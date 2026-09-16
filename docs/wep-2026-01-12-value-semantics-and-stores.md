@@ -147,15 +147,21 @@ takes both unbounded channels, the result being one of the places it could be.
 Every form names a parameter rather than a position, reusing the shape `part_of`
 already has, and an argument naming no parameter is reported.
 
-The two spellings differ at every call. A bare source hands on the reference
-itself, which the argument always carries. `elements_of = p` hands on what the
-referent holds instead: nothing where the element type cannot hold a reference,
-and never the parameter the argument is rooted at, which is a carrier by being
-the reference to the container rather than by anything the container holds.
-Copying between two of a caller's own arrays therefore carries what was put in
-them and not the arrays' own parameters. Where a join meets both spellings of a
-position — a function value of one type minted from two declarations — the
-reference is the wider claim and wins.
+The two spellings differ at every call, and telling them apart takes two
+carrier sets per value rather than one. A value is a reference into the
+positions it was derived from, and separately it holds the positions whatever
+sits inside it was derived from; a value can do both, so the sets are not
+disjoint, and what the value carries altogether is their union. A reference
+arrives pointing into its own position and holding nothing: what it holds is
+what this body put there.
+
+A bare source hands on the union, which the argument always carries.
+`elements_of = p` hands on the held set alone. Copying between two of a caller's
+own arrays therefore carries what was put in them and not the arrays' own
+parameters — and that holds however the argument is spelled, whether as the
+parameter, a projection of it, or a local bound from one. Where a join meets
+both spellings of a position — a function value of one type minted from two
+declarations — the reference is the wider claim and wins.
 
 Silence is the safe reading for `#[retain]` and not for `#[returns]`: a missing
 `#[returns]` is taken for "allocates", which elides copies and is wrong for a
@@ -354,13 +360,14 @@ that retains an argument coarsens every other call through the same type.
 Closing it takes knowing which function values reach which call, which is a
 points-to analysis and nothing here is one.
 
-An element claim on a local hands on everything that local carries. There is one
-carrier set per value, so "what was written into this array" and "what a
-reference to it was derived from" are the same set: an `elements_of` source
-rooted at a local that carries a reference for some other reason hands that on
-too. Only a parameter root is told apart, that being the one case where the two
-readings provably differ. Closing it takes separating a reference from what it
-points at in the carrier model.
+An element claim reads what a value holds, which a body fills but a signature
+never states. A parameter arrives holding whatever the caller put there, and
+nothing names that, so the claim is answered from the writes this body made and
+the positions those writes came from. A caller that hands on its own argument's
+elements untouched is not telling its own caller so, which is what makes the
+claim useful — it stops at the frame that filled the container — and also what
+bounds it. Closing that would take a summary of what a parameter holds on entry,
+which is a shape-level points-to answer and nothing here is one.
 
 A retention into a reference-typed local is bounded only where every assignment
 to that local roots at one of this body's own parameters. That is a must-alias

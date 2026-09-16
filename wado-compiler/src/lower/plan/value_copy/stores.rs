@@ -99,6 +99,43 @@ impl StoresFacts {
     }
 }
 
+/// What a value hands on, split by how it does. `is` are the positions the
+/// value is itself a reference into; `holds` are the positions something inside
+/// it is a reference into. A value can do both — a `&Sink` whose `Sink` keeps a
+/// reference to the same parameter — so the two are not disjoint, and what the
+/// value carries altogether is their union.
+///
+/// The split is what an element claim reads: `elements_of = p` asks what the
+/// referent's elements hold, which is `holds` and never `is`.
+#[derive(Clone, Default)]
+struct Carried {
+    is: IndexSet<u32>,
+    holds: IndexSet<u32>,
+}
+
+impl Carried {
+    fn held(positions: IndexSet<u32>) -> Self {
+        Carried {
+            is: IndexSet::default(),
+            holds: positions,
+        }
+    }
+
+    fn all(&self) -> IndexSet<u32> {
+        let mut out = self.is.clone();
+        extend(&mut out, &self.holds);
+        out
+    }
+
+    fn is_empty(&self) -> bool {
+        self.is.is_empty() && self.holds.is_empty()
+    }
+
+    fn absorb(&mut self, other: &Carried) -> bool {
+        extend(&mut self.is, &other.is) | extend(&mut self.holds, &other.holds)
+    }
+}
+
 /// The place an argument names, past the `&`/`&mut` it is wrapped in.
 fn unwrap_borrow(argument: &TirExpr) -> &TirExpr {
     match &argument.kind {
@@ -695,13 +732,16 @@ fn facts_of_body(
     carrying: &RefCarrying,
     body: BodyRef,
 ) -> (StoresFacts, Vec<(TypeId, StoresFacts)>) {
-    let mut carries: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
+    let mut carries: IndexMap<u32, Carried> = IndexMap::default();
     let mut param_of_local: IndexMap<u32, u32> = IndexMap::default();
     for (i, (local_index, type_id)) in params.iter().enumerate() {
         let position = u32::try_from(i).unwrap();
         param_of_local.insert(*local_index, position);
-        if carrying.holds(*type_id) {
-            carries.entry(*local_index).or_default().insert(position);
+        let entry = carries.entry(*local_index).or_default();
+        if is_reference_type(*type_id, type_table) {
+            entry.is.insert(position);
+        } else if carrying.holds(*type_id) {
+            entry.holds.insert(position);
         }
     }
     let anchors = anchors_of_body(&param_of_local, body);
@@ -722,7 +762,7 @@ fn facts_of_body(
         walker.grew = false;
         body.walk(&mut walker);
         if let Some(tail) = tail {
-            let carried = walker.carries(tail);
+            let carried = walker.carried(tail).all();
             walker.reaches_result(&carried);
         }
         if !walker.grew {
@@ -733,7 +773,7 @@ fn facts_of_body(
 }
 
 struct StoresWalker<'a> {
-    carries: IndexMap<u32, IndexSet<u32>>,
+    carries: IndexMap<u32, Carried>,
     /// Which parameter position each parameter's local holds, so a write
     /// through one is recorded as landing there rather than out of sight.
     param_of_local: IndexMap<u32, u32>,
@@ -751,9 +791,9 @@ struct StoresWalker<'a> {
 }
 
 impl StoresWalker<'_> {
-    /// The parameter positions the value of `expr` carries: a reference derived
-    /// from a parameter, or an aggregate holding one.
-    fn carries(&self, expr: &TirExpr) -> IndexSet<u32> {
+    /// What the value of `expr` hands on, and how: a reference derived from a
+    /// parameter, a value holding one, or both. See [`Carried`].
+    fn carried(&self, expr: &TirExpr) -> Carried {
         match &expr.kind {
             TirExprKind::Local { index, .. } => {
                 self.carries.get(index).cloned().unwrap_or_default()
@@ -762,8 +802,9 @@ impl StoresWalker<'_> {
                 op: TirUnaryOp::Ref | TirUnaryOp::MutRef,
                 expr: place,
             } => self.place_roots(place),
-            // A projection to a value reads data out of a reference; copying
-            // data does not copy the reference that found it.
+            // A projection reads out of a container, so what comes out is a
+            // reference into the container where it is one, and holds what the
+            // container holds where its own type can hold a reference.
             TirExprKind::Unary {
                 op: TirUnaryOp::Deref,
                 expr: inner,
@@ -772,44 +813,55 @@ impl StoresWalker<'_> {
             | TirExprKind::VariantPayload { expr: inner, .. }
             | TirExprKind::Index { expr: inner, .. }
             | TirExprKind::Cast { expr: inner, .. } => {
-                if is_reference_type(expr.type_id, self.type_table) {
-                    self.carries(inner)
-                } else {
-                    IndexSet::default()
-                }
+                self.placed(expr.type_id, self.carried(inner).all())
             }
-            TirExprKind::StructLiteral { fields, .. } => {
-                fields.iter().flat_map(|f| self.carries(&f.value)).collect()
-            }
+            TirExprKind::StructLiteral { fields, .. } => Carried::held(
+                fields
+                    .iter()
+                    .flat_map(|f| self.carried(&f.value).all())
+                    .collect(),
+            ),
             TirExprKind::TupleLiteral { elements } | TirExprKind::ArrayLiteral { elements } => {
-                elements.iter().flat_map(|e| self.carries(e)).collect()
+                Carried::held(
+                    elements
+                        .iter()
+                        .flat_map(|e| self.carried(e).all())
+                        .collect(),
+                )
             }
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
-            } => self.carries(p),
-            TirExprKind::Closure { captures, .. } => captures
-                .iter()
-                .flat_map(|c| {
-                    self.carries
-                        .get(&c.outer_index)
-                        .cloned()
-                        .unwrap_or_default()
-                })
-                .collect(),
+            } => Carried::held(self.carried(p).all()),
+            TirExprKind::Closure { captures, .. } => Carried::held(
+                captures
+                    .iter()
+                    .flat_map(|c| {
+                        self.carries
+                            .get(&c.outer_index)
+                            .map(Carried::all)
+                            .unwrap_or_default()
+                    })
+                    .collect(),
+            ),
             // Which positions a call routes to its result is read off a body,
             // and a builtin has none — `a[i]`'s `array_get_ref` hands back a
             // slot of its first argument while declaring nothing — so a
             // reference-typed result carries every argument.
             TirExprKind::Call { func, args, .. } => {
-                if is_reference_type(expr.type_id, self.type_table) {
-                    return args.iter().flat_map(|a| self.carries(&a.expr)).collect();
-                }
-                let facts = self.oracle.direct(func);
-                self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result, &facts)
+                let routed = if is_reference_type(expr.type_id, self.type_table) {
+                    args.iter()
+                        .flat_map(|a| self.carried(&a.expr).all())
+                        .collect()
+                } else {
+                    let facts = self.oracle.direct(func);
+                    self.carried_args(args.iter().map(|a| &a.expr), &facts.into_result, &facts)
+                };
+                self.placed(expr.type_id, routed)
             }
             TirExprKind::IndirectCall { callee, args } => {
                 let facts = self.oracle.indirect(callee.type_id, args.len());
-                self.carried_args(args.iter(), &facts.into_result, &facts)
+                let routed = self.carried_args(args.iter(), &facts.into_result, &facts);
+                self.placed(expr.type_id, routed)
             }
             // A control form's value is the tail of whichever arm runs, plus
             // whatever a `break` hands out of a labeled block.
@@ -818,10 +870,10 @@ impl StoresWalker<'_> {
                 let mut out = self.block_carries(block);
                 let mut breaks = BreakScan {
                     walker: self,
-                    found: IndexSet::default(),
+                    found: Carried::default(),
                 };
                 breaks.walk_block(block);
-                extend(&mut out, &breaks.found);
+                out.absorb(&breaks.found);
                 out
             }
             TirExprKind::If {
@@ -832,23 +884,45 @@ impl StoresWalker<'_> {
                 let mut out = self.block_carries(then_branch);
                 if let Some(eb) = else_branch {
                     let e = self.block_carries(eb);
-                    extend(&mut out, &e);
+                    out.absorb(&e);
                 }
                 out
             }
-            TirExprKind::Match { arms, .. } => arms
-                .iter()
-                .flat_map(|arm| self.carries(&arm.body))
-                .collect(),
-            _ => IndexSet::default(),
+            TirExprKind::Match { arms, .. } => {
+                let mut out = Carried::default();
+                for arm in arms {
+                    let c = self.carried(&arm.body);
+                    out.absorb(&c);
+                }
+                out
+            }
+            _ => Carried::default(),
         }
     }
 
+    /// Where `positions`, reached through a value of `type_id`, belong. A
+    /// reference is *into* them and holds nothing of its own until something is
+    /// put there; any other value that can keep a reference holds them. A type
+    /// that is neither hands on nothing, which is how reading plain data out of
+    /// a reference stops the walk.
+    fn placed(&self, type_id: TypeId, positions: IndexSet<u32>) -> Carried {
+        let mut out = Carried::default();
+        if positions.is_empty() {
+            return out;
+        }
+        if is_reference_type(type_id, self.type_table) {
+            out.is = positions;
+        } else if self.carrying.holds(type_id) {
+            out.holds = positions;
+        }
+        out
+    }
+
     /// A block's value is its final statement's expression.
-    fn block_carries(&self, block: &TirBlock) -> IndexSet<u32> {
+    fn block_carries(&self, block: &TirBlock) -> Carried {
         match block.stmts.last().map(|s| &s.kind) {
-            Some(TirStmtKind::Expr(e)) => self.carries(e),
-            _ => IndexSet::default(),
+            Some(TirStmtKind::Expr(e)) => self.carried(e),
+            _ => Carried::default(),
         }
     }
 
@@ -865,39 +939,20 @@ impl StoresWalker<'_> {
     }
 
     /// What the argument at `position` hands the callee. A position claimed by
-    /// `elements_of` hands on what the referent's elements hold: nothing at all
-    /// where they cannot hold a reference, and never the parameter the argument
-    /// is rooted at, which is a carrier by being a reference to the container
-    /// rather than by anything the container holds.
+    /// `elements_of` asks after the referent's elements, so it reads what the
+    /// argument holds and never what it is: a reference to a container is a
+    /// carrier by pointing at the container, not by anything the container keeps.
     fn claimed(&self, position: u32, arg: &TirExpr, facts: &StoresFacts) -> IndexSet<u32> {
-        if !facts.elements.contains(&position) {
-            return self.carries(arg);
+        let carried = self.carried(arg);
+        if facts.elements.contains(&position) {
+            return carried.holds;
         }
-        if !self.elements_carry(arg.type_id) {
-            return IndexSet::default();
-        }
-        let mut carried = self.carries(arg);
-        if let Some(&position) = Self::place_root(unwrap_borrow(arg))
-            .and_then(|(root, _)| self.param_of_local.get(&root))
-        {
-            carried.swap_remove(&position);
-        }
-        carried
-    }
-
-    /// Whether what a value of `type_id` holds can be a reference, past the
-    /// reference the argument itself is.
-    fn elements_carry(&self, type_id: TypeId) -> bool {
-        let inner = match self.type_table.get(type_id) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-            _ => type_id,
-        };
-        self.carrying.holds(inner)
+        carried.all()
     }
 
     /// What a *place* (the operand of `&`) carries, read off its root —
     /// `&p.field` roots at `p`, whatever the field's own type.
-    fn place_roots(&self, place: &TirExpr) -> IndexSet<u32> {
+    fn place_roots(&self, place: &TirExpr) -> Carried {
         Self::place_root(place)
             .and_then(|(local, _)| self.carries.get(&local).cloned())
             .unwrap_or_default()
@@ -957,17 +1012,28 @@ impl StoresWalker<'_> {
         self.grew |= extend(&mut self.facts.into_result, positions);
     }
 
-    fn carry_into(&mut self, local: u32, positions: &IndexSet<u32>) {
+    /// A local takes on a value: it carries what that value carries, the way
+    /// the value carried it.
+    fn rebind(&mut self, local: u32, carried: &Carried) {
+        if carried.is_empty() {
+            return;
+        }
+        self.grew |= self.carries.entry(local).or_default().absorb(carried);
+    }
+
+    /// A write into a local's own aggregate: whatever went in is held by the
+    /// local rather than named by it.
+    fn hold_into(&mut self, local: u32, positions: &IndexSet<u32>) {
         if positions.is_empty() {
             return;
         }
-        self.grew |= extend(self.carries.entry(local).or_default(), positions);
+        self.grew |= extend(&mut self.carries.entry(local).or_default().holds, positions);
     }
 
     /// A write of `value` into `target`: through a reference the caller owns it
     /// is an escape; into a local's own storage it makes that local a carrier.
     fn write(&mut self, target: &TirExpr, value: &TirExpr) {
-        let carried = self.carries(value);
+        let carried = self.carried(value);
         if carried.is_empty() {
             return;
         }
@@ -975,10 +1041,10 @@ impl StoresWalker<'_> {
         // walker, it does not write through it — so even a reference-typed one
         // only becomes a carrier. Only a projection reaches a referent.
         if let TirExprKind::Local { index, .. } = &target.kind {
-            self.carry_into(*index, &carried);
+            self.rebind(*index, &carried);
             return;
         }
-        self.lands_in_place(target, &carried);
+        self.lands_in_place(target, &carried.all());
     }
 
     /// Where a reference written into `place` ends up. Into a local's own
@@ -989,7 +1055,7 @@ impl StoresWalker<'_> {
     fn lands_in_place(&mut self, place: &TirExpr, carried: &IndexSet<u32>) {
         match Self::place_root(place) {
             Some((root, ty)) if !is_reference_type(ty, self.type_table) => {
-                self.carry_into(root, carried);
+                self.hold_into(root, carried);
             }
             Some((root, _)) => {
                 if let Some(&destination) = self.param_of_local.get(&root) {
@@ -1051,14 +1117,14 @@ impl StoresWalker<'_> {
     }
 
     fn bind_pattern(&mut self, pattern: &TirPattern, source: &TirExpr) {
-        let carried = self.carries(source);
+        let carried = self.carried(source);
         if carried.is_empty() {
             return;
         }
         let mut binds: IndexSet<u32> = IndexSet::default();
         analyze::collect_pattern_bindings(pattern, &mut binds);
         for b in binds {
-            self.carry_into(b, &carried);
+            self.rebind(b, &carried);
         }
     }
 }
@@ -1067,13 +1133,14 @@ impl StoresWalker<'_> {
 /// label a break targets is not distinguished — an outer one only over-counts.
 struct BreakScan<'a, 'w> {
     walker: &'a StoresWalker<'w>,
-    found: IndexSet<u32>,
+    found: Carried,
 }
 
 impl TirRefVisitor for BreakScan<'_, '_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if let TirStmtKind::Break { value: Some(v), .. } = &stmt.kind {
-            extend(&mut self.found, &self.walker.carries(v));
+            let c = self.walker.carried(v);
+            self.found.absorb(&c);
         }
         self.walk_stmt(stmt);
     }
@@ -1085,14 +1152,14 @@ impl TirRefVisitor for StoresWalker<'_> {
             TirStmtKind::Let {
                 local_index, value, ..
             } => {
-                let c = self.carries(value);
-                self.carry_into(*local_index, &c);
+                let c = self.carried(value);
+                self.rebind(*local_index, &c);
             }
             TirStmtKind::LetDestructure { pattern, value, .. } => {
                 self.bind_pattern(pattern, value);
             }
             TirStmtKind::Return { value: Some(v) } => {
-                let c = self.carries(v);
+                let c = self.carried(v).all();
                 self.reaches_result(&c);
             }
             _ => {}
@@ -1104,7 +1171,7 @@ impl TirRefVisitor for StoresWalker<'_> {
         match &expr.kind {
             TirExprKind::Assign { target, value } => self.write(target, value),
             TirExprKind::GlobalVarSet { value, .. } => {
-                let c = self.carries(value);
+                let c = self.carried(value).all();
                 self.escape(&c);
             }
             TirExprKind::Match { expr: scrut, arms } => {
