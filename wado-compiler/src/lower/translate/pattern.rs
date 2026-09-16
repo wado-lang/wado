@@ -139,14 +139,15 @@ pub struct Lowering {
 /// from the compiler-item registry so stdlib renames carry.
 struct TextEq {
     trait_name: FqTraitName,
+    /// The one method `Eq` declares.
+    method_name: String,
     string_name: FqTypeName,
     /// `String` and `&String`. Interned here because the per-function walk
     /// holds the type table immutably.
     string_type: TypeId,
     string_ref_type: TypeId,
-    /// The module defining each `eq` method, by mangled name. An impl need not
-    /// live in the module declaring its receiver, and a call naming the wrong
-    /// one mints an extern stub for a function the package defines.
+    /// The module defining each `Eq` method, by mangled name. An impl need not
+    /// live in the module declaring its receiver.
     eq_modules: IndexMap<String, ModuleSource>,
 }
 
@@ -162,15 +163,28 @@ impl TextEq {
             def: string_def,
             type_args: Vec::new(),
         });
+        let eq_trait = type_table
+            .compiler_item_def(CompilerItem::Eq)
+            .expect("the prelude always declares Eq");
         let mut eq_modules: IndexMap<String, ModuleSource> = IndexMap::default();
         for func in &flat.functions {
             let func = func.borrow();
-            if func.name.ends_with("::eq") {
+            let implements_eq = func
+                .method_info
+                .as_ref()
+                .and_then(|m| m.trait_name.as_ref())
+                .and_then(FqTraitName::canonical)
+                == Some(eq_trait);
+            if implements_eq {
                 eq_modules.insert(func.name.clone(), func.module_source.clone());
             }
         }
         Self {
             trait_name: type_table.compiler_trait_fq(CompilerItem::Eq),
+            method_name: type_table
+                .compiler_items()
+                .trait_method_name(CompilerItem::Eq)
+                .to_string(),
             string_name: type_table.compiler_struct_fq_name(CompilerItem::String),
             string_type,
             string_ref_type: type_table.make_ref(string_type),
@@ -1428,10 +1442,6 @@ impl<'a> PatternLowerer<'a> {
 
     /// Build the `Eq::eq(&self, &other)` call a string-literal pattern tests
     /// with, against the scrutinee's own `Eq<String>` impl.
-    ///
-    /// The argument carries the callee's own `&String`: typed as `String` the
-    /// fold reads it as a value the literal must be defended from, and builds
-    /// the backing array a second time at every string-literal pattern.
     fn text_eq_call(
         &self,
         receiver: TirExpr,
@@ -1453,7 +1463,11 @@ impl<'a> PatternLowerer<'a> {
         };
         // `translate` adjusts the receiver for the method's self-kind; only the
         // argument is spelled out here.
-        let method_info = LocalMethodName::new(receiver_name, Some(trait_name), "eq".to_string());
+        let method_info = LocalMethodName::new(
+            receiver_name,
+            Some(trait_name),
+            self.text_eq.method_name.clone(),
+        );
         let mangled_name = method_info.to_mangled_name();
         let module_source = self
             .text_eq
@@ -1472,6 +1486,9 @@ impl<'a> PatternLowerer<'a> {
                     method_info: Some(method_info),
                 },
                 vec![],
+                // The callee's own `&String`: typed as `String` the fold reads a
+                // value the literal must be defended from, and rebuilds its
+                // backing array at every string-literal pattern.
                 vec![CallArg::new(
                     TirExpr::new(
                         TirExprKind::Unary {

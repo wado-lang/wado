@@ -2048,9 +2048,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !settled {
             return None;
         }
-        // An arm tests the scrutinee against the literal with `==`, so any text
-        // answering `Eq<String>` — a `StrSlice`, a newtype over one — matches a
-        // string literal the way a `String` does.
+        // A string-literal arm tests the scrutinee with `==`, so any type
+        // answering `Eq<String>` matches one the way a `String` does.
         if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
             return None;
         }
@@ -2063,12 +2062,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
             return false;
         };
-        let written = self.tysys.type_table.borrow().type_name(scrutinee);
+        let (written, method) = {
+            let type_table = self.tysys.type_table.borrow();
+            (
+                type_table.type_name(scrutinee),
+                type_table
+                    .compiler_items()
+                    .trait_method_name(CompilerItem::Eq)
+                    .to_string(),
+            )
+        };
         // A newtype inherits its base's `Eq`, which is where the impl is.
         let (name, receiver) = self
             .tysys
             .trait_impl_base_lookup(&written, scrutinee, eq_trait);
-        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, "eq", Some(&ArgClass::StrLit))
+        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, &method, Some(&ArgClass::StrLit))
             .is_some()
     }
 
