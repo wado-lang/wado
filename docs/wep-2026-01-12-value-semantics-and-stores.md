@@ -222,9 +222,10 @@ the compiler may stop doing to the argument:
   accepted through a function value and refused by name. Where the retention
   names a destination the caller owns, the refusal reads it as a move does: the
   borrow outlives that destination and no longer, so a call whose destinations
-  are all past their last read is written back after all. A borrow of a
-  destination taken outside the call is a second name for it, and says nothing
-  about where the read through it happens, so it counts as a read after.
+  are all past their last read is written back after all. A read inside a loop
+  is a read after every call that loop encloses, and a borrow of a destination
+  taken outside the call is a second name for it that says nothing about where
+  the read through it happens, so both count as a read after.
 - A constant is not forwarded into a retained parameter.
 - A call whose result could embed a retained reference is not folded at compile
   time, since compile-time evaluation has no reference values to embed and the
@@ -405,21 +406,22 @@ claim useful — it stops at the frame that filled the container — and also wh
 bounds it. Closing that would take a summary of what a parameter holds on entry,
 which is the same points-to answer.
 
+The write-back pins a local any closure in the body reads, rather than one whose
+closure can still be called after the call. A loop is the body's only backward
+edge — a labelled break leaves forwards, and nothing else jumps — so a read
+inside a loop is a read after exactly the calls that loop encloses, and source
+order answers every other shape, two arms of the same branch included. A closure
+has no such bound: where its body sits says nothing about where it runs, so
+every local it reads is pinned for the whole body. Closing that takes knowing
+where a closure value can still be called from, which is the same points-to
+answer as above.
+
 A retention into a reference-typed local is bounded only where every assignment
 to that local roots at one of this body's own parameters. That is a must-alias
 reading, so one assignment from anywhere else — a call result, a global, another
 local with such an assignment — makes every write through the local an escape,
 however narrow the other assignments are. Closing it takes a per-program-point
 reading rather than one answer per local.
-
-The write-back pins a local any loop or closure in the body reads, rather than
-only one that can reach a read after the call. A loop is the body's only
-backward edge — a labelled break leaves forwards, and nothing else jumps — so
-source order answers every other shape exactly, including two arms of the same
-branch. Inside a loop it answers nothing, and a closure body carries no order
-against a call at all, so both are taken whole. Closing that takes the same
-per-program-point reading, which this pass never builds: it rewrites a tree on
-the way down.
 
 A lifted closure is not read as the value it came from. Lifting rewrites the
 closure literal at a call site into an object holding the lifted function, while

@@ -1,0 +1,43 @@
+// A loop that ends before the call cannot run again after it, so a read of the
+// destination inside that loop is not a read after. The write-back stands.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Bag {
+    item: Payload,
+}
+
+struct Keep {
+    held: &mut Payload,
+}
+
+#[inline("never")]
+fn park(k: &mut Keep, p: &mut Payload) {
+    k.held = p;
+    *p = Payload::Text("parked");
+}
+
+fn park_a_field(b: &mut Bag, spare: &mut Payload) -> i32 {
+    let mut unread = Keep { held: spare };
+    let mut n = 0;
+    for let i of 0..<3 {
+        if unread.held matches { Empty } { n += 1; }
+    }
+    park(&mut unread, &mut b.item);
+    return n;
+}
+
+test "a loop before the call is not a read after it" {
+    let mut b = Bag { item: Payload::Empty };
+    let mut spare = Payload::Empty;
+    assert park_a_field(&mut b, &mut spare) == 3;
+    assert b.item matches { Text(_) };
+}
+
+__DATA__
+{
+    "test": {}
+}

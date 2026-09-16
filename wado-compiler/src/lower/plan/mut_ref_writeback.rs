@@ -101,8 +101,14 @@ struct LastRead {
     /// name for the local that a read through says nothing about, so it counts
     /// as a read after every call it is not inside.
     borrows: IndexMap<u32, Vec<Span>>,
+    /// Locals a closure body reads. A closure runs wherever it is called, which
+    /// its own place in the source does not say, so such a read is after every
+    /// call.
     pinned: IndexSet<u32>,
-    loop_depth: u32,
+    /// A loop that reads a local, by the loop's span. The read runs again for
+    /// every call the loop encloses, and for no other.
+    in_loop: Vec<(Span, u32)>,
+    loops: Vec<Span>,
     closure_depth: u32,
 }
 
@@ -127,6 +133,13 @@ impl LastRead {
         if self.end.get(&local).is_some_and(|&end| end > call.end) {
             return true;
         }
+        if self
+            .in_loop
+            .iter()
+            .any(|(at, read)| *read == local && at.start <= call.start && at.end >= call.end)
+        {
+            return true;
+        }
         self.borrows.get(&local).is_some_and(|spans| {
             spans
                 .iter()
@@ -140,8 +153,11 @@ impl TirRefVisitor for LastRead {
         if let TirExprKind::Local { index, .. } = &expr.kind {
             let end = self.end.entry(*index).or_default();
             *end = (*end).max(expr.span.end);
-            if self.loop_depth > 0 || self.closure_depth > 0 {
+            if self.closure_depth > 0 {
                 self.pinned.insert(*index);
+            }
+            for at in &self.loops {
+                self.in_loop.push((*at, *index));
             }
         }
         if let TirExprKind::Unary {
@@ -163,9 +179,9 @@ impl TirRefVisitor for LastRead {
 
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         if matches!(stmt.kind, TirStmtKind::Loop { .. }) {
-            self.loop_depth += 1;
+            self.loops.push(stmt.span);
             self.walk_stmt(stmt);
-            self.loop_depth -= 1;
+            self.loops.pop();
             return;
         }
         self.walk_stmt(stmt);
