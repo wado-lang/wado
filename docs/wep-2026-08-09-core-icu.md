@@ -170,6 +170,11 @@ Its three parts:
   baked in; its locale-bearing capabilities take a buffer provider.
 - Data assets — the image below, keyed by (capability, locale).
 
+The asset ships in the text format, as `wado-bundled-libm` does. A binary
+checked into the toolchain is a thing no reader can inspect, and the text form
+says what the component is. The compiler tells a component from a core module
+after parsing, so an asset is one or the other however it is written.
+
 Assembling a program's data is a lookup: the reached locale-bearing capabilities
 name their marker sets, the declared locales expand through likely-subtags and
 the fallback chain, and the entries at those keys are handed over as blobs.
@@ -182,6 +187,45 @@ program declaring `ja` and formatting dates, the locale declaration is worth
 the 47 KB that remains. Fixing the marker set per capability is what removes the
 ICU-version-specific symbol-to-marker map, and with it the recording test that
 would have had to catch the map drifting on every ICU upgrade.
+
+### The version of Unicode is the version of Wado
+
+The toolchain carries one ICU build, so the Unicode and CLDR versions it
+answers for are the release's, not a dependency a program pins. ICU is a sharp
+tool: it brings behaviour a program did not ask for and bytes a program did not
+expect, so the version it speaks belongs to the language rather than to a
+package resolution.
+
+### Character properties are the first capability
+
+They are resource-free, need no locale, and their data does not vary by one, so
+they need neither the handle kinds above nor the data image below.
+
+The surface names a property two ways. A name written into the source is a WIT
+enum case: it resolves at the call site, carries no string, and cannot fail,
+which is what a per-character predicate like `is_upper` needs. A name a program
+reads at run time stays a string, matched loosely per UAX #44 and answered with
+`none` where it does not resolve. That is the `\p{...}` in a grammar. Both reach
+the same baked data, so neither approximates the other.
+
+The enum is not a size knob. ICU4X bakes every property as a static and the
+dispatch reaches every case, so naming a property as an enum case does not
+narrow what the call roots. What a program carries is decided by the collection
+instead.
+
+Three UCD properties are deliberately not answered:
+
+- `Block`, which ICU4X ships no data for.
+- `Decomposition_Type`, likewise.
+- The contributory `Other_*` properties, which UAX #44 defines as inputs to
+  derived properties rather than as properties to query, and which ICU4X
+  therefore omits.
+
+An unknown name is refused rather than approximated. A caller complementing an
+approximate set admits real members of the property instead of missing some,
+which is the failure that matters for a `\P{...}` in a grammar. Nothing in
+[antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s 1,150 grammars uses
+any of the three in a live rule.
 
 ### The data image
 
@@ -310,17 +354,32 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 ## Known gaps
 
-- **Nothing collects a component asset.** `wado-wasm-embed` collects over a
-  core-module asset, which is where the mechanism is proven: on
-  `wado-bundled-libm` a program calling `sin` keeps 344 of the asset's 5,448
-  rodata bytes, and all 54 of its exports answer bit-identically to the unpruned
-  module. A component takes the `wasm-compose` path instead and is composed
-  whole, so neither the code nor the data of ICU's asset is reached today.
+- **The collection reaches an interface's lifts, not a world's.** A world-level
+  lift is a root whether or not the program calls it, because the import plan
+  lists every world function the dependency declares and `used_wasi_functions`
+  keys effect operations alone. Closing it means recording what a world-level
+  call reaches, which changes what a plan entry means
+  ([#2068](https://github.com/wado-lang/wado/issues/2068)). `core:icu` exports
+  interfaces only, so it costs nothing here.
 
-  Closing it is the first three Implementation items: run the collection inside
-  a component, resolve the map from the sections a relocatable asset keeps
-  rather than only at asset-build time, and carry the `reloc.DATA` edges libm
-  has none of.
+- **The collection stops at the export.** A program reaching one property
+  carries the code and data of every property that export's dispatch can reach.
+  `has` matches over all 63 binary properties, so naming one case does not
+  narrow what the function roots, and a program wanting `Uppercase` alone pays
+  for all of them.
+
+  Splitting that needs a root finer than an export, which neither the
+  collection nor a re-link can express today. The export-level split already
+  separates the two paths: the string-named `ranges` and `contains` pull the
+  enumerated properties, `General_Category` and the name tables, which the
+  enum-named `has` and `set` do not.
+
+- **A dropped lift leaves a stub, not a hole.** A lift the program does not
+  import keeps its name and signature in the core module, because the
+  component's `canon lift` still aliases it. Dropping it outright would mean
+  renumbering the component's own index spaces. What remains is one short
+  function per unused lift — the data and code it reached are already gone, so
+  the cost is bytes rather than kilobytes.
 
 ## Open questions
 
@@ -355,33 +414,36 @@ dedup following genuine runtime data dependencies rather than taxonomy.
 
 - [ ] Non-owning token support in CM component import
       ([Wasm CM Component Import](./wep-2026-06-26-wasm-cm-component-import.md)):
-      a `dtor`-less imported handle decoded as a copyable newtype. It is all the
-      first slice needs — normalization, case mapping, character properties,
-      collation over the declared locales, and grapheme boundaries by eager
-      pass.
+      a `dtor`-less imported handle decoded as a copyable newtype. It is what
+      normalization, case mapping, collation over the declared locales, and
+      grapheme boundaries by eager pass need beyond what character properties
+      already use.
 - [ ] Affine resource support in the same path — methods, static constructors,
       `borrow<T>` parameters, `resource.drop` — gating the tailored,
       runtime-configured, and stateful surface, not the package.
 - [ ] The [data-provider mechanism](./wep-2026-06-13-compile-time-data-providers.md)
       itself, reduced here to an archive lookup: `core:icu` runs no provider
       component and needs no compile-time execution.
-- [ ] Promote the spike's ICU component into a first-party prebuilt artifact,
-      shipped relocatable, with the locale-bearing capabilities moved onto a
-      buffer provider and the rest left baked.
-- [ ] Collect over a component asset, rooted where the core-module path already
-      roots: the asset's exports that surviving Wado code calls.
-- [ ] Resolve the data-reference map at compile time. `dataref::resolve` runs
-      today only from `mise run update-bundled`, because libm ships as `.wat`
-      and the round trip invalidates the offsets a relocation holds. A
-      relocatable asset keeps those sections, so `embed` can read them itself
-      and needs no baked `wado.dataref`.
-- [ ] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
-      data range or a function. The map's shape and the walk both have to grow:
-      a live data range can root a function, so the data and code edges close
-      over one worklist rather than the code seeding the data once. The resolver
-      rejects one today rather than resolving halfway.
-- [ ] Write the facade over it: re-exports, the Wado-native shapes (`Ord`,
-      iterators, `Display`), and the one-shot helpers.
+- [ ] Ship the asset relocatable, and move the locale-bearing capabilities onto
+      a buffer provider with the rest left baked. The asset is first-party and
+      bundled already; what it is not yet is either of those.
+- [x] Collect over a component asset. Each core module it holds is embedded and
+      every other section copied byte for byte, so nothing is renumbered and
+      each `alias core export` still resolves. The root set is the lifted
+      functions the program imports; the rest keep their name and signature as
+      a stub. A program reaching one property carries 104 KB of the 303 KB
+      asset.
+- [x] Carry `reloc.DATA` — a pointer stored in the data itself, reaching another
+      data range or a function. A live data range can root a function, so the
+      data and code edges close over one worklist rather than the code seeding
+      the data once. libm has none; ICU has 146.
+- [x] Bake ICU's data-reference map at asset-build time, as libm's is. That is
+      what keeps the `.wat`: the map's offsets are segment-relative, so a
+      print/reparse preserves them where a `reloc` entry's offset into the
+      encoded code section would not. Resolving the map at compile time instead
+      would need the asset to ship relocatable, and ship in binary with it.
+- [ ] Grow the facade past character properties: re-exports, the Wado-native
+      shapes (`Ord`, iterators, `Display`), and the one-shot helpers.
 - [ ] Build the data image — per-(capability, locale) zlib entries plus index,
       deduplicated against the fallback parent — and bundle it with the
       toolchain.

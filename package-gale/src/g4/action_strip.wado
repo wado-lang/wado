@@ -17,6 +17,7 @@ use {
     scan_balanced,
     is_id_start_char,
     is_id_continue_char,
+    is_rule_name_upper,
 } from "./scan.wado";
 
 /// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
@@ -203,9 +204,7 @@ pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
             push_span(&mut word, &chars, i, j);
             prequel_open = PREQUEL_KEYWORDS.contains(&word);
             if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains(&word) {
-                // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
-                // TODO.md, blocked on ICU.
-                rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+                rule_type = if is_rule_name_upper(c) { RuleType::Lexer } else { RuleType::Parser };
             }
             push_span(&mut out, &chars, i, j);
             i = j;

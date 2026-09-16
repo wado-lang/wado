@@ -14,6 +14,7 @@ use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.
 use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, TK_ID, TK_SEMI } from "./grammars/ANTLRv4Lexer.g4";
 use { TK_TOKEN_REF, TK_RULE_REF, MODE_Argument, MODE_LexerCharSet } from "./grammars/ANTLRv4Lexer.g4";
 use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
+use { is_rule_name_upper } from "../src/g4/scan.wado";
 
 struct Antlr4Base {
     begins: i32,
@@ -25,10 +26,10 @@ struct Antlr4Base {
 
 /// Upstream asks `Character.isUpperCase`, which is Unicode-wide;
 /// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
-/// Wado's prelude has no `char::is_uppercase` (see TODO.md).
+/// `core:icu` answers it, through the classifier the `.g4` parser reads.
 fn is_token_ref_name(view: &LexerView) -> bool {
     return match char::from_u32(view.char_at(view.start()) as u32) {
-        Some(c) => c.is_ascii_uppercase(),
+        Some(c) => is_rule_name_upper(c),
         None => false,
     };
 }
@@ -189,7 +190,6 @@ test "the emit hook retypes ID by the case of its first character" {
     assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
 }
 
-#[TODO]
 test "a non-ASCII uppercase rule name is a TOKEN_REF" {
     let tokens = a4_tokenize("ÀBC : [0-9]+ ;");
     let name = antlr4::token_kind_name(tokens.kinds[0]);

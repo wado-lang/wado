@@ -26,12 +26,20 @@ mod reach;
 
 use std::fmt;
 
+use wasm_encoder::Encode;
+
 /// How to embed an asset.
 pub struct Embed<'a> {
-    /// `(module, name)` the memory is imported under.
-    pub memory_import: (&'a str, &'a str),
+    /// `(module, name)` the memory is imported under. `None` leaves the asset's
+    /// own memory alone, which is what a component's inner module needs.
+    pub memory_import: Option<(&'a str, &'a str)>,
     /// The exports to keep. Everything unreachable from them is dropped.
     pub keep_export: &'a dyn Fn(&str) -> bool,
+    /// Exports to keep as a name and a signature only. For an export something
+    /// still names — a component's `canon lift` — but nothing can call: the
+    /// name survives, and everything only its body reached does not. The body
+    /// left behind traps. A dropped export is not asked.
+    pub stub_export: &'a dyn Fn(&str) -> bool,
     /// Drop every custom section, the `name` section included (`-Os`).
     pub strip_custom_sections: bool,
 }
@@ -119,8 +127,64 @@ pub(crate) fn segment_base(data: &wasmparser::Data<'_>) -> Option<SegmentBase> {
 /// right. Validate before calling.
 pub fn embed(wasm: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
     let asset = Asset::collect(wasm)?;
-    let live = reach::live(&asset, opts.keep_export)?;
+    let live = reach::live(&asset, opts)?;
     emit::encode(&asset, &live, opts)
+}
+
+/// Collect over a component: each core module it holds is embedded, and every
+/// other section is copied byte for byte.
+pub fn embed_component(component: &[u8], opts: &Embed<'_>) -> Result<Vec<u8>, Error> {
+    use wasmparser::Payload;
+
+    // Copying the rest leaves the component's own items untouched, so nothing
+    // is renumbered and every `alias core export` still resolves. That is what
+    // [`Embed::stub_export`] is for: an export a lift still names cannot go.
+
+    let mut out = Vec::new();
+    let mut nesting = 0usize;
+    let mut copied = 0usize;
+    for payload in wasmparser::Parser::new(0).parse_all(component) {
+        match payload? {
+            Payload::ModuleSection {
+                unchecked_range, ..
+            } => {
+                // A module nested inside another module or component is that
+                // one's business; only the top level's are the asset's.
+                if nesting == 0 {
+                    out.extend_from_slice(&component[copied..unchecked_range.start]);
+                    // The length already written ahead of the range describes
+                    // the module that was there, so it goes with it. `Encode`
+                    // writes the new one back, length and payload together.
+                    drop_module_length(&mut out);
+                    embed(&component[unchecked_range.clone()], opts)?.encode(&mut out);
+                    copied = unchecked_range.end;
+                }
+                nesting += 1;
+            }
+            Payload::ComponentSection { .. } => nesting += 1,
+            Payload::End(_) if nesting > 0 => nesting -= 1,
+            _ => {}
+        }
+    }
+    if copied == 0 {
+        return Err(Error::Unsupported("a component with no core module"));
+    }
+    out.extend_from_slice(&component[copied..]);
+    Ok(out)
+}
+
+/// Take the module length off the tail of `out`. Read backwards, a LEB128 is
+/// its one byte without a continuation bit, then however many with one.
+fn drop_module_length(out: &mut Vec<u8>) {
+    out.pop();
+    while out.last().is_some_and(|byte| byte & 0x80 != 0) {
+        out.pop();
+    }
+    assert_eq!(
+        out.last(),
+        Some(&0x01),
+        "a module section is the byte 0x01 and a length"
+    );
 }
 
 /// Everything the pass needs from the asset, in its original index space.

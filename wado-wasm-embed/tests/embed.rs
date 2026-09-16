@@ -12,8 +12,9 @@ fn embed_err(source: &str) -> Error {
     embed(
         &wasm,
         &Embed {
-            memory_import: ("env", "memory"),
+            memory_import: Some(("env", "memory")),
             keep_export: &|_| true,
+            stub_export: &|_| false,
             strip_custom_sections: false,
         },
     )
@@ -21,16 +22,20 @@ fn embed_err(source: &str) -> Error {
 }
 
 fn prune_with(source: &str, keep: &[&str], strip: bool) -> Vec<u8> {
-    let wasm = wat::parse_str(source).expect("fixture must parse");
-    let out = embed(
-        &wasm,
+    embed_checked(
+        source,
         &Embed {
-            memory_import: ("env", "memory"),
+            memory_import: Some(("env", "memory")),
             keep_export: &|name| keep.contains(&name),
+            stub_export: &|_| false,
             strip_custom_sections: strip,
         },
     )
-    .expect("embed");
+}
+
+fn embed_checked(source: &str, opts: &Embed<'_>) -> Vec<u8> {
+    let wasm = wat::parse_str(source).expect("fixture must parse");
+    let out = embed(&wasm, opts).expect("embed");
     wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
         .validate_all(&out)
         .unwrap_or_else(|e| panic!("pruned module must validate: {e}"));
@@ -530,6 +535,181 @@ fn a_map_reaching_past_the_end_of_its_segment_is_rejected() {
     assert_matches!(embed_err(&quarters(Some("a 0:0+64\n"))), Error::DataRef(_));
 }
 
+/// An export something outside the module still names — a component's
+/// `canon lift` — but nothing can call. Its name and signature survive; what
+/// only its body reached does not.
+const LIFTED: &str = r#"
+    (module
+      (memory 1)
+      (func $only_here (result i32) (i32.const 7))
+      (func $used (export "used") (result i32) (call $only_here))
+      (func $lifted (export "lifted") (param i32) (result i64) (i64.extend_i32_u (call $only_here))))
+"#;
+
+#[test]
+fn a_stubbed_export_keeps_its_name_and_signature() {
+    let pruned = embed_checked(
+        LIFTED,
+        &Embed {
+            memory_import: Some(("env", "memory")),
+            keep_export: &|_| true,
+            stub_export: &|name| name == "lifted",
+            strip_custom_sections: false,
+        },
+    );
+    assert_eq!(exports(&pruned), ["used", "lifted"]);
+}
+
+#[test]
+fn a_stubbed_export_reaches_nothing() {
+    let pruned = embed_checked(
+        LIFTED,
+        &Embed {
+            memory_import: Some(("env", "memory")),
+            keep_export: &|name| name == "lifted",
+            stub_export: &|name| name == "lifted",
+            strip_custom_sections: false,
+        },
+    );
+    assert_eq!(
+        function_count(&pruned),
+        1,
+        "only the trap itself; `$only_here` went with the body"
+    );
+}
+
+/// `$deep` is reachable through `$lifted` alone, so it survives only if the
+/// call from `$caller` un-stubs `$lifted` and its body is walked.
+const CALLED_STUB: &str = r#"
+    (module
+      (memory 1)
+      (func $deep (result i32) (i32.const 9))
+      (func $lifted (export "lifted") (param i32) (result i64) (i64.extend_i32_u (call $deep)))
+      (func $caller (export "caller") (result i64) (call $lifted (i32.const 1))))
+"#;
+
+/// The two predicates disagree where one export is stubbed and another calls
+/// it. A reached body wins: it is still a body something calls.
+#[test]
+fn a_function_a_kept_export_reaches_is_kept_whole() {
+    let pruned = embed_checked(
+        CALLED_STUB,
+        &Embed {
+            memory_import: Some(("env", "memory")),
+            keep_export: &|_| true,
+            stub_export: &|name| name == "lifted",
+            strip_custom_sections: false,
+        },
+    );
+    assert_eq!(
+        function_count(&pruned),
+        3,
+        "`$lifted` kept its body, so `$deep` is still reached"
+    );
+}
+
+/// A component owns its memory, so its inner module keeps the one it defines
+/// rather than importing the host's.
+#[test]
+fn leaving_the_memory_alone_keeps_the_definition() {
+    let pruned = embed_checked(
+        LIFTED,
+        &Embed {
+            memory_import: None,
+            keep_export: &|name| name == "used",
+            stub_export: &|_| false,
+            strip_custom_sections: false,
+        },
+    );
+    assert_eq!(count_memory_imports(&pruned), 0, "no memory is imported");
+    assert!(
+        section_ids(&pruned).contains(&5),
+        "the memory section survives"
+    );
+}
+
+/// A segment holding a pointer into itself: `[0,4)` is the address of `"CCCC"`.
+/// `deref` reads `[0,4)` and follows it, so keeping `[0,4)` alone would leave it
+/// loading from bytes the prune took away.
+fn indirect(map: &str) -> String {
+    format!(
+        r#"
+        (module
+          (memory 1)
+          (data (i32.const 8) "\10\00\00\00BBBBCCCCDDDD")
+          (func $deref (export "deref") (result i32) (i32.load (i32.load (i32.const 8))))
+          (func $unused (export "unused") (result i32) (i32.load (i32.const 20)))
+          (@custom "wado.dataref" (after data) {map:?}))
+    "#
+    )
+}
+
+#[test]
+fn a_pointer_in_live_data_keeps_what_it_points_at() {
+    let pruned = prune(&indirect("deref 0:0+4\n@0:0 @0:8+4\n"), &["deref"]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(8), b"\x10\x00\x00\x00BBBBCCCC".to_vec())],
+        "the pointer's target survives; the gap to it is shorter than a header"
+    );
+}
+
+#[test]
+fn a_pointer_in_pruned_data_keeps_nothing() {
+    let pruned = prune(&indirect("deref 0:4+4\n@0:0 @0:8+4\n"), &["deref"]);
+    assert_eq!(
+        data_segments(&pruned),
+        [(Some(12), b"BBBB".to_vec())],
+        "nothing live covers the pointer's own bytes, so its target stays dead"
+    );
+}
+
+/// A function pointer stored in data: nothing calls `$target` directly, so only
+/// the data edge keeps it.
+#[test]
+fn a_function_pointer_in_live_data_keeps_the_function() {
+    let source = r#"
+        (module
+          (memory 1)
+          (table 1 funcref)
+          (data (i32.const 8) "\00\00\00\00")
+          (elem (i32.const 0) $target)
+          (func $target (result i32) (i32.const 7))
+          (func $call (export "call") (result i32)
+            (call_indirect (result i32) (i32.load (i32.const 8))))
+          (@custom "wado.dataref" (after data) "call 0:0+4\n@0:0 target\n"))
+    "#;
+    assert!(
+        function_names(&prune(source, &["call"]))
+            .iter()
+            .any(|(_, name)| name == "target"),
+        "a function only a live pointer names must survive"
+    );
+}
+
+/// A lift thunk's symbol is its WIT name, colons and all, so what tells a
+/// function target from a data one cannot be the presence of a `:`.
+#[test]
+fn a_pointer_reaches_a_function_whose_name_carries_a_colon() {
+    let source = r#"
+        (module
+          (memory 1)
+          (table 1 funcref)
+          (data (i32.const 8) "\00\00\00\00")
+          (elem (i32.const 0) $wado:icu/props#set)
+          (func $wado:icu/props#set (result i32) (i32.const 7))
+          (func $call (export "call") (result i32)
+            (call_indirect (result i32) (i32.load (i32.const 8))))
+          (@custom "wado.dataref" (after data) "call 0:0+4\n@0:0 wado:icu/props#set\n"))
+    "#;
+    assert!(
+        function_names(&prune(source, &["call"]))
+            .iter()
+            .any(|(_, name)| name == "wado:icu/props#set"),
+        "the target resolved despite the colons in its name"
+    );
+}
+
 /// `memory.init` names a segment by index, so a passive segment is never split
 /// and the indices of the ones that remain still have to line up.
 #[test]
@@ -637,6 +817,11 @@ fn a_range_that_cannot_end_is_rejected() {
         embed_err(&quarters(Some("a 0:1+4294967295\n"))),
         Error::DataRef(_)
     );
+    // A pointer site is a range of one byte, and its offset is read the same way.
+    assert_matches!(
+        embed_err(&quarters(Some("a 0:0+4\n@0:4294967295 a\n"))),
+        Error::DataRef(_)
+    );
 }
 
 /// Honouring one would spend a segment header to write nothing.
@@ -665,4 +850,33 @@ fn the_map_normalises_to_one_form_whatever_order_it_arrives_in() {
             .to_text();
         assert_eq!(text, canonical, "reordering {shuffled:?} changed the map");
     }
+}
+
+/// The bundled ICU component: one core module inside a component whose lifts
+/// name its exports. A program importing only `has` traps the other three.
+#[test]
+fn a_component_asset_is_collected_through_its_core_module() {
+    let wat = include_str!("../../wado-compiler/lib/core/icu.wat");
+    let component = wat::parse_str(wat).expect("the bundled asset must parse");
+    let used = "wado:icu/properties@0.1.0#has";
+    let out = wado_wasm_embed::embed_component(
+        &component,
+        &Embed {
+            memory_import: None,
+            keep_export: &|_| true,
+            stub_export: &|name| name.contains("properties@0.1.0#") && name != used,
+            strip_custom_sections: true,
+        },
+    )
+    .expect("embed_component");
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(&out)
+        .unwrap_or_else(|e| panic!("the collected component must validate: {e}"));
+    assert!(
+        out.len() * 3 < component.len(),
+        "collecting to one property must cut the asset to under a third: \
+         {} bytes from {}",
+        out.len(),
+        component.len()
+    );
 }

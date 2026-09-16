@@ -1,0 +1,101 @@
+// The shippable `core:icu` stage-1 surface: Unicode character properties as
+// code point ranges, with no `resource` anywhere, so a Wado program can import
+// the component today. `wit/world.wit` keeps the full spike surface.
+package wado:icu@0.1.0;
+
+// Two paths to the same data. `has` and `set` name a binary property as an
+// enum case, so they resolve at the call site and are total. `contains` and
+// `ranges` take the name as a string, for a name a program reads at run time
+// rather than writes.
+//
+// A name the string path does not answer returns `none`, never an
+// approximation: a caller complementing an approximate set admits real members
+// of the property rather than missing some.
+interface properties {
+  /// Every binary property this build answers. ICU4X bakes each one's data as a
+  /// static, so naming a case here reaches it with no lookup at all.
+  enum binary-property {
+    alnum,
+    alphabetic,
+    ascii-hex-digit,
+    bidi-control,
+    bidi-mirrored,
+    blank,
+    case-ignorable,
+    cased,
+    changes-when-casefolded,
+    changes-when-casemapped,
+    changes-when-lowercased,
+    changes-when-nfkc-casefolded,
+    changes-when-titlecased,
+    changes-when-uppercased,
+    dash,
+    default-ignorable-code-point,
+    deprecated,
+    diacritic,
+    emoji,
+    emoji-component,
+    emoji-modifier,
+    emoji-modifier-base,
+    emoji-presentation,
+    extended-pictographic,
+    extender,
+    full-composition-exclusion,
+    graph,
+    grapheme-base,
+    grapheme-extend,
+    grapheme-link,
+    hex-digit,
+    hyphen,
+    id-compat-math-continue,
+    id-compat-math-start,
+    id-continue,
+    id-start,
+    ideographic,
+    ids-binary-operator,
+    ids-trinary-operator,
+    ids-unary-operator,
+    join-control,
+    logical-order-exception,
+    lowercase,
+    math,
+    modifier-combining-mark,
+    noncharacter-code-point,
+    pattern-syntax,
+    pattern-white-space,
+    prepended-concatenation-mark,
+    print,
+    quotation-mark,
+    radical,
+    regional-indicator,
+    sentence-terminal,
+    soft-dotted,
+    terminal-punctuation,
+    unified-ideograph,
+    uppercase,
+    variation-selector,
+    white-space,
+    xdigit,
+    xid-continue,
+    xid-start,
+  }
+
+  /// Whether `ch` has the property.
+  has: func(property: binary-property, ch: char) -> bool;
+
+  /// The property's inclusive code point ranges, lowest first.
+  set: func(property: binary-property) -> list<tuple<u32, u32>>;
+
+  /// Inclusive code point ranges of a named property value, lowest first. A
+  /// binary property leaves `value` absent; an enumerated one supplies it, and
+  /// a `gc` value may name a group (`L`) as well as a category (`Lu`). Names
+  /// match as UAX #44 matches them, loosely.
+  ranges: func(property: string, value: option<string>) -> option<list<tuple<u32, u32>>>;
+
+  /// Whether `ch` has that named property value, without building the ranges.
+  contains: func(property: string, value: option<string>, ch: char) -> option<bool>;
+}
+
+world icu-properties {
+  export properties;
+}
