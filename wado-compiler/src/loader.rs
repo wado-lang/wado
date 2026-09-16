@@ -1560,24 +1560,23 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
             self.fetch_wasm_asset_bytes(&source, &path).await?
         };
 
-        // A CM component takes the component path; a core module falls through.
-        if kind == WasmAssetKind::Wasm && is_wasm_component(&raw_bytes) {
-            return self.handle_component_import(&source, &namespace, raw_bytes);
+        let core_wasm_bytes = match kind {
+            WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
+                .map_err(|e| LoadError::WasmImport {
+                    module_source: source.clone(),
+                    message: format!("failed to parse .wat: {e}"),
+                })?
+                .into_owned(),
+            WasmAssetKind::Wasm => raw_bytes,
+        };
+
+        // A component takes the component path, a core module falls through. The
+        // text form says which just as the binary does, so the bytes decide.
+        if is_wasm_component(&core_wasm_bytes) {
+            return self.handle_component_import(&source, &namespace, core_wasm_bytes);
         }
 
-        let (core_wasm_bytes, function_exports) = {
-            let core_wasm_bytes = match kind {
-                WasmAssetKind::Wat => wat::parse_bytes(&raw_bytes)
-                    .map_err(|e| LoadError::WasmImport {
-                        module_source: source.clone(),
-                        message: format!("failed to parse .wat: {e}"),
-                    })?
-                    .into_owned(),
-                WasmAssetKind::Wasm => raw_bytes,
-            };
-            let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
-            (core_wasm_bytes, function_exports)
-        };
+        let function_exports = parse_wasm_module_exports(&source, &core_wasm_bytes)?;
 
         // Synthesize a Wado AST module from the asset's exports and run
         // it through the regular parse/bind pipeline so that

@@ -2,7 +2,7 @@
 // sets. Common use cases: `\p{L}` (any letter), `\p{Nd}` (decimal
 // digit), `\p{Zs}` (space separator). These expand into character
 // ranges at grammar-parse time — see `expand_unicode_property` in
-// `g4/parser.wado`.
+// `g4/unicode.wado`.
 //
 // The existing `src/g4/parser_test.wado` verifies the ranges are
 // emitted correctly, but no driver-level test exercises the match

@@ -9,6 +9,9 @@
 # Node 26 (V8 14.6) ships stable JSPI, so `WebAssembly.Suspending` works without
 # `--experimental-wasm-jspi`, which Node 26 no longer accepts.
 node = "26"
+# `wasm-tools component new` wraps the bundled ICU core module into a component.
+# Only rebuilding that asset needs it.
+wasm-tools = "latest"
 
 [settings]
 auto_install = true
@@ -387,7 +390,8 @@ cargo build --bin wado --quiet
 
 CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zlib \
   core:serde core:json core:json_nsd core:args core:value core:cbor core:simd core:url core:kiln \
-  core:benchmark core:router core:digest core:random core:uuid core:temporal core:log core:jwt"
+  core:benchmark core:router core:digest core:random core:uuid core:temporal core:log core:jwt \
+  core:icu"
 WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
@@ -564,13 +568,31 @@ cd wado-bundled-libm && CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_
 WAT_FILE="wado-compiler/lib/core/libm.wat"
 WAT_TMP="${WAT_FILE}.tmp"
 cargo run --bin wado-dev-tools -- bundled-asset target/wasm32-unknown-unknown/release/wado_bundled_libm.wasm > "$WAT_TMP"
-if cmp -s "$WAT_TMP" "$WAT_FILE"; then
-  rm "$WAT_TMP"
-  echo "  bundled libm WAT unchanged, skipping update"
-else
-  mv "$WAT_TMP" "$WAT_FILE"
-  echo "  bundled libm WAT updated"
-fi
+scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled libm WAT"
+"""
+
+[tasks.update-bundled-icu]
+description = "Rebuild the bundled ICU character-property component"
+run = """
+#!/usr/bin/env bash
+set -xe -o pipefail
+# --emit-relocs keeps the `linking` and `reloc.*` sections the data-reference
+# map is resolved from; STRIP=none keeps the `name` section it is keyed by.
+cd wado-bundled-icu && RUSTFLAGS="-C link-arg=--emit-relocs" CARGO_PROFILE_RELEASE_STRIP=none cargo build --release && cd ..
+CORE="wado-bundled-icu/target/wasm32-unknown-unknown/release/wado_bundled_icu.wasm"
+CORE_WAT="wado-bundled-icu/target/icu.core.wat"
+COMPONENT="wado-bundled-icu/target/icu.component.wasm"
+# Resolve the relocations into `wado.dataref` and spend them, as libm does. The
+# map's offsets are segment-relative, so they survive the print/reparse that a
+# `reloc` entry's offset into the encoded code section would not.
+cargo run --bin wado-dev-tools -- bundled-asset "$CORE" > "$CORE_WAT"
+# The crate imports nothing, so the wrap needs no WASI adapter.
+wasm-tools component new "$CORE_WAT" -o "$COMPONENT"
+wasm-tools validate "$COMPONENT"
+WAT_FILE="wado-compiler/lib/core/icu.wat"
+WAT_TMP="${WAT_FILE}.tmp"
+wasm-tools print -f "$COMPONENT" -o "$WAT_TMP"
+scripts/replace-if-changed.sh "$WAT_TMP" "$WAT_FILE" "bundled ICU WAT"
 """
 
 [tasks.list-todo]

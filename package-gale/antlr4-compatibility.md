@@ -58,17 +58,38 @@ diagnostic carries a span.
   (`( A | )+`, `( x )*` with `x : ;`) — `check_epsilon_closure`, ANTLR4
   error 153.
 
-### The Unicode version is Gale's, not the jar's
+### ICU is the source of truth for `\p{...}`
 
-`\p{...}` resolves against the latest UCD — 17.0.0 today — and tracking a
-new release promptly is the standing policy. ANTLR4 ships a property
-table frozen when the jar was built (4.13.2 is Unicode 15.0.0), so Gale
-runs ahead of it: **divergence that traces to the Unicode version is
-wontfix**. The superset rule already covers it — a newly assigned code
-point's meaning is fixed by the UCD, not invented by Gale.
+`\p{...}` resolves through [`core:icu`](../docs/stdlib-core-icu.md), so its
+Unicode version is whatever the Wado release carries — 17.0.0 today. ANTLR4
+ships a property table frozen when the jar was built (4.13.2 is Unicode
+15.0.0). **Divergence that traces to ICU is accepted**, and it is not compared
+against the jar at all: a property's members are ICU's answer, not something
+Gale keeps and could get wrong.
 
-A derivation that disagrees on a code point _both_ versions define is
-still a bug; `scripts/check-unicode-properties.sh` separates the two.
+The layer above the data is still Gale's, so a disagreement there is still a
+bug: the bare-name resolution order, the two `General_Category` aliases behind
+`cntrl` and `digit`, `EmojiPresentation=`, and the complement. Those are
+pinned
+character-by-character in `src/g4/parser_test.wado`.
+
+### Three properties Gale deliberately does not answer
+
+ICU does not carry them, and Gale refuses rather than approximating. `\P{...}`
+complements what comes back, so a close-enough set would admit real members of
+the property instead of missing some. Each refusal names its reason.
+
+- **`Block`**, written `\p{Block=Greek}` or `\p{InGreek}`. ICU4X ships no Block
+  data. Name a script or the code point range itself.
+- **`Decomposition_Type`** (`\p{dt=Font}`). Likewise no data.
+- **The UCD's contributory `Other_*` properties** (`\p{Other_ID_Start}` and the
+  seven beside it). UAX #44 defines them as inputs to derived properties rather
+  than as properties to query, and ICU follows that. Name the derived property.
+
+Measured against [antlr/grammars-v4](https://github.com/antlr/grammars-v4)'s
+1,150 grammars: `Block` and `Decomposition_Type` never appear, and every
+`Other_*` occurrence sits in a comment. Python's and Rust's lexers spell the
+code points out by hand rather than use the property.
 
 ### EOF in parse trees
 
@@ -385,25 +406,16 @@ stubbed predicates, never about the base class.
 
 `scripts/antlr4-oracle-selftest.sh` pins both paths.
 
-#### Oracling the Unicode property tables
+#### The Unicode properties are not oracled
 
-`\P{...}` complements what `\p` selects, so a table that is merely close
-_admits_ code points rather than missing them — and a property's values
-partition the code-point space, so it can be compared exactly instead of
-spot-checked.
+The jar is not consulted about them at all. They come from `core:icu`, which
+is their single source of truth, and the property oracle that used to diff
+every value against the jar is gone with the tables it checked.
 
-`scripts/antlr4-property-oracle.sh <property> <value>...` gives the jar
-one `[\p{PROPERTY=VALUE}]+` rule per value over every Unicode scalar in
-order; a `+` rule consumes a whole run, so the token stream _is_ the
-jar's range table. `scripts/check-unicode-properties.sh` diffs that
-against Gale's expansion, with the tables regenerated at the jar's frozen
-version (above). Java runs only here, never in CI.
-
-ANTLR4's `Property=Value` surface is narrower than the UCD's: it rejects
+ANTLR4's `Property=Value` surface is narrower than the UCD's anyway: it rejects
 group letters (`\p{gc=L}`, though bare `\p{L}` is fine) and empty values
 (`\p{sc=Hrkt}`), and matches aliases case-insensitively but
-underscore-sensitively. Gale's UAX #44 loose matching is a superset; the
-oracle drops what the jar rejects, naming each on stderr.
+underscore-sensitively. Gale's UAX #44 loose matching is a superset.
 
 ### Stage C — action-body translation
 

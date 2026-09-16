@@ -905,8 +905,9 @@ fn embed_imported_wasm_modules(
         let embedded = wado_wasm_embed::embed(
             &asset.bytes,
             &wado_wasm_embed::Embed {
-                memory_import: ("env", "memory"),
+                memory_import: Some(("env", "memory")),
                 keep_export: &|name| used_exports.contains(name),
+                stub_export: &|_| false,
                 strip_custom_sections: strip_names,
             },
         )
@@ -4020,6 +4021,41 @@ fn import_resource_using_interfaces(
     }
 }
 
+/// Collect a component asset down to the lifted functions the program imports.
+/// An asset the pass cannot read is composed whole: the program is correct
+/// either way, and only its size is at stake.
+fn collect_component_asset(asset: &WasmAsset, project: &NirPackage) -> Vec<u8> {
+    // The component's own items are left alone, so a lift the program does not
+    // import still names a core export. That export stays as a stub, and what
+    // only its body reached is what the collection takes away.
+    let unused: IndexSet<String> = project
+        .cm_interface_registry
+        .interfaces()
+        .filter(|interface| asset.component_interface_fqs.contains(&interface.path))
+        .flat_map(|interface| {
+            let path = interface.path.clone();
+            interface.functions.into_iter().filter_map(move |func| {
+                let used = project.used_wasi_functions.contains(&func.used_key());
+                (!used).then(|| format!("{path}#{}", func.wasi_func_name))
+            })
+        })
+        .collect();
+
+    // A `cabi_post_` export belongs to the lift it is named after, so it lives
+    // and dies with it rather than being asked about separately.
+    let stub = |name: &str| unused.contains(name.strip_prefix("cabi_post_").unwrap_or(name));
+    wado_wasm_embed::embed_component(
+        &asset.bytes,
+        &wado_wasm_embed::Embed {
+            memory_import: None,
+            keep_export: &|_| true,
+            stub_export: &stub,
+            strip_custom_sections: true,
+        },
+    )
+    .unwrap_or_else(|_| asset.bytes.clone())
+}
+
 /// Compose `program_bytes` with its `ImportKind::Component` dependencies into
 /// one standalone component via `wasm-compose`. Each dependency's exported
 /// interface is connected to the program's matching import; leftover host
@@ -4087,7 +4123,8 @@ fn compose_dependency_components(
             if provides.is_empty() && provides_funcs.is_empty() {
                 continue;
             }
-            let dep = Component::from_bytes(&mut validator, "dependency", asset.bytes.clone())?;
+            let collected = collect_component_asset(asset, project);
+            let dep = Component::from_bytes(&mut validator, "dependency", collected)?;
             let dep_id = graph.add_component(dep)?;
             let dep_inst = graph.instantiate(dep_id)?;
             dep_instances.push((dep_id, dep_inst));

@@ -26,6 +26,36 @@ test "minimal grammar" {
     assert g.lexer_rules.is_empty();
 }
 
+// ANTLR4's `NameStartChar` admits `À` upwards, and it retypes a rule by
+// `Character.isUpperCase` on the first character — the UCD's `Uppercase`, which
+// `core:icu` answers.
+test "a rule name outside ASCII parses and is typed by Uppercase" {
+    let upper = parse("grammar Test;\nÀBC : [0-9]+ ;").unwrap();
+    assert upper.lexer_rules.len() == 1;
+    assert upper.lexer_rules[0].name == "ÀBC";
+    assert upper.parser_rules.is_empty();
+
+    // U+2160 is `Nl` with `Other_Uppercase`, so `Uppercase` admits it where `Lu`
+    // alone would not.
+    let other = parse("grammar Test;\nⅠbc : [0-9]+ ;").unwrap();
+    assert other.lexer_rules.len() == 1;
+    assert other.lexer_rules[0].name == "Ⅰbc";
+
+    let lower = parse("grammar Test;\nàbc : 'x' ;").unwrap();
+    assert lower.parser_rules.len() == 1;
+    assert lower.parser_rules[0].name == "àbc";
+    assert lower.lexer_rules.is_empty();
+
+    // U+01C5 is `Lt`, which is titlecase and not `Uppercase`, so ANTLR reads it
+    // as a parser rule.
+    let title = parse("grammar Test;\nǅbc : 'x' ;").unwrap();
+    assert title.parser_rules.len() == 1;
+
+    // A `NameChar` that is not a `NameStartChar` still continues a name.
+    let combining = parse("grammar Test;\nA\u{0300}b : 'x' ;").unwrap();
+    assert combining.lexer_rules[0].name == "A\u{0300}b";
+}
+
 test "grammar with simple parser rule" {
     let input = "grammar Test;
 json : value EOF ;";
@@ -393,24 +423,11 @@ X : [\\p{Grek}] ;");
     assert !class_admits(&cc, 'a');
 }
 
-test "an In-prefixed name is a block, not a script" {
-    // The `Greek` block is `Greek_And_Coptic` (U+0370..U+03FF), so it stops
-    // where Greek Extended begins — which the script does not.
-    let cc = class_of(&"grammar Test;
-X : [\\p{InGreek}] ;");
-    assert class_admits(&cc, 'α');
-    assert !class_admits(&cc, 'ᾰ'), "U+1FB0 is in Greek Extended, a different block";
-}
-
 test "binary properties resolve" {
     let syntax = class_of(&"grammar Test;
 X : [\\p{Pattern_Syntax}] ;");
     assert class_admits(&syntax, '+');
     assert !class_admits(&syntax, 'a');
-    let id_start = class_of(&"grammar Test;
-X : [\\p{Other_ID_Start}] ;");
-    assert class_admits(&id_start, '\u{2118}'), "SCRIPT CAPITAL P is Other_ID_Start";
-    assert !class_admits(&id_start, 'a');
     let ws = class_of(&"grammar Test;
 X : [\\p{White_Space}] ;");
     assert class_admits(&ws, '\t');
@@ -441,10 +458,27 @@ X : [\\p{General_Category=Lu}] ;");
 X : [\\p{Script=Greek}] ;");
     assert class_admits(&sc, 'ᾰ');
     assert !class_admits(&sc, 'a');
-    let blk = class_of(&"grammar Test;
-X : [\\p{Block=Greek_And_Coptic}] ;");
-    assert class_admits(&blk, 'α');
-    assert !class_admits(&blk, 'ᾰ');
+}
+
+// Block, Decomposition_Type and the UCD's contributory `Other_*` are answered
+// by ANTLR4 and not by Gale, because `core:icu` does not answer them. Each is
+// refused with a message naming the reason, never approximated: `\P{...}`
+// complements what comes back, so a close-enough set would admit real members
+// of the property. No grammar in antlr/grammars-v4 uses one in a live rule.
+test "a property Gale deliberately does not answer says so" {
+    let blk = parse("grammar Test;\nX : [\\p{Block=Greek_And_Coptic}] ;");
+    assert blk.unwrap_err().message.contains("ICU ships no Block data");
+    let in_prefixed = parse("grammar Test;\nX : [\\p{InGreek}] ;");
+    assert in_prefixed.unwrap_err().message.contains("ICU ships no Block data");
+    let dt = parse("grammar Test;\nX : [\\p{dt=Font}] ;");
+    assert dt.unwrap_err().message.contains("Decomposition_Type");
+    let contributory = parse("grammar Test;\nX : [\\p{Other_ID_Start}] ;");
+    assert contributory.unwrap_err().message.contains("contributory property");
+    // A property of its own beginning with `In`, which the Block reading would
+    // otherwise swallow. ICU answers its two siblings, so only this one reaches
+    // the message at all.
+    let indic = parse("grammar Test;\nX : [\\p{Indic_Positional_Category=Top}] ;");
+    assert !indic.unwrap_err().message.contains("Block");
 }
 
 test "a script property complements like a category" {
@@ -2176,11 +2210,9 @@ X : [\\p{EmojiPresentation=Text}] ;");
     assert !class_admits(&not_emoji, '\u{1F600}');
 }
 
-// The enumerated `Property=Value` names beyond `gc=` / `sc=` / `blk=`, pinned
-// character by character against the published jar (the whole-space diff is
-// `scripts/check-unicode-properties.sh`). The default-value cases carry the
-// weight: a table built from the listed lines alone answers those wrongly
-// rather than not at all.
+// The enumerated `Property=Value` names beyond `gc=` and `sc=`, pinned
+// character by character. The default-value cases carry the weight: a property
+// whose default is implicit answers those wrongly rather than not at all.
 
 test "Line_Break takes both alias spellings and its default value" {
     let alphabetic = class_of(&"grammar Test;
@@ -2253,23 +2285,16 @@ X : [\\p{ea=W}] ;"), '漢');
     assert class_admits(&class_of(&"grammar Test;
 X : [\\p{InSC=Bindu}] ;"), '\u{0901}');
     assert class_admits(&class_of(&"grammar Test;
-X : [\\p{dt=Font}] ;"), '\u{2102}'), "DOUBLE-STRUCK CAPITAL C is a font variant of C";
-    assert class_admits(&class_of(&"grammar Test;
 X : [\\p{vo=U}] ;"), '漢');
     assert class_admits(&class_of(&"grammar Test;
 X : [\\p{vo=R}] ;"), 'A');
 }
 
-test "a script or block with no code points of its own is still a value" {
+test "a script with no code points of its own is still a value" {
     let no_script = class_of(&"grammar Test;
 X : [\\p{sc=Zzzz}] ;");
     assert class_admits(&no_script, '\u{0378}'), "an unassigned code point has Script=Unknown";
     assert !class_admits(&no_script, 'A');
-
-    let no_block = class_of(&"grammar Test;
-X : [\\p{blk=NB}] ;");
-    assert class_admits(&no_block, '\u{2FE0}'), "U+2FE0 sits outside every assigned block";
-    assert !class_admits(&no_block, 'A');
 }
 
 test "an unknown enumerated property or value is still rejected" {

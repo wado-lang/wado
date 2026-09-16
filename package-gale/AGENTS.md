@@ -115,13 +115,7 @@ Real-world grammars can also be oracle-pinned (Stage B′ over the published jar
 
 A `superClass` grammar has no behaviour without its hand-written base class, so `antlr4-oracle.sh` refuses to guess one. Pass `--super tests/grammars/java/<Base>.java`, once per base — a lexer and its sibling parser declare their own. Each is the Java twin of a Wado `impl` in the matching driver test, and keeping the pair in sync is what makes the comparison mean anything. `--probe-super` only reports what an input does against a synthesized base — it never yields pinnable output, for the reason in "Oracling a `superClass` grammar" in [`antlr4-compatibility.md`](./antlr4-compatibility.md). `scripts/antlr4-oracle-selftest.sh` pins both paths (needs java; run it after touching the oracle).
 
-The `\p{...}` tables get an exact whole-space diff instead of pinned samples: `scripts/check-unicode-properties.sh` compares every property against the jar. The jar's Unicode snapshot is frozen at its build (4.13.2 is 15.0.0), so regenerate to match first:
-
-```sh
-scripts/regen-unicode-tables.sh 15.0.0   # match the jar
-scripts/check-unicode-properties.sh
-scripts/regen-unicode-tables.sh          # back to latest
-```
+`\p{...}` takes its properties from [`core:icu`](../docs/stdlib-core-icu.md), which is their single source of truth: the jar is no longer consulted about them, and divergence that traces to ICU is accepted. What Gale can still get wrong is the layer above the data — the bare-name resolution order, the two `General_Category` aliases behind `cntrl` and `digit`, `EmojiPresentation=`, and the complement — and that is pinned character-by-character in `src/g4/parser_test.wado`.
 
 To add an e2e grammar: drop the `.g4` in `tests/grammars/`, add a parse test in `src/g4/integration_test.wado`, and a driver test that imports it via the generator. Open the file with a comment saying which shape it pins and why that shape is hard.
 
