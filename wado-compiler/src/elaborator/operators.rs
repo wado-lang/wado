@@ -407,6 +407,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_name(CompilerItem::Eq)
                         .to_string();
+                    let eq_method = self.operator_method_name(CompilerItem::Eq);
                     let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
                         return TypeTable::ERROR;
                     };
@@ -415,7 +416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         eq_trait,
                         &eq_trait_name,
-                        "eq",
+                        &eq_method,
                         false,
                         Some(&ArgClass::Exact(right)),
                     ) else {
@@ -454,6 +455,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .borrow()
                         .compiler_trait_name(CompilerItem::Ord)
                         .to_string();
+                    let ord_method = self.operator_method_name(CompilerItem::Ord);
                     let Some(ord_trait) = self.tysys.compiler_trait_def(CompilerItem::Ord) else {
                         return TypeTable::ERROR;
                     };
@@ -462,7 +464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         lookup_type_id,
                         ord_trait,
                         &ord_trait_name,
-                        "cmp",
+                        &ord_method,
                         false,
                         None,
                     ) else {
@@ -513,12 +515,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .get(&name)
                     .cloned()
             {
+                let eq_method = self.operator_method_name(CompilerItem::Eq);
+                let ord_method = self.operator_method_name(CompilerItem::Ord);
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((bound_trait_name, info)) = {
                         let required = self.required_operator_trait(CompilerItem::Eq);
                         self.find_method_in_trait_bounds(
                             &bounds,
-                            "eq",
+                            &eq_method,
                             left,
                             span,
                             required.as_ref(),
@@ -530,7 +534,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         method_def: info.method_def,
                         trait_name: bound_trait_name,
-                        method_name: "eq".to_string(),
+                        method_name: eq_method,
                         impl_def: None,
                         impl_name: name.clone(),
                         impl_type_id: None,
@@ -557,7 +561,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) && let Some((_trait_name, info)) = {
                     let required = self.required_operator_trait(CompilerItem::Ord);
-                    self.find_method_in_trait_bounds(&bounds, "cmp", left, span, required.as_ref())
+                    self.find_method_in_trait_bounds(
+                        &bounds,
+                        &ord_method,
+                        left,
+                        span,
+                        required.as_ref(),
+                    )
                 } {
                     let ord_trait_name = self
                         .tysys
@@ -567,7 +577,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let resolved = ResolvedTraitMethod {
                         method_def: info.method_def,
                         trait_name: ord_trait_name,
-                        method_name: "cmp".to_string(),
+                        method_name: ord_method,
                         impl_def: None,
                         impl_name: name.clone(),
                         impl_type_id: None,
@@ -1868,6 +1878,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The operator trait a dispatch means, as a requirement the bound search
     /// must match.
+    /// The one method an operator trait declares, named by the registry's
+    /// capture of the declaration.
+    fn operator_method_name(&self, item: CompilerItem) -> String {
+        self.tysys
+            .type_table
+            .borrow()
+            .compiler_items()
+            .trait_method_name(item)
+            .to_string()
+    }
+
     fn required_operator_trait(&self, item: CompilerItem) -> Option<RequiredTrait> {
         let def = self.tysys.compiler_trait_def(item)?;
         Some(RequiredTrait {
