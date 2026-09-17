@@ -5189,7 +5189,40 @@ A call reaches a method through a type parameter's bound in three shapes: a meth
 
 `stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
-There is no way today to write an impl that needs an effect its trait does not declare. The design that admits one moves the declaration from each method to the trait head, where `with _` says the impl decides and `with ()` says every impl is pure. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+#### The Trait Head
+
+A `with` clause on the trait itself says what every impl of it may do. A method's own clause overrides it.
+
+| Head                          | Every impl of it       |
+| ----------------------------- | ---------------------- |
+| `trait Foo { … }`             | undecided              |
+| `trait Foo with () { … }`     | is pure                |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
+| `trait Foo with _ { … }`      | brings its own effects |
+
+`with _` is sugar for `<effect E> with E`, so an open head hands each impl its own effects and names none of them:
+
+```wado
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // E = Stdout
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with _ {       // as effectful as `S`
+    return s.next();
+}
+
+export fn run() with Stdout {
+    println(`${draw(&mut loud)}`);                  // Stdout, from `Loud`'s impl
+}
+```
+
+Where a fixed head demands the same effects of every caller, an open one is resolved from the type the call names: `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. `with _` in `draw`'s signature is what says so — a caller that forwards rather than resolves writes one of its own.
+
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ### Variadic Type Packs
 

@@ -7,15 +7,16 @@
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, is_test_function};
+use crate::name::{FqTraitName, FqTypeName, is_test_function};
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
 use crate::ast::{
     self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Stmt,
+    ImplBlock, Item, Stmt, TraitDecl,
 };
 use crate::compiler_host::Diagnostic;
+use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
 use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
@@ -47,6 +48,8 @@ pub enum EffectFault {
     Missing(EffectKind),
     /// An `impl` method declares an effect its trait method leaves out.
     UndeclaredByTrait,
+    /// The callee's effects are left open, and the caller forwards none.
+    MissingOpen,
 }
 
 /// Error from effect checking
@@ -76,6 +79,10 @@ impl From<EffectError> for Diagnostic {
             EffectFault::UndeclaredByTrait => format!(
                 "effect '{}' is not declared by trait method '{}'",
                 e.missing_effect, e.callee
+            ),
+            EffectFault::MissingOpen => format!(
+                "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
+                e.callee
             ),
         };
         Diagnostic {
@@ -396,6 +403,45 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
 /// method name.
 type TraitMethodKey = (ModuleSource, String, String);
 
+/// A trait, by its declaring module and name.
+type TraitKey = (ModuleSource, String);
+
+/// One trait impl, by the head of the type it targets and the trait it
+/// implements.
+type ImplKey = (FqTypeName, TraitKey);
+
+/// Whether `name` is an effect parameter of the trait or of the method, rather
+/// than an effect declaration the module can resolve.
+fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) -> bool {
+    let mut params = trait_decl.type_params.iter().chain(&method.type_params);
+    params.any(|p| p.is_effect && p.name == name)
+}
+
+/// The traits bounding each type parameter, by the slot
+/// `Scope::register_generic_params` gives it: an effect parameter and an
+/// `fn`-bound parameter take none.
+fn bound_traits_per_slot(
+    type_params: &[ast::GenericParam],
+    sem: &Semantics,
+    trait_by_def: &IndexMap<DefId, TraitKey>,
+) -> Vec<Vec<TraitKey>> {
+    let Some(resolutions) = sem.resolutions() else {
+        return Vec::new();
+    };
+    type_params
+        .iter()
+        .filter(|p| !p.is_effect)
+        .filter(|p| p.is_pack || p.bounds.iter().all(|b| b.fn_signature.is_none()))
+        .map(|p| {
+            p.bounds
+                .iter()
+                .filter_map(|bound| resolutions.declared(bound.id))
+                .filter_map(|def| trait_by_def.get(&def).cloned())
+                .collect()
+        })
+        .collect()
+}
+
 /// Owns the cross-module effect maps so multiple checks (effects, default
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
@@ -405,6 +451,12 @@ struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// Per type-parameter slot of a function declaration, the traits bounding
+    /// it, so a call site can read what its type arguments implement.
+    fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    /// Every effect an impl's methods declare, for resolving a trait head's
+    /// effect hole against the type a call instantiates it with.
+    impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
     resource_names: IndexSet<(ModuleSource, String)>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
@@ -480,16 +532,26 @@ impl OwnedEffectData {
         // A declaration has no body, so `fn_effects` holds nothing for it.
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
+        let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
                     continue;
                 };
+                if let Some(def) = sem.resolutions().and_then(|r| r.declared(trait_decl.id)) {
+                    trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
+                }
                 for method in &trait_decl.methods {
                     let effects = method
                         .effects
                         .iter()
                         .map(|name| {
+                            // A name the trait or the method declares as an
+                            // effect parameter stands for whatever the impl
+                            // brings, so it never resolves to a declaration.
+                            if declares_effect_param(trait_decl, method, name) {
+                                return EffectRef::Param { name: name.clone() };
+                            }
                             effect_named_in(name, src, sem, &closure, &effect_by_name).unwrap_or(
                                 EffectRef::Concrete {
                                     name: name.clone(),
@@ -502,6 +564,50 @@ impl OwnedEffectData {
                         (src.clone(), trait_decl.name.clone(), method.name.clone()),
                         effects,
                     );
+                }
+            }
+        }
+
+        let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>> = IndexMap::default();
+        let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                match item {
+                    Item::Function(func) if !func.type_params.is_empty() => {
+                        fn_bound_traits.insert(
+                            func.id,
+                            bound_traits_per_slot(&func.type_params, sem, &trait_by_def),
+                        );
+                    }
+                    Item::Impl(block) => {
+                        let Some(facts) = annotations.and_then(|ann| ann.impl_facts.get(&block.id))
+                        else {
+                            continue;
+                        };
+                        let Some(trait_name) = facts.trait_name.as_ref() else {
+                            continue;
+                        };
+                        let Some(trait_module) = trait_name.module() else {
+                            continue;
+                        };
+                        let key = (
+                            facts.struct_name.head_only(),
+                            (trait_module.clone(), trait_name.base_name().to_string()),
+                        );
+                        let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
+                        for effect in block
+                            .methods
+                            .iter()
+                            .filter_map(|method| fn_effects.get(&method.id))
+                            .flatten()
+                        {
+                            if !entry.contains(effect) {
+                                entry.push(effect.clone());
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -541,6 +647,8 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             trait_method_effects,
+            fn_bound_traits,
+            impl_effects,
             resource_names,
             members,
             closure,
@@ -558,6 +666,8 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
+            fn_bound_traits: &self.fn_bound_traits,
+            impl_effects: &self.impl_effects,
             resource_names: &self.resource_names,
             members: &self.members,
             closure: &self.closure,
@@ -582,6 +692,10 @@ struct EffectIndex<'a> {
     /// Trait method → the effects it declares. A call through a type
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// Per type-parameter slot of a function declaration, the traits bounding it.
+    fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    /// Every effect one impl's methods declare.
+    impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// Declared members, for nested-resource detection.
@@ -766,6 +880,11 @@ fn check_impl_effect_conformance(
         let Some(declared) = index.fn_effects.get(&method.id) else {
             continue;
         };
+        // An open head stands for whatever the impl brings, so it allows
+        // everything rather than one set.
+        if declared_by_trait.iter().any(EffectRef::is_param) {
+            continue;
+        }
         let allowed: IndexSet<EffectRef> = declared_by_trait
             .iter()
             .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
@@ -1147,6 +1266,7 @@ fn call_site_effects(
     {
         let params = index.fn_params.get(&def).cloned().unwrap_or_default();
         let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
+        let resolved = resolve_bound_effect_params(sem, index, annotations, def, id, resolved);
         return vec![bare(ident.name.clone(), resolved)];
     }
     let dispatches = dispatches_at(annotations, id);
@@ -1253,6 +1373,15 @@ impl EffectIndex<'_> {
 
     /// The effects one trait method declares. `None` for a name no trait
     /// declares, an `interface` operation, or a `resource` method.
+    /// Whether the trait leaves its effects to the impl — a `with _` head.
+    fn trait_is_open(&self, key: &TraitKey) -> bool {
+        self.trait_method_effects
+            .iter()
+            .any(|((module, trait_name, _), effects)| {
+                (module, trait_name) == (&key.0, &key.1) && effects.iter().any(EffectRef::is_param)
+            })
+    }
+
     fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
         let module = trait_name.module()?;
         self.trait_method_effects
@@ -1298,10 +1427,11 @@ fn resolve_effect_params(
     if param_names.is_empty() {
         return callee_effects.to_vec();
     }
-    let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
-        .iter()
-        .map(|n| (n.clone(), IndexSet::default()))
-        .collect();
+    // `None` until an argument determines the parameter. An argument that
+    // determines it to be pure leaves an empty set, which is not the same
+    // answer as never having been determined.
+    let mut concrete: IndexMap<String, Option<IndexSet<EffectRef>>> =
+        param_names.iter().map(|n| (n.clone(), None)).collect();
     let type_table = &sem.types;
     let skip = usize::from(is_method && !param_types.is_empty());
     for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
@@ -1328,8 +1458,9 @@ fn resolve_effect_params(
         };
         for formal_effect in formal {
             if let EffectRef::Param { name } = formal_effect
-                && let Some(set) = concrete.get_mut(name)
+                && let Some(slot) = concrete.get_mut(name)
             {
+                let set = slot.get_or_insert_with(IndexSet::default);
                 for a in actual {
                     set.insert(a.clone());
                 }
@@ -1339,17 +1470,70 @@ fn resolve_effect_params(
     let mut resolved = Vec::new();
     for effect in callee_effects {
         match effect {
-            EffectRef::Param { name } => {
-                if let Some(set) = concrete.get(name) {
-                    for c in expand_through_closure(set, index.closure) {
-                        resolved.push(c);
-                    }
-                }
-            }
+            // A parameter no argument determined — a trait bound's, say —
+            // stays the requirement, so only a caller holding it satisfies it.
+            EffectRef::Param { name } => match concrete.get(name).and_then(Option::as_ref) {
+                Some(set) => resolved.extend(expand_through_closure(set, index.closure)),
+                None => resolved.push(effect.clone()),
+            },
             EffectRef::Concrete { .. } => resolved.push(effect.clone()),
         }
     }
     resolved
+}
+
+/// Resolve an effect parameter the callee's trait bounds leave open against the
+/// types the call instantiates them with: `S: Source` filled with `Loud` brings
+/// what `impl Source for Loud` declares.
+///
+/// An instantiation reaching no impl this phase indexed leaves the parameter
+/// alone, so an unresolved bound stays the caller's requirement.
+fn resolve_bound_effect_params(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    annotations: Option<&TypeAnnotations>,
+    callee: AstId,
+    site: AstId,
+    effects: Vec<EffectRef>,
+) -> Vec<EffectRef> {
+    if !effects.iter().any(EffectRef::is_param) {
+        return effects;
+    }
+    let Some(slots) = index.fn_bound_traits.get(&callee) else {
+        return effects;
+    };
+    let mut brought: IndexSet<EffectRef> = IndexSet::default();
+    let mut resolved_any = false;
+    let instantiations = annotations
+        .into_iter()
+        .flat_map(|ann| ann.all(|facts| &facts.generic_instantiations, site));
+    for instantiation in instantiations {
+        for (slot, traits) in slots.iter().enumerate() {
+            let Some(&type_arg) = instantiation.type_args.get(slot) else {
+                continue;
+            };
+            let head = sem.types.fq_base_type_name(type_arg).head_only();
+            for key in traits.iter().filter(|key| index.trait_is_open(key)) {
+                let Some(declared) = index.impl_effects.get(&(head.clone(), key.clone())) else {
+                    continue;
+                };
+                resolved_any = true;
+                brought.extend(declared.iter().cloned());
+            }
+        }
+    }
+    if !resolved_any {
+        return effects;
+    }
+    let mut out: IndexSet<EffectRef> = IndexSet::default();
+    for effect in effects {
+        if effect.is_param() {
+            out.extend(brought.iter().cloned());
+        } else {
+            out.insert(effect);
+        }
+    }
+    out.into_iter().collect()
 }
 
 impl SemEffectWalker<'_> {
@@ -1382,9 +1566,22 @@ impl SemEffectWalker<'_> {
             // it against `wasi:cli`), so compare through the declaration's
             // canonical form rather than by raw `module_source`.
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // Any `Param` left after resolution did not bind to a concrete
-            // effect; skip it rather than report a spurious miss.
-            if effect.is_param() || self.current.contains(&effect) {
+            if effect.is_param() {
+                // A parameter no argument determined stands for whatever the
+                // callee brings, so only a caller carrying one of its own —
+                // `with _` — forwards it.
+                if !self.current.iter().any(EffectRef::is_param) {
+                    self.out.push(EffectError {
+                        callee: callee.to_string(),
+                        missing_effect: effect.name().to_string(),
+                        fault: EffectFault::MissingOpen,
+                        span,
+                        module: self.module.clone(),
+                    });
+                }
+                continue;
+            }
+            if self.current.contains(&effect) {
                 continue;
             }
             let effect = &effect;
@@ -2868,9 +3065,9 @@ impl PurityWalker<'_> {
     fn unanswered(&self, effects: &[EffectRef]) -> bool {
         effects.iter().any(|effect| {
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // A `Param` left after resolution bound to no concrete effect, as
-            // `SemEffectWalker::report_missing` reads it.
-            !effect.is_param() && !self.granted.contains(&effect)
+            // A `Param` left after resolution stands for effects no handler
+            // here can have installed, so it is unanswered like any other.
+            effect.is_param() || !self.granted.contains(&effect)
         })
     }
 

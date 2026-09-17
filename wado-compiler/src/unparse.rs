@@ -13,9 +13,9 @@ use crate::ast::{
     MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
     StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
-    TraitBound, TraitDecl, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
+    TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl,
+    Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -876,7 +876,7 @@ impl<'a> Unparser<'a> {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
             }
-            s.unparse_with_clause(&f.effects, &f.stores);
+            s.unparse_with_clause(f.written_effects(), &f.stores);
         });
 
         if let Some(body) = &f.body {
@@ -1001,10 +1001,11 @@ impl<'a> Unparser<'a> {
 
     /// Unparse generic type parameters: `<T, U: Ord>`
     fn unparse_generic_params(&mut self, params: &[GenericParam]) {
-        if params.is_empty() {
+        let written: Vec<&GenericParam> = params.iter().filter(|p| p.is_written()).collect();
+        if written.is_empty() {
             return;
         }
-        self.delimited("<", ">", params, |s, param| {
+        self.delimited("<", ">", written, |s, param| {
             s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
@@ -1223,6 +1224,12 @@ impl<'a> Unparser<'a> {
         if !t.supertraits.is_empty() {
             self.output.push_str(": ");
             self.unparse_trait_bounds(&t.supertraits);
+        }
+        match &t.head {
+            TraitHead::Undecided => {}
+            TraitHead::Pure { .. } => self.output.push_str(" with ()"),
+            TraitHead::Open { .. } => self.output.push_str(" with _"),
+            TraitHead::Fixed { effects, .. } => self.unparse_with_clause(effects, &[]),
         }
 
         self.with_braced_body(t.span, |this| {
@@ -4147,7 +4154,7 @@ pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
         output.push_str(" -> ");
         unparse_type_into(ret, output);
     }
-    unparse_with_clause_into(&f.effects, &f.stores, output);
+    unparse_with_clause_into(f.written_effects(), &f.stores, output);
 }
 
 /// Emit `[pub ]<keyword> <name>[<generics>]` into `out`.
@@ -4332,10 +4339,11 @@ fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
 }
 
 pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String) {
-    if params.is_empty() {
+    let written: Vec<&GenericParam> = params.iter().filter(|p| p.is_written()).collect();
+    if written.is_empty() {
         return;
     }
-    delimited_into("<", ">", params, output, |param, o| {
+    delimited_into("<", ">", written, output, |param, o| {
         emit_kw_if_into(param.is_effect, "effect ", o);
         emit_kw_if_into(param.is_pack, "..", o);
         o.push_str(&param.name);

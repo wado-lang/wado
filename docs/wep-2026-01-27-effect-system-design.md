@@ -109,7 +109,7 @@ fn run_with_mock_counter(f: fn() with Counter) {
 
 #### `with _`
 
-- [ ] Not implemented.
+- [x] Implemented.
 
 `with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. A function that only passes its callees' effects through writes it and names nothing:
 
@@ -389,7 +389,7 @@ Resolving the selected impl's effects at each instantiation would admit more pro
 
 #### `with _`: the impl decides
 
-- [ ] Not implemented.
+- [x] Implemented.
 
 `with _` on a trait head is the same sugar as on a function, so `trait Iterator with _` is `trait Iterator<effect E> with E`. The impl's own method signatures supply the argument, and nothing new has to be named:
 
@@ -413,6 +413,8 @@ fn sum<I: Iterator with ()>(it: I) -> i32 { ... }             // only a pure ite
 ```
 
 A type implements a trait once, so two impls differing only in the effect argument are rejected. That is what keeps the argument an output of the impl rather than a choice made at the call.
+
+The parameter is resolved where the call names the type: `count(lines)` demands what `impl Iterator for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it — `with _` says "as effectful as `I`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
 
 #### An undecided head
 
@@ -440,15 +442,22 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 ## Roadmap
 
-1. `with _`, on a function signature and on a trait head. Finished when it desugars to a fresh effect parameter in both positions, and a generic function forwards an impl's effects without naming them.
-2. The undecided-head diagnostic. Finished when a bare head reports at the severity its visibility selects, `allow` waives it, and only user-authored modules are walked.
-3. The prelude heads. Finished when `Iterator` and `IntoIterator` carry `with _`, `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`, and the corpus is green.
+1. The undecided-head diagnostic. Finished when a bare head reports at the severity its visibility selects, `allow` waives it, and only user-authored modules are walked. It is also what lets a bare head read as `with _`, which no trait can afford while every head in the corpus is bare.
+2. The prelude heads. Finished when `Iterator` and `IntoIterator` carry `with _`, `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`, and the corpus is green.
 
 ## Known gaps
 
 ### The rest of the prelude heads
 
-Step 3 above names the traits whose head is settled. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
+Step 2 above names the traits whose head is settled. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
+
+### An effect argument on a bound
+
+`fn sum<I: Iterator with ()>(it: I)` — constraining an open trait's effect argument at the bound — does not parse yet. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
+
+### An open bound on a method
+
+A trait head's hole is resolved from the type arguments a call site names, and only a free function's are read today. A generic _method_ with an open-head bound leaves the hole unresolved, so its caller has to forward it with `with _`. Nothing in the design turns on the difference; a method dispatch names its declaration by `DefId` where a free call names it by `AstId`, and the lookup needs the second key.
 
 ### One effect parameter per function
 

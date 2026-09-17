@@ -1,0 +1,18 @@
+// `with _` forwards its callee's effects, so a caller that holds none is
+// reported the same way a named `<effect E>` would report it.
+use { println, Stdout } from "core:cli";
+
+fn wrapper(f: fn() with _) with _ {
+    f();
+}
+
+fn bad() {
+    wrapper(|| { println("needs Stdout"); });
+}
+
+export fn run() with Stdout {
+    bad();
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout'"}
