@@ -39,7 +39,7 @@ use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::sig::ImplSig;
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::trait_env::{written_type_arg, written_type_args};
+use crate::elaborator::trait_env::written_type_arg;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::elaborator::{scope, sig};
@@ -2123,8 +2123,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .clone();
                 (sig, m.type_params.clone())
             });
-        let trait_type_for_name = header.trait_ty().unwrap().clone();
-        let target_for_name = header.ty.clone();
         // The trait's identity, resolved in the impl's own frame: the decl key
         // from the impl module's imports (so an alias resolves to the declaring
         // module), the arguments with the impl's bound type params substituted
@@ -2142,8 +2140,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return found_traits;
         };
-        let defs = scope.tysys.resolutions.defs().clone();
         let trait_args = impl_sig.trait_type_args;
+        let trait_name_of_impl = scope
+            .tysys
+            .trait_env
+            .fq_trait_of_impl(header, &scope.tysys.resolutions)
+            .expect("a header carrying a trait declaration names it");
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
@@ -2219,15 +2221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param_names = Param::names(&method_sig.params);
             let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
-                trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                    FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
-                        &trait_type_for_name,
-                        &scope.tysys.resolutions,
-                    )),
-                    &trait_type_for_name,
-                    &target_for_name,
-                    &scope.tysys.resolutions,
-                ),
+                trait_name: trait_name_of_impl.clone(),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2286,15 +2280,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                        FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
-                            &trait_type_for_name,
-                            &scope.tysys.resolutions,
-                        )),
-                        &trait_type_for_name,
-                        &target_for_name,
-                        &scope.tysys.resolutions,
-                    ),
+                    trait_name: trait_name_of_impl,
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {

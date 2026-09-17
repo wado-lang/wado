@@ -3346,9 +3346,8 @@ impl Monomorphizer {
         true
     }
 
-    /// The name with the template's own type parameters replaced in the trait's
-    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, which
-    /// is the impl that answers it. The receiver takes the same substitution.
+    /// The name with the template's type parameters replaced in the trait's
+    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,

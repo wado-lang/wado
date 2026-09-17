@@ -1,6 +1,5 @@
-// A bound may write the type parameter it constrains as a trait argument.
-// `T: Add<T>` asks for `Meters: Add<Meters>` at a call passing `Meters`, so the
-// arguments have to arrive in the call's parameter space and not the callee's.
+// A bound may write the type parameter it constrains as a trait argument, so
+// `T: Add<T>` asks for `Meters: Add<Meters>` at a call passing `Meters`.
 
 struct Meters {
     v: i32,
@@ -35,8 +34,7 @@ struct Pair<A, B> {
     b: B,
 }
 
-// The argument is another of the callee's own parameters, so the substitution
-// has to reach every one of them and not only the bounded parameter.
+// The argument is another of the callee's parameters, not the bounded one.
 fn join<A: Add<B, Output = A>, B>(p: Pair<A, B>) -> A {
     return p.a + p.b;
 }

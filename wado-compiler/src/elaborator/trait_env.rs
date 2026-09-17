@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
+use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -209,28 +210,21 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplInd
 }
 
 /// The trait an `impl` block names, whole: one value, so the identity, the
-/// spelling and the arguments cannot disagree about which trait at which
-/// arguments.
+/// spelling and the arguments cannot disagree.
 #[derive(Clone, Debug)]
 pub(super) struct ImplTraitRef {
-    /// The trait declaration, read from `Resolutions` rather than resolved a
-    /// second time. This is what an impl index matches against, so a lookup
-    /// compares declarations rather than spellings two modules can share
-    /// (WEP 2026-08-12). `None` for a trait position whose site names no
-    /// declaration.
+    /// The trait declaration (WEP 2026-08-12); `None` for a trait position
+    /// whose site names none.
     pub(super) def: Option<DefId>,
     /// Identity of the trait as the impl indices key it.
     pub(super) key: ImplTargetKey,
-    /// The head name as written, memoised so the index filters that only ask
-    /// "is this a trait impl?" need no allocation. A spelling, not an identity
-    /// — compare [`Self::key`] when the question is *which* trait this is.
+    /// The head as written. A spelling, not an identity — compare
+    /// [`Self::key`] when the question is *which* trait this is.
     pub(super) name: String,
-    /// The reference as written (`Index<K>` in `impl Index<K> for Map`), for
-    /// consumers that need its arguments' spellings.
+    /// The reference as written (`Index<K>` in `impl Index<K> for Map`).
     pub(super) ty: Type,
-    /// Identity of each argument the header writes, `Self` meaning
-    /// [`ImplHeader::target_id`]. Resolved once from the header's module, so a
-    /// consumer holding it alone compares identities rather than spellings.
+    /// Identity of each argument written, `Self` meaning
+    /// [`ImplHeader::target_id`].
     pub(super) arg_ids: Vec<name::FqTypeName>,
 }
 
@@ -291,7 +285,7 @@ impl ImplHeader {
         match &trait_.key {
             ImplTargetKey::Decl(def) => Some(
                 name::FqTraitName::declared(resolutions.defs(), *def)
-                    .with_args(written_type_args(&trait_.ty, resolutions)),
+                    .with_args(trait_.arg_ids.clone()),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
@@ -300,28 +294,24 @@ impl ImplHeader {
         }
     }
 
-    /// The trait declaration this header implements; `None` for an inherent
-    /// block and for a trait position that names none.
+    /// `None` for an inherent block, and for a trait position naming no
+    /// declaration.
     pub(super) fn trait_def(&self) -> Option<DefId> {
         self.trait_.as_ref()?.def
     }
 
-    /// Identity of the implemented trait as the impl indices key it.
     pub(super) fn trait_key(&self) -> Option<&ImplTargetKey> {
         Some(&self.trait_.as_ref()?.key)
     }
 
-    /// The head name of the implemented trait, as written.
     pub(super) fn trait_head_name(&self) -> Option<&str> {
         Some(self.trait_.as_ref()?.name.as_str())
     }
 
-    /// The implemented trait as written, arguments included.
     pub(super) fn trait_ty(&self) -> Option<&Type> {
         Some(&self.trait_.as_ref()?.ty)
     }
 
-    /// The identity of each argument the header writes for the trait.
     pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
         self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
     }
@@ -1586,6 +1576,14 @@ impl TraitEnv {
         }
     }
 
+    /// The type parameters `trait_` declares, empty for one that declares none
+    /// and for a name reaching no declaration.
+    pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
+        self.trait_decl_headers
+            .get(&trait_)
+            .map_or(&[], |header| header.type_params.as_slice())
+    }
+
     /// How many arguments the impl on `receiver` writes for `trait_`, among
     /// those a bound writing `wanted` reaches.
     pub(crate) fn impl_written_arg_count(
@@ -2093,6 +2091,40 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
     }
 }
 
+/// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying
+/// what `params` are there: `trait A<X>: B<X>` over `trait B<Y>: C<Y>` reaches
+/// `C<X>`.
+fn at_writer(
+    inherited: &InheritedBound,
+    params: &[ast::GenericParam],
+    direct: &ast::TraitBound,
+    writer: DefId,
+) -> InheritedBound {
+    let names: Vec<String> = params
+        .iter()
+        .take(direct.type_args.len())
+        .map(|p| p.name.clone())
+        .collect();
+    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &direct.type_args);
+    InheritedBound {
+        bound: ast::TraitBound {
+            type_args: inherited.bound.type_args.iter().map(at).collect(),
+            assoc_types: inherited
+                .bound
+                .assoc_types
+                .iter()
+                .map(|a| ast::AssocTypeBound {
+                    ty: at(&a.ty),
+                    ..a.clone()
+                })
+                .collect(),
+            ..inherited.bound.clone()
+        },
+        decl: inherited.decl,
+        writer,
+    }
+}
+
 /// Expand every trait's direct supertraits into its transitive closure,
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
 /// followed, keeping the closure finite.
@@ -2168,10 +2200,16 @@ fn expand_supertraits(
                 writer: loc,
             },
         );
+        let super_params = headers
+            .get(&super_loc)
+            .map_or(&[][..], |h| h.type_params.as_slice());
         for inherited in expand_supertraits(
             defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_inherited(&mut closure, &inherited);
+            push_unique_inherited(
+                &mut closure,
+                &at_writer(&inherited, super_params, direct, loc),
+            );
         }
     }
     stack.pop();

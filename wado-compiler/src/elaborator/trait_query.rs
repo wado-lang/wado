@@ -27,7 +27,7 @@ use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    get_type_name_static, header_answers_bound_args,
+    get_type_name_static, header_answers_bound_args, written_type_args,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -211,18 +211,23 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
-/// A bound as the call site asks it: its trait arguments are spelled in the
-/// declaring item's parameter space, so each of them becomes what the call
-/// passed for it.
-///
-/// `None` where one stays a binder, which the call left parametric: that
-/// question belongs to the caller's own instantiation, and asking it here of a
-/// concrete type answers no.
+/// A bound as the asking site states it: its arguments are spelled in the
+/// declaring item's parameter space, and become what the site wrote there.
+/// `None` where one stays a binder, which belongs to the site's own caller.
 fn asked_at_call(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
     let asked = at_call
         .iter()
         .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
     (!asked.args_mention_binder()).then_some(asked)
+}
+
+/// The pairs [`asked_at_call`] substitutes, from arguments already resolved.
+fn written_for(params: &[ast::GenericParam], args: &[FqTypeName]) -> Vec<(FqTypeName, FqTypeName)> {
+    params
+        .iter()
+        .zip(args)
+        .map(|(param, arg)| (FqTypeName::binder(&param.name), arg.clone()))
+        .collect()
 }
 
 /// Whether an AST type is phrased against `Self` anywhere, and so only means
@@ -496,12 +501,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
+        // The closure is spelled in the trait's own parameter space.
+        let at_impl = written_for(
+            self.tysys.trait_env.trait_decl_params(trait_decl),
+            &written_type_args(trait_type, &self.tysys.resolutions),
+        );
         let supertraits: Vec<(String, Option<FqTraitName>)> = self
             .tysys
             .trait_env
             .supertrait_closure(&trait_decl)
             .iter()
-            .map(|b| self.tysys.bound_named_written(&b.bound))
+            .map(|b| {
+                let (name, written) = self.tysys.bound_named_written(&b.bound);
+                (name, written.and_then(|t| asked_at_call(t, &at_impl)))
+            })
             .collect();
         if supertraits.is_empty() {
             return;
@@ -1044,19 +1057,33 @@ impl TypeSystem {
         trait_: DefId,
         wanted: &[FqTypeName],
     ) -> bool {
-        let answers = |written: &ast::TraitBound| {
-            let args = self
-                .bound_written(written)
-                .map(|named| named.args().to_vec())
+        let own = self.scoped_trait_decl_key(scope, &bound.name);
+        let written = |b: &ast::TraitBound| self.bound_written(b);
+        if own == Some(trait_) {
+            let args = written(bound)
+                .map(|n| n.args().to_vec())
                 .unwrap_or_default();
-            self.args_answer(&args, trait_, wanted)
-        };
-        if self.scoped_trait_decl_key(scope, &bound.name) == Some(trait_) {
-            return answers(bound);
+            return self.args_answer(&args, trait_, wanted);
         }
-        self.supertraits_of(scope, &bound.name)
-            .iter()
-            .any(|s| s.decl == trait_ && answers(&s.bound))
+        // A clause writes the subtrait's own parameters, which this bound fills.
+        let at_bound = written_for(
+            own.map_or(&[], |decl| self.trait_env.trait_decl_params(decl)),
+            &written(bound)
+                .map(|n| n.args().to_vec())
+                .unwrap_or_default(),
+        );
+        self.supertraits_of(scope, &bound.name).iter().any(|s| {
+            s.decl == trait_ && {
+                let clause = written(&s.bound);
+                let args = clause
+                    .clone()
+                    .and_then(|t| asked_at_call(t, &at_bound))
+                    .or(clause)
+                    .map(|n| n.args().to_vec())
+                    .unwrap_or_default();
+                self.args_answer(&args, trait_, wanted)
+            }
+        })
     }
 
     /// The transitive supertraits of `trait_name` as seen from `scope`.
@@ -2604,9 +2631,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// What the call passes for each of `params`, as the names a trait argument
-    /// spells its own parameters with. A parameter the call leaves parametric
-    /// contributes nothing, so a bound mentioning it keeps its binder.
+    /// [`written_for`] over a call's type arguments. A parameter the call leaves
+    /// parametric contributes nothing, so a bound mentioning it keeps its binder.
     fn call_site_types(
         &self,
         params: &[ast::GenericParam],

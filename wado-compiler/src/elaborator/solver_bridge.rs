@@ -860,8 +860,7 @@ impl SolverBridge {
         for (trait_, closure) in tysys.trait_env.supertrait_closures() {
             let id = lowering.trait_decl(*trait_);
             // An edge whose arguments the lowering cannot say states none,
-            // which answers the supertrait at its declared defaults and no
-            // written argument.
+            // which answers at the supertrait's declared defaults.
             program.traits.entry(id).or_default().supertraits = closure
                 .iter()
                 .map(|b| ParamBound {

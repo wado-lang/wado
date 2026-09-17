@@ -1,5 +1,5 @@
-// A supertrait clause writes the supertrait's own arguments, and a bound naming
-// the subtrait supplies the supertrait at exactly those arguments.
+// A supertrait clause writes arguments in the subtrait's parameter space, and a
+// bound naming the subtrait supplies the supertrait at what it wrote there.
 
 trait Measure<X> {
     fn of(&self, x: X) -> i32;
@@ -29,12 +29,28 @@ fn scaled<U: Measure<i32>>(u: U, by: i32) -> i32 {
     return u.of(by);
 }
 
-// `T: Metric` reaches `Measure<i32>` through the clause, so it answers a bound
-// written at that same argument.
 fn through_supertrait<T: Metric>(t: T, by: i32) -> i32 {
+    return scaled(t, by);
+}
+
+trait Gauge<X>: Measure<X> {
+    fn zero(&self) -> X;
+}
+
+impl Gauge<i32> for Ruler {
+    fn zero(&self) -> i32 {
+        return 0;
+    }
+}
+
+fn through_generic_supertrait<T: Gauge<i32>>(t: T, by: i32) -> i32 {
     return scaled(t, by);
 }
 
 test "a supertrait clause supplies its written arguments" {
     assert through_supertrait(Ruler { scale: 3 }, 4) == 12;
+}
+
+test "a supertrait clause writing the subtrait's parameter takes its argument" {
+    assert through_generic_supertrait(Ruler { scale: 5 }, 4) == 20;
 }

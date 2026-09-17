@@ -49,13 +49,9 @@ pub fn holds_with_args(
     .holds(ty, trait_, args)
 }
 
-/// Whether a bound in force answers `trait_` at `wanted`.
-///
-/// A bare request asks for the declared defaults and any bound reaching the
-/// trait answers it, which is what lets a supertrait such as
-/// `AsStrSlice: Eq<String>` supply a bare `Eq`. A request that writes arguments
-/// is answered by whatever the walk to the trait writes there — the bound's own
-/// arguments, or the supertrait clause's — defaulted where it writes none.
+/// Whether a bound in force answers `trait_` at `wanted`, comparing what the
+/// walk to the trait writes there against `wanted`, defaulted where it writes
+/// none.
 fn bound_answers(
     program: &Program,
     bound: &ParamBound,

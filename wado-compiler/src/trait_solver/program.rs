@@ -387,10 +387,9 @@ impl Program {
             .is_some()
     }
 
-    /// What is written for `wanted`'s own parameters when a bound on `bound` is
-    /// in force: `bound`'s own arguments where it names `wanted` itself, else
-    /// the supertrait clause that reached it. `None` where it does not reach.
-    /// The walk refuses to hang on a supertrait cycle.
+    /// What `bound` writes for `wanted`'s own parameters — its own arguments
+    /// where it names `wanted`, else the clause that reached it. `None` where it
+    /// does not reach.
     pub(super) fn args_reaching(
         &self,
         bound: &ParamBound,
