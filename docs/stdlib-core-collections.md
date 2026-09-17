@@ -99,6 +99,10 @@ Returns the value stored under text equal to `key`, or null.
 
 Returns true if some key spells the same text as `key`.
 
+#### `pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V>`
+
+Returns a reference to the value stored under text equal to `key`.
+
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
 ##### `fn index_assign(&mut self, key: K, value: Self::Output)`

@@ -2841,9 +2841,7 @@ Write any `AsStrSlice` text to the output buffer.
 #### `pub fn write_display<T: Display>(&mut self, value: &T)`
 
 Write a `Display` value with the default spec, as `write_str` writes
-text as it stands. This formatter's spec belongs to the value being
-rendered, not to a part written inside it — an exponent takes neither
-the width nor the sign the number asked for.
+text as it stands: the spec belongs to the value, not to its parts.
 
 #### `pub fn write_char(&mut self, c: char)`
 

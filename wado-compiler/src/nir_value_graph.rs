@@ -488,6 +488,28 @@ impl ValueKind {
     }
 }
 
+/// Which operand a neutral element sits on. Subtraction, division and the
+/// shifts are one-sided: `x << 0` is `x`, while `0 << x` is `0` — an absorbing
+/// element, which [`neutral_int`] does not claim.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Side {
+    Left,
+    Right,
+}
+
+/// Whether the integer `n`, on `side` of `op`, leaves the other operand
+/// unchanged. Integers only: `x + 0.0` is `+0.0` rather than `x` when `x` is
+/// `-0.0`, and `x * 1.0` would have to answer for a signalling NaN.
+pub fn neutral_int(op: NirBinaryOp, n: u64, side: Side) -> bool {
+    match op {
+        NirBinaryOp::Add | NirBinaryOp::BitOr | NirBinaryOp::BitXor => n == 0,
+        NirBinaryOp::Mul => n == 1,
+        NirBinaryOp::Sub | NirBinaryOp::Shl | NirBinaryOp::Shr => side == Side::Right && n == 0,
+        NirBinaryOp::Div => side == Side::Right && n == 1,
+        _ => false,
+    }
+}
+
 /// Hash-consed pure-value pool. One instance per function. Also owns the
 /// `OpaqueId` counter, so [`ValuePool::fresh_opaque`] returns a
 /// pool-unique identity each call.
@@ -1085,6 +1107,24 @@ impl ValuePool {
             if self.kind(rhs).as_bool() == Some(neutral) {
                 return lhs;
             }
+        }
+        // The same argument for the integer identities, which `sub_unchecked`
+        // plants as `self.start + x` wherever a view spans a whole string. The
+        // kept operand is the one whose type the operator returns, so a pool
+        // entry that recorded no type still folds.
+        if self
+            .kind(rhs)
+            .as_int()
+            .is_some_and(|(n, _)| neutral_int(op, n, Side::Right))
+        {
+            return lhs;
+        }
+        if self
+            .kind(lhs)
+            .as_int()
+            .is_some_and(|(n, _)| neutral_int(op, n, Side::Left))
+        {
+            return rhs;
         }
         let folded = type_table.and_then(|tt| {
             let l = self.const_of(lhs, tt)?;

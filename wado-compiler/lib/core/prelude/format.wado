@@ -144,9 +144,6 @@ impl Formatter {
     /// If no width is set or content is already as wide, writes content as-is.
     /// Width counts characters, so a multi-byte content pads by what it renders.
     pub fn pad<S: AsStrSlice>(&mut self, content: S) {
-        // The unpadded paths append `content` itself rather than a view of it:
-        // a view hides the append's operands from the constant-folding frame,
-        // and every `${x}` with no width specifier lands here.
         if self.width <= 0 {
             self.buf.push_str(content);
             return;
