@@ -20,6 +20,7 @@ use crate::ast::{
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    written_params,
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -9840,7 +9841,7 @@ line 2
     #[test]
     fn trait_supertrait_clause_follows_generic_params() {
         let decl = parse_trait("trait Sink<T>: Collect<Item = T> {}");
-        assert_eq!(decl.type_params.len(), 1);
+        assert_eq!(written_params(&decl.type_params).count(), 1);
         let names: Vec<&str> = decl.supertraits.iter().map(|b| b.name.as_str()).collect();
         assert_eq!(names, ["Collect"]);
     }
