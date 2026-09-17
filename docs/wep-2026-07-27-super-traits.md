@@ -101,24 +101,24 @@ form from
 obligation holds on arrival, and the redundant `Eq` in `impl<T: Eq + Ord>` comes
 out.
 
-Two follow-ups remain: a shared face over the `Reflect*` traits, and the
-stdlib `Fn: FnMut` that
+## Known gaps
+
+Two standard-library clauses are unwritten: a shared face over the `Reflect*`
+traits, and the stdlib `Fn: FnMut` that
 [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
 leaves open.
-
-## Known gaps
 
 An associated-type constraint in supertrait position is checked but not used for
 inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved. Closing it
 means feeding the constraint into inference wherever the bound is in scope.
 
 The trait solver states a clause's arguments only where it can name them as
-declarations. A clause whose argument is the subtrait's own parameter states
-none there, and the solver answers that edge at the supertrait's declared
-defaults. It is lenient rather than wrong — the elaborator, which does carry the
-argument, is what rejects a mismatch — so the two engines disagree on nothing a
-program can reach. Closing it means a solver-side spelling for a trait's own
-parameter, which its type language has no term for today.
+types. A clause whose argument is the subtrait's own parameter states none
+there, and the solver answers that edge at the supertrait's declared defaults.
+It is lenient rather than wrong — the elaborator, which does carry the argument,
+is what rejects a mismatch — so the two engines disagree on nothing a program
+can reach. Closing it means a solver-side spelling for a trait's own parameter,
+which its type language has no term for today.
 
 ## Consequences
 

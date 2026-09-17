@@ -1,0 +1,27 @@
+// `Self` written as a trait argument is the impl's target, so `impl Wrap<Self>`
+// owes `Base<F>` — an obligation a binder left unread would skip.
+
+trait Base<A> {
+    fn base(&self, a: &A) -> i32;
+}
+
+trait Wrap<A>: Base<A> {
+    fn wrap(&self) -> i32;
+}
+
+struct F {
+    v: i32,
+}
+
+impl Wrap<Self> for F {
+    fn wrap(&self) -> i32 {
+        return self.v;
+    }
+}
+
+test "an impl writing Self still owes its supertrait at that argument" {
+    assert F { v: 1 }.wrap() == 1;
+}
+
+__DATA__
+{"compile_error": "type 'F' implements trait 'Wrap' but not its supertrait 'Base'"}

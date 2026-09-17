@@ -3191,11 +3191,9 @@ impl<T: Eq> Eq for Pair<T> {
   [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
   associated function with no `self` has no receiver argument to bind `Self`
   from and stays unspellable
-- Positional trait arguments in bound position (`T: Take<i32>`) — bounds
-  accept associated-type constraints (`T: Collect<Item = i32>`) but not a
-  trait's own type arguments, so the bound-path counterpart of
-  [argument-directed selection](#one-trait-at-two-argument-lists) does not
-  arise yet
+- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes
+  one (`impl conv::Convert<String> for S`), and a bound names the trait it
+  imported by name
 
 ### Coherence and Orphan Rules
 

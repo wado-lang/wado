@@ -27,7 +27,7 @@ use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    get_type_name_static, header_answers_bound_args, written_type_args,
+    args_at_impl_target, get_type_name_static, header_answers_bound_args, written_type_args,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -527,10 +527,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        // The closure is spelled in the trait's own parameter space.
+        // The closure is spelled in the trait's own parameter space, and a
+        // written `Self` is this impl's target.
         let at_impl = written_for(
             self.tysys.trait_env.trait_decl_params(trait_decl),
-            &written_type_args(trait_type, &self.tysys.resolutions),
+            &args_at_impl_target(
+                written_type_args(trait_type, &self.tysys.resolutions),
+                &impl_block.ty,
+                &self.tysys.resolutions,
+            ),
         );
         let supertraits: Vec<(String, Option<FqTraitName>)> = self
             .tysys

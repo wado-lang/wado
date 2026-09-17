@@ -1516,14 +1516,7 @@ impl TraitEnv {
         target: &ast::Type,
         resolutions: &Resolutions,
     ) -> name::FqTraitName {
-        // A written `Self` argument is the impl's own target, so `impl Add<Self>
-        // for Meters` and `impl Add<Meters> for Meters` name one impl.
-        let target_id = written_type_arg(target, resolutions);
-        let written: Vec<name::FqTypeName> = fq
-            .args()
-            .iter()
-            .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
-            .collect();
+        let written = args_at_impl_target(fq.args().to_vec(), target, resolutions);
         let Some(params) = fq
             .canonical()
             .and_then(|decl| self.trait_decl_headers.get(&decl))
@@ -2884,6 +2877,20 @@ pub(super) fn non_default_named_arg_count(
 ///
 /// A name that reaches no declaration keeps its spelling — there is no identity
 /// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+/// Written trait arguments with `Self` read as the impl's own target, so
+/// `impl Add<Self> for Feet` says `Add<Feet>` wherever an impl head is read.
+pub(super) fn args_at_impl_target(
+    written: Vec<name::FqTypeName>,
+    target: &ast::Type,
+    resolutions: &Resolutions,
+) -> Vec<name::FqTypeName> {
+    let target_id = written_type_arg(target, resolutions);
+    written
+        .into_iter()
+        .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
+        .collect()
+}
+
 pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> name::FqTypeName {
     let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
         args.iter()
