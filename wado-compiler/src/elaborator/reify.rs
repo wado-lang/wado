@@ -64,8 +64,8 @@ use crate::escape::{
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
-    LocalMethodName, MethodName, display_function_name, effect_default_impl_name,
-    mangle_local_item_name, test_function_name,
+    LocalMethodName, MethodName, deref_capture_name, display_function_name,
+    effect_default_impl_name, mangle_local_item_name, test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -6699,11 +6699,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut deref_overrides: hashmap::IndexMap<String, (String, TypeId)> =
             hashmap::IndexMap::default();
         for mc in &cap_info.mut_captures {
-            // The slot comes from this walk; the `&mut` goes to the reserved
-            // index, which is the one the capture list records.
-            ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
-            let ref_index = mc.ref_index;
-            ctx.address_taken_locals.insert(mc.outer_index);
+            let Some(outer) = ctx.lookup(&mc.var_name) else {
+                unreachable!(
+                    "in {}: annotate mut-captured `{}`, which this frame does not bind",
+                    ctx.function_name, mc.var_name
+                )
+            };
+            let outer_index = outer.index;
+            let ref_index = ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
+            assert_eq!(
+                ref_index, mc.ref_index,
+                "in {}: `{}` lands on the index `resolve_closure` reserved for it",
+                ctx.function_name, mc.ref_name
+            );
+            ctx.address_taken_locals.insert(outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),
@@ -6716,7 +6725,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             op: TirUnaryOp::MutRef,
                             expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
-                                    index: mc.outer_index,
+                                    index: outer_index,
                                     name: mc.var_name.clone(),
                                 },
                                 mc.inner_type,
@@ -6733,9 +6742,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             deref_overrides.insert(mc.var_name.clone(), (mc.ref_name.clone(), mc.inner_type));
         }
 
-        // Step 2: open the closure context with the deref overrides, and with
-        // the environment annotate settled on, so the body walk reads slots
-        // rather than deciding them.
+        // Step 2: open the closure context with the deref overrides and the
+        // environment annotate settled on, whose slots the body walk reads.
         let mut closure_ctx =
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
@@ -6815,8 +6823,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
         // Step 5: assemble the capture list, making this frame capture whatever
-        // the closure only reached through it — the step `resolve_closure` ran,
-        // which also allocates this frame's own slots in the same order.
+        // the closure only reached through it, as `resolve_closure` also did.
         let captures = relink_recorded_captures(&cap_info.captures, &closure_ctx, ctx);
 
         // An explicit annotation wins; otherwise single-expression closure
@@ -7992,30 +7999,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A function-typed global's `GlobalVarGet` parts
-    /// `(module_source, global_name, type)`, or `None` for a non-global or
-    /// non-function name. Shares `ModuleDecls::lookup_global` with the
-    /// annotate-side `Elaborator::global_var_type` so the two paths agree.
-    fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
-        let (module_source, global_name, ty, _mutable) = self
-            .sem
-            .decls
-            .lookup_global(name, &self.current_module_source)?;
-        self.tysys
-            .type_table
-            .borrow()
-            .is_callable(ty)
-            .then_some((module_source, global_name, ty))
-    }
-
     /// The callee value of a call annotate recorded as indirect, read down to
     /// the function value as `build_indirect_call`'s `deref_to_value` does.
     ///
-    /// Which of the three it is comes from the record, so the type test that
-    /// decided it at annotate time is not repeated here. What is left to fail
-    /// is the record naming something this frame cannot reach, which is a
-    /// disagreement between the two walks rather than a question with an
-    /// answer.
+    /// `kind` says which value, so the type test that decided it at annotate
+    /// time is not repeated. Only a name this frame cannot reach is left to
+    /// fail, which is the two walks disagreeing.
     fn reify_indirect_callee(
         &mut self,
         callee: &ast::Expr,
@@ -8023,44 +8012,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> TirExpr {
         let span = callee.span();
-        let name = |callee: &ast::Expr| match callee {
-            ast::Expr::Ident(ident) => ident.name.clone(),
-            other => unreachable!(
-                "at {}: annotate recorded a named callee for {:?}",
-                other.span().location(),
-                std::mem::discriminant(other)
-            ),
-        };
-        let value = match kind {
-            IndirectCallee::Binding => {
-                let name = name(callee);
-                let Some(var_ref) = ctx.lookup_or_capture(&name) else {
+        let value = match (kind, callee) {
+            (IndirectCallee::Binding, ast::Expr::Ident(ident)) => {
+                let Some(var_ref) = ctx.lookup_or_capture(&ident.name) else {
                     unreachable!(
-                        "at {}: annotate reached the binding `{name}`, reify's frame cannot",
-                        span.location()
+                        "at {}: annotate reached the binding `{}`, reify's frame cannot",
+                        span.location(),
+                        ident.name
                     )
                 };
-                var_ref_expr(var_ref, &name, span)
+                var_ref_expr(var_ref, &ident.name, span)
             }
-            IndirectCallee::Global => {
-                let name = name(callee);
-                let Some((module_source, global_name, global_type)) = self.global_fn_callee(&name)
+            (IndirectCallee::Global, ast::Expr::Ident(ident)) => {
+                let Some((module_source, name, global_type, _mutable)) = self
+                    .sem
+                    .decls
+                    .lookup_global(&ident.name, &self.current_module_source)
                 else {
                     unreachable!(
-                        "at {}: annotate read the global `{name}`, reify finds no such global",
-                        span.location()
+                        "at {}: annotate read the global `{}`, reify finds no such global",
+                        span.location(),
+                        ident.name
                     )
                 };
                 TirExpr::new(
                     TirExprKind::GlobalVarGet {
                         module_source,
-                        name: global_name,
+                        name,
                     },
                     global_type,
                     span,
                 )
             }
-            IndirectCallee::Expr => self.reify_expr(callee, ctx, None),
+            (IndirectCallee::Expr, _) => self.reify_expr(callee, ctx, None),
+            (IndirectCallee::Binding | IndirectCallee::Global, other) => unreachable!(
+                "at {}: annotate recorded a named callee, and this one has no name",
+                other.span().location()
+            ),
         };
         deref_to_value(value, span, &self.tysys.type_table)
     }
@@ -10848,7 +10836,7 @@ fn var_ref_expr(var_ref: VarRef, name: &str, span: Span) -> TirExpr {
             let capture = TirExpr::new(
                 TirExprKind::Capture {
                     index,
-                    name: format!("$deref_cap_{index}"),
+                    name: deref_capture_name(index),
                 },
                 ref_type_id,
                 span,

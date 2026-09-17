@@ -16,7 +16,7 @@ use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
     StructDef, TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
     TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
-    TypeTable,
+    TypeTable, capture_at, capture_source_locals,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
@@ -1569,10 +1569,8 @@ impl ClosureSafetyAnalyzer<'_> {
     /// A capture stores the value in the closure's environment, so a local
     /// holding a closure loses its specialised form by being captured.
     fn escape_captured_locals(&mut self, captures: &[TirCapture]) {
-        for capture in captures {
-            if let Some(index) = capture.source.local()
-                && let Some(&closure_id) = self.local_to_closure.get(&index)
-            {
+        for index in capture_source_locals(captures) {
+            if let Some(&closure_id) = self.local_to_closure.get(&index) {
                 self.specializable.swap_remove(&closure_id);
             }
         }
@@ -2026,14 +2024,7 @@ impl TirMutVisitor for CaptureRewriter<'_> {
         match &mut expr.kind {
             TirExprKind::Capture { index, .. } => {
                 let index = *index;
-                let Some(capture) = self.captures.get(index as usize) else {
-                    unreachable!(
-                        "at {}: slot {index} is read, but this closure's environment has {}",
-                        self.self_span.location(),
-                        self.captures.len()
-                    )
-                };
-                let cap_type = capture.type_id;
+                let cap_type = capture_at(self.captures, index, self.self_span).type_id;
                 // The method this body becomes takes `self` as its first
                 // parameter, so the environment is local 0 of the new frame.
                 *expr = read_capture_slot((0, self.self_ref_type), index, cap_type, self.self_span);

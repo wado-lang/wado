@@ -2248,7 +2248,6 @@ fn build_handler_op_closure(
         name: h_name.to_string(),
         source: CaptureSource::Local(h_local_index),
         type_id: handler_type,
-        is_mut: false,
     }];
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();

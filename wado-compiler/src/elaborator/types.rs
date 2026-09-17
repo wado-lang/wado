@@ -2273,9 +2273,8 @@ impl From<TypeError> for Diagnostic {
 pub(super) enum OuterReach {
     /// A local of the enclosing frame, at this index.
     ParentLocal(u32),
-    /// The enclosing frame is itself a closure and reaches the binding through
-    /// its own environment. Which slot is not known until that frame registers
-    /// the capture, which it does once this closure's body has been walked.
+    /// A slot of the enclosing frame's own environment, which frame registers
+    /// once this closure's body has been walked, so no index is known here.
     ParentEnv,
 }
 
@@ -2468,18 +2467,14 @@ pub(super) struct FunctionContext {
     pub(super) locals: Vec<TirLocal>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
-    /// Bindings the enclosing frame can reach, and how it reaches each. Seeded
-    /// from the parent's own reachable set as well as its locals, so a closure
-    /// nested in a closure sees the enclosing function's bindings. Only set for
-    /// closure contexts.
+    /// Bindings the enclosing frame can reach, and how it reaches each: its own
+    /// locals, plus what it reaches by capture. Only set for closure contexts.
     pub(super) outer_locals: IndexMap<String, OuterBinding>,
     /// Captured bindings detected during resolution (name -> slot). Only used
     /// for closure contexts.
     pub(super) captured_vars: IndexMap<String, CaptureSlot>,
     /// Whether [`Self::seed_captures`] filled `captured_vars`, which closes it:
-    /// a frame replaying a recorded environment reads slots, and reaching a
-    /// binding that has none means the record it replays is not the one this
-    /// walk needs.
+    /// a frame replaying a recorded environment reads slots, never adds one.
     captures_seeded: bool,
     /// Stack of labeled block expression targets for tracking break types
     pub(super) labeled_block_targets: Vec<LabeledBlockTarget>,
@@ -2604,9 +2599,8 @@ impl FunctionContext {
         outer_ctx: &FunctionContext,
         type_table: &RefCell<TypeTable>,
     ) -> Self {
-        // Everything the parent can reach, not just what it owns. What the
-        // parent itself only reaches through its own environment goes in first,
-        // so a parent local of the same name shadows it.
+        // Everything the parent can reach, not just what it owns. Its own
+        // captures go in first, so a parent local of that name shadows one.
         let mut outer_locals: IndexMap<String, OuterBinding> = IndexMap::default();
         for (name, binding) in &outer_ctx.outer_locals {
             outer_locals.insert(
@@ -2629,9 +2623,8 @@ impl FunctionContext {
             }
         }
 
-        // Box types, asked of the binding each name actually resolves to. A
-        // parent local shadowing a boxed one is not boxed, so driving this off
-        // `outer_locals` rather than off every scope keeps the two in step.
+        // Box types, asked of the binding each name resolves to: read off
+        // `outer_locals`, a parent local shadowing a boxed one is not boxed.
         let mut outer_box_types = IndexMap::default();
         for (name, binding) in &outer_locals {
             let ref_type = match binding.reach {
@@ -2647,7 +2640,6 @@ impl FunctionContext {
             }
         }
 
-        // Closure function name is parent::{closure}
         let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
 
         Self {
@@ -2869,11 +2861,7 @@ impl FunctionContext {
     }
 
     /// Open this frame's environment with the slots annotate settled on, in its
-    /// order. Every read during the body walk then finds a slot already there,
-    /// so which slot holds what is annotate's answer and not a second walk's.
-    ///
-    /// How each name is reached stays this frame's own question: its parent
-    /// context answers it, and no index is replayed.
+    /// order, so the body walk reads slots rather than deciding them again.
     pub(super) fn seed_captures<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
         assert!(
             self.captured_vars.is_empty(),
@@ -2893,10 +2881,8 @@ impl FunctionContext {
         self.captures_seeded = true;
     }
 
-    /// The captures in slot order, for building `TirCapture` entries. For an
-    /// address-taken outer local the type is the box type (`&mut T`). `reach`
-    /// says where the enclosing frame finds each; a `ParentEnv` one is resolved
-    /// to a slot by [`super::closure::link_parent_captures`].
+    /// The captures in slot order, for building `TirCapture` entries. An
+    /// address-taken outer local carries its box type (`&mut T`).
     pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
         self.captured_vars
             .iter()

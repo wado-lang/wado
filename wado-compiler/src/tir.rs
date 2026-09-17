@@ -2602,13 +2602,6 @@ impl TypeTable {
         }
     }
 
-    /// Whether a value of `type_id` is callable: a function, a reference to
-    /// one, or a newtype over one.
-    pub fn is_callable(&self, type_id: TypeId) -> bool {
-        let head = self.representation_head(self.peel_refs(type_id));
-        matches!(self.get(head), ResolvedType::Function { .. })
-    }
-
     /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {
@@ -5481,7 +5474,25 @@ pub struct TirCapture {
     pub name: String,
     pub source: CaptureSource,
     pub type_id: TypeId,
-    pub is_mut: bool,
+}
+
+/// The constructing frame's locals `captures` reads, in order. A slot read off
+/// that frame's own environment names no local of it, so it yields nothing here.
+pub fn capture_source_locals(captures: &[TirCapture]) -> impl Iterator<Item = u32> + '_ {
+    captures.iter().filter_map(|c| c.source.local())
+}
+
+/// The environment entry a `TirExprKind::Capture` names. A body only indexes the
+/// environment of the closure it belongs to, so `slot` is always one of these.
+pub fn capture_at(captures: &[TirCapture], slot: u32, span: Span) -> &TirCapture {
+    let Some(capture) = captures.get(slot as usize) else {
+        unreachable!(
+            "at {}: slot {slot} is read, but this closure's environment has {}",
+            span.location(),
+            captures.len()
+        )
+    };
+    capture
 }
 
 #[derive(Debug, Clone)]

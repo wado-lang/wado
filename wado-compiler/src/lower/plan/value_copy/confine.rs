@@ -16,7 +16,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
     FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TypeId, TypeTable,
+    TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -248,7 +248,7 @@ impl TirRefVisitor for SinkWalker<'_> {
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
-                for index in captures.iter().filter_map(|c| c.source.local()) {
+                for index in capture_source_locals(captures) {
                     let t = self.taint.get(&index).cloned().unwrap_or_default();
                     raise(&t, &mut self.pe.side);
                 }
@@ -376,9 +376,7 @@ fn taint_of(ctx: &Ctx, taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
             let operands: Vec<&TirExpr> = args.iter().map(|a| &a.expr).collect();
             call_result_taint(ctx, taint, func, &operands)
         }
-        TirExprKind::Closure { captures, .. } => captures
-            .iter()
-            .filter_map(|c| c.source.local())
+        TirExprKind::Closure { captures, .. } => capture_source_locals(captures)
             .fold(Taint::default(), |acc, index| {
                 union(acc, taint.get(&index).cloned().unwrap_or_default())
             }),
@@ -418,7 +416,7 @@ fn subtree_local_taint(taint: &IndexMap<u32, Taint>, expr: &TirExpr) -> Taint {
     impl TirRefVisitor for Walk<'_> {
         fn visit_expr(&mut self, expr: &TirExpr) {
             if let TirExprKind::Closure { captures, .. } = &expr.kind {
-                for index in captures.iter().filter_map(|c| c.source.local()) {
+                for index in capture_source_locals(captures) {
                     if let Some(t) = self.taint.get(&index) {
                         self.acc.extend(t.iter().copied());
                     }

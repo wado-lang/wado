@@ -607,10 +607,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             given_args.is_none() || call.args.is_empty(),
             "typed arguments replace the call's AST arguments, never join them"
         );
-        // Closure call: a bare identifier that names a *value* binding (a
-        // local/param or a capture — checked first, so shadowing wins — or a
-        // module/imported global) is invoked on its value, not looked up as a
-        // named function.
+        // Closure call: a bare identifier naming a value — a binding first, so
+        // shadowing wins, else a global — is called on its value.
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
         {
@@ -639,10 +637,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             None => IndirectCallee::Global,
                         },
                     );
-                    // `fn mut` closures need a `mut` root binding — mirrors
-                    // Rust's FnMut rule. The check goes through the same helper
-                    // used by the indirect-call path below so identifier and
-                    // non-identifier callees share one code path.
+                    // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
+                    // The non-identifier callee path below asks the same helper.
                     self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
                     // Closure `let`-site defaults can pad missing trailing args

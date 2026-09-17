@@ -8,6 +8,7 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
+use crate::name::mut_capture_ref_name;
 use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
@@ -15,12 +16,9 @@ use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
-/// The captures reify emits: the environment annotate settled on, with each
-/// source resolved against `ctx`, and types from the recorded entries, which
-/// hole inference substitutes into after annotate is done.
-///
-/// The order is `closure_ctx`'s seeded order, so it is the recorded one. What
-/// a seeding cannot settle is a name reify reaches and annotate never saw.
+/// The captures reify emits: the seeded environment, each source resolved
+/// against `ctx`, and the recorded types, which hole inference substitutes into
+/// after annotate is done.
 pub(super) fn relink_recorded_captures(
     recorded: &[CaptureEntry],
     closure_ctx: &FunctionContext,
@@ -38,7 +36,6 @@ pub(super) fn relink_recorded_captures(
         .zip(recorded)
         .map(|(linked, recorded)| TirCapture {
             type_id: recorded.type_id,
-            is_mut: recorded.is_mut,
             ..linked
         })
         .collect()
@@ -71,11 +68,8 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
 }
 
 /// One [`TirCapture`] per capture, resolved against `ctx`, the frame that builds
-/// the closure.
-///
-/// A binding `ctx` owns is read from its local. One it only reaches through its
-/// own environment makes `ctx` capture it too, which is what makes capture
-/// transitive: every frame runs this against its own parent, to any depth.
+/// the closure. A binding `ctx` only reaches through its own environment makes
+/// `ctx` capture it too, which is what makes capture transitive.
 pub(super) fn link_parent_captures(
     closure_ctx: &FunctionContext,
     ctx: &mut FunctionContext,
@@ -92,7 +86,6 @@ pub(super) fn link_parent_captures(
                 name,
                 source,
                 type_id: local.type_id,
-                is_mut: local.is_mut,
             }
         })
         .collect()
@@ -204,7 +197,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
-                let ref_name = format!("$ref_{var_name}");
+                let ref_name = mut_capture_ref_name(var_name);
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
@@ -213,7 +206,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ref_name: ref_name.clone(),
                     inner_type,
                     ref_type,
-                    outer_index,
                     ref_index,
                 });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
@@ -275,7 +267,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|capture| CaptureEntry {
                 name: capture.name,
                 type_id: capture.type_id,
-                is_mut: capture.is_mut,
             })
             .collect();
 

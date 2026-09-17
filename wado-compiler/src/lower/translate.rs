@@ -32,8 +32,8 @@ use crate::name::{
     variant_tag_helper_name,
 };
 use crate::nir::{
-    FuncId, NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction,
-    NirGlobal, NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
+    FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
+    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
     NirVariantCase, NirVariantDecl,
 };
 use crate::nir_arena::{
@@ -709,7 +709,6 @@ impl Translator<'_> {
             struct_type_id: cf.struct_type_id,
             ref_type_id: cf.ref_type_id,
             call_method,
-            captures: cf.captures.iter().map(convert_capture).collect(),
             canonical_user_params: cf.canonical_user_params.clone(),
             canonical_return: cf.canonical_return,
         }
@@ -2647,14 +2646,6 @@ fn convert_literal_pattern(lit: &TirLiteralPattern) -> NirLiteralPattern {
         TirLiteralPattern::Char(c) => NirLiteralPattern::Char(*c),
         TirLiteralPattern::String(s) => NirLiteralPattern::String(s.clone()),
         TirLiteralPattern::Null => NirLiteralPattern::Null,
-    }
-}
-
-fn convert_capture(c: &TirCapture) -> NirCapture {
-    NirCapture {
-        name: c.name.clone(),
-        type_id: c.type_id,
-        is_mut: c.is_mut,
     }
 }
 

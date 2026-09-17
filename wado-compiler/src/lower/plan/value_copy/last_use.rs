@@ -14,6 +14,7 @@ use crate::tir;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirMatchArm,
     TirPattern, TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeTable,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1214,7 +1215,7 @@ impl Analyzer<'_> {
                 None => self.scan_place_uses(place, conflict),
             },
             TirExprKind::Closure { captures, .. } => {
-                for index in captures.iter().filter_map(|c| c.source.local()) {
+                for index in capture_source_locals(captures) {
                     conflict.insert(index);
                 }
             }
@@ -1675,7 +1676,7 @@ impl Analyzer<'_> {
             }
             // The body indexes locals of its own.
             TirExprKind::Closure { captures, .. } => {
-                let sources: Vec<u32> = captures.iter().filter_map(|c| c.source.local()).collect();
+                let sources: Vec<u32> = capture_source_locals(captures).collect();
                 for index in sources {
                     live.insert(index);
                     if record {

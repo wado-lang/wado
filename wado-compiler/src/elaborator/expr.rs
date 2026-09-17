@@ -3289,20 +3289,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Collect outer-binding names that are mutated inside an expression.
-    /// Mutation = direct or compound assignment whose target's root
-    /// identifier is the binding (e.g. `count`, `point.x`, `arr[i]`,
-    /// `pair.p.children[i].name` all resolve to their root ident).
-    ///
-    /// A nested closure is walked too: it writes the same binding, and the
-    /// binding is boxed by the frame that owns it. What the closure binds
-    /// itself shadows, so a write to one of those names is not an outer write.
+    /// The outer bindings `closure` assigns to, its nested closures included. A
+    /// write names its target's root ident (`point.x`, `arr[i]` name the root).
     pub(super) fn collect_mutated_vars(closure: &ast::ClosureExpr, result: &mut IndexSet<String>) {
-        let mut collector = MutatedVarsCollector {
+        MutatedVarsCollector {
             result,
-            shadowed: closure.params.iter().map(|p| p.name.clone()).collect(),
-        };
-        collector.visit_expr(&closure.body);
+            shadowed: Vec::new(),
+        }
+        .closure_body(closure);
     }
 
     /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
@@ -5449,12 +5443,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Walks a closure body and records the outer bindings it mutates: the root
-/// identifier of each `Assign` / `CompoundAssign` target, the one that survives
-/// `.field` and `[index]` accessors. A nested closure is descended into, because
-/// the binding it writes is boxed by the frame that owns it, however many frames
-/// away that is. Everything else falls through to `AstVisitor`'s `walk_*`
-/// defaults, so there is no `_ => {}` here for new syntax to slip past.
+/// Records the outer bindings a closure body assigns to, walking it under its
+/// own binders. Unhandled syntax falls through to `AstVisitor`'s `walk_*`.
 struct MutatedVarsCollector<'a> {
     result: &'a mut IndexSet<String>,
     /// Names bound inside the closure and in scope at this point of the walk. A
@@ -5491,6 +5481,16 @@ impl MutatedVarsCollector<'_> {
         self.shadowed.truncate(depth);
     }
 
+    /// Walk a closure's body under its own parameters. A write to one of those
+    /// names is that parameter's, not the outer binding it shadows.
+    fn closure_body(&mut self, closure: &ast::ClosureExpr) {
+        self.scoped(|s| {
+            s.shadowed
+                .extend(closure.params.iter().map(|p| p.name.clone()));
+            s.visit_expr(&closure.body);
+        });
+    }
+
     /// Walk a condition and the block its bindings reach. They reach that block
     /// and nothing else — an `else` arm and the statements after do not see them.
     fn conditional(&mut self, condition: &ast::Condition, then_block: &ast::Block) {
@@ -5514,13 +5514,7 @@ impl AstVisitor for MutatedVarsCollector<'_> {
                 self.record_target(&ca.target);
                 ast::walk_expr(self, expr);
             }
-            // A nested closure writing an outer binding mutates it just as the
-            // enclosing body would, and the binding has to be boxed where it is
-            // owned. Its own parameters shadow, so they are not outer writes.
-            ast::Expr::Closure(c) => self.scoped(|s| {
-                s.shadowed.extend(c.params.iter().map(|p| p.name.clone()));
-                s.visit_expr(&c.body);
-            }),
+            ast::Expr::Closure(c) => self.closure_body(c),
             ast::Expr::If(e) => {
                 self.conditional(&e.condition, &e.then_block);
                 if let Some(eb) = &e.else_block {
@@ -5532,9 +5526,6 @@ impl AstVisitor for MutatedVarsCollector<'_> {
             ast::Expr::Matches(_) | ast::Expr::TupleComprehension(_) => {
                 self.scoped(|s| ast::walk_expr(s, expr));
             }
-            // Everything else: let the generic walker recurse into every
-            // sub-expression. Adding new `Expr` variants therefore does
-            // not require touching this collector.
             _ => ast::walk_expr(self, expr),
         }
     }

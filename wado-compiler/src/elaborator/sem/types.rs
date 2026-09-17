@@ -845,25 +845,17 @@ pub(crate) struct MutCapture {
     pub(crate) inner_type: TypeId,
     /// `TypeId` of the mut-ref (`&mut T`).
     pub(crate) ref_type: TypeId,
-    /// Outer function's local index for the original binding. Reify
-    /// recomputes the same index from its own walk (see the
-    /// `FunctionContext::locals` walk-order invariant); this field is the
-    /// cross-check.
-    pub(crate) outer_index: u32,
-    /// Local index `resolve_closure` reserved for `ref_name`. The capture list
-    /// records it, so reify writes the `&mut` here rather than into a slot of
-    /// its own — two closures over one binding reserve two.
+    /// Local index `resolve_closure` reserved for `ref_name`, which reify's own
+    /// allocation has to land on — two closures over one binding reserve two.
     pub(crate) ref_index: u32,
 }
 
-/// One entry in the closure's capture list. Mirrors
-/// [`crate::tir::TirCapture`] but lives off the TIR so reify produces
-/// the same shape from the recorded info.
+/// One entry in the closure's capture list: the binding it holds and the type
+/// annotate settled on, which hole inference may still substitute into.
 #[derive(Clone)]
 pub(crate) struct CaptureEntry {
     pub(crate) name: String,
     pub(crate) type_id: TypeId,
-    pub(crate) is_mut: bool,
 }
 
 /// Closure capture-analysis result recorded by [`super::super::Elaborator::resolve_closure`].
