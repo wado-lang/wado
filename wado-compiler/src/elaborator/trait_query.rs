@@ -211,7 +211,6 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
-<<<<<<< HEAD
 /// A bound as the asking site states it: its arguments are spelled in the
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
@@ -229,8 +228,8 @@ fn written_for(params: &[ast::GenericParam], args: &[FqTypeName]) -> Vec<(FqType
         .zip(args)
         .map(|(param, arg)| (FqTypeName::binder(&param.name), arg.clone()))
         .collect()
-||||||| 145d94d59
-=======
+}
+
 /// What a reference points at, and whether it was a mutable one.
 fn referent(tt: &TypeTable, type_id: TypeId) -> (TypeId, bool) {
     match tt.get(type_id) {
@@ -255,7 +254,6 @@ fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
 pub(super) struct SelfBinding {
     pub(super) type_id: TypeId,
     pub(super) declaring_trait: Option<DefId>,
->>>>>>> origin/main
 }
 
 /// Whether an AST type is phrased against `Self` anywhere, and so only means
