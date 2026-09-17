@@ -2,6 +2,7 @@
 //! structural trait contributes `impl<Pi: Tr, …> Tr for D<P1..Pn>`.
 
 use super::holds::holds;
+use super::program::ParamBound;
 use super::program::{
     Declaration, Env, ImplDef, ImplId, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId,
     TypeDeclId,
@@ -38,7 +39,10 @@ pub fn derive(program: &mut Program, trait_: TraitDeclId, declarations: &[Declar
             origin: ImplOrigin::Derived,
         });
         let env = Env {
-            param_bounds: bounds,
+            param_bounds: bounds
+                .iter()
+                .map(|b| b.iter().copied().map(ParamBound::bare).collect())
+                .collect(),
         };
         standing.push((decl, id, env));
     }

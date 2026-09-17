@@ -76,7 +76,7 @@ pub struct Url {
 impl Eq for Url;
 
 fn default_port_for_scheme<S: AsStrSlice>(scheme: S) -> u16 {
-    if scheme.eq_str("http") || scheme.eq_str("ws") {
+    if scheme == "http" || scheme == "ws" {
         return 80;
     }
     return 443;
@@ -103,7 +103,7 @@ fn split_off_query_and_fragment<S: AsStrSlice>(input: S) -> [String, Option<Stri
 }
 
 fn is_special_scheme<S: AsStrSlice>(s: S) -> bool {
-    return s.eq_str("http") || s.eq_str("https") || s.eq_str("ws") || s.eq_str("wss");
+    return s matches { "http" | "https" | "ws" | "wss" };
 }
 
 fn is_unreserved_char(c: char) -> bool {
@@ -714,7 +714,7 @@ impl Url {
                     continue;
                 }
                 let [k, v] = split_query_part(part);
-                if key.eq_str(&percent_decode_query_component(&k)) {
+                if key == percent_decode_query_component(&k) {
                     result.push(percent_decode_query_component(&v));
                 }
             }

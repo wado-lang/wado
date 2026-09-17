@@ -988,13 +988,7 @@ impl<'a> Unparser<'a> {
                 s.unparse_fn_signature_in_bound(sig);
             } else {
                 s.output.push_str(&bound.name);
-                if !bound.assoc_types.is_empty() {
-                    s.delimited("<", ">", &bound.assoc_types, |s, assoc| {
-                        s.output.push_str(&assoc.name);
-                        s.output.push_str(" = ");
-                        s.unparse_type(&assoc.ty);
-                    });
-                }
+                unparse_bound_arguments_into(bound, &mut s.output);
             }
         });
     }
@@ -4326,15 +4320,32 @@ fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
             unparse_fn_signature_in_bound_into(sig, o);
         } else {
             o.push_str(&bound.name);
-            if !bound.assoc_types.is_empty() {
-                delimited_into("<", ">", &bound.assoc_types, o, |assoc, o| {
-                    o.push_str(&assoc.name);
-                    o.push_str(" = ");
-                    unparse_type_into(&assoc.ty, o);
-                });
-            }
+            unparse_bound_arguments_into(bound, o);
         }
     }
+}
+
+/// `<String, Output = T>` — a bound's trait arguments then its associated type
+/// bindings, in the one `<…>` that carries both.
+pub(crate) fn unparse_bound_arguments_into(bound: &TraitBound, o: &mut String) {
+    if bound.type_args.is_empty() && bound.assoc_types.is_empty() {
+        return;
+    }
+    o.push('<');
+    let mut sep = "";
+    for arg in &bound.type_args {
+        o.push_str(sep);
+        unparse_type_into(arg, o);
+        sep = ", ";
+    }
+    for assoc in &bound.assoc_types {
+        o.push_str(sep);
+        o.push_str(&assoc.name);
+        o.push_str(" = ");
+        unparse_type_into(&assoc.ty, o);
+        sep = ", ";
+    }
+    o.push('>');
 }
 
 pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String) {

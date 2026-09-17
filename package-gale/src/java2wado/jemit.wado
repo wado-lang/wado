@@ -517,17 +517,17 @@ fn emit_call(
 /// one resolution for both spellings, so a rule about a call (which API it
 /// belongs to, whether the body may reach it) holds however it is written.
 fn emit_recognizer_call<S: AsStrSlice, S1: AsStrSlice>(env: &JEnv, name: S, args_w: S1) -> Result<String, String> {
-    if name.eq_str("getText") {
+    if name == "getText" {
         return api_expr(env, ApiCall::Text, if env.lexer {
             lexer_matched_text_expr();
         } else {
             `${env.this_bind}.rule_text(${RULE_START_TOK_LOCAL})`;
         });
     }
-    if name.eq_str("getCharPositionInLine") {
+    if name == "getCharPositionInLine" {
         return api_expr(env, ApiCall::CharPos, lexer_cursor_column_expr());
     }
-    if name.eq_str("getRuleInvocationStack") {
+    if name == "getRuleInvocationStack" {
         return api_expr(env, ApiCall::RuleStack, `${env.this_bind}.rule_stack()`);
     }
     check_member_call_reachable(env, name)?;
@@ -711,7 +711,7 @@ fn name_expr<S: AsStrSlice>(
     bindings: &List<AltBinding>,
     env: &JEnv,
 ) -> Result<String, String> {
-    if name.eq_str("_tokenStartCharPositionInLine") {
+    if name == "_tokenStartCharPositionInLine" {
         return api_expr(env, ApiCall::TokenStartCharPos, lexer_token_start_column_expr());
     }
     return match resolve_name(env, name) {

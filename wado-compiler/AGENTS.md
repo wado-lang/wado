@@ -31,7 +31,9 @@ The Wado compiler crate.
 - Optimize to the limit correctness allows, and nothing short of it. Wrong code
   is never a trade for speed. A conservatism is not caution but a defect:
   measure what it buys, and delete it when that is nothing.
-- `cargo check` while iterating. The e2e fixtures cover the language, so run
+- `cargo check --all-targets` while iterating. Without it the unit tests are
+  never compiled, and a type the crate changes breaks them where nothing looks.
+  The e2e fixtures cover the language, so run
   `cargo test -p wado-compiler --test e2e` for anything the language touches. It
   runs O0 and O2, and the other levels only under `CI` or `WADO_FULL_TEST`.
   `mise run test` and `mise run test-wado` take an hour, so they belong at the

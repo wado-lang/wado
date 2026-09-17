@@ -5260,6 +5260,7 @@ impl Parser {
             return Ok(TraitBound {
                 id: self.alloc_ast_id(),
                 name: bound_name.to_string(),
+                type_args: Vec::new(),
                 assoc_types: Vec::new(),
                 span,
                 fn_signature: Some(fn_signature),
@@ -5268,23 +5269,37 @@ impl Parser {
         }
 
         let name = self.consume_ident()?;
-        let assoc_types = if self.check(&TokenKind::Lt) {
+        let mut type_args = Vec::new();
+        let mut assoc_types = Vec::new();
+        if self.check(&TokenKind::Lt) {
             self.advance();
-            let mut assoc = Vec::new();
             loop {
                 if self.check(&TokenKind::Gt) {
                     break;
                 }
-                let assoc_span = self.peek().span;
-                let assoc_name = self.consume_ident()?;
-                self.expect(&TokenKind::Eq)?;
-                let ty = self.parse_type()?;
-                assoc.push(AssocTypeBound {
-                    id: self.alloc_ast_id(),
-                    name: assoc_name,
-                    ty,
-                    span: assoc_span,
-                });
+                let arg_span = self.peek().span;
+                // `Name =` binds an associated type; anything else is the
+                // trait's own argument, positionally. A binding closes the
+                // positional list, as a named argument does everywhere else.
+                if self.peek_kind().as_ident_name().is_some()
+                    && matches!(self.peek_nth(1).kind, TokenKind::Eq)
+                {
+                    let assoc_name = self.consume_ident()?;
+                    self.advance();
+                    assoc_types.push(AssocTypeBound {
+                        id: self.alloc_ast_id(),
+                        name: assoc_name,
+                        ty: self.parse_type()?,
+                        span: arg_span,
+                    });
+                } else if assoc_types.is_empty() {
+                    type_args.push(self.parse_type()?);
+                } else {
+                    return Err(self.error_at_span(
+                        arg_span,
+                        "a trait argument cannot follow an associated type binding",
+                    ));
+                }
                 if self.check(&TokenKind::Comma) {
                     self.advance();
                 } else {
@@ -5292,13 +5307,11 @@ impl Parser {
                 }
             }
             self.expect_gt()?;
-            assoc
-        } else {
-            Vec::new()
-        };
+        }
         Ok(TraitBound {
             id: self.alloc_ast_id(),
             name,
+            type_args,
             assoc_types,
             span,
             fn_signature: None,

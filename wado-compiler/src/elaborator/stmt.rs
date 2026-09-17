@@ -17,6 +17,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
+use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
 use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
@@ -2019,7 +2020,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The type a literal pattern demands of its scrutinee, when the scrutinee is
     /// not it. An integer literal's range is the coercion's answer, not a pattern's.
-    fn literal_pattern_mismatch(&self, lit: &Literal, scrutinee_type: TypeId) -> Option<String> {
+    fn literal_pattern_mismatch(
+        &mut self,
+        lit: &Literal,
+        scrutinee_type: TypeId,
+    ) -> Option<String> {
         let type_table = self.tysys.type_table.borrow();
         let head = type_table.representation_head(scrutinee_type);
         let expected = match lit {
@@ -2030,16 +2035,50 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // An unsettled head judges nothing: an unresolved type is reported
         // where it is unresolved, and a type parameter decided per instance.
-        matches!(
-            type_table.get(head),
+        let settled = match type_table.get(head) {
             ResolvedType::Primitive(_)
-                | ResolvedType::Struct { .. }
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Flags { .. }
-                | ResolvedType::Unit
-        )
-        .then(|| expected.to_string())
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unit => true,
+            ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
+            _ => false,
+        };
+        drop(type_table);
+        if !settled {
+            return None;
+        }
+        // A string-literal arm tests the scrutinee with `==`, so any type
+        // answering `Eq<String>` matches one the way a `String` does.
+        if matches!(lit, Literal::String(_)) && self.compares_with_string_literal(scrutinee_type) {
+            return None;
+        }
+        Some(expected.to_string())
+    }
+
+    /// Whether `scrutinee == "…"` resolves, which is what a string-literal
+    /// pattern lowers to.
+    fn compares_with_string_literal(&mut self, scrutinee: TypeId) -> bool {
+        let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
+            return false;
+        };
+        let (written, method) = {
+            let type_table = self.tysys.type_table.borrow();
+            (
+                type_table.type_name(scrutinee),
+                type_table
+                    .compiler_items()
+                    .trait_method_name(CompilerItem::Eq)
+                    .to_string(),
+            )
+        };
+        // A newtype inherits its base's `Eq`, which is where the impl is.
+        let (name, receiver) = self
+            .tysys
+            .trait_impl_base_lookup(&written, scrutinee, eq_trait);
+        self.find_arithmetic_trait_impl(&name, receiver, eq_trait, &method, Some(&ArgClass::StrLit))
+            .is_some()
     }
 
     /// Validate a range pattern (`0..<10` or `'a'..='z'`) for the body walk,
@@ -2215,18 +2254,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let into_iterator = self.tysys.compiler_trait_def(CompilerItem::IntoIterator);
+            let into_iterator = self.tysys.compiler_trait(CompilerItem::IntoIterator);
             let implements_into_iter = into_iterator.is_some_and(|trait_| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     iterable_type_id,
-                    trait_,
+                    &trait_,
                 ) || self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     inner_type_id,
-                    trait_,
+                    &trait_,
                 )
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
@@ -2594,13 +2633,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        let iterator = self.tysys.compiler_trait_def(CompilerItem::Iterator);
+        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !iterator.is_some_and(|trait_| {
             self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 iter_type,
-                trait_,
+                &trait_,
             )
         }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),

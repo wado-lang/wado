@@ -1613,6 +1613,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // fresh id would be a reference site nothing resolved.
                 id: trait_decl.id,
                 name: trait_decl.name.clone(),
+                type_args: Vec::new(),
                 assoc_types: Vec::new(),
                 span: trait_decl.span,
                 fn_signature: None,

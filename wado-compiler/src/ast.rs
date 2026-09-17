@@ -1081,6 +1081,9 @@ pub fn walk_generic_params<V: AstVisitor>(v: &mut V, params: &[GenericParam]) {
 pub fn walk_trait_bounds<V: AstVisitor>(v: &mut V, bounds: &[TraitBound]) {
     for bound in bounds {
         v.visit_id(bound.id, bound.span);
+        for arg in &bound.type_args {
+            v.visit_type(arg);
+        }
         for assoc in &bound.assoc_types {
             v.visit_id(assoc.id, assoc.span);
             v.visit_type(&assoc.ty);
@@ -3653,7 +3656,8 @@ pub struct AssocTypeBound {
 }
 
 /// A single trait bound on a generic parameter.
-/// Simple: `Ord`; with associated type bindings: `Builder<Output = T>`.
+/// Simple: `Ord`; with the trait's own arguments: `Eq<String>`; with
+/// associated type bindings: `Builder<Output = T>`.
 /// `fn(...)` / `fn mut(...)` closure-type bound: `<F: fn(i32) -> i32>` —
 /// surface syntax for the internal `Fn` / `FnMut` traits; the parsed function
 /// signature is recorded in `fn_signature` and the bound's `name` is set to
@@ -3665,6 +3669,9 @@ pub struct TraitBound {
     /// reference site, and two modules' `T: Greet` are two of them.
     pub id: AstId,
     pub name: String,
+    /// The trait's own arguments, positionally (`String` in `Eq<String>`). A
+    /// position the bound leaves out takes the trait's declared default.
+    pub type_args: Vec<Type>,
     pub assoc_types: Vec<AssocTypeBound>,
     pub span: Span,
     /// Set when the bound was written as `fn(...)` / `fn mut(...)` in source.

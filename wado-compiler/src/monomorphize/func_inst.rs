@@ -3346,6 +3346,26 @@ impl Monomorphizer {
         true
     }
 
+    /// The name with the trait's arguments cut back to what the answering impl
+    /// writes. An instance minted under a longer name defines nothing.
+    fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
+        let shorter = || {
+            let trait_fq = info.trait_name.as_ref()?;
+            if trait_fq.args().is_empty() {
+                return None;
+            }
+            let trait_ = self.functions.trait_env.trait_def_of_fq(trait_fq)?;
+            let kept = self.functions.trait_env.impl_written_arg_count(
+                info.receiver(),
+                trait_,
+                trait_fq.args(),
+            )?;
+            (kept < trait_fq.args().len())
+                .then(|| info.with_trait_type_args(&trait_fq.args()[..kept]))
+        };
+        shorter().unwrap_or(info)
+    }
+
     /// Resolve a method call in a generic body to its concrete target after
     /// substitution, delegating by receiver kind: a reference type-param to
     /// [`Self::try_ref_blanket_shortcut`], a type-param (`T^Ord::cmp` →
@@ -3433,7 +3453,8 @@ impl Monomorphizer {
             let inner = type_table.peel_refs(receiver_type_id);
             // For newtypes/flags: first try the newtype's own name (e.g., "Meters"),
             // then fall back to the base type name (e.g., "f64") if no direct impl exists.
-            let candidate = info.with_substituted_struct_name(&type_table.fq_type_name(inner));
+            let candidate = self
+                .named_by_impl(info.with_substituted_struct_name(&type_table.fq_type_name(inner)));
             if self.functions.has_impl(&candidate)
                 || self.reflect_blanket_claims(&info, inner, type_table)
             {
@@ -3444,12 +3465,16 @@ impl Monomorphizer {
                 .and_then(|trait_name| self.functions.trait_env.trait_def_of_fq(trait_name))
                 .and_then(|trait_| self.newtype_link_with_trait_impl(inner, type_table, trait_))
             {
-                info.with_substituted_struct_name(&type_table.fq_type_name(link))
+                self.named_by_impl(
+                    info.with_substituted_struct_name(&type_table.fq_type_name(link)),
+                )
             } else {
                 // Newtypes must inherit the underlying head, else the trait_env
                 // candidate lookup misses the per-type impl.
                 let resolved_inner = type_table.representation_head(inner);
-                info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner))
+                self.named_by_impl(
+                    info.with_substituted_struct_name(&type_table.fq_type_name(resolved_inner)),
+                )
             }
         } else if needs_struct_type_args {
             // Resolve through newtypes so the receiver matches the TraitEnv key

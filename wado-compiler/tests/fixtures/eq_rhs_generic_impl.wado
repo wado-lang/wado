@@ -1,0 +1,36 @@
+use { println } from "core:cli";
+
+trait Text {
+    fn text(&self) -> String;
+}
+
+impl Text for String {
+    fn text(&self) -> String {
+        return *self;
+    }
+}
+
+struct Tag { name: String }
+
+impl Eq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        return self.name == *other;
+    }
+}
+
+impl<R: Text> Eq<R> for Tag {
+    fn eq(&self, other: &R) -> bool {
+        return self.name == other.text();
+    }
+}
+
+export fn run() with Stdout {
+    let t = Tag { name: "x" };
+    println(`${t == "x"}`);
+    println(`${t == "y"}`);
+}
+
+__DATA__
+{
+  "stdout": "true\nfalse\n"
+}

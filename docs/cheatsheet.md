@@ -339,6 +339,9 @@ part.len();                      // 3, in bytes
 part.to_string();                // copies out, here and only here
 for let c of part.chars() { ... }
 
+part == "ana";                   // `==` and a match pattern both reach a literal
+match part { "ana" => 1, _ => 0 };
+
 fn byte_len<S: AsStrSlice>(s: S) -> i32 {
     return s.len();
 }

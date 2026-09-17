@@ -1360,8 +1360,8 @@ impl StrSlice {
         return seq_cmp(self.repr, self.start, self.end, o.repr, o.start, o.end);
     }
 
-    /// Byte equality against any text. `==` reaches only another `StrSlice`,
-    /// so a body generic over `AsStrSlice` has no operator to compare with.
+    /// Byte equality against any text. `==` reaches a `String` and another
+    /// `StrSlice`; this reaches whatever a type parameter turns out to be.
     pub fn eq_str<S: AsStrSlice>(&self, other: S) -> bool {
         let len = self.len();
         let b = other.as_str_slice();
@@ -1620,7 +1620,13 @@ impl StrSlice {
 
 /// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 /// owned string, a reference to one, or a view of part of one.
+<<<<<<< HEAD
 pub trait AsStrSlice with () {
+||||||| 0896d4325
+pub trait AsStrSlice {
+=======
+pub trait AsStrSlice: Eq<String> {
+>>>>>>> origin/main
     fn as_str_slice(&self) -> StrSlice with stores[self];
 
     /// Append this text to `out`. `String` overrides it to copy straight out of
@@ -1876,6 +1882,14 @@ impl<T: AsStrSlice> AsStrSlice for &T {
 
     fn to_string(&self) -> String {
         return (*self).to_string();
+    }
+}
+
+/// What `AsStrSlice` requires of a reference to one. The blanket `Eq for &T`
+/// beside it compares two references, which is a different question.
+impl<T: AsStrSlice> Eq<String> for &T {
+    pub fn eq(&self, other: &String) -> bool {
+        return (*self).eq_str(other);
     }
 }
 
