@@ -20,7 +20,6 @@ use crate::ast::{
     TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
-    written_params,
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -6763,7 +6762,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
+    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item, written_params};
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
     use crate::{ast, format};
