@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789564616527,
+  "lastUpdate": 1789631554471,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56397,6 +56397,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 285121,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "145d94d59003ee3a340dcb3ce1d5d9103c08921c",
+          "message": "Merge pull request #2071 from wado-lang/claude/string-abstraction-asref-699aaa\n\nfeat(lang): a trait bound carries the trait's arguments, so text under `AsStrSlice` compares with `==`",
+          "timestamp": "2026-09-17T16:28:30+09:00",
+          "tree_id": "771238616c5f04ed69eff0b4d494300eed493eda",
+          "url": "https://github.com/wado-lang/wado/commit/145d94d59003ee3a340dcb3ce1d5d9103c08921c"
+        },
+        "date": 1789631554198,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285109,
             "unit": "bytes"
           }
         ]
