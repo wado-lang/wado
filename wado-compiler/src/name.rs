@@ -296,6 +296,33 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// Field name of the `index`-th environment slot on a closure functor
+/// (`$capture_0`, `$capture_1`, …).
+#[must_use]
+pub fn closure_capture_field(index: u32) -> String {
+    format!("{INTERNAL_PREFIX}capture_{index}")
+}
+
+/// Display name of a capture read through the `&mut` box a mutating closure
+/// holds, where the slot rather than the binding names the read.
+#[must_use]
+pub fn deref_capture_name(index: u32) -> String {
+    format!("{INTERNAL_PREFIX}deref_cap_{index}")
+}
+
+/// The `&mut` proxy an owning frame binds for a binding a closure writes.
+#[must_use]
+pub fn mut_capture_ref_name(var_name: &str) -> String {
+    format!("{INTERNAL_PREFIX}ref_{var_name}")
+}
+
+/// Local holding one flattened field of a variant-return slot. `slot_local`
+/// trails verbatim, so a source name and a minted one cannot collide.
+#[must_use]
+pub fn variant_return_field_local(field_name: &str, slot_local: &str) -> String {
+    format!("{INTERNAL_PREFIX}vr_{field_name}_{slot_local}")
+}
+
 /// The label a block no `break` names carries: `what` says which construct put
 /// the block there, `id` makes it unique within the body.
 #[must_use]

@@ -9,8 +9,16 @@ use super::value_copy::retention::RefCarrying;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
+<<<<<<< HEAD
     ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
     TirUnaryOp,
+||||||| 145d94d5900
+    ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt, TirStmtKind,
+    TirUnaryOp, TypeTable,
+=======
+    CaptureSource, ResolvedType, TirBlock, TirCapture, TirExpr, TirExprKind, TirFunction, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeTable, capture_at,
+>>>>>>> origin/main
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -317,10 +325,19 @@ impl<'a> WriteWalker<'a> {
         let mut inner = WriteWalker::new(self.computed, self.carrying);
         settle(&mut inner, Body::Expr(body));
         for index in inner.found_captures {
-            let Some(capture) = captures.get(index as usize) else {
-                continue;
+            match capture_at(captures, index, body.span).source {
+                // Storage this frame owns.
+                CaptureSource::Local(outer) => self.found.insert(outer),
+                // Storage a frame further out owns: report it as this frame's
+                // own capture, so the walk one level up maps it again.
+                CaptureSource::Capture(slot) => self.found_captures.insert(slot),
             };
+<<<<<<< HEAD
             self.grew |= self.found.insert(capture.outer_index);
+||||||| 145d94d5900
+            self.found.insert(capture.outer_index);
+=======
+>>>>>>> origin/main
         }
     }
 }

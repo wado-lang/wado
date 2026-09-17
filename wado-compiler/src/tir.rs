@@ -5421,12 +5421,60 @@ pub struct TirStructField {
     pub field_index: u32,
 }
 
+/// Where the frame constructing a closure finds a captured binding: a local it
+/// owns, or a slot of its own environment when it is a closure itself. See
+/// [WEP: Closure Implementation Internals](../../docs/wep-2026-01-25-closure-implementation-internals.md).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CaptureSource {
+    /// A local of the constructing frame.
+    Local(u32),
+    /// The constructing frame's own capture slot.
+    Capture(u32),
+}
+
+impl CaptureSource {
+    /// The constructing frame's local index, or `None` when the binding is
+    /// reached through that frame's own environment.
+    pub fn local(self) -> Option<u32> {
+        match self {
+            Self::Local(index) => Some(index),
+            Self::Capture(_) => None,
+        }
+    }
+
+    /// Apply `f` to a local index, leaving a capture slot alone.
+    pub fn map_local(self, f: impl FnOnce(u32) -> u32) -> Self {
+        match self {
+            Self::Local(index) => Self::Local(f(index)),
+            Self::Capture(_) => self,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct TirCapture {
     pub name: String,
-    pub outer_index: u32,
+    pub source: CaptureSource,
     pub type_id: TypeId,
-    pub is_mut: bool,
+}
+
+/// The constructing frame's locals `captures` reads, in order. A slot read off
+/// that frame's own environment names no local of it, so it yields nothing here.
+pub fn capture_source_locals(captures: &[TirCapture]) -> impl Iterator<Item = u32> + '_ {
+    captures.iter().filter_map(|c| c.source.local())
+}
+
+/// The environment entry a `TirExprKind::Capture` names. A body only indexes the
+/// environment of the closure it belongs to, so `slot` is always one of these.
+pub fn capture_at(captures: &[TirCapture], slot: u32, span: Span) -> &TirCapture {
+    let Some(capture) = captures.get(slot as usize) else {
+        unreachable!(
+            "at {}: slot {slot} is read, but this closure's environment has {}",
+            span.location(),
+            captures.len()
+        )
+    };
+    capture
 }
 
 #[derive(Debug, Clone)]

@@ -907,7 +907,7 @@ impl TirMutVisitor for ShiftLocals {
             // but its captures name locals out here, and shift with them.
             TirExprKind::Closure { captures, .. } => {
                 for capture in captures.iter_mut() {
-                    capture.outer_index += self.offset;
+                    capture.source = capture.source.map_local(|index| index + self.offset);
                 }
             }
             _ => self.walk_expr(expr),

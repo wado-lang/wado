@@ -280,6 +280,13 @@ impl Token {
 }
 
 impl Span {
+    /// Where this span starts, as `line:column`, for a message that has no
+    /// `Diagnostic` to carry it — a compiler-internal invariant report.
+    #[must_use]
+    pub fn location(&self) -> String {
+        format!("{}:{}", self.line, self.column)
+    }
+
     /// The positions this span runs between — the inverse of
     /// [`Position::span_to`].
     #[must_use]

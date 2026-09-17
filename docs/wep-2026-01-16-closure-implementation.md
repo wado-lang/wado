@@ -135,6 +135,25 @@ let greet = || println(s);    // captures &s; type: fn() with Stdout
 
 Any `&mut` capture promotes the closure type to `fn mut`. Pure read-only captures keep it `fn`.
 
+### Nesting
+
+A closure reaches a binding of any enclosing frame, not only the nearest one. It reads and writes the binding the source names, however many closures sit in between:
+
+```wado
+let mut count = 0;
+let mut outer = || {
+    let mut inner = || count += 1;   // fn mut: writes the function's `count`
+    inner();
+    inner();
+};
+outer();
+assert count == 2;
+```
+
+What a closure binds itself shadows, as it does anywhere. `|mut count| count += 1` writes its own parameter and captures nothing, and a body opening with `let mut count = 0` writes that.
+
+A captured binding is callable where its type is a function, so `|| g(v)` on an enclosing `g: fn(i32) -> i32` calls it. Calling a `fn mut` still requires the binding to be declared `mut`, one frame out as much as in place.
+
 ### No `move` Keyword
 
 Wado does not have a `move` keyword. To force a value-copy snapshot at closure creation, introduce an intermediate local:

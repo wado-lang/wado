@@ -127,6 +127,24 @@ withClause
 
 withItem
     : IDENTIFIER
+<<<<<<< HEAD
+||||||| 145d94d5900
+    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
+    ;
+
+storesItem
+    : IDENTIFIER
+    | INTEGER
+    | 'self'
+=======
+    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
+    ;
+
+storesItem
+    : identifier
+    | INTEGER
+    | 'self'
+>>>>>>> origin/main
     ;
 
 structDecl
@@ -602,7 +620,7 @@ closureParamList
     ;
 
 closureParam
-    : attribute* 'mut'? ('_' | IDENTIFIER) closureParamType?
+    : attribute* 'mut'? ('_' | identifier) closureParamType?
     ;
 
 closureParamType
