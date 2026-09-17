@@ -208,6 +208,11 @@ struct Signatures {
     /// Whether each parameter's own slot may be replaced by a constant. A
     /// slot the body reassigns, borrows or aliases holds more than the argument.
     param_fixed: Vec<Vec<bool>>,
+    /// Whether the function's scalar arguments may move into a clone. A callee
+    /// writing through a reference is one a compile-time frame runs for those
+    /// writes, and a constant it no longer receives is one that frame cannot
+    /// see — which costs a whole folded region to save a parameter.
+    scalar_specializable: Vec<bool>,
 }
 
 impl Signatures {
@@ -217,9 +222,11 @@ impl Signatures {
         let mut has_body = Vec::with_capacity(project.functions.len());
         let mut specializable = Vec::with_capacity(project.functions.len());
         let mut param_fixed = Vec::with_capacity(project.functions.len());
+        let mut scalar_specializable = Vec::with_capacity(project.functions.len());
         for func in &project.functions {
             let func = func.borrow();
             param_locals.push(func.params.iter().map(|p| p.local_index).collect());
+            scalar_specializable.push(!func.params.iter().any(|p| p.is_mut_ref));
             param_fixed.push(
                 func.params
                     .iter()
@@ -248,6 +255,7 @@ impl Signatures {
             has_body,
             specializable,
             param_fixed,
+            scalar_specializable,
         }
     }
 
@@ -853,6 +861,7 @@ fn select_sites(
                 // only a position they disagree on is worth a clone.
                 None => {
                     if !is_mut
+                        && signatures.scalar_specializable[index]
                         && signatures.param_fixed[index][position]
                         && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
                         && let Some(value) = FieldConst::of_operand(body, arg)
