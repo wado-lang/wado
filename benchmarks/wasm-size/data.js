@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789640840473,
+  "lastUpdate": 1789645550897,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56529,6 +56529,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 285109,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "235492ba320fe92f252cc0df2725d3702b62030c",
+          "message": "Merge pull request #2075 from wado-lang/claude/charming-hamilton-ywccv5\n\nfeat(compiler)!: infer reference retention, and declare it only where a body cannot say it",
+          "timestamp": "2026-09-17T20:28:10+09:00",
+          "tree_id": "0c7f296dde204d16316a64b921bc3e1e8fce443b",
+          "url": "https://github.com/wado-lang/wado/commit/235492ba320fe92f252cc0df2725d3702b62030c"
+        },
+        "date": 1789645549937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 286862,
             "unit": "bytes"
           }
         ]
