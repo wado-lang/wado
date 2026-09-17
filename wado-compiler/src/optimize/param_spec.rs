@@ -434,29 +434,16 @@ fn mark_unclassified_opaque(
 
 /// The tracked local an operand reads directly, if any.
 fn tracked_local(body: &Body, op: Operand, tracked: &IndexSet<u32>) -> Option<u32> {
-    let expr = op.as_expr()?;
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } if tracked.contains(index) => Some(*index),
-        _ => None,
-    }
+    body.local_read(op)
+        .map(|(local, _)| local)
+        .filter(|local| tracked.contains(local))
 }
 
 /// The local an argument names, looking through the `&` / `&mut` a by-value
 /// place is borrowed through. Returns the `Local` node too, which the caller
 /// marks classified so the catch-all does not re-read it as an escape.
 fn argument_local(body: &Body, arg: Operand) -> Option<(u32, ExprId)> {
-    let mut expr = arg.as_expr()?;
-    if let ExprKind::Unary {
-        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-        expr: inner,
-    } = &body.exprs[expr].kind
-    {
-        expr = inner.as_expr()?;
-    }
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => Some((*index, expr)),
-        _ => None,
-    }
+    body.borrowed_local(arg).or_else(|| body.local_read(arg))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -650,17 +637,13 @@ fn collect_roots(
     // A borrow is a second name for one object, so the two locals share a root
     // rather than the borrow ending the chain. Inlining a function that passes
     // its `&mut` parameter on mints exactly this binding.
-    let mut alias_of: IndexMap<u32, u32> = IndexMap::default();
-    let mut alias_reads: IndexSet<ExprId> = IndexSet::default();
+    let mut alias_defs: Vec<AliasDef> = Vec::new();
     let mut define = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
         if !is_struct_local(local) {
             return;
         }
-        match borrowed_local(body, value) {
-            Some((base, read)) if base != local => {
-                alias_of.insert(local, base);
-                alias_reads.insert(read);
-            }
+        match body.borrowed_local(value) {
+            Some((base, read)) if base != local => alias_defs.push(AliasDef { local, base, read }),
             _ => note_def(local, value, roots),
         }
     };
@@ -686,8 +669,7 @@ fn collect_roots(
     for local in &invalid {
         roots.swap_remove(local);
     }
-    // A local that is also defined some other way is not purely an alias.
-    alias_of.retain(|alias, _| !invalid.contains(alias) && !defined.contains(alias));
+    let (mut alias_of, alias_reads) = settle_aliases(&alias_defs, &defined, &invalid);
     flatten_aliases(&mut alias_of);
     for (alias, base) in &alias_of {
         if let Some(consts) = roots.get(base).cloned() {
@@ -717,7 +699,10 @@ fn collect_roots(
             }
         }
         for rebind in &use_facts.rebinds {
-            if borrowed_local(body, *rebind).is_some_and(|(_, read)| alias_reads.contains(&read)) {
+            if body
+                .borrowed_local(*rebind)
+                .is_some_and(|(_, read)| alias_reads.contains(&read))
+            {
                 continue;
             }
             let expected = locals.get(*local as usize).map(|l| l.type_id);
@@ -741,35 +726,61 @@ fn collect_roots(
     roots
 }
 
-/// The local a `&` / `&mut` operand borrows, with the node that reads it.
-fn borrowed_local(body: &Body, value: Operand) -> Option<(u32, ExprId)> {
-    let expr = value.as_expr()?;
-    let ExprKind::Unary {
-        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-        expr: inner,
-    } = &body.exprs[expr].kind
-    else {
-        return None;
-    };
-    let read = inner.as_expr()?;
-    match &body.exprs[read].kind {
-        ExprKind::Local { index, .. } => Some((*index, read)),
-        _ => None,
+/// One `let r = &base;` or `r = &base;`: the borrowing local, the local it
+/// names, and the node reading that local.
+struct AliasDef {
+    local: u32,
+    base: u32,
+    read: ExprId,
+}
+
+/// The alias edges that survive, and the reads they justify. A local is a second
+/// name for one object only while it names exactly one: bound to two different
+/// bases, or defined some other way as well, it is neither name's root. Both
+/// come out of the same pass so a dropped edge cannot leave its read behind —
+/// a read classified with no edge to narrow through is a write the base never
+/// hears about.
+fn settle_aliases(
+    defs: &[AliasDef],
+    defined: &IndexSet<u32>,
+    invalid: &IndexSet<u32>,
+) -> (IndexMap<u32, u32>, IndexSet<ExprId>) {
+    let mut alias_of: IndexMap<u32, u32> = IndexMap::default();
+    let mut rebound: IndexSet<u32> = IndexSet::default();
+    for def in defs {
+        if defined.contains(&def.local) || invalid.contains(&def.local) {
+            rebound.insert(def.local);
+        } else if alias_of
+            .insert(def.local, def.base)
+            .is_some_and(|b| b != def.base)
+        {
+            rebound.insert(def.local);
+        }
     }
+    alias_of.retain(|alias, _| !rebound.contains(alias));
+    let reads = defs
+        .iter()
+        .filter(|def| alias_of.contains_key(&def.local))
+        .map(|def| def.read)
+        .collect();
+    (alias_of, reads)
 }
 
 /// Point every alias at the root of its chain, so one pass reaches a borrow of
-/// a borrow. A cycle cannot arise: an alias is bound once, to an earlier local.
+/// a borrow.
 fn flatten_aliases(alias_of: &mut IndexMap<u32, u32>) {
     let resolved: Vec<(u32, u32)> = alias_of
         .iter()
         .map(|(alias, base)| {
             let mut base = *base;
-            for _ in 0..alias_of.len() {
-                match alias_of.get(&base) {
-                    Some(next) => base = *next,
-                    None => break,
-                }
+            let mut steps = 0;
+            while let Some(next) = alias_of.get(&base) {
+                base = *next;
+                steps += 1;
+                assert!(
+                    steps <= alias_of.len(),
+                    "an alias is bound once, to an earlier local, so the chain cannot cycle"
+                );
             }
             (*alias, base)
         })

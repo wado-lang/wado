@@ -562,6 +562,29 @@ impl Body {
         }
     }
 
+    /// The local a bare skeleton `Local` operand reads, with its node. `None` for
+    /// a promoted value or anything else.
+    pub fn local_read(&self, op: Operand) -> Option<(u32, ExprId)> {
+        let expr = op.as_expr()?;
+        match &self.exprs[expr].kind {
+            ExprKind::Local { index, .. } => Some((*index, expr)),
+            _ => None,
+        }
+    }
+
+    /// The local `&x` / `&mut x` borrows, with the node reading it. `None` for
+    /// anything else.
+    pub fn borrowed_local(&self, op: Operand) -> Option<(u32, ExprId)> {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &self.exprs[op.as_expr()?].kind
+        else {
+            return None;
+        };
+        self.local_read(*inner)
+    }
+
     /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
     /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
     /// filter): callers that only need the value (capacities, zero-tests) avoid

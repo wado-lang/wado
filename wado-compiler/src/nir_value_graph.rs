@@ -506,7 +506,21 @@ pub fn neutral_int(op: NirBinaryOp, n: u64, side: Side) -> bool {
         NirBinaryOp::Mul => n == 1,
         NirBinaryOp::Sub | NirBinaryOp::Shl | NirBinaryOp::Shr => side == Side::Right && n == 0,
         NirBinaryOp::Div => side == Side::Right && n == 1,
-        _ => false,
+        // `x & -1` is `x` only at the operand's own width, which a pool entry
+        // that recorded no type cannot supply. The rest return a bool or
+        // compare, so neither operand is the result.
+        NirBinaryOp::BitAnd
+        | NirBinaryOp::Mod
+        | NirBinaryOp::Eq
+        | NirBinaryOp::NotEq
+        | NirBinaryOp::Lt
+        | NirBinaryOp::LtEq
+        | NirBinaryOp::Gt
+        | NirBinaryOp::GtEq
+        | NirBinaryOp::And
+        | NirBinaryOp::Or
+        | NirBinaryOp::RefEq
+        | NirBinaryOp::RefNotEq => false,
     }
 }
 
