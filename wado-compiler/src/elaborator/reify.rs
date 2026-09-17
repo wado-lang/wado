@@ -2153,7 +2153,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         has_body: bool,
         declared: Option<tir::ReturnConvention>,
     ) -> Option<tir::ReturnConvention> {
-        if has_body || declared.is_some() {
+        if has_body || declared.is_some() || reserves_a_name_only(func) {
             return declared;
         }
         if func.is_cm_import() {
@@ -11365,6 +11365,13 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
 
 /// The discriminant a variant pattern matches. Pattern resolution rejects a case
 /// the scrutinee does not declare, so reify only ever sees one it resolved.
+/// Whether the declaration reserves a name rather than a signature. Nothing
+/// ever calls a `#[unavailable]` one, so it states nothing about a call and is
+/// owed nothing about one either.
+fn reserves_a_name_only(func: &ast::Function) -> bool {
+    func.unavailable_attr().is_some()
+}
+
 fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
     case_index.unwrap_or_else(|| {
         unreachable!("reify does not run on a pattern naming no case: `{case_name}`")

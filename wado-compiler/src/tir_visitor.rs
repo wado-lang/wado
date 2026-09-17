@@ -275,6 +275,17 @@ pub trait TirRefVisitor {
         }
     }
 
+    /// [`Self::walk_expr`], stopping at a closure body. A closure numbers its
+    /// locals in its own frame, so a walk that reads the enclosing body's
+    /// locals must stop here and read the captures instead — walking on would
+    /// both invent slots this body never named and miss the ones it did.
+    fn walk_expr_in_frame(&mut self, expr: &TirExpr) {
+        if matches!(expr.kind, TirExprKind::Closure { .. }) {
+            return;
+        }
+        self.walk_expr(expr);
+    }
+
     fn walk_pattern(&mut self, pattern: &TirPattern) {
         match pattern {
             TirPattern::Wildcard | TirPattern::Binding { .. } | TirPattern::Literal(_) => {}

@@ -86,16 +86,20 @@ pub fn replaced_locals(
     carrying: &RefCarrying,
 ) -> IndexSet<u32> {
     let mut walker = WriteWalker::new(computed, carrying);
-    // One walk follows a reference only as far forward as it is handed on; a
-    // loop handing one backwards needs another. Repeat until nothing grows.
+    settle(&mut walker, body);
+    walker.found
+}
+
+/// Walk `body` until nothing new is found. One walk follows a reference only as
+/// far forward as it is handed on; a loop handing one backwards needs another.
+fn settle(walker: &mut WriteWalker, body: Body<'_>) {
     loop {
         walker.grew = false;
-        body.walk(&mut walker);
+        body.walk(walker);
         if !walker.grew {
-            break;
+            return;
         }
     }
-    walker.found
 }
 
 /// What a body is spelled as, which differs between a function and a closure.
@@ -311,12 +315,12 @@ impl<'a> WriteWalker<'a> {
     /// enclosing body owns.
     fn walk_closure(&mut self, body: &TirExpr, captures: &[TirCapture]) {
         let mut inner = WriteWalker::new(self.computed, self.carrying);
-        inner.visit_expr(body);
+        settle(&mut inner, Body::Expr(body));
         for index in inner.found_captures {
             let Some(capture) = captures.get(index as usize) else {
                 continue;
             };
-            self.found.insert(capture.outer_index);
+            self.grew |= self.found.insert(capture.outer_index);
         }
     }
 }

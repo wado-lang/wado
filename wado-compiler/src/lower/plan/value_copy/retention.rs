@@ -75,7 +75,7 @@ impl RetentionFacts {
         // while every side claiming that position claims its elements.
         for &source in &other.elements {
             if !claimed_before.contains(&source) {
-                self.elements.insert(source);
+                grew |= self.elements.insert(source);
             }
         }
         for source in self.elements.iter().copied().collect::<Vec<_>>() {
@@ -210,7 +210,7 @@ impl TirRefVisitor for FunctorLocalReads<'_> {
         {
             self.at.entry(*index).or_insert(expr.type_id);
         }
-        self.walk_expr(expr);
+        self.walk_expr_in_frame(expr);
     }
 }
 
@@ -1065,11 +1065,9 @@ impl TirRefVisitor for AnchorScan<'_> {
                     self.bind_pattern(&arm.pattern, scrutinee);
                 }
             }
-            // A closure body binds in its own namespace, and is anchored there.
-            TirExprKind::Closure { .. } => return,
             _ => {}
         }
-        self.walk_expr(expr);
+        self.walk_expr_in_frame(expr);
     }
 }
 
@@ -1733,6 +1731,10 @@ impl TirRefVisitor for BreakScan<'_, '_> {
             self.found.absorb(&c);
         }
         self.walk_stmt(stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &TirExpr) {
+        self.walk_expr_in_frame(expr);
     }
 }
 
