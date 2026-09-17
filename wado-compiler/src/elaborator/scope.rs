@@ -18,7 +18,7 @@ use super::trait_env::InheritedBound;
 use super::trait_query::SelfBinding;
 use crate::ast::AstId;
 use crate::defs::DefId;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, FqTypeName};
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
@@ -109,10 +109,13 @@ impl TraitContext {
 }
 
 /// One open `type_implements_trait` question.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) struct TraitCheckFrame {
     pub(super) type_id: TypeId,
     pub(super) trait_: DefId,
+    /// The arguments the asking bound wrote. Part of the key: the same trait
+    /// at two instantiations is two questions.
+    pub(super) wanted: Vec<FqTypeName>,
     /// `Scope::member_edges` when the question was asked.
     pub(super) member_edges: u32,
 }
@@ -344,8 +347,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Add `bound` unless the list already holds its declaration, in which case
-    /// the constrained spelling wins — `T: Iterator + Iterator<Item = i32>` is
-    /// one bound, and it is the one carrying the associated type.
+    /// the merged bound carries what either spelling wrote — `T: Iterator +
+    /// Iterator<Item = i32>` is one bound, and it carries the associated type.
     ///
     /// A `fn(..)` bound names no trait, so it has no declaration to merge on
     /// and falls back to merging on its own site: two bounds written at two
@@ -368,15 +371,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let decl = self.bound_decl(bound, known);
         // A bound that names no declaration falls back to its spelling, so an
         // erroring program still reports one bound rather than one per mention.
+        // Only bounds that both write nothing are one bound. A written argument
+        // names an instantiation, and a bare bound names the declared default,
+        // so `Pick + Pick<String>` and `Eq<String> + Eq<StrSlice>` each ask for
+        // two impls. A repeat costs a second diagnostic and nothing else.
+        let mergeable = |b: &ast::TraitBound| b.type_args.is_empty() && bound.type_args.is_empty();
         let duplicate = match decl {
-            Some(decl) => out.iter_mut().find(|(_, d)| *d == Some(decl)),
+            Some(decl) => out
+                .iter_mut()
+                .find(|(b, d)| *d == Some(decl) && mergeable(b)),
             None => out
                 .iter_mut()
-                .find(|(b, d)| d.is_none() && b.name == bound.name),
+                .find(|(b, d)| d.is_none() && b.name == bound.name && mergeable(b)),
         };
         if let Some((existing, _)) = duplicate {
-            if existing.assoc_types.is_empty() && !bound.assoc_types.is_empty() {
-                *existing = bound.clone();
+            if existing.assoc_types.is_empty() {
+                existing.assoc_types.clone_from(&bound.assoc_types);
             }
             return;
         }

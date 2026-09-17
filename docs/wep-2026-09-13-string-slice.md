@@ -46,6 +46,7 @@ literal bare.
 What follows:
 
 - `AsStrSlice` is an ordinary trait whose method returns a view of the
+<<<<<<< HEAD
   receiver, the same shape `AsByteSlice` has. Static dispatch monomorphizes it,
   so a `fn f<S: AsStrSlice>(s: S)` carries no dispatch at `-O2`. The parameter is
   taken by value, so a call site writes the literal bare — `f("banana")`, never
@@ -53,6 +54,27 @@ What follows:
   `impl<T: AsStrSlice> AsStrSlice for &T`.
 - Every `StrSlice` method that returns another view hands out the receiver's
   storage too. A view holds its bytes in a reference field, and the spec's reference-storage
+||||||| 0896d43255b
+  receiver, so it declares `stores[self]`, the same shape `AsByteSlice` has.
+  Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: S)` carries no
+  dispatch at `-O2`. The parameter is taken by value, so a call site writes the
+  literal bare — `f("banana")`, never `f(&"banana")` — and a `&String` still
+  passes through the blanket `impl<T: AsStrSlice> AsStrSlice for &T`.
+- Every `StrSlice` method that returns another view declares `stores[self]` too.
+  A view holds its bytes in a reference field, and the spec's reference-storage
+=======
+  receiver, so it declares `stores[self]`, the same shape `AsByteSlice` has.
+  Static dispatch monomorphizes it, so a `fn f<S: AsStrSlice>(s: S)` carries no
+  dispatch at `-O2`. The parameter is taken by value, so a call site writes the
+  literal bare — `f("banana")`, never `f(&"banana")` — and a `&String` still
+  passes through the blanket `impl<T: AsStrSlice> AsStrSlice for &T`.
+- `AsStrSlice` requires `Eq<String>`, so a body generic over it compares its
+  text with `==` against a literal, and a string-literal pattern matches it.
+  `==` on a type parameter reads the parameter's bounds rather than the impls,
+  so without the requirement neither would resolve.
+- Every `StrSlice` method that returns another view declares `stores[self]` too.
+  A view holds its bytes in a reference field, and the spec's reference-storage
+>>>>>>> origin/main
   rule counts reading one out of the receiver as the receiver escaping.
 - The view must scalarize: a three-field struct built and read in one function
   leaves no `struct.new` behind. That is a property of the optimizer, so it is

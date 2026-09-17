@@ -774,7 +774,7 @@ not positive.
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
 
-### `pub trait AsStrSlice`
+### `pub trait AsStrSlice: Eq<String>`
 
 Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
@@ -4140,8 +4140,8 @@ Byte order against any text, the `cmp` a generic body cannot reach:
 
 #### `pub fn eq_str<S: AsStrSlice>(&self, other: S) -> bool`
 
-Byte equality against any text. `==` reaches only another `StrSlice`,
-so a body generic over `AsStrSlice` has no operator to compare with.
+Byte equality against any text. `==` reaches a `String` and another
+`StrSlice`; this reaches whatever a type parameter turns out to be.
 
 #### `pub fn eq_ignore_ascii_case<S: AsStrSlice>(&self, other: S) -> bool`
 

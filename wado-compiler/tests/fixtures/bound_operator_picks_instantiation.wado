@@ -1,0 +1,36 @@
+// An operator on a type parameter reads the bound its right operand admits.
+// Both bounds are written, and the one that answers is second, so taking the
+// first written would reach the wrong signature.
+
+struct Meters {
+    v: i32,
+}
+
+impl Add<String> for Meters {
+    type Output = Meters;
+
+    fn add(&self, rhs: &String) -> Meters {
+        return Meters { v: self.v + rhs.len() };
+    }
+}
+
+impl Add<i32> for Meters {
+    type Output = Meters;
+
+    fn add(&self, rhs: &i32) -> Meters {
+        return Meters { v: self.v + *rhs * 100 };
+    }
+}
+
+fn grow<T: Add<String, Output = T> + Add<i32, Output = T>>(t: T, by: i32) -> T {
+    return t + by;
+}
+
+fn label<T: Add<String, Output = T> + Add<i32, Output = T>>(t: T, by: String) -> T {
+    return t + by;
+}
+
+test "the right operand picks among a trait's instantiations" {
+    assert grow(Meters { v: 1 }, 2).v == 201;
+    assert label(Meters { v: 1 }, "abc").v == 4;
+}

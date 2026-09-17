@@ -244,6 +244,14 @@ pub(super) struct ImplHeader {
     /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
     /// consumers that need its generic arguments rather than its head name.
     pub(super) trait_type: Option<Type>,
+    /// Identity of each argument the header writes for the trait, `Self`
+    /// meaning [`Self::target_id`]. Resolved once from [`Self::module`]'s
+    /// vantage, so a consumer holding the header alone compares identities
+    /// rather than the spellings two modules can share.
+    pub(super) trait_arg_ids: Vec<name::FqTypeName>,
+    /// Identity of the impl target, resolved the same way. This is what a
+    /// `Self` default on the trait says at this impl.
+    pub(super) target_id: name::FqTypeName,
     /// The impl target type (`impl_block.ty`).
     pub(super) ty: Type,
     /// The impl block's type parameters.
@@ -412,13 +420,21 @@ pub(crate) enum BlanketReceiver {
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketBound {
     pub(crate) name: String,
-    /// The trait the bound's reference site names, `None` where it reaches no
-    /// declaration.
-    pub(crate) decl_ref: Option<DefId>,
+    /// The trait the bound's reference site names, with the arguments it
+    /// writes for that trait's own parameters. `None` where the site reaches no
+    /// declaration; no argument asks for the declared defaults.
+    pub(crate) trait_: Option<name::FqTraitName>,
     /// Associated types the bound pins to the receiver param itself (`Output`
     /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
     /// receiver; any other right-hand side is the instantiation's to answer.
     pub(crate) pinned_to_receiver: Vec<String>,
+}
+
+impl BlanketBound {
+    /// The declaration alone, for a question the trait's arguments do not enter.
+    pub(crate) fn decl(&self) -> Option<DefId> {
+        self.trait_.as_ref()?.canonical()
+    }
 }
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
@@ -490,6 +506,9 @@ fn classify_blanket_receiver(
 #[derive(Clone, Debug)]
 pub(super) struct TraitDeclHeader {
     pub(super) name: String,
+    /// What each type parameter's declared default says, resolved once from the
+    /// trait's own module. One entry per parameter, in declaration order.
+    pub(super) default_args: Vec<Option<DefaultArg>>,
     /// The trait's own type parameters (e.g. `<T, U>` in `trait Foo<T, U>`).
     pub(super) type_params: Vec<ast::GenericParam>,
     /// Direct supertraits as written (`trait Ord: Eq`). The transitive form
@@ -502,6 +521,32 @@ pub(super) struct TraitDeclHeader {
     /// before any digest exists.
     pub(super) assoc_types: Vec<ast::AssociatedTypeDecl>,
     pub(super) span: Span,
+}
+
+/// A trait type parameter's declared default (`trait Eq<Rhs = Self>`).
+#[derive(Clone, Debug)]
+pub(super) enum DefaultArg {
+    /// `= Self`, which says the target of whichever impl is answering.
+    SelfTarget,
+    /// Any other type, whose identity the trait's own module fixes.
+    Named(name::FqTypeName),
+}
+
+impl DefaultArg {
+    fn of(param: &ast::GenericParam, resolutions: &Resolutions) -> Option<Self> {
+        match param.default.as_ref()? {
+            Type::Named(named) if named.name == "Self" => Some(Self::SelfTarget),
+            default => Some(Self::Named(written_type_arg(default, resolutions))),
+        }
+    }
+
+    /// What it says at an impl whose target is `target`.
+    fn at(&self, target: &name::FqTypeName) -> name::FqTypeName {
+        match self {
+            Self::SelfTarget => target.clone(),
+            Self::Named(name) => name.clone(),
+        }
+    }
 }
 
 /// Every `trait` declaration in the program. Membership is the question — is
@@ -1113,6 +1158,11 @@ impl TraitEnv {
                         trait_def,
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
+                            default_args: trait_decl
+                                .type_params
+                                .iter()
+                                .map(|p| DefaultArg::of(p, resolutions))
+                                .collect(),
                             type_params: trait_decl.type_params.clone(),
                             supertraits: trait_decl.supertraits.clone(),
                             methods: method_headers(defs, &trait_decl.methods),
@@ -1150,6 +1200,24 @@ impl TraitEnv {
                         trait_ref,
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
+                        trait_arg_ids: impl_block.trait_type.as_ref().map_or_else(
+                            Vec::new,
+                            |trait_type| {
+                                written_arg_nodes(trait_type)
+                                    .iter()
+                                    .map(|arg| {
+                                        let node = match arg {
+                                            Type::Named(named) if named.name == "Self" => {
+                                                &impl_block.ty
+                                            }
+                                            _ => arg,
+                                        };
+                                        written_type_arg(node, resolutions)
+                                    })
+                                    .collect()
+                            },
+                        ),
+                        target_id: written_type_arg(&impl_block.ty, resolutions),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
                         methods: method_headers(defs, &impl_block.methods),
@@ -1177,7 +1245,17 @@ impl TraitEnv {
                                     .iter()
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
-                                        decl_ref: resolutions.declared(b.id),
+                                        trait_: resolutions.declared(b.id).map(|decl| {
+                                            name::FqTraitName::declared(resolutions.defs(), decl)
+                                                .with_args(
+                                                    b.type_args
+                                                        .iter()
+                                                        .map(|arg| {
+                                                            written_type_arg(arg, resolutions)
+                                                        })
+                                                        .collect(),
+                                                )
+                                        }),
                                         pinned_to_receiver: b
                                             .assoc_types
                                             .iter()
@@ -1427,12 +1505,88 @@ impl TraitEnv {
         };
         let args = args_without_declared_defaults(
             fq.args().to_vec(),
-            trait_type,
-            target,
+            written_arg_nodes(trait_type),
+            Some(target),
             params,
             resolutions,
         );
         fq.with_args(args)
+    }
+
+    /// [`Self::fq_trait_named_by_impl`] for a bound, which writes its arguments
+    /// itself. Naming the two alike is what lets a bound reach its impl.
+    pub(super) fn fq_trait_named_by_bound(
+        &self,
+        fq: name::FqTraitName,
+        bound: &ast::TraitBound,
+        resolutions: &Resolutions,
+    ) -> name::FqTraitName {
+        if bound.type_args.is_empty() {
+            return fq;
+        }
+        let Some(params) = fq
+            .canonical()
+            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .map(|header| &header.type_params)
+        else {
+            return fq;
+        };
+        let written = bound
+            .type_args
+            .iter()
+            .map(|arg| written_type_arg(arg, resolutions))
+            .collect();
+        let args =
+            args_without_declared_defaults(written, &bound.type_args, None, params, resolutions);
+        fq.with_args(args)
+    }
+
+    /// The trait's declared default at `index` where it names a type. `None`
+    /// for a `= Self` default, which says whatever target is answering rather
+    /// than a type of its own.
+    pub(super) fn named_default_arg(
+        &self,
+        trait_: DefId,
+        index: usize,
+    ) -> Option<&name::FqTypeName> {
+        match self
+            .trait_decl_headers
+            .get(&trait_)?
+            .default_args
+            .get(index)?
+        {
+            Some(DefaultArg::Named(name)) => Some(name),
+            Some(DefaultArg::SelfTarget) | None => None,
+        }
+    }
+
+    /// How many arguments the impl on `receiver` writes for `trait_`, among
+    /// those a bound writing `wanted` reaches.
+    pub(crate) fn impl_written_arg_count(
+        &self,
+        receiver: &name::Receiver,
+        trait_: DefId,
+        wanted: &[name::FqTypeName],
+    ) -> Option<usize> {
+        let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
+        self.entries_by_receiver(receiver).find_map(|entry| {
+            let header = self.impl_headers.get(&entry)?;
+            if header.trait_ref != Some(trait_) {
+                return None;
+            }
+            let answers = wanted.iter().enumerate().all(|(i, want)| {
+                let Some(effective) = header
+                    .trait_arg_ids
+                    .get(i)
+                    .cloned()
+                    .or_else(|| Some(defaults.get(i)?.as_ref()?.at(&header.target_id)))
+                else {
+                    return false;
+                };
+                effective.head_only() == want.head_only()
+            });
+            answers.then_some(header.trait_arg_ids.len())
+        })
     }
 
     /// The module defining `impl <trait_name> for <receiver>`, or `None` for a
@@ -2547,53 +2701,55 @@ pub(super) fn written_type_args(
 /// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
 fn args_without_declared_defaults(
     written: Vec<name::FqTypeName>,
-    trait_type: &ast::Type,
-    target: &ast::Type,
+    ast_args: &[ast::Type],
+    target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
     let mut kept = written;
-    kept.truncate(non_default_arg_count(
-        trait_type,
-        target,
-        params,
-        resolutions,
-    ));
+    kept.truncate(non_default_arg_count(ast_args, target, params, resolutions));
     kept
 }
 
-/// Whether a bare bound on the trait selects this header. A bound writes no
-/// arguments, so it asks for the declared default where a position has one
-/// (`T: Mul` is `Mul<Self>`) and nothing where it has none (`T: Pick`).
-pub(super) fn header_answers_bare_bound(
+/// Whether the header answers a bound writing `wanted`: at every position each
+/// side says its written argument, or the declared default where it wrote none.
+pub(super) fn header_answers_bound_args(
     trait_type: &ast::Type,
     target: &ast::Type,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
+    wanted: &[name::FqTypeName],
 ) -> bool {
     let ast_args = written_arg_nodes(trait_type);
-    ast_args.iter().enumerate().all(|(i, arg)| {
-        params
+    let default_at = |i: usize| declared_default_arg(params, i, Some(target), resolutions);
+    (0..ast_args.len().max(wanted.len())).all(|i| {
+        // A position the bound leaves open and the trait gives no default is
+        // one no bound can name, so every impl answers there.
+        let Some(asks) = wanted.get(i).cloned().or_else(|| default_at(i)) else {
+            return true;
+        };
+        ast_args
             .get(i)
-            .and_then(|p| p.default.as_ref())
-            .is_none_or(|default| restates_default(arg, default, target, resolutions))
+            .map(|arg| written_type_arg(arg, resolutions))
+            .or_else(|| default_at(i))
+            == Some(asks)
     })
 }
 
-/// Whether a written trait argument says exactly what the declared default
-/// does, `Self` meaning the impl's target.
-fn restates_default(
-    arg: &ast::Type,
-    default: &ast::Type,
-    target: &ast::Type,
+/// What the trait's declared default at `index` says, `Self` meaning the impl's
+/// target. A bound has no target node, so there a `Self` default says nothing.
+fn declared_default_arg(
+    params: &[ast::GenericParam],
+    index: usize,
+    target: Option<&ast::Type>,
     resolutions: &Resolutions,
-) -> bool {
+) -> Option<name::FqTypeName> {
+    let default = params.get(index)?.default.as_ref()?;
     match default {
         ast::Type::Named(named) if named.name == "Self" => {
-            matches!(arg, ast::Type::Named(a) if a.name == "Self")
-                || written_type_arg(arg, resolutions) == written_type_arg(target, resolutions)
+            Some(written_type_arg(target?, resolutions))
         }
-        _ => written_type_arg(arg, resolutions) == written_type_arg(default, resolutions),
+        _ => Some(written_type_arg(default, resolutions)),
     }
 }
 
@@ -2601,26 +2757,44 @@ fn restates_default(
 /// defaults do not. One rule behind both an impl's name and the identity its
 /// associated types register under, so the two cannot disagree.
 pub(super) fn non_default_arg_count(
-    trait_type: &ast::Type,
-    target: &ast::Type,
+    ast_args: &[ast::Type],
+    target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> usize {
-    let ast_args = written_arg_nodes(trait_type);
     let mut kept = ast_args.len();
     while let Some(last) = kept.checked_sub(1) {
-        let (Some(arg), Some(param)) = (ast_args.get(last), params.get(last)) else {
+        let Some(arg) = ast_args.get(last) else {
             break;
         };
-        let Some(default) = param.default.as_ref() else {
-            break;
-        };
-        if !restates_default(arg, default, target, resolutions) {
+        if !restates_default(arg, params, last, target, resolutions) {
             break;
         }
         kept = last;
     }
     kept
+}
+
+/// Whether a written trait argument says exactly what the declared default at
+/// `index` does.
+fn restates_default(
+    arg: &ast::Type,
+    params: &[ast::GenericParam],
+    index: usize,
+    target: Option<&ast::Type>,
+    resolutions: &Resolutions,
+) -> bool {
+    let Some(default) = params.get(index).and_then(|p| p.default.as_ref()) else {
+        return false;
+    };
+    // A bound has no target, so there only the `Self` spelling restates `Self`.
+    if matches!(default, ast::Type::Named(d) if d.name == "Self")
+        && matches!(arg, ast::Type::Named(a) if a.name == "Self")
+    {
+        return true;
+    }
+    declared_default_arg(params, index, target, resolutions)
+        .is_some_and(|default| written_type_arg(arg, resolutions) == default)
 }
 
 /// One written type argument as the identity it names.

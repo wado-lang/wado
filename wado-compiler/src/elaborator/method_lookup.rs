@@ -533,17 +533,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_param_bounds
             .get(param_name)?
             .clone();
-        let declared = bounds.iter().find_map(|bound| {
+        let (bound, declared) = bounds.iter().find_map(|bound| {
             let decl = self.trait_decl_at(bound.id, &bound.name)?;
             if decl != trait_ {
                 return None;
             }
             let sig = &self.trait_sig_of(&decl)?.method(method_name)?.sig;
-            sig.decl.param_types.get(sig.first_value_param()).copied()
+            let declared = sig.decl.param_types.get(sig.first_value_param()).copied()?;
+            Some((bound, declared))
         })?;
         // The same slots the dispatch binds, so the hint and the call agree on
-        // what a bare bound means.
-        let slots = self.bare_bound_slots(trait_, self_type_id);
+        // what the bound means.
+        let slots = self.bound_slots(bound, trait_, self_type_id);
         let substituted = self
             .tysys
             .type_table
@@ -2799,15 +2800,30 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         method_name: &str,
         rhs: Option<&ArgClass>,
     ) -> Option<ArithmeticTraitInfo> {
-        match self
-            .find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs)
-            .as_slice()
-        {
+        let mut found =
+            self.find_arithmetic_trait_impls(struct_name, base_type_id, trait_, method_name, rhs);
+        self.retain_most_specific_rhs(&mut found);
+        match found.as_slice() {
             [only] => Some(only.clone()),
             // Unique-or-error, as everywhere else: several admitted impls are
             // the caller's to report, with the span it holds.
             [] | [_, _, ..] => None,
         }
+    }
+
+    /// Keep only the impls writing a type for the right-hand parameter, where
+    /// one does: a bare parameter admits every operand and would shadow them.
+    fn retain_most_specific_rhs(&self, found: &mut Vec<ArithmeticTraitInfo>) {
+        if found.len() >= 2 && found.iter().any(|info| self.writes_rhs_type(info)) {
+            found.retain(|info| self.writes_rhs_type(info));
+        }
+    }
+
+    /// Whether the impl writes a type for its right-hand parameter, rather than
+    /// one mentioning its own type parameter.
+    fn writes_rhs_type(&self, info: &ArithmeticTraitInfo) -> bool {
+        info.rhs_type
+            .is_some_and(|rhs| !self.tysys.type_table.borrow().contains_rigid_param(rhs))
     }
 
     /// Every impl of `trait_name` on the receiver whose right-hand parameter

@@ -80,13 +80,13 @@ fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Res
 }
 
 fn apply<S: AsStrSlice>(a: i64, op: S, b: i64) -> Result<i64, String> {
-    if op.eq_str("+") {
+    if op == "+" {
         return Result::Ok(a + b);
     }
-    if op.eq_str("-") {
+    if op == "-" {
         return Result::Ok(a - b);
     }
-    if op.eq_str("*") {
+    if op == "*" {
         return Result::Ok(a * b);
     }
     if b == 0 {

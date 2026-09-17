@@ -6,12 +6,12 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::is_builtin_shape_name;
+use crate::name::{FqTraitName, FqTypeName, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
-    ModuleId, ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId,
-    TypeDeclId, TypeDef, candidates, derive, holds, rank,
+    ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
+    TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -447,7 +447,19 @@ pub(super) fn lower_impls<'a>(
                         continue;
                     };
                     let bound = lowering.trait_decl(bound);
-                    def.bounds.push(bound);
+                    // A bound writing an argument the lowering cannot spell
+                    // asks for the defaults, which every impl of the trait
+                    // answers — never for something narrower than written.
+                    let args = b
+                        .type_args
+                        .iter()
+                        .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
+                        .collect::<Option<Vec<_>>>()
+                        .unwrap_or_default();
+                    def.bounds.push(ParamBound {
+                        trait_: bound,
+                        args,
+                    });
                     // A pin the lowering cannot spell is dropped, as the
                     // compiler's own check drops one to anything but the
                     // receiver.
@@ -715,7 +727,7 @@ impl SolverBridge {
                 let kind = blanket
                     .bounds
                     .iter()
-                    .find_map(|bound| reflect.get(&bound.decl_ref?).copied())?;
+                    .find_map(|bound| reflect.get(&bound.decl()?).copied())?;
                 Some((blanket.def, kind))
             })
             .collect()
@@ -1235,7 +1247,19 @@ impl SolverBridge {
                 let def = bound
                     .resolved
                     .or_else(|| tysys.resolutions.declared(bound.id))?;
-                ids.push(self.lowering.known_trait(def)?);
+                // A bound whose arguments the lowering cannot say leaves the
+                // whole scope outside what it states, rather than a bound that
+                // would answer at arguments it never read.
+                let args = tysys
+                    .bound_written(bound)?
+                    .args()
+                    .iter()
+                    .map(|arg| self.wanted_arg(arg))
+                    .collect::<Option<Vec<_>>>()?;
+                ids.push(ParamBound {
+                    trait_: self.lowering.known_trait(def)?,
+                    args,
+                });
             }
             env.param_bounds.push(ids);
         }
@@ -1248,15 +1272,16 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
+        asked: &FqTraitName,
     ) -> Option<Question> {
+        let decl = asked.canonical()?;
         if tysys
-            .compiler_item_of_trait(trait_)
+            .compiler_item_of_trait(decl)
             .is_some_and(|item| !Self::states(item))
         {
             return None;
         }
-        let trait_ = self.lowering.known_trait(trait_)?;
+        let trait_ = self.lowering.known_trait(decl)?;
         let (env, names) = self.env_at(tysys, ctx)?;
         let ty =
             self.lowering
@@ -1267,12 +1292,32 @@ impl SolverBridge {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
+        let args = asked
+            .args()
+            .iter()
+            .map(|name| self.wanted_arg(name))
+            .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
             ty,
             trait_,
             module,
+            args,
         })
+    }
+
+    /// One argument a bound writes, as the solver reads it. Its own arguments
+    /// come with it, so `Eq<List<i32>>` does not lower as `Eq<List>`.
+    fn wanted_arg(&self, name: &FqTypeName) -> Option<SolverType> {
+        let head = self
+            .lowering
+            .known_type(&DeclKey::Def(name.head().def()?))?;
+        let args = name
+            .args()
+            .iter()
+            .map(|arg| self.wanted_arg(arg))
+            .collect::<Option<Vec<_>>>()?;
+        Some(SolverType::Decl(head, args))
     }
 
     /// The solver's answer to the question `type_implements_trait` just
@@ -1283,10 +1328,10 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
+        asked: &FqTraitName,
     ) -> Option<bool> {
-        let q = self.question(tysys, ctx, scope, type_id, trait_)?;
-        Some(holds(&self.program, &q.env, &q.ty, q.trait_, q.module).is_some())
+        let q = self.question(tysys, ctx, scope, type_id, asked)?;
+        Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
     }
 
     /// What the order selects for a call of `method_name` on `type_id` made in
@@ -1395,9 +1440,9 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
+        asked: &FqTraitName,
     ) -> String {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, trait_) else {
+        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
             return "outside what the lowering states".to_string();
         };
         let name_of = |id: u32| -> String {
@@ -1421,9 +1466,9 @@ impl SolverBridge {
             .type_params
             .keys()
             .zip(&q.env.param_bounds)
-            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.0)).collect()))
+            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.trait_.0)).collect()))
             .collect();
-        let answer = holds(&self.program, &q.env, &q.ty, q.trait_, q.module);
+        let answer = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
         let impls: Vec<_> = self
             .program
             .impls
@@ -1495,4 +1540,6 @@ struct Question {
     ty: SolverType,
     trait_: TraitDeclId,
     module: ModuleId,
+    /// The arguments the asking bound writes for the trait's own parameters.
+    args: Vec<SolverType>,
 }

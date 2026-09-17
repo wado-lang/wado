@@ -213,10 +213,10 @@ impl G4Parser {
         let mut is_parser_grammar = false;
         if self.is_kind(G4Token::Identifier) {
             let text = &self.peek().text;
-            if LexerSlice::eq_str("lexer", text) {
+            if *text == "lexer" {
                 is_lexer_grammar = true;
                 self.advance();
-            } else if LexerSlice::eq_str("parser", text) {
+            } else if *text == "parser" {
                 is_parser_grammar = true;
                 self.advance();
             }
@@ -243,7 +243,7 @@ impl G4Parser {
         let mut current_mode: i32 = DEFAULT_MODE;
 
         while !self.at_eof() {
-            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str("mode", &self.peek().text) {
+            if self.is_kind(G4Token::Identifier) && self.peek().text == "mode" {
                 if is_parser_grammar {
                     let tok = self.peek();
                     let expected: List<String> = ["rule definition"];
@@ -271,19 +271,14 @@ impl G4Parser {
                     continue;
                 }
                 if self.is_kind(G4Token::Identifier) {
-                    let text = &self.peek().text;
-                    if LexerSlice::eq_str("public", text) {
-                        visibility = Visibility::Public;
-                        self.advance();
-                        continue;
-                    }
-                    if LexerSlice::eq_str("private", text) {
-                        visibility = Visibility::Private;
-                        self.advance();
-                        continue;
-                    }
-                    if LexerSlice::eq_str("protected", text) {
-                        visibility = Visibility::Protected;
+                    let modifier = match self.peek().text {
+                        "public" => Option::Some(Visibility::Public),
+                        "private" => Option::Some(Visibility::Private),
+                        "protected" => Option::Some(Visibility::Protected),
+                        _ => null,
+                    };
+                    if let Some(v) = modifier {
+                        visibility = v;
                         self.advance();
                         continue;
                     }
@@ -378,17 +373,17 @@ impl G4Parser {
         loop {
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
-                if LexerSlice::eq_str("tokens", text) {
+                if *text == "tokens" {
                     self.advance();
                     self.parse_tokens_block(virtual_tokens)?;
                     continue;
                 }
-                if LexerSlice::eq_str("channels", text) {
+                if *text == "channels" {
                     self.advance();
                     self.parse_channels_block()?;
                     continue;
                 }
-                if LexerSlice::eq_str("options", text) {
+                if *text == "options" {
                     self.advance();
                     let opts = self.parse_options_block();
                     for let o of opts {
@@ -396,7 +391,7 @@ impl G4Parser {
                     }
                     continue;
                 }
-                if LexerSlice::eq_str("import", text) {
+                if *text == "import" {
                     self.advance();
                     self.parse_delegate_grammars()?;
                     continue;
@@ -744,8 +739,8 @@ impl G4Parser {
             }
             if self.is_kind(G4Token::Identifier) {
                 let text = &self.peek().text;
-                let is_returns = LexerSlice::eq_str("returns", text);
-                let is_locals = LexerSlice::eq_str("locals", text);
+                let is_returns = *text == "returns";
+                let is_locals = *text == "locals";
                 if is_returns || is_locals {
                     self.advance();
                     if self.is_kind(G4Token::CharClass) {
@@ -760,14 +755,14 @@ impl G4Parser {
                     }
                     continue;
                 }
-                if LexerSlice::eq_str("throws", text) {
+                if *text == "throws" {
                     self.advance();
                     for let q of self.parse_qualified_id_list() {
                         p.throws.push(q);
                     }
                     continue;
                 }
-                if LexerSlice::eq_str("options", text) {
+                if *text == "options" {
                     self.advance();
                     let opts = self.parse_options_block();
                     for let o of opts {
@@ -821,7 +816,7 @@ impl G4Parser {
                 break;
             }
             let text = &self.peek().text;
-            if LexerSlice::eq_str("catch", text) {
+            if *text == "catch" {
                 self.advance();
                 let mut decl_text = "";
                 if self.is_kind(G4Token::CharClass) {
@@ -834,7 +829,7 @@ impl G4Parser {
                 g.catches.push(CatchClause { decl_text, body });
                 continue;
             }
-            if LexerSlice::eq_str("finally", text) {
+            if *text == "finally" {
                 self.advance();
                 if self.is_kind(G4Token::LBrace) {
                     g.finally_action = Option::<ActionSource>::Some(self.extract_action('{', '}'));
@@ -1020,7 +1015,7 @@ impl G4Parser {
         let mut options: List<GrammarOption> = [];
         let mut consumed = false;
         loop {
-            if self.is_kind(G4Token::Identifier) && LexerSlice::eq_str("options", &self.peek().text) {
+            if self.is_kind(G4Token::Identifier) && self.peek().text == "options" {
                 self.advance();
                 let opts = self.parse_options_block();
                 for let o of opts {
@@ -1168,9 +1163,9 @@ impl G4Parser {
                     self.expect(G4Token::LParen)?;
                     let arg = self.advance();
                     self.expect(G4Token::RParen)?;
-                    if LexerSlice::eq_str("DEFAULT_TOKEN_CHANNEL", &arg.text) {
+                    if arg.text == "DEFAULT_TOKEN_CHANNEL" {
                         actions.channel = DEFAULT_CHANNEL;
-                    } else if LexerSlice::eq_str("HIDDEN", &arg.text) {
+                    } else if arg.text == "HIDDEN" {
                         actions.channel = HIDDEN_CHANNEL;
                     } else if arg.kind == G4Token::IntLit as i32 {
                         actions.channel = parse_int_literal(&arg.text.to_string());

@@ -1,0 +1,37 @@
+// Two written instantiations of one trait are both reachable: the call's
+// arguments choose, as they do among impls.
+
+trait Pick<A = i32> {
+    fn pick(&self, a: &A) -> bool;
+}
+
+struct Slot {
+    width: i32,
+}
+
+impl Pick<i32> for Slot {
+    fn pick(&self, a: &i32) -> bool {
+        return *a == self.width;
+    }
+}
+
+impl Pick<String> for Slot {
+    fn pick(&self, a: &String) -> bool {
+        return a.len() == self.width;
+    }
+}
+
+fn by_int<T: Pick<String> + Pick<i32>>(t: T, n: i32) -> bool {
+    return t.pick(&n);
+}
+
+fn by_text<T: Pick<String> + Pick<i32>>(t: T, s: String) -> bool {
+    return t.pick(&s);
+}
+
+test "the call's arguments choose the instantiation" {
+    assert by_int(Slot { width: 3 }, 3);
+    assert !by_int(Slot { width: 3 }, 4);
+    assert by_text(Slot { width: 3 }, "abc");
+    assert !by_text(Slot { width: 2 }, "abc");
+}

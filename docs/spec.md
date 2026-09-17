@@ -914,6 +914,18 @@ match command {
 | Or            | `Red \| Blue`                | Matches either pattern                       |
 | Guard         | `Some(x) && x > 0`           | Pattern with condition                       |
 
+A string-literal pattern tests the scrutinee with `==` against a `String`, so
+any type implementing `Eq<String>` matches one: a `String`, a `StrSlice`, or a
+newtype over either. A type parameter bounded by `AsStrSlice` matches as well,
+since `AsStrSlice` requires `Eq<String>`.
+
+```wado
+fn kind<S: AsStrSlice>(s: S) -> i32 {
+    return match s { "cntrl" => 1, "digit" => 2, _ => 0 };
+}
+kind("digit".as_str_slice());   // 2
+```
+
 #### Exhaustiveness
 
 Match must cover all possible cases. Use `_` wildcard for catch-all:
@@ -3708,16 +3720,44 @@ fn sum2<T: Add<Output = T>>(a: T, b: T) -> T { return a + b; }
 fn scale<T: Mul>(a: T, b: T) -> T::Output { return a * b; }
 ```
 
-A bound cannot write a trait argument — the parser reads `<...>` after one as
-associated-type bindings — so `T: Add` names the defaulted `Add<Self>`.
+A bound that writes no argument names the declared default. `T: Add` is
+`Add<Self>`, which `impl Add for Cm` answers and `impl Add<Inch> for Cm` does
+not.
+
+A bound that writes one asks for that argument. `T: Eq<String>` reaches
+`impl Eq<String> for StrSlice`. On a `String` receiver it reaches
+`impl Eq for String`, whose `Rhs` is the restated `Self`.
+
+The rule is the same wherever a bound is written: on a type parameter, on a
+supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
+(`type Item: Eq<String>`).
+
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.
 
 An operator names these traits by construction, not by spelling: a trait
 declared as `Add` elsewhere shadows the name but does not answer `+`.
 
-A parameter with no default is therefore unconstrained by a bound: `T: Pick`
-holds for every `impl Pick<K>`, and the body cannot pass an argument for `K`.
+A parameter with no default is left open by a bound that writes nothing there:
+`T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
+`T: Pick<String>` names it, and holds only for `impl Pick<String>`.
+
+Two bounds on one trait are two obligations, each asking for what it writes, so
+`T: Pick + Pick<String>` also asks for `impl Pick<i32>`. A method call on such a
+parameter reads the bound that writes arguments. The trait is one either way, so
+naming it selects nothing.
+
+An impl and a bound already in scope read a written argument differently.
+
+An impl answers a bound only where every position agrees, each side counting the
+trait's declared default where it wrote nothing. `impl Conv<i32> for Holder` does
+not answer `U: Conv` when `Conv` declares `X = String`.
+
+A bound already in scope supplies a bare request whatever it writes, and a
+supertrait does the same. `T: Conv<i32>` supplies `Conv`, and
+`AsStrSlice: Eq<String>` supplies `Eq`. Nothing is chosen at such a request. The
+bound is already fixed, and the question is only whether the trait is among what
+the parameter carries.
 
 ### Indexing Traits
 

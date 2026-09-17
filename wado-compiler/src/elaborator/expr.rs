@@ -5374,10 +5374,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .borrow()
             .compiler_trait_name(CompilerItem::Ord)
             .to_string();
-        let ord = self.tysys.compiler_trait_def(CompilerItem::Ord);
+        let ord = self.tysys.compiler_trait(CompilerItem::Ord);
         assert!(ord.is_some(), "core:prelude declares Ord");
         if element_type != TypeTable::ERROR
-            && !self.enforce_single_bound(element_type, &ord_trait_name, ord, "T", range.span)
+            && !self.enforce_single_bound_args(
+                element_type,
+                &ord_trait_name,
+                ord.as_ref(),
+                "T",
+                range.span,
+            )
         {
             return TypeTable::ERROR;
         }

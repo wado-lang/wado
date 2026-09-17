@@ -486,7 +486,7 @@ pub fn rule_result_type() -> String {
 /// Whether a rule's result type is a `<Rule>Vals` struct rather than the
 /// value-less `()` — i.e. the rule exposes a value channel.
 pub fn result_type_carries_vals<S: AsStrSlice>(result_type: S) -> bool {
-    return !result_type.eq_str(rule_result_type());
+    return result_type != rule_result_type();
 }
 
 /// Whether `rule` gets a value channel emitted: action execution is on and the

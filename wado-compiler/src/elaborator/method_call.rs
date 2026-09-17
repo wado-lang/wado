@@ -31,7 +31,7 @@ use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
-use crate::elaborator::synth::ArgProbe;
+use crate::elaborator::synth::{ArgProbe, ArgSource};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
 };
@@ -472,10 +472,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_binder = trait_match.blanket_binder;
         }
 
-        // Selection is over; the classes come out of the probe so the arguments
-        // can be elaborated (which needs `ctx` mutably) and then checked.
-        let synthesized = probe.take_classes();
-
         // If still not found and receiver is a TypeParam, try trait bounds
         // e.g., T: Ord -> look up cmp() in Ord trait declaration
         if method_info.is_none() {
@@ -489,21 +485,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None
                 }
             };
-            if let Some(name) = type_param_name
-                && let Some(bounds) = self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .get(&name)
-                    .cloned()
-                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
-                    &bounds,
-                    method_name,
-                    base_type_id,
-                    span,
-                    required_trait,
-                )
-            {
+            // Resolved into a local so the probe's borrow ends here: a `let`
+            // chain would hold it across the body, which still needs the probe.
+            let from_bounds = type_param_name
+                .and_then(|name| {
+                    self.annotate_ctx
+                        .trait_ctx
+                        .type_param_bounds
+                        .get(&name)
+                        .cloned()
+                })
+                .and_then(|bounds| {
+                    self.find_method_in_trait_bounds(
+                        &bounds,
+                        method_name,
+                        base_type_id,
+                        span,
+                        required_trait,
+                        ArgSource::Exprs(&mut probe),
+                    )
+                });
+            if let Some((found_trait, info)) = from_bounds {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
             }
@@ -545,6 +547,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             ast::TraitBound {
                                 id,
                                 name: b.base_name().to_string(),
+                                type_args: Vec::new(),
                                 assoc_types: Vec::new(),
                                 span,
                                 fn_signature: None,
@@ -562,6 +565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         span,
                         required_trait,
+                        ArgSource::Exprs(&mut probe),
                     )
                 }
             {
@@ -569,6 +573,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_info = Some(info);
             }
         }
+
+        // Selection is over; the classes come out of the probe so the arguments
+        // can be elaborated (which needs `ctx` mutably) and then checked.
+        let synthesized = probe.take_classes();
 
         // Get method info (error if method not found)
         // Track whether the lookup actually found a real method. The
@@ -2800,12 +2808,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(|(_, bounds)| {
                 bounds.iter().all(|bound| {
-                    bound.decl_ref.is_some_and(|bound_def| {
+                    bound.trait_.as_ref().is_some_and(|bound_trait| {
                         self.tysys.type_implements_trait(
                             &self.annotate_ctx,
                             &self.type_lookup(),
                             receiver_type_id,
-                            bound_def,
+                            bound_trait,
                         )
                     })
                 })

@@ -181,7 +181,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.begin("pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String");
     w.line("let mut _kind: i32 = -1;");
     w.begin("for let mut i = 0; i < RULE_NAMES.len(); i += 1");
-    w.begin("if rule.eq_str(RULE_NAMES[i])");
+    w.begin("if rule == RULE_NAMES[i]");
     w.line("_kind = i;");
     w.line("break;");
     w.end();

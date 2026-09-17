@@ -13,7 +13,6 @@ use super::Elaborator;
 use super::infer::unify;
 use super::types::TypeError;
 use crate::ast::{AstId, GenericParam};
-use crate::defs::DefId;
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
     BodyFacts, ClosureCaptureInfo, ForOfIteratorInfo, GenericInstantiation, KeyValueCoercionFacts,
@@ -21,7 +20,7 @@ use crate::elaborator::sem::types::{
     StaticMethodDispatch,
 };
 use crate::elaborator::types::VariantInfo;
-use crate::name::mangle_generic_name;
+use crate::name::{FqTraitName, mangle_generic_name};
 use crate::tir;
 
 /// Per-module registry of inference holes and their (eventual) solutions.
@@ -35,18 +34,18 @@ pub(crate) struct InferHoleTable {
     /// re-verified against the solution in [`Self::finalize_infer_holes`] (the
     /// call-site check only saw the unconstrained hole).
     ///
-    /// Each bound is the declaration its own reference site names, paired with
-    /// the spelling that site wrote for the diagnostic. Storing the spelling
-    /// alone loses the site, and the re-check then has no identity to enforce
-    /// against.
+    /// Each bound is the trait its own reference site names, arguments and all,
+    /// paired with the spelling that site wrote for the diagnostic. Storing the
+    /// spelling alone loses the site, and the re-check then has nothing to
+    /// enforce against.
     bounds: IndexMap<TypeId, (String, Vec<DeclaredBound>, Span)>,
 }
 
-/// A trait bound a slot declared: the declaration its reference site names,
-/// and the spelling that site wrote.
+/// A trait bound a slot declared: the trait its reference site names, with the
+/// arguments it writes, and the spelling that site wrote.
 #[derive(Clone, Debug)]
 pub(crate) struct DeclaredBound {
-    pub(crate) decl: DefId,
+    pub(crate) trait_: FqTraitName,
     pub(crate) written: String,
 }
 
@@ -104,8 +103,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         hole
     }
 
-    /// The bounds `param` declares, each as the declaration its own site names
-    /// plus the spelling that site wrote.
+    /// The bounds `param` declares, each as the trait its own site names plus
+    /// the spelling that site wrote.
     ///
     /// A bound whose site reaches no declaration is dropped: it is diagnosed
     /// where it was written, and there is nothing to enforce a solution
@@ -117,7 +116,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|b| b.fn_signature.is_none())
             .filter_map(|b| {
                 Some(DeclaredBound {
-                    decl: self.bound_trait_def(b.id)?,
+                    trait_: self.tysys.bound_written(b)?,
                     written: b.name.clone(),
                 })
             })
@@ -469,10 +468,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         drop(tt);
 
         for (solution, param_name, bound, span) in checks {
-            self.enforce_single_bound(
+            self.enforce_single_bound_args(
                 solution,
                 &bound.written,
-                Some(bound.decl),
+                Some(&bound.trait_),
                 &param_name,
                 span,
             );
