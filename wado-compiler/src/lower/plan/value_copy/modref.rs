@@ -59,11 +59,20 @@ impl Writes {
         self.opaque
     }
 
-    /// Whether this names any write. Which of the types named a given handle
-    /// reaches is not something this vocabulary answers, so any of them counts.
+    /// Whether the handle at `position` is written through at all. Which of
+    /// the types it reaches is not something this vocabulary answers, so any
+    /// of them counts.
     #[must_use]
-    pub fn writes_anything(&self) -> bool {
-        self.opaque || !self.whole.is_empty() || !self.fields.is_empty()
+    pub fn writes_through(&self, position: u32) -> bool {
+        self.opaque
+            || self
+                .whole
+                .iter()
+                .any(|(origin, _)| origin.could_be(position))
+            || self
+                .fields
+                .iter()
+                .any(|(origin, _, _)| origin.could_be(position))
     }
 
     /// Whether every write the handle at `position` carries is a field of
@@ -157,9 +166,9 @@ struct CallSite {
 /// A known callee's own writes are still unsettled while its body is being
 /// scanned, so a field this body's argument projects through — `outer.inner`
 /// in `callee(&mut outer.inner)` — is added to this function's own `Writes`
-/// only once the fixpoint shows `callee` writes anything at all. Recording it
-/// unconditionally would claim a write neither this function nor its callee
-/// makes, and reject a share that is safe.
+/// only once the fixpoint shows `callee` writes through the position it fills.
+/// Recording it unconditionally would claim a write neither this function nor
+/// its callee makes, and reject a share that is safe.
 struct PendingProjection {
     /// The fields the argument's path projects through, added together once
     /// the condition below is met.
@@ -168,6 +177,8 @@ struct PendingProjection {
     /// of its own — reached only through an `Index` or `Variant` step.
     whole: Option<(Origin, TypeId)>,
     callee: (ModuleSource, String),
+    /// Which of `callee`'s parameters this argument fills.
+    position: u32,
 }
 
 /// Collect each body's own writes, then close over the call graph: a caller
@@ -233,7 +244,7 @@ pub fn compute_mod_ref(
             for p in pending {
                 let hits = per_func
                     .get(&p.callee.0, &p.callee.1)
-                    .is_some_and(Writes::writes_anything);
+                    .is_some_and(|w| w.writes_through(p.position));
                 if hits {
                     merged.fields.extend(p.fields.iter().copied());
                     if let Some(whole) = p.whole {
@@ -384,7 +395,13 @@ impl Walker<'_> {
     /// `callee`'s own writes into — unless it is a variant payload typed like
     /// the payload rather than the value it was matched out of, where trusting
     /// that match would misfile the write.
-    fn record_pending(&mut self, names: &Names, handed: TypeId, callee: (ModuleSource, String)) {
+    fn record_pending(
+        &mut self,
+        names: &Names,
+        handed: TypeId,
+        callee: (ModuleSource, String),
+        position: u32,
+    ) {
         let Names::Place(place) = names else {
             self.writes.opaque |= matches!(names, Names::Unknown);
             return;
@@ -401,6 +418,7 @@ impl Walker<'_> {
                     fields: Vec::new(),
                     whole: Some((origin, lent)),
                     callee,
+                    position,
                 });
             }
             return;
@@ -418,6 +436,7 @@ impl Walker<'_> {
                 fields,
                 whole: None,
                 callee,
+                position,
             });
             return;
         }
@@ -471,14 +490,15 @@ impl TirRefVisitor for Walker<'_> {
                 let aliases_only =
                     func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
                 if !aliases_only {
-                    for arg in args
+                    for (position, arg) in args
                         .iter()
-                        .filter(|a| could_write_through(a.expr.type_id, self.type_table))
+                        .enumerate()
+                        .filter(|(_, a)| could_write_through(a.expr.type_id, self.type_table))
                     {
                         let names = self.resolver.names(&arg.expr);
                         if known {
                             let callee = (func.module_source.clone(), func.name.clone());
-                            self.record_pending(&names, arg.expr.type_id, callee);
+                            self.record_pending(&names, arg.expr.type_id, callee, position as u32);
                         } else {
                             self.record(&names, WholeOf::Handed(arg.expr.type_id));
                         }
