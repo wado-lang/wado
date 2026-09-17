@@ -302,6 +302,16 @@ pub fn closure_functor_type(module: &ModuleSource, functor_id: u32) -> FqTypeNam
     FqTypeName::shape(module, &format!("{CLOSURE_STRUCT_PREFIX}{functor_id}"))
 }
 
+/// The mangled name of closure functor `functor_id`'s `$call`.
+#[must_use]
+pub fn closure_call_name(module: &ModuleSource, functor_id: u32) -> String {
+    MethodName::format_local(
+        &closure_functor_type(module, functor_id),
+        None,
+        CLOSURE_CALL_METHOD,
+    )
+}
+
 /// Field name of the `index`-th environment slot on a closure functor
 /// (`$capture_0`, `$capture_1`, …).
 #[must_use]

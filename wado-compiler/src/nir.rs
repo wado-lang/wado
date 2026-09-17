@@ -13,7 +13,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CLOSURE_CALL_METHOD, FunctionId, LocalMethodName, MethodName, closure_functor_type,
+    CLOSURE_CALL_METHOD, FunctionId, LocalMethodName, closure_call_name, closure_functor_type,
 };
 use crate::nir_arena::{Body, ExprBody};
 use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
@@ -150,17 +150,14 @@ impl FunctionRef {
     }
 
     /// The `$call` of closure functor `functor_id`, under the mangled name
-    /// `lower` mints and `wir_build` looks up. The same function spelled two
-    /// ways is two keys, and a lookup on the wrong one silently finds nothing.
-    /// (`dce` keys its own call graph on `FunctionId::Method` instead.)
+    /// `lower` mints. Spelled a second way it would be a second key.
     pub fn closure_call(module: &ModuleSource, functor_id: u32) -> Self {
-        let functor = closure_functor_type(module, functor_id);
         Self {
             module_source: module.clone(),
-            name: MethodName::format_local(&functor, None, CLOSURE_CALL_METHOD),
+            name: closure_call_name(module, functor_id),
             monomorph_info: None,
             method_info: Some(LocalMethodName::new(
-                functor,
+                closure_functor_type(module, functor_id),
                 None,
                 CLOSURE_CALL_METHOD.to_string(),
             )),

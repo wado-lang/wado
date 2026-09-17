@@ -2,12 +2,9 @@
 //! `ClosureToCanonical`, so the `$call` behind it becomes a direct call the
 //! inliner can splice.
 //!
-//! `lower/plan/closure`'s fn-param specializer devirtualizes the closure whose
-//! value never leaves its declaring local. A closure parked in a struct field
-//! escapes by that rule, and the field read only exists once `inline` has
-//! copied the reader in, so it is this pass and not that one that takes
-//! `xs.map(f).collect()`: the functor goes into `IterMap.f`, and the loop
-//! `from_iter` leaves dispatches through a `call_ref` per element.
+//! `lower`'s fn-param specializer takes the closure that never leaves its
+//! declaring local. Every iterator adaptor parks one in a struct field
+//! instead, and the read of that field only exists after `inline`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{CLOSURE_CALL_METHOD, FunctionId};
@@ -23,8 +20,8 @@ use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_
 
 use cranelift_entity::EntityRef;
 
-/// How far a callee walk follows bindings, borrows, blocks and fields. The
-/// adaptor shapes reach a functor in six; the rest is headroom.
+/// How far a callee walk follows bindings, borrows, blocks and fields, so a
+/// long chain costs a fixed amount. Well past what the adaptor shapes need.
 const MAX_DEPTH: u32 = 12;
 
 /// One functor's `$call`: the callee to name, and one flag per parameter
@@ -66,13 +63,21 @@ pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
     ClosureDevirtRule { targets }
 }
 
+/// The expression the operand denotes, past the references around it and the
+/// blocks that only yield it, with the walk budget those hops left.
+fn past_transparent(engine: &Engine, op: Operand, mut depth: u32) -> Option<(ExprId, u32)> {
+    let mut expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
+    while let Some(yielded) = engine.body.block_yield(expr) {
+        depth -= 1;
+        expr = strip_refs(engine.body, yielded.as_expr().filter(|_| depth > 0)?);
+    }
+    Some((expr, depth))
+}
+
 /// The `ClosureToCanonical` the operand's value was built by, following the
 /// bindings, borrows, blocks and struct fields between the two.
 fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
-    let expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
-    if let Some(yielded) = engine.body.block_yield(expr) {
-        return resolve_canonical(engine, yielded, depth - 1);
-    }
+    let (expr, depth) = past_transparent(engine, op, depth)?;
     match &engine.body.exprs[expr].kind {
         ExprKind::ClosureToCanonical { .. } => Some(expr),
         ExprKind::Cast { expr: inner, .. } => {
@@ -101,10 +106,7 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
 /// the object on the way must be read through a plain field access alone —
 /// that is what keeps the field the literal wrote the field the read sees.
 fn resolve_struct_literal(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
-    let expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
-    if let Some(yielded) = engine.body.block_yield(expr) {
-        return resolve_struct_literal(engine, yielded, depth - 1);
-    }
+    let (expr, depth) = past_transparent(engine, op, depth)?;
     match &engine.body.exprs[expr].kind {
         ExprKind::StructLiteral { .. } => Some(expr),
         ExprKind::Local { index, .. } => {
@@ -356,7 +358,7 @@ impl Rule for ClosureDevirtRule {
             ..
         } = engine.body.exprs[canonical].kind.clone()
         else {
-            unreachable!("`found` matched a ClosureToCanonical");
+            unreachable!("`unparked_wrappers` matched a ClosureToCanonical");
         };
         engine.replace_expr_kind(
             canonical,

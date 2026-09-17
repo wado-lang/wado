@@ -1,7 +1,7 @@
 // `closure_devirt` names the functor's local and drops the callee operand, so
 // it must decline a callee that does anything on the way. Inlining `bump`
-// leaves the callee as a block whose leading statement writes `SIDE`, with the
-// closure as its tail — devirtualizing there deleted the write.
+// leaves the callee as a block that writes `SIDE` and then yields the closure.
+// Devirtualizing there deleted the write.
 
 use { println, Stdout } from "core:cli";
 
