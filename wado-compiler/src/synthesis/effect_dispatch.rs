@@ -17,10 +17,10 @@ use crate::name::{
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
-    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId, TypeTable,
+    CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
+    ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
+    TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -2246,9 +2246,8 @@ fn build_handler_op_closure(
 
     let captures = vec![TirCapture {
         name: h_name.to_string(),
-        outer_index: h_local_index,
+        source: CaptureSource::Local(h_local_index),
         type_id: handler_type,
-        is_mut: false,
     }];
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();

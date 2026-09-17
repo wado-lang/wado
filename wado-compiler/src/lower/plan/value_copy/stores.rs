@@ -16,7 +16,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern,
-    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -239,14 +239,8 @@ impl StoresWalker<'_> {
             TirExprKind::VariantConstruct {
                 payload: Some(p), ..
             } => self.carries(p),
-            TirExprKind::Closure { captures, .. } => captures
-                .iter()
-                .flat_map(|c| {
-                    self.carries
-                        .get(&c.outer_index)
-                        .cloned()
-                        .unwrap_or_default()
-                })
+            TirExprKind::Closure { captures, .. } => capture_source_locals(captures)
+                .flat_map(|index| self.carries.get(&index).cloned().unwrap_or_default())
                 .collect(),
             // Which positions a call routes to its result is read off a body,
             // and a builtin has none — `a[i]`'s `array_get_ref` hands back a

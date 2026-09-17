@@ -1632,8 +1632,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         match expr {
-            ast::Expr::Ident(id) => match binding_mutability(&id.name, ctx) {
-                Some(is_mut) => (!is_mut).then(|| id.name.clone()),
+            ast::Expr::Ident(id) => match ctx.binding(&id.name) {
+                Some(binding) => (!binding.is_mut).then(|| id.name.clone()),
                 // Only a name no binding claims can be the global; one
                 // shadowing it answers for itself.
                 None => self.is_immutable_global(&id.name).then(|| id.name.clone()),
@@ -3455,21 +3455,4 @@ pub(super) fn adjusted_receiver_type(
             }
         }
     }
-}
-
-/// How the frame sees `name`: `Some(is_mut)` for a binding it can vouch for,
-/// `None` when none claims the name and it may be a global.
-///
-/// A closure body's own scopes hold only its parameters and locals — the
-/// enclosing frame's bindings reach it as captures, which the scopes alone
-/// would leave unaccounted for.
-fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
-    if let Some(local) = ctx.lookup(name) {
-        return Some(local.is_mut);
-    }
-    // Reading through a `&mut` box is what a mutable capture is.
-    if ctx.deref_overrides.contains_key(name) || ctx.outer_box_types.contains_key(name) {
-        return Some(true);
-    }
-    ctx.outer_locals.get(name).map(|outer| outer.is_mut)
 }

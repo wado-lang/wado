@@ -231,14 +231,6 @@ pub enum NirLiteralPattern {
     Null,
 }
 
-#[derive(Debug, Clone)]
-pub struct NirCapture {
-    pub name: String,
-    pub outer_index: u32,
-    pub type_id: TypeId,
-    pub is_mut: bool,
-}
-
 /// Generic type parameter in NIR (from AST `GenericParam`)
 #[derive(Debug, Clone)]
 pub struct NirTypeParam {
@@ -865,8 +857,6 @@ pub struct ClosureFunctor {
     /// The `$call` method for this closure (with body transformed:
     /// Capture nodes become `FieldAccess` on self)
     pub call_method: Rc<RefCell<NirFunction>>,
-    /// Captures from the original closure
-    pub captures: Vec<NirCapture>,
     /// Canonical user-declared (name, type) pairs of the closure literal,
     /// captured at functor creation and never mutated.
     /// `register_closure_wrappers` reads it for the wrapper's external signature

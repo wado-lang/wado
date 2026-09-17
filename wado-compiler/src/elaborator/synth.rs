@@ -507,7 +507,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return self.class_of_type(*inner);
             }
             if let Some(outer) = ctx.outer_locals.get(name) {
-                return self.class_of_type(outer.type_id);
+                return self.class_of_type(outer.local.type_id);
             }
             if let Some(&(ty, _)) = self.sem.decls.current_module_globals.get(name) {
                 return self.class_of_type(ty);

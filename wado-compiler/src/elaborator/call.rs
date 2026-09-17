@@ -19,7 +19,7 @@ use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, TraitContext};
-use super::sem::types::{CalleeParams, StaticMethodDispatch};
+use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
@@ -350,14 +350,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if root.name.contains("::") {
             return; // Qualified name (e.g. `Type::method`) — not a local.
         }
-        let Some(local) = ctx.lookup(&root.name) else {
-            return; // Not a local — must be a top-level fn or capture seen later.
+        let Some(binding) = ctx.binding(&root.name) else {
+            return; // Not a binding — must be a top-level fn or a global.
         };
-        if local.is_mut {
+        if binding.is_mut {
             return;
         }
         let is_mut_ref = matches!(
-            self.tysys.type_table.borrow().get(local.type_id),
+            self.tysys.type_table.borrow().get(binding.type_id),
             ResolvedType::MutRef(_)
         );
         if is_mut_ref {
@@ -608,23 +608,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             given_args.is_none() || call.args.is_empty(),
             "typed arguments replace the call's AST arguments, never join them"
         );
-        // Closure call: a bare identifier that names a *value* binding (a
-        // local/param — checked first, so shadowing wins — or a module/imported
-        // global) is invoked on its value, not looked up as a named function.
+        // Closure call: a bare identifier naming a value — a binding first, so
+        // shadowing wins, else a global — is called on its value.
         if let Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
         {
-            let local = ctx
-                .lookup(&ident.name)
-                .map(|local| (local.type_id, local.defining_ast_id));
-            let value_ty = local
+            let binding = ctx
+                .lookup_or_capture(&ident.name)
+                .map(|var_ref| (var_ref.value_type(), var_ref.defining_ast_id()));
+            let value_ty = binding
                 .map(|(ty, _)| ty)
                 .or_else(|| self.global_var_type(ident.id, &ident.name));
             if let Some(value_ty) = value_ty {
                 // Record the use→def edge the same way `resolve_ident` would,
                 // so navigation on a value-binding callee (local or global)
                 // still resolves — the fast path bypasses `resolve_ident`.
-                match local {
+                match binding {
                     Some((_, defining_ast_id)) => {
                         self.record_reference_opt(ident.id, defining_ast_id);
                     }
@@ -632,20 +631,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 if let Some(sig) = self.as_fn_signature(value_ty) {
-                    // `fn mut` closures need a `mut` root binding — mirrors
-                    // Rust's FnMut rule. The check goes through the same helper
-                    // used by the indirect-call path below so identifier and
-                    // non-identifier callees share one code path.
+                    self.record_indirect_callee(
+                        call.id,
+                        match binding {
+                            Some(_) => IndirectCallee::Binding,
+                            None => IndirectCallee::Global,
+                        },
+                    );
+                    // A `fn mut` needs a `mut` root binding, Rust's FnMut rule.
+                    // The non-identifier callee path below asks the same helper.
                     self.check_fn_mut_root_mutability(&call.callee, ctx, sig.is_mut);
 
                     // Closure `let`-site defaults can pad missing trailing args
-                    // only for local callees.
+                    // only for a callee that names a binding.
                     return self.build_indirect_call(
                         call,
                         ctx,
                         &sig.params,
                         sig.return_type,
-                        /* pad_with_defaults */ local.is_some(),
+                        /* pad_with_defaults */ binding.is_some(),
                         given_args.as_deref(),
                     );
                 }
@@ -688,6 +692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let callee_type = self.resolve_expr(&call.callee, ctx, None);
 
             if let Some(sig) = self.as_fn_signature(callee_type) {
+                self.record_indirect_callee(call.id, IndirectCallee::Expr);
                 // Enforce `fn mut` root-mutability for non-identifier
                 // callees too: `(h.f)()`, `arr[i]()`, `(arr[i].f)()`, …
                 // require the root binding to be `mut`. A temporary root
