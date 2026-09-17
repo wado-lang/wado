@@ -7,16 +7,14 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
+use crate::nir::{FunctionRef, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
-use crate::name::{
-    CLOSURE_CALL_METHOD, FqTraitName, FqTypeName, MangledName, MethodName, StructName,
-};
+use crate::name::{FqTraitName, FqTypeName, MangledName, MethodName, StructName};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_value_graph::{OpaqueSource, ValueId};
 use crate::optimize::multi_value_return::block_tail_call;
@@ -155,11 +153,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
-        let call_method_local = MethodName::format_local(
-            &FqTypeName::shape(module_source, functor_name),
-            None,
-            CLOSURE_CALL_METHOD,
-        );
+        let call_method_local = FunctionRef::closure_call(module_source, functor.id).name;
         let call_method_fq = MangledName::in_module(module_source, &call_method_local);
         let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
             Some(id) => id,

@@ -149,9 +149,10 @@ impl FunctionRef {
         }
     }
 
-    /// The `$call` of closure functor `functor_id`. Every site that names one
-    /// goes through here: the same function reached by two constructions is two
-    /// keys, and a lookup on the wrong one silently finds nothing.
+    /// The `$call` of closure functor `functor_id`, under the mangled name
+    /// `lower` mints and `wir_build` looks up. The same function spelled two
+    /// ways is two keys, and a lookup on the wrong one silently finds nothing.
+    /// (`dce` keys its own call graph on `FunctionId::Method` instead.)
     pub fn closure_call(module: &ModuleSource, functor_id: u32) -> Self {
         let functor = closure_functor_type(module, functor_id);
         Self {

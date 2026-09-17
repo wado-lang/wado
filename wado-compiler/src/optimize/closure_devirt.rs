@@ -9,15 +9,17 @@
 //! `xs.map(f).collect()`: the functor goes into `IterMap.f`, and the loop
 //! `from_iter` leaves dispatches through a `call_ref` per element.
 
-use crate::hashmap::IndexMap;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::name::{CLOSURE_CALL_METHOD, FunctionId};
 use crate::nir::{FuncId, FunctionRef};
-use crate::nir_arena::{ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtKind};
+use crate::nir_arena::{
+    ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
 
-use super::arena_query::{is_addressed, strip_refs};
+use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_refs};
 
 use cranelift_entity::EntityRef;
 
@@ -200,16 +202,42 @@ fn runs_before(engine: &Engine, canonical: ExprId, call: ExprId) -> bool {
         .any(|(call_block, call_at)| call_block == block && call_at > at)
 }
 
-/// The local the wrapper's functor is parked in — the handle a direct call can
-/// name wherever the wrapper reaches — with the name and type to read it by.
-fn functor_local(engine: &Engine, canonical: ExprId) -> Option<(u32, String)> {
+/// The local the wrapper's functor is parked in, when it holds the same object
+/// at a later call as here: bound once, with no reference into it.
+fn functor_local(engine: &mut Engine, canonical: ExprId) -> Option<(u32, String)> {
     let ExprKind::ClosureToCanonical { functor, .. } = &engine.body.exprs[canonical].kind else {
         return None;
     };
     let ExprKind::Local { index, name } = &engine.body.exprs[functor.as_expr()?].kind else {
         return None;
     };
-    Some((*index, name.clone()))
+    let (index, name) = (*index, name.clone());
+    if !engine.local_has_one_version(index) || engine.body_address_taken().contains(&index) {
+        return None;
+    }
+    Some((index, name))
+}
+
+/// Every `let x = ClosureToCanonical { … }` among `stmts` whose functor is not
+/// a local yet, as its position, the wrapper, and the functor.
+fn unparked_wrappers(engine: &Engine, stmts: &[StmtId]) -> Vec<(usize, ExprId, ExprId)> {
+    stmts
+        .iter()
+        .enumerate()
+        .filter_map(|(at, &stmt)| {
+            let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
+                return None;
+            };
+            let canonical = value.as_expr()?;
+            let ExprKind::ClosureToCanonical { functor, .. } = &engine.body.exprs[canonical].kind
+            else {
+                return None;
+            };
+            let functor = functor.as_expr()?;
+            (!matches!(engine.body.exprs[functor].kind, ExprKind::Local { .. }))
+                .then_some((at, canonical, functor))
+        })
+        .collect()
 }
 
 impl ClosureDevirtRule {
@@ -237,18 +265,25 @@ impl ClosureDevirtRule {
             return None;
         };
         let (callee, arity) = (*callee, args.len());
+        // Naming the functor's local drops the callee operand, and with it
+        // whatever the trace saw through — an inlined helper's writes, say.
+        if !is_pure_nontrapping_operand_typed(engine.body, callee, engine.value_graph_type_table())
+        {
+            return None;
+        }
         let canonical = resolve_canonical(engine, callee, MAX_DEPTH)?;
         let devirtualizable =
             runs_before(engine, canonical, call) && self.target(engine, canonical, arity).is_some();
         devirtualizable.then_some(canonical)
     }
 
-    /// Whether some `IndirectCall` in the body dispatches through this wrapper.
+    /// Every wrapper in the body some `IndirectCall` dispatches through.
     /// Parking a functor nothing devirtualizes would only add a binding.
-    fn reaches_a_devirt_site(&self, engine: &mut Engine, canonical: ExprId) -> bool {
+    fn devirt_sites(&self, engine: &mut Engine) -> IndexSet<ExprId> {
         reachable_exprs(engine.body)
             .into_iter()
-            .any(|call| self.devirt_site(engine, call) == Some(canonical))
+            .filter_map(|call| self.devirt_site(engine, call))
+            .collect()
     }
 }
 
@@ -286,25 +321,17 @@ impl Rule for ClosureDevirtRule {
     /// by the wrapper have a handle on the one object it holds.
     fn apply_block(&self, engine: &mut Engine, id: BlockId) -> bool {
         let stmts = engine.body.blocks[id].stmts.clone();
-        let found = stmts.iter().enumerate().find_map(|(at, &stmt)| {
-            let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
-                return None;
-            };
-            let canonical = value.as_expr()?;
-            let ExprKind::ClosureToCanonical { functor, .. } = &engine.body.exprs[canonical].kind
-            else {
-                return None;
-            };
-            let functor = functor.as_expr()?;
-            (!matches!(engine.body.exprs[functor].kind, ExprKind::Local { .. }))
-                .then_some((at, canonical, functor))
-        });
-        let Some((at, canonical, functor)) = found else {
-            return false;
-        };
-        if !self.reaches_a_devirt_site(engine, canonical) {
+        let candidates = unparked_wrappers(engine, &stmts);
+        if candidates.is_empty() {
             return false;
         }
+        let sites = self.devirt_sites(engine);
+        let Some((at, canonical, functor)) = candidates
+            .into_iter()
+            .find(|&(_, canonical, _)| sites.contains(&canonical))
+        else {
+            return false;
+        };
         let type_id = engine.body.exprs[functor].type_id;
         let span = engine.body.exprs[functor].span;
         let name = format!("$functor_{}", functor.index());
