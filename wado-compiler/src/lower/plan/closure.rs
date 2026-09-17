@@ -168,7 +168,7 @@ fn capture_field_value(cap: &TirCapture, enclosing_self: EnclosingSelf, span: Sp
         ),
         CaptureSource::Capture(slot) => {
             let Some(enclosing_self) = enclosing_self else {
-                panic!(
+                unreachable!(
                     "capture `{}` reads slot {slot} of an enclosing environment, \
                      but the frame building the functor has none",
                     cap.name,
@@ -2010,7 +2010,8 @@ impl TirMutVisitor for CaptureRewriter<'_> {
                 let cap_type = self
                     .captures
                     .get(index as usize)
-                    .map_or(TypeTable::UNKNOWN, |c| c.type_id);
+                    .expect("a `Capture` names a slot of its own closure's environment")
+                    .type_id;
                 // The method this body becomes takes `self` as its first
                 // parameter, so the environment is local 0 of the new frame.
                 *expr = read_capture_slot((0, self.self_ref_type), index, cap_type, self.self_span);

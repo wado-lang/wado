@@ -2859,29 +2859,29 @@ impl FunctionContext {
     /// says where the enclosing frame finds each; a `ParentEnv` one is resolved
     /// to a slot by [`super::closure::link_parent_captures`].
     pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
-        let mut captures: Vec<_> = self
-            .captured_vars
+        self.captured_vars
             .iter()
-            .filter_map(|(name, slot)| {
-                self.outer_locals.get(name).map(|outer| {
-                    // Use box type if the outer variable has its address taken
-                    let effective_type_id = self
-                        .outer_box_types
-                        .get(name)
-                        .copied()
-                        .unwrap_or(outer.local.type_id);
-                    let effective_local = LocalVar {
-                        type_id: effective_type_id,
-                        ..outer.local
-                    };
-                    (slot.index, name.clone(), effective_local, slot.reach)
-                })
+            .enumerate()
+            .map(|(position, (name, slot))| {
+                assert_eq!(
+                    slot.index as usize, position,
+                    "a slot is allocated at the end, so insertion order is slot order"
+                );
+                let outer = self
+                    .outer_locals
+                    .get(name)
+                    .expect("a captured name is one the enclosing frame reaches");
+                let type_id = self
+                    .outer_box_types
+                    .get(name)
+                    .copied()
+                    .unwrap_or(outer.local.type_id);
+                let local = LocalVar {
+                    type_id,
+                    ..outer.local
+                };
+                (name.clone(), local, slot.reach)
             })
-            .collect();
-        captures.sort_by_key(|(index, _, _, _)| *index);
-        captures
-            .into_iter()
-            .map(|(_, name, local, reach)| (name, local, reach))
             .collect()
     }
 }

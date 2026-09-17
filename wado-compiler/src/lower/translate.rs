@@ -2372,7 +2372,7 @@ impl FunctionTranslator<'_, '_> {
     /// binding its own closure reached the same way.
     fn read_enclosing_capture(&self, cap: &TirCapture, slot: u32, span: Span) -> ExprId {
         let Some((self_index, self_type)) = self.enclosing_env else {
-            panic!(
+            unreachable!(
                 "capture `{}` reads slot {slot} of an enclosing environment, \
                  but the translated function has none",
                 cap.name,

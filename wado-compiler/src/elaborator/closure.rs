@@ -60,9 +60,13 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
     match ctx.lookup_or_capture(name) {
         Some(VarRef::Capture { index, .. } | VarRef::DerefCapture { index, .. }) => index,
         Some(VarRef::Local { .. }) => {
-            panic!("`{name}` is a local of the frame that was recorded as reaching it by capture")
+            unreachable!(
+                "`{name}` is a local of the frame that was recorded as reaching it by capture"
+            )
         }
-        None => panic!("`{name}` was reached through the enclosing environment but is not in it"),
+        None => {
+            unreachable!("`{name}` was reached through the enclosing environment but is not in it")
+        }
     }
 }
 
