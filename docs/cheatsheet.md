@@ -1342,13 +1342,13 @@ impl Tick for Quiet { fn tick(&mut self) -> i32 { ... } }
 fn run<T: Tick>(t: &mut T) -> i32 with _ { return t.tick(); }
 // `run(&mut loud)` requires Stdout at the call; `run(&mut quiet)` requires none
 
-// A head that writes nothing decides nothing, and is diagnosed (a `pub` trait
-// warns, a private one remarks). Waive it while deciding:
+// A head that writes nothing reads as `with _`, and is diagnosed (a `pub`
+// trait warns, a private one remarks). Waive it while deciding:
 #[allow(undecided_effects)]
 trait Undecided { fn tick(&mut self) -> i32; }
 
-// In the prelude: Iterator / IntoIterator are `with _`; Eq, Ord, Default,
-// Serialize and Deserialize are `with ()`.
+// Every standard library trait says `with ()`, Iterator and FromStr included:
+// an impl of one performing I/O is a design error.
 
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {

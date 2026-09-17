@@ -5195,7 +5195,7 @@ A `with` clause on the trait itself says what every impl of it may do. A method'
 
 | Head                          | Every impl of it       |
 | ----------------------------- | ---------------------- |
-| `trait Foo { … }`             | undecided — diagnosed  |
+| `trait Foo { … }`             | as `with _`, diagnosed |
 | `trait Foo with () { … }`     | is pure                |
 | `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
 | `trait Foo with _ { … }`      | brings its own effects |
@@ -5222,9 +5222,9 @@ export fn run() with Stdout {
 
 Where a fixed head demands the same effects of every caller, an open one is resolved from the type the call names: `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. `with _` in `draw`'s signature is what says so — a caller that forwards rather than resolves writes one of its own.
 
-A head that writes nothing decides nothing, and publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
 
-`Iterator` and `IntoIterator` carry `with _`, so an iterator that reads a file is ordinary and a pure one demands nothing. `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`: an impl of them performing I/O is a design error, and the compiler says so.
+A body dispatching on a type parameter — `s.read()` where `s: S` and `S: Source` — has no impl to read, so an open head's hole survives there and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` for that reason and its own: an impl performing I/O is a design error, for comparison, conversion and iteration alike.
 
 See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 

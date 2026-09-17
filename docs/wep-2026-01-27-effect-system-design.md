@@ -344,7 +344,7 @@ A trait head says what every impl of it may do. It has four states, and a bare h
 
 A method's own `with` clause overrides the head.
 
-The point of the table is that "should be pure" is a contract worth writing down, and that writing nothing is not the same statement. `Eq` and `Serialize` performing I/O is a design error, so they say `with ()`. An iterator that reads a file is ordinary, so `Iterator` says `with _`. Most traits sit between the two, and their author does not have to guess on the first day.
+The point of the table is that "should be pure" is a contract worth writing down, and that writing nothing is not the same statement. Every trait the standard library declares says `with ()`: an impl of one performing I/O is a design error, comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
 
 #### A head that names no hole
 
@@ -391,34 +391,36 @@ Resolving the selected impl's effects at each instantiation would admit more pro
 
 - [x] Implemented.
 
-`with _` on a trait head is the same sugar as on a function, so `trait Iterator with _` is `trait Iterator<effect E> with E`. The impl's own method signatures supply the argument, and nothing new has to be named:
+`with _` on a trait head is the same sugar as on a function, so `trait Source with _` is `trait Source<effect E> with E`. The impl's own method signatures supply the argument, and nothing new has to be named:
 
 ```wado
-trait Iterator with _ {
+trait Source with _ {
     type Item;
-    fn next(&mut self) -> Option<Self::Item>;
+    fn read(&mut self) -> Option<Self::Item>;
 }
 
-impl Iterator for LineReader {
+impl Source for LineReader {
     type Item = String;
-    fn next(&mut self) -> Option<String> with FileSystem { ... }   // E = FileSystem
+    fn read(&mut self) -> Option<String> with FileSystem { ... }   // E = FileSystem
 }
 ```
 
 A bound leaves the argument free, or passes one to constrain it. A caller that only forwards writes `with _` and names nothing:
 
 ```wado
-fn count<I: Iterator>(it: I) -> i32 with _ { ... }            // as effectful as `it`
-fn sum<I: Iterator with ()>(it: I) -> i32 { ... }             // only a pure iterator
+fn count<S: Source>(s: S) -> i32 with _ { ... }            // as effectful as `s`
+fn sum<S: Source with ()>(s: S) -> i32 { ... }             // only a pure source
 ```
 
 A type implements a trait once, so two impls differing only in the effect argument are rejected. That is what keeps the argument an output of the impl rather than a choice made at the call.
 
-The parameter is resolved where the call names the type: `count(lines)` demands what `impl Iterator for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it — `with _` says "as effectful as `I`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
+The parameter is resolved where the call names the type: `count(lines)` demands what `impl Source for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it — `with _` says "as effectful as `S`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
+
+A rigid dispatch is the case that does not resolve: in `fn count<S: Source>(s: S)` the body's `s.read()` has no impl to read, since `S` is a type parameter, so the hole survives and `count` forwards it. That is why every trait in the standard library and in the test corpus declares its head — a bare one would push a `with _` onto each of its callers.
 
 #### An undecided head
 
-- [x] Diagnosed. It does not yet read as `with _` — see the gap below.
+- [x] Reads as `with _`, and is diagnosed.
 
 A bare head is not neutral. It reads as `with _`, so it publishes an open contract, and deciding it later is a breaking change: a downstream `with _` that forwarded the trait's effects has nothing left to forward once the head says `with ()`.
 
@@ -442,20 +444,13 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 ## Roadmap
 
-1. The rest of the prelude heads, below. The flip depends on them, so they come first.
-2. A bare head reading as `with _`. Finished when `TraitHead::Undecided` inherits the hole and the corpus is green.
+The trait head is in. What is left is recorded as gaps below.
 
 ## Known gaps
 
-### The rest of the prelude heads
-
-`Iterator` and `IntoIterator` carry `with _`; `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings, `Sequence`, `AsSlice`, `AsStrSlice`, `Reflect` and its siblings, and `core:serde`'s `Serializer` and `Deserializer`) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
-
-Step 2 of the roadmap is what forces the order. A rigid dispatch — `a.widen()` where `a: T` and `T: Widen` — cannot resolve the hole, because inside the generic function there is no impl to read, so the caller must write `with _`. The moment a bare head reads as open, every such call through an undecided prelude trait demands one: `package-marl` alone takes them on `to_string`, `to_chars`, `len` and `chars`, and `package-jade` on all four `Serializer` operations. Deciding the heads first leaves only the traits the corpus declares for itself.
-
 ### An effect argument on a bound
 
-`fn sum<I: Iterator with ()>(it: I)` — constraining an open trait's effect argument at the bound — does not parse yet. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
+`fn sum<S: Source with ()>(s: S)` — constraining an open trait's effect argument at the bound — does not parse yet. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
 
 ### How deep an open head resolves
 
