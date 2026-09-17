@@ -123,7 +123,16 @@ fn append_impl_blocks(sem: &Semantics, symbol: &Symbol, public_only: bool, out: 
 /// notation `Type::m`), where there is no item-level [`Symbol`] to render.
 #[must_use]
 pub(crate) fn hover_for_function(f: &ast::Function) -> HoverResult {
-    fenced_hover(unparse::unparse_function_signature(f))
+    fenced_hover(function_hover_text(f))
+}
+
+/// A function's attributes above its signature. The fence carries more than one
+/// line, so a reader sees what the declaration states as the declaration writes
+/// it — every attribute, with no allowlist.
+fn function_hover_text(f: &ast::Function) -> String {
+    let mut out = unparse::unparse_attributes(&f.attrs);
+    out.push(unparse::unparse_function_signature(f));
+    out.join("\n")
 }
 
 fn fenced_hover(signature: String) -> HoverResult {
@@ -306,7 +315,7 @@ fn pattern_binds(pattern: &ast::Pattern, target: AstId) -> bool {
 /// identified by `target`.
 fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
     match item {
-        Item::Function(f) => (f.id == target).then(|| unparse::unparse_function_signature(f)),
+        Item::Function(f) => (f.id == target).then(|| function_hover_text(f)),
         // Struct fields follow `public_only` (matching `wado doc`'s `..`
         // elision when set); enum cases are always public.
         Item::Struct(s) => {
@@ -343,13 +352,13 @@ fn item_info(item: &Item, target: AstId, public_only: bool) -> Option<String> {
             t.methods
                 .iter()
                 .find(|m| m.id == target)
-                .map(unparse::unparse_function_signature)
+                .map(function_hover_text)
         }
         Item::Impl(imp) => imp
             .methods
             .iter()
             .find(|m| m.id == target)
-            .map(unparse::unparse_function_signature),
+            .map(function_hover_text),
         Item::Flags(fl) => (fl.id == target).then(|| unparse::unparse_flags_header(fl)),
         Item::Newtype(n) => (n.id == target).then(|| unparse::unparse_newtype_signature(n)),
         Item::BuiltinTypeDecl(d) => {

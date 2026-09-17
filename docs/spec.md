@@ -5785,7 +5785,7 @@ The attribute is only valid inside `core::*` modules; the elaborator rejects it 
 
 Links Wado definitions (effects, resources, enums) to Component Model interfaces. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
 
-#### `#[retain(...)]` / `#[returns(...)]`
+#### `#[retain(...)]` / `#[result(...)]`
 
 What a call does with the reference parameters it is handed: whether its result
 aliases one, and whether it keeps one past the return. Neither is a safety
@@ -5796,7 +5796,7 @@ a `.wasm` / `.wat` asset import. See
 [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ```wado
-#[returns(part_of = arr)]
+#[result(part_of = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
 #[retain(value, into = arr)]
@@ -5806,7 +5806,7 @@ pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
 ```
 
-`#[returns(owned)]` says the result is freshly allocated; `#[returns(part_of = p)]`
+`#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
 says it is part of `p`.
 
 `#[retain(...)]` names one retained thing and repeats where there is more than

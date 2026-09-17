@@ -4133,23 +4133,32 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
 
 /// Signature-only unparsers for AST declarations.
 ///
-/// These produce a textual signature suitable for hover, completion detail,
-/// document symbols, etc. — without emitting the body or surrounding
-/// indentation. They are stateless (no trivia attachment needed) and match the
-/// canonical source syntax of the language.
+/// These produce a single-line textual signature suitable for hover, completion
+/// detail, document symbols, etc. — without emitting the body, attributes, or
+/// surrounding indentation. They are stateless (no trivia attachment needed)
+/// and match the canonical source syntax of the language.
 pub fn unparse_function_signature(f: &Function) -> String {
     let mut out = String::new();
     unparse_function_signature_into(f, &mut out);
     out
 }
 
+/// A declaration's attributes, one rendered string each, with no allowlist: a
+/// reader is shown what the source wrote, and a new attribute needs no change
+/// here. They sit beside the signature rather than in it, which is one line.
+#[must_use]
+pub fn unparse_attributes(attrs: &[Attribute]) -> Vec<String> {
+    attrs
+        .iter()
+        .map(|attr| {
+            let mut out = String::new();
+            unparse_attribute_into(attr, &mut out);
+            out
+        })
+        .collect()
+}
+
 pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
-    // Every attribute, with no allowlist: `#[retain]` and `#[returns]` reach a
-    // reader because attributes do, and a new one needs no change here.
-    for attr in &f.attrs {
-        unparse_attribute_into(attr, output);
-        output.push('\n');
-    }
     output.push_str(function_decl_keyword(f.is_export, f.visibility));
     emit_kw_if_into(f.is_async, "async ", output);
     output.push_str("fn ");
@@ -4275,14 +4284,10 @@ pub fn unparse_impl_block_signature(b: &ImplBlock, public_only: bool) -> String 
     }
     unparse_type_into(&b.ty, &mut out);
     out.push_str(" {\n");
-    // A member's signature is several lines once it carries an attribute, and
-    // every one of them sits inside the block.
-    for member in lines {
-        for line in member.lines() {
-            out.push_str("    ");
-            out.push_str(line);
-            out.push('\n');
-        }
+    for line in lines {
+        out.push_str("    ");
+        out.push_str(&line);
+        out.push('\n');
     }
     out.push('}');
     out

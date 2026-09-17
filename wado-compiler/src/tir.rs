@@ -5888,7 +5888,7 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
-    /// What `#[returns(...)]` declared. Read only where there is no body to
+    /// What `#[result(...)]` declared. Read only where there is no body to
     /// infer from, so one written on a body is recorded and ignored.
     pub declared_return_convention: Option<ReturnConvention>,
 
@@ -5973,10 +5973,10 @@ pub enum InlineHint {
 /// a fresh place or a projection of one parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnConvention {
-    /// `#[returns(owned)]` — every returned value is freshly materialized, so a
+    /// `#[result(owned)]` — every returned value is freshly materialized, so a
     /// caller may consume it as a move.
     Owned,
-    /// `#[returns(part_of = p)]` — the result names a component of parameter `p`
+    /// `#[result(part_of = p)]` — the result names a component of parameter `p`
     /// in place, so it lives as long as that argument's storage does.
     PartOf(usize),
 }
@@ -5998,7 +5998,7 @@ pub struct RetainSpec<Param> {
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
 pub struct BuiltinDeclaration {
-    /// `#[returns(...)]`, or `None` where the declaration states none.
+    /// `#[result(...)]`, or `None` where the declaration states none.
     pub returns: Option<ReturnConvention>,
     /// `#[retain(...)]` — what this call keeps beyond it.
     pub retains: Vec<RetainSpec<usize>>,

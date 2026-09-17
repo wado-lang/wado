@@ -1,29 +1,29 @@
-// A malformed `#[returns(...)]` is reported, never read as silence: silence
+// A malformed `#[result(...)]` is reported, never read as silence: silence
 // means the result is freshly allocated, which is what elides a copy.
 
-#[returns(part_of = nope)]
+#[result(part_of = nope)]
 fn first(xs: &List<i32>) -> i32 {
     return xs[0];
 }
 
-#[returns(borrowed)]
+#[result(borrowed)]
 fn second(xs: &List<i32>) -> i32 {
     return xs[1];
 }
 
-#[returns]
+#[result]
 fn third(xs: &List<i32>) -> i32 {
     return xs[0];
 }
 
-#[returns(part_of = "xs")]
+#[result(part_of = "xs")]
 fn fourth(xs: &List<i32>) -> i32 {
     return xs[1];
 }
 
 // One convention, not the first of several: a surplus argument is an author
 // error, and reading past it would apply a row nobody wrote.
-#[returns(owned, bogus)]
+#[result(owned, bogus)]
 fn fifth(xs: &List<i32>) -> i32 {
     return xs[0];
 }
@@ -35,10 +35,10 @@ export fn run() {
 
 __DATA__
 {
-    "compile_error": "#[returns(part_of = nope)] names no parameter",
+    "compile_error": "#[result(part_of = nope)] names no parameter",
     "compile_errors_contains": [
-        "unknown #[returns] convention: borrowed",
-        "#[returns] takes one convention: `owned` or `part_of = param`",
-        "#[returns(part_of = ...)] takes a parameter name, unquoted"
+        "unknown #[result] convention: borrowed",
+        "#[result] takes one convention: `owned` or `part_of = param`",
+        "#[result(part_of = ...)] takes a parameter name, unquoted"
     ]
 }

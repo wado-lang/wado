@@ -126,7 +126,11 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_seq_element")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
+
+`#[compiler_item("serialize_seq_end")]`
 
 ### `pub trait SerializeMap`
 
@@ -140,13 +144,21 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_struct_field")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
+
+`#[compiler_item("serialize_struct_end")]`
 
 ### `pub trait SerializeVariant`
 
 #### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_variant_payload")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
+
+`#[compiler_item("serialize_variant_end")]`
 
 ### `pub trait Serializer`
 
@@ -194,13 +206,21 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 
+`#[compiler_item("serializer_begin_seq")]`
+
 #### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>`
 
 #### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
 
+`#[compiler_item("serializer_begin_struct")]`
+
 #### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
 
+`#[compiler_item("serializer_serialize_unit_variant")]`
+
 #### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
+
+`#[compiler_item("serializer_begin_variant")]`
 
 ### `pub trait Serialize`
 
@@ -210,7 +230,11 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
+`#[compiler_item("deserialize_seq_next_element")]`
+
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+`#[compiler_item("deserialize_seq_end")]`
 
 ### `pub trait DeserializeMap`
 
@@ -258,23 +282,39 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
+`#[compiler_item("deserialize_struct_next_field")]`
+
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+`#[compiler_item("deserialize_struct_value")]`
 
 #### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
+`#[compiler_item("deserialize_struct_skip")]`
+
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+`#[compiler_item("deserialize_struct_end")]`
 
 ### `pub trait DeserializeVariant`
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
 
+`#[compiler_item("deserialize_variant_variant_name")]`
+
 #### `fn disc(&mut self) -> Result<i32, DeserializeError>`
 
+`#[compiler_item("deserialize_variant_disc")]`
+
 #### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+`#[compiler_item("deserialize_variant_payload")]`
 
 #### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+`#[compiler_item("deserialize_variant_end")]`
 
 ### `pub trait Visitor`
 
@@ -357,11 +397,17 @@ What this format does when the wire repeats a field or key.
 
 #### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError>`
 
+`#[compiler_item("deserializer_begin_seq")]`
+
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
 #### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
+`#[compiler_item("deserializer_begin_struct")]`
+
 #### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
+
+`#[compiler_item("deserializer_begin_variant")]`
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

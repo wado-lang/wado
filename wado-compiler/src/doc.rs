@@ -9,8 +9,8 @@ use crate::ast::{
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::token::Span;
 use crate::unparse::{
-    get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
-    unparse_type_into,
+    get_item_id, unparse_attributes, unparse_enum_signature, unparse_function_signature,
+    unparse_struct_signature, unparse_type_into,
 };
 use crate::{ParseResult, ast, parse, stdlib};
 
@@ -99,6 +99,10 @@ pub struct DocField {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocFunction {
     pub signature: String,
+    /// The declaration's attributes, rendered as written. Beside the signature
+    /// rather than in it: a signature is one line, and a reader wants both.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -523,6 +527,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
+            attrs: unparse_attributes(&m.attrs),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -556,6 +561,7 @@ fn build_doc_resource(
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
+            attrs: unparse_attributes(&m.attrs),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -573,6 +579,7 @@ fn build_doc_resource(
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
+        attrs: unparse_attributes(&f.attrs),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -1029,6 +1036,7 @@ fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     unparse_type_into(&c.ty, &mut sig);
     DocFunction {
         signature: sig,
+        attrs: Vec::new(),
         doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &[]),
     }
 }

@@ -679,16 +679,16 @@ fn render_md_primitive_impl(out: &mut String, p: &DocPrimitiveType, h3: &str, h4
         render_md_doc(out, d);
     }
     for c in &p.constants {
-        render_md_entity(out, &c.signature, c.doc.as_deref(), h4);
+        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
     }
     for m in &p.methods {
-        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
     }
     for ti in &p.trait_impls {
         writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
         let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
-            render_md_entity(out, &m.signature, m.doc.as_deref(), h5);
+            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
         }
     }
 }
@@ -709,11 +709,7 @@ fn render_md_functions_section(out: &mut String, doc: &DocModule, h2: &str, h3: 
     }
     writeln!(out, "\n{h2} Functions").unwrap();
     for f in &doc.functions {
-        writeln!(out, "\n{h3} `{}`", f.signature).unwrap();
-        if let Some(ref d) = f.doc {
-            out.push('\n');
-            render_md_doc(out, d);
-        }
+        render_md_member(out, &f.signature, &f.attrs, f.doc.as_deref(), h3);
     }
 }
 
@@ -724,7 +720,7 @@ fn render_md_trait(out: &mut String, t: &DocTrait, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &t.methods {
-        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
     }
 }
 
@@ -742,13 +738,13 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
     }
     for m in &s.methods {
-        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
     }
     for ti in &s.trait_impls {
         writeln!(out, "\n{h4} `{}`", ti.signature).unwrap();
         let h5 = h(heading_level(h4) + 1);
         for m in &ti.methods {
-            render_md_entity(out, &m.signature, m.doc.as_deref(), h5);
+            render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h5);
         }
     }
 }
@@ -799,7 +795,7 @@ fn render_md_effect(out: &mut String, e: &DocEffect, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &e.methods {
-        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
     }
 }
 
@@ -810,12 +806,23 @@ fn render_md_resource(out: &mut String, r: &DocResource, h3: &str, h4: &str) {
         render_md_doc(out, d);
     }
     for m in &r.methods {
-        render_md_entity(out, &m.signature, m.doc.as_deref(), h4);
+        render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
     }
 }
 
 fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
+    render_md_member(out, sig, &[], doc, h);
+}
+
+/// A member's heading, the attributes its declaration carries, and its doc.
+/// The heading is a one-line code span, so the attributes go on a line of their
+/// own under it rather than into the signature.
+fn render_md_member(out: &mut String, sig: &str, attrs: &[String], doc: Option<&str>, h: &str) {
     writeln!(out, "\n{h} `{sig}`").unwrap();
+    if !attrs.is_empty() {
+        let rendered: Vec<String> = attrs.iter().map(|a| format!("`{a}`")).collect();
+        writeln!(out, "\n{}", rendered.join(" ")).unwrap();
+    }
     if let Some(d) = doc {
         out.push('\n');
         render_md_doc(out, d);

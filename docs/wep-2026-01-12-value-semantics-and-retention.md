@@ -128,14 +128,14 @@ A body-less declaration is the exception: there is nothing to read, so it states
 its facts itself, as attributes.
 
 ```wado
-#[returns(part_of = arr)]
+#[result(part_of = arr)]
 pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
 
 #[retain(value, into = arr)]
 pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
 ```
 
-`#[returns(owned)]` and `#[returns(part_of = p)]` state borrow-out.
+`#[result(owned)]` and `#[result(part_of = p)]` state borrow-out.
 `#[retain(...)]` states retain, naming one retained thing per attribute and
 repeating where there is more than one, so each carries its own destination
 without the attribute grammar growing a way to group them:
@@ -170,21 +170,21 @@ parameter, a projection of it, or a local bound from one. Where a join meets
 both spellings of a position — a function value of one type minted from two
 declarations — the reference is the wider claim and wins.
 
-Silence is the safe reading for `#[retain]` and not for `#[returns]`: a missing
-`#[returns]` is taken for "allocates", which elides copies and is wrong for a
+Silence is the safe reading for `#[retain]` and not for `#[result]`: a missing
+`#[result]` is taken for "allocates", which elides copies and is wrong for a
 declaration that does hand out an argument's storage. A declaration that owes
 one is reported at the declaration, wherever it lives.
 
 Where each is accepted:
 
-| Declaration                                        | `#[retain]` / `#[returns]`   |
+| Declaration                                        | `#[retain]` / `#[result]`    |
 | -------------------------------------------------- | ---------------------------- |
 | `core:builtin`, body-less                          | Yes                          |
 | CM component import, WASI, `.wasm` / `.wat` import | Yes                          |
 | `trait` / `interface` method requirement           | Error — the impl's body does |
 | Anything with a body                               | Error — the body states it   |
 
-A Component Model import declares no `#[returns]` and owes none: the boundary
+A Component Model import declares no `#[result]` and owes none: the boundary
 copies ([Component Model Boundaries](#component-model-boundaries)), so its
 result is owned by construction. The answer is the same for every one of them,
 so it is read off the declaration rather than written on each.

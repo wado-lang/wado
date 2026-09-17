@@ -14,7 +14,7 @@ trait Keeper {
     #[retain(item)]
     fn keep(&self, item: &Item) -> Bag;
 
-    #[returns(owned)]
+    #[result(owned)]
     fn fresh(&self) -> Bag;
 }
 
@@ -29,7 +29,7 @@ __DATA__
 {
     "compile_error": "`Keeper::keep` cannot declare `#[retain]`",
     "compile_errors_contains": [
-        "`Keeper::fresh` cannot declare `#[returns]`",
+        "`Keeper::fresh` cannot declare `#[result]`",
         "`Sink::take` cannot declare `#[retain]`"
     ]
 }

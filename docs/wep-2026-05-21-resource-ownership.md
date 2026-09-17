@@ -263,10 +263,11 @@ where it cannot prove move / share / fresh; no elision pass):
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. Where a result comes from is one fact: a body is read for it, a
-  `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
-  place; `#[returns(part_of = p)]` says it names a component of parameter `p`.
-  The declaration is mandatory. Link asserts that a bodyless `core:builtin`
-  reading through a reference and returning storage carries one. What is left
+  `core:builtin` declares it. `#[result(owned)]` says the result is a fresh
+  place; `#[result(part_of = p)]` says it names a component of parameter `p`.
+  The declaration is mandatory. A bodyless declaration reading through a
+  reference and returning storage is refused without one, at the declaration,
+  where there is a span to point at. What is left
   undeclared cannot hand storage out at all, so reading it as fresh is a fact
   rather than a guess. The obligation is checkable from the
   signature because only a reference argument can carry storage out: a by-value
@@ -280,7 +281,7 @@ where it cannot prove move / share / fresh; no elision pass):
   receiver. `VariantCase::extract(&self, w)` returns a component of `w`; testing
   `self` asks about a member descriptor the walk built fresh, and calls the
   result fresh while `w` is still held. A `core:builtin` answers the same
-  question from `#[returns(part_of = p)]`, which names `p` outright.
+  question from `#[result(part_of = p)]`, which names `p` outright.
 
   An _indirect_ call is fresh when every closure `$call` of its
   return type returns owned: closure lowering rewrites every callable value —

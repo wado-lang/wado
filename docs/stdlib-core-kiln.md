@@ -24,6 +24,8 @@ See WEP 2026-04-12 (Kiln) §"The generator contract".
 
 #### `fn emit_diagnostic(diagnostic: Diagnostic)`
 
+`#[cm("core:kiln/kiln-host@0.1.0#emit-diagnostic")]` `#[cm_params("diagnostic")]`
+
 Report a diagnostic that will be surfaced as a normal compile
 diagnostic. Multiple diagnostics may be reported; they are all
 printed even if the generator eventually returns a successful

@@ -41,7 +41,7 @@ fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
 
 /// [`hands_out_storage`] asked at the declaration, before monomorphization
 /// narrows the types: a body-less declaration answering yes owes
-/// `#[returns(part_of = p)]`, or `#[returns(owned)]` that it allocates. Silence
+/// `#[result(part_of = p)]`, or `#[result(owned)]` that it allocates. Silence
 /// reads as "allocates", which elides copies, so it is not a safe default here.
 pub fn owes_return_convention(
     params: &[TirParam],
@@ -52,7 +52,7 @@ pub fn owes_return_convention(
         && may_carry_storage(return_type, type_table)
 }
 
-/// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body
+/// Whether `func` declares `#[result(owned)]`. Only a declaration with no body
 /// is asked: a body is inferred from below, and would be free to contradict
 /// what it declared.
 fn declares_owned(func: &TirFunction) -> bool {
@@ -91,7 +91,7 @@ impl BuiltinDeclarations {
     }
 
     /// The parameter a declaration's result is a component of, for a call that
-    /// declared `#[returns(part_of = p)]`.
+    /// declared `#[result(part_of = p)]`.
     pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
         match self.get(func)?.returns? {
             ReturnConvention::PartOf(param) => Some(param),
@@ -154,7 +154,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// Whether a call to `func` yields an owned (fresh) value. A body-less
     /// declaration answers from what it stated: one that hands out an argument's
-    /// storage must say `#[returns(part_of = p)]`, so anything that did not is
+    /// storage must say `#[result(part_of = p)]`, so anything that did not is
     /// fresh. A body function is owned iff the fixpoint proved it so, and an
     /// extern / opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
@@ -166,7 +166,7 @@ impl<'a> OwnedCalls<'a> {
 
     /// The parameter `func` returns a projection of, by position, so a call to
     /// it is fresh exactly when *that* argument is. A body function answers from
-    /// the fixpoint; a `core:builtin` from `#[returns(part_of = p)]`, which says
+    /// the fixpoint; a `core:builtin` from `#[result(part_of = p)]`, which says
     /// the result is a component of `p` — and a component of a place nothing
     /// else reaches is one nothing else reaches. A wasm asset declares neither.
     pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
@@ -294,7 +294,7 @@ fn is_receiver_projection(
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => recurse(inner),
-        // A builtin hands out the parameter its `#[returns(part_of = p)]` names,
+        // A builtin hands out the parameter its `#[result(part_of = p)]` names,
         // which need not be the first: `struct_field_get(v, i)` reads `v`.
         TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
             .part_of(func)
@@ -309,7 +309,7 @@ fn is_receiver_projection(
 
 /// The two return conventions, component by component. Seeds the callees that
 /// have no body to settle — a value-copy helper clones, a declaration says
-/// `#[returns(owned)]`, and a builtin that cannot hand storage out allocates —
+/// `#[result(owned)]`, and a builtin that cannot hand storage out allocates —
 /// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
 /// every value it returns is owned, and self-projecting on parameter `p` when

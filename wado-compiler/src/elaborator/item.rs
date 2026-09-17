@@ -2053,7 +2053,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// Reject `#[retain(...)]` and `#[returns(...)]` on a method requirement, in
+    /// Reject `#[retain(...)]` and `#[result(...)]` on a method requirement, in
     /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
     /// and that impl's body is what answers both.
     pub(super) fn reject_retention_attrs_on_requirement(
@@ -2068,8 +2068,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                      says what it keeps, so stating it here binds every call site to a promise \
                      no implementation makes"
                 }
-                "returns" => {
-                    "cannot declare `#[returns]`: the impl it dispatches to has the body that \
+                "result" => {
+                    "cannot declare `#[result]`: the impl it dispatches to has the body that \
                      says what its result is made of, so stating it here binds every call site \
                      to a promise no implementation makes"
                 }

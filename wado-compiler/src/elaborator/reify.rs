@@ -2166,10 +2166,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &self.current_module_source,
             Diagnostic {
                 severity: Severity::Error,
-                code: Code::ReturnsAttr,
+                code: Code::ResultAttr,
                 message: format!(
                     "`{}` reads through a reference and returns storage: \
-                     declare #[returns(part_of = p)], or #[returns(owned)] that it allocates",
+                     declare #[result(part_of = p)], or #[result(owned)] that it allocates",
                     func.name
                 ),
                 span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
@@ -2178,7 +2178,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         None
     }
 
-    /// The `#[returns(...)]` convention, `None` where the declaration states
+    /// The `#[result(...)]` convention, `None` where the declaration states
     /// none. A malformed one is reported rather than read as that silence, which
     /// means "allocates" — the reading that elides copies.
     fn reify_return_convention_attr(
@@ -2186,15 +2186,15 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
     ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == "returns")?;
+        let attr = attrs.iter().find(|a| a.name == "result")?;
         let emit = |message: String| {
-            self.attr_error(Code::ReturnsAttr, attr, message);
+            self.attr_error(Code::ResultAttr, attr, message);
             None
         };
 
         let [arg] = attr.args.as_slice() else {
             return emit(
-                "#[returns] takes one convention: `owned` or `part_of = param`".to_string(),
+                "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
         match arg {
@@ -2202,14 +2202,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
                     Some(index) => Some(tir::ReturnConvention::PartOf(index)),
-                    None => emit(format!("#[returns(part_of = {named})] names no parameter")),
+                    None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
             _ if arg.name() == "part_of" => {
-                emit("#[returns(part_of = ...)] takes a parameter name, unquoted".to_string())
+                emit("#[result(part_of = ...)] takes a parameter name, unquoted".to_string())
             }
             _ => emit(format!(
-                "unknown #[returns] convention: {} (expected `owned` or `part_of = param`)",
+                "unknown #[result] convention: {} (expected `owned` or `part_of = param`)",
                 arg.name()
             )),
         }
