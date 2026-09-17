@@ -1,0 +1,57 @@
+// A callee writing a container it allocated itself does not write its
+// caller's `&mut self`, so a field read taken before the call needs no
+// defensive copy. `modref` used to absorb a callee's writes whole, so
+// `List<i64>`'s own fields landed in this parser's `Writes`, no write was
+// re-rootable at the handle, and `let raw = self.repr` copied the whole input
+// on every call — json_catalog_v2's `parse_area` at 1.2 MB/s.
+//
+// The callee that really does write the handle is
+// `value_copy_callee_writes_handle_field`.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    repr: Array<u8>,
+    pos: i32,
+}
+
+impl P {
+    // Writes `self.pos`, and a `List` of its own that reaches no caller
+    // except by return.
+    fn take_digits(&mut self) -> List<i64> {
+        let mut out: List<i64> = [];
+        while self.pos < 4 {
+            out.push(builtin::array_get_value_u8(&self.repr, self.pos) as i64);
+            self.pos += 1;
+        }
+        return out;
+    }
+
+    fn scan(&mut self) -> i64 {
+        let raw = self.repr;
+        let digits = self.take_digits();
+        let mut sum: i64 = 0;
+        for let d of digits {
+            sum += d;
+        }
+        return sum + builtin::array_get_value_u8(&raw, 0) as i64;
+    }
+}
+
+export fn run() with Stdout {
+    let mut bytes = builtin::array_new::<u8>(4);
+    builtin::array_set::<u8>(&mut bytes, 0, 1);
+    builtin::array_set::<u8>(&mut bytes, 1, 2);
+    builtin::array_set::<u8>(&mut bytes, 2, 3);
+    builtin::array_set::<u8>(&mut bytes, 3, 4);
+    let mut p = P { repr: bytes, pos: 0 };
+    println(`${p.scan()}`);
+}
+
+__DATA__
+{
+    "stdout": "11\n",
+    "wir_not_expect:O2": [
+        "$array_clone_dst"
+    ]
+}

@@ -87,6 +87,15 @@ enum WholeOf {
     Handed(TypeId),
 }
 
+/// One call this body makes to a callee this scan reads, and whether it hands
+/// over storage this frame's own caller can observe. A call handed none can
+/// name no write the caller can see: what it writes is this frame's, or a
+/// global, which is opaque either way.
+struct CallSite {
+    callee: (ModuleSource, String),
+    reaches_caller: bool,
+}
+
 /// A known callee's own writes are still unsettled while its body is being
 /// scanned, so a field this body's argument projects through — `outer.inner`
 /// in `callee(&mut outer.inner)` — is added to this function's own `Writes`
@@ -127,7 +136,7 @@ pub fn compute_mod_ref(
         ModuleSource,
         String,
         Writes,
-        Vec<(ModuleSource, String)>,
+        Vec<CallSite>,
         Vec<PendingProjection>,
     )> = Vec::new();
     for func_rc in &flat.functions {
@@ -158,9 +167,16 @@ pub fn compute_mod_ref(
         changed = false;
         for (module, name, _, callees, pending) in &direct {
             let mut merged = per_func.get(module, name).cloned().unwrap_or_default();
-            for (cm, cn) in callees {
-                if let Some(callee) = per_func.get(cm, cn) {
+            for site in callees {
+                let Some(callee) = per_func.get(&site.callee.0, &site.callee.1) else {
+                    continue;
+                };
+                if site.reaches_caller {
                     merged.absorb(callee);
+                } else {
+                    // Its named writes land in storage this frame owns. One it
+                    // could not name may still go anywhere.
+                    merged.opaque |= callee.is_opaque();
                 }
             }
             for p in pending {
@@ -196,7 +212,7 @@ fn scan(
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
     builtins: &BuiltinDeclarations,
-) -> (Writes, Vec<(ModuleSource, String)>, Vec<PendingProjection>) {
+) -> (Writes, Vec<CallSite>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
         return (
             Writes {
@@ -227,7 +243,7 @@ struct Walker<'a> {
     builtins: &'a BuiltinDeclarations,
     resolver: &'a Resolver<'a>,
     writes: Writes,
-    callees: Vec<(ModuleSource, String)>,
+    callees: Vec<CallSite>,
     pending: Vec<PendingProjection>,
 }
 
@@ -365,24 +381,32 @@ impl TirRefVisitor for Walker<'_> {
             // write, if any, is charged at whoever uses that reference.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
-                if known {
-                    self.callees
-                        .push((func.module_source.clone(), func.name.clone()));
-                }
                 let aliases_only =
                     func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
-                if !aliases_only {
-                    for arg in args
-                        .iter()
-                        .filter(|a| could_write_through(a.expr.type_id, self.type_table))
-                    {
-                        let names = self.resolver.names(&arg.expr);
-                        if known {
-                            let callee = (func.module_source.clone(), func.name.clone());
-                            self.record_pending(&names, arg.expr.type_id, callee);
-                        } else {
-                            self.record(&names, WholeOf::Handed(arg.expr.type_id));
-                        }
+                let handed: Vec<&TirExpr> = if aliases_only {
+                    Vec::new()
+                } else {
+                    args.iter()
+                        .map(|a| &a.expr)
+                        .filter(|e| could_write_through(e.type_id, self.type_table))
+                        .collect()
+                };
+                let reaches_caller = handed
+                    .iter()
+                    .any(|e| self.reachable_from_caller(&self.resolver.names(e)));
+                if known {
+                    self.callees.push(CallSite {
+                        callee: (func.module_source.clone(), func.name.clone()),
+                        reaches_caller,
+                    });
+                }
+                for expr in handed {
+                    let names = self.resolver.names(expr);
+                    if known {
+                        let callee = (func.module_source.clone(), func.name.clone());
+                        self.record_pending(&names, expr.type_id, callee);
+                    } else {
+                        self.record(&names, WholeOf::Handed(expr.type_id));
                     }
                 }
             }
