@@ -7,16 +7,16 @@
 // references (like method-call auto-deref), so the projection must peel
 // references before resolving.
 
-trait Seq {
+trait Seq with () {
     fn get(&mut self) -> i32;
 }
 
-trait De {
+trait De with () {
     type Acc: Seq;
     fn begin(&mut self) -> Self::Acc with stores[self];
 }
 
-trait Deser {
+trait Deser with () {
     fn deser<D: De>(d: &mut D) -> Self;
 }
 

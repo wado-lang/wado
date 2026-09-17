@@ -5,13 +5,13 @@ fn origin() -> i32 {
     return 3;
 }
 
-pub trait Tagged {
+pub trait Tagged with () {
     fn tagged(n: i32 = origin()) -> i32;
 }
 
 struct Tag {}
 
-pub trait Named {
+pub trait Named with () {
     fn name() -> String;
 }
 
@@ -21,7 +21,7 @@ impl Named for Tag {
     }
 }
 
-pub trait Boxed {
+pub trait Boxed with () {
     fn boxed<T: Named = Tag>(&self) -> String;
     fn made<T: Named = Tag>() -> String;
 }

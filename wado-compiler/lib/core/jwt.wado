@@ -40,14 +40,14 @@ test {
 
 /// The `alg` a key speaks for. Both halves inherit it, so a key that signs
 /// and verifies answers once.
-pub trait JwsAlgorithm {
+pub trait JwsAlgorithm with () {
     /// The `alg` header value, e.g. `"HS256"`.
     fn alg(&self) -> String;
 }
 
 /// The verifying half of a JWS algorithm. Implement it on a key type to teach
 /// [`verify`] an algorithm this module does not carry.
-pub trait JwsVerifier: JwsAlgorithm {
+pub trait JwsVerifier: JwsAlgorithm with () {
     /// Whether `signature` is this key's over `signing_input` (the token's
     /// `header.payload` ASCII bytes). An implementation compares with
     /// `eq_constant_time`, never `==`.
@@ -55,7 +55,7 @@ pub trait JwsVerifier: JwsAlgorithm {
 }
 
 /// The signing half of a JWS algorithm.
-pub trait JwsSigner: JwsAlgorithm {
+pub trait JwsSigner: JwsAlgorithm with () {
     fn sign(&self, signing_input: &ByteList) -> ByteList;
 }
 

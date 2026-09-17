@@ -62,7 +62,7 @@ impl Gen {
 
 // ── Generation ────────────────────────────────────────────────────────────
 
-trait Arbitrary {
+trait Arbitrary with () {
     fn arbitrary(g: &mut Gen) -> Self;
 }
 
@@ -181,7 +181,7 @@ impl<L: ReflectFlags<Members = [..M]>, ..M> Arbitrary for L {
 
 /// Candidates strictly simpler than `self`, best first. An empty list means
 /// the value is already minimal.
-trait Shrink {
+trait Shrink with () {
     fn shrink(&self) -> List<Self>;
 }
 

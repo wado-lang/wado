@@ -7,11 +7,11 @@ struct DeserializeError {
     offset: i64,
 }
 
-trait Deserialize {
+trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
 }
 
-trait Deserializer {
+trait Deserializer with () {
     fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>;
     fn deserialize_string(&mut self) -> Result<String, DeserializeError>;
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError>;

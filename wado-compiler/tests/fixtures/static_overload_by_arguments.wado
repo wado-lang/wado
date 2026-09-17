@@ -9,7 +9,7 @@ use { Item as BItem } from "./sub/same_name_item_b.wado";
 
 struct M {}
 
-trait Later<T> {
+trait Later<T> with () {
     fn later(tag: i32, v: T) -> i32;
 }
 
@@ -27,7 +27,7 @@ impl Later<String> for M {
 
 // The selected impl's parameters shape every literal in the list, not only the
 // first: `5` elaborated under its own default `i32` matched neither impl.
-trait Shaped<T> {
+trait Shaped<T> with () {
     fn shaped(tag: i32, v: T) -> i32;
 }
 
@@ -51,7 +51,7 @@ struct Wrap<A> {
 // that shape. `Wrap<A>` is no `i32` however `A` is chosen, and admitting one
 // made the generic sibling ambiguous with the concrete impl of the name — on an
 // argument no annotation could have separated.
-trait Sibling<T> {
+trait Sibling<T> with () {
     fn sibling(v: T) -> i32;
 }
 
@@ -70,7 +70,7 @@ impl Sibling<i32> for M {
 // A parameter's slots are solved from the argument and the result compared, not
 // its rendered name: a base name embeds a function type's own parameters, so
 // `fn(T) -> i32` and `fn(i32) -> i32` never spell alike however `T` is chosen.
-trait Applied<T> {
+trait Applied<T> with () {
     fn applied(v: T) -> i32;
 }
 
@@ -84,7 +84,7 @@ fn double(n: i32) -> i32 {
     return n * 2;
 }
 
-trait Ident<T> {
+trait Ident<T> with () {
     fn ident(v: T) -> i32;
 }
 

@@ -3,7 +3,7 @@
 // resolution picked nothing, so the argument met no list at all, the call was
 // mangled anyway, and WIR build panicked on a name it could not resolve.
 
-trait Conv<T> {
+trait Conv<T> with () {
     fn conv(tag: i32, v: T) -> i32;
 }
 
@@ -27,7 +27,7 @@ impl Conv<String> for M {
 
 // The survey that names what the receiver does declare read only the bodies a
 // block writes, so an inherited default was invisible to it.
-trait Make {
+trait Make with () {
     fn make(v: String) -> i32 {
         return v.len() as i32;
     }

@@ -14,7 +14,7 @@
 
 use { println, Stdout } from "core:cli";
 
-trait Sink {
+trait Sink with () {
     fn take(&mut self, n: i32);
 }
 
@@ -28,7 +28,7 @@ impl Sink for Counter {
     }
 }
 
-trait Emit {
+trait Emit with () {
     fn emit<S: Sink>(&self, s: &mut S);
 }
 

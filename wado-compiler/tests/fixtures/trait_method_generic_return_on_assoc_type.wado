@@ -4,7 +4,7 @@
 
 use { println, Stdout } from "core:cli";
 
-trait FromI32 {
+trait FromI32 with () {
     fn from_i32(n: i32) -> Self;
 }
 
@@ -16,11 +16,11 @@ impl FromI32 for String {
     fn from_i32(n: i32) -> String { return `${n}`; }
 }
 
-trait Reader {
+trait Reader with () {
     fn read_typed<T: FromI32>(&mut self) -> T;
 }
 
-trait Source {
+trait Source with () {
     type R: Reader;
     fn get_reader(&self) -> Self::R;
 }

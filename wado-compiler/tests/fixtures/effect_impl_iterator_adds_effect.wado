@@ -1,6 +1,6 @@
-// `Iterator`'s head is `with _`, so an iterator that prints is ordinary. The
-// effect reaches whoever iterates it: `consume` names `Counter`, so the head's
-// hole resolves to what `Counter`'s impl declares.
+// A user iterator whose `next()` carries `with Stdout` implements a trait
+// method that declares no effects. The trait's `with` clause bounds every
+// impl of it, so the impl is reported where it is written.
 use { println, Stdout } from "core:cli";
 
 struct Counter {
@@ -29,9 +29,9 @@ impl IntoIterator for Counter {
     }
 }
 
-fn consume(c: Counter) with Stdout {
+fn consume(c: Counter) {
     for let v of c {
-        println(`${v}`);
+        let _ = v;
     }
 }
 
@@ -40,4 +40,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"stdout": "tick\n1\ntick\n0\ntick\n"}
+{"compile_error": "effect 'Stdout' is not declared by trait method 'Iterator::next'"}

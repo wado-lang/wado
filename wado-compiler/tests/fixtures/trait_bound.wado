@@ -23,7 +23,7 @@ impl<T: Ord> Ord for Pair<T> {
     }
 }
 
-trait Printable {
+trait Printable with () {
     fn print(&self) -> String;
 }
 
@@ -73,7 +73,7 @@ impl<T: Ord> Wrapper<T> {
     }
 }
 
-trait Stringify {
+trait Stringify with () {
     fn to_str(&self) -> String;
 }
 
@@ -87,7 +87,7 @@ fn stringify<T: Stringify>(x: T) -> String {
     return x.to_str();
 }
 
-trait ToNum {
+trait ToNum with () {
     fn to_num(&self) -> i32;
 }
 
@@ -110,11 +110,11 @@ fn sum_nums<T: ToNum>(a: T, b: T) -> i32 {
     return a.to_num() + b.to_num();
 }
 
-trait Named {
+trait Named with () {
     fn name(&self) -> String;
 }
 
-trait Scored {
+trait Scored with () {
     fn score(&self) -> i32;
 }
 
@@ -139,7 +139,7 @@ fn describe_player<T: Named + Scored>(x: &T) -> String {
     return `${x.name()}: ${x.score()}`;
 }
 
-trait Describe {
+trait Describe with () {
     fn describe(&self) -> String;
 }
 
@@ -164,11 +164,11 @@ fn show<T: Describe>(x: T) -> String {
     return x.describe();
 }
 
-trait Drawable {
+trait Drawable with () {
     fn draw(&self) -> String;
 }
 
-trait Clickable {
+trait Clickable with () {
     fn on_click(&self) -> String;
 }
 
@@ -192,7 +192,7 @@ struct Widget<T: Drawable + Clickable> {
     item: T,
 }
 
-trait Describable {
+trait Describable with () {
     fn describe(&self) -> String;
 }
 
@@ -217,7 +217,7 @@ struct EqContainer<T: Eq> {
     item: T,
 }
 
-trait Resettable {
+trait Resettable with () {
     fn reset(&mut self);
 }
 
@@ -235,7 +235,7 @@ fn reset_it<T: Resettable>(item: &mut T) {
     item.reset();
 }
 
-trait Measurable {
+trait Measurable with () {
     fn measure(&self) -> i32;
 }
 

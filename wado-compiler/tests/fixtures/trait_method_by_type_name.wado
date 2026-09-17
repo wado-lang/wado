@@ -7,11 +7,11 @@
 
 struct S {}
 
-trait Greet {
+trait Greet with () {
     fn go(&self) -> i32;
 }
 
-trait Add {
+trait Add with () {
     fn add(&self, v: i32) -> i32;
 }
 
@@ -30,7 +30,7 @@ impl Add for S {
 // The rung that answered for an inherited default asked only for receiver-less
 // declarations, and the trait's frame has to be filled past `Self` for the
 // parameter to resolve.
-trait Bump {
+trait Bump with () {
     fn bump(&self, v: i32) -> i32 {
         return v + 10;
     }
@@ -45,7 +45,7 @@ struct M {}
 // The body is emitted under the trait reference the block wrote (`Enc<A>`), so
 // the call has to name that too: minting the segment from the trait declaration
 // drops the arguments and names `Enc::make`, which nothing declares.
-trait Enc<T> {
+trait Enc<T> with () {
     fn make() -> i32 {
         return 7;
     }
@@ -56,13 +56,13 @@ impl Enc<A> for M {}
 // The selection reaches the trait's own declaration, whose signature
 // `method_sig` does not hold — the impl-declared ones are its, a trait's own
 // its `TraitSig`'s.
-trait Made {
+trait Made with () {
     fn made(n: i32 = 3) -> i32 {
         return n;
     }
 }
 
-trait Other {
+trait Other with () {
     fn other() -> i32;
 }
 
@@ -82,7 +82,7 @@ struct Held {
     n: i32,
 }
 
-trait Pick {
+trait Pick with () {
     fn pick(v: Self) -> Self {
         return v;
     }

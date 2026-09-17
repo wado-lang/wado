@@ -3953,8 +3953,7 @@ pub struct AssociatedConst {
 /// that writes its own `with` clause overrides it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TraitHead {
-    /// No clause. The design has it read as [`TraitHead::Open`] and report as
-    /// undecided; today it bounds nothing.
+    /// No clause: reads as [`TraitHead::Open`], and reports as undecided.
     Undecided,
     /// `with ()`: every impl is pure.
     Pure { span: Span },
@@ -3972,15 +3971,15 @@ pub enum TraitHead {
 impl TraitHead {
     /// Whether an impl of this trait chooses its own effects.
     pub fn is_open(&self) -> bool {
-        matches!(self, TraitHead::Open { .. })
+        matches!(self, TraitHead::Open { .. } | TraitHead::Undecided)
     }
 
     /// The effects a method inherits when it declares none of its own.
     pub fn inherited_effects(&self) -> Vec<String> {
         match self {
-            TraitHead::Undecided | TraitHead::Pure { .. } => Vec::new(),
+            TraitHead::Pure { .. } => Vec::new(),
             TraitHead::Fixed { effects, .. } => effects.clone(),
-            TraitHead::Open { .. } => vec![EFFECT_HOLE.to_string()],
+            TraitHead::Open { .. } | TraitHead::Undecided => vec![EFFECT_HOLE.to_string()],
         }
     }
 
