@@ -59,10 +59,9 @@ fn bound_answers(
     wanted: &[SolverType],
 ) -> bool {
     program.args_reaching(bound, trait_).iter().any(|args| {
-        wanted
-            .iter()
-            .enumerate()
-            .all(|(i, want)| args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want))
+        wanted.iter().enumerate().all(|(i, want)| {
+            args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want)
+        })
     })
 }
 
