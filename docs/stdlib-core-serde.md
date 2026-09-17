@@ -122,13 +122,13 @@ else the type's `name_policy` applies, else identity.
 
 ## Traits
 
-### `pub trait SerializeSeq`
+### `pub trait SerializeSeq with ()`
 
 #### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeMap`
+### `pub trait SerializeMap with ()`
 
 #### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
 
@@ -136,19 +136,19 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeStruct`
+### `pub trait SerializeStruct with ()`
 
 #### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeVariant`
+### `pub trait SerializeVariant with ()`
 
 #### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait Serializer`
+### `pub trait Serializer with ()`
 
 #### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
 
@@ -202,17 +202,17 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
 
-### `pub trait Serialize`
+### `pub trait Serialize with ()`
 
 #### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
 
-### `pub trait DeserializeSeq`
+### `pub trait DeserializeSeq with ()`
 
 #### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait DeserializeMap`
+### `pub trait DeserializeMap with ()`
 
 #### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
 
@@ -220,7 +220,7 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait FieldSchema`
+### `pub trait FieldSchema with ()`
 
 Static, per-type, format-agnostic field-name → index mapping.
 
@@ -254,7 +254,7 @@ Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
 
-### `pub trait DeserializeStruct`
+### `pub trait DeserializeStruct with ()`
 
 #### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
@@ -264,7 +264,7 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait DeserializeVariant`
+### `pub trait DeserializeVariant with ()`
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
 
@@ -276,7 +276,7 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait Visitor`
+### `pub trait Visitor with ()`
 
 #### `fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>`
 
@@ -320,7 +320,7 @@ The CBOR `undefined` simple value (major 7, value 23). Distinct from
 arm. The default collapses it to `null` so visitors that do not model
 the distinction (e.g. JSON) keep working.
 
-### `pub trait Deserializer`
+### `pub trait Deserializer with ()`
 
 #### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 
@@ -365,7 +365,7 @@ What this format does when the wire repeats a field or key.
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
-### `pub trait Deserialize`
+### `pub trait Deserialize with ()`
 
 #### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>`
 

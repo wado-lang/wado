@@ -3,7 +3,7 @@
 // blanket is keyed by the receiver it serves, so its body instantiates at
 // `H::Item`, not at the projection's base `H`.
 
-trait Show {
+trait Show with () {
     fn show(&self) -> String;
 }
 
@@ -13,7 +13,7 @@ impl<T: Display> Show for T {
     }
 }
 
-trait Holder {
+trait Holder with () {
     type Item: Display;
     fn item(&self) -> Self::Item;
 }

@@ -38,11 +38,11 @@ impl Cursor {
     }
 }
 
-trait ToWire {
+trait ToWire with () {
     fn to_wire(&self) -> Node;
 }
 
-trait FromWire {
+trait FromWire with () {
     fn from_wire(n: &Node) -> Result<Self, WireError>;
 
     /// The pack-map entry point: one field of a struct, in declaration order.

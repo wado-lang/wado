@@ -55,7 +55,7 @@ Traps unconditionally, marking unreachable code.
 
 ## Traits
 
-### `pub trait Eq<Rhs = Self>`
+### `pub trait Eq<Rhs = Self> with ()`
 
 Trait for equality comparisons.
 Types implementing this trait can be compared with `==` and `!=` operators.
@@ -64,7 +64,7 @@ Types implementing this trait can be compared with `==` and `!=` operators.
 
 Returns true if self equals other.
 
-### `pub trait Ord: Eq`
+### `pub trait Ord: Eq with ()`
 
 Trait for ordering comparisons.
 Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
@@ -73,7 +73,7 @@ Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operator
 
 Compares self with other and returns an Ordering.
 
-### `pub trait Default`
+### `pub trait Default with ()`
 
 Trait for providing a default value for a type.
 Types implementing this trait can produce a sensible "zero" or "empty" value.
@@ -82,7 +82,7 @@ Types implementing this trait can produce a sensible "zero" or "empty" value.
 
 Returns the default value for this type.
 
-### `pub trait Reflect`
+### `pub trait Reflect with ()`
 
 A type's identity: the root every reflected kind sits under. Sealed and
 compiler-synthesized like the kinds. See WEP 2026-06-13.
@@ -97,7 +97,7 @@ The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
 kind carries the attribute, and it says the same thing on each: the
 root answers so a caller need not know which kind it holds.
 
-### `pub trait ReflectStruct: Reflect`
+### `pub trait ReflectStruct: Reflect with ()`
 
 Compile-time struct introspection. The compiler synthesizes an impl for
 every struct; it cannot be implemented in user code and is callable only in
@@ -123,7 +123,7 @@ evaluates its default.
 All slots empty. Starting here is what makes a filled slot mean "the
 wire wrote this", so a repeat is visible without a second record.
 
-### `pub trait Member`
+### `pub trait Member with ()`
 
 The attr-reading face of a reflected member. Sealed and
 compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
@@ -136,7 +136,7 @@ The source field name.
 
 The raw `#[wire(name)]` value (casing not applied), or `None`.
 
-### `pub trait ReflectVariant: Reflect`
+### `pub trait ReflectVariant: Reflect with ()`
 
 Compile-time variant introspection. The compiler synthesizes an impl for
 every variant; it cannot be implemented in user code and is callable only
@@ -151,7 +151,7 @@ Returns the live case's tag.
 
 Returns the per-case members.
 
-### `pub trait ReflectEnum: Reflect`
+### `pub trait ReflectEnum: Reflect with ()`
 
 Compile-time enum introspection. The compiler synthesizes an impl for
 every enum; it cannot be implemented in user code and is callable only
@@ -170,7 +170,7 @@ Returns the case with the given tag; `None` for an unknown tag.
 
 Returns the per-case members.
 
-### `pub trait ReflectFlags: Reflect`
+### `pub trait ReflectFlags: Reflect with ()`
 
 Compile-time flags introspection. The compiler synthesizes an impl for
 every flags type; it cannot be implemented in user code and is callable
@@ -190,7 +190,7 @@ are set.
 
 Returns the per-bit members.
 
-### `pub trait ReflectNewtype: Reflect`
+### `pub trait ReflectNewtype: Reflect with ()`
 
 Compile-time newtype introspection. The compiler synthesizes an impl for
 every newtype; it cannot be implemented in user code and is callable only
@@ -202,7 +202,7 @@ it inherits from that base — `ReflectStruct::<T>` on a newtype over a
 struct walks the struct's fields — so only the base is stated here.
 See WEP 2026-06-13.
 
-### `pub trait ReflectTemplate: Reflect`
+### `pub trait ReflectTemplate: Reflect with ()`
 
 Compile-time introspection of a tagged template literal's shape. The
 compiler synthesizes an impl per shape; it cannot be implemented in user
@@ -222,20 +222,20 @@ none — with escapes processed.
 
 `tail()` with escapes preserved.
 
-### `pub trait Ref`
+### `pub trait Ref with ()`
 
 Marker for reference-identity types: those whose value is a Wasm GC
 reference. Sealed and compiler-synthesized; user impls are rejected.
 See WEP 2026-01-20.
 
-### `pub trait RefMut`
+### `pub trait RefMut with ()`
 
 Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
 ones (`variant`, `fn`). A `&mut` to one of these writes through to the stored
 value. Sealed and compiler-synthesized; user impls are rejected.
 See WEP 2026-01-20.
 
-### `pub trait IndexRef<IndexType>`
+### `pub trait IndexRef<IndexType> with ()`
 
 Immutable reference indexing: `&container[i]` reads through this.
 `Output: Ref` — only a reference element can be handed out by reference; a
@@ -245,7 +245,7 @@ value element is read through `IndexValue`.
 
 Returns a reference to the element at the given index.
 
-### `pub trait IndexRefMut<IndexType>`
+### `pub trait IndexRefMut<IndexType> with ()`
 
 Mutable reference indexing: `container[i].mutating_method()`.
 `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
@@ -255,7 +255,7 @@ element (`variant`, `fn`) cannot be handed out mutably by reference.
 
 Returns a mutable reference to the element at the given index.
 
-### `pub trait IndexAssign<IndexType>`
+### `pub trait IndexAssign<IndexType> with ()`
 
 Value-assignment indexing: `container[i] = value`.
 Separate from `IndexRefMut`: a scalar element has no addressable cell, so
@@ -265,7 +265,7 @@ writing it by value is a distinct operation from handing out a `&mut`.
 
 Assigns a value to the element at the given index.
 
-### `pub trait IndexValue<IndexType>`
+### `pub trait IndexValue<IndexType> with ()`
 
 Value-copy indexing: `container[i]` yields a copy of the element.
 The value-semantics counterpart to `IndexRef` for elements that cannot be
@@ -275,7 +275,7 @@ aliased by reference (scalars, resources).
 
 Returns a copy of the element at the given index.
 
-### `pub trait Add<Rhs = Self>`
+### `pub trait Add<Rhs = Self> with ()`
 
 Trait for the `+` operator.
 Types implementing this trait can use the `+` operator for addition.
@@ -284,7 +284,7 @@ Types implementing this trait can use the `+` operator for addition.
 
 Adds two values and returns the result.
 
-### `pub trait Sub<Rhs = Self>`
+### `pub trait Sub<Rhs = Self> with ()`
 
 Trait for the `-` operator (binary subtraction).
 Types implementing this trait can use the `-` operator for subtraction.
@@ -293,7 +293,7 @@ Types implementing this trait can use the `-` operator for subtraction.
 
 Subtracts rhs from self and returns the result.
 
-### `pub trait Mul<Rhs = Self>`
+### `pub trait Mul<Rhs = Self> with ()`
 
 Trait for the `*` operator.
 Types implementing this trait can use the `*` operator for multiplication.
@@ -302,7 +302,7 @@ Types implementing this trait can use the `*` operator for multiplication.
 
 Multiplies two values and returns the result.
 
-### `pub trait Div<Rhs = Self>`
+### `pub trait Div<Rhs = Self> with ()`
 
 Trait for the `/` operator.
 Types implementing this trait can use the `/` operator for division.
@@ -311,7 +311,7 @@ Types implementing this trait can use the `/` operator for division.
 
 Divides self by rhs and returns the result.
 
-### `pub trait Rem<Rhs = Self>`
+### `pub trait Rem<Rhs = Self> with ()`
 
 Trait for the `%` operator.
 Types implementing this trait can use the `%` operator for remainder.
@@ -320,7 +320,7 @@ Types implementing this trait can use the `%` operator for remainder.
 
 Returns the remainder of dividing self by rhs.
 
-### `pub trait Neg`
+### `pub trait Neg with ()`
 
 Trait for the unary `-` operator (negation).
 Types implementing this trait can use the `-` prefix operator.
@@ -329,7 +329,7 @@ Types implementing this trait can use the `-` prefix operator.
 
 Returns the negation of self.
 
-### `pub trait BitAnd<Rhs = Self>`
+### `pub trait BitAnd<Rhs = Self> with ()`
 
 Trait for the `&` operator (bitwise AND).
 
@@ -337,7 +337,7 @@ Trait for the `&` operator (bitwise AND).
 
 Returns the bitwise AND of self and rhs.
 
-### `pub trait BitOr<Rhs = Self>`
+### `pub trait BitOr<Rhs = Self> with ()`
 
 Trait for the `|` operator (bitwise OR).
 
@@ -345,7 +345,7 @@ Trait for the `|` operator (bitwise OR).
 
 Returns the bitwise OR of self and rhs.
 
-### `pub trait BitXor<Rhs = Self>`
+### `pub trait BitXor<Rhs = Self> with ()`
 
 Trait for the `^` operator (bitwise XOR).
 
@@ -353,7 +353,7 @@ Trait for the `^` operator (bitwise XOR).
 
 Returns the bitwise XOR of self and rhs.
 
-### `pub trait BitNot`
+### `pub trait BitNot with ()`
 
 Trait for the `~` operator (bitwise NOT).
 
@@ -361,7 +361,7 @@ Trait for the `~` operator (bitwise NOT).
 
 Returns the bitwise NOT of self.
 
-### `pub trait Shl`
+### `pub trait Shl with ()`
 
 Trait for the `<<` operator (left shift).
 
@@ -369,7 +369,7 @@ Trait for the `<<` operator (left shift).
 
 Returns self shifted left by rhs bits.
 
-### `pub trait Shr`
+### `pub trait Shr with ()`
 
 Trait for the `>>` operator (right shift).
 
@@ -377,7 +377,7 @@ Trait for the `>>` operator (right shift).
 
 Returns self shifted right by rhs bits.
 
-### `pub trait Display`
+### `pub trait Display with ()`
 
 Trait for user-facing display formatting.
 Types implementing this trait can be formatted with `${x}` in template strings.
@@ -387,7 +387,7 @@ All format traits write to a `Formatter` that wraps `&mut String`.
 
 Formats the value and writes to the given formatter.
 
-### `pub trait Inspect`
+### `pub trait Inspect with ()`
 
 Trait for debug/inspect formatting.
 Types implementing this trait can be formatted with `${x:?}` in template strings.
@@ -402,7 +402,7 @@ Unlike Display, Inspect always shows the "raw" debug representation:
 
 Formats the value as a debug representation and writes to the given formatter.
 
-### `pub trait Binary`
+### `pub trait Binary with ()`
 
 Trait for formatting values as binary integers.
 Used with the `${x:b}` format specifier.
@@ -411,7 +411,7 @@ Used with the `${x:b}` format specifier.
 
 Formats the value as binary and writes to the given formatter.
 
-### `pub trait Octal`
+### `pub trait Octal with ()`
 
 Trait for formatting values as octal integers.
 Used with the `${x:o}` format specifier.
@@ -420,7 +420,7 @@ Used with the `${x:o}` format specifier.
 
 Formats the value as octal and writes to the given formatter.
 
-### `pub trait LowerHex`
+### `pub trait LowerHex with ()`
 
 Trait for formatting values as lowercase hexadecimal.
 Used with the `${x:x}` format specifier.
@@ -429,7 +429,7 @@ Used with the `${x:x}` format specifier.
 
 Formats the value as lowercase hex and writes to the given formatter.
 
-### `pub trait UpperHex`
+### `pub trait UpperHex with ()`
 
 Trait for formatting values as uppercase hexadecimal.
 Used with the `${x:X}` format specifier.
@@ -438,7 +438,7 @@ Used with the `${x:X}` format specifier.
 
 Formats the value as uppercase hex and writes to the given formatter.
 
-### `pub trait LowerExp`
+### `pub trait LowerExp with ()`
 
 Trait for formatting values in lowercase exponential notation.
 Used with the `${x:e}` format specifier.
@@ -447,7 +447,7 @@ Used with the `${x:e}` format specifier.
 
 Formats the value in lowercase exponential notation and writes to the given formatter.
 
-### `pub trait UpperExp`
+### `pub trait UpperExp with ()`
 
 Trait for formatting values in uppercase exponential notation.
 Used with the `${x:E}` format specifier.
@@ -456,7 +456,7 @@ Used with the `${x:E}` format specifier.
 
 Formats the value in uppercase exponential notation and writes to the given formatter.
 
-### `pub trait Iterator`
+### `pub trait Iterator with ()`
 
 The core iterator trait for sequences of values.
 Types implementing this trait can be iterated over using `for-of` loops.
@@ -575,7 +575,7 @@ The remaining element with the smallest `key`, the first on ties.
 
 The remaining element with the largest `key`, the last on ties.
 
-### `pub trait IntoIterator`
+### `pub trait IntoIterator with ()`
 
 Conversion into an Iterator.
 Types implementing this trait can be used in `for-of` loops directly.
@@ -585,7 +585,7 @@ Types implementing this trait can be used in `for-of` loops directly.
 Creates an iterator from a value.
 Note: Uses &self due to parser limitation (self by value not yet supported in traits).
 
-### `pub trait From<T>`
+### `pub trait From<T> with ()`
 
 Infallible conversion trait.
 Implement this to define how to convert from type `T` into `Self`.
@@ -597,7 +597,7 @@ The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 
 Converts a value of type `T` into `Self`.
 
-### `pub trait TryFrom<T>`
+### `pub trait TryFrom<T> with ()`
 
 Fallible conversion trait.
 Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
@@ -606,21 +606,21 @@ Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
 
 Attempts to convert a value of type `T` into `Self`.
 
-### `pub trait Sum`
+### `pub trait Sum with ()`
 
 Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 bound. Implemented for every `Add<Output = Self>`.
 
 #### `fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
-### `pub trait Product`
+### `pub trait Product with ()`
 
 Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 element bound. Implemented for every `Mul<Output = Self>`.
 
 #### `fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
-### `pub trait Extremum`
+### `pub trait Extremum with ()`
 
 Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 `max`'s element bound. Implemented for every `Ord`.
@@ -629,20 +629,20 @@ Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 
 #### `fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>`
 
-### `pub trait FromIterator`
+### `pub trait FromIterator with ()`
 
 Trait for creating a collection from any iterator of `Elem`.
 
 #### `fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self`
 
-### `pub trait LiteralSpread`
+### `pub trait LiteralSpread with ()`
 
 `..base` inside a `{ … }` literal: merge `base` into `self`, last write
 wins. A target without this impl rejects `..base` where it is written.
 
 #### `fn spread_literal(&mut self, base: Self)`
 
-### `pub trait FromStr`
+### `pub trait FromStr with ()`
 
 Parse a value from a string.
 
@@ -658,7 +658,7 @@ Parse the view as `Self`.
 
 Parse the whole of any `AsStrSlice` text as `Self`.
 
-### `pub trait LenientFromStr`
+### `pub trait LenientFromStr with ()`
 
 Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
 the common spelling variations for the type (casing, radix prefixes,
@@ -671,7 +671,7 @@ is never trimmed (that is the caller's concern). See
 
 Parse the entire string as `Self`, accepting forgiving spellings.
 
-### `pub trait PushDisplay`
+### `pub trait PushDisplay with ()`
 
 Writes a `Display` value into a `String` in place, skipping the temporary
 `String` that a `` `${value}` `` template allocates before copying it in. The
@@ -684,7 +684,7 @@ that `Formatter` depends on — mirroring `impl Display for String` above.
 
 #### `fn push_display<T: Display>(&mut self, value: &T)`
 
-### `pub trait Sequence`
+### `pub trait Sequence with ()`
 
 Read-only random-access sequence: `Array<T>`, `List<T>`, and `Slice<T>`.
 
@@ -710,7 +710,7 @@ unspecified `Elem` or traps; it is never undefined behaviour.
 
 #### `fn position(&self, mut pred: fn mut(Self::Elem) -> bool) -> Option<i32>`
 
-### `pub trait AsSlice: Sequence`
+### `pub trait AsSlice: Sequence with ()`
 
 Reference view over a contiguous sequence. Implemented by `Array<T>`,
 `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
@@ -736,7 +736,7 @@ not positive.
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
 
-### `pub trait AsStrSlice: Eq<String>`
+### `pub trait AsStrSlice: Eq<String> with ()`
 
 Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
@@ -840,7 +840,7 @@ literals stops folding to one.
 
 #### `fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String`
 
-### `pub trait AsByteSlice`
+### `pub trait AsByteSlice with ()`
 
 Conversion to a `ByteSlice` that copies no bytes.
 
@@ -850,7 +850,7 @@ UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 
 #### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
 
-### `pub trait Step`
+### `pub trait Step with ()`
 
 Types that can be incremented by one step (for range iteration).
 

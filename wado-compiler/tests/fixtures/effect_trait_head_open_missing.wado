@@ -1,0 +1,31 @@
+// An open trait's method carries the head's effect parameter, so a caller
+// dispatching through the bound has to forward it.
+use { println, Stdout } from "core:cli";
+
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+struct Loud {
+    n: i32,
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 {
+    return s.next();
+}
+
+export fn run() with Stdout {
+    let mut loud = Loud { n: 0 };
+    println(`${draw(&mut loud)}`);
+}
+
+__DATA__
+{"compile_error": "missing effect"}

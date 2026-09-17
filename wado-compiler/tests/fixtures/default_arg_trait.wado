@@ -6,7 +6,7 @@
 
 use { Tagged, Boxed, Named } from "./sub/default_arg_trait_lib.wado";
 
-trait Make {
+trait Make with () {
     fn made(value: i32 = 0) -> i32;
     fn pair(a: i32, b: i32 = 2) -> i32;
 }
@@ -55,7 +55,7 @@ fn origin() -> i32 {
     return 100;
 }
 
-trait Spread {
+trait Spread with () {
     fn spread(a: i32, b: i32 = a + 1) -> i32;
 }
 
@@ -66,9 +66,9 @@ impl Spread for Marker {
     }
 }
 
-trait Ready {}
+trait Ready with () {}
 
-trait Blanketed {
+trait Blanketed with () {
     fn built(n: i32 = 7) -> i32;
 }
 
@@ -88,7 +88,7 @@ impl<X: Ready> Blanketed for X {
 // to, so writing one there is not an `impl` re-declaring it. The body is
 // elaborated once per implementing type, and a rejection there fires in every
 // module that implements the trait.
-trait Greet {
+trait Greet with () {
     fn hello(name: String = "world") -> String {
         return `hi ${name}`;
     }
@@ -195,7 +195,7 @@ test "the receiver-taking spelling reads the same declaration" {
     assert Holder::boxed::<Local>(&h) == "local";
 }
 
-trait Greeter {
+trait Greeter with () {
     fn greet(&self, prefix: String = "Hello", suffix: String = "!") -> String;
 }
 
@@ -216,7 +216,7 @@ test "an instance method's defaults come from the trait, not the impl" {
     assert g.greet("Hey", "?") == "Hey, Alice?";
 }
 
-trait Maker {
+trait Maker with () {
     fn produce(n: i32 = 9) -> i32;
 }
 

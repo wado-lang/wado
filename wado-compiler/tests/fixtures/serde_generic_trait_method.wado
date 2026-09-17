@@ -2,11 +2,11 @@
 // This is a prerequisite for serde — trait methods with their own type parameters
 use { println, Stdout } from "core:cli";
 
-trait Writer {
+trait Writer with () {
     fn write_value<T: Printable>(&mut self, value: &T);
 }
 
-trait Printable {
+trait Printable with () {
     fn to_text(&self) -> String;
 }
 

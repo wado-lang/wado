@@ -159,6 +159,8 @@ pub enum Code {
     /// A binder takes a name that already reaches a declaration or an enclosing
     /// binding.
     ShadowedName,
+    /// A trait head says nothing about the effects its impls may declare.
+    UndecidedEffects,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -255,6 +257,7 @@ impl std::fmt::Display for Code {
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::ShadowedName => "SHADOWED_NAME",
+            Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",

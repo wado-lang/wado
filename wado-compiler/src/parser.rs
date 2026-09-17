@@ -6,7 +6,7 @@ use crate::ast::{
     AssociatedTypeDecl, AstId, AstIdSpace, AttrArg, AttrEntry, AttrObject, AttrValue, Attribute,
     BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr, ChainedComparison,
     ClosureExpr, ClosureParam, CmBoundary, CmImport, CmResourceLinearity, ComparisonChainExpr,
-    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt,
+    CompoundAssignExpr, CompoundAssignOp, Condition, ConditionElement, ContinueStmt, EFFECT_HOLE,
     EffectHandlerBinding, EnumCase, EnumDecl, ErrorExpr, ErrorItem, ErrorStmt, Expr, ExprStmt,
     FieldAccessExpr, FlagsDecl, FlagsVariant, ForOfStmt, ForStmt, FormatSpec, Function,
     FunctionType, GenericParam, GenericType, GlobalDecl, IdentExpr, IfExpr, IfStmt, ImplBlock,
@@ -16,10 +16,10 @@ use crate::ast::{
     RangeExpr, RangeKind, ResourceDecl, RestClause, RestClauseDecl, ResumeExpr, ReturnStmt,
     SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, StructLiteralSpread, StructPatternField, TaggedTemplateExpr,
-    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TryOpExpr,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
+    TaskReturnStmt, TemplatePart, TemplateStringExpr, TestDecl, TraitBound, TraitDecl, TraitHead,
+    TryOpExpr, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
@@ -83,6 +83,19 @@ pub struct Parser {
     /// never reach the recovery branch — a real parse error is never masked from
     /// a backtracking caller even when this flag is set across a checkpoint.
     recovering: bool,
+    effect_hole: EffectHole,
+}
+
+/// Where the parse stands on `with _`, which names an effect only inside a
+/// signature and mints one parameter however often that signature writes it.
+#[derive(Debug, Clone, Copy)]
+enum EffectHole {
+    /// Not in a signature, so `_` names no effect.
+    Outside,
+    /// In a signature that has not written one.
+    Unwritten,
+    /// In a signature, at the first `_` it wrote.
+    Written(Span),
 }
 
 #[derive(Debug)]
@@ -212,6 +225,7 @@ impl Parser {
             errors: Vec::new(),
             contextual_keywords: Vec::new(),
             recovering: false,
+            effect_hole: EffectHole::Outside,
         }
     }
 
@@ -1810,8 +1824,9 @@ impl Parser {
         let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T, U> or <T: Ord>
-        let type_params = self.parse_generic_params()?;
+        let mut type_params = self.parse_generic_params()?;
 
+        let held_hole = std::mem::replace(&mut self.effect_hole, EffectHole::Unwritten);
         let lparen_span = self.peek().span;
         self.expect(&TokenKind::LParen)?;
         let params = self.parse_param_list()?;
@@ -1832,6 +1847,21 @@ impl Parser {
         let return_type = self.parse_optional_return_type()?;
 
         let (effects, effect_ids, stores) = self.parse_with_clause()?;
+
+        // `with _` is sugar for `<effect E> with E`, so the signature carries
+        // the parameter it stands for. One per function, as for a written one.
+        if let Some(hole) = self.take_effect_hole_param(held_hole) {
+            if let Some(declared) = type_params.iter().find(|p| p.is_effect) {
+                return Err(self.error_at_span(
+                    hole.span,
+                    &format!(
+                        "`with _` mints an effect parameter, and `{}` already declares one",
+                        declared.name
+                    ),
+                ));
+            }
+            type_params.push(hole);
+        }
 
         // Check for bodyless function declaration (compiler built-in /
         // trait-method signature) e.g., `pub fn stream_new() -> i64;`
@@ -1871,6 +1901,7 @@ impl Parser {
             return_type,
             effects,
             effect_ids,
+            effects_inherited: false,
             stores,
             body,
             span,
@@ -2044,6 +2075,46 @@ impl Parser {
         Some(false)
     }
 
+    /// Record a `with _` against the signature being parsed. Outside one there
+    /// is no parameter to mint, so `_` names nothing.
+    fn note_effect_hole(&mut self, span: Span) -> ParseResult<()> {
+        match self.effect_hole {
+            EffectHole::Outside => Err(self.error_at_span(
+                span,
+                "`with _` stands for an effect parameter, so it belongs in a declaration's signature",
+            )),
+            EffectHole::Unwritten => {
+                self.effect_hole = EffectHole::Written(span);
+                Ok(())
+            }
+            EffectHole::Written(_) => Ok(()),
+        }
+    }
+
+    /// Take one effect name of a `with` row, noting it if it is the hole.
+    fn consume_effect_name(
+        &mut self,
+        effects: &mut Vec<String>,
+        effect_ids: &mut Vec<(AstId, Span)>,
+    ) -> ParseResult<()> {
+        let (name, span) = self.consume_ident_with_span()?;
+        if name == EFFECT_HOLE {
+            self.note_effect_hole(span)?;
+        }
+        effects.push(name);
+        effect_ids.push((self.alloc_ast_id(), span));
+        Ok(())
+    }
+
+    /// The effect parameter a signature's `with _` minted, if it carries one.
+    /// `_` is its name, so the clause that asked for it already reads it.
+    fn take_effect_hole_param(&mut self, held: EffectHole) -> Option<GenericParam> {
+        let EffectHole::Written(span) = std::mem::replace(&mut self.effect_hole, held) else {
+            return None;
+        };
+        Some(self.effect_hole_param(span))
+    }
+
     /// Parse a declaration's `with (Effect1, stores[a])` clause. `stores[...]`
     /// is a row member, so it may sit at any position. Nothing follows the row
     /// but the body or `;`, so a comma after a bare effect is a missing paren.
@@ -2065,9 +2136,7 @@ impl Parser {
             if self.check(&TokenKind::Stores) {
                 stores.extend(self.parse_stores_list()?);
             } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
+                self.consume_effect_name(&mut effects, &mut effect_ids)?;
             }
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
@@ -2132,9 +2201,7 @@ impl Parser {
             if self.check(&TokenKind::Stores) {
                 stores.extend(self.parse_stores_list_for_fn_type()?);
             } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
+                self.consume_effect_name(&mut effects, &mut effect_ids)?;
             }
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
@@ -5130,6 +5197,13 @@ impl Parser {
 
             let (name, name_span) = self.consume_ident_with_span()?;
 
+            if is_effect && name == EFFECT_HOLE {
+                return Err(self.error_at_span(
+                    name_span,
+                    "`_` is the effect parameter `with _` mints; name this one, or write `with _`",
+                ));
+            }
+
             // Parse optional trait bounds: `T: Ord`, `T: Ord + Clone`, `T: Builder<Output = T>`
             let bounds = if self.check(&TokenKind::Colon) {
                 self.advance();
@@ -5943,7 +6017,7 @@ impl Parser {
         let (name, name_span) = self.consume_ident_with_span()?;
 
         // Parse generic parameters like <T>
-        let type_params = self.parse_generic_params()?;
+        let mut type_params = self.parse_generic_params()?;
 
         let supertraits = if self.check(&TokenKind::Colon) {
             self.advance();
@@ -5958,6 +6032,11 @@ impl Parser {
         } else {
             Vec::new()
         };
+
+        let head = self.parse_trait_head()?;
+        if head.is_open() {
+            type_params.push(self.effect_hole_param(head.span().unwrap_or(name_span)));
+        }
 
         self.expect(&TokenKind::LBrace)?;
 
@@ -5990,13 +6069,14 @@ impl Parser {
                 // Trait methods cannot be exported at the CM boundary.
                 // Attributes (e.g. `#[compiler_item("...")]`) carry through so
                 // the elaborator can register per-method compiler items.
-                methods.push(self.parse_function(
-                    Visibility::Private,
-                    false,
-                    false,
-                    attrs,
-                    true,
-                )?);
+                let mut method =
+                    self.parse_function(Visibility::Private, false, false, attrs, true)?;
+                // A method that declares nothing takes what the head says.
+                if method.effects.is_empty() {
+                    method.effects = head.inherited_effects();
+                    method.effects_inherited = !method.effects.is_empty();
+                }
+                methods.push(method);
             }
         }
 
@@ -6007,6 +6087,7 @@ impl Parser {
             name,
             name_span,
             visibility,
+            head,
             type_params,
             supertraits,
             associated_types,
@@ -6014,6 +6095,70 @@ impl Parser {
             attrs,
             span: start_span.merge(&end_span),
         })
+    }
+
+    /// Parse the `with` clause on a trait head. `with ()` is the one place the
+    /// empty row means something: every impl of this trait is pure.
+    fn parse_trait_head(&mut self) -> ParseResult<TraitHead> {
+        let start = self.peek().span;
+        let Some(parenthesized) = self.open_with_row() else {
+            return Ok(TraitHead::Undecided);
+        };
+        if parenthesized && self.check(&TokenKind::RParen) {
+            let span = start.merge(&self.advance().span);
+            return Ok(TraitHead::Pure { span });
+        }
+
+        let mut effects = Vec::new();
+        let mut effect_ids = Vec::new();
+        loop {
+            let (name, span) = self.consume_ident_with_span()?;
+            effects.push(name);
+            effect_ids.push((self.alloc_ast_id(), span));
+            if !parenthesized || !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        let end = if parenthesized {
+            self.expect(&TokenKind::RParen)?.span
+        } else if self.check(&TokenKind::Comma) {
+            return Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS));
+        } else {
+            effect_ids.last().map_or(start, |(_, s)| *s)
+        };
+        let span = start.merge(&end);
+
+        if effects.iter().any(|e| e == EFFECT_HOLE) {
+            if effects.len() > 1 {
+                return Err(self.error_at_span(
+                    span,
+                    "`with _` stands for every effect an impl declares, so it takes no row",
+                ));
+            }
+            return Ok(TraitHead::Open { span });
+        }
+        Ok(TraitHead::Fixed {
+            effects,
+            effect_ids,
+            span,
+        })
+    }
+
+    /// The effect parameter a `with _` stands for, named `_` so the clause that
+    /// asked for it reads it unchanged.
+    fn effect_hole_param(&mut self, span: Span) -> GenericParam {
+        GenericParam {
+            id: self.alloc_ast_id(),
+            attrs: Vec::new(),
+            name: EFFECT_HOLE.to_string(),
+            name_span: span,
+            is_effect: true,
+            is_pack: false,
+            bounds: Vec::new(),
+            default: None,
+            span,
+        }
     }
 
     /// Parse a world declaration
@@ -6617,7 +6762,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item};
+    use crate::ast::{AstVisitor, ConditionElement, EffectHandlerBinding, Item, written_params};
     use crate::lexer::lex;
     use crate::name::INTERNAL_PREFIX;
     use crate::{ast, format};
@@ -9695,7 +9840,7 @@ line 2
     #[test]
     fn trait_supertrait_clause_follows_generic_params() {
         let decl = parse_trait("trait Sink<T>: Collect<Item = T> {}");
-        assert_eq!(decl.type_params.len(), 1);
+        assert_eq!(written_params(&decl.type_params).count(), 1);
         let names: Vec<&str> = decl.supertraits.iter().map(|b| b.name.as_str()).collect();
         assert_eq!(names, ["Collect"]);
     }

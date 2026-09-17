@@ -5,7 +5,7 @@
 //! A slot the receiver mentions is the receiver's to fill, whatever spelling it
 //! is mentioned in, so a block that fills its own slots is no blanket.
 
-trait Codec {
+trait Codec with () {
     fn build<T: Display>(v: T) -> String;
 }
 
@@ -33,7 +33,7 @@ impl Codec for Plain {
 
 struct Tag {}
 
-trait Named {
+trait Named with () {
     fn name() -> String;
 }
 
@@ -45,7 +45,7 @@ impl Named for Tag {
 
 // A method-level slot the arguments do not pin takes the default its
 // declaration wrote, whether or not the block declares slots of its own.
-trait Made {
+trait Made with () {
     fn made<U: Named = Tag>() -> String;
 }
 
@@ -66,7 +66,7 @@ impl Made for Plain {
 // `Wrap::<i32>::make`. Asking only whether the block declares *any* slot reads
 // every such impl as one, and proposes an `impl Make<i32> for Wrap` nobody can
 // write.
-trait Make<T> {
+trait Make<T> with () {
     fn make(v: T) -> i32;
 }
 
@@ -87,7 +87,7 @@ struct Holder<F> {
     f: F,
 }
 
-trait Mk<A> {
+trait Mk<A> with () {
     fn mk(v: A) -> i32;
 }
 

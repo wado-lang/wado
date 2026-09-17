@@ -5207,6 +5207,67 @@ Effect parameters:
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
 
+### Effects on Trait Methods
+
+A trait method's `with` clause is the contract every impl of it writes to. An impl method may not declare an effect the trait method leaves out, and a call to the method requires what the trait declares, whichever impl runs.
+
+```wado
+trait Source {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching the declaration
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` needs it
+    return s.next();
+}
+```
+
+A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. None of them knows which impl runs, so each demands what the trait method declares.
+
+`stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+
+#### The Trait Head
+
+A `with` clause on the trait itself says what every impl of it may do. A method's own clause overrides it.
+
+| Head                          | Every impl of it       |
+| ----------------------------- | ---------------------- |
+| `trait Foo { … }`             | as `with _`, diagnosed |
+| `trait Foo with () { … }`     | is pure                |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
+| `trait Foo with _ { … }`      | brings its own effects |
+
+`with _` is sugar for `<effect E> with E`, so an open head hands each impl its own effects and names none of them:
+
+```wado
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // E = Stdout
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with _ {       // as effectful as `S`
+    return s.next();
+}
+
+export fn run() with Stdout {
+    println(`${draw(&mut loud)}`);                  // Stdout, from `Loud`'s impl
+}
+```
+
+A fixed head demands the same effects of every caller. An open one is resolved from the type each call names, so `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. The `with _` in `draw`'s signature is what leaves that open. A caller that forwards the effects instead of resolving them writes one of its own.
+
+A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+
+A body dispatching on a type parameter has no impl to read. In `s.read()`, where `s: S` and `S: Source`, an open head's hole survives, and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` instead. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
+
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+
 ### Variadic Type Packs
 
 Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.

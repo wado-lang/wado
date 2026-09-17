@@ -6,7 +6,7 @@
 // `E` (the `Err` arm). Before the fix both fused to `T`, so the `Err` arm built
 // a payload of the wrong type and codegen produced invalid Wasm.
 
-trait Access {
+trait Access with () {
     fn payload<T: Default>(&mut self) -> Result<T, i32>;
     fn tag(&mut self) -> Result<i32, i32>;
 }
@@ -26,7 +26,7 @@ impl Access for VAImpl {
     }
 }
 
-trait Decoder {
+trait Decoder with () {
     fn decode(va: &mut VAImpl) -> Result<Self, i32>;
 }
 

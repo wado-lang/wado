@@ -11,13 +11,13 @@ struct Held<T> {
     value: T,
 }
 
-trait Base {
+trait Base with () {
     type Elem;
 
     fn one(&self) -> Self::Elem;
 }
 
-trait Derived: Base {
+trait Derived: Base with () {
     fn held(&self) -> Held<Self::Elem> {
         return Held { value: self.one() };
     }

@@ -3,7 +3,7 @@
 // `ReflectStruct` bound selects the blanket while the call site chooses `S`, so
 // the instance keys on the field-type pack and the method type argument alike.
 
-trait Sink {
+trait Sink with () {
     fn put(&mut self, s: &String);
 }
 
@@ -17,7 +17,7 @@ impl Sink for Buf {
     }
 }
 
-trait Emit {
+trait Emit with () {
     fn emit<S: Sink>(&self, s: &mut S);
 }
 

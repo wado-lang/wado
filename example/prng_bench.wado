@@ -653,7 +653,7 @@ fn drain_shishua_bulk(rng: &mut Shishua, n: i32) -> u64 {
 // saying what the members admit does not: a bound takes only `Name = Type`, so
 // `..V: BitXor<u64x2, Output = u64x2>` will not parse. `BitXor`'s `Rhs` is a
 // type parameter rather than an associated type, and nothing can name it.
-trait VectorRound {
+trait VectorRound with () {
     fn round_of(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
 }
 
@@ -678,7 +678,7 @@ fn drain_through_trait<R: VectorRound>(rng: &mut R, n: i32) -> u64 {
 // width, off a cursor the engine keeps. It costs a branch and a select per
 // vector, which SHISHUA's round cannot absorb — its own output is about that
 // cheap per vector.
-trait VectorSource {
+trait VectorSource with () {
     fn next_vector(&mut self) -> u64x2;
 }
 
