@@ -1354,14 +1354,16 @@ impl TypeTable {
     }
 
     /// Whether `ty` is an instance of the compiler struct `item`, as a generic
-    /// instance or as the monomorphized struct carrying its head name.
+    /// instance or as the monomorphized struct its declaration heads.
     #[must_use]
     pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
-        let head = self.compiler_items().struct_name(item);
+        let Some(head) = self.compiler_item_def(item) else {
+            return false;
+        };
         match self.get(ty) {
-            ResolvedType::GenericInstance { def, .. } => self.def_name(*def) == head,
+            ResolvedType::GenericInstance { def, .. } => *def == head,
             ResolvedType::Struct { def, type_args } => {
-                !type_args.is_empty() && self.struct_head_name(*def) == head
+                !type_args.is_empty() && def.decl() == Some(head)
             }
             ResolvedType::Primitive(_)
             | ResolvedType::Unit
