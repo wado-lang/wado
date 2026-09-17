@@ -1,0 +1,28 @@
+// A bare bound names the declared default, so `Pick + Pick<String>` asks for
+// `Pick<i32>` as well. `Slot` answers only the second.
+
+trait Pick<A = i32> {
+    fn pick(&self, a: &A) -> i32;
+}
+
+struct Slot {
+    v: i32,
+}
+
+impl Pick<String> for Slot {
+    fn pick(&self, a: &String) -> i32 {
+        return a.len();
+    }
+}
+
+fn both<T: Pick + Pick<String>>(t: &T) -> i32 {
+    return 1;
+}
+
+test "a bare bound beside a written one is a second obligation" {
+    let s = Slot { v: 1 };
+    assert both(&s) == 1;
+}
+
+__DATA__
+{"compile_error": "type 'Slot' does not implement trait 'Pick' required by bound on 'T'"}

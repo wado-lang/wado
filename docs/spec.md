@@ -3740,6 +3740,11 @@ A parameter with no default is left open by a bound that writes nothing there:
 `T: Pick` holds for every `impl Pick<K>`, and the body cannot say which `K`.
 `T: Pick<String>` names it, and holds only for `impl Pick<String>`.
 
+Two bounds on one trait are two obligations, each asking for what it writes, so
+`T: Pick + Pick<String>` also asks for `impl Pick<i32>`. A method call on such a
+parameter reads the bound that writes arguments. The trait is one either way, so
+naming it selects nothing.
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:

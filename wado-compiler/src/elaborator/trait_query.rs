@@ -1965,6 +1965,20 @@ fn declaring_module_of_kind(
     }
 }
 
+/// One bound per trait declaration, keeping the first that writes arguments.
+/// Several bounds on one trait are one method at several instantiations.
+fn one_bound_per_trait(candidates: Vec<(ast::TraitBound, DefId)>) -> Vec<(ast::TraitBound, DefId)> {
+    let mut out: Vec<(ast::TraitBound, DefId)> = Vec::new();
+    for (bound, key) in candidates {
+        match out.iter_mut().find(|(_, kept)| *kept == key) {
+            Some(kept) if kept.0.type_args.is_empty() => *kept = (bound, key),
+            Some(_) => {}
+            None => out.push((bound, key)),
+        }
+    }
+    out
+}
+
 /// An associated type paired with the trait that *declares* it: a subtrait's
 /// default body may name a supertrait's, and keying the projection to the
 /// dispatched-through trait made `<T as Base>::Elem` and `Derived`'s two types.
@@ -2180,6 +2194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }) && self.trait_declares_method_of(key, method_name)
             })
             .collect();
+        let candidates = one_bound_per_trait(candidates);
         let resolved = candidates.first().and_then(|(bound, key)| {
             self.trait_method_of(key, method_name)
                 .map(|found| (bound.clone(), *key, found))

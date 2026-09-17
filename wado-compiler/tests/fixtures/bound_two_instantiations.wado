@@ -1,0 +1,44 @@
+// Two bounds on one trait are two obligations, and a call reads the one that
+// writes arguments. Naming the trait would select neither, so this is not a
+// collision between traits.
+
+trait Pick<A = i32> {
+    fn pick(&self, a: &A) -> bool;
+}
+
+struct Slot {
+    width: i32,
+}
+
+impl Pick<i32> for Slot {
+    fn pick(&self, a: &i32) -> bool {
+        return *a == self.width;
+    }
+}
+
+impl Pick<String> for Slot {
+    fn pick(&self, a: &String) -> bool {
+        return a.len() == self.width;
+    }
+}
+
+fn written_last<T: Pick + Pick<String>>(t: T, a: String) -> bool {
+    return t.pick(&a);
+}
+
+fn written_first<T: Pick<String> + Pick>(t: T, a: String) -> bool {
+    return t.pick(&a);
+}
+
+test "a call reads the bound that writes arguments" {
+    assert written_last(Slot { width: 3 }, "abc");
+    assert !written_last(Slot { width: 2 }, "abc");
+    assert written_first(Slot { width: 3 }, "abc");
+    assert !written_first(Slot { width: 2 }, "abc");
+}
+
+test "both obligations hold, so the bare bound still selects its impl" {
+    let n: i32 = 3;
+    assert Slot { width: 3 }.pick(&n);
+    assert !Slot { width: 4 }.pick(&n);
+}
