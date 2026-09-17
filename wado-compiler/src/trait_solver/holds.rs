@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
-    RefRule, SolverType, TraitDeclId, TypeDeclId,
+    ArgDefault, AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound,
+    Program, RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -68,10 +68,29 @@ fn bound_answers(
     if wanted.is_empty() || bound.trait_ != trait_ {
         return true;
     }
-    wanted
-        .iter()
-        .enumerate()
-        .all(|(i, want)| bound.args.get(i).is_none_or(|arg| arg == want))
+    wanted.iter().enumerate().all(|(i, want)| {
+        bound
+            .args
+            .get(i)
+            .or_else(|| named_default(program, trait_, i))
+            == Some(want)
+    })
+}
+
+/// The trait's declared default at `index` where it names a type. A `Self`
+/// default names whatever is answering, which no written argument equals, so it
+/// answers nothing here — as `TypeSystem::args_answer` decides it.
+fn named_default(program: &Program, trait_: TraitDeclId, index: usize) -> Option<&SolverType> {
+    match program
+        .traits
+        .get(&trait_)?
+        .arg_defaults
+        .get(index)?
+        .as_ref()?
+    {
+        ArgDefault::Type(ty) => Some(ty),
+        ArgDefault::SelfType | ArgDefault::Opaque => None,
+    }
 }
 
 /// One question and the questions open under it.
@@ -465,9 +484,7 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{
-        ArgDefault, Fact, ParamBound, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef,
-    };
+    use super::super::program::{Fact, ParamDef, Pin, TraitDef, TypeDef};
     use super::super::testing::{Builder, concrete, decl, ref_to};
     use super::*;
 
@@ -493,6 +510,45 @@ mod tests {
                 .map(|b| b.into_iter().map(ParamBound::bare).collect())
                 .collect(),
         }
+    }
+
+    /// A bound writing no argument says the trait’s declared defaults, so a
+    /// request writing one it does not say goes unanswered.
+    #[test]
+    fn a_bare_bound_does_not_answer_a_written_argument() {
+        let mut p = Program::default();
+        p.traits.entry(EQ).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let env = Env {
+            param_bounds: vec![vec![ParamBound::bare(EQ)]],
+        };
+        assert_eq!(
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[]),
+            Some(Holds::default())
+        );
+        assert_eq!(
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(I32)]),
+            None
+        );
+    }
+
+    /// The bound writing the argument answers it, and only it.
+    #[test]
+    fn a_written_bound_answers_its_own_argument() {
+        let p = Program::default();
+        let env = Env {
+            param_bounds: vec![vec![ParamBound {
+                trait_: EQ,
+                args: vec![decl(I32)],
+            }]],
+        };
+        assert_eq!(
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(I32)]),
+            Some(Holds::default())
+        );
+        assert_eq!(
+            holds_with_args(&p, &env, &SolverType::Param(0), EQ, HERE, &[decl(POINT)]),
+            None
+        );
     }
 
     #[test]
