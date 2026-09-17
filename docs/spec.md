@@ -3745,6 +3745,18 @@ Two bounds on one trait are two obligations, each asking for what it writes, so
 parameter reads the bound that writes arguments. The trait is one either way, so
 naming it selects nothing.
 
+An impl and a bound already in scope read a written argument differently.
+
+An impl answers a bound only where every position agrees, each side counting the
+trait's declared default where it wrote nothing. `impl Conv<i32> for Holder` does
+not answer `U: Conv` when `Conv` declares `X = String`.
+
+A bound already in scope supplies a bare request whatever it writes, and a
+supertrait does the same. `T: Conv<i32>` supplies `Conv`, and
+`AsStrSlice: Eq<String>` supplies `Eq`. Nothing is chosen at such a request. The
+bound is already fixed, and the question is only whether the trait is among what
+the parameter carries.
+
 ### Indexing Traits
 
 The prelude defines traits for index-based access:
