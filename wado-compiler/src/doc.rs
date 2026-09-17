@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::loader::resolve_wasm_asset_path;
@@ -674,11 +674,11 @@ fn render_type(ty: &Type) -> String {
 }
 
 fn render_generic_params(params: &[GenericParam]) -> String {
-    if params.is_empty() {
+    if written_params(params).next().is_none() {
         return String::new();
     }
     let mut out = String::from("<");
-    for (i, param) in params.iter().enumerate() {
+    for (i, param) in written_params(params).enumerate() {
         if i > 0 {
             out.push_str(", ");
         }
