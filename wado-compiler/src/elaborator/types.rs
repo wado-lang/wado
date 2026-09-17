@@ -2268,10 +2268,35 @@ impl From<TypeError> for Diagnostic {
     }
 }
 
-/// Local variable information during resolution
+/// How the frame enclosing a closure reaches one binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum OuterReach {
+    /// A local of the enclosing frame, at this index.
+    ParentLocal(u32),
+    /// A slot of the enclosing frame's own environment, which frame registers
+    /// once this closure's body has been walked, so no index is known here.
+    ParentEnv,
+}
+
+/// One binding an enclosing frame can reach. `local` describes the binding;
+/// `reach` says where the enclosing frame finds it.
+#[derive(Debug, Clone)]
+pub(super) struct OuterBinding {
+    pub(super) local: LocalVar,
+    pub(super) reach: OuterReach,
+}
+
+/// One environment slot of a closure under construction.
+#[derive(Debug, Clone)]
+pub(super) struct CaptureSlot {
+    pub(super) index: u32,
+    pub(super) reach: OuterReach,
+}
+
+/// Local variable information during resolution. The name is the key of the
+/// scope map holding it, so it is not repeated here.
 #[derive(Debug, Clone)]
 pub(super) struct LocalVar {
-    pub(super) name: String,
     pub(super) type_id: TypeId,
     pub(super) index: u32,
 
@@ -2442,12 +2467,15 @@ pub(super) struct FunctionContext {
     pub(super) locals: Vec<TirLocal>,
     /// Local indices that have their address taken (&x or &mut x)
     pub(super) address_taken_locals: IndexSet<u32>,
-    /// Outer context locals for closure capture detection (name -> `LocalVar` snapshot)
-    /// Only set for closure contexts
-    pub(super) outer_locals: IndexMap<String, LocalVar>,
-    /// Captured variables detected during resolution (name -> capture index)
-    /// Only used for closure contexts
-    pub(super) captured_vars: IndexMap<String, u32>,
+    /// Bindings the enclosing frame can reach, and how it reaches each: its own
+    /// locals, plus what it reaches by capture. Only set for closure contexts.
+    pub(super) outer_locals: IndexMap<String, OuterBinding>,
+    /// Captured bindings detected during resolution (name -> slot). Only used
+    /// for closure contexts.
+    pub(super) captured_vars: IndexMap<String, CaptureSlot>,
+    /// Whether [`Self::seed_captures`] filled `captured_vars`, which closes it:
+    /// a frame replaying a recorded environment reads slots, never adds one.
+    captures_seeded: bool,
     /// Stack of labeled block expression targets for tracking break types
     pub(super) labeled_block_targets: Vec<LabeledBlockTarget>,
     /// Stack of all active labels (from labeled blocks and labeled block expressions)
@@ -2544,6 +2572,7 @@ impl FunctionContext {
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
+            captures_seeded: false,
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -2570,26 +2599,47 @@ impl FunctionContext {
         outer_ctx: &FunctionContext,
         type_table: &RefCell<TypeTable>,
     ) -> Self {
-        // Snapshot all locals from outer context
-        let mut outer_locals = IndexMap::default();
+        // Everything the parent can reach, not just what it owns. Its own
+        // captures go in first, so a parent local of that name shadows one.
+        let mut outer_locals: IndexMap<String, OuterBinding> = IndexMap::default();
+        for (name, binding) in &outer_ctx.outer_locals {
+            outer_locals.insert(
+                name.clone(),
+                OuterBinding {
+                    local: binding.local.clone(),
+                    reach: OuterReach::ParentEnv,
+                },
+            );
+        }
         for scope in &outer_ctx.scopes {
             for (name, local) in scope {
-                outer_locals.insert(name.clone(), local.clone());
+                outer_locals.insert(
+                    name.clone(),
+                    OuterBinding {
+                        local: local.clone(),
+                        reach: OuterReach::ParentLocal(local.index),
+                    },
+                );
             }
         }
 
-        // Compute box types for address-taken outer locals
+        // Box types, asked of the binding each name resolves to: read off
+        // `outer_locals`, a parent local shadowing a boxed one is not boxed.
         let mut outer_box_types = IndexMap::default();
-        for scope in &outer_ctx.scopes {
-            for (name, local) in scope {
-                if outer_ctx.address_taken_locals.contains(&local.index) {
-                    let ref_type = type_table.borrow_mut().make_mut_ref(local.type_id);
-                    outer_box_types.insert(name.clone(), ref_type);
-                }
+        for (name, binding) in &outer_locals {
+            let ref_type = match binding.reach {
+                OuterReach::ParentLocal(index) => outer_ctx
+                    .address_taken_locals
+                    .contains(&index)
+                    .then(|| type_table.borrow_mut().make_mut_ref(binding.local.type_id)),
+                // Boxed where it is owned, however many frames out that is.
+                OuterReach::ParentEnv => outer_ctx.outer_box_types.get(name).copied(),
+            };
+            if let Some(ref_type) = ref_type {
+                outer_box_types.insert(name.clone(), ref_type);
             }
         }
 
-        // Closure function name is parent::{closure}
         let function_name = format!("{}::{{closure}}", outer_ctx.function_name);
 
         Self {
@@ -2602,6 +2652,7 @@ impl FunctionContext {
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
+            captures_seeded: false,
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -2689,9 +2740,8 @@ impl FunctionContext {
 
         let scope = self.scopes.last_mut().unwrap();
         scope.insert(
-            name.clone(),
+            name,
             LocalVar {
-                name,
                 type_id,
                 index,
                 is_mut,
@@ -2709,6 +2759,14 @@ impl FunctionContext {
             }
         }
         None
+    }
+
+    /// The binding `name` names here: one this frame owns, or one it reaches
+    /// through its own environment. Registers no capture, unlike
+    /// [`Self::lookup_or_capture`].
+    pub(super) fn binding(&self, name: &str) -> Option<&LocalVar> {
+        self.lookup(name)
+            .or_else(|| self.outer_locals.get(name).map(|outer| &outer.local))
     }
 
     /// Run `body` with the surrounding frame's bindings out of scope, keeping
@@ -2746,61 +2804,38 @@ impl FunctionContext {
 
         // Check deref overrides (for mutable closures: `count` -> `*$ref_count`)
         if let Some((ref_name, inner_type_id)) = self.deref_overrides.get(name).cloned()
-            && let Some(ref_local) = self.outer_locals.get(&ref_name).cloned()
+            && let Some(ref_binding) = self.outer_locals.get(&ref_name).cloned()
         {
-            let outer_defining_ast_id = self.outer_locals.get(name).and_then(|l| l.defining_ast_id);
-            let capture_index = if let Some(&idx) = self.captured_vars.get(&ref_name) {
-                idx
-            } else {
-                let idx = self.captured_vars.len() as u32;
-                self.captured_vars.insert(ref_name.clone(), idx);
-                idx
-            };
+            let outer_defining_ast_id = self
+                .outer_locals
+                .get(name)
+                .and_then(|b| b.local.defining_ast_id);
             return Some(VarRef::DerefCapture {
-                index: capture_index,
-                ref_type_id: ref_local.type_id,
+                index: self.capture_slot(&ref_name, ref_binding.reach),
+                ref_type_id: ref_binding.local.type_id,
                 inner_type_id,
                 defining_ast_id: outer_defining_ast_id,
             });
         }
 
         // Check outer context (for closures)
-        if let Some(outer_local) = self.outer_locals.get(name) {
-            let inner_type_id = outer_local.type_id;
-            let outer_defining_ast_id = outer_local.defining_ast_id;
+        if let Some(outer) = self.outer_locals.get(name).cloned() {
+            let inner_type_id = outer.local.type_id;
+            let outer_defining_ast_id = outer.local.defining_ast_id;
+            let index = self.capture_slot(name, outer.reach);
 
             // If this outer local has been address-taken (boxed), capture via DerefCapture
             if let Some(&ref_type_id) = self.outer_box_types.get(name) {
-                let capture_index = if let Some(&idx) = self.captured_vars.get(name) {
-                    idx
-                } else {
-                    let idx = self.captured_vars.len() as u32;
-                    self.captured_vars.insert(name.to_string(), idx);
-                    idx
-                };
                 return Some(VarRef::DerefCapture {
-                    index: capture_index,
+                    index,
                     ref_type_id,
                     inner_type_id,
                     defining_ast_id: outer_defining_ast_id,
                 });
             }
 
-            // Check if we already captured this variable
-            if let Some(&capture_index) = self.captured_vars.get(name) {
-                return Some(VarRef::Capture {
-                    index: capture_index,
-                    type_id: inner_type_id,
-                    defining_ast_id: outer_defining_ast_id,
-                });
-            }
-
-            // Record a new capture
-            let capture_index = self.captured_vars.len() as u32;
-            self.captured_vars.insert(name.to_string(), capture_index);
-
             return Some(VarRef::Capture {
-                index: capture_index,
+                index,
                 type_id: inner_type_id,
                 defining_ast_id: outer_defining_ast_id,
             });
@@ -2809,34 +2844,73 @@ impl FunctionContext {
         None
     }
 
-    /// Get the list of captures for building `TirCapture` entries.
-    /// For address-taken outer locals, the `LocalVar.type_id` is the box type (`&mut T`).
-    pub(super) fn get_captures(&self) -> Vec<(String, u32, LocalVar)> {
-        let mut captures: Vec<_> = self
-            .captured_vars
+    /// This closure's environment slot for `name`, allocating one on first use.
+    fn capture_slot(&mut self, name: &str, reach: OuterReach) -> u32 {
+        if let Some(slot) = self.captured_vars.get(name) {
+            return slot.index;
+        }
+        assert!(
+            !self.captures_seeded,
+            "in {}: `{name}` reaches this closure's environment, and the record being replayed has no slot for it",
+            self.function_name
+        );
+        let index = self.captured_vars.len() as u32;
+        self.captured_vars
+            .insert(name.to_string(), CaptureSlot { index, reach });
+        index
+    }
+
+    /// Open this frame's environment with the slots annotate settled on, in its
+    /// order, so the body walk reads slots rather than deciding them again.
+    pub(super) fn seed_captures<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
+        assert!(
+            self.captured_vars.is_empty(),
+            "in {}: the environment is seeded before the body walk, which is what fills it otherwise",
+            self.function_name
+        );
+        for name in names {
+            let Some(binding) = self.outer_locals.get(name) else {
+                unreachable!(
+                    "in {}: annotate captured `{name}`, which this frame cannot reach",
+                    self.function_name
+                )
+            };
+            let reach = binding.reach;
+            self.capture_slot(name, reach);
+        }
+        self.captures_seeded = true;
+    }
+
+    /// The captures in slot order, for building `TirCapture` entries. An
+    /// address-taken outer local carries its box type (`&mut T`).
+    pub(super) fn get_captures(&self) -> Vec<(String, LocalVar, OuterReach)> {
+        self.captured_vars
             .iter()
-            .filter_map(|(name, &index)| {
-                self.outer_locals.get(name).map(|local| {
-                    // Use box type if the outer variable has its address taken
-                    let effective_type_id = self
-                        .outer_box_types
-                        .get(name)
-                        .copied()
-                        .unwrap_or(local.type_id);
-                    let effective_local = LocalVar {
-                        name: local.name.clone(),
-                        type_id: effective_type_id,
-                        index: local.index,
-                        is_mut: local.is_mut,
-                        defining_ast_id: local.defining_ast_id,
-                    };
-                    (name.clone(), index, effective_local)
-                })
+            .enumerate()
+            .map(|(position, (name, slot))| {
+                assert_eq!(
+                    slot.index as usize, position,
+                    "in {}: a slot is allocated at the end, so insertion order is slot order",
+                    self.function_name
+                );
+                let Some(outer) = self.outer_locals.get(name) else {
+                    unreachable!(
+                        "in {}: `{name}` holds a slot, but the enclosing frame cannot reach it",
+                        self.function_name
+                    )
+                };
+                let type_id = self
+                    .outer_box_types
+                    .get(name)
+                    .copied()
+                    .unwrap_or(outer.local.type_id);
+                let local = LocalVar {
+                    type_id,
+                    ..outer.local
+                };
+                (name.clone(), local, slot.reach)
             })
-            .collect();
-        // Sort by capture index for consistent ordering
-        captures.sort_by_key(|(_, index, _)| *index);
-        captures
+            .collect()
     }
 }
 
@@ -2859,6 +2933,32 @@ pub(super) enum VarRef {
         inner_type_id: TypeId,
         defining_ast_id: Option<AstId>,
     },
+}
+
+impl VarRef {
+    /// The type of the value read, which for a `DerefCapture` is what the
+    /// captured reference points at rather than the reference.
+    pub(super) fn value_type(&self) -> TypeId {
+        match *self {
+            VarRef::Local { type_id, .. } | VarRef::Capture { type_id, .. } => type_id,
+            VarRef::DerefCapture { inner_type_id, .. } => inner_type_id,
+        }
+    }
+
+    /// The node that introduced the binding, for the use→def edge.
+    pub(super) fn defining_ast_id(&self) -> Option<AstId> {
+        match *self {
+            VarRef::Local {
+                defining_ast_id, ..
+            }
+            | VarRef::Capture {
+                defining_ast_id, ..
+            }
+            | VarRef::DerefCapture {
+                defining_ast_id, ..
+            } => defining_ast_id,
+        }
+    }
 }
 
 /// The trait a qualified call names, resolved to its identity: the

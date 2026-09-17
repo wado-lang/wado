@@ -131,7 +131,7 @@ withItem
     ;
 
 storesItem
-    : IDENTIFIER
+    : identifier
     | INTEGER
     | 'self'
     ;
@@ -609,7 +609,7 @@ closureParamList
     ;
 
 closureParam
-    : attribute* 'mut'? ('_' | IDENTIFIER) closureParamType?
+    : attribute* 'mut'? ('_' | identifier) closureParamType?
     ;
 
 closureParamType

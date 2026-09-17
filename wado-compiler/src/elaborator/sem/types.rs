@@ -143,6 +143,11 @@ macro_rules! with_body_facts {
             /// matches, comparison chain, for-of, while, compound assignment),
             /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
             ann_desugars => desugars: $crate::elaborator::sem::types::DesugarKind,
+            /// Where a call whose callee is a value rather than a named
+            /// function reads that value from, keyed by the call's [`AstId`].
+            /// A call of a named function, a method, or a variant constructor
+            /// leaves no entry. See [`IndirectCallee`].
+            ann_indirect_callee => indirect_callees: $crate::elaborator::sem::types::IndirectCallee,
             /// Generic instantiations decided by inference at call /
             /// construction sites. Keyed by the call expression's, struct
             /// literal's, or variant-ctor's [`AstId`]. Recorded by
@@ -840,26 +845,17 @@ pub(crate) struct MutCapture {
     pub(crate) inner_type: TypeId,
     /// `TypeId` of the mut-ref (`&mut T`).
     pub(crate) ref_type: TypeId,
-    /// Outer function's local index for the original binding. Reify
-    /// recomputes the same index from its own walk (see the
-    /// `FunctionContext::locals` walk-order invariant); this field is the
-    /// cross-check.
-    pub(crate) outer_index: u32,
-    /// Local index `resolve_closure` reserved for `ref_name`. The capture list
-    /// records it, so reify writes the `&mut` here rather than into a slot of
-    /// its own — two closures over one binding reserve two.
+    /// Local index `resolve_closure` reserved for `ref_name`, which reify's own
+    /// allocation has to land on — two closures over one binding reserve two.
     pub(crate) ref_index: u32,
 }
 
-/// One entry in the closure's capture list. Mirrors
-/// [`crate::tir::TirCapture`] but lives off the TIR so reify produces
-/// the same shape from the recorded info.
+/// One entry in the closure's capture list: the binding it holds and the type
+/// annotate settled on, which hole inference may still substitute into.
 #[derive(Clone)]
 pub(crate) struct CaptureEntry {
     pub(crate) name: String,
-    pub(crate) outer_index: u32,
     pub(crate) type_id: TypeId,
-    pub(crate) is_mut: bool,
 }
 
 /// Closure capture-analysis result recorded by [`super::super::Elaborator::resolve_closure`].
@@ -1095,6 +1091,19 @@ pub(crate) struct ForOfIteratorInfo {
     /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
+}
+
+/// Where a call reads its callee from, when that callee is a value and not a
+/// named function. Reify builds the same indirect call from this tag instead of
+/// asking the question a second time.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndirectCallee {
+    /// A local, parameter, or captured binding holding a `fn(...)` value.
+    Binding,
+    /// A global of `fn(...)` type, in this module or imported.
+    Global,
+    /// Any other expression of callable type — `arr[i](x)`, `(f.g)(x)`.
+    Expr,
 }
 
 /// Which TIR-direct desugar path the body walk took at a source-level
