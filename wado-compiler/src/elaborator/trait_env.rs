@@ -294,6 +294,11 @@ impl ImplHeader {
         }
     }
 
+    /// Whether the block writes a trait at all, whatever it resolves to.
+    pub(super) fn is_trait_impl(&self) -> bool {
+        self.trait_.is_some()
+    }
+
     /// `None` for an inherent block, and for a trait position naming no
     /// declaration.
     pub(super) fn trait_def(&self) -> Option<DefId> {
@@ -1499,8 +1504,7 @@ impl TraitEnv {
         resolutions: &Resolutions,
     ) -> Option<name::FqTraitName> {
         let fq = header.fq_trait(resolutions)?;
-        let trait_type = header.trait_ty()?;
-        Some(self.fq_trait_named_by_impl(fq, trait_type, &header.ty, resolutions))
+        Some(self.fq_trait_named_by_impl(fq, &header.ty, resolutions))
     }
 
     /// [`Self::fq_trait_of_impl`] for a caller holding the written trait
@@ -1508,24 +1512,25 @@ impl TraitEnv {
     pub(super) fn fq_trait_named_by_impl(
         &self,
         fq: name::FqTraitName,
-        trait_type: &ast::Type,
         target: &ast::Type,
         resolutions: &Resolutions,
     ) -> name::FqTraitName {
+        // A written `Self` argument is the impl's own target, so `impl Add<Self>
+        // for Meters` and `impl Add<Meters> for Meters` name one impl.
+        let target_id = written_type_arg(target, resolutions);
+        let written: Vec<name::FqTypeName> = fq
+            .args()
+            .iter()
+            .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
+            .collect();
         let Some(params) = fq
             .canonical()
             .and_then(|decl| self.trait_decl_headers.get(&decl))
             .map(|header| &header.type_params)
         else {
-            return fq;
+            return fq.with_args(written);
         };
-        let args = args_without_declared_defaults(
-            fq.args().to_vec(),
-            written_arg_nodes(trait_type),
-            Some(target),
-            params,
-            resolutions,
-        );
+        let args = args_without_declared_defaults(written, Some(target), params, resolutions);
         fq.with_args(args)
     }
 
@@ -1552,8 +1557,7 @@ impl TraitEnv {
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
             .collect();
-        let args =
-            args_without_declared_defaults(written, &bound.type_args, None, params, resolutions);
+        let args = args_without_declared_defaults(written, None, params, resolutions);
         fq.with_args(args)
     }
 
@@ -2765,38 +2769,35 @@ pub(super) fn written_type_args(
 /// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
 fn args_without_declared_defaults(
     written: Vec<name::FqTypeName>,
-    ast_args: &[ast::Type],
     target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
-    let mut kept = written;
-    kept.truncate(non_default_arg_count(ast_args, target, params, resolutions));
-    kept
+    let kept = non_default_named_arg_count(&written, &|index| {
+        declared_default_arg(params, index, target, resolutions)
+    });
+    let mut written = written;
+    written.truncate(kept);
+    written
 }
 
 /// Whether the header answers a bound writing `wanted`: at every position each
 /// side says its written argument, or the declared default where it wrote none.
 pub(super) fn header_answers_bound_args(
-    trait_type: &ast::Type,
+    written: &[name::FqTypeName],
     target: &ast::Type,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
     wanted: &[name::FqTypeName],
 ) -> bool {
-    let ast_args = written_arg_nodes(trait_type);
     let default_at = |i: usize| declared_default_arg(params, i, Some(target), resolutions);
-    (0..ast_args.len().max(wanted.len())).all(|i| {
+    (0..written.len().max(wanted.len())).all(|i| {
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
         let Some(asks) = wanted.get(i).cloned().or_else(|| default_at(i)) else {
             return true;
         };
-        ast_args
-            .get(i)
-            .map(|arg| written_type_arg(arg, resolutions))
-            .or_else(|| default_at(i))
-            == Some(asks)
+        written.get(i).cloned().or_else(|| default_at(i)) == Some(asks)
     })
 }
 

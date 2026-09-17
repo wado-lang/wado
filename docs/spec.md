@@ -3726,9 +3726,14 @@ A bound that writes one asks for that argument. `T: Eq<String>` reaches
 `impl Eq<String> for StrSlice`. On a `String` receiver it reaches
 `impl Eq for String`, whose `Rhs` is the restated `Self`.
 
+An impl writing `Self` as a trait argument says its own target, so
+`impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
+
 The rule is the same wherever a bound is written: on a type parameter, on a
 supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
-(`type Item: Eq<String>`).
+(`type Item: Eq<String>`). A bound's arguments are spelled where it is written,
+so a supertrait clause naming its own trait's parameter — `trait Gauge<X>:
+Measure<X>` — supplies `Measure<i32>` under `T: Gauge<i32>`.
 
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.

@@ -368,7 +368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .impl_headers
                     .get(entry)
-                    .is_some_and(|h| h.trait_.is_some())
+                    .is_some_and(ImplHeader::is_trait_impl)
                 {
                     refs.push(ImplBlockRef(*entry));
                 }
@@ -388,7 +388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .trait_env
                         .impl_headers
                         .get(entry)
-                        .is_some_and(|h| h.trait_.is_some())
+                        .is_some_and(ImplHeader::is_trait_impl)
                     {
                         refs.push(ImplBlockRef(*entry));
                     }
@@ -2123,16 +2123,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .clone();
                 (sig, m.type_params.clone())
             });
-        // The trait's identity, resolved in the impl's own frame: the decl key
-        // from the impl module's imports (so an alias resolves to the declaring
-        // module), the arguments with the impl's bound type params substituted
-        // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
-        // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
-        // `check_impl_trait_resolves` has already rejected a header whose trait
-        // reaches no declaration, and such a block implements no trait — so it
-        // contributes no trait method here. The index still holds it, keyed on
-        // the spelling it wrote, which is how an erroneous block reaches a
-        // lookup at all; a candidate built without an identity keys on nothing.
+        // A header whose trait reaches no declaration implements none, so it
+        // contributes no trait method. The index still holds it under the
+        // spelling it wrote, which is how an erroneous block reaches a lookup.
         let Some(trait_decl) = signatures
             .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")

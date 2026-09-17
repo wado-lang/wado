@@ -2198,7 +2198,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let fq = scope.fq_trait_name(t);
             scope.tysys.trait_env.fq_trait_named_by_impl(
                 fq,
-                t,
                 &impl_block.ty,
                 &scope.tysys.resolutions,
             )

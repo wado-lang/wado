@@ -1281,7 +1281,7 @@ impl SolverBridge {
                     .bound_written(bound)?
                     .args()
                     .iter()
-                    .map(|arg| self.wanted_arg(arg))
+                    .map(|arg| self.lowering.named_arg(arg))
                     .collect::<Option<Vec<_>>>()?;
                 ids.push(ParamBound {
                     trait_: self.lowering.known_trait(def)?,
@@ -1322,7 +1322,7 @@ impl SolverBridge {
         let args = asked
             .args()
             .iter()
-            .map(|name| self.wanted_arg(name))
+            .map(|name| self.lowering.named_arg(name))
             .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
@@ -1331,12 +1331,6 @@ impl SolverBridge {
             module,
             args,
         })
-    }
-
-    /// One argument a bound writes, as the solver reads it. Its own arguments
-    /// come with it, so `Eq<List<i32>>` does not lower as `Eq<List>`.
-    fn wanted_arg(&self, name: &FqTypeName) -> Option<SolverType> {
-        self.lowering.named_arg(name)
     }
 
     /// The solver's answer to the question `type_implements_trait` just

@@ -214,14 +214,14 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
 /// A bound as the asking site states it: its arguments are spelled in the
 /// declaring item's parameter space, and become what the site wrote there.
 /// `None` where one stays a binder, which belongs to the site's own caller.
-fn asked_at_call(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
+fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
     let asked = at_call
         .iter()
         .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
     (!asked.args_mention_binder()).then_some(asked)
 }
 
-/// The pairs [`asked_at_call`] substitutes, from arguments already resolved.
+/// The pairs [`asked_at`] substitutes, from arguments already resolved.
 fn written_for(params: &[ast::GenericParam], args: &[FqTypeName]) -> Vec<(FqTypeName, FqTypeName)> {
     params
         .iter()
@@ -513,7 +513,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|b| {
                 let (name, written) = self.tysys.bound_named_written(&b.bound);
-                (name, written.and_then(|t| asked_at_call(t, &at_impl)))
+                (name, written.and_then(|t| asked_at(t, &at_impl)))
             })
             .collect();
         if supertraits.is_empty() {
@@ -1057,32 +1057,31 @@ impl TypeSystem {
         trait_: DefId,
         wanted: &[FqTypeName],
     ) -> bool {
+        let args_of = |named: Option<FqTraitName>| {
+            self.args_answer(
+                &named.map(|n| n.args().to_vec()).unwrap_or_default(),
+                trait_,
+                wanted,
+            )
+        };
         let own = self.scoped_trait_decl_key(scope, &bound.name);
-        let written = |b: &ast::TraitBound| self.bound_written(b);
         if own == Some(trait_) {
-            let args = written(bound)
-                .map(|n| n.args().to_vec())
-                .unwrap_or_default();
-            return self.args_answer(&args, trait_, wanted);
+            return args_of(self.bound_written(bound));
         }
         // A clause writes the subtrait's own parameters, which this bound fills.
         let at_bound = written_for(
             own.map_or(&[], |decl| self.trait_env.trait_decl_params(decl)),
-            &written(bound)
+            &self
+                .bound_written(bound)
                 .map(|n| n.args().to_vec())
                 .unwrap_or_default(),
         );
         self.supertraits_of(scope, &bound.name).iter().any(|s| {
-            s.decl == trait_ && {
-                let clause = written(&s.bound);
-                let args = clause
-                    .clone()
-                    .and_then(|t| asked_at_call(t, &at_bound))
-                    .or(clause)
-                    .map(|n| n.args().to_vec())
-                    .unwrap_or_default();
-                self.args_answer(&args, trait_, wanted)
-            }
+            s.decl == trait_
+                && args_of(
+                    self.bound_written(&s.bound)
+                        .map(|t| asked_at(t.clone(), &at_bound).unwrap_or(t)),
+                )
         })
     }
 
@@ -1664,14 +1663,14 @@ impl TypeSystem {
     /// Whether a bound writing `wanted` selects the header — see
     /// [`super::trait_env::header_answers_bound_args`].
     fn header_answers_bound_args(&self, header: &ImplHeader, wanted: &[FqTypeName]) -> bool {
-        let (Some(trait_type), Some(decl)) = (header.trait_ty(), header.trait_def()) else {
+        let Some(decl) = header.trait_def() else {
             return true;
         };
         let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
             return true;
         };
         header_answers_bound_args(
-            trait_type,
+            header.trait_arg_ids(),
             &header.ty,
             &decl_header.type_params,
             &self.resolutions,
@@ -2597,7 +2596,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let written = self
                     .tysys
                     .bound_written(bound)
-                    .and_then(|trait_| asked_at_call(trait_, &at_call));
+                    .and_then(|trait_| asked_at(trait_, &at_call));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,
@@ -2621,7 +2620,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(trait_) = self
                         .tysys
                         .bound_written(&bound)
-                        .and_then(|trait_| asked_at_call(trait_, &at_call))
+                        .and_then(|trait_| asked_at(trait_, &at_call))
                     {
                         self.check_and_register_bound(subject, &trait_);
                     }

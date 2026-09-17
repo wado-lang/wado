@@ -62,6 +62,13 @@ The expansion happens where a bound is read, not where it is registered: a type
 parameter's bounds stay as written, and the question "does `T` implement `Eq`?"
 is what walks the closure. Registration sites are too many to keep in step.
 
+A clause writes its arguments in the declaring trait's own parameter space, so
+`trait Gauge<X>: Measure<X>` says `Measure` at whatever `Gauge` was asked at:
+`T: Gauge<i32>` supplies `Measure<i32>`, and `impl Gauge<i32> for Ruler`
+requires `Ruler: Measure<i32>`. The expansion substitutes as it walks, so a
+clause reached through another trait arrives in the space of the trait the
+question started from.
+
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`
 is rejected wherever `T: Sink` is required, the same as if the constraint had
@@ -96,6 +103,20 @@ Two follow-ups remain: a shared face over the `Reflect*` traits, and the
 stdlib `Fn: FnMut` that
 [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
 leaves open.
+
+## Known gaps
+
+An associated-type constraint in supertrait position is checked but not used for
+inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved. Closing it
+means feeding the constraint into inference wherever the bound is in scope.
+
+The trait solver states a clause's arguments only where it can name them as
+declarations. A clause whose argument is the subtrait's own parameter states
+none there, and the solver answers that edge at the supertrait's declared
+defaults. It is lenient rather than wrong — the elaborator, which does carry the
+argument, is what rejects a mismatch — so the two engines disagree on nothing a
+program can reach. Closing it means a solver-side spelling for a trait's own
+parameter, which its type language has no term for today.
 
 ## Consequences
 
