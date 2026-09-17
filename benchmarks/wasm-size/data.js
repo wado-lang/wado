@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789645550897,
+  "lastUpdate": 1789668028538,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56553,6 +56553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/235492ba320fe92f252cc0df2725d3702b62030c"
         },
         "date": 1789645549937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 286862,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "df124f7604fe096a2de1016832980b0280169029",
+          "message": "Merge pull request #2074 from wado-lang/claude/string-abstraction-asref-699aaa\n\nfix(traits): a trait question states the arguments it is asked at",
+          "timestamp": "2026-09-18T02:46:50+09:00",
+          "tree_id": "77d563e4366e07c925e6b0d914192341e9bc3a7a",
+          "url": "https://github.com/wado-lang/wado/commit/df124f7604fe096a2de1016832980b0280169029"
+        },
+        "date": 1789668027954,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
