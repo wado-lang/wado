@@ -18,6 +18,7 @@ use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::unparse::unparse_type_into;
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).
@@ -2083,10 +2084,25 @@ type ResolveTrait<'a> = &'a dyn Fn(&ast::TraitBound) -> Option<DefId>;
 type ResolveWritten<'a> =
     &'a dyn Fn(&ModuleSource, &ast::Type, &[ast::GenericParam]) -> ImplTargetKey;
 
-/// Add an inherited bound unless the list already holds its declaration, so
-/// two spellings of one supertrait collapse.
+/// The arguments a bound writes, as written: the key two edges to one trait
+/// are the same edge at, so `D<X>` and `D<List<X>>` stay two.
+fn written_args_key(bound: &ast::TraitBound) -> String {
+    let mut out = String::new();
+    for arg in &bound.type_args {
+        unparse_type_into(arg, &mut out);
+        out.push(',');
+    }
+    out
+}
+
+/// Add an inherited bound unless the list already holds that supertrait at
+/// those arguments, so two spellings of one supertrait collapse.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
-    let Some(existing) = bounds.iter_mut().find(|b| b.decl == bound.decl) else {
+    let key = written_args_key(&bound.bound);
+    let Some(existing) = bounds
+        .iter_mut()
+        .find(|b| b.decl == bound.decl && written_args_key(&b.bound) == key)
+    else {
         bounds.push(bound.clone());
         return;
     };
@@ -2104,12 +2120,23 @@ fn at_writer(
     direct: &ast::TraitBound,
     writer: DefId,
 ) -> InheritedBound {
-    let names: Vec<String> = params
-        .iter()
-        .take(direct.type_args.len())
-        .map(|p| p.name.clone())
-        .collect();
-    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &direct.type_args);
+    let mut names: Vec<String> = Vec::new();
+    let mut args: Vec<ast::Type> = Vec::new();
+    for (index, param) in params.iter().enumerate() {
+        // A position the clause leaves out stands at the declared default, so
+        // an inherited bound spelling it arrives as a type and not a binder.
+        let Some(arg) = direct
+            .type_args
+            .get(index)
+            .or(param.default.as_ref())
+            .cloned()
+        else {
+            break;
+        };
+        names.push(param.name.clone());
+        args.push(arg);
+    }
+    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &args);
     InheritedBound {
         bound: ast::TraitBound {
             type_args: inherited.bound.type_args.iter().map(at).collect(),

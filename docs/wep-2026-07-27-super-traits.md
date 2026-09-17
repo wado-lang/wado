@@ -67,7 +67,9 @@ A clause writes its arguments in the declaring trait's own parameter space, so
 `T: Gauge<i32>` supplies `Measure<i32>`, and `impl Gauge<i32> for Ruler`
 requires `Ruler: Measure<i32>`. The expansion substitutes as it walks, so a
 clause reached through another trait arrives in the space of the trait the
-question started from.
+question started from. A position the clause leaves out stands at the
+supertrait's declared default, so a bound inherited through it arrives as a type
+rather than as a parameter no later reader can resolve.
 
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`

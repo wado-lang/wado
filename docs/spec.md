@@ -3735,7 +3735,9 @@ The rule is the same wherever a bound is written: on a type parameter, on a
 supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
 (`type Item: Eq<String>`). A bound's arguments are spelled where it is written,
 so a supertrait clause naming its own trait's parameter — `trait Gauge<X>:
-Measure<X>` — supplies `Measure<i32>` under `T: Gauge<i32>`.
+Measure<X>` — supplies `Measure<i32>` under `T: Gauge<i32>`. A position the
+clause leaves out takes the declared default there too, so `trait A<T>: B<T>`
+over `trait B<X, Y = i32>: C<Y>` supplies `C<i32>`.
 
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.

@@ -25,11 +25,11 @@ impl Metric for Ruler {
     }
 }
 
-fn scaled<U: Measure<i32>>(u: U, by: i32) -> i32 {
+fn scaled<U: Measure<i32>>(u: U, by: i32) -> i32 with _ {
     return u.of(by);
 }
 
-fn through_supertrait<T: Metric>(t: T, by: i32) -> i32 {
+fn through_supertrait<T: Metric>(t: T, by: i32) -> i32 with _ {
     return scaled(t, by);
 }
 
@@ -43,7 +43,7 @@ impl Gauge<i32> for Ruler {
     }
 }
 
-fn through_generic_supertrait<T: Gauge<i32>>(t: T, by: i32) -> i32 {
+fn through_generic_supertrait<T: Gauge<i32>>(t: T, by: i32) -> i32 with _ {
     return scaled(t, by);
 }
 

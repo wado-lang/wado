@@ -6,7 +6,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, is_builtin_shape_name};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
@@ -14,7 +14,7 @@ use crate::trait_solver::{
     TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
-use super::trait_env::{BlanketReceiver, ImplHeader};
+use super::trait_env::{BlanketReceiver, ImplHeader, written_arg_nodes};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::defs::DefKind;
@@ -151,13 +151,27 @@ impl Lowering {
     /// A written trait argument as the solver spells it; `None` for a name the
     /// lowering states nothing about.
     fn named_arg(&self, name: &FqTypeName) -> Option<SolverType> {
-        let head = self.known_type(&DeclKey::Def(name.head().def()?))?;
         let args = name
             .args()
             .iter()
             .map(|arg| self.named_arg(arg))
             .collect::<Option<Vec<_>>>()?;
-        Some(SolverType::Decl(head, args))
+        let pointee = match name.head() {
+            TypeHead::Tuple => SolverType::Tuple(args),
+            TypeHead::Builtin(builtin) => {
+                SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
+            }
+            head => SolverType::Decl(self.known_type(&DeclKey::Def(head.def()?))?, args),
+        };
+        Some(
+            name.references()
+                .iter()
+                .rev()
+                .fold(pointee, |inner, kind| SolverType::Ref {
+                    is_mut: *kind == RefKind::Mut,
+                    inner: Box::new(inner),
+                }),
+        )
     }
 
     /// The declaration a trait id was given for. Every trait id is minted from
@@ -436,18 +450,14 @@ pub(super) fn lower_impls<'a>(
         let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {
             continue;
         };
-        let mut trait_args = Vec::new();
-        if let Some(Type::Generic(generic)) = header.trait_ty() {
-            let lowered: Option<Vec<SolverType>> = generic
-                .args
-                .iter()
-                .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
-                .collect();
-            let Some(lowered) = lowered else {
-                continue;
-            };
-            trait_args = lowered;
-        }
+        let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
+        let Some(trait_args) = written
+            .iter()
+            .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
         let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
         let params = header
             .type_params

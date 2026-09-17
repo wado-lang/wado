@@ -1,0 +1,46 @@
+// A supertrait clause reaching through a trait that leaves a parameter out
+// re-spells the inherited bound at that parameter's declared default, so `C<Y>`
+// arrives as `C<i32>` rather than as the binder `Y`.
+
+trait C<Z> {
+    fn c(&self, z: Z) -> i32;
+}
+
+trait B<X, Y = i32>: C<Y> {
+    fn b(&self, x: X) -> i32;
+}
+
+trait A<T>: B<T> {
+    fn a(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl C<i32> for S {
+    fn c(&self, z: i32) -> i32 {
+        return z;
+    }
+}
+
+impl B<String> for S {
+    fn b(&self, x: String) -> i32 {
+        return x.len();
+    }
+}
+
+impl A<String> for S {
+    fn a(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn via<T: A<String>>(t: T, z: i32) -> i32 with _ {
+    return t.c(z);
+}
+
+test "an omitted supertrait argument stands at its declared default" {
+    assert via(S { v: 1 }, 9) == 9;
+    assert S { v: 2 }.b("abc") == 3;
+}
