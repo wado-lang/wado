@@ -610,14 +610,7 @@ impl StoresOracle<'_> {
         }
         let mut facts = RetentionFacts::default();
         for retain in self.builtins.retain_specs(func) {
-            declare_retention(
-                &mut facts,
-                &RetainSpec {
-                    source: u32::try_from(retain.source).unwrap(),
-                    elements: retain.elements,
-                    into: retain.into.map(|at| u32::try_from(at).unwrap()),
-                },
-            );
+            declare_retention(&mut facts, retain);
         }
         facts
     }
@@ -802,47 +795,31 @@ pub fn compute_retention(
 /// where, so both unbounded channels take it: the result is one of the places
 /// it could be. `elements_of = p` claims what the referent holds rather than
 /// the reference, which each call gates on the argument's own type.
-fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<u32>) {
+fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<usize>) {
+    let source = u32::try_from(retain.source).unwrap();
     if retain.elements {
-        facts.elements.insert(retain.source);
+        facts.elements.insert(source);
     }
     match retain.into {
         Some(destination) => {
             facts
                 .into_param
-                .entry(retain.source)
+                .entry(source)
                 .or_default()
-                .insert(destination);
+                .insert(u32::try_from(destination).unwrap());
         }
         None => {
-            facts.escapes.insert(retain.source);
-            facts.into_result.insert(retain.source);
+            facts.escapes.insert(source);
+            facts.into_result.insert(source);
         }
     }
 }
 
 /// What a declaration's `#[retain(...)]` clauses state, by parameter position.
 fn declared_facts(func: &TirFunction) -> RetentionFacts {
-    let position = |name: &str| {
-        // Reify drops a clause naming no parameter, so one reaching here names
-        // a parameter of this very declaration.
-        let at = func
-            .params
-            .iter()
-            .position(|p| p.name == name)
-            .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", func.name));
-        u32::try_from(at).unwrap()
-    };
     let mut facts = RetentionFacts::default();
-    for retain in &func.retains {
-        declare_retention(
-            &mut facts,
-            &RetainSpec {
-                source: position(&retain.source),
-                elements: retain.elements,
-                into: retain.into.as_deref().map(position),
-            },
-        );
+    for retain in func.retains_by_position() {
+        declare_retention(&mut facts, &retain);
     }
     facts
 }

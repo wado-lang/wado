@@ -57,8 +57,8 @@ What follows:
   so without the requirement neither would resolve.
 - Every `StrSlice` method that returns another view hands out the receiver's
   storage too. A view holds its bytes in a reference field, and the spec's
-  reference-storage
-  rule counts reading one out of the receiver as the receiver escaping.
+  reference-storage rule counts reading one out of the receiver as the receiver
+  escaping.
 - The view must scalarize: a three-field struct built and read in one function
   leaves no `struct.new` behind. That is a property of the optimizer, so it is
   tested as one.

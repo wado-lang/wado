@@ -6059,6 +6059,23 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// This declaration's `#[retain(...)]` clauses by parameter position.
+    /// Reify drops a clause naming no parameter, so one reaching here names a
+    /// parameter of this very declaration.
+    pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
+        let position = |name: &str| {
+            self.params
+                .iter()
+                .position(|p| p.name == name)
+                .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", self.name))
+        };
+        self.retains.iter().map(move |r| RetainSpec {
+            source: position(&r.source),
+            elements: r.elements,
+            into: r.into.as_deref().map(position),
+        })
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.

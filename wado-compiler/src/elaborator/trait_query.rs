@@ -2763,11 +2763,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `binding`. A `Self` head with arguments never does: nothing spells one.
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
         match ty {
-            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
-                self.project_off_self(binding, &ns.name).is_some()
+            ast::Type::NamespacedGeneric(ns) => {
+                (ns.namespace != "Self" || self.project_off_self(binding, &ns.name).is_some())
                     && self.all_project_off_self(&ns.args, binding)
             }
-            ast::Type::NamespacedGeneric(ns) => self.all_project_off_self(&ns.args, binding),
             ast::Type::Generic(generic) => {
                 generic.name != "Self" && self.all_project_off_self(&generic.args, binding)
             }

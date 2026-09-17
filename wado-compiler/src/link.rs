@@ -27,21 +27,7 @@ fn record_declaration(
     if func.body.is_some() {
         return;
     }
-    let position = |name: &str| {
-        func.params
-            .iter()
-            .position(|p| p.name == name)
-            .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", func.name))
-    };
-    let retains: Vec<RetainSpec<usize>> = func
-        .retains
-        .iter()
-        .map(|r| RetainSpec {
-            source: position(&r.source),
-            elements: r.elements,
-            into: r.into.as_deref().map(position),
-        })
-        .collect();
+    let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
     if func.declared_return_convention.is_some() || !retains.is_empty() {
         // A call re-homes a method's key to the impl block's module, so only a
         // free function is found again under the module declaring it.
