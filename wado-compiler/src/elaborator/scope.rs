@@ -349,11 +349,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let decl = self.bound_decl(bound, known);
         // A bound that names no declaration falls back to its spelling, so an
         // erroring program still reports one bound rather than one per mention.
+        // Two bounds that each write arguments are two bounds, since merging
+        // `Eq<String> + Eq<StrSlice>` would drop one of the impls they ask for.
+        // A repeat of one of them costs a second diagnostic and nothing else.
+        let mergeable = |b: &ast::TraitBound| b.type_args.is_empty() || bound.type_args.is_empty();
         let duplicate = match decl {
-            Some(decl) => out.iter_mut().find(|(_, d)| *d == Some(decl)),
+            Some(decl) => out
+                .iter_mut()
+                .find(|(b, d)| *d == Some(decl) && mergeable(b)),
             None => out
                 .iter_mut()
-                .find(|(b, d)| d.is_none() && b.name == bound.name),
+                .find(|(b, d)| d.is_none() && b.name == bound.name && mergeable(b)),
         };
         if let Some((existing, _)) = duplicate {
             if existing.type_args.is_empty() {
