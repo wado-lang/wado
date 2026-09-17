@@ -452,20 +452,20 @@ impl GenContext {
         if !self.rule_follow_exact {
             return [];
         }
-        return match self.rule_follow_kinds.get_str(rule_name) {
-            Some(follow) => follow,
-            None => [],
+        let Some(follow) = self.rule_follow_kinds.get_str(rule_name) else {
+            return [];
         };
+        return follow;
     }
 
     pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<String>) -> bool {
         if !self.rule_follow_exact {
             return true;
         }
-        let Some(follow) = self.rule_follow_kinds.get_str(rule_name) else {
+        let Some(follow) = self.rule_follow_kinds.get_ref_str(rule_name) else {
             return true;
         };
-        return sets_overlap(branch_tokens, &follow);
+        return sets_overlap(branch_tokens, follow);
     }
 
     pub fn emits_at_end_conflict_via_atn<S: AsStrSlice>(

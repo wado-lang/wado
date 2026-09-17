@@ -110,10 +110,6 @@ pub fn fold_range_ci(start: char, end: char, out: &mut List<CharRange>) {
     }
 }
 
-fn seen_contains<S: AsStrSlice>(seen: &List<String>, text: S) -> bool {
-    return seen.iter_ref().any(|item| *item == text.as_str_slice());
-}
-
 pub fn collect_literal_tokens(parser_rules: &List<ParserRule>) -> List<LitToken> {
     let mut seen: List<String> = [];
     let mut result: List<LitToken> = [];
@@ -153,7 +149,7 @@ fn collect_lits_from_elements(elements: &List<Element>, seen: &mut List<String>,
 fn collect_lits_from_element(elem: &Element, seen: &mut List<String>, result: &mut List<LitToken>) {
     match *elem {
         Literal(l) => {
-            if !seen_contains(seen, &l.text) {
+            if !seen.contains_str(&l.text) {
                 seen.push(l.text);
                 let base = literal_const_name(&l.text);
                 let const_name = disambiguate_const_name(&base, result);
@@ -885,7 +881,7 @@ fn fragment_elem_refs_self<S: AsStrSlice>(
             if name == target.as_str_slice() {
                 return true;
             }
-            if visited.iter_ref().any(|v: &String| *v == name) {
+            if visited.contains_str(&name) {
                 return false;
             }
             visited.push(name);

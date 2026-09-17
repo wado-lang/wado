@@ -269,7 +269,7 @@ let first = arr[0];                      // index access (read)
 arr[0] = 100;                            // index assignment (write, requires mut)
 
 let names: List<String> = ["a", "b"];
-names.contains_str(view);                // List<String>: membership by text, copying nothing
+names.contains_str(view);                // membership by text, copying nothing
 
 // In-place element mutation: iterate `&mut` to get `&mut T`
 let mut ps: List<Point> = [Point { x: 1 }, Point { x: 2 }];
@@ -1600,7 +1600,7 @@ let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
 map.get_str(view);            // String-keyed map: look up by a view, no key copy
 map.contains_key_str(view);   // likewise -> bool
-map.get_ref_str(view);        // likewise -> Option<&V>, for a value worth not copying
+map.get_ref_str(view);        // likewise -> Option<&V>, when copying V would be waste
 map.remove("key");            // -> bool
 map.try_insert("k", 1);       // insert if absent -> bool
 map.get_or_insert("k", 1);    // the stored value, or the inserted one

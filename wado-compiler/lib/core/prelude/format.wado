@@ -406,22 +406,6 @@ impl Formatter {
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
 
-/// Byte end of the leading `char_count` characters of `view`, or its whole
-/// length when it holds fewer.
-fn char_prefix_end(view: StrSlice, char_count: i32) -> i32 {
-    let len = view.len();
-    let mut end = 0;
-    let mut seen = 0;
-    while end < len && seen < char_count {
-        end += 1;
-        while end < len && !is_char_start(view.get_byte_unchecked(end)) {
-            end += 1;
-        }
-        seen += 1;
-    }
-    return end;
-}
-
 /// Write text through the spec. Precision caps the length in characters
 /// (Rust's `{:.N}`), narrowing the view rather than copying it out.
 fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
@@ -430,7 +414,7 @@ fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
         return;
     }
     let view = text.as_str_slice();
-    f.pad(view.sub_unchecked(0, char_prefix_end(view, f.precision)));
+    f.pad(view.sub_unchecked(0, view.char_prefix_end(f.precision)));
 }
 
 impl Display for String {

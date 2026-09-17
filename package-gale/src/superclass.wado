@@ -827,7 +827,7 @@ fn rule_calls_super<S: AsStrSlice>(
     actions: bool,
     visited: &mut List<String>,
 ) -> bool {
-    if visited.iter_ref().any(|v: &String| *v == rule.name) {
+    if visited.contains_str(&rule.name) {
         return false;
     }
     visited.push(rule.name);
