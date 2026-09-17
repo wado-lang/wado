@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789635696231,
+  "lastUpdate": 1789640840473,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56465,6 +56465,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ddccc3f760a4e7beae5618ae963671bd602d2dee"
         },
         "date": 1789635695571,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285109,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd190997446b05d9a2c792446d8ff2626f6656c8",
+          "message": "Merge pull request #2073 from wado-lang/claude/effect-generic-dispatch\n\nfeat(effects): a trait's `with` clause bounds every impl of it, and effects survive a generic bound",
+          "timestamp": "2026-09-17T19:08:01+09:00",
+          "tree_id": "42466cd22dd7359cc4eb72fd2d954aceebb97b6e",
+          "url": "https://github.com/wado-lang/wado/commit/bd190997446b05d9a2c792446d8ff2626f6656c8"
+        },
+        "date": 1789640839709,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
