@@ -2104,6 +2104,47 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
     }
 }
 
+/// A trait reference written against `params` re-spelled at `written`, the
+/// arguments a site gives them: `C<Y>` under `B<X, Y = i32>` written `B<String>`
+/// reaches `C<i32>`. Every reader of an inherited bound owes this, since the
+/// bound arrives in the declaring trait's parameter space and not the reader's.
+pub(super) fn bound_at_args(
+    bound: &ast::TraitBound,
+    params: &[ast::GenericParam],
+    written: &[ast::Type],
+) -> ast::TraitBound {
+    let mut names: Vec<String> = Vec::new();
+    let mut args: Vec<ast::Type> = Vec::new();
+    for (index, param) in params.iter().enumerate() {
+        // A position the site leaves out stands at the declared default, so an
+        // inherited bound spelling it arrives as a type and not a binder. A
+        // default naming a parameter to its left means that parameter's
+        // argument, not the name the reading site happens to use.
+        let arg = match written.get(index) {
+            Some(arg) => arg.clone(),
+            None => match param.default.as_ref() {
+                Some(default) => substitute_type_params(default, &names, &args),
+                None => break,
+            },
+        };
+        names.push(param.name.clone());
+        args.push(arg);
+    }
+    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &args);
+    ast::TraitBound {
+        type_args: bound.type_args.iter().map(at).collect(),
+        assoc_types: bound
+            .assoc_types
+            .iter()
+            .map(|a| ast::AssocTypeBound {
+                ty: at(&a.ty),
+                ..a.clone()
+            })
+            .collect(),
+        ..bound.clone()
+    }
+}
+
 /// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying
 /// what `params` are there: `trait A<X>: B<X>` over `trait B<Y>: C<Y>` reaches
 /// `C<X>`.
@@ -2113,37 +2154,8 @@ fn at_writer(
     direct: &ast::TraitBound,
     writer: DefId,
 ) -> InheritedBound {
-    let mut names: Vec<String> = Vec::new();
-    let mut args: Vec<ast::Type> = Vec::new();
-    for (index, param) in params.iter().enumerate() {
-        // A position the clause leaves out stands at the declared default, so
-        // an inherited bound spelling it arrives as a type and not a binder.
-        let Some(arg) = direct
-            .type_args
-            .get(index)
-            .or(param.default.as_ref())
-            .cloned()
-        else {
-            break;
-        };
-        names.push(param.name.clone());
-        args.push(arg);
-    }
-    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &args);
     InheritedBound {
-        bound: ast::TraitBound {
-            type_args: inherited.bound.type_args.iter().map(at).collect(),
-            assoc_types: inherited
-                .bound
-                .assoc_types
-                .iter()
-                .map(|a| ast::AssocTypeBound {
-                    ty: at(&a.ty),
-                    ..a.clone()
-                })
-                .collect(),
-            ..inherited.bound.clone()
-        },
+        bound: bound_at_args(&inherited.bound, params, &direct.type_args),
         decl: inherited.decl,
         writer,
     }
@@ -2873,10 +2885,37 @@ pub(super) fn non_default_named_arg_count(
     kept
 }
 
-/// One written type argument as the identity it names.
-///
-/// A name that reaches no declaration keeps its spelling — there is no identity
-/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
+/// A site's trait arguments as every reader of them needs them: what it wrote,
+/// `Self` read as `target`, and an omitted position at its declared default.
+pub(super) fn args_stated_at(
+    written: Vec<name::FqTypeName>,
+    target: Option<&ast::Type>,
+    params: &[ast::GenericParam],
+    resolutions: &Resolutions,
+) -> Vec<name::FqTypeName> {
+    let mut args = match target {
+        Some(target) => args_at_impl_target(written, target, resolutions),
+        None => written,
+    };
+    // A position the site leaves out is the trait's default, not a binder no
+    // later reader can resolve. A default naming a parameter to its left means
+    // that parameter's argument, so it is read against what is settled already.
+    for index in args.len()..params.len() {
+        let Some(default) = declared_default_arg(params, index, target, resolutions) else {
+            break;
+        };
+        assert_eq!(args.len(), index);
+        let settled = params[..index]
+            .iter()
+            .zip(&args)
+            .fold(default, |ty, (param, arg)| {
+                ty.substitute(&name::FqTypeName::binder(&param.name), arg)
+            });
+        args.push(settled);
+    }
+    args
+}
+
 /// Written trait arguments with `Self` read as the impl's own target, so
 /// `impl Add<Self> for Feet` says `Add<Feet>` wherever an impl head is read.
 pub(super) fn args_at_impl_target(
@@ -2891,6 +2930,10 @@ pub(super) fn args_at_impl_target(
         .collect()
 }
 
+/// One written type argument as the identity it names.
+///
+/// A name that reaches no declaration keeps its spelling — there is no identity
+/// to hold, and [`name::TypeHead::Builtin`] is the case that says so.
 pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> name::FqTypeName {
     let nested = |args: &[ast::Type]| -> Vec<name::FqTypeName> {
         args.iter()

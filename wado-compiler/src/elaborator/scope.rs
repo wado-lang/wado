@@ -14,7 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
-use super::trait_env::InheritedBound;
+use super::trait_env::{InheritedBound, bound_at_args};
 use super::trait_query::SelfBinding;
 use crate::ast::AstId;
 use crate::defs::DefId;
@@ -416,9 +416,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<InheritedBound> {
-        self.bound_decl(bound, known)
-            .map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
-            .unwrap_or_default()
+        let Some(decl) = self.bound_decl(bound, known) else {
+            return Vec::new();
+        };
+        // The closure is spelled in the named trait's parameter space, which
+        // this site's arguments fill.
+        let params = self.tysys.trait_env.trait_decl_params(decl);
+        self.tysys
+            .trait_env
+            .supertrait_closure(&decl)
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: bound_at_args(&inherited.bound, params, &bound.type_args),
+                ..inherited.clone()
+            })
+            .collect()
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

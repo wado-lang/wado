@@ -40,7 +40,41 @@ fn via<T: A<String>>(t: T, z: i32) -> i32 {
     return t.c(z);
 }
 
+// The bound writes `B<String>` and leaves `Y` out, so the clause `C<Y>` it
+// supplies is `C<i32>` — a binder here reaches no `c`.
+fn direct<T: B<String>>(t: T, z: i32) -> i32 {
+    return t.c(z);
+}
+
+// `W = V` names the parameter to its left, so it stands at that parameter's
+// argument and not at the name the reading site happens to use.
+trait Q<Z> with () {
+    fn q(&self, z: Z) -> i32;
+}
+
+trait P<V, W = V>: Q<W> with () {
+    fn p(&self, v: V) -> i32;
+}
+
+impl Q<String> for S {
+    fn q(&self, z: String) -> i32 {
+        return z.len();
+    }
+}
+
+impl P<String> for S {
+    fn p(&self, v: String) -> i32 {
+        return v.len() * 2;
+    }
+}
+
+fn leftward<T: P<String>>(t: T, z: String) -> i32 {
+    return t.q(z);
+}
+
 test "an omitted supertrait argument stands at its declared default" {
     assert via(S { v: 1 }, 9) == 9;
+    assert direct(S { v: 1 }, 7) == 7;
+    assert leftward(S { v: 1 }, "abcd") == 4;
     assert S { v: 2 }.b("abc") == 3;
 }
