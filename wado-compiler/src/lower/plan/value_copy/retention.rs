@@ -800,18 +800,15 @@ fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<usize>) {
     if retain.elements {
         facts.elements.insert(source);
     }
-    match retain.into {
-        Some(destination) => {
-            facts
-                .into_param
-                .entry(source)
-                .or_default()
-                .insert(u32::try_from(destination).unwrap());
-        }
-        None => {
-            facts.escapes.insert(source);
-            facts.into_result.insert(source);
-        }
+    if let Some(destination) = retain.into {
+        facts
+            .into_param
+            .entry(source)
+            .or_default()
+            .insert(u32::try_from(destination).unwrap());
+    } else {
+        facts.escapes.insert(source);
+        facts.into_result.insert(source);
     }
 }
 
