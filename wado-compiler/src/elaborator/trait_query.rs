@@ -27,7 +27,7 @@ use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    args_at_impl_target, get_type_name_static, header_answers_bound_args, written_type_args,
+    args_stated_at, get_type_name_static, header_answers_bound_args, written_type_args,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -527,13 +527,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        // The closure is spelled in the trait's own parameter space, and a
-        // written `Self` is this impl's target.
+        // The closure is spelled in the trait's own parameter space.
+        let params = self.tysys.trait_env.trait_decl_params(trait_decl);
         let at_impl = written_for(
-            self.tysys.trait_env.trait_decl_params(trait_decl),
-            &args_at_impl_target(
+            params,
+            &args_stated_at(
                 written_type_args(trait_type, &self.tysys.resolutions),
-                &impl_block.ty,
+                Some(&impl_block.ty),
+                params,
                 &self.tysys.resolutions,
             ),
         );
@@ -1100,12 +1101,17 @@ impl TypeSystem {
             return args_of(self.bound_written(bound));
         }
         // A clause writes the subtrait's own parameters, which this bound fills.
+        let params = own.map_or(&[][..], |decl| self.trait_env.trait_decl_params(decl));
         let at_bound = written_for(
-            own.map_or(&[], |decl| self.trait_env.trait_decl_params(decl)),
-            &self
-                .bound_written(bound)
-                .map(|n| n.args().to_vec())
-                .unwrap_or_default(),
+            params,
+            &args_stated_at(
+                self.bound_written(bound)
+                    .map(|n| n.args().to_vec())
+                    .unwrap_or_default(),
+                None,
+                params,
+                &self.resolutions,
+            ),
         );
         self.supertraits_of(scope, &bound.name).iter().any(|s| {
             s.decl == trait_

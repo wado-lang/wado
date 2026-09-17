@@ -58,13 +58,12 @@ fn bound_answers(
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
-    let Some(args) = program.args_reaching(bound, trait_) else {
-        return false;
-    };
-    wanted
-        .iter()
-        .enumerate()
-        .all(|(i, want)| args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want))
+    program.args_reaching(bound, trait_).iter().any(|args| {
+        wanted
+            .iter()
+            .enumerate()
+            .all(|(i, want)| args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want))
+    })
 }
 
 /// The trait's declared default at `index` where it names a type. A `Self`
@@ -178,7 +177,20 @@ impl Query<'_> {
                     return None;
                 }
                 let answer = self.impl_answers(id, def, ty)?;
-                if !answers_args(program, def, ty, &answer.trait_args, args) {
+                // The impl writes its arguments at the trait it names, so what
+                // the walk from there reaches at `trait_` is what the bound's
+                // arguments compare against.
+                let reached = program.args_reaching(
+                    &ParamBound {
+                        trait_: implemented,
+                        args: answer.trait_args.clone(),
+                    },
+                    trait_,
+                );
+                if !reached
+                    .iter()
+                    .any(|written| answers_args(program, def, ty, written, args))
+                {
                     return None;
                 }
                 Some(answer.holds)

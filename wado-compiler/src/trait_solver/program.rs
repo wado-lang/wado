@@ -383,35 +383,43 @@ impl Program {
     /// Whether a bound on `bound` answers for `wanted`: itself or a supertrait,
     /// transitively.
     pub(super) fn bound_reaches(&self, bound: TraitDeclId, wanted: TraitDeclId) -> bool {
-        self.args_reaching(&ParamBound::bare(bound), wanted)
-            .is_some()
+        !self
+            .args_reaching(&ParamBound::bare(bound), wanted)
+            .is_empty()
     }
 
-    /// What `bound` writes for `wanted`'s own parameters — its own arguments
-    /// where it names `wanted`, else the clause that reached it. `None` where it
-    /// does not reach.
+    /// Every argument list `bound` writes for `wanted`'s own parameters — its
+    /// own arguments where it names `wanted`, and each clause that reaches it.
+    /// Two edges to one trait writing different arguments are two answers, so
+    /// the walk carries on past the first rather than deciding on it.
     pub(super) fn args_reaching(
         &self,
         bound: &ParamBound,
         wanted: TraitDeclId,
-    ) -> Option<Vec<SolverType>> {
+    ) -> Vec<Vec<SolverType>> {
         if bound.trait_ == wanted {
-            return Some(bound.args.clone());
+            return vec![bound.args.clone()];
         }
-        let mut stack = self.traits.get(&bound.trait_)?.supertraits.clone();
-        let mut seen: Vec<TraitDeclId> = vec![bound.trait_];
+        let Some(def) = self.traits.get(&bound.trait_) else {
+            return Vec::new();
+        };
+        let mut reaching = Vec::new();
+        let mut stack = def.supertraits.clone();
+        // An edge is its trait and what it writes, so a second instantiation of
+        // one trait is walked rather than taken for a revisit.
+        let mut seen: Vec<ParamBound> = vec![bound.clone()];
         while let Some(next) = stack.pop() {
-            if next.trait_ == wanted {
-                return Some(next.args);
-            }
-            if seen.contains(&next.trait_) {
+            if seen.contains(&next) {
                 continue;
             }
-            seen.push(next.trait_);
+            if next.trait_ == wanted {
+                reaching.push(next.args.clone());
+            }
             if let Some(def) = self.traits.get(&next.trait_) {
                 stack.extend(def.supertraits.iter().cloned());
             }
+            seen.push(next);
         }
-        None
+        reaching
     }
 }
