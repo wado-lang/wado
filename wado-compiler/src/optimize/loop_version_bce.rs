@@ -507,10 +507,8 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     }
 }
 
-/// Conjoin the floor terms onto `residual`: `var >= demanded` at the version
-/// point, and for a step the residual cannot read as a constant, `step >= 0`
-/// and `H <= MAX - step` — together these say `var` only rises, and never past
-/// the wrap.
+/// Conjoin the floor terms onto `residual`: `var >= demanded`, and the
+/// `step >= 0` / `H <= MAX - step` pair that says `var` rises without wrapping.
 fn and_floor_terms(
     engine: &mut Engine,
     plan: &Plan,
@@ -519,8 +517,7 @@ fn and_floor_terms(
     span: Span,
 ) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
-    let pred =
-        |engine: &mut Engine, l, op, r| alloc_binary(engine, l, op, r, TypeTable::BOOL, span);
+    let pred = |e: &mut Engine, l, op, r| alloc_binary(e, l, op, r, TypeTable::BOOL, span);
 
     let var_read = local_read(engine, plan.var, span);
     let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);

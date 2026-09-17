@@ -1533,18 +1533,16 @@ pub(super) fn induction_entry(
     var: u32,
 ) -> Option<i64> {
     let entry = sole_unconditional_write(engine, parent, var, Some(loop_stmt))?;
-    let step = sole_unconditional_write(engine, loop_body, var, None)?;
-    (parse_var_offset(engine, binds, step) == Some((var, 1)))
+    let step = induction_step(engine, binds, loop_body, var)?;
+    matches!(step, InductionStep::Const(1))
         .then(|| parse_const_i64(engine, binds, entry))
         .flatten()
 }
 
-/// How far `var` advances per iteration, for a caller that establishes the
-/// floor at run time instead of reading a constant entry.
+/// How far `var` advances each iteration: a constant, or a local the caller
+/// must still prove loop-invariant.
 pub(super) enum InductionStep {
-    /// `var = var + K`.
     Const(i64),
-    /// `var = var + S`, `S` a local the caller must still prove invariant.
     Local(u32),
 }
 
