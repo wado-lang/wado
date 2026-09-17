@@ -267,9 +267,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
-    /// [`Self::with_self_type`], `None` here is a value: it returns the walk to
-    /// its own module.
     /// Run `body` with `Self` standing for `binding`'s receiver, and the
     /// enclosing impl's own bindings out of reach so a `Self::Assoc` inside
     /// projects off that receiver alone.
@@ -291,6 +288,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
+    /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
+    /// [`Self::with_self_type`], `None` here is a value: it returns the walk to
+    /// its own module.
     pub(super) fn with_resolving_home<R>(
         &mut self,
         module: Option<ModuleSource>,

@@ -303,9 +303,8 @@ impl<'a> WriteWalker<'a> {
         if roots.is_empty() {
             return;
         }
-        // From here `carried` answers for `local` with what it holds rather
-        // than the slot itself, which loses nothing: `found` only grows over
-        // the settle rounds, so a slot already reported stays reported.
+        // `carried` now answers for `local` with what it holds rather than the
+        // slot, which loses nothing: `found` only grows over the settle rounds.
         let held = self.holds.entry(local).or_default();
         for root in roots {
             self.grew |= held.insert(root);
