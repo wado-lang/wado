@@ -4086,14 +4086,14 @@ fn unparse_literal_into(lit: &Literal, output: &mut String) {
 }
 
 /// `#[name(args)]`, the one spelling every reader of an attribute shares.
-pub fn unparse_attribute_into(attr: &Attribute, output: &mut String) {
+fn unparse_attribute_into(attr: &Attribute, output: &mut String) {
     output.push_str("#[");
     unparse_attr_body_into(&attr.name, &attr.args, output);
     output.push(']');
 }
 
 /// `#![name(args)]` — the module's own, spelled by the same body.
-pub fn unparse_inner_attribute_into(attr: &InnerAttribute, output: &mut String) {
+fn unparse_inner_attribute_into(attr: &InnerAttribute, output: &mut String) {
     output.push_str("#![");
     unparse_attr_body_into(&attr.name, &attr.args, output);
     output.push(']');
@@ -5422,7 +5422,7 @@ fn inline_hint_attr(hint: tir::InlineHint) -> Option<&'static str> {
 }
 
 /// Render a `#[retain(...)]` clause back as it is written.
-pub fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
+fn unparse_retain_attr(retain: &tir::RetainSpec<String>) -> String {
     let source = if retain.elements {
         format!("elements_of = {}", retain.source)
     } else {

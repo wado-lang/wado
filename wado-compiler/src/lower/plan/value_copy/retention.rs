@@ -30,7 +30,7 @@ use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
 use std::cell::RefCell;
 
-/// Per-function set of reference-parameter positions the function may store.
+/// Per-function set of reference-parameter positions the function may retain.
 pub type RetainedParams = FuncKeyMap<IndexSet<u32>>;
 
 /// The three ways a reference parameter outlives its call. See the module doc.
@@ -660,15 +660,6 @@ impl BoundedRetention {
             .get(&func.module_source, &func.name)?
             .get(&u32::try_from(source).ok()?)
     }
-
-    /// Whether this callee bounds any retention at all, which is what a reader
-    /// checks before doing the work of resolving one.
-    #[must_use]
-    pub fn any(&self, func: &FunctionRef) -> bool {
-        self.at
-            .get(&func.module_source, &func.name)
-            .is_some_and(|by_source| !by_source.is_empty())
-    }
 }
 
 /// What the fixpoint publishes: the positions each function may keep, where the
@@ -788,7 +779,7 @@ pub fn compute_retention(
         let func = func.borrow();
         if let Some(facts) = computed.get(&func.module_source, &func.name) {
             compiler_trace!(
-                "stores",
+                "retention",
                 "{} escapes={:?} into_result={:?} into_param={:?}",
                 func.name,
                 facts.escapes,
