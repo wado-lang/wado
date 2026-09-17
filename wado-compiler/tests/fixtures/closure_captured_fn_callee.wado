@@ -1,0 +1,42 @@
+// Calling a captured `fn`-typed binding. The callee is a name like any other,
+// so it is read from the environment when the frame does not own it.
+
+fn apply(f: fn() -> i32) -> i32 {
+    return f();
+}
+
+fn twice(g: fn(i32) -> i32, v: i32) -> i32 {
+    return apply(|| g(v) + g(v));
+}
+
+fn nested(g: fn(i32) -> i32, v: i32) -> i32 {
+    return apply(|| apply(|| g(v)));
+}
+
+test "a closure calls a captured fn parameter" {
+    assert twice(|x| x + 1, 20) == 42;
+}
+
+test "a captured fn callee crosses two frames" {
+    assert nested(|x| x * 2, 21) == 42;
+}
+
+test "a closure calls a captured fn-typed local" {
+    let double = |x: i32| x * 2;
+    assert apply(|| double(21)) == 42;
+}
+
+test "a captured fn-typed global is callable" {
+    assert apply(|| DOUBLE(21)) == 42;
+}
+
+test "a captured binding shadows a same-named global" {
+    #[allow(shadowed_name)]
+    let DOUBLE = |x: i32| x + 1;
+    assert apply(|| DOUBLE(41)) == 42;
+}
+
+global DOUBLE: fn(i32) -> i32 = |x: i32| x * 2;
+
+__DATA__
+{"test": {}}

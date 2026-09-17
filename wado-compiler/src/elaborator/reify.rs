@@ -7998,19 +7998,46 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .sem
             .decls
             .lookup_global(name, &self.current_module_source)?;
-        let table = self.tysys.type_table.borrow();
-        let base = table.representation_head(table.peel_refs(ty));
-        matches!(table.get(base), ResolvedType::Function { .. }).then_some((
-            module_source,
-            global_name,
-            ty,
-        ))
+        self.tysys
+            .type_table
+            .borrow()
+            .is_callable(ty)
+            .then_some((module_source, global_name, ty))
     }
 
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
     /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
     /// callee.
+    /// The callee of a bare-ident call on a value binding — a local, a capture,
+    /// or a global — read down to the function value. `None` when the name is
+    /// not a binding of `fn(...)` type.
+    fn reify_value_callee(
+        &mut self,
+        ident: &ast::IdentExpr,
+        ctx: &mut FunctionContext,
+    ) -> Option<TirExpr> {
+        let callee = if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
+            var_ref_expr(var_ref, &ident.name, ident.span)
+        } else {
+            let (module_source, global_name, global_type) = self.global_fn_callee(&ident.name)?;
+            TirExpr::new(
+                TirExprKind::GlobalVarGet {
+                    module_source,
+                    name: global_name,
+                },
+                global_type,
+                ident.span,
+            )
+        };
+        if !self.tysys.type_table.borrow().is_callable(callee.type_id) {
+            return None;
+        }
+        // Auto-deref a `&fn` / `&mut fn` callee down to the function value,
+        // exactly as `build_indirect_call`'s final `deref_to_value` does.
+        Some(deref_to_value(callee, ident.span, &self.tysys.type_table))
+    }
+
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -8240,76 +8267,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // dropped (no side effects: `reify_expr` is pure TIR shaping).
         }
 
-        // Closure-call shape: bare-ident callee that resolves to a
-        // local with `fn(...)` type. Annotate decides this by
-        // probing `ctx.lookup`; reify reproduces by checking the
-        // ident's local + its resolved type. The same `ctx` reify
-        // built during the body walk has every let-bound local in
-        // place (the walk-order invariant), so the lookup returns the
-        // same answer.
+        // Closure-call shape: a bare-ident callee naming a value binding — a
+        // local, a capture, or a global — of `fn(...)` type. Annotate decides
+        // this by probing `ctx.lookup_or_capture` and then the globals; reify
+        // reproduces it against the same `ctx` it built during the body walk,
+        // which has every let-bound local in place (the walk-order invariant),
+        // so both walks read the same answer and register the same capture.
         if let ast::Expr::Ident(ident) = &call.callee
             && !ident.name.contains("::")
-            && let Some(local) = ctx.lookup(&ident.name)
-            && {
-                // The callee may be a bare `fn(...)` value or a reference
-                // to one (`&fn(...)`, `&mut fn(...)`), possibly behind a
-                // fn-type newtype. Mirror `Elaborator::as_fn_signature`:
-                // peel references and the ultimate base type before
-                // checking for `Function`.
-                let table = self.tysys.type_table.borrow();
-                let base = table.representation_head(table.peel_refs(local.type_id));
-                matches!(table.get(base), ResolvedType::Function { .. })
-            }
+            && let Some(callee_expr) = self.reify_value_callee(ident, ctx)
         {
-            let local_index = local.index;
-            let local_type_id = local.type_id;
-            let callee_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: ident.name.clone(),
-                },
-                local_type_id,
-                ident.span,
-            );
-            // Auto-deref a `&fn` / `&mut fn` callee down to the function
-            // value, exactly as `build_indirect_call`'s final
-            // `deref_to_value` does in the production path.
-            let callee_expr = deref_to_value(callee_expr, ident.span, &self.tysys.type_table);
-            let arg_exprs: Vec<TirExpr> = call
-                .args
-                .iter()
-                .map(|a| self.reify_expr(a, ctx, None))
-                .collect();
-            return TirExpr::new(
-                TirExprKind::IndirectCall {
-                    callee: Box::new(callee_expr),
-                    args: arg_exprs,
-                },
-                recorded_type,
-                span,
-            );
-        }
-
-        // Global closure call: a bare-ident callee that is not a local but
-        // names a *global* (current-module or imported) of `fn(...)` type.
-        // Mirrors `resolve_call`'s global path. Annotate records no type for
-        // the callee (like the local-variable path), so build the global read
-        // directly with the global's type rather than via `reify_expr`.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
-            && ctx.lookup(&ident.name).is_none()
-            && let Some((module_source, global_name, callee_ty)) =
-                self.global_fn_callee(&ident.name)
-        {
-            let callee_expr = TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source,
-                    name: global_name,
-                },
-                callee_ty,
-                ident.span,
-            );
-            let callee_expr = deref_to_value(callee_expr, ident.span, &self.tysys.type_table);
             let arg_exprs: Vec<TirExpr> = call
                 .args
                 .iter()
@@ -8348,12 +8315,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // `Elaborator::resolve_call`'s non-ident-callee path
         if !matches!(&call.callee, ast::Expr::Ident(_)) {
             let callee_expr = self.reify_expr(&call.callee, ctx, None);
-            let is_fn = {
-                let table = self.tysys.type_table.borrow();
-                let base = table.representation_head(table.peel_refs(callee_expr.type_id));
-                matches!(table.get(base), ResolvedType::Function { .. })
-            };
-            if is_fn {
+            if self
+                .tysys
+                .type_table
+                .borrow()
+                .is_callable(callee_expr.type_id)
+            {
                 // Auto-deref a `&fn` / `&mut fn` callee, matching
                 // `build_indirect_call`'s `deref_to_value` in production.
                 let callee_expr =
@@ -9083,51 +9050,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    the parent's `AstIdSpace` + counter, see
         //    `parse_interpolation_expr`.)
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            match var_ref {
-                VarRef::Local { index, type_id, .. } => {
-                    return TirExpr::new(
-                        TirExprKind::Local {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
-                }
-                VarRef::Capture { index, type_id, .. } => {
-                    return TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
-                }
-                VarRef::DerefCapture {
-                    index,
-                    ref_type_id,
-                    inner_type_id,
-                    ..
-                } => {
-                    let capture_expr = TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: format!("$deref_cap_{index}"),
-                        },
-                        ref_type_id,
-                        ident.span,
-                    );
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(capture_expr),
-                        },
-                        inner_type_id,
-                        ident.span,
-                    );
-                }
-            }
+            return var_ref_expr(var_ref, &ident.name, ident.span);
         }
 
         // 2. Current-module global.
@@ -10895,6 +10818,52 @@ fn adjust_receiver_node(
                     span,
                 )
             }
+        }
+    }
+}
+
+/// The TIR read of a resolved binding: a local, a by-value capture, or a
+/// dereference of a captured `&mut`.
+fn var_ref_expr(var_ref: VarRef, name: &str, span: Span) -> TirExpr {
+    match var_ref {
+        VarRef::Local { index, type_id, .. } => TirExpr::new(
+            TirExprKind::Local {
+                index,
+                name: name.to_string(),
+            },
+            type_id,
+            span,
+        ),
+        VarRef::Capture { index, type_id, .. } => TirExpr::new(
+            TirExprKind::Capture {
+                index,
+                name: name.to_string(),
+            },
+            type_id,
+            span,
+        ),
+        VarRef::DerefCapture {
+            index,
+            ref_type_id,
+            inner_type_id,
+            ..
+        } => {
+            let capture = TirExpr::new(
+                TirExprKind::Capture {
+                    index,
+                    name: format!("$deref_cap_{index}"),
+                },
+                ref_type_id,
+                span,
+            );
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(capture),
+                },
+                inner_type_id,
+                span,
+            )
         }
     }
 }

@@ -2602,6 +2602,13 @@ impl TypeTable {
         }
     }
 
+    /// Whether a value of `type_id` is callable: a function, a reference to
+    /// one, or a newtype over one.
+    pub fn is_callable(&self, type_id: TypeId) -> bool {
+        let head = self.representation_head(self.peel_refs(type_id));
+        matches!(self.get(head), ResolvedType::Function { .. })
+    }
+
     /// [`Self::peel_refs`] as [`Self::try_get`] is to [`Self::get`]: an id this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_peel_refs(&self, mut type_id: TypeId) -> Option<TypeId> {

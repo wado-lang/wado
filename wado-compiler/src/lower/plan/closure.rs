@@ -1564,6 +1564,20 @@ struct ClosureSafetyAnalyzer<'a> {
     in_callee_position: bool,
 }
 
+impl ClosureSafetyAnalyzer<'_> {
+    /// A capture stores the value in the closure's environment, so a local
+    /// holding a closure loses its specialised form by being captured.
+    fn escape_captured_locals(&mut self, captures: &[TirCapture]) {
+        for capture in captures {
+            if let Some(index) = capture.source.local()
+                && let Some(&closure_id) = self.local_to_closure.get(&index)
+            {
+                self.specializable.swap_remove(&closure_id);
+            }
+        }
+    }
+}
+
 impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         // Let-binding a closure literal: mark the local as carrying that
@@ -1574,12 +1588,14 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         } = &stmt.kind
             && let TirExprKind::Closure {
                 body,
+                captures,
                 functor_id: Some(closure_id),
                 ..
             } = &value.kind
         {
             self.local_to_closure.insert(*local_index, *closure_id);
             self.specializable.insert(*closure_id);
+            self.escape_captured_locals(captures);
             let saved_l2c = std::mem::take(self.local_to_closure);
             let prev = std::mem::replace(&mut self.in_callee_position, false);
             self.visit_expr(body);
@@ -1594,6 +1610,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         match &expr.kind {
             TirExprKind::Closure {
                 body,
+                captures,
                 functor_id: Some(closure_id),
                 ..
             } => {
@@ -1603,6 +1620,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 if !self.in_callee_position {
                     self.specializable.swap_remove(closure_id);
                 }
+                self.escape_captured_locals(captures);
                 let saved_l2c = std::mem::take(self.local_to_closure);
                 let prev = std::mem::replace(&mut self.in_callee_position, false);
                 self.visit_expr(body);

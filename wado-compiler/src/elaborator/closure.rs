@@ -31,7 +31,7 @@ pub(super) fn relink_recorded_captures(
         "annotate and reify disagree on how many captures this closure has"
     );
     linked
-        .iter()
+        .into_iter()
         .zip(recorded)
         .map(|(linked, recorded)| {
             assert_eq!(
@@ -39,10 +39,9 @@ pub(super) fn relink_recorded_captures(
                 "annotate and reify disagree on this closure's capture order"
             );
             TirCapture {
-                name: recorded.name.clone(),
-                source: linked.source,
                 type_id: recorded.type_id,
                 is_mut: recorded.is_mut,
+                ..linked
             }
         })
         .collect()
@@ -70,8 +69,8 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
     }
 }
 
-/// One [`CaptureEntry`] per capture, resolved against `ctx`, the frame that
-/// builds the closure.
+/// One [`TirCapture`] per capture, resolved against `ctx`, the frame that builds
+/// the closure.
 ///
 /// A binding `ctx` owns is read from its local. One it only reaches through its
 /// own environment makes `ctx` capture it too, which is what makes capture
@@ -79,7 +78,7 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
 pub(super) fn link_parent_captures(
     closure_ctx: &FunctionContext,
     ctx: &mut FunctionContext,
-) -> Vec<CaptureEntry> {
+) -> Vec<TirCapture> {
     closure_ctx
         .get_captures()
         .into_iter()
@@ -88,7 +87,7 @@ pub(super) fn link_parent_captures(
                 OuterReach::ParentLocal(index) => CaptureSource::Local(index),
                 OuterReach::ParentEnv => CaptureSource::Capture(parent_capture_slot(ctx, &name)),
             };
-            CaptureEntry {
+            TirCapture {
                 name,
                 source,
                 type_id: local.type_id,
@@ -196,7 +195,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let Some(local) = ctx.lookup(var_name) else {
                 // A binding `ctx` only reaches by capture is boxed where it is
                 // owned; writing through that box is still a mutating capture.
-                any_mutating_capture |= ctx.outer_binding_is_mut(var_name) == Some(true);
+                any_mutating_capture |= ctx.binding(var_name).is_some_and(|b| b.is_mut);
                 continue;
             };
             if local.is_mut {
@@ -267,7 +266,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        let recorded_captures = link_parent_captures(&closure_ctx, ctx);
+        // The source each capture reads from belongs to this walk alone: reify
+        // resolves it again against its own frame, so recording it would be a
+        // second answer to one question.
+        let recorded_captures = link_parent_captures(&closure_ctx, ctx)
+            .into_iter()
+            .map(|capture| CaptureEntry {
+                name: capture.name,
+                type_id: capture.type_id,
+                is_mut: capture.is_mut,
+            })
+            .collect();
 
         // WEP 2026-05-26: the only signal reify needs
         // for the closure's capture analysis.

@@ -2762,10 +2762,12 @@ impl FunctionContext {
         None
     }
 
-    /// Whether the binding `name` reaches through this frame's own environment
-    /// is `mut`; `None` when no such binding exists.
-    pub(super) fn outer_binding_is_mut(&self, name: &str) -> Option<bool> {
-        self.outer_locals.get(name).map(|b| b.local.is_mut)
+    /// The binding `name` names here: one this frame owns, or one it reaches
+    /// through its own environment. Registers no capture, unlike
+    /// [`Self::lookup_or_capture`].
+    pub(super) fn binding(&self, name: &str) -> Option<&LocalVar> {
+        self.lookup(name)
+            .or_else(|| self.outer_locals.get(name).map(|outer| &outer.local))
     }
 
     /// Run `body` with the surrounding frame's bindings out of scope, keeping
@@ -2905,6 +2907,32 @@ pub(super) enum VarRef {
         inner_type_id: TypeId,
         defining_ast_id: Option<AstId>,
     },
+}
+
+impl VarRef {
+    /// The type of the value read, which for a `DerefCapture` is what the
+    /// captured reference points at rather than the reference.
+    pub(super) fn value_type(&self) -> TypeId {
+        match *self {
+            VarRef::Local { type_id, .. } | VarRef::Capture { type_id, .. } => type_id,
+            VarRef::DerefCapture { inner_type_id, .. } => inner_type_id,
+        }
+    }
+
+    /// The node that introduced the binding, for the use→def edge.
+    pub(super) fn defining_ast_id(&self) -> Option<AstId> {
+        match *self {
+            VarRef::Local {
+                defining_ast_id, ..
+            }
+            | VarRef::Capture {
+                defining_ast_id, ..
+            }
+            | VarRef::DerefCapture {
+                defining_ast_id, ..
+            } => defining_ast_id,
+        }
+    }
 }
 
 /// The trait a qualified call names, resolved to its identity: the

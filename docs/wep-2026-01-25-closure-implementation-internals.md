@@ -26,7 +26,7 @@ A closure whose concrete type is known at the use site — parameter position, u
 
 A closure whose use erases its type — struct field, mixed-branch return, container element — is wrapped in a canonical `(env, funcref)` struct instead.
 
-Escape analysis in the lower phase decides this per local: a local appearing only as a call's callee keeps the specialised form; every other position forces canonicalisation. The choice is invisible at the source level, since both satisfy the same `fn(T) -> U`.
+Escape analysis in the lower phase decides this per local: a local appearing only as a call's callee keeps the specialised form; every other position forces canonicalisation. Being captured is one of those positions, since the value is stored in another closure's environment — so a closure a nested closure calls is canonical, and the call goes through the funcref. The choice is invisible at the source level, since both satisfy the same `fn(T) -> U`.
 
 Boxed trait objects (`dyn Fn`) were rejected. Wado has GC and needs no `Box`, and the canonical struct already fills that role without user-visible syntax.
 
@@ -106,7 +106,7 @@ A host callback does not need one to: the closure stays in a guest-side registry
 ## Open
 
 - [ ] **Value-copy analysis does not model an environment read.** The escape, liveness and `carries` walks in the lower phase have no case for a capture read, so a value flowing out of one frame's environment into a nested closure's is invisible to them. No program is known where that changes a decision, since the read is synthesized after those walks run. Closing it takes a capture case in each walk, attributing the read to the environment rather than to a local.
-- [ ] **Detect mutation through a method call.** A closure is tagged `fn mut` from assignments to captured bindings, so mutating a capture via a `&mut self` method leaves it typed `fn`.
+- [ ] **Detect mutation through a call.** A closure is tagged `fn mut` from assignments to captured bindings, and nothing else counts: `xs.push(1)` on a captured `xs`, or passing one as `&mut n`, leaves the closure typed `fn`, so the binding is never boxed and the write lands on a copy with no diagnostic. The walk runs before method resolution, so it cannot ask whether a receiver is `&mut self`; reading every call on a captured binding as a write would box more and mark more closures `fn mut`, which changes what compiles.
 - [ ] **Return `Iterator<Item = ...>` from adapters.** They return named structs (`IterMap<Self, U>`, `IterFilter<Self>`); the anonymous form needs the elaborator to elaborate a trait-object-style return type.
 - [ ] **Effect-polymorphic iterator methods** (`<effect E>`). Closure literals already inherit caller effects, so this is convenience rather than a correctness fix.
 - [ ] **`Fn` / `FnMut` as user-namable traits**, for user-defined callable types. Closure literals never need them.

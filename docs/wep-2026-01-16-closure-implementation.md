@@ -152,6 +152,8 @@ assert count == 2;
 
 What a closure binds itself shadows, as it does anywhere. `|mut count| count += 1` writes its own parameter and captures nothing, and a body opening with `let mut count = 0` writes that.
 
+A captured binding is callable where its type is a function, so `|| g(v)` on an enclosing `g: fn(i32) -> i32` calls it. Being a `fn mut` still asks the binding it was declared with to be `mut`, one frame out as much as in place.
+
 ### No `move` Keyword
 
 Wado does not have a `move` keyword. To force a value-copy snapshot at closure creation, introduce an intermediate local:

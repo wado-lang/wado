@@ -3448,12 +3448,5 @@ pub(super) fn adjusted_receiver_type(
 /// enclosing frame's bindings reach it as captures, which the scopes alone
 /// would leave unaccounted for.
 fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
-    if let Some(local) = ctx.lookup(name) {
-        return Some(local.is_mut);
-    }
-    // Reading through a `&mut` box is what a mutable capture is.
-    if ctx.deref_overrides.contains_key(name) || ctx.outer_box_types.contains_key(name) {
-        return Some(true);
-    }
-    ctx.outer_binding_is_mut(name)
+    ctx.binding(name).map(|binding| binding.is_mut)
 }
