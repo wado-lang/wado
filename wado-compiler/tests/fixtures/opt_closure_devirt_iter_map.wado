@@ -1,14 +1,11 @@
-// Regression test: `closure_devirt` turns the `call_ref` an iterator adaptor
-// leaves into a direct call to the functor's `$call`.
+// `closure_devirt` turns the `call_ref` an iterator adaptor leaves into a
+// direct call to the functor's `$call`. The shape is microgpt's: `map` parks
+// the functor in `IterMap.f`, and the dispatch only appears once `inline`
+// copies `from_iter` and `IterMap::next` into this loop.
 //
-// `lower` devirtualizes a call through a closure-bearing local, but `map`
-// parks the functor in `IterMap.f`, and the loop only appears once `inline`
-// copies `from_iter` and `IterMap::next` into the caller. Before the rule,
-// every element paid a `ref.cast` and an indirect call through a wrapper.
-//
-// `let_block_flatten` is what hoists the functor binding out of the
-// `&mut { …; IterMap { … } }` the adaptor leaves, into the block holding the
-// call — without that the rule refuses, since the region could be dropped.
+// It also covers `let_block_flatten`'s reference case, which hoists the
+// functor binding out of the `&mut { …; IterMap { … } }` the adaptor leaves
+// and into the block holding the call. Without that the rule refuses.
 
 use { println, Stdout } from "core:cli";
 

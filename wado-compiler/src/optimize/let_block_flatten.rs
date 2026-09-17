@@ -3,14 +3,13 @@
 use cranelift_entity::EntityRef;
 
 use crate::compiler_trace;
-use crate::nir::NirFunction;
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, StmtId, StmtKind};
+use crate::nir::{NirFunction, NirUnaryOp};
+use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, Operand, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 
+use super::arena_query::strip_refs;
 use super::gate::{FunctionGate, GatedPass};
-use crate::nir::NirUnaryOp;
-use crate::nir_arena::Operand;
 
 /// Flatten every block-tailed `let` binding across the package.
 ///
@@ -87,17 +86,10 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     let StmtKind::Let { value, .. } = &body.stmts[sid].kind else {
         return None;
     };
-    // A borrow of the block is the same binding one indirection out: the
-    // reference is taken on the tail's value either way, so the leading
-    // statements hoist the same. `&mut { …; Struct { … } }` is what an
-    // inlined by-reference receiver leaves.
-    let value_e = match &body.exprs[value.as_expr()?].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: borrowed,
-        } => borrowed.as_expr()?,
-        _ => value.as_expr()?,
-    };
+    // A reference around the block applies to the tail's value either way, so
+    // the leading statements hoist the same. `&mut { …; Struct { … } }` is
+    // what an inlined by-reference receiver leaves.
+    let value_e = strip_refs(body, value.as_expr()?);
     // Flattening a block a `break` names would strip the target the jump needs.
     let inner = body.unbroken_block(value_e)?;
     let (&tail, leading) = body.blocks[inner].stmts.split_last()?;

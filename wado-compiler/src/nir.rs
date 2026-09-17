@@ -12,7 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{FunctionId, LocalMethodName};
+use crate::name::{
+    CLOSURE_CALL_METHOD, FunctionId, LocalMethodName, MethodName, closure_functor_type,
+};
 use crate::nir_arena::{Body, ExprBody};
 use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
@@ -144,6 +146,23 @@ impl FunctionRef {
             | "is_uninitialized"
             | "black_box" => Some(format!("builtin::{generic_name}")),
             _ => None,
+        }
+    }
+
+    /// The `$call` of closure functor `functor_id`. Every site that names one
+    /// goes through here: the same function reached by two constructions is two
+    /// keys, and a lookup on the wrong one silently finds nothing.
+    pub fn closure_call(module: &ModuleSource, functor_id: u32) -> Self {
+        let functor = closure_functor_type(module, functor_id);
+        Self {
+            module_source: module.clone(),
+            name: MethodName::format_local(&functor, None, CLOSURE_CALL_METHOD),
+            monomorph_info: None,
+            method_info: Some(LocalMethodName::new(
+                functor,
+                None,
+                CLOSURE_CALL_METHOD.to_string(),
+            )),
         }
     }
 

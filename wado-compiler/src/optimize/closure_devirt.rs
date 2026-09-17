@@ -2,29 +2,27 @@
 //! `ClosureToCanonical`, so the `$call` behind it becomes a direct call the
 //! inliner can splice.
 //!
-//! `lower` already rewrites a call through a closure-bearing local; what it
-//! cannot see is a closure parked in a struct field and read back after
-//! `inline` has copied the reader in. `xs.map(f).collect()` is that shape: the
-//! functor goes into `IterMap.f`, and the loop `from_iter` leaves dispatches
-//! through a `call_ref` and a wrapper per element.
+//! `lower/plan/closure`'s fn-param specializer devirtualizes the closure whose
+//! value never leaves its declaring local. A closure parked in a struct field
+//! escapes by that rule, and the field read only exists once `inline` has
+//! copied the reader in, so it is this pass and not that one that takes
+//! `xs.map(f).collect()`: the functor goes into `IterMap.f`, and the loop
+//! `from_iter` leaves dispatches through a `call_ref` per element.
 
 use crate::hashmap::IndexMap;
-use crate::module_source::ModuleSource;
-use crate::name::{
-    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTypeName, FunctionId, LocalMethodName, MethodName,
-};
-use crate::nir::{FuncId, FunctionRef, NirUnaryOp};
+use crate::name::{CLOSURE_CALL_METHOD, FunctionId};
+use crate::nir::{FuncId, FunctionRef};
 use crate::nir_arena::{ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::TypeId;
+use crate::nir_visitor::reachable_exprs;
 
-use super::arena_query::has_break_to;
+use super::arena_query::{is_addressed, strip_refs};
 
 use cranelift_entity::EntityRef;
 
-/// How far the callee walk follows bindings, borrows, blocks and fields before
-/// giving up. Every shape the iterator combinators leave is within four hops.
+/// How far a callee walk follows bindings, borrows, blocks and fields. The
+/// adaptor shapes reach a functor in six; the rest is headroom.
 const MAX_DEPTH: u32 = 12;
 
 /// One functor's `$call`: the callee to name, and one flag per parameter
@@ -39,15 +37,16 @@ pub(super) struct ClosureDevirtRule {
     targets: IndexMap<FunctionId, CallTarget>,
 }
 
-/// Index every functor's `$call` under the name
-/// [`call_method_id`] spells from what a `ClosureToCanonical` carries.
+/// Index every functor's `$call` under the key [`FunctionRef::closure_call`]
+/// builds from what a `ClosureToCanonical` carries.
 pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
+    let suffix = format!("::{CLOSURE_CALL_METHOD}");
     let mut targets: IndexMap<FunctionId, CallTarget> = IndexMap::default();
     for (id, &func_id) in &project.func_index {
         let FunctionId::Free(free) = id else {
             continue;
         };
-        if !free.name.ends_with(&format!("::{CLOSURE_CALL_METHOD}")) {
+        if !free.name.ends_with(&suffix) {
             continue;
         }
         let func = project.functions[func_id.index()].borrow();
@@ -65,42 +64,16 @@ pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
     ClosureDevirtRule { targets }
 }
 
-/// The name of functor `functor_id`'s `$call`, as `lower` minted it.
-fn call_method_id(closure_module: &ModuleSource, functor_id: u32) -> FunctionId {
-    let functor_fq = FqTypeName::shape(
-        closure_module,
-        &format!("{CLOSURE_STRUCT_PREFIX}{functor_id}"),
-    );
-    FunctionRef {
-        module_source: closure_module.clone(),
-        name: MethodName::format_local(&functor_fq, None, CLOSURE_CALL_METHOD),
-        monomorph_info: None,
-        method_info: Some(LocalMethodName::new(
-            functor_fq,
-            None,
-            CLOSURE_CALL_METHOD.to_string(),
-        )),
-    }
-    .function_id()
-}
-
 /// The `ClosureToCanonical` the operand's value was built by, following the
 /// bindings, borrows, blocks and struct fields between the two.
 fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
-    if depth == 0 {
-        return None;
+    let expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
+    if let Some(yielded) = engine.body.block_yield(expr) {
+        return resolve_canonical(engine, yielded, depth - 1);
     }
-    let expr = op.as_expr()?;
     match &engine.body.exprs[expr].kind {
         ExprKind::ClosureToCanonical { .. } => Some(expr),
         ExprKind::Cast { expr: inner, .. } => {
-            let inner = *inner;
-            resolve_canonical(engine, inner, depth - 1)
-        }
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => {
             let inner = *inner;
             resolve_canonical(engine, inner, depth - 1)
         }
@@ -108,10 +81,6 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
             let index = *index;
             let value = binding_value(engine, index)?;
             resolve_canonical(engine, value, depth - 1)
-        }
-        ExprKind::LabeledBlock { .. } => {
-            let tail = block_tail(engine, expr)?;
-            resolve_canonical(engine, tail, depth - 1)
         }
         ExprKind::FieldAccess {
             expr: base,
@@ -126,6 +95,28 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
     }
 }
 
+/// The struct literal the operand's value was built by. Every local holding
+/// the object on the way must be read through a plain field access alone —
+/// that is what keeps the field the literal wrote the field the read sees.
+fn resolve_struct_literal(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
+    let expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
+    if let Some(yielded) = engine.body.block_yield(expr) {
+        return resolve_struct_literal(engine, yielded, depth - 1);
+    }
+    match &engine.body.exprs[expr].kind {
+        ExprKind::StructLiteral { .. } => Some(expr),
+        ExprKind::Local { index, .. } => {
+            let index = *index;
+            if !field_read_only_local(engine, index) {
+                return None;
+            }
+            let value = binding_value(engine, index)?;
+            resolve_struct_literal(engine, value, depth - 1)
+        }
+        _ => None,
+    }
+}
+
 /// The value bound to `local`, when the body binds it exactly once.
 fn binding_value(engine: &mut Engine, local: u32) -> Option<Operand> {
     if !engine.local_has_one_version(local) {
@@ -133,22 +124,6 @@ fn binding_value(engine: &mut Engine, local: u32) -> Option<Operand> {
     }
     let stmt = engine.local_def(local)?;
     let StmtKind::Let { value, .. } = &engine.body.stmts[stmt].kind else {
-        return None;
-    };
-    Some(*value)
-}
-
-/// The value a labeled block yields, when its last statement is that value and
-/// no `break` names it.
-fn block_tail(engine: &Engine, expr: ExprId) -> Option<Operand> {
-    let ExprKind::LabeledBlock { label, block, .. } = &engine.body.exprs[expr].kind else {
-        return None;
-    };
-    if has_break_to(engine.body, NodeRef::Block(*block), label) {
-        return None;
-    }
-    let last = *engine.body.blocks[*block].stmts.last()?;
-    let StmtKind::Expr(value) = &engine.body.stmts[last].kind else {
         return None;
     };
     Some(*value)
@@ -169,42 +144,8 @@ fn struct_literal_field(
     fields.get(field_index as usize).map(|f| f.value)
 }
 
-/// The struct literal the operand's value was built by. Every binding on the
-/// way must be single-version, and every local holding the object must be read
-/// through a plain field access alone — that is what keeps the field the
-/// literal wrote the field the read sees.
-fn resolve_struct_literal(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
-    if depth == 0 {
-        return None;
-    }
-    let expr = op.as_expr()?;
-    match &engine.body.exprs[expr].kind {
-        ExprKind::StructLiteral { .. } => Some(expr),
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef | NirUnaryOp::Deref,
-            expr: inner,
-        } => {
-            let inner = *inner;
-            resolve_struct_literal(engine, inner, depth - 1)
-        }
-        ExprKind::LabeledBlock { .. } => {
-            let tail = block_tail(engine, expr)?;
-            resolve_struct_literal(engine, tail, depth - 1)
-        }
-        ExprKind::Local { index, .. } => {
-            let index = *index;
-            if !field_read_only_local(engine, index) {
-                return None;
-            }
-            let value = binding_value(engine, index)?;
-            resolve_struct_literal(engine, value, depth - 1)
-        }
-        _ => None,
-    }
-}
-
-/// Whether every mention of `local` is a field read: no write through it, no
-/// borrow of a field, no argument position, and no promoted read.
+/// Whether every mention of `local` is a plain field read: nothing writes
+/// through it, borrows a field off it, or hands it to a callee.
 fn field_read_only_local(engine: &mut Engine, local: u32) -> bool {
     if engine.promoted_read_count(local) > 0 || engine.body_address_taken().contains(&local) {
         return false;
@@ -214,19 +155,9 @@ fn field_read_only_local(engine: &mut Engine, local: u32) -> bool {
         let Some(NodeRef::Expr(access)) = engine.parent_of(NodeRef::Expr(read)) else {
             return false;
         };
-        if !matches!(engine.body.exprs[access].kind, ExprKind::FieldAccess { .. })
-            || engine.is_assign_target(access)
-        {
-            return false;
-        }
-        !matches!(
-            engine.parent_of(NodeRef::Expr(access)),
-            Some(NodeRef::Expr(outer))
-                if matches!(
-                    engine.body.exprs[outer].kind,
-                    ExprKind::Unary { op: NirUnaryOp::Ref | NirUnaryOp::MutRef, .. },
-                )
-        )
+        matches!(engine.body.exprs[access].kind, ExprKind::FieldAccess { .. })
+            && !engine.is_assign_target(access)
+            && !is_addressed(engine, access)
     })
 }
 
@@ -269,20 +200,16 @@ fn runs_before(engine: &Engine, canonical: ExprId, call: ExprId) -> bool {
         .any(|(call_block, call_at)| call_block == block && call_at > at)
 }
 
-/// The functor the canonical wrapper holds, once it is parked in a local of its
-/// own — the handle a direct call can name wherever the wrapper reaches.
-fn functor_local(engine: &Engine, canonical: ExprId) -> Option<(u32, String, TypeId)> {
+/// The local the wrapper's functor is parked in — the handle a direct call can
+/// name wherever the wrapper reaches — with the name and type to read it by.
+fn functor_local(engine: &Engine, canonical: ExprId) -> Option<(u32, String)> {
     let ExprKind::ClosureToCanonical { functor, .. } = &engine.body.exprs[canonical].kind else {
         return None;
     };
     let ExprKind::Local { index, name } = &engine.body.exprs[functor.as_expr()?].kind else {
         return None;
     };
-    Some((
-        *index,
-        name.clone(),
-        engine.locals()[*index as usize].type_id,
-    ))
+    Some((*index, name.clone()))
 }
 
 impl ClosureDevirtRule {
@@ -299,31 +226,50 @@ impl ClosureDevirtRule {
         };
         let target = self
             .targets
-            .get(&call_method_id(closure_module, *functor_id))?;
+            .get(&FunctionRef::closure_call(closure_module, *functor_id).function_id())?;
         (target.params_is_mut.len() == arg_count + 1).then_some(target)
+    }
+
+    /// The wrapper `call` dispatches through, when this rule can make the
+    /// dispatch direct.
+    fn devirt_site(&self, engine: &mut Engine, call: ExprId) -> Option<ExprId> {
+        let ExprKind::IndirectCall { callee, args } = &engine.body.exprs[call].kind else {
+            return None;
+        };
+        let (callee, arity) = (*callee, args.len());
+        let canonical = resolve_canonical(engine, callee, MAX_DEPTH)?;
+        let devirtualizable =
+            runs_before(engine, canonical, call) && self.target(engine, canonical, arity).is_some();
+        devirtualizable.then_some(canonical)
+    }
+
+    /// Whether some `IndirectCall` in the body dispatches through this wrapper.
+    /// Parking a functor nothing devirtualizes would only add a binding.
+    fn reaches_a_devirt_site(&self, engine: &mut Engine, canonical: ExprId) -> bool {
+        reachable_exprs(engine.body)
+            .into_iter()
+            .any(|call| self.devirt_site(engine, call) == Some(canonical))
     }
 }
 
 impl Rule for ClosureDevirtRule {
     /// `f(args)` where `f`'s value came from one functor → `$call(f, args)`.
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let ExprKind::IndirectCall { callee, args } = &engine.body.exprs[id].kind else {
+        let Some(canonical) = self.devirt_site(engine, id) else {
             return false;
         };
-        let (callee, args) = (*callee, args.clone());
-        let Some(canonical) = resolve_canonical(engine, callee, MAX_DEPTH) else {
+        let Some((local, name)) = functor_local(engine, canonical) else {
             return false;
         };
-        if !runs_before(engine, canonical, id) {
-            return false;
-        }
-        let Some((local, name, type_id)) = functor_local(engine, canonical) else {
-            return false;
+        let ExprKind::IndirectCall { args, .. } = &engine.body.exprs[id].kind else {
+            unreachable!("`devirt_site` matched an IndirectCall");
         };
-        let Some(target) = self.target(engine, canonical, args.len()) else {
-            return false;
-        };
+        let args = args.clone();
+        let target = self
+            .target(engine, canonical, args.len())
+            .expect("`devirt_site` found this target");
         let (func_id, params_is_mut) = (target.func_id, target.params_is_mut.clone());
+        let type_id = engine.locals()[local as usize].type_id;
         let span = engine.body.exprs[id].span;
         let receiver = engine.alloc_expr(ExprKind::Local { index: local, name }, type_id, span);
         let args = args
@@ -398,26 +344,5 @@ impl Rule for ClosureDevirtRule {
         kept.insert(at, bind);
         engine.set_block_stmts(id, kept);
         true
-    }
-}
-
-impl ClosureDevirtRule {
-    /// Whether some `IndirectCall` in the body dispatches through this wrapper.
-    /// Splitting one nothing devirtualizes would only add a binding.
-    fn reaches_a_devirt_site(&self, engine: &mut Engine, canonical: ExprId) -> bool {
-        let calls: Vec<(ExprId, Operand, usize)> = engine
-            .body
-            .exprs
-            .iter()
-            .filter_map(|(id, node)| match &node.kind {
-                ExprKind::IndirectCall { callee, args } => Some((id, *callee, args.len())),
-                _ => None,
-            })
-            .collect();
-        calls.into_iter().any(|(call, callee, arity)| {
-            resolve_canonical(engine, callee, MAX_DEPTH) == Some(canonical)
-                && runs_before(engine, canonical, call)
-                && self.target(engine, canonical, arity).is_some()
-        })
     }
 }

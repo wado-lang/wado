@@ -6,13 +6,13 @@
 
 use cranelift_entity::EntityRef;
 
-use crate::nir::{NirBinaryOp, NirFunction, NirUnaryOp};
+use crate::nir::{NirBinaryOp, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::tir::{TypeId, TypeTable};
 
-use super::arena_query::is_pure_expr;
+use super::arena_query::{is_addressed, is_pure_expr};
 use super::gate::{FunctionGate, GatedPass};
 use super::mod_ref::ModRef;
 use crate::nir_arena::Operand;
@@ -279,11 +279,6 @@ fn sole_value_use(engine: &mut Engine, local: u32) -> Option<ExprId> {
         use_id = Some(mention);
     }
     use_id
-}
-
-fn is_addressed(engine: &Engine, mention: ExprId) -> bool {
-    matches!(engine.parent_of(NodeRef::Expr(mention)), Some(NodeRef::Expr(p))
-        if matches!(&engine.body.exprs[p].kind, ExprKind::Unary { op: NirUnaryOp::Ref | NirUnaryOp::MutRef, .. }))
 }
 
 /// The innermost statement containing `expr`. Adjacency to the binding requires

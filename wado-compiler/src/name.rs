@@ -296,6 +296,12 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// The functor struct closure `functor_id` lowers to.
+#[must_use]
+pub fn closure_functor_type(module: &ModuleSource, functor_id: u32) -> FqTypeName {
+    FqTypeName::shape(module, &format!("{CLOSURE_STRUCT_PREFIX}{functor_id}"))
+}
+
 /// Field name of the `index`-th environment slot on a closure functor
 /// (`$capture_0`, `$capture_1`, …).
 #[must_use]
