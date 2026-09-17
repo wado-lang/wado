@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
-    SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
+    RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -54,7 +54,7 @@ struct Query<'a> {
     program: &'a Program,
     env: &'a Env,
     scope: ModuleId,
-    asking: Vec<(SolverType, TraitDeclId)>,
+    asking: Vec<(SolverType, TraitDeclId, Vec<SolverType>)>,
     /// A type this query answers about at the type itself, without inheriting
     /// its newtype base's impls. Selection asks this way so that a blanket
     /// whose bound only the base carries is a candidate at the base's level and
@@ -71,7 +71,13 @@ impl Query<'_> {
         trait_: TraitDeclId,
         args: &[SolverType],
     ) -> Option<Holds> {
-        if self.asking.iter().any(|(t, tr)| t == ty && *tr == trait_) {
+        // Keyed by the arguments too: the same trait asked at two
+        // instantiations is two questions, and only one of them may hold.
+        if self
+            .asking
+            .iter()
+            .any(|(t, tr, a)| t == ty && *tr == trait_ && a == args)
+        {
             return None;
         }
         let program = self.program;
@@ -126,7 +132,7 @@ impl Query<'_> {
             });
         }
 
-        self.asking.push((ty.clone(), trait_));
+        self.asking.push((ty.clone(), trait_, args.to_vec()));
         let answer = program
             .impls
             .iter()
@@ -1044,7 +1050,7 @@ mod tests {
         let mut p = Builder::default()
             .impl_(ImplDef {
                 params: vec![ParamDef {
-                    bounds: vec![MUL],
+                    bounds: vec![ParamBound::bare(MUL)],
                     pins: vec![Pin {
                         trait_: MUL,
                         assoc: OUTPUT,
@@ -1094,7 +1100,7 @@ mod tests {
             .impl_(ImplDef {
                 params: vec![
                     ParamDef {
-                        bounds: vec![MUL],
+                        bounds: vec![ParamBound::bare(MUL)],
                         pins: vec![Pin {
                             trait_: MUL,
                             assoc: OUTPUT,
@@ -1172,7 +1178,7 @@ mod tests {
             .impl_(ImplDef {
                 params: vec![
                     ParamDef {
-                        bounds: vec![ALPHA],
+                        bounds: vec![ParamBound::bare(ALPHA)],
                         pins: vec![Pin {
                             trait_: ALPHA,
                             assoc: FIELDS,

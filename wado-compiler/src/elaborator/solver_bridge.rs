@@ -1283,12 +1283,7 @@ impl SolverBridge {
         let module = self.lowering.known_module(scope.current_module_source)?;
         let args = wanted
             .iter()
-            .map(|name| {
-                let head = self
-                    .lowering
-                    .known_type(&DeclKey::Def(name.head().def()?))?;
-                Some(SolverType::Decl(head, Vec::new()))
-            })
+            .map(|name| self.wanted_arg(name))
             .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
@@ -1297,6 +1292,20 @@ impl SolverBridge {
             module,
             args,
         })
+    }
+
+    /// One argument a bound writes, as the solver reads it. Its own arguments
+    /// come with it, so `Eq<List<i32>>` does not lower as `Eq<List>`.
+    fn wanted_arg(&self, name: &FqTypeName) -> Option<SolverType> {
+        let head = self
+            .lowering
+            .known_type(&DeclKey::Def(name.head().def()?))?;
+        let args = name
+            .args()
+            .iter()
+            .map(|arg| self.wanted_arg(arg))
+            .collect::<Option<Vec<_>>>()?;
+        Some(SolverType::Decl(head, args))
     }
 
     /// The solver's answer to the question `type_implements_trait` just

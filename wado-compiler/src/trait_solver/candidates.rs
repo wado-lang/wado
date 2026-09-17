@@ -136,7 +136,8 @@ fn is_variadic(target: &SolverType) -> bool {
 #[cfg(test)]
 mod tests {
     use super::super::program::{
-        AssocId, ImplDef, ImplId, ImplOrigin, ModuleScope, ParamDef, Pin, TypeDeclId, TypeDef,
+        AssocId, ImplDef, ImplId, ImplOrigin, ModuleScope, ParamBound, ParamDef, Pin, TypeDeclId,
+        TypeDef,
     };
     use super::super::rank::{Selection, rank};
     use super::super::testing::{Builder, concrete, decl, generic, ref_to};
@@ -583,7 +584,7 @@ mod tests {
                 .concrete(LIMIT, decl(POINT))
                 .impl_(ImplDef {
                     params: vec![ParamDef {
-                        bounds: vec![LIMIT],
+                        bounds: vec![ParamBound::bare(LIMIT)],
                         pins: vec![Pin {
                             trait_: LIMIT,
                             assoc: AssocId(0),

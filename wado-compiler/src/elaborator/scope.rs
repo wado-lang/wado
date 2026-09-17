@@ -17,7 +17,7 @@ use super::Elaborator;
 use super::trait_env::InheritedBound;
 use crate::ast::AstId;
 use crate::defs::DefId;
-use crate::name::FqTraitName;
+use crate::name::{FqTraitName, FqTypeName};
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
@@ -108,10 +108,13 @@ impl TraitContext {
 }
 
 /// One open `type_implements_trait` question.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) struct TraitCheckFrame {
     pub(super) type_id: TypeId,
     pub(super) trait_: DefId,
+    /// The arguments the asking bound wrote. Part of the key: the same trait
+    /// at two instantiations is two questions.
+    pub(super) wanted: Vec<FqTypeName>,
     /// `Scope::member_edges` when the question was asked.
     pub(super) member_edges: u32,
 }

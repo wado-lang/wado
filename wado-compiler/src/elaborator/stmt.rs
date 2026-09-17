@@ -2043,7 +2043,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 | ResolvedType::Variant { .. }
                 | ResolvedType::Flags { .. }
                 | ResolvedType::Unit
-        );
+        ) || (matches!(type_table.get(head), ResolvedType::GenericInstance { .. })
+            && type_table.is_concrete(head));
         drop(type_table);
         if !settled {
             return None;

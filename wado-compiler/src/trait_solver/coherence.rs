@@ -256,7 +256,7 @@ mod tests {
         };
         let blanket = |bounds: [TraitDeclId; 2]| ImplDef {
             params: vec![ParamDef {
-                bounds: bounds.to_vec(),
+                bounds: bounds.map(ParamBound::bare).to_vec(),
                 pins: bounds.map(pin).to_vec(),
             }],
             ..concrete(TR, SolverType::Param(0))

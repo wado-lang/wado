@@ -1,0 +1,34 @@
+// A supertrait is checked at the arguments it writes. `Slot` answers
+// `Pick<i32>`, which is not the `Pick<String>` that `Text` requires.
+
+trait Pick<A = i32> {
+    fn pick(&self, a: &A) -> i32;
+}
+
+trait Text: Pick<String> {
+    fn text(&self) -> i32;
+}
+
+struct Slot {
+    v: i32,
+}
+
+impl Pick for Slot {
+    fn pick(&self, a: &i32) -> i32 {
+        return *a;
+    }
+}
+
+impl Text for Slot {
+    fn text(&self) -> i32 {
+        return self.v;
+    }
+}
+
+test "a supertrait writing an argument is not answered at another one" {
+    let s = Slot { v: 1 };
+    assert s.text() == 1;
+}
+
+__DATA__
+{"compile_error": "type 'Slot' implements trait 'Text' but not its supertrait 'Pick'"}

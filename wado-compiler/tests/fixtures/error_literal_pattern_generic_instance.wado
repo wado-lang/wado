@@ -1,0 +1,20 @@
+// A concrete generic instance judges a literal pattern like any other settled
+// type. Only an argument still to be decided leaves the question to the
+// instance.
+
+struct Pair<A> {
+    a: A,
+    b: A,
+}
+
+test "a string pattern needs a scrutinee that compares with a String" {
+    let p = Pair { a: 1, b: 2 };
+    let k = match p {
+        "---" => 1,
+        _ => 0,
+    };
+    assert k == 0;
+}
+
+__DATA__
+{"compile_error": "pattern mismatch: expected 'String', found 'Pair<i32>'"}

@@ -435,12 +435,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // The bound carries its own reference site, so which `Ord` it
             // means is the answer the table already recorded for it — not the
             // spelling, which two modules can share.
-            let bounds: Vec<(String, Option<DefId>)> = self
+            let bounds: Vec<(String, Option<DefId>, Vec<FqTypeName>)> = self
                 .trait_assoc_type_decl(&trait_name, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.fn_signature.is_none())
-                .map(|bound| (bound.name.clone(), self.bound_trait_def(bound.id)))
+                .map(|bound| {
+                    let (def, wanted) = match self.tysys.bound_written(bound) {
+                        Some((def, wanted)) => (Some(def), wanted),
+                        None => (None, Vec::new()),
+                    };
+                    (bound.name.clone(), def, wanted)
+                })
                 .collect();
             if bounds.is_empty() {
                 continue;
@@ -455,13 +461,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if self.tysys.type_table.borrow().contains_type_param(type_id) {
                 continue;
             }
-            for (bound_name, bound_def) in &bounds {
-                self.enforce_single_bound(
+            for (bound_name, bound_def, wanted) in &bounds {
+                self.enforce_single_bound_args(
                     type_id,
                     bound_name,
                     *bound_def,
                     &binding.name,
                     binding.span,
+                    wanted,
                 );
             }
         }
@@ -482,26 +489,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        let supertraits: Vec<(String, Option<DefId>)> = self
+        let supertraits: Vec<(String, Option<(DefId, Vec<FqTypeName>)>)> = self
             .tysys
             .trait_env
             .supertrait_closure(&trait_decl)
             .iter()
-            .map(|b| (b.bound.name.clone(), self.bound_trait_def(b.bound.id)))
+            .map(|b| (b.bound.name.clone(), self.tysys.bound_written(&b.bound)))
             .collect();
         if supertraits.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
-        for (supertrait, supertrait_def) in supertraits {
-            let Some(supertrait_def) = supertrait_def else {
+        for (supertrait, written) in supertraits {
+            let Some((supertrait_def, wanted)) = written else {
                 continue;
             };
-            if self.tysys.type_implements_trait(
+            if self.tysys.type_implements_trait_with_args(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 self_type,
                 supertrait_def,
+                &wanted,
             ) {
                 continue;
             }
@@ -613,7 +621,7 @@ impl TypeSystem {
         wanted: &[FqTypeName],
     ) -> bool {
         let resolved = self.type_table.borrow().get(type_id).clone();
-        let result = Self::asking(ctx, type_id, trait_, || {
+        let result = Self::asking(ctx, type_id, trait_, wanted, || {
             self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_, wanted)
         });
         self.check_solver_agreement(ctx, scope, type_id, trait_, wanted, result);
@@ -655,13 +663,21 @@ impl TypeSystem {
     /// `answer` under the recursion guard. A question already open answers
     /// without it: a repeat reached through a member is a recursive type and
     /// holds; one reached through bounds alone grounds nothing (WEP 2026-09-01).
-    fn asking(ctx: &Scope, type_id: TypeId, trait_: DefId, answer: impl FnOnce() -> bool) -> bool {
+    fn asking(
+        ctx: &Scope,
+        type_id: TypeId,
+        trait_: DefId,
+        wanted: &[FqTypeName],
+        answer: impl FnOnce() -> bool,
+    ) -> bool {
         let member_edges = ctx.member_edges.get();
+        // Keyed by the arguments too: the same trait asked at two
+        // instantiations is two questions, and only one of them may hold.
         let repeated = ctx
             .trait_check_stack
             .borrow()
             .iter()
-            .find(|f| f.type_id == type_id && f.trait_ == trait_)
+            .find(|f| f.type_id == type_id && f.trait_ == trait_ && f.wanted == wanted)
             .map(|open| member_edges > open.member_edges);
         if let Some(repeated) = repeated {
             return repeated;
@@ -669,6 +685,7 @@ impl TypeSystem {
         ctx.trait_check_stack.borrow_mut().push(TraitCheckFrame {
             type_id,
             trait_,
+            wanted: wanted.to_vec(),
             member_edges,
         });
         let result = answer();
@@ -738,7 +755,7 @@ impl TypeSystem {
             return true;
         }
         let receiver = self.type_table.borrow().impl_receiver_key(type_id);
-        Self::asking(ctx, type_id, trait_, || {
+        Self::asking(ctx, type_id, trait_, wanted, || {
             self.find_trait_impl_for_subject(
                 ctx,
                 scope,
