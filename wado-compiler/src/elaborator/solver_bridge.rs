@@ -1248,7 +1248,19 @@ impl SolverBridge {
                 let def = bound
                     .resolved
                     .or_else(|| tysys.resolutions.declared(bound.id))?;
-                ids.push(self.lowering.known_trait(def)?);
+                // A bound whose arguments the lowering cannot say leaves the
+                // whole scope outside what it states, rather than a bound that
+                // would answer at arguments it never read.
+                let args = tysys
+                    .bound_written(bound)?
+                    .args()
+                    .iter()
+                    .map(|arg| self.wanted_arg(arg))
+                    .collect::<Option<Vec<_>>>()?;
+                ids.push(ParamBound {
+                    trait_: self.lowering.known_trait(def)?,
+                    args,
+                });
             }
             env.param_bounds.push(ids);
         }
@@ -1455,7 +1467,7 @@ impl SolverBridge {
             .type_params
             .keys()
             .zip(&q.env.param_bounds)
-            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.0)).collect()))
+            .map(|(name, bounds)| (name, bounds.iter().map(|b| name_of(b.trait_.0)).collect()))
             .collect();
         let answer = holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args);
         let impls: Vec<_> = self

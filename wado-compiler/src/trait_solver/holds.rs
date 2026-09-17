@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
-    SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
+    RefRule, SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -47,6 +47,31 @@ pub fn holds_with_args(
         at_itself: None,
     }
     .holds(ty, trait_, args)
+}
+
+/// Whether a bound in force answers `trait_` at `wanted`.
+///
+/// A bare request asks for the declared defaults and any bound reaching the
+/// trait answers it, which is what lets a supertrait such as
+/// `AsStrSlice: Eq<String>` supply a bare `Eq`. A request that writes
+/// arguments is answered only by a bound on that same trait writing them too:
+/// a supertrait edge carries no arguments across, so it cannot answer one.
+fn bound_answers(
+    program: &Program,
+    bound: &ParamBound,
+    trait_: TraitDeclId,
+    wanted: &[SolverType],
+) -> bool {
+    if !program.bound_reaches(bound.trait_, trait_) {
+        return false;
+    }
+    if wanted.is_empty() || bound.trait_ != trait_ {
+        return true;
+    }
+    wanted
+        .iter()
+        .enumerate()
+        .all(|(i, want)| bound.args.get(i).is_none_or(|arg| arg == want))
 }
 
 /// One question and the questions open under it.
@@ -95,7 +120,7 @@ impl Query<'_> {
             && let Some(bounds) = self.env.param_bounds.get(*index as usize)
             && bounds
                 .iter()
-                .any(|&bound| program.bound_reaches(bound, trait_))
+                .any(|bound| bound_answers(program, bound, trait_, args))
         {
             return Some(Holds::default());
         }
@@ -463,7 +488,10 @@ mod tests {
 
     fn env(bounds: Vec<Vec<TraitDeclId>>) -> Env {
         Env {
-            param_bounds: bounds,
+            param_bounds: bounds
+                .into_iter()
+                .map(|b| b.into_iter().map(ParamBound::bare).collect())
+                .collect(),
         }
     }
 

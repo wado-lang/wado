@@ -3,6 +3,7 @@
 use crate::ast::{self, AstId, BinaryOp, UnaryOp};
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
+use crate::elaborator::synth::ArgSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
 use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -517,6 +518,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 let eq_method = self.operator_method_name(CompilerItem::Eq);
                 let ord_method = self.operator_method_name(CompilerItem::Ord);
+                let rhs_arg = self.tysys.type_table.borrow_mut().make_ref(right);
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq)
                     && let Some((bound_trait_name, info)) = {
                         let required = self.required_operator_trait(CompilerItem::Eq);
@@ -526,7 +528,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             left,
                             span,
                             required.as_ref(),
-                            None,
+                            ArgSource::Types(vec![rhs_arg]),
                         )
                     }
                 {
@@ -568,7 +570,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         left,
                         span,
                         required.as_ref(),
-                        None,
+                        ArgSource::Types(vec![rhs_arg]),
                     )
                 } {
                     let ord_trait_name = self
@@ -716,13 +718,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unwrap_or_default();
                 let operand_type_id = left;
                 let required = self.required_operator_trait(item);
+                let rhs_arg = self.tysys.type_table.borrow_mut().make_ref(right);
                 if let Some((found_trait, info)) = self.find_method_in_trait_bounds(
                     &bounds,
                     method_name,
                     left,
                     span,
                     required.as_ref(),
-                    None,
+                    ArgSource::Types(vec![rhs_arg]),
                 ) {
                     let return_type = self.operator_output_type(operand_type_id, &found_trait);
                     let resolved = ResolvedTraitMethod {
@@ -767,6 +770,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             // A type parameter dispatches through its bounds, as the arithmetic
             // operators do; the name-keyed lookup below reaches no impl for one.
+            let rhs_arg = self.tysys.type_table.borrow_mut().make_ref(right);
             if let ResolvedType::TypeParam { name, .. } = &left_type
                 && let Some(bounds) = self
                     .annotate_ctx
@@ -781,7 +785,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     left,
                     span,
                     Some(&required),
-                    None,
+                    ArgSource::Types(vec![rhs_arg]),
                 )
             {
                 let return_type = self.operator_output_type(left, &found_trait);
@@ -1150,7 +1154,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expr_type,
                     unary.span,
                     Some(&required),
-                    None,
+                    ArgSource::NoArguments,
                 )
             {
                 let return_type = self.operator_output_type(expr_type, &found_trait);

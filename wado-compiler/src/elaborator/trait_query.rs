@@ -24,7 +24,7 @@ use super::tysys::TypeSystem;
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
-use crate::elaborator::synth::{ArgClass, ArgProbe};
+use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
     get_type_name_static, header_answers_bound_args,
@@ -2095,7 +2095,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         span: Span,
         required_trait: Option<&RequiredTrait>,
-        probe: Option<&mut ArgProbe<'_>>,
+        args: ArgSource<'_, '_>,
     ) -> Option<(FqTraitName, MethodInfo)> {
         self.find_method_in_trait_bounds_with(
             bounds,
@@ -2104,7 +2104,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_type_id,
             span,
             required_trait,
-            probe,
+            args,
         )
     }
 
@@ -2115,7 +2115,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         candidates: Vec<(ast::TraitBound, DefId)>,
         method_name: &str,
         self_type_id: TypeId,
-        probe: Option<&mut ArgProbe<'_>>,
+        args: ArgSource<'_, '_>,
     ) -> Vec<(ast::TraitBound, DefId)> {
         let mut groups: Vec<Vec<(ast::TraitBound, DefId)>> = Vec::new();
         for (bound, key) in candidates {
@@ -2124,11 +2124,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 None => groups.push(vec![(bound, key)]),
             }
         }
-        let mut probe = probe;
+        let mut args = args;
         groups
             .into_iter()
             .map(|group| {
-                self.select_instantiation(group, method_name, self_type_id, probe.as_deref_mut())
+                self.select_instantiation(group, method_name, self_type_id, args.reborrow())
             })
             .collect()
     }
@@ -2141,16 +2141,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         group: Vec<(ast::TraitBound, DefId)>,
         method_name: &str,
         self_type_id: TypeId,
-        probe: Option<&mut ArgProbe<'_>>,
+        args: ArgSource<'_, '_>,
     ) -> (ast::TraitBound, DefId) {
         let written = group.iter().any(|(bound, _)| !bound.type_args.is_empty());
-        if group.len() > 1
-            && written
-            && let Some(probe) = probe
-        {
+        let mut args = args;
+        if group.len() > 1 && written && !args.is_empty() {
             // Classification costs something, so it waits for an overload set,
             // as `select_trait_match` makes it wait (WEP 2026-07-31).
-            let classes: Vec<ArgClass> = (0..probe.len()).map(|i| probe.class(self, i)).collect();
+            let classes: Vec<ArgClass> = (0..args.len()).map(|i| args.class(self, i)).collect();
             let admitted: Vec<usize> = (0..group.len())
                 .filter(|&i| {
                     let Some(params) =
@@ -2165,6 +2163,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .all(|(class, &param)| self.class_admits(param, class))
                 })
                 .collect();
+            // One exact answer decides on its own. A parameter that is the
+            // caller’s own type parameter is a bare slot to `class_admits`,
+            // which admits every argument, so without this tier an exactly
+            // matching instantiation never wins over a slot-shaped sibling.
+            let exact: Vec<usize> = admitted
+                .iter()
+                .copied()
+                .filter(|&i| self.exactly_admits(&group[i], method_name, self_type_id, &classes))
+                .collect();
+            if let [winner] = exact.as_slice() {
+                let mut group = group;
+                return group.swap_remove(*winner);
+            }
             // Unique-or-nothing, as among impls: several admitted candidates
             // select none, and the written bound answers below.
             if let [winner] = admitted.as_slice() {
@@ -2178,6 +2189,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or(0);
         let mut group = group;
         group.swap_remove(first_written)
+    }
+
+    /// Whether every class names exactly what the candidate takes there, with
+    /// no slot standing in. Argument passing’s one coercion still applies.
+    fn exactly_admits(
+        &mut self,
+        candidate: &(ast::TraitBound, DefId),
+        method_name: &str,
+        self_type_id: TypeId,
+        classes: &[ArgClass],
+    ) -> bool {
+        let Some(params) =
+            self.bound_param_types(&candidate.0, candidate.1, method_name, self_type_id)
+        else {
+            return false;
+        };
+        let tt = self.tysys.type_table.borrow();
+        classes.len() == params.len()
+            && classes.iter().zip(params.iter()).all(|(class, &param)| {
+                matches!(class, ArgClass::Exact(arg) if param_takes(&tt, param, *arg))
+            })
     }
 
     /// The value parameters `method_name` takes under `bound`, for selection.
@@ -2216,7 +2248,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         span: Span,
         required_trait: Option<&RequiredTrait>,
-        probe: Option<&mut ArgProbe<'_>>,
+        args: ArgSource<'_, '_>,
     ) -> Option<(FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bounds_with(bounds, known);
         // Which trait each bound means is settled once, here: a bound reached
@@ -2253,7 +2285,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }) && self.trait_declares_method_of(key, method_name)
             })
             .collect();
-        let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, probe);
+        let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
         let resolved = candidates.first().and_then(|(bound, key)| {
             self.trait_method_of(key, method_name)
                 .map(|found| (bound.clone(), *key, found))

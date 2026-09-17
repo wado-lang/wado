@@ -569,7 +569,7 @@ mod tests {
     fn a_bound_in_force_makes_a_blanket_a_candidate_for_a_parameter() {
         let p = program(Builder::default().bounded(TR, SolverType::Param(0), vec![LIMIT]));
         let env = Env {
-            param_bounds: vec![vec![LIMIT]],
+            param_bounds: vec![vec![ParamBound::bare(LIMIT)]],
         };
         let found = candidates(&p, &env, &SolverType::Param(0), M, HERE);
         assert_eq!(found.in_scope.len(), 1);

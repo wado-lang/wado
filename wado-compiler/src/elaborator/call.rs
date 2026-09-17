@@ -1,5 +1,6 @@
 //! Function call resolution.
 
+use crate::elaborator::synth::{ArgProbe, ArgSource};
 use std::cell::RefCell;
 
 use crate::hashmap::IndexMap;
@@ -3712,7 +3713,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_param_type_id,
                     call.span,
                     None,
-                    None,
+                    ArgSource::Exprs(&mut ArgProbe::new(&call.args, ctx)),
                 )
             }
         {

@@ -334,7 +334,9 @@ pub struct Program {
 /// and [`SolverType::Pack`], a pack's bound holding of each element.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Env {
-    pub param_bounds: Vec<Vec<TraitDeclId>>,
+    /// Each parameter's bounds, whole: a bound carries the arguments it writes,
+    /// which decide whether it answers a question at those arguments.
+    pub param_bounds: Vec<Vec<ParamBound>>,
 }
 
 impl Program {

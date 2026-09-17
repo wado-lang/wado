@@ -152,6 +152,54 @@ impl<'a> ArgProbe<'a> {
     }
 }
 
+/// What a site offers for choosing among a trait's instantiations.
+///
+/// Every variant is a statement: a site that selects on nothing says so by name,
+/// so no site can leave selection out by omission.
+pub(super) enum ArgSource<'probe, 'a> {
+    /// A call's argument expressions, classified on demand.
+    Exprs(&'probe mut ArgProbe<'a>),
+    /// Argument types already elaborated, as the callee will receive them.
+    Types(Vec<TypeId>),
+    /// The site passes no value argument, so nothing selects.
+    NoArguments,
+}
+
+impl<'a> ArgSource<'_, 'a> {
+    pub(super) fn len(&self) -> usize {
+        match self {
+            Self::Exprs(probe) => probe.len(),
+            Self::Types(types) => types.len(),
+            Self::NoArguments => 0,
+        }
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    pub(super) fn class<H: CompilerHost>(
+        &mut self,
+        elaborator: &mut Elaborator<'_, H>,
+        index: usize,
+    ) -> ArgClass {
+        match self {
+            Self::Exprs(probe) => probe.class(elaborator, index),
+            Self::Types(types) => ArgClass::Exact(types[index]),
+            Self::NoArguments => unreachable!("`NoArguments` has no argument at {index}"),
+        }
+    }
+
+    /// A shorter-lived borrow of the same source, for one step of a loop.
+    pub(super) fn reborrow(&mut self) -> ArgSource<'_, 'a> {
+        match self {
+            Self::Exprs(probe) => ArgSource::Exprs(probe),
+            Self::Types(types) => ArgSource::Types(types.clone()),
+            Self::NoArguments => ArgSource::NoArguments,
+        }
+    }
+}
+
 /// The names a pattern binds. Shares the walk with the or-pattern handler so
 /// one pattern shape cannot be a binder there and invisible here.
 fn pattern_binding_names(pattern: &ast::Pattern) -> Vec<String> {
@@ -177,7 +225,7 @@ fn condition_binding_names(condition: &ast::Condition) -> Vec<String> {
 /// Whether an argument of type `arg` answers a parameter of type `param`,
 /// argument passing's one coercion included: a `&mut T` argument answers a `&T`
 /// parameter, as [`unify`] binds it.
-fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
+pub(super) fn param_takes(tt: &TypeTable, param: TypeId, arg: TypeId) -> bool {
     param == arg
         || matches!(
             (tt.get(param), tt.get(arg)),

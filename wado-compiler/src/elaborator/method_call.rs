@@ -31,7 +31,7 @@ use crate::elaborator::call::slot_type_bindings;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sig;
-use crate::elaborator::synth::ArgProbe;
+use crate::elaborator::synth::{ArgProbe, ArgSource};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
 };
@@ -502,7 +502,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         span,
                         required_trait,
-                        Some(&mut probe),
+                        ArgSource::Exprs(&mut probe),
                     )
                 });
             if let Some((found_trait, info)) = from_bounds {
@@ -565,7 +565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         span,
                         required_trait,
-                        Some(&mut probe),
+                        ArgSource::Exprs(&mut probe),
                     )
                 }
             {
