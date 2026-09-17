@@ -462,11 +462,11 @@ fn supertrait_method_is_reachable_through_a_bound() {
     // `x.base()` resolves only if `T: Derived` elaborated to carry `Base`.
     compile_ok(
         r"
-trait Base {
+trait Base with () {
     fn base(&self) -> i32;
 }
 
-trait Derived: Base {
+trait Derived: Base with () {
     fn derived(&self) -> i32;
 }
 
