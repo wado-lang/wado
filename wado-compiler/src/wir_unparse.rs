@@ -699,6 +699,8 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I32Shl(a, b) => self.write_binop_op("<<", a, b),
             WirInstr::I32ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I32ShrU(a, b) => self.write_binop_op(">>u", a, b),
+            WirInstr::I32Rotl(a, b) => self.write_binop_op("rotl", a, b),
+            WirInstr::I32Rotr(a, b) => self.write_binop_op("rotr", a, b),
             WirInstr::I32Eq(a, b) => self.write_binop_op("==", a, b),
             WirInstr::I32Ne(a, b) => self.write_binop_op("!=", a, b),
             WirInstr::I32LtS(a, b) => self.write_binop_op("<", a, b),
@@ -741,6 +743,8 @@ impl<'a> WirUnparser<'a> {
             WirInstr::I64Shl(a, b) => self.write_binop_op("<<", a, b),
             WirInstr::I64ShrS(a, b) => self.write_binop_op(">>", a, b),
             WirInstr::I64ShrU(a, b) => self.write_binop_op(">>u", a, b),
+            WirInstr::I64Rotl(a, b) => self.write_binop_op("rotl", a, b),
+            WirInstr::I64Rotr(a, b) => self.write_binop_op("rotr", a, b),
             WirInstr::I64Eq(a, b) => self.write_binop_op("==", a, b),
             WirInstr::I64Ne(a, b) => self.write_binop_op("!=", a, b),
             WirInstr::I64LtS(a, b) => self.write_binop_op("<", a, b),
@@ -2275,9 +2279,10 @@ fn is_op_instr(instr: &WirInstr) -> bool {
         F32Add, F32Div, F32Eq, F32Ge, F32Gt, F32Le, F32Lt, F32Mul, F32Ne, F32Sub, F64Add, F64Div,
         F64Eq, F64Ge, F64Gt, F64Le, F64Lt, F64Mul, F64Ne, F64Sub, I32Add, I32And, I32DivS, I32DivU,
         I32Eq, I32Eqz, I32GeS, I32GeU, I32GtS, I32GtU, I32LeS, I32LeU, I32LtS, I32LtU, I32Mul,
-        I32Ne, I32Or, I32RemS, I32RemU, I32Shl, I32ShrS, I32ShrU, I32Sub, I32Xor, I64Add, I64And,
-        I64DivS, I64DivU, I64Eq, I64Eqz, I64GeS, I64GeU, I64GtS, I64GtU, I64LeS, I64LeU, I64LtS,
-        I64LtU, I64Mul, I64Ne, I64Or, I64RemS, I64RemU, I64Shl, I64ShrS, I64ShrU, I64Sub, I64Xor,
+        I32Ne, I32Or, I32RemS, I32RemU, I32Rotl, I32Rotr, I32Shl, I32ShrS, I32ShrU, I32Sub, I32Xor,
+        I64Add, I64And, I64DivS, I64DivU, I64Eq, I64Eqz, I64GeS, I64GeU, I64GtS, I64GtU, I64LeS,
+        I64LeU, I64LtS, I64LtU, I64Mul, I64Ne, I64Or, I64RemS, I64RemU, I64Rotl, I64Rotr, I64Shl,
+        I64ShrS, I64ShrU, I64Sub, I64Xor,
     };
     matches!(
         instr,
@@ -2294,6 +2299,8 @@ fn is_op_instr(instr: &WirInstr) -> bool {
             | I32Shl(..)
             | I32ShrS(..)
             | I32ShrU(..)
+            | I32Rotl(..)
+            | I32Rotr(..)
             | I32Eq(..)
             | I32Ne(..)
             | I32LtS(..)
@@ -2318,6 +2325,8 @@ fn is_op_instr(instr: &WirInstr) -> bool {
             | I64Shl(..)
             | I64ShrS(..)
             | I64ShrU(..)
+            | I64Rotl(..)
+            | I64Rotr(..)
             | I64Eq(..)
             | I64Ne(..)
             | I64LtS(..)

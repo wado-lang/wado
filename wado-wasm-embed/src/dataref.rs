@@ -33,6 +33,12 @@ impl DataRange {
         })
     }
 
+    /// The single byte at `offset`, which is what a pointer site occupies for
+    /// the purpose of asking whether the asset holds it.
+    pub(crate) fn at(segment: u32, offset: u32) -> Option<Self> {
+        DataRange::new(segment, offset, 1)
+    }
+
     pub(crate) fn end(&self) -> u32 {
         self.offset
             .checked_add(self.size)
@@ -40,11 +46,30 @@ impl DataRange {
     }
 }
 
-/// Function name -> the data ranges its body relocates against. Names are the
-/// asset's own, so a map and the module it describes only mean anything together.
+/// What one edge of the map reaches.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum Target {
+    Data(DataRange),
+    Func(String),
+}
+
+/// A pointer stored in the data itself, at `segment:offset`, and what it reaches.
+/// Keeping the bytes it occupies without keeping its target would leave live
+/// code dereferencing a range the prune took away.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct Pointer {
+    pub segment: u32,
+    pub offset: u32,
+    pub target: Target,
+}
+
+/// What a function reads, and what the data itself points at. Both are keyed by
+/// the asset's own names and segment indices, so a map and the module it
+/// describes only mean anything together.
 #[derive(Debug)]
 pub struct DataRefs {
     entries: BTreeMap<String, Vec<DataRange>>,
+    pointers: Vec<Pointer>,
 }
 
 impl DataRefs {
@@ -52,8 +77,12 @@ impl DataRefs {
         self.entries.get(func_name).map(Vec::as_slice)
     }
 
+    pub fn pointers(&self) -> &[Pointer] {
+        &self.pointers
+    }
+
     pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
+        self.entries.is_empty() && self.pointers.is_empty()
     }
 
     pub fn len(&self) -> usize {
@@ -68,11 +97,13 @@ impl DataRefs {
         ranges.iter().map(|r| r.size).sum()
     }
 
-    /// Parse the payload of a [`SECTION_NAME`] section: one function per line,
-    /// `<name> <segment>:<offset>+<size> ...`, fields separated by any run of
-    /// spaces so the emitted form can align its columns.
+    /// Parse the payload of a [`SECTION_NAME`] section. A line is either what a
+    /// function reads, `<name> <segment>:<offset>+<size> ...`, or where a
+    /// pointer sits and what it reaches, `@<segment>:<offset> <target>`. Fields
+    /// are separated by any run of spaces so the emitted form can align them.
     pub fn parse(text: &str) -> Result<Self, Error> {
         let mut entries = BTreeMap::new();
+        let mut pointers = Vec::new();
         for (number, line) in text.lines().enumerate() {
             let line = line.trim();
             if line.is_empty() {
@@ -80,44 +111,67 @@ impl DataRefs {
             }
             let malformed = || Error::DataRef(format!("line {}: malformed: {line}", number + 1));
             let mut fields = line.split_ascii_whitespace();
-            let name = fields.next().ok_or_else(malformed)?;
+            let head = fields.next().ok_or_else(malformed)?;
+            if let Some(site) = head.strip_prefix('@') {
+                let (segment, offset) = site.split_once(':').ok_or_else(malformed)?;
+                let target = fields.next().ok_or_else(malformed)?;
+                if fields.next().is_some() {
+                    return Err(malformed());
+                }
+                pointers.push(Pointer {
+                    segment: segment.parse().map_err(|_| malformed())?,
+                    offset: offset.parse().map_err(|_| malformed())?,
+                    target: parse_target(target).ok_or_else(malformed)?,
+                });
+                continue;
+            }
             let mut ranges = Vec::new();
             for field in fields {
-                let (segment, rest) = field.split_once(':').ok_or_else(malformed)?;
-                let (offset, size) = rest.split_once('+').ok_or_else(malformed)?;
-                ranges.push(
-                    DataRange::new(
-                        segment.parse().map_err(|_| malformed())?,
-                        offset.parse().map_err(|_| malformed())?,
-                        size.parse().map_err(|_| malformed())?,
-                    )
-                    .ok_or_else(malformed)?,
-                );
+                ranges.push(parse_range(field).ok_or_else(malformed)?);
             }
             if ranges.is_empty() {
                 return Err(malformed());
             }
             merge(&mut ranges);
-            if entries.insert(name.to_string(), ranges).is_some() {
-                return Err(Error::DataRef(format!("`{name}` is listed twice")));
+            if entries.insert(head.to_string(), ranges).is_some() {
+                return Err(Error::DataRef(format!("`{head}` is listed twice")));
             }
         }
         // Indistinguishable from a map that failed to resolve, and honouring it
         // prunes every data segment away. An asset with nothing to say carries
         // no section at all.
-        if entries.is_empty() {
+        if entries.is_empty() && pointers.is_empty() {
             return Err(Error::DataRef("names no function".into()));
         }
-        Ok(DataRefs { entries })
+        pointers.sort_by_key(|p| (p.segment, p.offset));
+        pointers.dedup();
+        Ok(DataRefs { entries, pointers })
     }
 
     /// The payload [`parse`](Self::parse) reads, ordered by the first offset so
-    /// the map reads as a partition of the segment, and column-aligned.
+    /// the map reads as a partition of the segment, and column-aligned. The
+    /// pointer lines follow, in address order.
     pub fn to_text(&self) -> String {
         let mut rows: Vec<(&str, &Vec<DataRange>)> =
             self.entries.iter().map(|(n, r)| (n.as_str(), r)).collect();
         rows.sort_by_key(|(name, ranges)| (ranges[0], *name));
-        let width = rows.iter().map(|(name, _)| name.len()).max().unwrap_or(0);
+        let sites: Vec<String> = self
+            .pointers
+            .iter()
+            .map(|p| format!("@{}:{}", p.segment, p.offset))
+            .collect();
+        // Aligning to the longest name pads every line to it, and a mangled
+        // Rust symbol can run past a hundred characters. Past a line's worth a
+        // name gets one space: the padding costs the reader more than the
+        // columns buy.
+        const ALIGN_CAP: usize = 72;
+        let width = rows
+            .iter()
+            .map(|(name, _)| name.len())
+            .chain(sites.iter().map(String::len))
+            .filter(|len| *len <= ALIGN_CAP)
+            .max()
+            .unwrap_or(0);
 
         let mut text = String::new();
         for (name, ranges) in rows {
@@ -128,7 +182,33 @@ impl DataRefs {
             }
             text.push('\n');
         }
+        for (site, pointer) in sites.iter().zip(&self.pointers) {
+            let target = match &pointer.target {
+                Target::Data(r) => format!("@{}:{}+{}", r.segment, r.offset, r.size),
+                Target::Func(name) => name.clone(),
+            };
+            writeln!(text, "{site:width$} {target}").expect("writing to a String cannot fail");
+        }
         text
+    }
+}
+
+fn parse_range(field: &str) -> Option<DataRange> {
+    let (segment, rest) = field.split_once(':')?;
+    let (offset, size) = rest.split_once('+')?;
+    DataRange::new(
+        segment.parse().ok()?,
+        offset.parse().ok()?,
+        size.parse().ok()?,
+    )
+}
+
+/// `@<segment>:<offset>+<size>` is a range, and anything else names a function.
+/// The `@` tells them apart, since a WIT-derived symbol carries `:` itself.
+fn parse_target(field: &str) -> Option<Target> {
+    match field.strip_prefix('@') {
+        Some(range) => parse_range(range).map(Target::Data),
+        None => Some(Target::Func(field.to_string())),
     }
 }
 
@@ -151,11 +231,10 @@ fn merge(ranges: &mut Vec<DataRange>) {
 
 /// Resolve the map from a module wasm-ld linked with `--emit-relocs`.
 ///
-/// Only `reloc.CODE` is read: an entry there names a data symbol, and the byte
-/// it patches locates the function that names it. A relocation in the data
-/// section would mean a pointer stored in the data itself — a data-to-data or
-/// data-to-function edge this map cannot express — so one is an error rather
-/// than something to resolve halfway.
+/// A `reloc.CODE` entry names a data symbol, and the byte it patches locates the
+/// function that names it. A `reloc.DATA` entry is a pointer stored in the data
+/// itself: the byte it patches locates the segment and offset, and the symbol it
+/// names is what the pointer reaches — another data range, or a function.
 pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     use wasmparser::{Payload, RelocSectionReader};
 
@@ -167,7 +246,9 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     let mut code_section = None;
     let mut data_section = None;
     let mut code_range = 0..0;
+    let mut data_range = 0..0;
     let mut bodies: Vec<std::ops::Range<usize>> = Vec::new();
+    let mut segments: Vec<std::ops::Range<usize>> = Vec::new();
     let mut imported_funcs = 0;
     let mut linking = None;
     let mut relocs = Vec::new();
@@ -195,7 +276,16 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
                 code_range = range;
             }
             Payload::CodeSectionEntry(body) => bodies.push(body.range()),
-            Payload::DataSection(_) => data_section = Some(index),
+            Payload::DataSection(reader) => {
+                data_section = Some(index);
+                data_range = reader.range();
+                for data in reader {
+                    let data = data?;
+                    // The payload's own bytes, which is what an offset into the
+                    // section lands in.
+                    segments.push(data.range.end - data.data.len()..data.range.end);
+                }
+            }
             Payload::CustomSection(reader) if reader.name() == "linking" => {
                 linking = Some((reader.data(), reader.data_offset()));
             }
@@ -223,24 +313,43 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     let (data, offset) = linking.ok_or_else(|| {
         Error::DataRef("no `linking` section: link the asset with `--emit-relocs`".into())
     })?;
-    let symbols = data_symbols(data, offset)?;
+    let symbols = symbol_targets(data, offset, &names)?;
 
     let mut entries: BTreeMap<String, Vec<DataRange>> = BTreeMap::new();
+    let mut pointers = Vec::new();
     for (data, offset) in relocs {
         let reader = RelocSectionReader::new(wasmparser::BinaryReader::new(data, offset))?;
-        if Some(reader.section_index()) == data_section {
-            return Err(Error::DataRef(
-                "`reloc.DATA` names a pointer stored in the data itself, which the \
-                 function-to-data map cannot express"
-                    .into(),
-            ));
-        }
-        if Some(reader.section_index()) != code_section {
+        let section = Some(reader.section_index());
+        if section != code_section && section != data_section {
             continue;
         }
         for entry in reader.entries() {
             let entry = entry?;
-            let Some(range) = symbols.get(&entry.index) else {
+            let Some(target) = symbols.get(&entry.index) else {
+                continue;
+            };
+            if section == data_section {
+                let position = data_range.start + entry.offset as usize;
+                let (segment, payload) = segments
+                    .iter()
+                    .enumerate()
+                    .find(|(_, payload)| payload.contains(&position))
+                    .ok_or_else(|| {
+                        Error::DataRef(format!(
+                            "relocation at data offset {} falls outside every segment",
+                            entry.offset
+                        ))
+                    })?;
+                pointers.push(Pointer {
+                    segment: segment as u32,
+                    offset: (position - payload.start) as u32,
+                    target: target.clone(),
+                });
+                continue;
+            }
+            // Only a data target says which bytes a function reads; a call
+            // relocation is an edge the code walk already follows.
+            let Target::Data(range) = target else {
                 continue;
             };
             let position = code_range.start + entry.offset as usize;
@@ -265,12 +374,19 @@ pub fn resolve(wasm: &[u8]) -> Result<DataRefs, Error> {
     for ranges in entries.values_mut() {
         merge(ranges);
     }
-    Ok(DataRefs { entries })
+    pointers.sort_by_key(|p| (p.segment, p.offset));
+    pointers.dedup();
+    Ok(DataRefs { entries, pointers })
 }
 
-/// The range each data symbol of the `linking` section defines, by symbol
-/// index. A relocation names one of these.
-fn data_symbols(data: &[u8], offset: usize) -> Result<BTreeMap<u32, DataRange>, Error> {
+/// What each symbol of the `linking` section reaches, by symbol index: the range
+/// a data symbol defines, or the name of a function symbol. A relocation names
+/// one of these.
+fn symbol_targets(
+    data: &[u8],
+    offset: usize,
+    names: &BTreeMap<u32, &str>,
+) -> Result<BTreeMap<u32, Target>, Error> {
     use wasmparser::{Linking, LinkingSectionReader, SymbolInfo};
 
     let mut symbols = BTreeMap::new();
@@ -280,25 +396,36 @@ fn data_symbols(data: &[u8], offset: usize) -> Result<BTreeMap<u32, DataRange>, 
             continue;
         };
         for (index, symbol) in map.into_iter().enumerate() {
-            let SymbolInfo::Data {
-                symbol: Some(defined),
-                ..
-            } = symbol?
-            else {
-                continue;
+            let target = match symbol? {
+                SymbolInfo::Data {
+                    symbol: Some(defined),
+                    ..
+                } => {
+                    if defined.size == 0 {
+                        continue;
+                    }
+                    Target::Data(
+                        DataRange::new(defined.index, defined.offset, defined.size).ok_or_else(
+                            || {
+                                Error::DataRef(format!(
+                                    "symbol {index} spans {} bytes from {} of segment {}, which \
+                                     the address space cannot hold",
+                                    defined.size, defined.offset, defined.index
+                                ))
+                            },
+                        )?,
+                    )
+                }
+                // A function symbol is named by the `name` section, which is
+                // what the emitted map keys functions by. One the section does
+                // not name is one no pointer can be checked against.
+                SymbolInfo::Func { index: func, .. } => match names.get(&func) {
+                    Some(name) => Target::Func((*name).to_string()),
+                    None => continue,
+                },
+                _ => continue,
             };
-            if defined.size == 0 {
-                continue;
-            }
-            let range =
-                DataRange::new(defined.index, defined.offset, defined.size).ok_or_else(|| {
-                    Error::DataRef(format!(
-                        "symbol {index} spans {} bytes from {} of segment {}, which the \
-                         address space cannot hold",
-                        defined.size, defined.offset, defined.index
-                    ))
-                })?;
-            symbols.insert(index as u32, range);
+            symbols.insert(index as u32, target);
         }
     }
     Ok(symbols)

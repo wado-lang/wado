@@ -63,8 +63,11 @@ Short-circuits are the same corollary seen from the other side. A capture is
 **unconditional** when no short-circuit lies between it and the condition root. A
 capture below one is **conditional** and is taken where the operand sits, so the
 short-circuit still decides whether it runs. The boundaries are the right operand
-of `&&` and `||`, and every operand of a comparison chain past the first
-comparison (`a < b < c` runs as `(a < b) && (b < c)`).
+of `&&` and `||`. A comparison chain is not one: it evaluates every operand, so
+a failed `0 <= i < n` reports `n` as well as `i`.
+
+A chain's middle operand stands in two comparisons and is reported once, because
+it is evaluated once: `assert a < mid() < b` takes a single slot for `mid()`.
 
 ### 2. Rendering reports reach, not just value
 
@@ -149,6 +152,13 @@ not yet reach — a defect or an open question, never a boundary.
 
       A `Spread` needs nothing: it only ever sits inside a literal the scan
       already walks.
+
+- [ ] **Say which half of a comparison chain failed.** A chain renders its
+      operands and no per-comparison result, since the comparisons are the
+      chain's own and not operands the source wrote. Measured: `0 <= a < b`
+      takes one slot per operand, where `0 <= a && a < b` also renders
+      `0 <= a`. A reader infers the failing half from the values. Whether a
+      chain should report each comparison is undecided, so this stays unpinned.
 
 ## Consequences
 

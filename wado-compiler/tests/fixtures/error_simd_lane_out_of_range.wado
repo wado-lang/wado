@@ -1,0 +1,14 @@
+// A SIMD lane index is a Wasm immediate, so one naming a lane the vector does
+// not have cannot be lowered. It used to reach codegen and panic the compiler
+// with an invalid module; the elaborator names it instead.
+use { i8x16 } from "core:simd";
+
+export fn run() {
+    let v = i8x16::splat(3);
+    assert builtin::i8x16_extract_lane_u(99, v as v128) == 3;
+}
+
+__DATA__
+{
+    "compile_error": "lane index out of range for `builtin::i8x16_extract_lane_u`: 99 (0..16)"
+}

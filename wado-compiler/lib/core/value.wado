@@ -257,8 +257,8 @@ impl Visitor for ValueVisitor {
         return Result::Ok(Value::Float(v));
     }
 
-    fn visit_string(&mut self, v: String) -> Result<Value, DeserializeError> {
-        return Result::Ok(Value::String(v));
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Value, DeserializeError> {
+        return Result::Ok(Value::String(v.to_string()));
     }
 
     fn visit_bytes(&mut self, v: ByteList) -> Result<Value, DeserializeError> {
@@ -314,7 +314,7 @@ impl Visitor for ValueVisitor {
 /// inherent `impl` on a variant.
 fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
     match value {
-        Null => f.write_str(&"null"),
+        Null => f.write_str("null"),
         Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
         Int(n) => (*n).inspect(f),
         UInt(n) => (*n).inspect(f),
@@ -323,12 +323,12 @@ fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
         Float(n) => (*n).inspect(f),
         String(s) => (*s).inspect(f),
         Bytes(b) => {
-            f.write_str(&"0x");
+            f.write_str("0x");
             f.write_str(&b.to_hex());
         },
         List(arr) => {
             if arr.is_empty() {
-                f.write_str(&"[]");
+                f.write_str("[]");
                 return;
             }
             f.open_brace("[");
@@ -341,22 +341,22 @@ fn inspect_value_alternate(value: &Value, f: &mut Formatter) {
         },
         Object(map) => {
             if map.is_empty() {
-                f.write_str(&"{}");
+                f.write_str("{}");
                 return;
             }
             f.open_brace("{");
             for let [k, v] of map.entries() {
                 f.write_newline_indent();
                 k.inspect(f);
-                f.write_str(&": ");
+                f.write_str(": ");
                 v.inspect(f);
                 f.write_char(',');
             }
             f.close_brace("}");
         },
-        Undefined => f.write_str(&"undefined"),
+        Undefined => f.write_str("undefined"),
         Unknown(b) => {
-            f.write_str(&"unknown(0x");
+            f.write_str("unknown(0x");
             f.write_str(&b.to_hex());
             f.write_char(')');
         },
@@ -370,7 +370,7 @@ impl Inspect for Value {
             return;
         }
         match self {
-            Null => f.write_str(&"null"),
+            Null => f.write_str("null"),
             Bool(b) => f.write_str(&if *b { "true" } else { "false" }),
             Int(n) => (*n).inspect(f),
             UInt(n) => (*n).inspect(f),
@@ -379,14 +379,14 @@ impl Inspect for Value {
             Float(n) => (*n).inspect(f),
             String(s) => (*s).inspect(f),
             Bytes(b) => {
-                f.write_str(&"0x");
+                f.write_str("0x");
                 f.write_str(&b.to_hex());
             },
             List(arr) => {
                 f.write_char('[');
                 for let mut i = 0; i < arr.len(); i += 1 {
                     if i > 0 {
-                        f.write_str(&", ");
+                        f.write_str(", ");
                     }
                     arr[i].inspect(f);
                 }
@@ -397,18 +397,18 @@ impl Inspect for Value {
                 let mut first = true;
                 for let [k, v] of map.entries() {
                     if !first {
-                        f.write_str(&", ");
+                        f.write_str(", ");
                     }
                     first = false;
                     k.inspect(f);
-                    f.write_str(&": ");
+                    f.write_str(": ");
                     v.inspect(f);
                 }
                 f.write_char('}');
             },
-            Undefined => f.write_str(&"undefined"),
+            Undefined => f.write_str("undefined"),
             Unknown(b) => {
-                f.write_str(&"unknown(0x");
+                f.write_str("unknown(0x");
                 f.write_str(&b.to_hex());
                 f.write_char(')');
             },
@@ -514,11 +514,11 @@ impl SerializeMap for ValueMapSerializer {
 }
 
 impl SerializeStruct for ValueStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         let mut v: Value = Value::Null;
         let mut ser = ValueSerializer { out: &mut v };
         value.serialize(&mut ser)?;
-        self.entries[*name] = v;
+        self.entries[name.to_string()] = v;
         return Result::Ok(());
     }
 
@@ -604,8 +604,8 @@ impl Serializer for ValueSerializer {
         return Result::Ok(());
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        *self.out = Value::String(*v);
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        *self.out = Value::String(v.to_string());
         return Result::Ok(());
     }
 
@@ -635,32 +635,32 @@ impl Serializer for ValueSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<ValueStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<ValueStructSerializer, SerializeError> {
         return Result::Ok(ValueStructSerializer {
             out: self.out,
             entries: TreeMap::<String, Value>::new(),
         });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
-        *self.out = Value::String(*variant_name);
+        *self.out = Value::String(variant_name.to_string());
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<ValueVariantSerializer, SerializeError> {
         return Result::Ok(ValueVariantSerializer {
             out: self.out,
-            name: *variant_name,
+            name: variant_name.to_string(),
             payloads: [],
         });
     }

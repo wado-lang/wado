@@ -95,7 +95,7 @@ which is unrecoverable unlike an error.
 
 ## Functions
 
-### `pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError>`
+### `pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) -> Result<(), DeserializeError>`
 
 Applies `policy` to a key the wire already wrote. Detecting the repeat is
 the caller's job: a struct sees a filled slot, a map asks `try_insert`.
@@ -106,7 +106,7 @@ One nesting level deeper, or `DepthLimitExceeded` at the limit. Threaded as
 a value, so there is nothing to decrement and a format cannot leave the
 count unbalanced; each picks its own `max_depth` and container boundaries.
 
-### `pub fn apply_case(style: CaseStyle, s: String) -> String`
+### `pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String`
 
 Apply a `CaseStyle` to an identifier. `Identity` returns `s` unchanged.
 
@@ -142,7 +142,7 @@ else the type's `name_policy` applies, else identity.
 
 ### `pub trait SerializeStruct`
 
-#### `fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>`
+#### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
 `#[compiler_item("serialize_struct_field")]`
 
@@ -182,7 +182,7 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-#### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+#### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 #### `fn is_human_readable(&self) -> bool`
 
@@ -208,19 +208,31 @@ with no distinct byte-string form keeps working unchanged.
 
 `#[compiler_item("serializer_begin_seq")]`
 
+<<<<<<< HEAD
 #### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>`
 
 #### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
 
 `#[compiler_item("serializer_begin_struct")]`
+||||||| 5708464fb8e
+#### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
+=======
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
+>>>>>>> origin/main
 
-#### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+#### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("serializer_serialize_unit_variant")]`
 
 #### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
 
 `#[compiler_item("serializer_begin_variant")]`
+||||||| 5708464fb8e
+#### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
+=======
+#### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
+>>>>>>> origin/main
 
 ### `pub trait Serialize`
 
@@ -336,7 +348,7 @@ visitor that only cares about JSON-style numbers keeps working.
 
 #### `fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError>`
 
-#### `fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>`
+#### `fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Self::Value, DeserializeError>`
 
 #### `fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError>`
 
@@ -399,8 +411,15 @@ What this format does when the wire repeats a field or key.
 
 `#[compiler_item("deserializer_begin_seq")]`
 
+<<<<<<< HEAD
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
+||||||| 5708464fb8e
+#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
+=======
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 #### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
 `#[compiler_item("deserializer_begin_struct")]`
@@ -408,6 +427,11 @@ What this format does when the wire repeats a field or key.
 #### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 
 `#[compiler_item("deserializer_begin_variant")]`
+||||||| 5708464fb8e
+#### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
+=======
+#### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
+>>>>>>> origin/main
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
@@ -436,23 +460,23 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `offset: i64`
 
-#### `pub fn unexpected_type(msg: String, offset: i64) -> DeserializeError`
+#### `pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
-#### `pub fn missing_field(name: String) -> DeserializeError`
+#### `pub fn missing_field<S: AsStrSlice>(name: S) -> DeserializeError`
 
-#### `pub fn invalid_value(msg: String, offset: i64) -> DeserializeError`
+#### `pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
-#### `pub fn malformed(msg: String, offset: i64) -> DeserializeError`
+#### `pub fn malformed<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
 #### `pub fn eof(offset: i64) -> DeserializeError`
 
 #### `pub fn trailing(offset: i64) -> DeserializeError`
 
-#### `pub fn overflow(msg: String, offset: i64) -> DeserializeError`
+#### `pub fn overflow<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
-#### `pub fn depth_limit(msg: String, offset: i64) -> DeserializeError`
+#### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
-#### `pub fn duplicate_field(name: String) -> DeserializeError`
+#### `pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError`
 
 ### `pub struct IgnoredAny`
 

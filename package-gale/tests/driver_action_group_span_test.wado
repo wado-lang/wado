@@ -7,54 +7,54 @@ use gs from "./grammars/wado_group_span.g4"
     };
 
 test "a prequel reads the span of a call inside a group" {
-    let r = gs::parse_whole(&"aab");
+    let r = gs::parse_whole("aab");
     assert r.ok(), "clean parse";
     assert r.output == "aa", `output: '${r.output}'`;
 }
 
 test "an @init reads the span of a call it runs before" {
-    let r = gs::parse_before(&"aa");
+    let r = gs::parse_before("aa");
     assert r.ok(), "clean parse";
     // ANTLR's `$r` is null there; the unassigned range renders as empty text.
     assert r.output.is_empty(), `output: '${r.output}'`;
 }
 
 test "an @after reads the span of a call inside a loop" {
-    let r = gs::parse_loop_span(&"aabaab");
+    let r = gs::parse_loop_span("aabaab");
     assert r.ok(), "clean parse";
     assert r.output == "aa", `output: '${r.output}'`;
 }
 
 test "an @after reads the span of a call two groups deep" {
-    let r = gs::parse_deep(&"aabcd");
+    let r = gs::parse_deep("aabcd");
     assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
     assert r.output == "aa", `output: '${r.output}'`;
 }
 
 test "an action inside a group reads the rule's own span" {
-    let r = gs::parse_group_text(&"a c");
+    let r = gs::parse_group_text("a c");
     assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
     assert r.output == "a", `output: '${r.output}'`;
 
     // `$text` is what the rule has consumed so far, so each iteration sees one
     // more `A` than the last.
-    let looped = gs::parse_loop_text(&"a a c");
+    let looped = gs::parse_loop_text("a a c");
     assert looped.ok(), `clean parse: ${looped.diagnostics.len()} diagnostics`;
     assert looped.output == "aaa", `output: '${looped.output}'`;
 }
 
 test "a rule-call argument reads a capture" {
-    let r = gs::parse_arg_reader(&"aab");
+    let r = gs::parse_arg_reader("aab");
     assert r.ok(), `clean parse: ${r.diagnostics.len()} diagnostics`;
     assert r.output == "aa", `output: '${r.output}'`;
 }
 
 test "an action in an optional group renders that call's node" {
-    let taken = gs::parse_opt(&"aab");
+    let taken = gs::parse_opt("aab");
     assert taken.ok(), "clean parse with the optional present";
     assert taken.output == "(a a a)", `output: '${taken.output}'`;
 
-    let skipped = gs::parse_opt(&"b");
+    let skipped = gs::parse_opt("b");
     assert skipped.ok(), "clean parse with the optional absent";
     assert skipped.output == "", `output: '${skipped.output}'`;
 }

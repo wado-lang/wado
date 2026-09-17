@@ -3391,7 +3391,7 @@ fn needs_parens(expr: &Expr, parent_op: BinaryOp, is_left: bool) -> bool {
                 return true;
             }
             // Comparison operators chain instead of associating: `a == b == c`
-            // parses as the 3-way chain `a == b && b == c`, and mixing groups
+            // parses as the 3-way chain `(a == b) & (b == c)`, and mixing groups
             // (`a < b < c == d`) is a parse error. A comparison nested as
             // either operand of another comparison must keep its parens, or the
             // round-trip silently rewrites the meaning. The same-precedence arm

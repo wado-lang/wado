@@ -7,7 +7,7 @@
 use crate::name::RefKind;
 use crate::nir::NirUnaryOp;
 use crate::nir_arena::{
-    BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtKind,
+    BlockId, Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::tir::{TypeId, TypeTable};
 
@@ -57,36 +57,60 @@ pub(super) fn block_shape(body: &Body, e: ExprId) -> Option<(BlockId, Option<&st
     }
 }
 
-/// The global a block materializes: exactly `{ G = v; G }`, the shape
-/// constant-object globalization leaves where it names a constant at a use site.
-///
-/// One recognizer for two consumers, which must agree: the store inside the pair
-/// does not refuse the region around it, and the pair itself is not a region.
+/// The globals a block stores into directly, each stored exactly once. Stored
+/// twice is a mutation rather than a materialization, and is left out.
 #[must_use]
-pub fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalKey> {
-    let [set, get] = body.blocks[block].stmts.as_slice() else {
-        return None;
-    };
-    let (StmtKind::Expr(set), StmtKind::Expr(get)) =
-        (&body.stmts[*set].kind, &body.stmts[*get].kind)
-    else {
+pub(super) fn materialized_globals(body: &Body, block: BlockId) -> Vec<niri::GlobalKey> {
+    let mut once: Vec<niri::GlobalKey> = Vec::new();
+    let mut twice: Vec<niri::GlobalKey> = Vec::new();
+    for stmt in &body.blocks[block].stmts {
+        let Some(key) = stmt_global_store(body, *stmt) else {
+            continue;
+        };
+        if once.contains(&key) {
+            twice.push(key);
+        } else {
+            once.push(key);
+        }
+    }
+    once.retain(|key| !twice.contains(key));
+    once
+}
+
+/// The global a statement stores into, when that is all the statement does.
+fn stmt_global_store(body: &Body, stmt: StmtId) -> Option<niri::GlobalKey> {
+    let StmtKind::Expr(e) = &body.stmts[stmt].kind else {
         return None;
     };
     let ExprKind::GlobalVarSet {
         module_source,
         name,
         ..
-    } = &body.exprs[set.as_expr()?].kind
+    } = &body.exprs[e.as_expr()?].kind
     else {
         return None;
     };
+    Some((module_source.clone(), name.clone()))
+}
+
+/// The global a block materializes: exactly `{ G = v; G }`, the shape
+/// constant-object globalization leaves where it names a constant at a use site.
+#[must_use]
+fn materialization_pair(body: &Body, block: BlockId) -> Option<niri::GlobalKey> {
+    let [set, get] = body.blocks[block].stmts.as_slice() else {
+        return None;
+    };
+    let stored = stmt_global_store(body, *set)?;
+    let StmtKind::Expr(get) = &body.stmts[*get].kind else {
+        return None;
+    };
     let read = global_mention(body, get.as_expr()?)?;
-    (read == (module_source.clone(), name.clone())).then_some(read)
+    (read == stored).then_some(read)
 }
 
 /// The global an expression names, whether it reads or writes it.
 #[must_use]
-pub fn global_mention(body: &Body, e: ExprId) -> Option<niri::GlobalKey> {
+pub(super) fn global_mention(body: &Body, e: ExprId) -> Option<niri::GlobalKey> {
     match &body.exprs[e].kind {
         ExprKind::GlobalVarGet {
             module_source,

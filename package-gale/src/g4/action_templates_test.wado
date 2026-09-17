@@ -1,6 +1,6 @@
 use { expand_action_templates } from "./action_templates.wado";
 
-fn expand(src: &String) -> String {
+fn expand<S: AsStrSlice>(src: S) -> String {
     let outcome = expand_action_templates(src);
     assert outcome.warnings.is_empty(), `unexpected warnings: ${outcome.warnings:?}`;
     return outcome.text;

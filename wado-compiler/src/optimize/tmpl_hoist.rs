@@ -1001,18 +1001,13 @@ fn extract_fmt_candidates(
             };
             let indent_field_index = *indent_field_index;
 
-            // Verify all non-buf fields are constant (literals)
             let all_const = ff.fields.iter().all(|(name, _, value)| {
-                if name == FormatterField::Buf.field_name() {
-                    return true;
-                }
-                is_constant_operand(engine.body, *value)
+                name == FormatterField::Buf.field_name() || is_literal_field(engine.body, *value)
             });
             if !all_const {
                 continue;
             }
 
-            // Verify the Formatter type is a struct
             let resolved = type_table.get(ff.value_type_id);
             if !matches!(resolved, ResolvedType::Struct { .. }) {
                 continue;
@@ -1307,18 +1302,11 @@ fn buf_field_references_local(
     }
 }
 
-/// Check if an expression is a compile-time constant (literal).
-fn is_constant_expr(body: &Body, e: ExprId) -> bool {
-    matches!(
-        &body.exprs[e].kind,
-            | ExprKind::EnumConstruct { .. }
-    )
-}
-
-/// Operand form of [`is_constant_expr`]: a promoted scalar (`Operand::Value`)
-/// is always a compile-time constant.
-fn is_constant_operand(body: &Body, op: Operand) -> bool {
-    op.as_expr().is_none_or(|e| is_constant_expr(body, e))
+/// Whether a `Formatter` field holds a literal: a promoted scalar, or the
+/// `Alignment` case `align` carries.
+fn is_literal_field(body: &Body, op: Operand) -> bool {
+    op.as_expr()
+        .is_none_or(|e| matches!(&body.exprs[e].kind, ExprKind::EnumConstruct { .. }))
 }
 
 /// Whether `expr` is an `array_new<u8>(N)` call carrying a capacity argument.

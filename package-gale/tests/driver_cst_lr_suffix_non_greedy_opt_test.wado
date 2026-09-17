@@ -9,25 +9,25 @@ use g from "./grammars/lr_suffix_non_greedy_opt.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_suffix_non_greedy_opt" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "no suffix: the else belongs to the caller" {
-    assert_tree(&"a else c", &"(s (e a) else c)");
+    assert_tree("a else c", "(s (e a) else c)");
 }
 
 test "the suffix's ?? skips so the caller gets its else" {
-    assert_tree(&"a if b else c", &"(s (e (e a) if (e b)) else c)");
+    assert_tree("a if b else c", "(s (e (e a) if (e b)) else c)");
 }
 
 test "the suffix's ?? enters when a second else covers the caller" {
-    assert_tree(&"a if b else c else d", &"(s (e (e a) if (e b) else (e c)) else d)");
+    assert_tree("a if b else c else d", "(s (e (e a) if (e b) else (e c)) else d)");
 }
 
 test "a climbing suffix leaves the else for the caller" {
-    assert_tree(&"a if b if c else d", &"(s (e (e a) if (e (e b) if (e c))) else d)");
+    assert_tree("a if b if c else d", "(s (e (e a) if (e (e b) if (e c))) else d)");
 }

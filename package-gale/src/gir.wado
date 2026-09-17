@@ -153,12 +153,12 @@ pub variant DiagnosticSite {
 }
 
 impl DiagnosticOwner {
-    pub fn rule_dispatch(rule: &String) -> DiagnosticOwner {
-        return DiagnosticOwner { rule: *rule, site: DiagnosticSite::RuleDispatch };
+    pub fn rule_dispatch<S: AsStrSlice>(rule: S) -> DiagnosticOwner {
+        return DiagnosticOwner { rule: rule.to_string(), site: DiagnosticSite::RuleDispatch };
     }
 
-    pub fn host(name: &String) -> DiagnosticOwner {
-        return DiagnosticOwner { site: DiagnosticSite::Host(*name) };
+    pub fn host<S: AsStrSlice>(name: S) -> DiagnosticOwner {
+        return DiagnosticOwner { site: DiagnosticSite::Host(name.to_string()) };
     }
 
     /// The human-readable owner shown by `gale dump` and `gale gen`.

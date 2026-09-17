@@ -19,11 +19,11 @@ use sqlite from "../../package-gale/tests/grammars/SQLite.g4"
 
 test "smoke" {
     // Tiny inline statement; no Preopens needed.
-    assert sqlite::highlight(&"SELECT 1;").len() > 0;
+    assert sqlite::highlight("SELECT 1;").len() > 0;
 }
 
 export fn run() with (Stdout, MonotonicClock, Preopens) {
-    let sql = fs::read_to_string(&"sqlite_parse/queries.sql").unwrap();
+    let sql = fs::read_to_string("sqlite_parse/queries.sql").unwrap();
     let mut b = Benchmark {
         name: "syntax-highlight (Gale)",
         input_size: Option::Some(sql.len()),

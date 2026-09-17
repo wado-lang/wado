@@ -1,0 +1,35 @@
+// The fill collapse must survive a fill loop nested in another loop. The
+// `assert 0 <= index < self.used` in `List::index_assign` records its operands
+// under the `&&`, so those writes are branch-guarded and the replay cannot in
+// general reproduce them. Here it can: `0 <= index` follows from the counting
+// loop's entry `i = 0`, so the branch is taken on every iteration and on the
+// replay alike.
+
+use { println, Stdout } from "core:cli";
+
+fn fill_and_sum(xs: &mut List<i32>, limit: i32, reps: i32) -> i32 {
+    let mut sum = 0;
+    for let mut r = 0; r < reps; r += 1 {
+        for let mut i = 0; i <= limit; i += 1 {
+            xs[i] = 7;
+        }
+        for let mut n = 0; n <= limit; n += 1 {
+            sum += xs[n];
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${fill_and_sum(&mut xs, builtin::black_box(10), builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "231\n",
+    "wir_expect:O2": [
+        "builtin::array_fill<i32>(",
+        "7, (limit + 1) - i)"
+    ]
+}

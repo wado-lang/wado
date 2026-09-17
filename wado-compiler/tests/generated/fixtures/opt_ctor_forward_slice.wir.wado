@@ -66,13 +66,12 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
 
-global global:opt_ctor_forward_slice.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(72, 101, 108, 108, 111);
-
 fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let subtask: i32;
     let packed_5: i64;
     let rx_6: i32;
     let tx_7: i32;
+    let elements: ref Array<u8>;
     let packed_11: i64;
     let ptr_12: i32;
     let raw_len: i32;
@@ -82,15 +81,14 @@ fn "opt_ctor_forward_slice.wado/run"() with Stderr {
     let ws: i32;
     let evt_ptr: i32;
     let status_40: i32;
-    let $sroa_data_repr: ref Array<u8>;
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     subtask = "opt_ctor_forward_slice.wado/$cm_binding__Stderr_write_via_stream"(rx_6);
-    $sroa_data_repr = global:opt_ctor_forward_slice.wado::$const_obj_0;
+    elements = array.new_fixed<u8>(72, 101, 108, 108, 111);
     ptr_12 = builtin::i32_wrap_i64(local.tee packed_11(ptr_23 = "mem/realloc"(0, 0, 1, 5); i = 0; b0: block {
         l1: loop {
             break_if b0 i >= 5;
-            builtin::store_u8(ptr_23 + i, builtin::array_get_value_u8($sroa_data_repr, 0 + i));
+            builtin::store_u8(ptr_23 + i, builtin::array_get_value_u8(elements, 0 + i));
             i = i + 1;
             continue l1;
         };

@@ -89,10 +89,13 @@ const EXPECTED: &[(&str, &[&str])] = &[
 
 /// Operands a short-circuit can skip, which the plan marks `conditional`.
 const EXPECTED_CONDITIONAL: &[(&str, &[&str])] = &[
-    ("0 <= a < b", &["b"]),
     ("a < b && b < 3", &["b", "b < 3"]),
     ("a > b || b > 0", &["b", "b > 0"]),
 ];
+
+/// A comparison chain evaluates every operand, so a failure reports every one
+/// of them — `0 <= i < n` names `n` whichever half failed.
+const EXPECTED_UNCONDITIONAL: &[(&str, &[&str])] = &[("0 <= a < b", &["a", "b"])];
 
 fn entry_plan() -> String {
     let host = InMemoryHost::new();
@@ -195,6 +198,21 @@ fn a_short_circuited_operand_is_marked_conditional() {
             assert!(
                 some_plan_line_has(block, label, "conditional"),
                 "`{condition}` should mark `{label}` conditional, got:\n{block}"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_comparison_chain_marks_no_operand_conditional() {
+    let plan = entry_plan();
+
+    for (condition, labels) in EXPECTED_UNCONDITIONAL {
+        let block = plan_of(&plan, condition);
+        for label in *labels {
+            assert!(
+                !some_plan_line_has(block, label, "conditional"),
+                "`{condition}` should reach `{label}` on every run, got:\n{block}"
             );
         }
     }

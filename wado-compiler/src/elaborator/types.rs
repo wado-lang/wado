@@ -372,6 +372,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A type application writing more arguments than the head declares.
+    SurplusTypeArguments {
+        name: String,
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
     /// Unknown function
     UnknownFunction {
         name: String,
@@ -1279,6 +1287,31 @@ impl TypeError {
                      supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
                     if *expected == 1 { "" } else { "s" },
                 ),
+                *span,
+            ),
+            TypeError::SurplusTypeArguments {
+                name,
+                expected,
+                found,
+                span,
+            } => (
+                Code::TypeMismatch,
+                {
+                    // Surplus, so a declared parameter puts `found` at two or
+                    // more and only the `expected == 0` wording needs "was".
+                    debug_assert!(found > expected);
+                    if *expected == 0 {
+                        format!(
+                            "`{name}` takes no type arguments, but {found} {} supplied",
+                            if *found == 1 { "was" } else { "were" },
+                        )
+                    } else {
+                        format!(
+                            "`{name}` takes {expected} type argument{}, but {found} were supplied",
+                            if *expected == 1 { "" } else { "s" },
+                        )
+                    }
+                },
                 *span,
             ),
             TypeError::UnknownFunction { name, span } => (

@@ -17,6 +17,7 @@ use {
     scan_balanced,
     is_id_start_char,
     is_id_continue_char,
+    is_rule_name_upper,
 } from "./scan.wado";
 
 /// ANTLR's `currentRuleType`: which recognizer the rule being scanned belongs
@@ -38,7 +39,7 @@ global GRAMMAR_KEYWORDS: List<String> = [
     "private", "returns", "locals", "throws", "catch", "finally", "mode",
 ];
 
-pub fn strip_action_bodies(grammar: &String) -> String {
+pub fn strip_action_bodies<S: AsStrSlice>(grammar: S) -> String {
     let chars: List<char> = grammar.chars().collect();
     let n = chars.len();
     let mut out = String::with_capacity(grammar.len());
@@ -133,7 +134,7 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             i += 1;
             continue;
         }
-        if c == 'c' && starts_with_word(&chars, i, &"catch") {
+        if c == 'c' && starts_with_word(&chars, i, "catch") {
             let mut j = i + 5;
             while j < n && chars[j].is_ascii_whitespace() {
                 j += 1;
@@ -153,7 +154,7 @@ pub fn strip_action_bodies(grammar: &String) -> String {
                 }
             }
         }
-        if c == 'f' && starts_with_word(&chars, i, &"finally") {
+        if c == 'f' && starts_with_word(&chars, i, "finally") {
             let mut j = i + 7;
             while j < n && chars[j].is_ascii_whitespace() {
                 j += 1;
@@ -203,9 +204,7 @@ pub fn strip_action_bodies(grammar: &String) -> String {
             push_span(&mut word, &chars, i, j);
             prequel_open = PREQUEL_KEYWORDS.contains(&word);
             if rule_type matches { RuleType::Unknown } && !GRAMMAR_KEYWORDS.contains(&word) {
-                // ASCII-only, as ANTLR asks `Character.isUpperCase`: see
-                // TODO.md, blocked on ICU.
-                rule_type = if c.is_ascii_uppercase() { RuleType::Lexer } else { RuleType::Parser };
+                rule_type = if is_rule_name_upper(c) { RuleType::Lexer } else { RuleType::Parser };
             }
             push_span(&mut out, &chars, i, j);
             i = j;
@@ -236,7 +235,7 @@ fn push_span(out: &mut String, chars: &List<char>, start: i32, end: i32) {
     }
 }
 
-fn starts_with_word(chars: &List<char>, i: i32, word: &String) -> bool {
+fn starts_with_word<S: AsStrSlice>(chars: &List<char>, i: i32, word: S) -> bool {
     let w: List<char> = word.chars().collect();
     let wn = w.len();
     if i + wn > chars.len() {

@@ -25,6 +25,7 @@ use super::trait_env;
 use super::trait_env::ImplTargetKey;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
+use super::util::parse_i128_literal;
 use crate::ast::{AstId, GenericParam};
 use crate::compiler_item::CompilerItem;
 use crate::defs::{DefId, DefKind};
@@ -549,6 +550,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Check the lane immediates of a SIMD builtin call. Wasm encodes each as
+    /// an instruction immediate, so only a literal naming a lane that exists
+    /// can be lowered — anything else reaches codegen as an invalid module.
+    fn check_simd_lane_immediates(&mut self, builtin: &str, args: &[Expr]) {
+        let Some(SimdLaneShape {
+            immediates,
+            arity,
+            lanes,
+        }) = simd_lane_immediates(builtin)
+        else {
+            return;
+        };
+        // A miscounted call has no lane positions yet: every argument has
+        // shifted, and the arity error is the one to report.
+        if args.len() != arity {
+            return;
+        }
+        for arg in args.iter().take(immediates) {
+            let message = match lane_literal(arg) {
+                None => format!("`builtin::{builtin}` needs an integer literal lane index"),
+                Some(lane) if lane < 0 || lane >= lanes => {
+                    format!("lane index out of range for `builtin::{builtin}`: {lane} (0..{lanes})")
+                }
+                Some(_) => continue,
+            };
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message,
+                span: arg.span(),
+            });
+        }
+    }
+
     pub(super) fn resolve_call(
         &mut self,
         call: &ast::CallExpr,
@@ -935,6 +968,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if prefix == "builtin" {
                 let builtin_source = ModuleSource::builtin();
                 self.check_namespaced_visibility(&builtin_source, suffix, ident.span);
+                self.check_simd_lane_immediates(suffix, &call.args);
                 (
                     self.callee_in_module(&builtin_source, suffix),
                     effective_name.to_string(),
@@ -1271,8 +1305,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                     let payload = args.into_iter().next();
 
-                    // Infer variant type: use GenericInstance for generic variants
                     let variant_type = if variant_info.type_params.is_empty() {
+                        // A generic case's payload type is a parameter
+                        // `infer_variant_type_args` binds from this very
+                        // argument, so only a concrete one has a type to check.
+                        if let Some(payload) = payload {
+                            self.typecheck(payload, case_data.payload, call.span);
+                        }
                         self.tysys
                             .type_table
                             .borrow()
@@ -3289,8 +3328,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
         receiver_key: Option<&ImplTargetKey>,
     ) -> (Vec<TypeId>, Vec<TypeId>) {
-        let Some(sig) =
-            self.static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+        let Some(sig) = self
+            .static_call_sig(struct_name, method_name, receiver_key, SigChoice::Any)
+            .or_else(|| {
+                let key = receiver_key
+                    .cloned()
+                    .unwrap_or_else(|| self.impl_target(struct_name));
+                self.inherited_default_method_sig(&key, method_name)
+            })
         else {
             return (vec![], vec![]);
         };
@@ -3489,6 +3534,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|(_, sig)| sig)
     }
 
+    /// The signature of a trait default `key` inherits without overriding it,
+    /// which no impl block lists and so every impl-keyed index misses.
+    fn inherited_default_method_sig(
+        &self,
+        key: &ImplTargetKey,
+        method_name: &str,
+    ) -> Option<MethodSig> {
+        let trait_env = &self.tysys.trait_env;
+        let mut sig = trait_env
+            .impl_index
+            .get(key)?
+            .iter()
+            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_ref)
+            .find_map(|trait_decl| {
+                let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
+                method.default_body.as_ref()?;
+                Some(method.sig.clone())
+            })?;
+        let split = sig.declaring_split();
+        sig.decl.type_params.drain(..split);
+        sig.declaring_slot_count = 0;
+        sig.method_slot_base = 0;
+        Some(sig)
+    }
+
     /// `Type::method()` reaching a value blanket's static, which is indexed
     /// under the blanket's receiver param and so misses `type_name`'s own
     /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
@@ -3647,6 +3717,61 @@ impl TypeSystem {
             .borrow_mut()
             .make_generic_instance(def, type_args)
     }
+}
+
+/// The lane a literal argument names. A negative one parses as a negation
+/// applied to a literal, and reaches the range check either way.
+fn lane_literal(arg: &Expr) -> Option<i128> {
+    let (sign, operand) = match arg {
+        Expr::Unary(unary) if unary.op == ast::UnaryOp::Neg => ("-", &unary.expr),
+        _ => ("", arg),
+    };
+    let Expr::Literal(lit) = operand else {
+        return None;
+    };
+    let ast::Literal::Number(repr) = &lit.value else {
+        return None;
+    };
+    parse_i128_literal(&format!("{sign}{repr}")).ok()
+}
+
+/// Where a SIMD builtin keeps its lane immediates, and what they may name.
+struct SimdLaneShape {
+    immediates: usize,
+    arity: usize,
+    lanes: i128,
+}
+
+/// The lane shape a SIMD builtin's name spells out. `i8x16.shuffle` indexes a
+/// pair of vectors, so its bound is twice a single vector's.
+fn simd_lane_immediates(builtin: &str) -> Option<SimdLaneShape> {
+    if builtin == "i8x16_shuffle" {
+        return Some(SimdLaneShape {
+            immediates: 16,
+            arity: 18,
+            lanes: 32,
+        });
+    }
+    let (vector, operation) = builtin.split_once('_')?;
+    let arity = if operation.starts_with("extract_lane") {
+        2
+    } else if operation.starts_with("replace_lane") {
+        3
+    } else {
+        return None;
+    };
+    let lanes = match vector {
+        "i8x16" => 16,
+        "i16x8" => 8,
+        "i32x4" | "f32x4" => 4,
+        "i64x2" | "f64x2" => 2,
+        _ => return None,
+    };
+    Some(SimdLaneShape {
+        immediates: 1,
+        arity,
+        lanes,
+    })
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {

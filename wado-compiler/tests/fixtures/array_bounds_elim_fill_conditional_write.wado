@@ -1,0 +1,32 @@
+// The fill idiom replays the loop body's leftover statements once, at the last
+// iterated index. A write a branch guards is not the last iteration's to make:
+// `seen = i` runs only at `i == 2`, and replaying the body at `i == 10` leaves
+// `seen` at `-1`. The collapse must decline when something outside the version
+// `if` can observe the difference, as here: the function returns `seen`.
+
+use { println, Stdout } from "core:cli";
+
+fn fill_and_sum(xs: &mut List<i32>, limit: i32) -> i32 {
+    let mut seen = -1;
+    for let mut i = 0; i <= limit; i += 1 {
+        if i == 2 {
+            seen = i;
+        }
+        xs[i] = 7;
+    }
+    let mut sum = 0;
+    for let mut n = 0; n <= limit; n += 1 {
+        sum += xs[n];
+    }
+    return sum + seen;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${fill_and_sum(&mut xs, builtin::black_box(10))}`);
+}
+
+__DATA__
+{
+    "stdout": "79\n"
+}

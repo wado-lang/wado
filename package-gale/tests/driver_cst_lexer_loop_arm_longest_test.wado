@@ -8,34 +8,34 @@ use g from "./grammars/lexer_loop_arm_longest.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lexer_loop_arm_longest" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${result.diagnostics:?}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${result.diagnostics:?}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "a string with no escape is one token" {
-    assert_tree(&"\"ab\"", &"(start \"ab\")");
+    assert_tree("\"ab\"", "(start \"ab\")");
 }
 
 // What decides is whether the loop can continue after the longer arm, which is
 // viability rather than length. `latn_match` answers it.
 test "an escaped quote stays inside the string" {
-    assert_tree(&"\"a\\\"b\"", &"(start \"a\\\"b\")");
+    assert_tree("\"a\\\"b\"", "(start \"a\\\"b\")");
 }
 
 test "a string that is only an escaped quote" {
-    assert_tree(&"\"\\\"\"", &"(start \"\\\"\")");
+    assert_tree("\"\\\"\"", "(start \"\\\"\")");
 }
 
 test "the shorter arm still wins where the longer one strands the suffix" {
-    assert_tree(&"ab", &"(start ab)");
+    assert_tree("ab", "(start ab)");
 }
 
 // Two escapes exercise the simulator's rule-call guard: each closure is
 // computed afresh at its own position, so `ESC` being entered once already
 // does not stop the second escape from being read as one.
 test "a string with two escaped quotes stays one token" {
-    assert_tree(&"\"a\\\"b\\\"c\"", &"(start \"a\\\"b\\\"c\")");
+    assert_tree("\"a\\\"b\\\"c\"", "(start \"a\\\"b\\\"c\")");
 }

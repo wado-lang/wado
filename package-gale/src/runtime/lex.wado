@@ -40,7 +40,7 @@ impl LexerSlice {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
-    pub fn from_string(s: String) -> LexerSlice {
+    pub fn from_string<S: AsStrSlice>(s: S) -> LexerSlice {
         let chars = s.chars().collect();
         return LexerSlice { chars: &chars, start: 0, end: chars.len() };
     }
@@ -65,7 +65,7 @@ impl LexerSlice {
         return s;
     }
 
-    pub fn eq_str(a: &String, b: &LexerSlice) -> bool {
+    pub fn eq_str<S: AsStrSlice>(a: S, b: &LexerSlice) -> bool {
         let a_chars = a.chars();
         let mut a_iter = a_chars;
         let mut i = b.start;
@@ -308,9 +308,9 @@ impl TokenStream {
     pub fn push_token_text_escaped(&self, out: &mut String, i: i32) {
         for let mut j = self.starts[i]; j < self.ends[i]; j += 1 {
             match self.chars[j] {
-                '\n' => out.push_str(&"\\n"),
-                '\r' => out.push_str(&"\\r"),
-                '\t' => out.push_str(&"\\t"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
                 c => out.push(c),
             }
         }
@@ -348,12 +348,12 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new(message: String, span: Span, expected: List<String>) -> ParseError {
-        return ParseError { message, span, expected };
+    pub fn new<S: AsStrSlice>(message: S, span: Span, expected: List<String>) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected };
     }
 
-    pub fn at(message: String, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
-        return ParseError { message, span, expected, line, col, rule_stack: [] };
+    pub fn at<S: AsStrSlice>(message: S, span: Span, expected: List<String>, line: i32, col: i32) -> ParseError {
+        return ParseError { message: message.to_string(), span, expected, line, col, rule_stack: [] };
     }
 
     pub fn full_message(&self) -> String {
@@ -378,7 +378,7 @@ pub fn rule_path_of(stack: &List<String>) -> String {
             continue;
         }
         if written > 0 {
-            out.push_str(&" > ");
+            out.push_str(" > ");
         }
         out.push_str(name);
         written += 1;
@@ -400,9 +400,9 @@ fn join_expected(names: &List<String>) -> String {
 
 impl Display for ParseError {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
+        f.write_str(`parse error at ${self.line}:${self.col}: ${self.full_message()}`);
         if !self.rule_stack.is_empty() {
-            f.write_str(&`\n  in rule: ${self.rule_path()}`);
+            f.write_str(`\n  in rule: ${self.rule_path()}`);
         }
     }
 }

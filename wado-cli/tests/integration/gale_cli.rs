@@ -23,8 +23,12 @@ fn gale_gen_calculator_emits_generated_parser() {
         .success()
         .stdout(predicate::str::contains("#![generated(by = \"gale\""))
         .stdout(predicate::str::contains("calculator.g4"))
-        .stdout(predicate::str::contains("pub fn parse("))
-        .stdout(predicate::str::contains("pub fn tokenize("));
+        .stdout(predicate::str::contains(
+            "pub fn parse<S: AsStrSlice>(input: S",
+        ))
+        .stdout(predicate::str::contains(
+            "pub fn tokenize<S: AsStrSlice>(input: S",
+        ));
 }
 
 #[test]
@@ -42,5 +46,7 @@ fn gale_gen_highlight_emits_highlight_function() {
         .assert()
         .success()
         .stdout(predicate::str::contains("#![generated(by = \"gale\""))
-        .stdout(predicate::str::contains("pub fn highlight("));
+        .stdout(predicate::str::contains(
+            "pub fn highlight<S: AsStrSlice>(input: S",
+        ));
 }

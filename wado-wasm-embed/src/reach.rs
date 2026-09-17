@@ -11,8 +11,8 @@ use std::convert::Infallible;
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 use wasmparser::{ElementItems, ElementKind, ExternalKind};
 
-use crate::dataref::{DataRange, DataRefs, merge_with_gap};
-use crate::{Asset, Error, segment_base};
+use crate::dataref::{DataRange, DataRefs, Target, merge_with_gap};
+use crate::{Asset, Embed, Error, segment_base};
 
 /// A gap this small is cheaper to keep than to split around: a second segment
 /// costs a header, an offset expression and a length.
@@ -32,6 +32,8 @@ pub(crate) struct Live {
     /// Functions a surviving `ref.func` names that nothing left in the module
     /// declares. They need a declarative segment of their own.
     pub declare: Vec<u32>,
+    /// Functions kept for their name and signature alone.
+    pub stub: BTreeSet<u32>,
 }
 
 /// How much of a surviving data segment survives.
@@ -42,16 +44,19 @@ pub(crate) enum Keep {
     Ranges(Vec<DataRange>),
 }
 
-pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Result<Live, Error> {
+pub(crate) fn live(asset: &Asset<'_>, opts: &Embed<'_>) -> Result<Live, Error> {
+    let keep_export = opts.keep_export;
+    let (data_refs, pointers) = match &asset.data_refs {
+        Some(refs) => resolve_map(asset, refs)?,
+        None => (BTreeMap::new(), Vec::new()),
+    };
     let mut walk = Walk {
         asset,
         live: Live::default(),
         queue: Vec::new(),
         ref_funcs: BTreeSet::new(),
-        data_refs: match &asset.data_refs {
-            Some(refs) => func_ranges(asset, refs)?,
-            None => BTreeMap::new(),
-        },
+        data_refs,
+        pointers,
         // Only an active segment at a constant base can have its pieces name
         // their own addresses. A passive one is reached through the
         // `memory.init` that copies it, which the walk already follows.
@@ -79,6 +84,14 @@ pub(crate) fn live(asset: &Asset<'_>, keep_export: &dyn Fn(&str) -> bool) -> Res
 
     for export in &asset.exports {
         if !keep_export(export.name) {
+            continue;
+        }
+        // A stubbed export keeps its index and its type but roots nothing, so
+        // its body is never walked and whatever only it reached is collected.
+        if (opts.stub_export)(export.name)
+            && matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
+        {
+            walk.mark_stub(export.index);
             continue;
         }
         match export.kind {
@@ -178,8 +191,25 @@ struct Walk<'a, 'b> {
     /// map. Reaching a function reaches its ranges, so the data edges close
     /// over the same worklist the code edges do.
     data_refs: BTreeMap<u32, &'a [DataRange]>,
+    /// Where each pointer stored in the data sits, and what it reaches. Keeping
+    /// the bytes a pointer occupies reaches its target, which is what lets a
+    /// live data range root a function.
+    pointers: Vec<Edge>,
     /// Which segments a range may narrow, by segment index.
     splittable: Vec<bool>,
+}
+
+/// A pointer site with its target resolved against the asset's own indices.
+struct Edge {
+    segment: u32,
+    offset: u32,
+    target: Reached,
+    fired: bool,
+}
+
+enum Reached {
+    Data(DataRange),
+    Func(u32),
 }
 
 impl Walk<'_, '_> {
@@ -311,13 +341,29 @@ impl Walk<'_, '_> {
     }
 
     fn mark_func(&mut self, index: u32) {
-        if !self.live.funcs.insert(index) {
+        // A stub already sits in `live.funcs`, so that set alone cannot say
+        // whether the body has been walked.
+        let was_stub = self.live.stub.remove(&index);
+        if !self.live.funcs.insert(index) && !was_stub {
             return;
         }
         self.queue.push(Item::Func(index));
         for range in self.data_refs.get(&index).copied().unwrap_or_default() {
             self.mark_data_range(*range);
         }
+    }
+
+    /// Keep a function's slot and signature without walking its body. Its type
+    /// stays live: the export and the body left behind both still name it.
+    fn mark_stub(&mut self, index: u32) {
+        if self.live.funcs.contains(&index) {
+            return;
+        }
+        if let Some(defined) = self.defined(index, self.asset.imported.funcs) {
+            self.mark_type(self.asset.funcs[defined]);
+        }
+        self.live.funcs.insert(index);
+        self.live.stub.insert(index);
     }
 
     fn mark_table(&mut self, index: u32) {
@@ -349,6 +395,29 @@ impl Walk<'_, '_> {
         if self.live.datas.insert(index, Keep::Whole).is_none() {
             self.queue.push(Item::Data(index));
         }
+        self.fire(|edge| edge.segment == index);
+    }
+
+    /// Follow every not-yet-followed pointer whose site `covers` keeps. An edge
+    /// fires once, so a chain of pointers costs one step each however many
+    /// ranges cover it.
+    fn fire<F: Fn(&Edge) -> bool>(&mut self, covers: F) {
+        let mut reached = Vec::new();
+        for edge in &mut self.pointers {
+            if !edge.fired && covers(edge) {
+                edge.fired = true;
+                reached.push(match edge.target {
+                    Reached::Data(range) => Reached::Data(range),
+                    Reached::Func(index) => Reached::Func(index),
+                });
+            }
+        }
+        for target in reached {
+            match target {
+                Reached::Data(range) => self.mark_data_range(range),
+                Reached::Func(index) => self.mark_func(index),
+            }
+        }
     }
 
     /// Keep one range of a segment, and queue the segment so its offset
@@ -372,6 +441,11 @@ impl Walk<'_, '_> {
                 Keep::Ranges(ranges) => ranges.push(range),
             },
         }
+        self.fire(|edge| {
+            edge.segment == range.segment
+                && range.offset <= edge.offset
+                && edge.offset < range.end()
+        });
     }
 
     fn mark_type(&mut self, index: u32) {
@@ -450,60 +524,91 @@ impl Reencode for Recorder<'_> {
     }
 }
 
-/// Resolve the asset's map against its `name` section.
+/// Resolve the asset's map against its `name` section, which both halves of the
+/// map are keyed by, so it is walked once.
 ///
-/// Every name in the map has to land on a function, and every range inside its
-/// segment: a map that has drifted from the module would otherwise prune data
-/// that is still read, and silently produce a module that computes the wrong
-/// answer.
-fn func_ranges<'a>(
+/// Anything the module cannot answer for — a name landing on no function, a
+/// range outside its segment — means the map has drifted from it. Honouring a
+/// drifted map prunes data something still reads, so it is an error.
+fn resolve_map<'a>(
     asset: &'a Asset<'_>,
     refs: &'a DataRefs,
-) -> Result<BTreeMap<u32, &'a [DataRange]>, Error> {
+) -> Result<(BTreeMap<u32, &'a [DataRange]>, Vec<Edge>), Error> {
     let names = asset.names.clone().ok_or_else(|| {
         Error::DataRef("the asset has no `name` section to resolve the map against".into())
     })?;
-
-    let mut resolved = BTreeMap::new();
-    let mut matched: BTreeSet<&str> = BTreeSet::new();
+    let mut funcs: BTreeMap<&str, u32> = BTreeMap::new();
     for subsection in names {
-        let wasmparser::Name::Function(map) = subsection? else {
-            continue;
-        };
-        for naming in map {
-            let naming = naming?;
-            if let Some(ranges) = refs.get(naming.name) {
-                resolved.insert(naming.index, ranges);
-                matched.insert(naming.name);
+        if let wasmparser::Name::Function(map) = subsection? {
+            for naming in map {
+                let naming = naming?;
+                funcs.insert(naming.name, naming.index);
             }
         }
     }
 
-    if matched.len() != refs.len() {
+    let mut reads = BTreeMap::new();
+    for (name, index) in &funcs {
+        if let Some(ranges) = refs.get(name) {
+            for range in ranges {
+                check_range(asset, range, &format!("function `{name}`"))?;
+            }
+            reads.insert(*index, ranges);
+        }
+    }
+    if reads.len() != refs.len() {
         return Err(Error::DataRef(format!(
             "names {} functions, of which the asset's `name` section resolves {}",
             refs.len(),
-            matched.len()
+            reads.len()
         )));
     }
-    for (func, ranges) in &resolved {
-        for range in *ranges {
-            let segment = asset.datas.get(range.segment as usize).ok_or_else(|| {
-                Error::DataRef(format!(
-                    "function {func} reads segment {}, which the asset does not have",
-                    range.segment
-                ))
-            })?;
-            if range.end() as usize > segment.data.len() {
-                return Err(Error::DataRef(format!(
-                    "function {func} reads {}..{} of segment {}, which is {} bytes",
-                    range.offset,
-                    range.end(),
-                    range.segment,
-                    segment.data.len()
-                )));
+
+    let mut edges = Vec::new();
+    for pointer in refs.pointers() {
+        let site = DataRange::at(pointer.segment, pointer.offset).ok_or_else(|| {
+            Error::DataRef(format!(
+                "a pointer sits at {}:{}, which no segment can reach",
+                pointer.segment, pointer.offset
+            ))
+        })?;
+        check_range(asset, &site, "a pointer")?;
+        let target = match &pointer.target {
+            Target::Data(range) => {
+                check_range(asset, range, "a pointer")?;
+                Reached::Data(*range)
             }
-        }
+            Target::Func(name) => Reached::Func(*funcs.get(name.as_str()).ok_or_else(|| {
+                Error::DataRef(format!(
+                    "a pointer reaches `{name}`, which the asset's `name` section does not name"
+                ))
+            })?),
+        };
+        edges.push(Edge {
+            segment: pointer.segment,
+            offset: pointer.offset,
+            target,
+            fired: false,
+        });
     }
-    Ok(resolved)
+    Ok((reads, edges))
+}
+
+fn check_range(asset: &Asset<'_>, range: &DataRange, reader: &str) -> Result<(), Error> {
+    let segment = asset.datas.get(range.segment as usize).ok_or_else(|| {
+        Error::DataRef(format!(
+            "{reader} reads segment {}, which the asset does not have",
+            range.segment
+        ))
+    })?;
+    if range.end() as usize > segment.data.len() {
+        return Err(Error::DataRef(format!(
+            "{reader} reads {}..{} of segment {}, which is {} bytes",
+            range.offset,
+            range.end(),
+            range.segment,
+            segment.data.len()
+        )));
+    }
+    Ok(())
 }

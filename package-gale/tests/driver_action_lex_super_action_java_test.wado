@@ -39,7 +39,7 @@ test "a Java action body that is nothing but a base call runs" {
     let mut base = JsBaseImpl { depth: 0, max_depth: 0, names: true };
     with JsBase => &mut base do {
         // OPEN OPEN NAME CLOSE CLOSE + EOF.
-        let toks = js::tokenize(&"{ { a } }");
+        let toks = js::tokenize("{ { a } }");
         assert toks.len() == 6, `expected 6 tokens, got ${toks.len()}`;
         let name = js::token_kind_name(toks.kinds[2]);
         assert name == "NAME", `expected NAME, got ${name}`;
@@ -51,7 +51,7 @@ test "a Java action body that is nothing but a base call runs" {
 test "the predicate op still gates its rule alongside the action ops" {
     let mut off = JsBaseImpl { depth: 0, max_depth: 0, names: false };
     with JsBase => &mut off do {
-        let toks = js::tokenize(&"a");
+        let toks = js::tokenize("a");
         let name = js::token_kind_name(toks.kinds[0]);
         assert name == "ID", `expected ID, got ${name}`;
     };

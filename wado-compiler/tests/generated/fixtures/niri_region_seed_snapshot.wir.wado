@@ -64,24 +64,25 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:niri_region_seed_snapshot.wado::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(99);
+global global:niri_region_seed_snapshot.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 };
 global global:niri_region_seed_snapshot.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(120);
 
 fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     let s: ref "core:prelude/string.wado//String";
     let $local_2: ref "core:prelude/string.wado//String";
-    let new_used_21: i32;
-    let start_22: i32;
-    let new_used_31: i32;
-    let start_32: i32;
-    let handle_37: i32;
-    let packed_39: i64;
-    let rx_40: i32;
-    let tx_41: i32;
-    let handle_49: i32;
-    let packed_51: i64;
-    let rx_52: i32;
-    let tx_53: i32;
+    let new_used_27: i32;
+    let start_28: i32;
+    let other_31: ref "core:prelude/string.wado//String";
+    let new_used_42: i32;
+    let start_43: i32;
+    let handle_48: i32;
+    let packed_50: i64;
+    let rx_51: i32;
+    let tx_52: i32;
+    let handle_60: i32;
+    let packed_62: i64;
+    let rx_63: i32;
+    let tx_64: i32;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97, 98), used: 2 };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(17), used: 0 };
     $local_2.used = 1;
@@ -89,33 +90,34 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     block {
         block {
         };
-        new_used_21 = 1 + 2;
-        if @unlikely(new_used_21 > 17) {
+        new_used_27 = 1 + 2;
+        if @unlikely(new_used_27 > 17) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_21);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_27);
         }
-        start_22 = $local_2.used;
-        $local_2.used = new_used_21;
-        builtin::array_copy<u8>($local_2.repr, start_22, s.repr, 0, 2);
+        start_28 = $local_2.used;
+        $local_2.used = new_used_27;
+        builtin::array_copy<u8>($local_2.repr, start_28, s.repr, 0, 2);
     };
-    new_used_31 = 2 + 1;
-    if @unlikely(new_used_31 > builtin::array_len(s.repr)) {
+    other_31 = global:niri_region_seed_snapshot.wado::$const_obj_0;
+    new_used_42 = 2 + 1;
+    if @unlikely(new_used_42 > builtin::array_len(s.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_31);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(s, new_used_42);
     }
-    start_32 = s.used;
-    s.used = new_used_31;
-    builtin::array_copy<u8>(s.repr, start_32, global:niri_region_seed_snapshot.wado::$const_obj_0, 0, 1);
-    rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
-    tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
-    handle_37 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
-    "core:rt/write_string_to_stream"(tx_41, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_37);
-    rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
-    tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
-    handle_49 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
-    "core:rt/write_string_to_stream"(tx_53, s);
-    "wasi/future-drop-readable:transmission-cli"(handle_49);
+    start_43 = s.used;
+    s.used = new_used_42;
+    builtin::array_copy<u8>(s.repr, start_43, other_31.repr, 0, 1);
+    rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
+    tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
+    handle_48 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
+    "core:rt/write_string_to_stream"(tx_52, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_48);
+    rx_63 = builtin::i32_wrap_i64(local.tee packed_62("wasi/stream-new"()));
+    tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
+    handle_60 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
+    "core:rt/write_string_to_stream"(tx_64, s);
+    "wasi/future-drop-readable:transmission-cli"(handle_60);
 }
 
 fn "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

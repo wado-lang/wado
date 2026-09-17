@@ -974,6 +974,8 @@ pub enum WirInstr {
     I32Shl(Box<WirInstr>, Box<WirInstr>),
     I32ShrS(Box<WirInstr>, Box<WirInstr>),
     I32ShrU(Box<WirInstr>, Box<WirInstr>),
+    I32Rotl(Box<WirInstr>, Box<WirInstr>),
+    I32Rotr(Box<WirInstr>, Box<WirInstr>),
     I32Eqz(Box<WirInstr>),
     I32Eq(Box<WirInstr>, Box<WirInstr>),
     I32Ne(Box<WirInstr>, Box<WirInstr>),
@@ -1011,6 +1013,8 @@ pub enum WirInstr {
     I64Shl(Box<WirInstr>, Box<WirInstr>),
     I64ShrS(Box<WirInstr>, Box<WirInstr>),
     I64ShrU(Box<WirInstr>, Box<WirInstr>),
+    I64Rotl(Box<WirInstr>, Box<WirInstr>),
+    I64Rotr(Box<WirInstr>, Box<WirInstr>),
     I64Eqz(Box<WirInstr>),
     I64Eq(Box<WirInstr>, Box<WirInstr>),
     I64Ne(Box<WirInstr>, Box<WirInstr>),
@@ -2023,6 +2027,8 @@ impl WirInstr {
             | Self::I32Shl(l, r)
             | Self::I32ShrS(l, r)
             | Self::I32ShrU(l, r)
+            | Self::I32Rotl(l, r)
+            | Self::I32Rotr(l, r)
             | Self::I32Eq(l, r)
             | Self::I32Ne(l, r)
             | Self::I32LtS(l, r)
@@ -2046,6 +2052,8 @@ impl WirInstr {
             | Self::I64Shl(l, r)
             | Self::I64ShrS(l, r)
             | Self::I64ShrU(l, r)
+            | Self::I64Rotl(l, r)
+            | Self::I64Rotr(l, r)
             | Self::I64Eq(l, r)
             | Self::I64Ne(l, r)
             | Self::I64LtS(l, r)
@@ -2606,6 +2614,8 @@ impl WirInstr {
             | Self::I32Shl(l, r)
             | Self::I32ShrS(l, r)
             | Self::I32ShrU(l, r)
+            | Self::I32Rotl(l, r)
+            | Self::I32Rotr(l, r)
             | Self::I32Eq(l, r)
             | Self::I32Ne(l, r)
             | Self::I32LtS(l, r)
@@ -2629,6 +2639,8 @@ impl WirInstr {
             | Self::I64Shl(l, r)
             | Self::I64ShrS(l, r)
             | Self::I64ShrU(l, r)
+            | Self::I64Rotl(l, r)
+            | Self::I64Rotr(l, r)
             | Self::I64Eq(l, r)
             | Self::I64Ne(l, r)
             | Self::I64LtS(l, r)

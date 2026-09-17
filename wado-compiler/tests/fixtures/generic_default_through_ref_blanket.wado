@@ -1,0 +1,58 @@
+// Regression: a generic trait default the impl does not override, reached on a
+// type parameter instantiated as a reference, lost its own type arguments.
+//
+// `try_ref_blanket_shortcut` routes such a call to the universal ref blanket
+// (`impl<T: Meas> Meas for &T`) and rebuilt the `FunctionRef` with
+// `method_type_args: vec![]`, so `scaled`'s `M2` stayed open and reached
+// codegen unsubstituted. A non-generic default (`doubled`) never needed the
+// slot, and a value receiver never took the shortcut, so only this shape
+// reproduces.
+
+trait Meas {
+    fn raw(&self) -> i32;
+
+    fn doubled(&self) -> i32 {
+        return self.raw() * 2;
+    }
+
+    fn scaled<M: Meas>(&self, by: M) -> i32 {
+        return self.raw() * by.raw();
+    }
+}
+
+struct B { n: i32 }
+
+impl Meas for B {
+    fn raw(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl<T: Meas> Meas for &T {
+    fn raw(&self) -> i32 {
+        return (*self).raw();
+    }
+}
+
+fn take_scaled<M: Meas>(m: M) -> i32 {
+    return m.scaled(B { n: 3 });
+}
+
+fn take_doubled<M: Meas>(m: M) -> i32 {
+    return m.doubled();
+}
+
+test "generic default on a value receiver" {
+    assert take_scaled(B { n: 5 }) == 15;
+}
+
+test "generic default through the universal ref blanket" {
+    let b = B { n: 5 };
+    assert take_scaled(&b) == 15;
+}
+
+test "non-generic default through the universal ref blanket" {
+    let b = B { n: 7 };
+    assert take_doubled(&b) == 14;
+    assert take_doubled(b) == 14;
+}

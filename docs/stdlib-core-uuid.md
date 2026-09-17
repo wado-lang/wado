@@ -12,8 +12,9 @@ Only the two versions in common use today are provided:
   correlation.
 
 `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-Generating in bulk, install `core:random`'s `BufferedRandom` so the host
-call is drawn once per block rather than once per UUID.
+Generating in bulk, install `core:secure_random`'s `BufferedRandom` so the
+host call is drawn once per block rather than once per UUID.
+
 `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 and `Inspect` render the canonical hyphenated form, as does `Serialize` for
 text formats; binary ones get CBOR tag 37 and the 16 bytes.
@@ -25,7 +26,7 @@ Values within a tick, or across a backwards clock step, are unordered.
 ## Synopsis
 
 ```wado
-assert Uuid::parse(&"550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
+assert Uuid::parse("550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
     && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 ```
 
@@ -57,7 +58,7 @@ Generate a version-7 (time-ordered) UUID: a 48-bit millisecond timestamp
 and a 12-bit sub-millisecond fraction from `SystemClock`, then 62
 random bits.
 
-#### `pub fn parse(s: &String) -> Result<Uuid, ParseError>`
+#### `pub fn parse<S: AsStrSlice>(s: S) -> Result<Uuid, ParseError>`
 
 Parse a UUID string (case-insensitive), accepting every form Go's
 `uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,

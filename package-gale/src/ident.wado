@@ -10,38 +10,38 @@
 /// (`panic` / `unreachable`), so a grammar rule/token cannot shadow them in
 /// the generated module. Over-inclusion is harmless (a spurious `_`);
 /// under-inclusion emits code that fails to compile — when in doubt, escape.
-fn is_wado_reserved(name: &String) -> bool {
+fn is_wado_reserved<S: AsStrSlice>(name: S) -> bool {
     return match name.len() {
-        2 => match *name {
+        2 => match name.to_string() {
             "Fn" | "as" | "fn" | "i8" | "if" | "in" | "of" | "u8" => true,
             _ => false,
         },
-        3 => match *name {
+        3 => match name.to_string() {
             "f32" | "f64" | "for" | "i16" | "i32" | "i64" | "let" | "mut" | "pub" | "u16" | "u32" | "u64" | "use" => true,
             _ => false,
         },
-        4 => match *name {
+        4 => match name.to_string() {
             "bool" | "char" | "else" | "enum" | "from" | "impl" | "loop" | "move" | "null" | "self" | "task" | "test" | "true" | "type" | "with" => true,
             _ => false,
         },
-        5 => match *name {
+        5 => match name.to_string() {
             "List" | "async" | "break" | "const" | "false" | "flags" | "match" | "panic" | "scope" | "trait" | "while" | "world" => true,
             _ => false,
         },
-        6 => match *name {
+        6 => match name.to_string() {
             "Option" | "Result" | "String" | "assert" | "effect" | "export" | "global" | "import" | "return" | "stores" | "struct" | "unique" => true,
             _ => false,
         },
-        7 => match *name {
+        7 => match name.to_string() {
             "handler" | "matches" | "variant" => true,
             _ => false,
         },
-        8 => match *name {
+        8 => match name.to_string() {
             "continue" | "reactive" | "resource" => true,
             _ => false,
         },
-        9 => *name == "interface",
-        11 => *name == "unreachable",
+        9 => name.eq_str("interface"),
+        11 => name.eq_str("unreachable"),
         _ => false,
     };
 }
@@ -79,14 +79,14 @@ global GENERATED_LOCALS: List<String> = [
 
 /// Escape an identifier that would collide with a Wado reserved word or a
 /// generated local by appending '_'.
-pub fn escape_ident(name: &String) -> String {
-    if is_wado_reserved(name) || GENERATED_LOCALS.contains(name) {
-        return `${*name}_`;
+pub fn escape_ident<S: AsStrSlice>(name: S) -> String {
+    if is_wado_reserved(name) || GENERATED_LOCALS.contains(&name.to_string()) {
+        return `${name}_`;
     }
-    return *name;
+    return name.to_string();
 }
 
-pub fn to_pascal_case(name: &String) -> String {
+pub fn to_pascal_case<S: AsStrSlice>(name: S) -> String {
     let mut result = String::with_capacity(name.len());
     let mut capitalize_next = true;
     for let c of name.chars() {
@@ -102,7 +102,7 @@ pub fn to_pascal_case(name: &String) -> String {
     return result;
 }
 
-pub fn to_snake_case(name: &String) -> String {
+pub fn to_snake_case<S: AsStrSlice>(name: S) -> String {
     let mut result = String::with_capacity(name.len() + 4);
     let mut prev_lower = false;
     for let c of name.chars() {
@@ -120,6 +120,6 @@ pub fn to_snake_case(name: &String) -> String {
     return result;
 }
 
-pub fn to_lower(name: &String) -> String {
+pub fn to_lower<S: AsStrSlice>(name: S) -> String {
     return name.to_ascii_lowercase();
 }

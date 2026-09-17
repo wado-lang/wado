@@ -56,7 +56,7 @@ struct Lexer {
 }
 
 impl Lexer {
-    fn new(src: &String) -> Lexer {
+    fn new<S: AsStrSlice>(src: S) -> Lexer {
         return Lexer { chars: src.chars().collect(), pos: 0, line: 1, col: 1 };
     }
 
@@ -185,7 +185,7 @@ struct Parser {
 }
 
 impl Parser {
-    fn new(src: &String) -> Result<Parser, HighlightQueryError> {
+    fn new<S: AsStrSlice>(src: S) -> Result<Parser, HighlightQueryError> {
         let mut lexer = Lexer::new(src);
         let cur = match lexer.next_lexeme() {
             Ok(lx) => lx,
@@ -207,8 +207,8 @@ impl Parser {
         return Result::Ok(());
     }
 
-    fn mk_err(&self, message: String) -> HighlightQueryError {
-        return HighlightQueryError { message, line: self.cur.line, col: self.cur.col };
+    fn mk_err<S: AsStrSlice>(&self, message: S) -> HighlightQueryError {
+        return HighlightQueryError { message: message.to_string(), line: self.cur.line, col: self.cur.col };
     }
 
     /// Consume the current `@capture` pair and return the capture name.
@@ -331,7 +331,7 @@ impl Parser {
 
 /// Parse a highlight query into a flat rule list. Names are resolved against
 /// the grammar later, in `highlight_gen`.
-pub fn parse_highlight_query(src: &String) -> Result<List<HighlightRule>, HighlightQueryError> {
+pub fn parse_highlight_query<S: AsStrSlice>(src: S) -> Result<List<HighlightRule>, HighlightQueryError> {
     let mut parser = match Parser::new(src) {
         Ok(p) => p,
         Err(e) => {

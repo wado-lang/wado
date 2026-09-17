@@ -8,22 +8,22 @@ use de from "./grammars/lr_dangling_else.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_dangling_else" },
     };
 
-fn chk(input: &String, expected: &String) {
+fn chk<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let r = de::parse(input);
-    assert r.ok(), `unexpected diagnostics for ${*input}: ${de::to_string_tree(&r)}`;
+    assert r.ok(), `unexpected diagnostics for ${input}: ${de::to_string_tree(&r)}`;
     let a = de::to_string_tree(&r);
-    assert a == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${a}`;
+    assert a == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${a}`;
 }
 
 test "dangling-else: no else" {
-    chk(&"if 1 then 2", &"(prog (e if (e 1) then (e 2)))");
+    chk("if 1 then 2", "(prog (e if (e 1) then (e 2)))");
 }
 test "dangling-else: else binds" {
-    chk(&"if 1 then 2 else 3", &"(prog (e if (e 1) then (e 2) else (e 3)))");
+    chk("if 1 then 2 else 3", "(prog (e if (e 1) then (e 2) else (e 3)))");
 }
 test "dangling-else: else binds to the nearest (inner) if" {
-    chk(&"if 1 then if 2 then 3 else 4", &"(prog (e if (e 1) then (e if (e 2) then (e 3)) else (e 4)))");
+    chk("if 1 then if 2 then 3 else 4", "(prog (e if (e 1) then (e if (e 2) then (e 3)) else (e 4)))");
 }
 test "dangling-else: then-operand admits a higher-precedence suffix" {
-    chk(&"if 1 then 2 * 3", &"(prog (e if (e 1) then (e (e 2) * (e 3))))");
+    chk("if 1 then 2 * 3", "(prog (e if (e 1) then (e (e 2) * (e 3))))");
 }

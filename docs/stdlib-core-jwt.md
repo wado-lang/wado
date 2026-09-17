@@ -44,7 +44,7 @@ assert claims.validate_time(1300819380) matches { Err(JwtError::Expired) };
 
 Sign `payload` into a compact JWS: `base64url(header).base64url(payload).base64url(signature)`.
 
-### `pub fn verify<K: JwsVerifier>(token: &String, key: &K) -> Result<ByteList, JwtError>`
+### `pub fn verify<K: JwsVerifier, S: AsStrSlice>(token: S, key: &K) -> Result<ByteList, JwtError>`
 
 Verify `token` with `key` and return its payload bytes.
 

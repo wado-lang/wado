@@ -9,7 +9,7 @@ use t from "./grammars/java_lex_print.g4"
 use { TK_EOF } from "./grammars/java_lex_print.g4";
 
 test "java lexer actions print ahead of the token dump" {
-    let tokens = t::tokenize(&"34 enum abc");
+    let tokens = t::tokenize("34 enum abc");
     let actual = t::to_lexer_string(&tokens, TK_EOF);
     let expected = "I
 enum!
@@ -25,7 +25,7 @@ ID abc
 test "a java lexer predicate decides the winning rule" {
     // `enum` only wins ENUM because `getText().equals("enum")` holds; every
     // other lowercase run falls through to ID.
-    let tokens = t::tokenize(&"enu");
+    let tokens = t::tokenize("enu");
     let actual = t::to_lexer_string(&tokens, TK_EOF);
     let expected = "ID enu
 [@0,0:2='enu',<3>,1:0]

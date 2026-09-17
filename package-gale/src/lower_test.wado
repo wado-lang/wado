@@ -47,9 +47,9 @@ use {
     alt_class_first_set,
 } from "./gir.wado";
 
-fn empty_grammar(name: &String) -> Grammar {
+fn empty_grammar<S: AsStrSlice>(name: S) -> Grammar {
     return Grammar {
-        name: *name,
+        name: name.to_string(),
         kind: GrammarKind::Combined,
         parser_rules: [],
         lexer_rules: [],
@@ -66,7 +66,7 @@ fn no_lit_tokens() -> List<LitToken> {
     return [];
 }
 
-fn str_contains(haystack: &String, needle: &String) -> bool {
+fn str_contains<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> bool {
     let h_len = haystack.len();
     let n_len = needle.len();
     if n_len > h_len {
@@ -96,7 +96,7 @@ fn alt_of(elements: List<Element>) -> Alternative {
 }
 
 test "lower passes through grammar metadata" {
-    let mut g = empty_grammar(&"JSON");
+    let mut g = empty_grammar("JSON");
     g.source_files = ["JSON.g4"];
     let lowered = lower(&g, &no_lit_tokens());
     assert lowered.name == "JSON";
@@ -108,7 +108,7 @@ test "lower passes through grammar metadata" {
 }
 
 test "lower simple rule with single TokenRef" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "value",
@@ -142,7 +142,7 @@ test "lower simple rule with single TokenRef" {
 }
 
 test "lower simple rule with Literal" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "punc",
@@ -166,7 +166,7 @@ test "lower simple rule with Literal" {
 }
 
 test "lower simple rule with RuleRef" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "stmt",
@@ -192,7 +192,7 @@ test "lower simple rule with RuleRef" {
 }
 
 test "lower simple rule with Wildcard" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "any",
@@ -215,7 +215,7 @@ test "lower simple rule with Wildcard" {
 }
 
 test "lower simple rule with Not" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "no_int",
@@ -249,7 +249,7 @@ test "lower simple rule with Not over multi-token Group" {
     // `r : ~ ( INT | FLOAT ) ;` — Not over a Group whose alts are
     // each a single token. The kinds array carries both
     // alternative kinds.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "no_num",
@@ -283,7 +283,7 @@ test "lower simple rule with Not over multi-token Group" {
 }
 
 test "lower dedupes same-name fields" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "two_ints",
@@ -317,7 +317,7 @@ test "lower dedupes same-name fields" {
 }
 
 test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -364,7 +364,7 @@ test "lower multi-alt rule with disjoint first sets produces Direct dispatch" {
 }
 
 test "lower multi-alt rule with labeled alts uses label as case name" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     // `expr : INT #IntLit | STRING #StrLit ;` (each alt labeled).
     let mut int_alt = alt_of([Element::TokenRef(TokenRefElement::new("INT"))]);
     int_alt.label = Option::<String>::Some("IntLit");
@@ -402,7 +402,7 @@ test "lower interns multi-element first set from Direct dispatch branch" {
     // own first set the result is `{TK_INT, TK_FLOAT}` — a
     // two-element `DispatchBranch.tokens` that Phase 2.7 should
     // intern as a single `KindSet`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -440,7 +440,7 @@ test "lower kind set registry collapses identical sets to one id" {
     // should produce only ONE entry in `kind_sets`. Both `expr`
     // and `lit` reference `num`, so the dispatch branch covering
     // alt 0 in each rule has the same `{TK_FLOAT, TK_INT}` set.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -480,7 +480,7 @@ test "lower produces empty kind_sets when every dispatch branch is single-token"
     // Two-alt rule where each alt's first set is a single token.
     // Direct dispatch yields two single-token branches — neither
     // contributes to `kind_sets`, so the registry stays empty.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -501,7 +501,7 @@ test "lower transparent Group wraps single leaf element" {
     // `wrapped : (INT) ;` — a syntactic wrapper with no struct of
     // its own. The GroupOp carries `Transparent` shape and the
     // inner Op is the leaf Token verbatim.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "wrapped",
@@ -550,7 +550,7 @@ test "lower transparent Group dedupes against surrounding scope" {
     // `pair : INT (INT) ;` — the second INT lives inside a
     // Transparent group, so its binding still nests in the outer
     // alt's name table. Dedup turns the inner field into `int_2`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "pair",
@@ -592,7 +592,7 @@ test "lower single-alt Group with two leaves produces SingleAlt shape" {
     // `assignment : (name=ID '=' INT) ;` — a single alt with 3
     // elements lowers to `GroupShape::SingleAlt`. The struct gets
     // its own name table; the surrounding alt sees a single field.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "assignment",
@@ -644,7 +644,7 @@ test "lower single-alt Group uses fresh name table for inner ops" {
     // `pair : ID (ID INT) ;` — the outer ID dedups under `id`.
     // The inner Group is a SingleAlt, so its first ID gets the
     // base name `id` again (fresh table inside the struct).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "pair",
@@ -702,7 +702,7 @@ test "lower single-alt Group field name dedupes against outer scope" {
     // collides with the inner group's `single_alt_group_field_name`,
     // which is also `id_int`. The outer name table dedupes the
     // group's field to `id_int_2`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -744,7 +744,7 @@ test "lower single-alt Group field name dedupes against outer scope" {
 
 test "lower token-only Group produces TokenOnly shape with single field" {
     // `cmd : (K_INSERT | K_REPLACE) ;`
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "cmd",
@@ -796,7 +796,7 @@ test "lower token-only Group produces TokenOnly shape with single field" {
 
 test "lower token-only Group accepts Literal alts" {
     // `op : ('+' | '-') ;`
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "op",
@@ -840,7 +840,7 @@ test "lower token-only Group field dedupes against outer scope" {
     // `k_a`, then the group's `token_group_field_name` is
     // `k_a_or_k_b`. No collision today, so this just sanity-checks
     // that the outer scope sees the group's field through dedup.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -884,7 +884,7 @@ test "lower SimpleCst Group with single-RuleRef alts produces SimpleCst shape" {
     // `wrap : (stmt | expr) ; stmt : ID ; expr : INT ;`
     // The wrap rule's group is SimpleCst — each alt is a single
     // distinct RuleRef with disjoint first sets.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "wrap",
@@ -954,7 +954,7 @@ test "lower SimpleCst Group field dedupes against outer scope" {
     // `r : stmt_or_expr=ID (stmt | expr) ; stmt : INT ; expr : ID ;`
     // The outer label binds `stmt_or_expr` first; the group dedups
     // its base name to `stmt_or_expr_2`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1009,7 +1009,7 @@ test "lower General Group with disjoint multi-shape alts produces General shape"
     // Alt 0 is RuleRef → first set {ID}; alt 1 starts with INT.
     // Mixed shape rules out SimpleCst / TokenOnly / SingleAlt, so
     // the classifier picks General.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1074,7 +1074,7 @@ test "lower General Group group_index is per-rule cumulative" {
     // `r : (stmt | INT INT) (other | FLOAT FLOAT) ;`
     // `stmt : ID ; other : K_OTHER ;`
     // Two general groups; the second gets group_index = 1.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1146,7 +1146,7 @@ test "lower General Group group_index is per-rule cumulative" {
 test "lower Repeat with nested SingleAlt Group inner" {
     // `r : (a b)* ;` — Repeat over a multi-element single-alt Group.
     // The Repeat body becomes a SingleAlt Group Op.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1194,7 +1194,7 @@ test "lower SingleAlt Group containing nested Group" {
     // `r : (a (b c)) ;` — outer SingleAlt contains a nested
     // SingleAlt as its second element. Nested ops carry through
     // recursively.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1249,7 +1249,7 @@ test "lower Transparent Group wrapping Repeat" {
     // `r : (a*) ;` — Transparent Group whose only inner element is
     // a Repeat. The Op is a Repeat directly (no Group wrapper at
     // emit time).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1296,7 +1296,7 @@ test "lower Transparent Group wrapping Repeat" {
 test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
     // `r : INT? ;` — Optional Repeat. The Plain strategy is correct:
     // emit fires `if peek_kind ∈ first(inner) { ... }`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1342,7 +1342,7 @@ test "lower Optional Repeat with TokenRef inner uses Plain strategy" {
 
 test "lower greedy Star Repeat with TokenRef inner" {
     // `tokens : INT* ;`
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "tokens",
@@ -1395,7 +1395,7 @@ test "lower greedy Star Repeat with TokenRef inner" {
 
 test "lower greedy Plus Repeat with RuleRef inner" {
     // `exprs : expr+ ;`
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "exprs",
@@ -1438,7 +1438,7 @@ test "lower greedy Plus Repeat with RuleRef inner" {
 test "lower Repeat scan body mirrors parse body" {
     // Scan side gets its own ScanElement::Repeat with the same kind
     // and inner shape, no field bindings.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "tokens",
@@ -1481,7 +1481,7 @@ test "lower Repeat scan body mirrors parse body" {
 }
 
 test "lower simple rule produces scan body mirroring leaf ops" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "mix",
@@ -1536,7 +1536,7 @@ test "lower simple rule produces scan body mirroring leaf ops" {
 }
 
 test "lower scan element flattens scalar Label" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "labelled",
@@ -1568,7 +1568,7 @@ test "lower scan element flattens scalar Label" {
 }
 
 test "lower scalar Label rebinds inner field name" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "labelled",
@@ -1605,7 +1605,7 @@ test "lower scalar Label over a transparent Group binds the inner leaf" {
     // `x=(ID)` must bind exactly what `x=ID` binds. A Transparent
     // GroupOp has no field slot of its own, so the wrapper is stripped
     // before lowering or the binding is dropped.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "labelled",
@@ -1641,7 +1641,7 @@ test "lower scalar Label over a transparent Group binds the inner leaf" {
 }
 
 test "lower Label dedupes against surrounding alt names" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     // `lhs=ID lhs=ID` — two scalar labels with the same name.
     // dedup_name should produce "lhs" then "lhs_2".
     g.parser_rules = [
@@ -1684,7 +1684,7 @@ test "lower Label dedupes against surrounding alt names" {
 }
 
 test "lower carries every leaf op in order" {
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "mix",
@@ -1732,7 +1732,7 @@ test "lower carries every leaf op in order" {
 test "lower enumerates leaf field decls with span and Plain kinds" {
     // `mix : ID ':' expr ;` — leaf ops produce a 4-field struct
     // (span + id + colon + expr), all `Plain` kind.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "mix",
@@ -1782,7 +1782,7 @@ test "lower enumerates leaf field decls with span and Plain kinds" {
 test "lower enumerates Repeat field decls with List/Optional kinds" {
     // `r : INT* INT? ;` — Star produces `int_list: List<Token>`,
     // Optional produces `int: Option<Token>`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1832,7 +1832,7 @@ test "lower SingleAlt Group body enumerates list-label inner as List field" {
     // `r : ID (COMMA b+=ID)* ;` — the `(COMMA b+=ID)` SingleAlt
     // group's inner `b+=ID` is a list label. The SingleAlt struct
     // must carry `b: List<Token>`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -1903,7 +1903,7 @@ test "lower SingleAlt Group body enumerates inner FieldDecls without span" {
     // `assignment : (name=ID '=' INT) ;` — the SingleAlt inner body
     // gets its own `IdEqIntItem` struct with `id`, `eq`, `int` —
     // no leading `span` field (the outer rule struct owns the span).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "assignment",
@@ -1958,7 +1958,7 @@ test "lower General Group inner alts enumerate per-alt FieldDecls without span" 
     // produces `NodeGroup0` enum + `NodeGroup0Alt0` / `NodeGroup0Alt1`
     // structs. Each inner alt struct carries its own FieldDecls
     // (no `span` — the outer `NodeNode` owns it).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "node",
@@ -2022,7 +2022,7 @@ test "lower Repeat field name dedupes against outer scope" {
     // `r : int_list=ID INT* ;` — outer label takes `int_list`,
     // the unlabeled `INT*` dedups its outer struct field to
     // `int_list_2`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2067,7 +2067,7 @@ test "lower Group field decls match shape's outer field/type" {
     // `stmt : ID ; expr : INT ;`
     // — TokenOnly, SimpleCst, SingleAlt shapes each produce one
     // field on the outer struct.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2129,7 +2129,7 @@ test "lower LR rule splits atom and lr_alts and assigns precedence" {
     // precedence assignment: first LR alt = highest = total_lr,
     // last = 1. So `+` (alt 1, lr_position 0) → own_prec = 2;
     // `*` (alt 2, lr_position 1) → own_prec = 1.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -2188,7 +2188,7 @@ test "lower LR rule splits atom and lr_alts and assigns precedence" {
 test "lower LR rule respects right-associative conflict_min" {
     // `expr : INT | <assoc=right> expr '**' expr ;`
     // Right-assoc: conflict_min = own_prec (not own_prec + 1).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -2229,7 +2229,7 @@ test "lower LR rule respects right-associative conflict_min" {
 test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
     // `expr : INT | expr '++' ;` — the LR alt has no internal
     // self-ref beyond the leading prefix.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "expr",
@@ -2257,7 +2257,7 @@ test "lower LR rule with no trailing self-ref records last_self_ref_idx -1" {
 
 test "lower non-greedy Wildcard Repeat carries outer_follow as exit_first" {
     // `comment : '/*' .*? '*/' ;` — `.*?` exits when `*/` appears.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "comment",
@@ -2306,7 +2306,7 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
     // shape just as it does for bare `.*?`. Without an empty
     // body_first_set on the lowered Repeat, emit would fall through to
     // a `false` while-condition and the loop would never enter.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2356,7 +2356,7 @@ test "lower non-greedy single-element Group Repeat lowers body to TransparentGro
 
 test "lower non-greedy TokenRef Repeat carries outer_follow as exit_first" {
     // `r : ID*? '=' ;` — non-greedy `ID*?` followed by required `=`.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2397,7 +2397,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
     // the inner and the follow; peek(1) distinguishes INT (inner)
     // from STRING (follow). `exit_second` carries the inner's
     // post-first first set so emit can disambiguate.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2459,7 +2459,7 @@ test "lower non-greedy Group Repeat fills exit_second from inner suffix" {
 test "lower multi-alt rule with overlapping first sets emits Tournament dispatch" {
     // `r : ID INT | ID STRING ;` — both alts start with ID, so
     // overlap. Both are fully scannable → Tournament dispatch.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2498,7 +2498,7 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     // OverlapTournament diagnostic naming the rule and the shared token.
     // The scan-side dispatch lowers the same alts but must not duplicate
     // the warning.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2521,20 +2521,20 @@ test "lower warns once when overlapping alts fall back to a tournament" {
     assert lowered.diagnostics.len() == 1, `expected 1 diagnostic, got ${lowered.diagnostics.len()}`;
     let d = &lowered.diagnostics[0];
     // The owner names the rule structurally, so tooling matches by equality.
-    assert d.owner == DiagnosticOwner::rule_dispatch(&"r"), `unexpected owner: ${d.owner.label()}`;
+    assert d.owner == DiagnosticOwner::rule_dispatch("r"), `unexpected owner: ${d.owner.label()}`;
     if let OverlapTournament = &d.kind {
     } else {
         panic("expected DiagnosticKind::OverlapTournament");
     }
     // The message should name the shared lookahead token so a grammar
     // author can see why the alts overlapped.
-    assert str_contains(&d.message, &"TK_ID"), `message lacks shared token: ${d.message}`;
+    assert str_contains(&d.message, "TK_ID"), `message lacks shared token: ${d.message}`;
 }
 
 test "lower raises no diagnostics for disjoint alts" {
     // `r : ID | INT ;` — disjoint first sets dispatch directly with no
     // tournament, so there is nothing to warn about.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2588,7 +2588,7 @@ test "lower Tournament sorts longer alt first" {
     // `r : ID INT STRING | ID INT ;` — both start with ID, but the
     // 3-element alt is "more specific" and sorts before the 2-elem
     // alt (longest-match wins).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2632,7 +2632,7 @@ test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repe
     // `r : a X ; a : X* ;` — the call to `a` is followed by `X`
     // (non-nullable), so its continuation is the static mask `[{X}]`;
     // `a`'s `X*` sits at the rule tail, so it gates on the caller follow.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new("r", Visibility::Default, [], [
             alt_of([
@@ -2679,7 +2679,7 @@ test "lower: RuleCall before a token gets a Combined FollowArg; callee tail Repe
 test "lower: RuleCall at the rule tail forwards the runtime follow" {
     // `r : a ; a : X* ;` — `a` is the last element of `r`, so its
     // continuation is whatever `r` was itself called with → Forward.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new("r", Visibility::Default, [], [alt_of([Element::RuleRef(RuleRefElement::new("a"))])]),
         ParserRule::new("a", Visibility::Default, [], [
@@ -2710,7 +2710,7 @@ test "lower Optional Repeat over multi-token Group uses OptionalLookahead strate
     // elements. The Optional needs a 2-token lookahead to commit
     // to firing. Emits `OptionalLookahead` carrying the
     // per-position signature.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2785,7 +2785,7 @@ test "lower Optional Repeat with single-token inner stays Plain" {
     // `gen_op_repeat_with_follow_override` emits the single-token
     // guard directly from `inner_first`, so the `OptionalLookahead`
     // specialisation is unnecessary here.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -2826,7 +2826,7 @@ test "lower Optional Repeat over RuleRef-led Group inner uses OptionalScanGuard"
     // TokenRef), and the elements include no nested Optionals so
     // shape lookahead doesn't apply either. The inner is scannable,
     // so `OptionalScanGuard` is the strategy emit picks.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -3000,7 +3000,7 @@ test "lower Optional Repeat with many optionals does not enumerate 2^n shapes" {
             non_greedy: false,
         }));
     }
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -3040,7 +3040,7 @@ test "lower Repeat over General Group inner uses speculative group_counter id" {
     // (the per-rule counter starts at 0 in alt 0). The Repeat's
     // outer struct field is `group_0_list` (Plus → `_list` suffix
     // on the General-Group base `group_<idx>`).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -3099,7 +3099,7 @@ test "lower Repeat with list-label inner uses label name as outer field" {
     // `r : (names+=ID)* ;` — `+=` inside a `*` Repeat. The Repeat
     // becomes the array; the label name `names` IS the outer
     // struct field (no `_list` suffix).
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",
@@ -3141,7 +3141,7 @@ test "lower Transparent Group does not contribute a CST field" {
     // false for this 1-alt-1-element shape. lower's enumeration must
     // match that decision so the GIR-driven struct emit produces the
     // same fields parser_gen's runtime construction assigns.
-    let mut g = empty_grammar(&"T");
+    let mut g = empty_grammar("T");
     g.parser_rules = [
         ParserRule::new(
             "r",

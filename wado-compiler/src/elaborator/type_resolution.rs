@@ -572,6 +572,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.resolve_named_type_at(None, name, span, false)
     }
 
+    /// Report an application writing more type arguments than `params` declares,
+    /// and say whether it did. Fewer is [`Self::type_args_of_application`]'s.
+    fn reject_surplus_type_args(
+        &mut self,
+        name: &str,
+        params: &[ast::GenericParam],
+        args: &[Type],
+        span: Span,
+    ) -> bool {
+        // A pack swallows every argument past the scalars ahead of it, so an
+        // arity is only a ceiling when the declaration has none.
+        if params.iter().any(|p| p.is_pack) {
+            return false;
+        }
+        let expected = params.iter().filter(|p| !p.is_effect).count();
+        if args.len() <= expected {
+            return false;
+        }
+        let _ = self.emit(TypeError::SurplusTypeArguments {
+            name: name.to_string(),
+            expected,
+            found: args.len(),
+            span,
+        });
+        true
+    }
+
     /// The type arguments an application of `def` supplies, each slot the site
     /// left out taken from the declaration's default.
     ///
@@ -880,6 +907,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return self.resolve_generic_type_out_of_scope(site, name, args, span);
                 };
                 let struct_info = self.lookup_struct_fields_of_decl(def).cloned();
+                // A trait head reaches here too (`impl IndexValue<i32> for T`),
+                // and a trait's parameters live on its own declaration, so only
+                // a type declaration's list is a ceiling to exceed.
+                let declared: Option<Vec<ast::GenericParam>> = struct_info
+                    .as_ref()
+                    .map(|info| info.type_params.clone())
+                    .or_else(|| {
+                        self.lookup_variant_case_of_decl(def)
+                            .map(|info| info.type_params.clone())
+                    })
+                    .or_else(|| {
+                        self.lookup_generic_newtype_of_decl(def)
+                            .map(|info| info.type_params.clone())
+                    });
+                if let Some(params) = declared
+                    && self.reject_surplus_type_args(name, &params, args, span)
+                {
+                    return TypeTable::ERROR;
+                }
                 if struct_info
                     .as_ref()
                     .is_some_and(|info| !info.type_params.is_empty())

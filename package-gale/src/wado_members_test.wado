@@ -7,7 +7,7 @@ fn member_act(scope: Option<String>) -> NamedAction {
 }
 
 test "translate_wado_members parses a defaulted field" {
-    let m = translate_wado_members(&"count: i32 = 0").unwrap();
+    let m = translate_wado_members("count: i32 = 0").unwrap();
     assert m.fields.len() == 1, `fields: ${m.fields.len()}`;
     assert m.fields[0].name == "count";
     assert m.fields[0].ty == "i32";
@@ -28,18 +28,18 @@ test "translate_wado_members parses several fields and a method" {
 }
 
 test "translate_wado_members handles a generic field type" {
-    let m = translate_wado_members(&"seen: List<i32> = []").unwrap();
+    let m = translate_wado_members("seen: List<i32> = []").unwrap();
     assert m.fields.len() == 1;
     assert m.fields[0].ty == "List<i32>", `ty: ${m.fields[0].ty}`;
     assert m.fields[0].init == "[]";
 }
 
 test "translate_wado_members rejects a field with no initializer" {
-    assert translate_wado_members(&"count: i32") matches { Err(_) };
+    assert translate_wado_members("count: i32") matches { Err(_) };
 }
 
 test "translate_wado_members keeps fields after a comparison-operator initializer" {
-    let m = translate_wado_members(&"ok: bool = 1 < 2; count: i32 = 0").unwrap();
+    let m = translate_wado_members("ok: bool = 1 < 2; count: i32 = 0").unwrap();
     assert m.fields.len() == 2, `fields: ${m.fields.len()}`;
     assert m.fields[0].name == "ok";
     assert m.fields[0].init == "1 < 2", `init: '${m.fields[0].init}'`;
@@ -48,7 +48,7 @@ test "translate_wado_members keeps fields after a comparison-operator initialize
 }
 
 test "translate_wado_members captures a method with a struct-literal default arg" {
-    let m = translate_wado_members(&"fn reset(p: Pos = Pos { x: 0 }) { return p.x; }").unwrap();
+    let m = translate_wado_members("fn reset(p: Pos = Pos { x: 0 }) { return p.x; }").unwrap();
     assert m.fields.is_empty(), `fields: ${m.fields.len()}`;
     assert m.methods.len() == 1, `methods: ${m.methods.len()}`;
     assert m.methods[0].source.contains("Pos { x: 0 }"), `method: '${m.methods[0].source}'`;

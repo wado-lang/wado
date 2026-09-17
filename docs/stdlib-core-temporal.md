@@ -172,7 +172,7 @@ RFC 3339 / ISO 8601 string in UTC (`…Z`), using the least sub-second
 precision (0, 3, 6, or 9 fraction digits) that represents the instant
 exactly. This is the serde wire form.
 
-#### `pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError>`
+#### `pub fn parse_rfc3339<S: AsStrSlice>(text: S) -> Result<Instant, DeserializeError>`
 
 Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
 discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
@@ -183,7 +183,7 @@ RFC 7231 IMF-fixdate, the form an HTTP `Date`, `Expires`, or
 `Last-Modified` header carries: `"Sun, 06 Nov 1994 08:49:37 GMT"`.
 Always UTC, always whole seconds.
 
-#### `pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError>`
+#### `pub fn parse_http_date<S: AsStrSlice>(text: S) -> Result<Instant, DeserializeError>`
 
 Parse an HTTP-date in any of the three forms RFC 7231 requires a
 recipient to accept: IMF-fixdate (`"Sun, 06 Nov 1994 08:49:37 GMT"`),
@@ -191,7 +191,7 @@ the obsolete RFC 850 (`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose
 two-digit year pivots at 70), and asctime (`"Sun Nov  6 08:49:37 1994"`).
 The weekday is advisory and is not checked against the date.
 
-#### `pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime`
+#### `pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime`
 
 Interpret this instant in `time_zone`, the zoned view of the same moment
 (`Temporal.Instant.toZonedDateTimeISO`).
@@ -245,19 +245,19 @@ which is also a string after the removal of `Temporal.TimeZone`. Only
 `"UTC"`/`"Z"` and fixed `±HH:MM` offsets are interpretable today; every
 operation traps on an IANA name until a tz database is bundled.
 
-#### `pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime`
+#### `pub fn new<S: AsStrSlice>(instant: Instant, time_zone: S) -> ZonedDateTime`
 
 Interpret `instant` in `time_zone`, canonicalizing the three spellings of
 UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
 derived `Eq`. Any other zone is stored verbatim.
 
-#### `pub fn now(time_zone: String) -> ZonedDateTime with SystemClock`
+#### `pub fn now<S: AsStrSlice>(time_zone: S) -> ZonedDateTime with SystemClock`
 
 The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
 The zone is the caller's: there is no system-zone lookup until the
 `wasi:clocks` `timezone` interface is wired up.
 
-#### `pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError>`
+#### `pub fn parse_rfc3339<S: AsStrSlice>(text: S) -> Result<ZonedDateTime, DeserializeError>`
 
 Parse an RFC 3339 / ISO 8601 timestamp such as
 `"2023-11-14T22:13:20.5+09:00"` or `"1970-01-01T00:00:00Z"`, preserving
@@ -410,7 +410,7 @@ Round the local wall clock to a multiple of `increment` units, counting
 from local midnight so a day-aligned unit lands on the civil boundary.
 `Unit::Day` rounds to the nearest midnight. Traps on an IANA zone name.
 
-#### `pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime`
+#### `pub fn with_time_zone<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime`
 
 The same instant read in another zone.
 
@@ -483,7 +483,7 @@ against it.
 
 #### `nanoseconds: i64`
 
-#### `pub fn parse(text: String) -> Result<Duration, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<Duration, DeserializeError>`
 
 Parse an ISO 8601 duration such as `"P1Y2M3W4DT5H6M7.5S"`, optionally
 signed. A fraction is allowed on the last time component present and
@@ -576,7 +576,7 @@ length — Temporal's `constrain` overflow.
 
 The date `days` after the Unix epoch.
 
-#### `pub fn parse(text: String) -> Result<PlainDate, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDate, DeserializeError>`
 
 Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
 
@@ -654,7 +654,7 @@ Drop the year.
 
 Pair this date with a wall-clock time.
 
-#### `pub fn to_zoned_date_time(&self, time_zone: String, time: PlainTime = PlainTime {}) -> ZonedDateTime`
+#### `pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S, time: PlainTime = PlainTime {}) -> ZonedDateTime`
 
 Read this date at `time` in `time_zone`, which resolves it to an
 instant. Traps on an IANA zone name.
@@ -702,7 +702,7 @@ descending significance and so orders chronologically within a day.
 A wall-clock time, asserted to be in range. Every component defaults to
 zero, so `PlainTime { hour: 9 }` is 09:00:00.
 
-#### `pub fn parse(text: String) -> Result<PlainTime, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainTime, DeserializeError>`
 
 Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
 
@@ -778,7 +778,7 @@ still names a different moment in every zone. Corresponds to
 
 A date and time, asserted to be in range.
 
-#### `pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDateTime, DeserializeError>`
 
 Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
 the separator and no offset.
@@ -801,7 +801,7 @@ The span from this value to `other`, positive when `other` is later.
 
 The span from `other` to this value — `until` with the sign flipped.
 
-#### `pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime`
+#### `pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime`
 
 Read this reading in `time_zone`, which resolves it to an instant.
 Traps on an IANA zone name.
@@ -839,7 +839,7 @@ period. Corresponds to `Temporal.PlainYearMonth`.
 
 A year and month, asserted to be in range.
 
-#### `pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainYearMonth, DeserializeError>`
 
 Parse `YYYY-MM`.
 
@@ -919,7 +919,7 @@ is `to_plain_date`'s problem.
 A month and day, asserted to exist in some year — February 29 does, so
 it is accepted here and resolved by `to_plain_date`.
 
-#### `pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError>`
+#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainMonthDay, DeserializeError>`
 
 Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
 

@@ -380,6 +380,27 @@ mod format_contract_tests {
         );
     }
 
+    #[test]
+    fn a_type_reexported_from_a_component_is_documented() {
+        // `core:icu` publishes `BinaryProperty` with
+        // `pub use { BinaryProperty } from "./icu.wat"`. The type is named in
+        // two signatures, so a reader who cannot see its cases cannot call them.
+        let out = render_single(
+            &extract_stdlib_doc("core:icu").expect("core:icu stdlib doc"),
+            "markdown",
+            "core:icu",
+            OutputFormat::Markdown,
+        );
+        assert!(
+            out.contains("enum BinaryProperty"),
+            "a component's re-exported enum must be documented:\n{out}"
+        );
+        assert!(
+            out.contains("Uppercase"),
+            "the enum's cases must be documented:\n{out}"
+        );
+    }
+
     fn assert_dprint_stable(content: &str, label: &str) {
         let reformatted = format_markdown(content);
         assert_eq!(

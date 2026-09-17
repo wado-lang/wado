@@ -256,16 +256,16 @@ internal fn write_seq_inspect<T: Inspect>(
             break;
         }
         if shown > 0 {
-            f.write_str(&", ");
+            f.write_str(", ");
         }
         repr[i].inspect(f);
         shown += 1;
     }
     if marker && truncated {
         if shown > 0 {
-            f.write_str(&", ...");
+            f.write_str(", ...");
         } else {
-            f.write_str(&"...");
+            f.write_str("...");
         }
     }
     f.write_char(']');
@@ -276,7 +276,7 @@ internal fn write_seq_inspect<T: Inspect>(
 /// ones.
 fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &mut Formatter, marker: bool, limit: i32) {
     if start >= end {
-        f.write_str(&"[]");
+        f.write_str("[]");
         return;
     }
     f.open_brace("[");
@@ -294,7 +294,7 @@ fn write_seq_inspect_alt<T: Inspect>(repr: &Array<T>, start: i32, end: i32, f: &
     }
     if marker && truncated {
         f.write_newline_indent();
-        f.write_str(&"...");
+        f.write_str("...");
     }
     f.close_brace("]");
 }

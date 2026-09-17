@@ -11,49 +11,49 @@ use g from "./grammars/lr_atn_mid_operand.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_lr_atn_mid_operand" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
     let actual = g::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    ${*input}\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    ${input}\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
-fn assert_parses(input: &String) {
+fn assert_parses<S: AsStrSlice>(input: S) {
     let result = g::parse(input);
-    assert result.ok(), `unexpected diagnostics for ${*input}: ${g::to_string_tree(&result)}`;
+    assert result.ok(), `unexpected diagnostics for ${input}: ${g::to_string_tree(&result)}`;
 }
 
 test "the between atom keeps its own and" {
-    assert_tree(&"between a and b ;", &"(stat (expr between (expr a) and (expr b)) ;)");
+    assert_tree("between a and b ;", "(stat (expr between (expr a) and (expr b)) ;)");
 }
 
 test "binary and chains left-associatively" {
-    assert_tree(&"a and b and c ;", &"(stat (expr (expr (expr a) and (expr b)) and (expr c)) ;)");
+    assert_tree("a and b and c ;", "(stat (expr (expr (expr a) and (expr b)) and (expr c)) ;)");
 }
 
 test "the mid operand stops at the enclosing and" {
-    assert_tree(&"a between b and c ;", &"(stat (expr (expr a) between (expr b) and (expr c)) ;)");
+    assert_tree("a between b and c ;", "(stat (expr (expr a) between (expr b) and (expr c)) ;)");
 }
 
 // Acceptance is asserted outside the `#[TODO]`s below, so a regression from
 // "wrong tree" to "rejected" fails instead of staying a pending todo.
 test "the climbing cases parse" {
-    assert_parses(&"a between b and c and d ;");
-    assert_parses(&"between a and b and c ;");
+    assert_parses("a between b and c and d ;");
+    assert_parses("between a and b and c ;");
 }
 
 #[TODO]
 test "the mid operand climbs the shared and when one is left over" {
     assert_tree(
-        &"a between b and c and d ;",
-        &"(stat (expr (expr a) between (expr (expr b) and (expr c)) and (expr d)) ;)",
+        "a between b and c and d ;",
+        "(stat (expr (expr a) between (expr (expr b) and (expr c)) and (expr d)) ;)",
     );
 }
 
 #[TODO]
 test "the atom's first operand climbs the shared and when one is left over" {
     assert_tree(
-        &"between a and b and c ;",
-        &"(stat (expr between (expr (expr a) and (expr b)) and (expr c)) ;)",
+        "between a and b and c ;",
+        "(stat (expr between (expr (expr a) and (expr b)) and (expr c)) ;)",
     );
 }

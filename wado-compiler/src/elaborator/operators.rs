@@ -417,6 +417,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &eq_trait_name,
                         "eq",
                         false,
+                        Some(&ArgClass::Exact(right)),
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = if op == BinaryOp::Eq { "==" } else { "!=" };
@@ -463,6 +464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &ord_trait_name,
                         "cmp",
                         false,
+                        None,
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = match op {
@@ -898,9 +900,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             let float_name = {
                 let table = self.tysys.type_table.borrow();
-                match table.get(table.representation_head(left)) {
-                    ResolvedType::Primitive(PrimitiveType::F32) => Some("f32"),
-                    ResolvedType::Primitive(PrimitiveType::F64) => Some("f64"),
+                match table.primitive_head(left) {
+                    Some(PrimitiveType::F32) => Some("f32"),
+                    Some(PrimitiveType::F64) => Some("f64"),
                     _ => None,
                 }
             };
@@ -1189,6 +1191,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &trait_name,
                         method_name,
                         false,
+                        None,
                     )
                     .or_else(|| {
                         self.resolve_trait_method_for_op(
@@ -1198,6 +1201,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             &trait_name,
                             method_name,
                             false,
+                            None,
                         )
                     });
                 if let Some(resolved) = resolved {
@@ -1751,7 +1755,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Resolve `a OP1 b OP2 c [OP3 d …]` as the equivalent
-    /// `(a OP1 b) && (b OP2 c) [&& (c OP3 d) …]`, which reify emits.
+    /// `(a OP1 b) & (b OP2 c) [& (c OP3 d) …]`, which reify emits. The join is
+    /// `&`, not `&&`: a chain evaluates every operand.
     ///
     /// Middle terms appear in two comparisons each, so each is bound to a
     /// `$mK` local — `foo() < bar() < baz()` calls `bar()` exactly once.
@@ -1794,7 +1799,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Multi-comparison: actual chain expansion. Tag the node so the
-        // future `reify` pass can replay the same `(a < b) && (b < c)`
+        // future `reify` pass can replay the same `(a < b) & (b < c)`
         // shape with the same `$mK` middle bindings.
         self.record_desugar(chain.id, DesugarKind::ComparisonChain);
 
@@ -1838,10 +1843,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let cmp_type =
                 self.resolve_binary_op(prev, cmp.op, right, cmp.right.span(), cmp.op_span, None);
-            // The `&&` joining two comparisons is synthesised, so its right
+            // The `&` joining two comparisons is synthesised, so its right
             // operand is the comparison the chain just built, not written text.
-            acc =
-                self.resolve_binary_op(acc, BinaryOp::And, cmp_type, cmp.op_span, chain.span, None);
+            acc = self.resolve_binary_op(
+                acc,
+                BinaryOp::BitAnd,
+                cmp_type,
+                cmp.op_span,
+                chain.span,
+                None,
+            );
             prev = right;
         }
 

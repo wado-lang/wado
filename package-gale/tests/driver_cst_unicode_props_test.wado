@@ -3,32 +3,32 @@ use g from "./grammars/unicode_props.g4"
     with {
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_unicode_props" },
     };
-fn ok(input: &String) {
-    assert g::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn ok<S: AsStrSlice>(input: S) {
+    assert g::parse(input).ok(), `unexpected diagnostics for ${input}`;
 }
 test "unicode: ascii word" {
-    ok(&"hello");
+    ok("hello");
 }
 test "unicode: digits" {
-    ok(&"12345");
+    ok("12345");
 }
 test "unicode: word and number" {
-    ok(&"foo 42");
+    ok("foo 42");
 }
 test "unicode: latin accents" {
-    ok(&"café");
-    ok(&"naïve");
-    ok(&"résumé");
+    ok("café");
+    ok("naïve");
+    ok("résumé");
 }
 test "unicode: greek" {
-    ok(&"αβγδε");
-    ok(&"ΑΒΓΔΕ");
+    ok("αβγδε");
+    ok("ΑΒΓΔΕ");
 }
 test "unicode: cyrillic" {
-    ok(&"Привет");
+    ok("Привет");
 }
 test "unicode: cjk" {
-    ok(&"世界");
-    ok(&"日本語");
-    ok(&"ひらがな");
+    ok("世界");
+    ok("日本語");
+    ok("ひらがな");
 }

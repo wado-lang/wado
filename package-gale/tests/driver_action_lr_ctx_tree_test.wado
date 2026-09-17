@@ -8,7 +8,7 @@ use lct from "./grammars/wado_lr_ctx_tree.g4"
     };
 
 test "$ctx.toStringTree renders the LR node at a single (atom-only) level" {
-    let result = lct::parse(&"1");
+    let result = lct::parse("1");
     assert result.ok(), "clean parse of 1";
     // `e` is the start rule, so at `@after` the open stack is empty; the render
     // must still produce the just-closed `e` node, not "".
@@ -17,7 +17,7 @@ test "$ctx.toStringTree renders the LR node at a single (atom-only) level" {
 }
 
 test "$ctx.toStringTree renders each LR level's own node" {
-    let result = lct::parse(&"1 + 2");
+    let result = lct::parse("1 + 2");
     assert result.ok(), "clean parse of 1 + 2";
     // One `@after` per precedence level: the two atoms, then the wrapping node.
     // The outermost render is the whole expression.

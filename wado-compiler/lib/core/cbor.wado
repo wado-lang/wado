@@ -144,7 +144,7 @@ fn push_be(buf: &mut ByteList, value: u64, nbytes: i32) {
 
 /// Append the UTF-8 bytes of `s` (a `String` is already valid UTF-8, so the
 /// text string is emitted verbatim — RFC 8949 §3.1).
-fn push_text_bytes(buf: &mut ByteList, s: &String) {
+fn push_text_bytes<S: AsStrSlice>(buf: &mut ByteList, s: S) {
     buf.extend_from_slice(s.as_bytes() as Slice<u8>);
 }
 
@@ -190,7 +190,7 @@ fn write_bignum(buf: &mut ByteList, tag: u64, mag: u128) {
 // scalar difference is the float ladder; everything else is byte-identical).
 
 /// Write a text string head + body (RFC 8949 §3.1).
-fn write_text(buf: &mut ByteList, s: &String) {
+fn write_text<S: AsStrSlice>(buf: &mut ByteList, s: S) {
     write_head(buf, MAJOR_TEXT, s.len() as u64);
     push_text_bytes(buf, s);
 }
@@ -304,7 +304,7 @@ impl SerializeMap for CborMapSerializer {
 }
 
 impl SerializeStruct for CborStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         write_text(self.buf, name);
         let mut ser = CborSerializer { buf: self.buf };
         let r = value.serialize(&mut ser);
@@ -386,11 +386,11 @@ impl Serializer for CborSerializer {
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        write_text(self.buf, &`${v}`);
+        write_text(self.buf, `${v}`);
         return Result::Ok(());
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         write_text(self.buf, v);
         return Result::Ok(());
     }
@@ -424,15 +424,15 @@ impl Serializer for CborSerializer {
         return Result::Ok(CborMapSerializer { buf: self.buf });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CborStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<CborStructSerializer, SerializeError> {
         write_head(self.buf, MAJOR_MAP, fields as u64);
         return Result::Ok(CborStructSerializer { buf: self.buf });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         // External tagging: a unit variant is just its name as a text string.
@@ -440,10 +440,10 @@ impl Serializer for CborSerializer {
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<CborVariantSerializer, SerializeError> {
         // External tagging: a single-pair map `{ name: payload }`.
@@ -585,7 +585,7 @@ impl SerializeMap for CanonicalCborMapSerializer {
 }
 
 impl SerializeStruct for CanonicalCborStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         let mut kbuf = ByteList::with_capacity(name.len() + 1);
         write_text(&mut kbuf, name);
         let vbuf = canonical_encode(value)?;
@@ -664,11 +664,11 @@ impl Serializer for CanonicalCborSerializer {
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        write_text(self.buf, &`${v}`);
+        write_text(self.buf, `${v}`);
         return Result::Ok(());
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
         write_text(self.buf, v);
         return Result::Ok(());
     }
@@ -705,27 +705,31 @@ impl Serializer for CanonicalCborSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalCborStructSerializer, SerializeError> {
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        fields: i32,
+    ) -> Result<CanonicalCborStructSerializer, SerializeError> {
         return Result::Ok(CanonicalCborStructSerializer {
             buf: self.buf,
             entries: [],
         });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
         write_text(self.buf, variant_name);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<CanonicalCborVariantSerializer, SerializeError> {
         write_head(self.buf, MAJOR_MAP, 1);
@@ -1829,7 +1833,11 @@ impl Deserializer for CborDeserializer {
     /// Open a container of the expected major type, unwrapping any
     /// self-described prefix. `remaining` is `-1` when indefinite; `expected`
     /// is the type-mismatch diagnostic, by reference so success allocates none.
-    fn begin_container(&mut self, want_major: u8, expected: &String) -> Result<[i64, bool, i32], DeserializeError> {
+    fn begin_container<S: AsStrSlice>(
+        &mut self,
+        want_major: u8,
+        expected: S,
+    ) -> Result<[i64, bool, i32], DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             if major == MAJOR_TAG && arg == TAG_SELF_DESCRIBED {
@@ -1837,7 +1845,7 @@ impl Deserializer for CborDeserializer {
             }
             if major != want_major {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type(*expected, self.pos as i64));
+                return Result::Err(DeserializeError::unexpected_type(expected.to_string(), self.pos as i64));
             }
             let depth = self.inner_depth()?;
             let remaining: i64 = if indef { -1 } else { arg as i64 };
@@ -1855,12 +1863,40 @@ impl Deserializer for CborDeserializer {
         return Result::Ok(CborMapAccess { de: self, depth, remaining, indef });
     }
 
+<<<<<<< HEAD
     fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> {
+||||||| 5708464fb8e
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<CborStructAccess, DeserializeError> with stores[self] {
+=======
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        num_fields: i32,
+    ) -> Result<CborStructAccess, DeserializeError> with stores[self] {
+>>>>>>> origin/main
         let [remaining, indef, depth] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP_FOR_STRUCT)?;
         return Result::Ok(CborStructAccess { de: self, depth, remaining, indef });
     }
 
+<<<<<<< HEAD
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> {
+||||||| 5708464fb8e
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<CborVariantAccess, DeserializeError> with stores[self] {
+=======
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<CborVariantAccess, DeserializeError> with stores[self] {
+>>>>>>> origin/main
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {

@@ -86,7 +86,7 @@ type "functype//core:prelude/traits.wado/core:prelude/traits.wado/IterMap<core:p
 
 type "functype//iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$call" = fn(ref "iter_map_collect_variant.wado//Color") -> ref "core:prelude/string.wado//String";  // TypeId(29)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(30)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
@@ -196,38 +196,34 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
     let buf_2: ref "core:prelude/string.wado//String";
     let i: i32;
     let item: ref "core:prelude/string.wado//String";
+    let n_18: i32;
     let new_used: i32;
-    let start_18: i32;
-    let $licm_used_22: i32;
-    let $licm_used_23: i32;
-    let $licm_repr_24: ref Array<u8>;
-    let $licm_repr_25: ref "Array<core:prelude/string.wado/String>";
-    let $licm_arith_26: bool;
+    let start_23: i32;
+    let $licm_used_27: i32;
+    let $licm_repr_28: ref "Array<core:prelude/string.wado/String>";
     buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used * 8), used: 0 };
     i = 0;
-    $licm_used_22 = self.used;
-    $licm_used_23 = separator.used;
-    $licm_repr_24 = separator.repr;
-    $licm_repr_25 = self.repr;
-    $licm_arith_26 = $licm_used_23 == 0;
+    $licm_used_27 = self.used;
+    $licm_repr_28 = self.repr;
     b5: block {
         l6: loop {
-            break_if b5 i >= $licm_used_22;
+            break_if b5 i >= $licm_used_27;
             if i > 0 {
-                $inline_core_prelude_string_wado_String__push_str_3: block {
-                    break_if $inline_core_prelude_string_wado_String__push_str_3 $licm_arith_26;
-                    new_used = buf_2.used + $licm_used_23;
+                $inline_core_prelude_string_wado_String__internal_push_string_6: block {
+                    n_18 = separator.used;
+                    break_if $inline_core_prelude_string_wado_String__internal_push_string_6 n_18 == 0;
+                    new_used = buf_2.used + n_18;
                     if @unlikely(new_used > builtin::array_len(buf_2.repr)) {
                         cold_path;
                         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used);
                     }
-                    start_18 = buf_2.used;
+                    start_23 = buf_2.used;
                     buf_2.used = new_used;
-                    builtin::array_copy<u8>(buf_2.repr, start_18, $licm_repr_24, 0, $licm_used_23);
+                    builtin::array_copy<u8>(buf_2.repr, start_23, separator.repr, 0, n_18);
                 };
             }
-            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_25, i);
-            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"(buf_2, item);
+            item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_28, i);
+            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(buf_2, item);
             i = i + 1;
             continue l6;
         };
@@ -344,21 +340,21 @@ fn "iter_map_collect_variant.wado/iter_map_collect_variant.wado/$Closure_0::$cal
     });
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad$spec0$scalar"(self, content) {
-    let self_12: i32;
-    let new_used_15: i32;
-    let start_16: i32;
-    $inline_core_prelude_string_wado_String__push_str_0: block {
-        self_12 = content.used;
-        break_if $inline_core_prelude_string_wado_String__push_str_0 self_12 == 0;
-        new_used_15 = self.used + self_12;
-        if @unlikely(new_used_15 > builtin::array_len(self.repr)) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, content) {
+    let n_15: i32;
+    let new_used_19: i32;
+    let start_20: i32;
+    $inline_core_prelude_string_wado_String__internal_push_string_2: block {
+        n_15 = content.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_2 n_15 == 0;
+        new_used_19 = self.used + n_15;
+        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_15);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
         }
-        start_16 = self.used;
-        self.used = new_used_15;
-        builtin::array_copy<u8>(self.repr, start_16, content.repr, 0, self_12);
+        start_20 = self.used;
+        self.used = new_used_19;
+        builtin::array_copy<u8>(self.repr, start_20, content.repr, 0, n_15);
     };
     return;
 }

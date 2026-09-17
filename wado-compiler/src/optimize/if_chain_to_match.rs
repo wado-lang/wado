@@ -3,7 +3,7 @@
 //! `Deserialize` routes a field through such a run, unrolled one arm per
 //! declared field and left by none of them.
 
-use super::arena_query::local_written_by;
+use super::arena_query::{local_written_by, operand_local};
 use crate::compiler_trace;
 use crate::const_eval::is_signed_int;
 use crate::hashmap::IndexSet;
@@ -12,7 +12,7 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprKind, NodeRef, Operand, PatKind, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
-use crate::nir_value_graph::{OpaqueSource, ValueKind};
+use crate::nir_value_graph::ValueKind;
 use crate::tir::{ResolvedType, TypeTable};
 use crate::token::Span;
 
@@ -145,8 +145,8 @@ fn split_guard(body: &Body, table: &TypeTable, stmt: StmtId) -> Option<(u32, i12
     };
     let (lhs, rhs) = eq_operands(body, condition)?;
     match (
-        (local_of(body, lhs), int_key(body, table, rhs)),
-        (local_of(body, rhs), int_key(body, table, lhs)),
+        (operand_local(body, lhs), int_key(body, table, rhs)),
+        (operand_local(body, rhs), int_key(body, table, lhs)),
     ) {
         ((Some(local), Some(key)), _) | (_, (Some(local), Some(key))) => {
             Some((local, key, then_block))
@@ -174,23 +174,6 @@ fn eq_operands(body: &Body, condition: Operand) -> Option<(Operand, Operand)> {
                 op: NirBinaryOp::Eq,
                 right,
             } => Some((*left, *right)),
-            _ => None,
-        },
-    }
-}
-
-/// The local an operand reads, directly or through a pooled opaque.
-fn local_of(body: &Body, op: Operand) -> Option<u32> {
-    match op {
-        Operand::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
-        },
-        Operand::Value(v) => match body.values.kind(v) {
-            ValueKind::Opaque(opaque) => match body.values.opaque_source(*opaque)? {
-                OpaqueSource::Local(local) => Some(local),
-                OpaqueSource::Expr(_) => None,
-            },
             _ => None,
         },
     }

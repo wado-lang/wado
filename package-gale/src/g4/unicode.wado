@@ -1,0 +1,241 @@
+//! Code point sets for `\p{...}`, resolved through [`core:icu`], which is the
+//! single source of truth for what a property's members are.
+//!
+//! Gale matches decoded Unicode scalars where ANTLR4 matches UTF-16 code units,
+//! so every set built here is clipped to the scalars on the way in.
+
+use { CharRange } from "../ir.wado";
+use icu from "core:icu";
+
+/// Highest Unicode scalar value.
+global CODE_POINT_MAX: i32 = 0x10FFFF;
+/// The surrogate block — code points that are not Unicode scalars.
+global SURROGATE_FIRST: i32 = 0xD800;
+global SURROGATE_LAST: i32 = 0xDFFF;
+
+/// Push `[lo, hi]` as `CharRange`s, keeping only its Unicode-scalar part.
+///
+/// A surrogate endpoint is legal in ANTLR4 but equals no decoded character
+/// here. Dropping that part is what "matches nothing" looks like in a scalar
+/// range set — collapsing it to U+FFFD would match a real, unrelated character.
+pub fn clip_to_scalars(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    // Already a scalar range: a `char` cannot hold a surrogate, so splitting
+    // at the gap would churn the emitted pattern and match the same set.
+    if is_scalar(lo) && is_scalar(hi) {
+        push_scalar_segment(ranges, lo, hi);
+        return;
+    }
+    push_scalar_segment(ranges, lo, i32::min(hi, SURROGATE_FIRST - 1));
+    push_scalar_segment(ranges, i32::max(lo, SURROGATE_LAST + 1), i32::min(hi, CODE_POINT_MAX));
+}
+
+fn is_scalar(code: i32) -> bool {
+    return 0 <= code <= CODE_POINT_MAX && !(SURROGATE_FIRST <= code <= SURROGATE_LAST);
+}
+
+fn push_scalar_segment(ranges: &mut List<CharRange>, lo: i32, hi: i32) {
+    if 0 <= lo <= hi {
+        ranges.push(CharRange::range(
+            char::from_u32_unchecked(lo as u32),
+            char::from_u32_unchecked(hi as u32),
+        ));
+    }
+}
+
+/// Complement of a range set over the Unicode scalars — what `\P{X}` admits.
+/// A group letter unions several categories, so the input needs sorting before
+/// the gap walk.
+pub fn complement_char_ranges(ranges: &List<CharRange>) -> List<CharRange> {
+    let mut sorted: List<[i32, i32]> = ranges.into_iter().map(|r: &CharRange| [r.start as i32, r.end as i32]).collect();
+    sorted.sort_by(|a: &[i32, i32], b: &[i32, i32]| a.0.cmp(&b.0));
+    let mut out: List<CharRange> = [];
+    let mut next = 0;
+    for let r of &sorted {
+        if r.0 > next {
+            clip_to_scalars(&mut out, next, r.0 - 1);
+        }
+        if r.1 + 1 > next {
+            next = r.1 + 1;
+        }
+    }
+    clip_to_scalars(&mut out, next, CODE_POINT_MAX);
+    return out;
+}
+
+/// Expand a `\p{...}` property into its ranges. False for a property
+/// `core:icu` does not answer, so the caller can reject rather than yield a set
+/// matching nothing.
+///
+/// Bare names are resolved POSIX → general category → script → binary
+/// property. The POSIX names go first so their meaning stays the measured one
+/// even if a future UCD grows a property that spells the same. The
+/// `Property=Value` form names its property instead; the enumerated properties
+/// (`lb=`, `bc=`, …) are reachable only that way, their single-letter values
+/// being ones a bare-name lookup would collide with.
+pub fn expand_unicode_property<S: AsStrSlice>(name: S, ranges: &mut List<CharRange>) -> bool {
+    let key = normalize_property_name(name);
+    let mut parts = key.split("=");
+    let head = parts.next().unwrap();
+    if let Some(value) = parts.next() {
+        if parts.next() matches { Some(_) } {
+            return false;
+        }
+        let found = if head == "emojipresentation" {
+            emoji_presentation_ranges(&value);
+        } else {
+            value_ranges(&head, &value);
+        };
+        return push_found_ranges(found, ranges);
+    }
+    if push_found_ranges(posix_property_ranges(&key), ranges) {
+        return true;
+    }
+    if push_found_ranges(value_ranges("gc", &key), ranges) {
+        return true;
+    }
+    if push_found_ranges(value_ranges("sc", &key), ranges) {
+        return true;
+    }
+    return push_found_ranges(binary_ranges(&key), ranges);
+}
+
+/// `a - b`, via De Morgan (`!(!a | b)`) so the only set primitive here is the
+/// complement `\P` already needs.
+fn subtract_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    let mut acc = complement_char_ranges(a);
+    for let r of b {
+        acc.push(*r);
+    }
+    return complement_char_ranges(&acc);
+}
+
+/// `a & b`, as `a - !b`.
+fn intersect_char_ranges(a: &List<CharRange>, b: &List<CharRange>) -> List<CharRange> {
+    return subtract_char_ranges(a, &complement_char_ranges(b));
+}
+
+/// A binary property's ranges, as Unicode scalars. Null for a name `core:icu`
+/// does not answer, which is what lets the caller reject it.
+fn binary_ranges<S: AsStrSlice>(property: S) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::ranges(property.to_string()));
+}
+
+/// An enumerated property value's ranges, as Unicode scalars. `gc` takes a
+/// group letter (`L`) as well as a category (`Lu`).
+fn value_ranges<S: AsStrSlice, S1: AsStrSlice>(property: S, value: S1) -> Option<List<CharRange>> {
+    return scalar_ranges(icu::value_ranges(property.to_string(), value.to_string()));
+}
+
+fn scalar_ranges(found: Option<List<[u32, u32]>>) -> Option<List<CharRange>> {
+    let Some(found) = found else {
+        return null;
+    };
+    let mut out: List<CharRange> = [];
+    for let r of &found {
+        clip_to_scalars(&mut out, r.0 as i32, r.1 as i32);
+    }
+    return Option::Some(out);
+}
+
+fn push_found_ranges(found: Option<List<CharRange>>, ranges: &mut List<CharRange>) -> bool {
+    let Some(items) = found else {
+        return false;
+    };
+    for let r of &items {
+        ranges.push(*r);
+    }
+    return true;
+}
+
+/// Ranges for a property this file names literally, so a name `core:icu` does
+/// not answer is Gale's own mistake rather than user input.
+fn required_ranges<S: AsStrSlice>(found: Option<List<CharRange>>, name: S) -> List<CharRange> {
+    let Some(ranges) = found else {
+        panic(`core:icu does not answer '${name}'`);
+    };
+    return ranges;
+}
+
+fn gc_set<S: AsStrSlice>(key: S) -> List<CharRange> {
+    return required_ranges(value_ranges("gc", key), key);
+}
+
+fn binary_set<S: AsStrSlice>(key: S) -> List<CharRange> {
+    return required_ranges(binary_ranges(key), key);
+}
+
+/// The POSIX compatibility properties (UTS #18 Annex C) ANTLR4 answers through
+/// ICU. `core:icu` ships five of them itself; `cntrl` and `digit` it does not,
+/// each being a `General_Category` under another name. `Alpha`, `Lower`, `Upper`
+/// and `Space` are POSIX names too, but each is a UCD alias the binary
+/// properties already answer with the same set.
+fn posix_property_ranges<S: AsStrSlice>(key: S) -> Option<List<CharRange>> {
+    return match key {
+        "cntrl" => Option::Some(gc_set("cc")),
+        "digit" => Option::Some(gc_set("nd")),
+        "alnum" | "blank" | "graph" | "print" | "xdigit" => Option::Some(binary_set(key)),
+        _ => null,
+    };
+}
+
+/// `EmojiPresentation=<value>`, ANTLR4's own extension over the UCD (its
+/// `lexer-rules.md` defines the three values). Derived from the UCD's `Emoji`
+/// and `Emoji_Presentation`, and pinned character-by-character.
+fn emoji_presentation_ranges<S: AsStrSlice>(value: S) -> Option<List<CharRange>> {
+    let emoji = binary_set("emoji");
+    return match value {
+        // Colourful by default.
+        "emojidefault" => Option::Some(intersect_char_ranges(&emoji, &binary_set("emojipresentation"))),
+        // Emoji-capable, but drawn as text unless asked otherwise.
+        "textdefault" => Option::Some(subtract_char_ranges(&emoji, &binary_set("emojipresentation"))),
+        // Text-only: never emoji at all.
+        "text" => Option::Some(complement_char_ranges(&emoji)),
+        _ => null,
+    };
+}
+
+/// Why `\p{name}` was refused. Three families ANTLR4 answers are deliberately
+/// not Gale's, so each says so rather than reading as a hole in a table.
+pub fn unsupported_property_message<S: AsStrSlice>(name: S) -> String {
+    let key = normalize_property_name(name);
+    let head = key.split("=").next().unwrap();
+    let in_block = head.starts_with("in") && !IN_PREFIXED_PROPERTIES.contains(&head);
+    if head == "block" || head == "blk" || in_block {
+        return `Gale does not answer the Block property ("${name}"): ICU ships no Block data. Name a script (\\p{Greek}) or the code point range itself.`;
+    }
+    if head == "decompositiontype" || head == "dt" {
+        return `Gale does not answer Decomposition_Type ("${name}"): ICU ships no data for it.`;
+    }
+    if CONTRIBUTORY_PROPERTIES.contains(&key) {
+        return `"${name}" is a contributory property, which UAX #44 defines as an input to a derived property rather than one to query. Name the derived property instead (\\p{Alphabetic}, \\p{ID_Start}, …).`;
+    }
+    return `unsupported Unicode property "${name}" in a character set`;
+}
+
+/// Property names, folded, that begin with the `In` a Block query begins with.
+/// Without them `\p{Indic_Syllabic_Category}` reads as a Block query.
+global IN_PREFIXED_PROPERTIES: List<String> = [
+    "indicsyllabiccategory", "insc", "indicconjunctbreak", "incb", "indicpositionalcategory", "inpc",
+];
+
+/// The UCD's contributory properties, folded, in long and short form. ICU omits
+/// them; a general category spelling `Other_*` (`Lo`, `No`) is answered as a
+/// category before this is asked.
+global CONTRIBUTORY_PROPERTIES: List<String> = [
+    "otheralphabetic", "oalpha", "otherdefaultignorablecodepoint", "odi", "othergraphemeextend", "ogrext",
+    "otheridcontinue", "oidc", "otheridstart", "oids", "otherlowercase", "olower", "othermath", "omath",
+    "otheruppercase", "oupper",
+];
+
+/// Fold a property name the way UAX #44 matches one: ignoring case, `_`, `-`
+/// and spaces.
+fn normalize_property_name<S: AsStrSlice>(name: S) -> String {
+    let mut out = String::with_capacity(name.len());
+    for let c of name.chars() {
+        if c == '_' || c == '-' || c == ' ' {
+            continue;
+        }
+        out.push(c.to_ascii_lowercase());
+    }
+    return out;
+}

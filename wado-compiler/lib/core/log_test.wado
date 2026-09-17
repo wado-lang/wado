@@ -103,8 +103,8 @@ test "an event with no fields carries an empty object" {
 test "level names round-trip through the lenient parser" {
     assert Level::Trace.name() == "trace";
     assert Level::Error.label() == "ERROR";
-    assert Level::from_str_lenient(&"WARN") matches { Ok(Warn) };
-    assert Level::from_str_lenient(&"nope") matches { Err(_) };
+    assert Level::from_str_lenient("WARN") matches { Ok(Warn) };
+    assert Level::from_str_lenient("nope") matches { Err(_) };
     // The infallible wrapper widens rather than silences.
     assert level_from_str("nope") matches { Trace };
     assert level_from_str("info") matches { Info };

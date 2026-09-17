@@ -27,7 +27,7 @@ assert from_string::<Point>("{\"x\":1,\"y\":2}") matches { Ok(p) && p.x == 1 && 
 
 ## Functions
 
-### `pub fn write_escaped_string(buf: &mut String, s: &String)`
+### `pub fn write_escaped_string<S: AsStrSlice>(buf: &mut String, s: S)`
 
 Writes a JSON-escaped string (with surrounding quotes) into buf. Only `"`,
 `\`, and controls (< 0x20) are escaped — all ASCII, so a run of multi-byte
@@ -60,10 +60,11 @@ Serializes a value to a pretty JSON string. Convenience over
 
 `trailing_char`, when `Some`, is appended after the value.
 
-### `pub fn from_string<T: Deserialize>(input: String, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
+### `pub fn from_string<T: Deserialize, S: AsStrSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
 Deserializes a value from a JSON string. Convenience wrapper over
-`from_bytes` (a `String` is a UTF-8 byte source); serde I/O is bytes-primary.
+`from_bytes`, which every text source reaches through its own UTF-8 bytes;
+serde I/O is bytes-primary.
 
 ### `pub fn from_bytes<T: Deserialize, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
@@ -119,7 +120,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
@@ -129,11 +130,11 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<JsonMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<JsonStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<JsonVariantSerializer, SerializeError>`
 
 ### `pub struct PrettyJsonSerializer`
 
@@ -165,7 +166,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
@@ -175,11 +176,11 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<PrettyJsonMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<PrettyJsonStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<PrettyJsonStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<PrettyJsonVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<PrettyJsonVariantSerializer, SerializeError>`
 
 ### `pub struct JsonDeserializer`
 
@@ -280,9 +281,21 @@ Skips the next JSON value without allocating.
 
 ##### `fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError>`
 
+<<<<<<< HEAD
 ##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<JsonStructAccess, DeserializeError>`
+||||||| 5708464fb8e
+##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> with stores[self]`
+=======
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> with stores[self]`
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 ##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError>`
+||||||| 5708464fb8e
+##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self]`
+=======
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self]`
+>>>>>>> origin/main
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
@@ -312,7 +325,7 @@ _Fields are private._
 
 ##### `fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>`
 
-##### `fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>`
+##### `fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>`
 
 ##### `fn serialize_bytes(&mut self, v: ByteSlice) -> Result<(), SerializeError>`
 
@@ -322,8 +335,8 @@ _Fields are private._
 
 ##### `fn begin_map(&mut self, len: i32) -> Result<CanonicalMapSerializer, SerializeError>`
 
-##### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<CanonicalStructSerializer, SerializeError>`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<CanonicalStructSerializer, SerializeError>`
 
-##### `fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>`
+##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-##### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError>`
+##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<CanonicalVariantSerializer, SerializeError>`

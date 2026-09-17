@@ -1,0 +1,20 @@
+// `List::index_assign` bounds-checks both ends (issue #1856). Without the lower
+// bound a negative index reaches `array.set` and traps with no message; the
+// chained assert names the index and the length instead. It is free now that
+// the optimizer sees through the chained form.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(4, 0);
+    xs[builtin::black_box(-1)] = 7;
+    println(`${xs[0]}`);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "index out of bounds"
+    ],
+    "trapped": true
+}

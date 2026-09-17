@@ -1,0 +1,35 @@
+// The floor a counting loop's entry constant gives is a fact about every
+// path, so a write under an `if` is not one. Here `i = 0` runs only when
+// `flag` does, and with `flag == false` the loop starts at `-5`: the lower
+// half of `!(0 <= i && i < xs.len())` is false on the first iteration and the
+// panic must fire at every optimization level.
+
+use { println, Stdout } from "core:cli";
+
+fn sum_from(xs: &List<i32>, flag: bool) -> i32 {
+    let mut i = -5;
+    if flag {
+        i = 0;
+    }
+    let mut s = 0;
+    for ; i < xs.len(); i += 1 {
+        if !(0 <= i && i < xs.len()) {
+            panic("index out of range");
+        }
+        s += xs[i];
+    }
+    return s;
+}
+
+export fn run() with Stdout {
+    let xs = List::<i32>::filled(builtin::black_box(5), 3);
+    println(`${sum_from(&xs, builtin::black_box(false))}`);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "index out of range"
+    ],
+    "trapped": true
+}

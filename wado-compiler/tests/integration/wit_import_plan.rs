@@ -91,7 +91,7 @@ fn plan_matches_component_across_cli_corpus() {
         "example/hello.wado",
         "example/sha256.wado",
         "example/uuid_v7.wado",
-        "benchmark/count_prime/count_prime.wado",
+        "example/count_prime.wado",
         "benchmark/mandelbrot/mandelbrot.wado",
         "benchmark/sieve/sieve.wado",
     ] {
@@ -195,7 +195,7 @@ fn plan_matches_component_for_http_service_with_resources() {
 fn plan_excludes_type_alias_only_clock_types() {
     // count_prime uses MonotonicClock; the real component imports
     // monotonic-clock but not clocks/types (which only provides `duration`).
-    let imports = assert_corpus_plan_matches("benchmark/count_prime/count_prime.wado");
+    let imports = assert_corpus_plan_matches("example/count_prime.wado");
     assert!(
         imports.iter().any(|i| i.contains("clocks/monotonic-clock")),
         "{imports:?}"

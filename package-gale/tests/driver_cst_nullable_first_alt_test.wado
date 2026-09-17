@@ -11,21 +11,21 @@ use nfa from "./grammars/nullable_first_alt.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_nullable_first_alt" },
     };
 
-fn assert_tree(input: &String, expected: &String) {
+fn assert_tree<S: AsStrSlice, S1: AsStrSlice>(input: S, expected: S1) {
     let result = nfa::parse(input);
-    assert result.ok(), `unexpected diagnostics for "${*input}"`;
+    assert result.ok(), `unexpected diagnostics for "${input}"`;
     let actual = nfa::to_string_tree(&result);
-    assert actual == *expected, `\ninput:    "${*input}"\nexpected: ${*expected}\nactual:   ${actual}`;
+    assert actual == expected.to_string(), `\ninput:    "${input}"\nexpected: ${expected}\nactual:   ${actual}`;
 }
 
 test "nullable-first: the empty match wins where the caller consumes the token" {
-    assert_tree(&"p b", &"(s p r b)");
-    assert_tree(&"p a b", &"(s p (r a) b)");
+    assert_tree("p b", "(s p r b)");
+    assert_tree("p a b", "(s p (r a) b)");
 }
 
 test "nullable-first: the lookahead still picks the alternative that has one" {
-    assert_tree(&"q a", &"(s q (r a))");
-    assert_tree(&"q", &"(s q r)");
+    assert_tree("q a", "(s q (r a))");
+    assert_tree("q", "(s q r)");
 }
 
 #[TODO]
@@ -34,5 +34,5 @@ test "nullable-first: the caller's continuation can rule the empty match out" {
     // over, so ANTLR4 takes `B`. Gale's decision is one per rule and cannot
     // vary by call site — the same arm order that gets `p b` right gets this
     // wrong. Resolvable only by the follow-aware decision the ATN makes.
-    assert_tree(&"q b", &"(s q (r b))");
+    assert_tree("q b", "(s q (r b))");
 }

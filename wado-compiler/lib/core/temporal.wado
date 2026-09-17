@@ -163,7 +163,7 @@ fn resolve_fraction_digits(f: &Formatter, default_digits: i32) -> i32 {
 /// Render an instant as an ISO 8601 / RFC 3339 string in the civil time given
 /// by `offset_seconds` (0 for UTC), with `digits` truncated sub-second digits
 /// and the given zone `suffix` (e.g. `"Z"` or `"+09:00"`).
-fn render_iso8601(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i32, suffix: String) -> String {
+fn render_iso8601<S: AsStrSlice>(seconds: i64, nanoseconds: u32, offset_seconds: i64, digits: i32, suffix: S) -> String {
     let local = seconds + offset_seconds;
     let [days, second_of_day] = epoch_days_and_seconds(local);
     let [year, month, day] = civil_from_days(days);
@@ -253,8 +253,8 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
 
 /// A fixed UTC offset zone string as a signed second count, or `None` when the
 /// zone is not one: `"Z"`/`"z"`, `"UTC"`, and ±HH:MM are the forms understood.
-fn try_fixed_offset(zone: &String) -> Option<i64> {
-    if *zone == "UTC" {
+fn try_fixed_offset<S: AsStrSlice>(zone: S) -> Option<i64> {
+    if zone.eq_str("UTC") {
         return Option::Some(0);
     }
     if let Ok(offset) = parse_zone_designator(&zone.as_str_slice(), 0) {
@@ -265,7 +265,7 @@ fn try_fixed_offset(zone: &String) -> Option<i64> {
 
 /// The fixed UTC offset of `zone` in seconds. Any other value (notably an IANA
 /// zone name) traps with a clear message.
-fn parse_fixed_offset(zone: &String) -> i64 {
+fn parse_fixed_offset<S: AsStrSlice>(zone: S) -> i64 {
     if let Some(offset) = try_fixed_offset(zone) {
         return offset;
     }
@@ -443,7 +443,7 @@ impl Instant {
 
     /// Parse an RFC 3339 / ISO 8601 timestamp into the exact instant it names,
     /// discarding the offset. Same grammar as `ZonedDateTime::parse_rfc3339`.
-    pub fn parse_rfc3339(text: String) -> Result<Instant, DeserializeError> {
+    pub fn parse_rfc3339<S: AsStrSlice>(text: S) -> Result<Instant, DeserializeError> {
         return Result::Ok(parse_iso_zoned(&text.as_str_slice())?.instant);
     }
 
@@ -464,7 +464,7 @@ impl Instant {
     /// the obsolete RFC 850 (`"Sunday, 06-Nov-94 08:49:37 GMT"`, whose
     /// two-digit year pivots at 70), and asctime (`"Sun Nov  6 08:49:37 1994"`).
     /// The weekday is advisory and is not checked against the date.
-    pub fn parse_http_date(text: String) -> Result<Instant, DeserializeError> {
+    pub fn parse_http_date<S: AsStrSlice>(text: S) -> Result<Instant, DeserializeError> {
         let view = text.as_str_slice();
         let comma = index_of_byte(&text, b',');
         if comma < 0 {
@@ -478,7 +478,7 @@ impl Instant {
 
     /// Interpret this instant in `time_zone`, the zoned view of the same moment
     /// (`Temporal.Instant.toZonedDateTimeISO`).
-    pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
+    pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime {
         return ZonedDateTime::new(*self, time_zone);
     }
 }
@@ -502,14 +502,14 @@ impl ZonedDateTime {
     /// Interpret `instant` in `time_zone`, canonicalizing the three spellings of
     /// UTC (`"UTC"`, `"z"`, `±00:00`) to `"Z"` so they are one value under the
     /// derived `Eq`. Any other zone is stored verbatim.
-    pub fn new(instant: Instant, time_zone: String) -> ZonedDateTime {
+    pub fn new<S: AsStrSlice>(instant: Instant, time_zone: S) -> ZonedDateTime {
         return ZonedDateTime { instant: instant, time_zone: canonical_time_zone(time_zone) };
     }
 
     /// The current time read in `time_zone` (`Temporal.Now.zonedDateTimeISO`).
     /// The zone is the caller's: there is no system-zone lookup until the
     /// `wasi:clocks` `timezone` interface is wired up.
-    pub fn now(time_zone: String) -> ZonedDateTime with SystemClock {
+    pub fn now<S: AsStrSlice>(time_zone: S) -> ZonedDateTime with SystemClock {
         return ZonedDateTime::new(Instant::now(), time_zone);
     }
 
@@ -527,7 +527,7 @@ impl ZonedDateTime {
     /// ISO 8601 calendar (so e.g. `"2023-02-29"` and `"…T24:00:00Z"` are
     /// rejected); malformed or out-of-range input returns a `DeserializeError`
     /// carrying the byte offset of the problem.
-    pub fn parse_rfc3339(text: String) -> Result<ZonedDateTime, DeserializeError> {
+    pub fn parse_rfc3339<S: AsStrSlice>(text: S) -> Result<ZonedDateTime, DeserializeError> {
         return parse_iso_zoned(&text.as_str_slice());
     }
 
@@ -745,7 +745,7 @@ impl ZonedDateTime {
     }
 
     /// The same instant read in another zone.
-    pub fn with_time_zone(&self, time_zone: String) -> ZonedDateTime {
+    pub fn with_time_zone<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime {
         return ZonedDateTime::new(self.instant, time_zone);
     }
 
@@ -819,7 +819,7 @@ fn add_months_to_civil(year: i64, month: i64, day: i64, months: i64) -> [i64, i6
     let shifted_year = floor_div(total, 12);
     let shifted_month = floor_mod(total, 12) + 1;
     let month_length = days_in_month_value(shifted_year, shifted_month);
-    let shifted_day = if day > month_length { month_length } else { day };
+    let shifted_day = i64::min(day, month_length);
     return [shifted_year, shifted_month, shifted_day];
 }
 
@@ -922,11 +922,11 @@ fn floor_mod(a: i64, m: i64) -> i64 {
 
 /// Canonicalize the spellings of a zero-offset zone (`"UTC"`, `"z"`, `±00:00`)
 /// to `"Z"`, and a fixed offset to `±HH:MM`. Anything else is left verbatim.
-fn canonical_time_zone(zone: String) -> String {
+fn canonical_time_zone<S: AsStrSlice>(zone: S) -> String {
     if let Some(offset) = try_fixed_offset(&zone) {
         return format_offset_suffix(offset);
     }
-    return zone;
+    return zone.to_string();
 }
 
 /// ISO 8601 week date `[week, week_year]` for a day given by its calendar year,
@@ -1405,7 +1405,7 @@ impl Duration {
     /// Parse an ISO 8601 duration such as `"P1Y2M3W4DT5H6M7.5S"`, optionally
     /// signed. A fraction is allowed on the last time component present and
     /// spills into the components below it, so `"PT1.5H"` is `PT1H30M`.
-    pub fn parse(text: String) -> Result<Duration, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<Duration, DeserializeError> {
         return parse_iso_duration(&text.as_str_slice());
     }
 
@@ -1942,7 +1942,7 @@ struct DurationVisitor {
 impl Visitor for DurationVisitor {
     type Value = Duration;
 
-    fn visit_string(&mut self, v: String) -> Result<Duration, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Duration, DeserializeError> {
         return Duration::parse(v);
     }
 
@@ -2095,7 +2095,7 @@ fn civil_instant(year: i64, month: i64, day: i64, second_of_day: i64, offset: i3
 }
 
 /// Index of the first `byte` in `text`, or `-1`.
-fn index_of_byte(text: &String, byte: u8) -> i32 {
+fn index_of_byte<S: AsStrSlice>(text: S, byte: u8) -> i32 {
     let mut i = 0;
     while i < text.len() {
         if text.get_byte_unchecked(i) == byte {
@@ -2194,7 +2194,7 @@ impl PlainDate {
     }
 
     /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
-    pub fn parse(text: String) -> Result<PlainDate, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDate, DeserializeError> {
         return PlainDate::from_str_slice(&text.as_str_slice());
     }
 
@@ -2311,7 +2311,7 @@ impl PlainDate {
 
     /// Read this date at `time` in `time_zone`, which resolves it to an
     /// instant. Traps on an IANA zone name.
-    pub fn to_zoned_date_time(&self, time_zone: String, time: PlainTime = PlainTime {}) -> ZonedDateTime {
+    pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S, time: PlainTime = PlainTime {}) -> ZonedDateTime {
         return self.to_plain_date_time(time).to_zoned_date_time(time_zone);
     }
 
@@ -2351,7 +2351,7 @@ impl PlainTime {
     }
 
     /// Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
-    pub fn parse(text: String) -> Result<PlainTime, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainTime, DeserializeError> {
         return PlainTime::from_str_slice(&text.as_str_slice());
     }
 
@@ -2466,7 +2466,7 @@ impl PlainDateTime {
 
     /// Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
     /// the separator and no offset.
-    pub fn parse(text: String) -> Result<PlainDateTime, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDateTime, DeserializeError> {
         return PlainDateTime::from_str_slice(&text.as_str_slice());
     }
 
@@ -2507,7 +2507,7 @@ impl PlainDateTime {
 
     /// Read this reading in `time_zone`, which resolves it to an instant.
     /// Traps on an IANA zone name.
-    pub fn to_zoned_date_time(&self, time_zone: String) -> ZonedDateTime {
+    pub fn to_zoned_date_time<S: AsStrSlice>(&self, time_zone: S) -> ZonedDateTime {
         let offset = parse_fixed_offset(&time_zone);
         let local = self.date.epoch_days() * 86400;
         return ZonedDateTime {
@@ -2548,7 +2548,7 @@ impl PlainYearMonth {
     }
 
     /// Parse `YYYY-MM`.
-    pub fn parse(text: String) -> Result<PlainYearMonth, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainYearMonth, DeserializeError> {
         return PlainYearMonth::from_str_slice(&text.as_str_slice());
     }
 
@@ -2641,7 +2641,7 @@ impl PlainMonthDay {
     }
 
     /// Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
-    pub fn parse(text: String) -> Result<PlainMonthDay, DeserializeError> {
+    pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainMonthDay, DeserializeError> {
         return PlainMonthDay::from_str_slice(&text.as_str_slice());
     }
 
@@ -2759,7 +2759,7 @@ struct PlainDateVisitor {
 impl Visitor for PlainDateVisitor {
     type Value = PlainDate;
 
-    fn visit_string(&mut self, v: String) -> Result<PlainDate, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainDate, DeserializeError> {
         return PlainDate::parse(v);
     }
 
@@ -2832,7 +2832,7 @@ struct PlainTimeVisitor {
 impl Visitor for PlainTimeVisitor {
     type Value = PlainTime;
 
-    fn visit_string(&mut self, v: String) -> Result<PlainTime, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainTime, DeserializeError> {
         return PlainTime::parse(v);
     }
 
@@ -2905,7 +2905,7 @@ struct PlainDateTimeVisitor {
 impl Visitor for PlainDateTimeVisitor {
     type Value = PlainDateTime;
 
-    fn visit_string(&mut self, v: String) -> Result<PlainDateTime, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainDateTime, DeserializeError> {
         return PlainDateTime::parse(v);
     }
 
@@ -2989,7 +2989,7 @@ struct PlainYearMonthVisitor {
 impl Visitor for PlainYearMonthVisitor {
     type Value = PlainYearMonth;
 
-    fn visit_string(&mut self, v: String) -> Result<PlainYearMonth, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainYearMonth, DeserializeError> {
         return PlainYearMonth::parse(v);
     }
 
@@ -3070,7 +3070,7 @@ struct PlainMonthDayVisitor {
 impl Visitor for PlainMonthDayVisitor {
     type Value = PlainMonthDay;
 
-    fn visit_string(&mut self, v: String) -> Result<PlainMonthDay, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<PlainMonthDay, DeserializeError> {
         return PlainMonthDay::parse(v);
     }
 
@@ -3174,7 +3174,7 @@ struct InstantVisitor {
 impl Visitor for InstantVisitor {
     type Value = Instant;
 
-    fn visit_string(&mut self, v: String) -> Result<Instant, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Instant, DeserializeError> {
         let zdt = ZonedDateTime::parse_rfc3339(v)?;
         return Result::Ok(zdt.instant);
     }
@@ -3241,7 +3241,7 @@ struct ZonedDateTimeVisitor {
 impl Visitor for ZonedDateTimeVisitor {
     type Value = ZonedDateTime;
 
-    fn visit_string(&mut self, v: String) -> Result<ZonedDateTime, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<ZonedDateTime, DeserializeError> {
         return ZonedDateTime::parse_rfc3339(v);
     }
 

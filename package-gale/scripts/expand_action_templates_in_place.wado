@@ -74,13 +74,13 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
 
 /// The entries of `path`, sorted by name — the walk is ordered so a rewrite
 /// run reports the same way twice.
-fn list_dir(path: &String) -> Result<List<fs::DirEntry>, fs::FsError> with Preopens {
+fn list_dir<S: AsStrSlice>(path: S) -> Result<List<fs::DirEntry>, fs::FsError> with Preopens {
     let mut entries = fs::read_dir(path)?;
     entries.sort_by(|a: &fs::DirEntry, b: &fs::DirEntry| a.name.cmp(&b.name));
     return Result::Ok(entries);
 }
 
-fn grammar_names(dir: &String) -> List<String> with (Stderr, Preopens, Exit) {
+fn grammar_names<S: AsStrSlice>(dir: S) -> List<String> with (Stderr, Preopens, Exit) {
     let entries = match list_dir(dir) {
         Ok(list) => list,
         Err(e) => {

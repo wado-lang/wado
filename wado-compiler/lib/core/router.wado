@@ -75,10 +75,10 @@ impl PathParams {
     /// Look up a captured parameter by name. Returns `None` if absent.
     /// The returned `String` is freshly allocated from the matched
     /// byte range of the path.
-    pub fn get(&self, name: String) -> Option<String> {
+    pub fn get<S: AsStrSlice>(&self, name: S) -> Option<String> {
         let n = self.names.len();
         for let mut i = 0; i < n; i += 1 {
-            if self.names[i] == name {
+            if name.eq_str(&self.names[i]) {
                 let s = self.ranges[i * 2];
                 let e = self.ranges[i * 2 + 1];
                 return Option::Some(self.path.substr_bytes(s, e));
@@ -202,42 +202,96 @@ impl<H> Router<H> {
 
     /// Registers a handler for `(method, pattern)`. Last-write-wins.
     /// Panics on a malformed pattern.
+<<<<<<< HEAD
     pub fn route(&mut self, method: Method, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.insert(Option::Some(method), pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn get(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn get(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Get, pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn post(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn post(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Post, pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn put(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn put(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Put, pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn patch(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn patch(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Patch, pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn delete(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn delete(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Delete, pattern, handler);
     }
 
+<<<<<<< HEAD
     pub fn options(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn options(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.route(Method::Options, pattern, handler);
     }
 
     /// Registers a handler that matches any HTTP method (including
     /// `Method::Other(_)`) at `pattern`. Specific-method handlers at the
     /// same pattern take precedence; `any` is the fallback.
+<<<<<<< HEAD
     pub fn any(&mut self, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    pub fn any(&mut self, pattern: String, handler: H) with stores[handler] {
+=======
+    pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         self.insert(null, pattern, handler);
     }
 
+<<<<<<< HEAD
     fn insert(&mut self, method_opt: Option<Method>, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    fn insert(&mut self, method_opt: Option<Method>, pattern: String, handler: H) with stores[handler] {
+=======
+    fn insert<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         let segs = parse_pattern(&pattern);
         if is_static_pattern(&segs) {
             self.insert_static(method_opt, pattern, handler);
@@ -246,7 +300,13 @@ impl<H> Router<H> {
         self.insert_dynamic(&method_opt, &segs, handler);
     }
 
+<<<<<<< HEAD
     fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H) {
+||||||| 5708464fb8e
+    fn insert_static(&mut self, method_opt: Option<Method>, pattern: String, handler: H) with stores[handler] {
+=======
+    fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) with stores[handler] {
+>>>>>>> origin/main
         // `static_entries` is kept sorted by `static_entry_cmp` so both
         // `match_static` and this last-write-wins lookup can locate an
         // existing entry in O(log n). The narrow `[lo, hi)` range covers
@@ -254,7 +314,7 @@ impl<H> Router<H> {
         // scanned linearly (one entry per HTTP method, so single digits).
         let new_entry = StaticEntry {
             method: method_opt,
-            pattern,
+            pattern: pattern.to_string(),
             rm: RouteMatch {
                 handler,
                 params: empty_path_params(),
@@ -359,7 +419,13 @@ impl<H> Router<H> {
         return self.match_dynamic(&method, path);
     }
 
+<<<<<<< HEAD
     fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
+||||||| 5708464fb8e
+    fn match_static(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self] {
+=======
+    fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> with stores[self] {
+>>>>>>> origin/main
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo >= hi {
             return null;
@@ -489,7 +555,7 @@ impl<H> Router<H> {
 
     /// Returns the specific methods registered for `path`. `any` does not
     /// contribute. Empty array on a 404 or when only `any` is registered.
-    pub fn allowed_methods(&self, path: &String) -> List<Method> {
+    pub fn allowed_methods<S: AsStrSlice>(&self, path: S) -> List<Method> {
         // Static side first.
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo < hi {
@@ -505,7 +571,7 @@ impl<H> Router<H> {
         return self.allowed_methods_dynamic(path);
     }
 
-    fn allowed_methods_dynamic(&self, path: &String) -> List<Method> {
+    fn allowed_methods_dynamic<S: AsStrSlice>(&self, path: S) -> List<Method> {
         let plen = path.len();
         let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
@@ -621,14 +687,14 @@ fn method_rank(m: &Option<Method>) -> i32 {
 }
 
 /// Find the [lo, hi) range of entries whose `pattern` equals `path`.
-fn bsearch_pattern_range<H>(entries: &List<StaticEntry<H>>, path: &String) -> [i32, i32] {
+fn bsearch_pattern_range<H, S: AsStrSlice>(entries: &List<StaticEntry<H>>, path: S) -> [i32, i32] {
     let n = entries.len();
     // Lower bound
     let mut lo = 0;
     let mut hi = n;
     while lo < hi {
         let mid = (lo + hi) / 2;
-        match entries[mid].pattern.cmp(path) {
+        match entries[mid].pattern.cmp_str(path) {
             Less => {
                 lo = mid + 1;
             },
@@ -643,7 +709,7 @@ fn bsearch_pattern_range<H>(entries: &List<StaticEntry<H>>, path: &String) -> [i
     hi = n;
     while lo < hi {
         let mid = (lo + hi) / 2;
-        match entries[mid].pattern.cmp(path) {
+        match entries[mid].pattern.cmp_str(path) {
             Greater => {
                 hi = mid;
             },
@@ -688,7 +754,7 @@ fn set_method_specific(entries: &mut List<MethodEntry>, method: Method, handler_
     entries.push(MethodEntry { method, handler_idx });
 }
 
-fn strip_query(s: String) -> String {
+fn strip_query<S: AsStrSlice>(s: S) -> String {
     let len = s.len();
     for let mut i = 0; i < len; i += 1 {
         let b = s.get_byte_unchecked(i);
@@ -696,12 +762,12 @@ fn strip_query(s: String) -> String {
             return s.substr_bytes(0, i);
         }
     }
-    return s;
+    return s.to_string();
 }
 
 /// Parse a route pattern path into a list of segments. Panics on
 /// malformed input.
-fn parse_pattern(path: &String) -> List<Segment> {
+fn parse_pattern<S: AsStrSlice>(path: S) -> List<Segment> {
     let bytes = path.len();
     if bytes == 0 || path.get_byte_unchecked(0) != b'/' {
         panic("route pattern must start with '/'");
@@ -748,12 +814,12 @@ fn parse_pattern(path: &String) -> List<Segment> {
     return out;
 }
 
-fn bsearch_label(edges: &List<LiteralEdge>, key: &String) -> [i32, bool] {
+fn bsearch_label<S: AsStrSlice>(edges: &List<LiteralEdge>, key: S) -> [i32, bool] {
     let mut lo = 0;
     let mut hi = edges.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        match edges[mid].label.cmp(key) {
+        match edges[mid].label.cmp_str(key) {
             Less => {
                 lo = mid + 1;
             },
@@ -901,7 +967,21 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
 
+<<<<<<< HEAD
     fn begin_struct(&mut self, _name: &String, _num_fields: i32) -> Result<PathParamsStructAccess, DeserializeError> {
+||||||| 5708464fb8e
+    fn begin_struct(
+        &mut self,
+        _name: &String,
+        _num_fields: i32,
+    ) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
+=======
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        _name: S,
+        _num_fields: i32,
+    ) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
+>>>>>>> origin/main
         // Nested structs are unsupported: `PathParams` is a flat key/value
         // surface, so a nested `begin_struct` (cursor != 0) means a field
         // typed as another struct asked us to descend into it. Refuse loudly
@@ -915,7 +995,21 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Ok(PathParamsStructAccess { de: *self });
     }
 
+<<<<<<< HEAD
     fn begin_variant(&mut self, _type_name: &String, _num_cases: i32) -> Result<PathParamsVariantStub, DeserializeError> {
+||||||| 5708464fb8e
+    fn begin_variant(
+        &mut self,
+        _type_name: &String,
+        _num_cases: i32,
+    ) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
+=======
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        _type_name: S,
+        _num_cases: i32,
+    ) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
+>>>>>>> origin/main
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
 
@@ -955,7 +1049,7 @@ impl PathParamsDeserializer {
     /// Byte-by-byte comparison of `path[start..<start + pat.len()]` with
     /// `pat`. Used by `deserialize_bool` to avoid a substring allocation
     /// when checking against the constants `"true"` / `"false"`.
-    fn path_bytes_eq(&self, start: i32, pat: String) -> bool {
+    fn path_bytes_eq<S: AsStrSlice>(&self, start: i32, pat: S) -> bool {
         let plen = pat.len();
         for let mut i = 0; i < plen; i += 1 {
             if self.src.path.get_byte_unchecked(start + i) != pat.get_byte_unchecked(i) {
@@ -968,7 +1062,7 @@ impl PathParamsDeserializer {
     /// Format an `invalid_value` error message including the param name and
     /// the captured slice, e.g.
     /// `path param 'id' is not a valid u64: 'abc'`.
-    fn format_error(&self, type_name: String) -> String {
+    fn format_error<S: AsStrSlice>(&self, type_name: S) -> String {
         let i = self.cursor - 1;
         let name = &self.src.names[i];
         let [s, e] = self.current_range();
@@ -979,7 +1073,7 @@ impl PathParamsDeserializer {
     /// Parse the active param's byte range into `T` via `FromStr`.
     /// Shared body of every scalar `deserialize_*` arm — keeps the per-type
     /// methods to a single line each.
-    fn parse_scalar<T: FromStr>(&self, type_name: String) -> Result<T, DeserializeError> {
+    fn parse_scalar<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
         return match T::from_str_slice(&self.src.path.as_str_slice().sub(s, e)) {

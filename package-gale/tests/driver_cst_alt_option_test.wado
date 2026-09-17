@@ -36,7 +36,7 @@ fn count_unstamped(s: &ao::CstStore) -> i32 {
 }
 
 test "a stamped expr node maps to Some(label)" {
-    let result = ao::parse(&"(42)");
+    let result = ao::parse("(42)");
     assert result.ok(), "clean input should parse without diagnostics";
     // Outer Paren expr + inner Num expr, both stamped; none unstamped.
     assert count_stamped(&result.cst) == 2;
@@ -48,7 +48,7 @@ test "an unstamped error-recovery expr node maps to None, not a silent first alt
     // so the parser opens an RK_EXPR node, picks no alt, and closes it with
     // alt unset. Were the accessor to panic, this test would crash; were it
     // to fall back to the first label, count_unstamped's assert would fail.
-    let result = ao::parse(&"()");
+    let result = ao::parse("()");
     assert !result.ok(), "`( )` is a syntax error";
     assert count_unstamped(&result.cst) >= 1, "expected an unstamped expr node in the error tree";
 }

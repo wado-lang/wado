@@ -1,0 +1,14 @@
+// A variant case's payload type was never checked against the argument, so the
+// mismatch reached codegen and built a module the validator rejected.
+
+variant Tagged {
+    Num(i32),
+}
+
+test "a variant case checks its payload's type" {
+    let t = Tagged::Num("hello");
+    assert t matches { Num(_) };
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'i32', found 'String'"}

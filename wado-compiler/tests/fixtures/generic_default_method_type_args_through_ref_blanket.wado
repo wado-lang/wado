@@ -1,0 +1,55 @@
+// A defaulted trait method carrying its own type parameters, reached through
+// the universal `&T` blanket. The blanket shortcut rewrites the call to the
+// reference instance, and the method's type arguments are written in the
+// calling body's parameters, so they need the same substitution the receiver
+// takes — left raw, the instance named a type parameter and never matched the
+// one monomorphization minted.
+
+trait Shout {
+    fn name(&self) -> String;
+
+    fn greet<W: Shout>(&self, who: &W) -> String {
+        return `${self.name()} greets ${who.name()}`;
+    }
+}
+
+struct Cat {
+    call: String,
+}
+
+impl Shout for Cat {
+    fn name(&self) -> String {
+        return self.call;
+    }
+}
+
+impl<T: Shout> Shout for &T {
+    fn name(&self) -> String {
+        return (*self).name();
+    }
+}
+
+fn pair<A: Shout, B: Shout>(a: A, b: B) -> String {
+    return a.greet(&b);
+}
+
+test "a generic default reaches a concrete receiver" {
+    let c = Cat { call: "meow" };
+    let d = Cat { call: "purr" };
+    assert pair(c, d) == "meow greets purr";
+}
+
+test "a generic default reaches a receiver through the ref blanket" {
+    let c = Cat { call: "meow" };
+    let d = Cat { call: "purr" };
+    assert pair(&c, d) == "meow greets purr";
+}
+
+test "both sides of a generic default go through the ref blanket" {
+    let c = Cat { call: "meow" };
+    let d = Cat { call: "purr" };
+    assert pair(&c, &d) == "meow greets purr";
+}
+
+__DATA__
+{"test": {}}

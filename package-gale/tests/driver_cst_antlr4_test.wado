@@ -14,6 +14,7 @@ use { TK_LINE_COMMENT, TK_BLOCK_COMMENT, TK_INT } from "./grammars/ANTLRv4Lexer.
 use { TK_ARGUMENT_CONTENT, TK_END_ARGUMENT, TK_ID, TK_SEMI } from "./grammars/ANTLRv4Lexer.g4";
 use { TK_TOKEN_REF, TK_RULE_REF, MODE_Argument, MODE_LexerCharSet } from "./grammars/ANTLRv4Lexer.g4";
 use { LexerAdaptor, LexerView, Lexer } from "./grammars/ANTLRv4Lexer.g4";
+use { is_rule_name_upper } from "../src/g4/scan.wado";
 
 struct Antlr4Base {
     begins: i32,
@@ -25,10 +26,10 @@ struct Antlr4Base {
 
 /// Upstream asks `Character.isUpperCase`, which is Unicode-wide;
 /// `NameStartChar` admits `\u00C0` upwards, so a rule named `ÀBC` diverges.
-/// Wado's prelude has no `char::is_uppercase` (see TODO.md).
+/// `core:icu` answers it, through the classifier the `.g4` parser reads.
 fn is_token_ref_name(view: &LexerView) -> bool {
     return match char::from_u32(view.char_at(view.start()) as u32) {
-        Some(c) => c.is_ascii_uppercase(),
+        Some(c) => is_rule_name_upper(c),
         None => false,
     };
 }
@@ -94,7 +95,7 @@ impl LexerAdaptor for DoublePushBase {
 test "a second mode command in one action is a hard error" {
     let mut base = DoublePushBase { hits: 0 };
     with LexerAdaptor => &mut base do {
-        antlr4::tokenize(&"r[int x] : 'a' ;");
+        antlr4::tokenize("r[int x] : 'a' ;");
     };
 }
 
@@ -102,14 +103,14 @@ fn new_antlr4_base() -> Antlr4Base {
     return Antlr4Base { begins: 0, ends: 0 };
 }
 
-fn a4_tokenize(input: &String) -> antlr4::TokenStream {
+fn a4_tokenize<S: AsStrSlice>(input: S) -> antlr4::TokenStream {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         return antlr4::tokenize(input);
     };
 }
 
-fn a4_parse(input: &String) -> antlr4::ParseResult {
+fn a4_parse<S: AsStrSlice>(input: S) -> antlr4::ParseResult {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
         return antlr4::parse(input);
@@ -117,7 +118,7 @@ fn a4_parse(input: &String) -> antlr4::ParseResult {
 }
 
 test "tokenize grammar declaration" {
-    let tokens = a4_tokenize(&"grammar Foo;");
+    let tokens = a4_tokenize("grammar Foo;");
     assert tokens.len() >= 3, `expected at least 3 tokens, got ${tokens.len()}`;
     // Verify the first token is GRAMMAR keyword
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
@@ -125,61 +126,61 @@ test "tokenize grammar declaration" {
 }
 
 test "tokenize rule with string literal" {
-    let tokens = a4_tokenize(&"bar : 'hello' ;");
+    let tokens = a4_tokenize("bar : 'hello' ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize alternatives" {
-    let tokens = a4_tokenize(&"expr : expr '+' expr | INT ;");
+    let tokens = a4_tokenize("expr : expr '+' expr | INT ;");
     // Should have: identifier, colon, identifier, string, identifier, pipe, identifier, semi
     assert tokens.len() >= 7, `expected at least 7 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize character set" {
-    let tokens = a4_tokenize(&"ID : [a-zA-Z_]+ ;");
+    let tokens = a4_tokenize("ID : [a-zA-Z_]+ ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize action block" {
-    let tokens = a4_tokenize(&"rule_ : 'a' { doSomething(); } ;");
+    let tokens = a4_tokenize("rule_ : 'a' { doSomething(); } ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize options block" {
-    let tokens = a4_tokenize(&"options { tokenVocab = FooLexer; }");
+    let tokens = a4_tokenize("options { tokenVocab = FooLexer; }");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize fragment" {
-    let tokens = a4_tokenize(&"fragment DIGIT : [0-9] ;");
+    let tokens = a4_tokenize("fragment DIGIT : [0-9] ;");
     assert tokens.len() >= 4, `expected at least 4 tokens, got ${tokens.len()}`;
     let first_name = antlr4::token_kind_name(tokens.kinds[0]);
     assert first_name == "FRAGMENT", `expected FRAGMENT, got ${first_name}`;
 }
 
 test "tokenize labels" {
-    let tokens = a4_tokenize(&"expr : INT # NumExpr ;");
+    let tokens = a4_tokenize("expr : INT # NumExpr ;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 test "tokenize lexer commands" {
-    let tokens = a4_tokenize(&"WS : [ \\t\\n]+ -> skip ;");
+    let tokens = a4_tokenize("WS : [ \\t\\n]+ -> skip ;");
     assert tokens.len() >= 5, `expected at least 5 tokens, got ${tokens.len()}`;
 }
 
 
 test "parse minimal grammar" {
-    let r = a4_parse(&"grammar Foo;");
+    let r = a4_parse("grammar Foo;");
     assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
 }
 
 test "parse a grammar with a parser rule and a lexer rule" {
-    let r = a4_parse(&"grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
+    let r = a4_parse("grammar Foo;\nexpr : expr '+' expr | INT ;\nINT : [0-9]+ ;\n");
     assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostic(s)`;
 }
 
 test "the emit hook retypes ID by the case of its first character" {
-    let tokens = a4_tokenize(&"expr : INT ;");
+    let tokens = a4_tokenize("expr : INT ;");
     let mut names: List<String> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         names.push(antlr4::token_kind_name(tokens.kinds[i]));
@@ -189,9 +190,8 @@ test "the emit hook retypes ID by the case of its first character" {
     assert !names.contains(&"ID"), `no ID may survive the hook, got ${names:?}`;
 }
 
-#[TODO]
 test "a non-ASCII uppercase rule name is a TOKEN_REF" {
-    let tokens = a4_tokenize(&"ÀBC : [0-9]+ ;");
+    let tokens = a4_tokenize("ÀBC : [0-9]+ ;");
     let name = antlr4::token_kind_name(tokens.kinds[0]);
     assert name == "TOKEN_REF", `expected TOKEN_REF, got ${name}`;
 }
@@ -199,7 +199,7 @@ test "a non-ASCII uppercase rule name is a TOKEN_REF" {
 test "a lexer rule's bracket opens a char set, not an argument list" {
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
-        let tokens = antlr4::tokenize(&"INT : [0-9]+ ;");
+        let tokens = antlr4::tokenize("INT : [0-9]+ ;");
         for let mut i = 0; i < tokens.len(); i += 1 {
             assert tokens.kinds[i] != TK_ARGUMENT_CONTENT, "a char set must not lex as argument content";
         }
@@ -216,7 +216,7 @@ test "a lexer rule's bracket opens a char set, not an argument list" {
 // them as trivia with `channel == 3`, not 0 or 1. This exercises the
 // generic `channel(X)` routing path, not just the HIDDEN shortcut.
 test "user channel: LINE_COMMENT routed to COMMENT channel" {
-    let tokens = a4_tokenize(&"// hi\n42");
+    let tokens = a4_tokenize("// hi\n42");
     // LINE_COMMENT must not appear in the main stream.
     for let mut i = 0; i < tokens.len(); i += 1 {
         assert tokens.kinds[i] != TK_LINE_COMMENT, "LINE_COMMENT leaked into main stream — channel routing dropped";
@@ -238,7 +238,7 @@ test "user channel: LINE_COMMENT routed to COMMENT channel" {
 }
 
 test "user channel: BLOCK_COMMENT routed to COMMENT channel" {
-    let tokens = a4_tokenize(&"/* hi */ 42");
+    let tokens = a4_tokenize("/* hi */ 42");
     for let mut i = 0; i < tokens.len(); i += 1 {
         assert tokens.kinds[i] != TK_BLOCK_COMMENT, "BLOCK_COMMENT leaked into main stream";
     }
@@ -262,7 +262,7 @@ test "the base's argument-bracket ops run on the winning tokens" {
     // matched bracket, and never for a candidate that lost the tournament.
     let mut base = new_antlr4_base();
     with LexerAdaptor => &mut base do {
-        let tokens = antlr4::tokenize(&"r[int x] : 'a' ;");
+        let tokens = antlr4::tokenize("r[int x] : 'a' ;");
         assert tokens.len() >= 6, `expected at least 6 tokens, got ${tokens.len()}`;
     };
     assert base.begins == 1, `expected 1 handleBeginArgument, got ${base.begins}`;
@@ -270,7 +270,7 @@ test "the base's argument-bracket ops run on the winning tokens" {
 }
 
 test "the base drives the Argument mode from handleBeginArgument" {
-    let tokens = a4_tokenize(&"r[int x] : 'a' ;");
+    let tokens = a4_tokenize("r[int x] : 'a' ;");
     let mut content = 0;
     let mut ends = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
@@ -286,7 +286,7 @@ test "the base drives the Argument mode from handleBeginArgument" {
 }
 
 test "a nested bracket retypes its closing bracket as content" {
-    let tokens = a4_tokenize(&"r[int[] a] : 'a' ;");
+    let tokens = a4_tokenize("r[int[] a] : 'a' ;");
     let mut ends = 0;
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.kinds[i] == TK_END_ARGUMENT {

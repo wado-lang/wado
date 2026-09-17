@@ -20,7 +20,7 @@ use arith from "./Arith.g4"
 /// never a trap: a syntax error (the resilient parser reports it as a
 /// diagnostic) and a runtime error like division by zero or an out-of-range
 /// literal (handled below and propagated with `?`).
-pub fn eval(input: &String) -> Result<i64, String> {
+pub fn eval<S: AsStrSlice>(input: S) -> Result<i64, String> {
     let result = arith::parse(input);
     if !result.ok() {
         let d = &result.diagnostics[0];
@@ -79,14 +79,14 @@ fn fold_binary(s: &arith::CstStore, node: i32, toks: &arith::TokenStream) -> Res
     return apply(left, &op, right);
 }
 
-fn apply(a: i64, op: &String, b: i64) -> Result<i64, String> {
-    if *op == "+" {
+fn apply<S: AsStrSlice>(a: i64, op: S, b: i64) -> Result<i64, String> {
+    if op.eq_str("+") {
         return Result::Ok(a + b);
     }
-    if *op == "-" {
+    if op.eq_str("-") {
         return Result::Ok(a - b);
     }
-    if *op == "*" {
+    if op.eq_str("*") {
         return Result::Ok(a * b);
     }
     if b == 0 {

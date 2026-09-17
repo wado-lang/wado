@@ -18,7 +18,7 @@ use crate::nir_engine::Engine;
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::optimize::mod_ref;
 use crate::optimize::value_copy::mutation::MutationOracle;
-use crate::tir::{ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Every reachable block, each before the blocks nested under it.
 pub(super) fn reachable_blocks(body: &Body) -> Vec<BlockId> {
@@ -309,6 +309,35 @@ pub(super) fn bare_promoted_local(body: &Body, op: Operand) -> Option<u32> {
     }
 }
 
+/// The local an operand reads: a bare skeleton `Local`, or the promoted value
+/// that extracts back to one.
+pub(super) fn operand_local(body: &Body, op: Operand) -> Option<u32> {
+    match op {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Local { index, .. } => Some(*index),
+            _ => None,
+        },
+        Operand::Value(_) => bare_promoted_local(body, op),
+    }
+}
+
+/// The `(left, op, right)` of a binary node, skeleton or promoted. The two
+/// worlds spell the node differently and every reader of one wants both.
+pub(super) fn binary_parts(body: &Body, op: Operand) -> Option<(Operand, NirBinaryOp, Operand)> {
+    match op {
+        Operand::Expr(e) => match &body.exprs[e].kind {
+            ExprKind::Binary { left, op, right } => Some((*left, *op, *right)),
+            _ => None,
+        },
+        Operand::Value(v) => match body.values.kind(v) {
+            ValueKind::Binary { lhs, op, rhs, .. } => {
+                Some((Operand::Value(*lhs), *op, Operand::Value(*rhs)))
+            }
+            _ => None,
+        },
+    }
+}
+
 /// Whether `idx` appears anywhere in the expression subtree at `id`. Matches
 /// the coverage of the tree `expr_mentions_local` (every nested statement,
 /// block, and `ConstantValue` pattern expression is walked).
@@ -321,7 +350,28 @@ pub(super) fn stmt_mentions_local(body: &Body, id: StmtId, idx: u32) -> bool {
     node_mentions_local(body, NodeRef::Stmt(id), idx)
 }
 
+/// Whether `idx` appears anywhere in what `op` reads, skeleton or promoted.
+pub(super) fn operand_mentions_local(body: &Body, op: Operand, idx: u32) -> bool {
+    match op {
+        Operand::Expr(e) => expr_mentions_local(body, e, idx),
+        Operand::Value(v) => body.values.value_reads_local(v, idx),
+    }
+}
+
 fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
+    mentions_local_except(body, node, None, idx)
+}
+
+/// Whether `idx` appears anywhere under `node` outside the `skip` subtree.
+pub(super) fn mentions_local_except(
+    body: &Body,
+    node: NodeRef,
+    skip: Option<NodeRef>,
+    idx: u32,
+) -> bool {
+    if Some(node) == skip {
+        return false;
+    }
     if let NodeRef::Expr(id) = node
         && is_local(body, id, idx)
     {
@@ -338,7 +388,7 @@ fn node_mentions_local(body: &Body, node: NodeRef, idx: u32) -> bool {
     }
     body.for_each_child(node, |c| {
         if !found {
-            found = node_mentions_local(body, c, idx);
+            found = mentions_local_except(body, c, skip, idx);
         }
     });
     found
@@ -534,17 +584,40 @@ pub(super) fn value_may_trap(pool: &ValuePool, v: ValueId) -> bool {
 /// `mod_ref::ModRef::of_expr(..).may_trap`; this is the per-node contribution
 /// a walker consults while it recurses itself.
 ///
-/// `Cast` is conservatively trap-capable here (matching `mod_ref`); a consumer
-/// needing the finer "only float→int truncation traps" refinement keeps its own
-/// check (see `select_lowering::is_trapping_cast`).
+/// The one trapping cast: `wir_build::translate_cast` lowers a float-to-integer
+/// conversion to the non-saturating `I*TruncF*`, which traps on NaN and on an
+/// out-of-range magnitude. Every other conversion it emits is total — integer to
+/// integer of any width or signedness, integer to float, float to float — and a
+/// cast between non-numeric types is a representation no-op, never a `ref.cast`.
+/// Provable only with a type table.
+pub(super) fn cast_truncates_a_float(
+    body: &Body,
+    types: Option<&TypeTable>,
+    inner: Operand,
+    target: TypeId,
+) -> bool {
+    let Some(types) = types else {
+        return true;
+    };
+    types.is_float(body.operand_type(inner)) && types.is_integer(target)
+}
+
+/// Without a type table `Cast` is conservatively trap-capable; with one only a
+/// float source makes it trap.
 pub(super) fn expr_node_may_trap(body: &Body, id: ExprId) -> bool {
+    expr_node_may_trap_typed(body, id, None)
+}
+
+/// [`expr_node_may_trap`], with a type table to settle a cast.
+pub(super) fn expr_node_may_trap_typed(body: &Body, id: ExprId, types: Option<&TypeTable>) -> bool {
     match &body.exprs[id].kind {
         ExprKind::Binary { op, .. } => binary_op_may_trap(*op),
         ExprKind::Unary { op, .. } => unary_op_may_trap(*op),
-        // Numeric narrowing / `ref.cast`, and heap projections on a
-        // possibly-null (or case-mismatched) receiver.
-        ExprKind::Cast { .. }
-        | ExprKind::FieldAccess { .. }
+        ExprKind::Cast { expr, target_type } => {
+            cast_truncates_a_float(body, types, *expr, *target_type)
+        }
+        // Heap projections on a possibly-null (or case-mismatched) receiver.
+        ExprKind::FieldAccess { .. }
         | ExprKind::Index { .. }
         | ExprKind::VariantTag { .. }
         | ExprKind::VariantTest { .. }

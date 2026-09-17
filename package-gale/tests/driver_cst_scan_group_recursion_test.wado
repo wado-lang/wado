@@ -16,19 +16,19 @@ use recur from "./grammars/scan_group_recursion.g4"
 // complete it, so `closure` — and thus `expr` — must not match. Before the fix
 // the scan of `expr` recursed `expr -> primary -> closure -> expr` forever.
 test "lone pipe does not recurse unboundedly" {
-    let r = recur::parse(&"|");
+    let r = recur::parse("|");
     assert r.diagnostics.len() > 0, "expected diagnostics for a lone '|'";
 }
 
 // `| |` also cannot form `closure ('||' | '|' '|') expr` (the body `expr` is
 // absent), and must terminate with diagnostics rather than trap.
 test "double pipe without a body does not recurse unboundedly" {
-    let r = recur::parse(&"| |");
+    let r = recur::parse("| |");
     assert r.diagnostics.len() > 0, "expected diagnostics for '| |'";
 }
 
 // A well-formed `closure` still parses: `|| 1 ;` is `('||') expr` then `';'`.
 test "valid closure still parses cleanly" {
-    let r = recur::parse(&"|| 1 ;");
+    let r = recur::parse("|| 1 ;");
     assert r.ok(), `expected a clean parse, got ${r.diagnostics.len()} diagnostics`;
 }

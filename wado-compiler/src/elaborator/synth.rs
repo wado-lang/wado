@@ -10,7 +10,7 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::hashmap::IndexMap;
 use crate::name::FqTypeName;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::Elaborator;
 use super::callee::CalleeRef;
@@ -273,27 +273,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     || tt.fq_base_type_name(tt.representation_head(param)) == *head
             }
             ArgClass::IntLit => {
-                let base = tt.representation_head(param);
-                matches!(
-                    tt.get(base),
-                    ResolvedType::Primitive(
-                        PrimitiveType::I8
-                            | PrimitiveType::I16
-                            | PrimitiveType::I32
-                            | PrimitiveType::I64
-                            | PrimitiveType::U8
-                            | PrimitiveType::U16
-                            | PrimitiveType::U32
-                            | PrimitiveType::U64
-                            | PrimitiveType::F32
-                            | PrimitiveType::F64
-                    )
-                ) || tt.wide_int_item(base).is_some()
+                tt.is_integer(param)
+                    || tt.is_float(param)
+                    || tt.wide_int_item(tt.representation_head(param)).is_some()
             }
-            ArgClass::FloatLit => matches!(
-                tt.get(tt.representation_head(param)),
-                ResolvedType::Primitive(PrimitiveType::F32 | PrimitiveType::F64)
-            ),
+            ArgClass::FloatLit => tt.is_float(param),
             ArgClass::StrLit => tt.base_type_name(tt.representation_head(param)) == "String",
             ArgClass::NullLit => tt.as_option(param).is_some(),
         }

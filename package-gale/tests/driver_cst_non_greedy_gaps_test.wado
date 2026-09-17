@@ -6,19 +6,19 @@ use ng from "./grammars/non_greedy_gaps.g4"
         generator: { module: "../src/generator.wado", output_dir: "./generated/cst_non_greedy_gaps" },
     };
 
-fn assert_parses(input: &String) {
-    assert ng::parse(input).ok(), `unexpected diagnostics for ${*input}`;
+fn assert_parses<S: AsStrSlice>(input: S) {
+    assert ng::parse(input).ok(), `unexpected diagnostics for ${input}`;
 }
 
 test "non-greedy-gaps: bare constant" {
-    assert_parses(&"public static final int X");
+    assert_parses("public static final int X");
 }
 test "non-greedy-gaps: constant after junk" {
-    assert_parses(&"foo bar = 1 ; public static final int Y");
+    assert_parses("foo bar = 1 ; public static final int Y");
 }
 test "non-greedy-gaps: constant then junk" {
-    assert_parses(&"public static final int A ; garbage here");
+    assert_parses("public static final int A ; garbage here");
 }
 test "non-greedy-gaps: interleaved" {
-    assert_parses(&"int x ; public static final int A ; x = 1 ; public static final int B ; end");
+    assert_parses("int x ; public static final int A ; x = 1 ; public static final int B ; end");
 }

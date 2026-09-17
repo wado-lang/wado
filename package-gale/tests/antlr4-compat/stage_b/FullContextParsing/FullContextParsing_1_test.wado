@@ -24,7 +24,7 @@ test "stage_b_sub: FullContextParsing/ExprAmbiguity_1" {
     let input = "a+b";
     let expected = "(expr a + (expr b))";
     let result = t_ExprAmbiguity_1::parse_s(&input);
-    let actual = t_ExprAmbiguity_1::to_string_subtree(&result, &"expr");
+    let actual = t_ExprAmbiguity_1::to_string_subtree(&result, "expr");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }
@@ -47,7 +47,7 @@ test "stage_b_sub: FullContextParsing/ExprAmbiguity_2" {
     let input = "a+b*c";
     let expected = "(expr a + (expr b * (expr c)))";
     let result = t_ExprAmbiguity_2::parse_s(&input);
-    let actual = t_ExprAmbiguity_2::to_string_subtree(&result, &"expr");
+    let actual = t_ExprAmbiguity_2::to_string_subtree(&result, "expr");
     let norm = normalize_tree(&expected);
     assert actual == norm, `actual:   ${actual}\nexpected: ${norm}`;
 }

@@ -21,6 +21,15 @@
 //! - `extract_lane(index)` — returns the lane value (i32/i64/f32/f64 depending on type)
 //! - `extract_lane_s(index)` / `extract_lane_u(index)` — sign/zero-extended extraction for sub-32-bit types (i8x16, i16x8)
 //!
+//! ## Byte Selection
+//!
+//! `swizzle(indices)` picks each byte of one vector by a runtime index, zeroing
+//! an index of 16 or more. To pick from two vectors, or to pick at no runtime
+//! cost, use `builtin::i8x16_shuffle(l0, ..., l15, a, b)`: `0..=15` names a byte
+//! of `a` and `16..=31` a byte of `b`. Its sixteen indices are Wasm immediates,
+//! so they must be written as literals at the call — a method could not carry
+//! them until const generic parameters land.
+//!
 //! ## Operators
 //!
 //! All types support `+`, `-`, `*`, `&`, `|`, `^`, `~`, `<<`, `>>`, and unary `-`.
@@ -51,8 +60,8 @@
 //!
 //! ## Unsigned Integer Types (u8x16, u16x8, u32x4, u64x2)
 //!
-//! **u8x16:** `abs`, `add_sat`, `sub_sat`, `min`, `max`, `avgr`,
-//! `all_true`, `bitmask`, `popcnt`, `bitselect`.
+//! **u8x16:** `swizzle`, `relaxed_swizzle`, `abs`, `add_sat`, `sub_sat`, `min`,
+//! `max`, `avgr`, `all_true`, `bitmask`, `popcnt`, `bitselect`.
 //!
 //! **u16x8:** `abs`, `add_sat`, `sub_sat`, `min`, `max`, `avgr`,
 //! `all_true`, `bitmask`, `bitselect`.
@@ -1062,10 +1071,23 @@ impl u8x16 {
         return builtin::i8x16_splat(a) as u8x16;
     }
 
+    /// Select each byte by a runtime index; an index of 16 or more yields 0.
+    pub fn swizzle(&self, indices: &u8x16) -> u8x16 {
+        return builtin::i8x16_swizzle(*self as v128, *indices as v128) as u8x16;
+    }
+
+    /// Select each byte by a runtime index, leaving an out-of-range one to the
+    /// engine. Faster where the hardware swizzle differs from Wasm's.
+    pub fn relaxed_swizzle(&self, indices: &u8x16) -> u8x16 {
+        return builtin::i8x16_relaxed_swizzle(*self as v128, *indices as v128) as u8x16;
+    }
+
     /// Load 16 bytes from a String at the given byte offset into a u8x16.
     /// The caller must ensure `offset + 16 <= s.len()`.
-    pub fn from_string(s: &String, offset: i32) -> u8x16 {
-        let arr = s.internal_raw_bytes();
+    pub fn from_string<S: AsStrSlice>(s: S, offset: i32) -> u8x16 {
+        let view = s.as_str_slice();
+        let arr = view.internal_raw_bytes();
+        let offset = offset + view.internal_byte_offset();
         let v: u8x16 = [
             builtin::array_get_value_u8(arr, offset) as i32,
             builtin::array_get_value_u8(arr, offset + 1) as i32,

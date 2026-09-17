@@ -1,0 +1,15 @@
+// A negative lane index is a negation applied to a literal rather than a
+// literal, so the check reads through it and names the range rather than
+// asking for a literal it was already given.
+use { i8x16 } from "core:simd";
+
+export fn run() {
+    let v = i8x16::splat(3);
+    assert builtin::i8x16_extract_lane_u(-1, v as v128) == 3;
+}
+
+__DATA__
+{
+    "compile_error": "lane index out of range for `builtin::i8x16_extract_lane_u`: -1 (0..16)",
+    "compile_errors_not_contains": ["needs an integer literal lane index"]
+}

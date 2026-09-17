@@ -127,20 +127,20 @@ pub struct DeserializeError {
 }
 
 impl DeserializeError {
-    pub fn unexpected_type(msg: String, offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::UnexpectedType, message: msg, offset };
+    pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::UnexpectedType, message: msg.to_string(), offset };
     }
 
-    pub fn missing_field(name: String) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::MissingField, message: name, offset: -1 };
+    pub fn missing_field<S: AsStrSlice>(name: S) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::MissingField, message: name.to_string(), offset: -1 };
     }
 
-    pub fn invalid_value(msg: String, offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::InvalidValue, message: msg, offset };
+    pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::InvalidValue, message: msg.to_string(), offset };
     }
 
-    pub fn malformed(msg: String, offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::MalformedInput, message: msg, offset };
+    pub fn malformed<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::MalformedInput, message: msg.to_string(), offset };
     }
 
     pub fn eof(offset: i64) -> DeserializeError {
@@ -155,15 +155,15 @@ impl DeserializeError {
         };
     }
 
-    pub fn overflow(msg: String, offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::Overflow, message: msg, offset };
+    pub fn overflow<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::Overflow, message: msg.to_string(), offset };
     }
 
-    pub fn depth_limit(msg: String, offset: i64) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg, offset };
+    pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+        return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 
-    pub fn duplicate_field(name: String) -> DeserializeError {
+    pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError {
         return DeserializeError {
             kind: DeserializeErrorKind::DuplicateField,
             message: `duplicate field: ${name}`,
@@ -183,11 +183,11 @@ pub enum DuplicateKeyPolicy {
 
 /// Applies `policy` to a key the wire already wrote. Detecting the repeat is
 /// the caller's job: a struct sees a filled slot, a map asks `try_insert`.
-pub fn report_duplicate_key(policy: DuplicateKeyPolicy, name: &String) -> Result<(), DeserializeError> {
+pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) -> Result<(), DeserializeError> {
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
-            return Result::Err(DeserializeError::duplicate_field(*name));
+            return Result::Err(DeserializeError::duplicate_field(name.to_string()));
         },
         DuplicateKeyPolicy::Warn => {
             builtin::cold_path();
@@ -241,7 +241,7 @@ pub trait SerializeStruct {
 
 
     #[compiler_item("serialize_struct_field")]
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
 
     #[compiler_item("serialize_struct_end")]
@@ -278,7 +278,7 @@ pub trait Serializer {
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError>;
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError>;
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError>;
     /// Whether the output is meant to be read by people. Binary formats
     /// override it to false so a value can pick a compact representation.
     fn is_human_readable(&self) -> bool {
@@ -313,23 +313,37 @@ pub trait Serializer {
 
 
     #[compiler_item("serializer_begin_struct")]
+<<<<<<< HEAD
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>;
+||||||| 5708464fb8e
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+=======
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        fields: i32,
+    ) -> Result<Self::StructSerializer, SerializeError> with stores[self];
+>>>>>>> origin/main
 
 
     #[compiler_item("serializer_serialize_unit_variant")]
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError>;
 
 
     #[compiler_item("serializer_begin_variant")]
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<Self::VariantSerializer, SerializeError>;
 }
@@ -455,7 +469,7 @@ pub trait Visitor {
     fn visit_u128(&mut self, v: u128) -> Result<Self::Value, DeserializeError> {
         return self.visit_f64(v as f64);
     }
-    fn visit_string(&mut self, v: String) -> Result<Self::Value, DeserializeError>;
+    fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Self::Value, DeserializeError>;
     /// Byte-string visit (CBOR major type 2; JSON base64). Defaults to an
     /// `UnexpectedType` error so text-only visitors are unaffected.
     fn visit_bytes(&mut self, _v: ByteList) -> Result<Self::Value, DeserializeError> {
@@ -525,11 +539,39 @@ pub trait Deserializer {
 
 
     #[compiler_item("deserializer_begin_struct")]
+<<<<<<< HEAD
     fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>;
+||||||| 5708464fb8e
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        num_fields: i32,
+    ) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+=======
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        num_fields: i32,
+    ) -> Result<Self::StructAccess, DeserializeError> with stores[self];
+>>>>>>> origin/main
 
 
     #[compiler_item("deserializer_begin_variant")]
+<<<<<<< HEAD
     fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>;
+||||||| 5708464fb8e
+    fn begin_variant(
+        &mut self,
+        type_name: &String,
+        num_cases: i32,
+    ) -> Result<Self::VariantAccess, DeserializeError> with stores[self];
+=======
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<Self::VariantAccess, DeserializeError> with stores[self];
+>>>>>>> origin/main
     fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>;
 }
 
@@ -695,12 +737,12 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         match self {
             Ok(v) => {
-                let mut var = s.begin_variant(&"Result", &"Ok", 0)?;
+                let mut var = s.begin_variant("Result", "Ok", 0)?;
                 var.payload(v)?;
                 return var.end();
             },
             Err(v) => {
-                let mut var = s.begin_variant(&"Result", &"Err", 1)?;
+                let mut var = s.begin_variant("Result", "Err", 1)?;
                 var.payload(v)?;
                 return var.end();
             },
@@ -861,7 +903,7 @@ impl Visitor for IgnoredAnyVisitor {
         return Result::Ok(IgnoredAny {});
     }
 
-    fn visit_string(&mut self, _v: String) -> Result<IgnoredAny, DeserializeError> {
+    fn visit_string<S: AsStrSlice>(&mut self, _v: S) -> Result<IgnoredAny, DeserializeError> {
         return Result::Ok(IgnoredAny {});
     }
 
@@ -934,7 +976,7 @@ impl Deserialize for ByteArray {
 
 impl<T: Deserialize, E: Deserialize> Deserialize for Result<T, E> {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Result<T, E>, DeserializeError> {
-        let mut va = d.begin_variant(&"Result", 2)?;
+        let mut va = d.begin_variant("Result", 2)?;
         let name = va.variant_name()?;
         if name == "Ok" {
             let val = va.payload()?;
@@ -1079,7 +1121,7 @@ fn unknown_case_error(key: &CaseKey) -> DeserializeError {
     };
 }
 
-fn missing_field_error(name: String) -> DeserializeError {
+fn missing_field_error<S: AsStrSlice>(name: S) -> DeserializeError {
     return DeserializeError {
         kind: DeserializeErrorKind::MissingField,
         message: `missing field: ${name}`,
@@ -1293,9 +1335,9 @@ fn case_separator(style: CaseStyle) -> u8 {
 /// lower/digit → upper transition starts a word; inside an uppercase run, an
 /// uppercase directly before a lowercase starts one. Digits attach to the
 /// current word.
-pub fn apply_case(style: CaseStyle, s: String) -> String {
+pub fn apply_case<S: AsStrSlice>(style: CaseStyle, s: S) -> String {
     if style matches { Identity } {
-        return s;
+        return s.to_string();
     }
     // Bytes, not chars: every rule above is ASCII, and a multi-byte sequence's
     // bytes are all >= 0x80, so they are neither separators nor case

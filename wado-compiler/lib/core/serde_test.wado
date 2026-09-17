@@ -50,7 +50,7 @@ struct MockSerializer {
 impl SerializeSeq for MockSeqSerializer {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.w.buf.push_str(&",");
+            self.w.buf.push_str(",");
         }
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
@@ -59,7 +59,7 @@ impl SerializeSeq for MockSeqSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&"]");
+        self.w.buf.push_str("]");
         return Result::Ok(());
     }
 }
@@ -67,11 +67,11 @@ impl SerializeSeq for MockSeqSerializer {
 impl SerializeMap for MockMapSerializer {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
-            self.w.buf.push_str(&",");
+            self.w.buf.push_str(",");
         }
         let mut ser = MockSerializer { w: self.w };
         let r = key.serialize::<MockSerializer>(&mut ser);
-        self.w.buf.push_str(&":");
+        self.w.buf.push_str(":");
         return r;
     }
 
@@ -83,17 +83,23 @@ impl SerializeMap for MockMapSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&"}");
+        self.w.buf.push_str("}");
         return Result::Ok(());
     }
 }
 
 impl SerializeStruct for MockStructSerializer {
+<<<<<<< HEAD
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
+||||||| 5708464fb8e
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> with stores[self] {
+=======
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> with stores[self] {
+>>>>>>> origin/main
         if self.count > 0 {
-            self.w.buf.push_str(&",");
+            self.w.buf.push_str(",");
         }
-        self.w.buf.push_str(&`"${*name}":`);
+        self.w.buf.push_str(`"${name}":`);
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         self.count += 1;
@@ -101,7 +107,7 @@ impl SerializeStruct for MockStructSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&"}");
+        self.w.buf.push_str("}");
         return Result::Ok(());
     }
 }
@@ -114,7 +120,7 @@ impl SerializeVariant for MockVariantSerializer {
     }
 
     fn end(&mut self) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&"}");
+        self.w.buf.push_str("}");
         return Result::Ok(());
     }
 }
@@ -126,91 +132,131 @@ impl Serializer for MockSerializer {
     type VariantSerializer = MockVariantSerializer;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v}`);
+        self.w.buf.push_str(`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v}`);
+        self.w.buf.push_str(`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_u32(&mut self, v: u32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v}`);
+        self.w.buf.push_str(`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v}`);
+        self.w.buf.push_str(`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v as f64}`);
+        self.w.buf.push_str(`${v as f64}`);
         return Result::Ok(());
     }
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`${v}`);
+        self.w.buf.push_str(`${v}`);
         return Result::Ok(());
     }
 
     fn serialize_bool(&mut self, v: bool) -> Result<(), SerializeError> {
         if v {
-            self.w.buf.push_str(&"true");
+            self.w.buf.push_str("true");
         } else {
-            self.w.buf.push_str(&"false");
+            self.w.buf.push_str("false");
         }
         return Result::Ok(());
     }
 
     fn serialize_char(&mut self, v: char) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"${v}"`);
+        self.w.buf.push_str(`"${v}"`);
         return Result::Ok(());
     }
 
-    fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"${*v}"`);
+    fn serialize_string<S: AsStrSlice>(&mut self, v: S) -> Result<(), SerializeError> {
+        self.w.buf.push_str(`"${v}"`);
         return Result::Ok(());
     }
 
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&"null");
+        self.w.buf.push_str("null");
         return Result::Ok(());
     }
 
+<<<<<<< HEAD
     fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> {
         self.w.buf.push_str(&"[");
+||||||| 5708464fb8e
+    fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str(&"[");
+=======
+    fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str("[");
+>>>>>>> origin/main
         return Result::Ok(MockSeqSerializer { w: self.w, count: 0 });
     }
 
+<<<<<<< HEAD
     fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> {
         self.w.buf.push_str(&"{");
+||||||| 5708464fb8e
+    fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str(&"{");
+=======
+    fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str("{");
+>>>>>>> origin/main
         return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
+<<<<<<< HEAD
     fn begin_struct(&mut self, name: &String, fields: i32) -> Result<MockStructSerializer, SerializeError> {
         self.w.buf.push_str(&"{");
+||||||| 5708464fb8e
+    fn begin_struct(
+        &mut self,
+        name: &String,
+        fields: i32,
+    ) -> Result<MockStructSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str(&"{");
+=======
+    fn begin_struct<S: AsStrSlice>(
+        &mut self,
+        name: S,
+        fields: i32,
+    ) -> Result<MockStructSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str("{");
+>>>>>>> origin/main
         return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
 
-    fn serialize_unit_variant(
+    fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
     ) -> Result<(), SerializeError> {
-        self.w.buf.push_str(&`"${*variant_name}"`);
+        self.w.buf.push_str(`"${variant_name}"`);
         return Result::Ok(());
     }
 
-    fn begin_variant(
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(
         &mut self,
-        type_name: &String,
-        variant_name: &String,
+        type_name: S,
+        variant_name: S1,
         disc: i32,
+<<<<<<< HEAD
     ) -> Result<MockVariantSerializer, SerializeError> {
         self.w.buf.push_str(&`{"${*variant_name}":`);
+||||||| 5708464fb8e
+    ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str(&`{"${*variant_name}":`);
+=======
+    ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
+        self.w.buf.push_str(`{"${variant_name}":`);
+>>>>>>> origin/main
         return Result::Ok(MockVariantSerializer { w: self.w });
     }
 }
@@ -382,7 +428,7 @@ test "apply_case heck-parity edge corpus" {
 }
 
 test "report_duplicate_key rejects under Error" {
-    let r = report_duplicate_key(DuplicateKeyPolicy::Error, &"role");
+    let r = report_duplicate_key(DuplicateKeyPolicy::Error, "role");
     assert r matches { Err(e) && e.kind == DeserializeErrorKind::DuplicateField };
     if let Err(e) = r {
         assert e.message == "duplicate field: role";
@@ -390,9 +436,9 @@ test "report_duplicate_key rejects under Error" {
 }
 
 test "report_duplicate_key continues under Warn" {
-    assert report_duplicate_key(DuplicateKeyPolicy::Warn, &"role") matches { Ok };
+    assert report_duplicate_key(DuplicateKeyPolicy::Warn, "role") matches { Ok };
 }
 
 test "report_duplicate_key continues under PassThru" {
-    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, &"role") matches { Ok };
+    assert report_duplicate_key(DuplicateKeyPolicy::PassThru, "role") matches { Ok };
 }

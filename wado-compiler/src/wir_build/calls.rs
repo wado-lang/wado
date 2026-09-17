@@ -5,6 +5,8 @@
 //! These methods are part of `FunctionTranslator`; see `translate.rs` for
 //! the struct definition and the primary translation dispatch.
 
+use std::array;
+
 use crate::module_source::ModuleSource;
 use crate::name::MangledName;
 use crate::tir::{TypeId, TypeTable};
@@ -20,13 +22,13 @@ use crate::tir::ResolvedType;
 use crate::wir::WirFuncId;
 use crate::wir_build::translate::ref_binding_needs_boxing;
 
-/// The compile-time constant of a SIMD lane operand — a promoted
-/// `Operand::Value` int constant in the function's value pool.
+/// The compile-time constant of a SIMD lane operand, promoted into the
+/// function's value pool. The elaborator has already rejected anything else.
 fn operand_lane_const(body: &Body, op: Operand) -> u8 {
-    match body.operand_const_int(op) {
-        Some(n) => n as u8,
-        None => panic!("SIMD lane index must be a constant integer literal"),
-    }
+    let Some(lane) = body.operand_const_int(op) else {
+        panic!("SIMD lane index survived elaboration unfolded")
+    };
+    lane as u8
 }
 
 /// Mechanical builtin shapes — each evaluates its operand expressions
@@ -803,6 +805,12 @@ impl FunctionTranslator<'_, '_> {
             "builtin::v128_xor" => binary!(self, args, WirInstr::V128Xor),
             "builtin::v128_bitselect" => ternary!(self, args, WirInstr::V128Bitselect),
             "builtin::i8x16_splat" => unary!(self, args, WirInstr::I8x16Splat),
+            "builtin::i8x16_shuffle" => {
+                let lanes = array::from_fn(|i| operand_lane_const(self.body, args[i].expr));
+                let a = self.translate_operand(args[16].expr);
+                let b = self.translate_operand(args[17].expr);
+                WirInstr::I8x16Shuffle(lanes, Box::new(a), Box::new(b))
+            }
             "builtin::i8x16_extract_lane_s" => {
                 extract_lane!(self, args, WirInstr::I8x16ExtractLaneS)
             }

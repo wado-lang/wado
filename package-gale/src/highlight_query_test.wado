@@ -3,30 +3,30 @@
 
 use { parse_highlight_query, HighlightRule, TokenSelector } from "./highlight_query.wado";
 
-fn parse_ok(src: String) -> List<HighlightRule> {
+fn parse_ok<S: AsStrSlice>(src: S) -> List<HighlightRule> {
     return match parse_highlight_query(&src) {
         Ok(rules) => rules,
         Err(e) => panic(`unexpected parse error at ${e.line}:${e.col}: ${e.message}`),
     };
 }
 
-fn parse_err(src: String) -> String {
+fn parse_err<S: AsStrSlice>(src: S) -> String {
     return match parse_highlight_query(&src) {
         Ok(_) => panic(`expected a parse error for: ${src}`),
         Err(e) => e.message,
     };
 }
 
-fn is_name(sel: &TokenSelector, expected: String) -> bool {
+fn is_name<S: AsStrSlice>(sel: &TokenSelector, expected: S) -> bool {
     return match sel {
-        Name(n) => *n == expected,
+        Name(n) => expected.eq_str(*n),
         Literal(_) => false,
     };
 }
 
-fn is_literal(sel: &TokenSelector, expected: String) -> bool {
+fn is_literal<S: AsStrSlice>(sel: &TokenSelector, expected: S) -> bool {
     return match sel {
-        Literal(t) => *t == expected,
+        Literal(t) => expected.eq_str(*t),
         Name(_) => false,
     };
 }

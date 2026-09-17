@@ -527,28 +527,16 @@ pub fn make_synthetic_free_function(
     }
 }
 
-/// Build a `f.write_str(&"text")` statement. `Formatter::write_str` takes
-/// `&String`, so the literal is wrapped in an explicit `Ref` using the caller's
-/// cached `ref_string_type`. `formatter_name` is the resolved
-/// [`CompilerItem::Formatter`] struct name, threaded in from the caller's own
-/// snapshot rather than looked up again here.
+/// Build a `f.write_str::<String>("text")` statement. The named type argument
+/// is what instantiates the `AsStrSlice` monomorph.
 pub fn write_str_stmt(
     text: impl Into<String>,
     fmt: TirExpr,
     string_type: TypeId,
-    ref_string_type: TypeId,
     span: Span,
     formatter_name: &FqTypeName,
 ) -> TirStmt {
-    let literal = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
-    let arg = TirExpr::new(
-        TirExprKind::Unary {
-            op: TirUnaryOp::Ref,
-            expr: Box::new(literal),
-        },
-        ref_string_type,
-        span,
-    );
+    let arg = TirExpr::new(TirExprKind::StringLiteral(text.into()), string_type, span);
     let call = TirExpr::new(
         TirExprKind::method_call(
             Box::new(fmt),
@@ -562,7 +550,7 @@ pub fn write_str_stmt(
                     "write_str".to_string(),
                 )),
             },
-            vec![],
+            vec![string_type],
             vec![CallArg::new(arg, false)],
         ),
         TypeTable::UNIT,

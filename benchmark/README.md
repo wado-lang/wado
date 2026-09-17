@@ -16,15 +16,54 @@ compression, parsing, and application server.
 
 ## Pure Computation
 
-### Prime Counting
+### MicroGPT
 
-Count primes up to 1M (integer arithmetic, trial division).
+A character-level GPT on a scalar autograd object graph: one layer, 16 embedding
+dimensions, 4 heads, 4,096 parameters. A port of
+[Andrej Karpathy's microgpt](https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95);
+`example/microgpt.wado` is the full version.
 
-| Implementation |     Throughput |   ms/iter | vs best |
-| -------------- | -------------: | --------: | ------- |
-| C              | 12.36 M nums/s | 80.930 ms | 1.00x   |
-| JavaScript     | 11.81 M nums/s | 84.703 ms | 1.05x   |
-| **Wado**       | 11.66 M nums/s | 85.794 ms | 1.06x   |
+The other rows in this section loop over flat arrays. This one walks a graph of
+small heap objects: a training step builds 31k to 89k nodes, traverses them
+depth-first, and accumulates gradients back through them.
+
+Train — 32 steps, one per document, of forward, backward and Adam:
+
+| Implementation |      Throughput |    ms/iter | vs best |
+| -------------- | --------------: | ---------: | ------- |
+| Rust           | 1.68 k tokens/s | 135.174 ms | 1.00x   |
+| JavaScript     | 588.24 tokens/s | 385.898 ms | 2.85x   |
+| **Wado**       | 493.70 tokens/s | 459.796 ms | 3.40x   |
+
+Infer — 24 samples of the forward path alone, no gradients:
+
+| Implementation |      Throughput |    ms/iter | vs best |
+| -------------- | --------------: | ---------: | ------- |
+| Rust           | 2.76 k tokens/s | 139.349 ms | 1.00x   |
+| JavaScript     | 1.59 k tokens/s | 241.493 ms | 1.73x   |
+| **Wado**       | 1.03 k tokens/s | 371.605 ms | 2.67x   |
+
+Wado gives up less on inference than on training. Training spends most of its
+time in the backward pass, which sorts the whole graph topologically and then
+walks every edge again — pointer chasing over GC objects, where Rust's flat
+`Vec` of indices is at its strongest. Inference never builds that traversal.
+
+Each sample also runs the full 16-position attention window, deeper than any
+training step reaches on this corpus: the longest name gives 11 positions and
+the mean is 7, and attention cost grows with the square of the position count.
+
+Rust makes a node a `usize` index into a `Vec<Value>`, because a `&mut` into a
+growing `Vec` is what the borrow checker forbids. Wado's `Graph::value` returns
+that `&mut Value` and a node holds those handles as its children, which is the
+shape the Python original has. The gap between the two rows is what that costs.
+
+All three arms print the same final loss and generate the same sample, so they
+are the same computation.
+
+These figures come from a 4-core Xeon @ 2.80GHz, not from the dedicated machine
+the rest of this file uses, so read the `vs best` column rather than the
+absolute throughput. Best of three, as everywhere else. Re-measure these rows
+the next time the suite runs on that machine.
 
 ### Mandelbrot
 
@@ -329,7 +368,7 @@ HTTP routing needs `oha` and Bun, and is measured separately
 mise run benchmark-all              # run all
 
 # pure computation
-mise run benchmark-count-prime      # integer arithmetic
+mise run benchmark-microgpt         # autograd object graph
 mise run benchmark-mandelbrot       # float arithmetic
 mise run benchmark-sieve            # array operations
 mise run benchmark-fts              # float-to-string

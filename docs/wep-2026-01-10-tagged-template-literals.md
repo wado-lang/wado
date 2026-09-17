@@ -207,11 +207,11 @@ fn sql<T: ReflectTemplate<Holes = [..V]>, ..V: ToSqlParam>(t: T) -> SqlQuery {
     let mut query = "";
     let mut params: List<SqlParam> = [];
     for let h of ReflectTemplate::<T>::members() {
-        query.push_str(&h.lit());
-        query.push_str(&"?");
+        query.push_str(h.lit());
+        query.push_str("?");
         params.push(h.get(&t).to_sql_param());
     }
-    query.push_str(&ReflectTemplate::<T>::tail());
+    query.push_str(ReflectTemplate::<T>::tail());
     return SqlQuery { query, params };
 }
 ```
@@ -226,11 +226,11 @@ fn html<T: ReflectTemplate<Holes = [..V]>, ..V: Display>(t: T) -> Html {
     let mut out = "";
     let mut ctx = HtmlContext::Text;
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit());
+        out.push_str(h.lit());
         ctx = ctx.advance(&h.lit());      // attribute? script? text?
         ctx.escape_into(h.get(&t), &mut out);
     }
-    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(ReflectTemplate::<T>::tail());
     return Html { out };
 }
 ```
@@ -242,11 +242,11 @@ fn info<T: ReflectTemplate<Holes = [..V]>, ..V: Serialize>(t: T) with Log {
     let mut msg = "";
     let mut fields = FieldMap::new();
     for let h of ReflectTemplate::<T>::members() {
-        msg.push_str(&h.lit());
+        msg.push_str(h.lit());
         h.fmt(&t, &mut Formatter::new(&mut msg));
         fields.insert(h.source(), h.get(&t));   // "user.id" => 42
     }
-    msg.push_str(&ReflectTemplate::<T>::tail());
+    msg.push_str(ReflectTemplate::<T>::tail());
     emit(msg, fields);
 }
 ```
@@ -267,10 +267,10 @@ An untagged template means what the prelude's `format` tag means:
 fn format<T: ReflectTemplate<Holes = [..V]>, ..V>(t: T) -> String {
     let mut out = "";
     for let h of ReflectTemplate::<T>::members() {
-        out.push_str(&h.lit());
+        out.push_str(h.lit());
         h.fmt(&t, &mut Formatter::new(&mut out));
     }
-    out.push_str(&ReflectTemplate::<T>::tail());
+    out.push_str(ReflectTemplate::<T>::tail());
     return out;
 }
 ```
@@ -286,8 +286,8 @@ What the tag body compiles to, once monomorphized, inlined and folded:
 - `for let h of members()` is unrolled — one straight-line block per hole.
 - `members()` is a closed constant expression: globalization hoists it, and
   every `lit()` / `raw()` / `source()` / `has_spec()` is a field projected out
-  of that global, which `niri` folds to the literal. `push_str(&h.lit())` is
-  the same instruction sequence as `push_str(&"SELECT …")`.
+  of that global, which `niri` folds to the literal. `push_str(h.lit())` is
+  the same instruction sequence as `push_str("SELECT …")`.
 - `get()` is a projection of the template struct's field at a constant index,
   folded to a direct field read after inlining, as `StructField::get` is. Its
   result binds read-only in every tag above, so the value-copy planner shares
