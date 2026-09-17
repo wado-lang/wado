@@ -27,7 +27,7 @@ use crate::elaborator::sig::TraitSig;
 use crate::elaborator::synth::{ArgClass, ArgSource, param_takes};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
-    args_stated_at, get_type_name_static, header_answers_bound_args, written_type_args,
+    get_type_name_static, header_answers_bound_args, written_arg_nodes_at_target,
 };
 use crate::elaborator::types::{RequiredTrait, StructFieldInfo, VariantInfo};
 use crate::name::{DeclName, FqTraitName};
@@ -219,15 +219,6 @@ fn asked_at(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option
         .iter()
         .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
     (!asked.args_mention_binder()).then_some(asked)
-}
-
-/// The pairs [`asked_at`] substitutes, from arguments already resolved.
-fn written_for(params: &[ast::GenericParam], args: &[FqTypeName]) -> Vec<(FqTypeName, FqTypeName)> {
-    params
-        .iter()
-        .zip(args)
-        .map(|(param, arg)| (FqTypeName::binder(&param.name), arg.clone()))
-        .collect()
 }
 
 /// What a reference points at, and whether it was a mutable one.
@@ -527,26 +518,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        // The closure is spelled in the trait's own parameter space.
-        let params = self.tysys.trait_env.trait_decl_params(trait_decl);
-        let at_impl = written_for(
-            params,
-            &args_stated_at(
-                written_type_args(trait_type, &self.tysys.resolutions),
-                Some(&impl_block.ty),
-                params,
-                &self.tysys.resolutions,
-            ),
-        );
+        let written = written_arg_nodes_at_target(trait_type, &impl_block.ty);
         let supertraits: Vec<(String, Option<FqTraitName>)> = self
             .tysys
             .trait_env
-            .supertrait_closure(&trait_decl)
+            .supertrait_closure_at(&trait_decl, &written)
             .iter()
-            .map(|b| {
-                let (name, written) = self.tysys.bound_named_written(&b.bound);
-                (name, written.and_then(|t| asked_at(t, &at_impl)))
-            })
+            .map(|b| self.tysys.bound_named_written(&b.bound))
             .collect();
         if supertraits.is_empty() {
             return;
@@ -1096,37 +1074,27 @@ impl TypeSystem {
                 wanted,
             )
         };
-        let own = self.scoped_trait_decl_key(scope, &bound.name);
-        if own == Some(trait_) {
+        if self.scoped_trait_decl_key(scope, &bound.name) == Some(trait_) {
             return args_of(self.bound_written(bound));
         }
-        // A clause writes the subtrait's own parameters, which this bound fills.
-        let params = own.map_or(&[][..], |decl| self.trait_env.trait_decl_params(decl));
-        let at_bound = written_for(
-            params,
-            &args_stated_at(
-                self.bound_written(bound)
-                    .map(|n| n.args().to_vec())
-                    .unwrap_or_default(),
-                None,
-                params,
-                &self.resolutions,
-            ),
-        );
-        self.supertraits_of(scope, &bound.name).iter().any(|s| {
-            s.decl == trait_
-                && args_of(
-                    self.bound_written(&s.bound)
-                        .map(|t| asked_at(t.clone(), &at_bound).unwrap_or(t)),
-                )
-        })
+        self.supertraits_of(scope, &bound.name, &bound.type_args)
+            .iter()
+            .any(|s| s.decl == trait_ && args_of(self.bound_written(&s.bound)))
     }
 
-    /// The transitive supertraits of `trait_name` as seen from `scope`.
-    pub(super) fn supertraits_of(&self, scope: &TypeLookup, trait_name: &str) -> &[InheritedBound] {
+    /// The transitive supertraits of `trait_name` as seen from `scope`,
+    /// re-spelled at the arguments the reading site writes for it.
+    pub(super) fn supertraits_of(
+        &self,
+        scope: &TypeLookup,
+        trait_name: &str,
+        written: &[ast::Type],
+    ) -> Vec<InheritedBound> {
         match self.scoped_trait_decl_key(scope, trait_name) {
-            Some(key) => self.trait_env.supertrait_closure(&key),
-            None => self.trait_env.supertrait_closure_named(trait_name),
+            Some(key) => self.trait_env.supertrait_closure_at(&key, written),
+            None => self
+                .trait_env
+                .supertrait_closure_named_at(trait_name, written),
         }
     }
 
@@ -2074,7 +2042,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inherited: Vec<DeclaredAssocType> = self
             .tysys
             .trait_env
-            .supertrait_closure(key)
+            .supertrait_closure_at(key, &[])
             .iter()
             .filter_map(|bound| Some((bound.decl, self.trait_decl_header_of(&bound.decl)?)))
             .flat_map(|(decl, super_header)| {

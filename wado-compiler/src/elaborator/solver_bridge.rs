@@ -866,7 +866,7 @@ impl SolverBridge {
     /// Each trait's supertraits, argument defaults and reference rule;
     /// `Inspect` holds for all.
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
-        for (trait_, closure) in tysys.trait_env.supertrait_closures() {
+        for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
             // An edge whose arguments the lowering cannot say states none,
             // which answers at the supertrait's declared defaults.

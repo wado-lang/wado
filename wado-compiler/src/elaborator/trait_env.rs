@@ -1430,7 +1430,10 @@ impl TraitEnv {
     }
 
     /// Every trait with its supertrait closure.
-    pub(super) fn supertrait_closures(
+    /// Every trait's closure, each spelled in that trait's own parameter space
+    /// — the space a caller stating declarations rather than reading a site
+    /// wants. A caller reading a site owes [`Self::supertrait_closure_at`].
+    pub(super) fn supertrait_closures_in_own_space(
         &self,
     ) -> impl Iterator<Item = (&DefId, &Vec<InheritedBound>)> {
         self.supertrait_closures.iter()
@@ -1439,7 +1442,10 @@ impl TraitEnv {
     /// The transitive supertraits of the trait `key` names, deduplicated by
     /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
-    pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
+    ///
+    /// Spelled in `key`'s own parameter space, so a caller reading an argument
+    /// owes [`Self::supertrait_closure_at`] instead.
+    fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or_else(
             || self.supertrait_closure_named(self.defs.name(*key)),
             Vec::as_slice,
@@ -1449,10 +1455,48 @@ impl TraitEnv {
     /// [`Self::supertrait_closure`] for a caller holding a bare name with no
     /// import context to canonicalise it. Empty when the name is declared by
     /// more than one module.
-    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
+    fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
         self.supertrait_closures_by_name
             .get(name)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// The transitive supertraits of `key`, re-spelled at `written` — the
+    /// arguments the reading site gives `key`'s parameters. The only way out of
+    /// the index, so no reader can take a clause for one of its own bounds.
+    pub(super) fn supertrait_closure_at(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+    ) -> Vec<InheritedBound> {
+        let params = self.trait_decl_params(*key);
+        self.supertrait_closure(key)
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: bound_at_args(&inherited.bound, params, written),
+                ..inherited.clone()
+            })
+            .collect()
+    }
+
+    /// [`Self::supertrait_closure_at`] for a name with no import context.
+    pub(super) fn supertrait_closure_named_at(
+        &self,
+        name: &str,
+        written: &[ast::Type],
+    ) -> Vec<InheritedBound> {
+        let params = self
+            .trait_decl_headers
+            .iter()
+            .find(|(decl, _)| self.defs.name(**decl) == name)
+            .map_or(&[][..], |(_, header)| header.type_params.as_slice());
+        self.supertrait_closure_named(name)
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: bound_at_args(&inherited.bound, params, written),
+                ..inherited.clone()
+            })
+            .collect()
     }
 
     /// Keys of every impl block on `type_key`, in global build order —
@@ -2781,6 +2825,20 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     }
 }
 
+/// [`written_arg_nodes`] with `Self` read as `target`, so an impl head's
+/// arguments say what a reader of the closure needs before it is re-spelled.
+pub(super) fn written_arg_nodes_at_target(
+    ty: &ast::Type,
+    target: &ast::Type,
+) -> Vec<ast::Type> {
+    let self_name = ["Self".to_string()];
+    let at_target = std::slice::from_ref(target);
+    written_arg_nodes(ty)
+        .iter()
+        .map(|arg| substitute_type_params(arg, &self_name, at_target))
+        .collect()
+}
+
 /// The type arguments a written trait position supplies, each read off the node
 /// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
@@ -2883,37 +2941,6 @@ pub(super) fn non_default_named_arg_count(
         kept = last;
     }
     kept
-}
-
-/// A site's trait arguments as every reader of them needs them: what it wrote,
-/// `Self` read as `target`, and an omitted position at its declared default.
-pub(super) fn args_stated_at(
-    written: Vec<name::FqTypeName>,
-    target: Option<&ast::Type>,
-    params: &[ast::GenericParam],
-    resolutions: &Resolutions,
-) -> Vec<name::FqTypeName> {
-    let mut args = match target {
-        Some(target) => args_at_impl_target(written, target, resolutions),
-        None => written,
-    };
-    // A position the site leaves out is the trait's default, not a binder no
-    // later reader can resolve. A default naming a parameter to its left means
-    // that parameter's argument, so it is read against what is settled already.
-    for index in args.len()..params.len() {
-        let Some(default) = declared_default_arg(params, index, target, resolutions) else {
-            break;
-        };
-        assert_eq!(args.len(), index);
-        let settled = params[..index]
-            .iter()
-            .zip(&args)
-            .fold(default, |ty, (param, arg)| {
-                ty.substitute(&name::FqTypeName::binder(&param.name), arg)
-            });
-        args.push(settled);
-    }
-    args
 }
 
 /// Written trait arguments with `Self` read as the impl's own target, so

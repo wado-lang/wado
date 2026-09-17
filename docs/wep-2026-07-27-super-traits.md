@@ -71,12 +71,20 @@ question started from. A position the clause leaves out stands at the
 supertrait's declared default, so a bound inherited through it arrives as a type
 rather than as a parameter no later reader can resolve.
 
+The closure is stored in the declaring trait's parameter space, which is not the
+reading site's. The index therefore hands out nothing raw: a reader names the
+arguments the site writes and receives the closure already re-spelled. A reader
+that could take a clause for one of its own bounds is the defect this forecloses
+— it fails by resolving a parameter name the site never wrote, which nothing
+downstream can detect.
+
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`
 is rejected wherever `T: Sink` is required, the same as if the constraint had
-been written on the bound directly. It is not yet used for inference — `T: Sink`
-leaves `T::Item` unresolved rather than equal to `i32`, so a body must still
-name the type. Implying it, as Rust ≥ 1.72 does, is follow-up work.
+been written on the bound directly. It also answers the projection, so `T: Sink`
+gives `T::Item = i32` with no annotation. A constraint naming the writer's own
+parameter (`trait Sink<T>: Collect<Item = T>`) is read at the argument the bound
+writes, `U: Sink<i32>` giving `U::Item = i32`.
 
 ### Cycles
 
