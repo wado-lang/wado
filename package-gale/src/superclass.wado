@@ -916,7 +916,8 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
 pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
-    return `${base_name.as_str_slice()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.as_str_slice()})`;
+    return `${base_name.as_str_slice()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.as_str_slice(
+    )})`;
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
