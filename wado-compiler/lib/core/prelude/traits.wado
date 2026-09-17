@@ -25,7 +25,7 @@ pub enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-pub trait Eq<Rhs = Self> {
+pub trait Eq<Rhs = Self> with () {
     /// Returns true if self equals other.
     fn eq(&self, other: &Rhs) -> bool;
 }
@@ -45,7 +45,7 @@ impl<T> Eq for &mut T {
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 #[compiler_item("ord")]
-pub trait Ord: Eq {
+pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -53,7 +53,7 @@ pub trait Ord: Eq {
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
-pub trait Default {
+pub trait Default with () {
     /// Returns the default value for this type.
     fn default() -> Self;
 }
@@ -61,7 +61,7 @@ pub trait Default {
 /// A type's identity: the root every reflected kind sits under. Sealed and
 /// compiler-synthesized like the kinds. See WEP 2026-06-13.
 #[compiler_item("reflect")]
-pub trait Reflect {
+pub trait Reflect with () {
     /// Returns the declaration's name.
     #[compiler_item("reflect_type_name")]
     fn type_name() -> String;
@@ -78,7 +78,7 @@ pub trait Reflect {
 /// monomorphized contexts (`T` a concrete struct).
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_struct")]
-pub trait ReflectStruct: Reflect {
+pub trait ReflectStruct: Reflect with () {
     /// The field types as a tuple `[F_0, F_1, ...]`.
     type FieldTypes;
 
@@ -125,7 +125,7 @@ pub enum CaseStyle {
 /// The attr-reading face of a reflected member. Sealed and
 /// compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 #[compiler_item("member")]
-pub trait Member {
+pub trait Member with () {
     /// The source field name.
     #[compiler_item("member_name")]
     fn name(&self) -> String;
@@ -140,7 +140,7 @@ pub trait Member {
 /// in monomorphized contexts (`T` a concrete variant).
 /// See WEP 2026-06-13 §3.
 #[compiler_item("reflect_variant")]
-pub trait ReflectVariant: Reflect {
+pub trait ReflectVariant: Reflect with () {
     /// The per-case payload tuple `[P_0, P_1, ...]`; unit cases are `()`.
     type CasePayloads;
 
@@ -161,7 +161,7 @@ pub trait ReflectVariant: Reflect {
 /// in monomorphized contexts (`T` a concrete enum).
 /// See WEP 2026-06-13 §3b.
 #[compiler_item("reflect_enum")]
-pub trait ReflectEnum: Reflect {
+pub trait ReflectEnum: Reflect with () {
     /// The per-case member tuple `[EnumCase<Self>, ...]`.
     type Members;
 
@@ -183,7 +183,7 @@ pub trait ReflectEnum: Reflect {
 /// only in monomorphized contexts (`T` a concrete flags type).
 /// See WEP 2026-06-13 §3c.
 #[compiler_item("reflect_flags")]
-pub trait ReflectFlags: Reflect {
+pub trait ReflectFlags: Reflect with () {
     /// The per-bit member tuple `[FlagsBit<Self>, ...]`.
     type Members;
 
@@ -211,7 +211,7 @@ pub trait ReflectFlags: Reflect {
 /// struct walks the struct's fields — so only the base is stated here.
 /// See WEP 2026-06-13.
 #[compiler_item("reflect_newtype")]
-pub trait ReflectNewtype: Reflect {
+pub trait ReflectNewtype: Reflect with () {
     /// The type this newtype wraps: `type UserName = String` → `String`.
     type Base;
 }
@@ -221,7 +221,7 @@ pub trait ReflectNewtype: Reflect {
 /// code and is callable only in monomorphized contexts (`T` the anonymous
 /// type a template literal denotes). See WEP 2026-01-10.
 #[compiler_item("reflect_template")]
-pub trait ReflectTemplate: Reflect {
+pub trait ReflectTemplate: Reflect with () {
     /// The hole types as a tuple `[V_0, V_1, ...]`.
     type Holes;
 
@@ -617,7 +617,7 @@ impl<T: Inspect> Inspect for FlagsBit<T> {
 /// reference. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
 #[compiler_item("ref")]
-pub trait Ref {
+pub trait Ref with () {
 }
 
 /// Marker for in-place-mutable reference types: `Ref` minus the replace-on-assign
@@ -625,14 +625,14 @@ pub trait Ref {
 /// value. Sealed and compiler-synthesized; user impls are rejected.
 /// See WEP 2026-01-20.
 #[compiler_item("ref_mut")]
-pub trait RefMut {
+pub trait RefMut with () {
 }
 
 /// Immutable reference indexing: `&container[i]` reads through this.
 /// `Output: Ref` — only a reference element can be handed out by reference; a
 /// value element is read through `IndexValue`.
 #[compiler_item("index_ref")]
-pub trait IndexRef<IndexType> {
+pub trait IndexRef<IndexType> with () {
     type Output: Ref;
 
     /// Returns a reference to the element at the given index.
@@ -643,7 +643,7 @@ pub trait IndexRef<IndexType> {
 /// `Output: RefMut` — the element must be mutated in place, so a replace-on-assign
 /// element (`variant`, `fn`) cannot be handed out mutably by reference.
 #[compiler_item("index_ref_mut")]
-pub trait IndexRefMut<IndexType> {
+pub trait IndexRefMut<IndexType> with () {
     type Output: RefMut;
 
     /// Returns a mutable reference to the element at the given index.
@@ -654,7 +654,7 @@ pub trait IndexRefMut<IndexType> {
 /// Separate from `IndexRefMut`: a scalar element has no addressable cell, so
 /// writing it by value is a distinct operation from handing out a `&mut`.
 #[compiler_item("index_assign")]
-pub trait IndexAssign<IndexType> {
+pub trait IndexAssign<IndexType> with () {
     type Output;
 
     /// Assigns a value to the element at the given index.
@@ -665,7 +665,7 @@ pub trait IndexAssign<IndexType> {
 /// The value-semantics counterpart to `IndexRef` for elements that cannot be
 /// aliased by reference (scalars, resources).
 #[compiler_item("index_value")]
-pub trait IndexValue<IndexType> {
+pub trait IndexValue<IndexType> with () {
     type Output;
 
     /// Returns a copy of the element at the given index.
@@ -675,7 +675,7 @@ pub trait IndexValue<IndexType> {
 /// Trait for the `+` operator.
 /// Types implementing this trait can use the `+` operator for addition.
 #[compiler_item("add")]
-pub trait Add<Rhs = Self> {
+pub trait Add<Rhs = Self> with () {
     type Output;
 
     /// Adds two values and returns the result.
@@ -685,7 +685,7 @@ pub trait Add<Rhs = Self> {
 /// Trait for the `-` operator (binary subtraction).
 /// Types implementing this trait can use the `-` operator for subtraction.
 #[compiler_item("sub")]
-pub trait Sub<Rhs = Self> {
+pub trait Sub<Rhs = Self> with () {
     type Output;
 
     /// Subtracts rhs from self and returns the result.
@@ -695,7 +695,7 @@ pub trait Sub<Rhs = Self> {
 /// Trait for the `*` operator.
 /// Types implementing this trait can use the `*` operator for multiplication.
 #[compiler_item("mul")]
-pub trait Mul<Rhs = Self> {
+pub trait Mul<Rhs = Self> with () {
     type Output;
 
     /// Multiplies two values and returns the result.
@@ -705,7 +705,7 @@ pub trait Mul<Rhs = Self> {
 /// Trait for the `/` operator.
 /// Types implementing this trait can use the `/` operator for division.
 #[compiler_item("div")]
-pub trait Div<Rhs = Self> {
+pub trait Div<Rhs = Self> with () {
     type Output;
 
     /// Divides self by rhs and returns the result.
@@ -715,7 +715,7 @@ pub trait Div<Rhs = Self> {
 /// Trait for the `%` operator.
 /// Types implementing this trait can use the `%` operator for remainder.
 #[compiler_item("rem")]
-pub trait Rem<Rhs = Self> {
+pub trait Rem<Rhs = Self> with () {
     type Output;
 
     /// Returns the remainder of dividing self by rhs.
@@ -725,7 +725,7 @@ pub trait Rem<Rhs = Self> {
 /// Trait for the unary `-` operator (negation).
 /// Types implementing this trait can use the `-` prefix operator.
 #[compiler_item("neg")]
-pub trait Neg {
+pub trait Neg with () {
     type Output;
 
     /// Returns the negation of self.
@@ -733,7 +733,7 @@ pub trait Neg {
 }
 /// Trait for the `&` operator (bitwise AND).
 #[compiler_item("bit_and")]
-pub trait BitAnd<Rhs = Self> {
+pub trait BitAnd<Rhs = Self> with () {
     type Output;
 
     /// Returns the bitwise AND of self and rhs.
@@ -742,7 +742,7 @@ pub trait BitAnd<Rhs = Self> {
 
 /// Trait for the `|` operator (bitwise OR).
 #[compiler_item("bit_or")]
-pub trait BitOr<Rhs = Self> {
+pub trait BitOr<Rhs = Self> with () {
     type Output;
 
     /// Returns the bitwise OR of self and rhs.
@@ -751,7 +751,7 @@ pub trait BitOr<Rhs = Self> {
 
 /// Trait for the `^` operator (bitwise XOR).
 #[compiler_item("bit_xor")]
-pub trait BitXor<Rhs = Self> {
+pub trait BitXor<Rhs = Self> with () {
     type Output;
 
     /// Returns the bitwise XOR of self and rhs.
@@ -760,7 +760,7 @@ pub trait BitXor<Rhs = Self> {
 
 /// Trait for the `~` operator (bitwise NOT).
 #[compiler_item("bit_not")]
-pub trait BitNot {
+pub trait BitNot with () {
     type Output;
 
     /// Returns the bitwise NOT of self.
@@ -769,7 +769,7 @@ pub trait BitNot {
 
 /// Trait for the `<<` operator (left shift).
 #[compiler_item("shl")]
-pub trait Shl {
+pub trait Shl with () {
     type Output;
 
     /// Returns self shifted left by rhs bits.
@@ -778,7 +778,7 @@ pub trait Shl {
 
 /// Trait for the `>>` operator (right shift).
 #[compiler_item("shr")]
-pub trait Shr {
+pub trait Shr with () {
     type Output;
 
     /// Returns self shifted right by rhs bits.
@@ -788,7 +788,7 @@ pub trait Shr {
 /// Types implementing this trait can be formatted with `${x}` in template strings.
 /// All format traits write to a `Formatter` that wraps `&mut String`.
 #[compiler_item("display")]
-pub trait Display {
+pub trait Display with () {
     /// Formats the value and writes to the given formatter.
     fn fmt(&self, f: &mut Formatter);
 }
@@ -801,7 +801,7 @@ pub trait Display {
 /// - Structs show field names: `Point { x: 10, y: 20 }`
 /// - Enums/Variants show type-qualified names: `Color::Red`
 #[compiler_item("inspect")]
-pub trait Inspect {
+pub trait Inspect with () {
     /// Formats the value as a debug representation and writes to the given formatter.
     fn inspect(&self, f: &mut Formatter);
 }
@@ -971,7 +971,7 @@ impl<N: ReflectNewtype<Base = B>, B: Inspect> Inspect for N {
 /// Trait for formatting values as binary integers.
 /// Used with the `${x:b}` format specifier.
 #[compiler_item("binary")]
-pub trait Binary {
+pub trait Binary with () {
     /// Formats the value as binary and writes to the given formatter.
     fn fmt_binary(&self, f: &mut Formatter);
 }
@@ -979,7 +979,7 @@ pub trait Binary {
 /// Trait for formatting values as octal integers.
 /// Used with the `${x:o}` format specifier.
 #[compiler_item("octal")]
-pub trait Octal {
+pub trait Octal with () {
     /// Formats the value as octal and writes to the given formatter.
     fn fmt_octal(&self, f: &mut Formatter);
 }
@@ -987,7 +987,7 @@ pub trait Octal {
 /// Trait for formatting values as lowercase hexadecimal.
 /// Used with the `${x:x}` format specifier.
 #[compiler_item("lower_hex")]
-pub trait LowerHex {
+pub trait LowerHex with () {
     /// Formats the value as lowercase hex and writes to the given formatter.
     fn fmt_lower_hex(&self, f: &mut Formatter);
 }
@@ -995,7 +995,7 @@ pub trait LowerHex {
 /// Trait for formatting values as uppercase hexadecimal.
 /// Used with the `${x:X}` format specifier.
 #[compiler_item("upper_hex")]
-pub trait UpperHex {
+pub trait UpperHex with () {
     /// Formats the value as uppercase hex and writes to the given formatter.
     fn fmt_upper_hex(&self, f: &mut Formatter);
 }
@@ -1003,7 +1003,7 @@ pub trait UpperHex {
 /// Trait for formatting values in lowercase exponential notation.
 /// Used with the `${x:e}` format specifier.
 #[compiler_item("lower_exp")]
-pub trait LowerExp {
+pub trait LowerExp with () {
     /// Formats the value in lowercase exponential notation and writes to the given formatter.
     fn fmt_lower_exp(&self, f: &mut Formatter);
 }
@@ -1011,7 +1011,7 @@ pub trait LowerExp {
 /// Trait for formatting values in uppercase exponential notation.
 /// Used with the `${x:E}` format specifier.
 #[compiler_item("upper_exp")]
-pub trait UpperExp {
+pub trait UpperExp with () {
     /// Formats the value in uppercase exponential notation and writes to the given formatter.
     fn fmt_upper_exp(&self, f: &mut Formatter);
 }
@@ -1019,7 +1019,7 @@ pub trait UpperExp {
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
-pub trait Iterator {
+pub trait Iterator with () {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -1461,7 +1461,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
-pub trait IntoIterator {
+pub trait IntoIterator with () {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 
@@ -1487,14 +1487,14 @@ impl<I: Iterator> IntoIterator for I {
 ///
 /// The compiler provides a reflexive blanket impl `From<T> for T` for all types.
 #[compiler_item("from")]
-pub trait From<T> {
+pub trait From<T> with () {
     /// Converts a value of type `T` into `Self`.
     fn from(value: T) -> Self;
 }
 
 /// Fallible conversion trait.
 /// Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
-pub trait TryFrom<T> {
+pub trait TryFrom<T> with () {
     type Error;
 
     /// Attempts to convert a value of type `T` into `Self`.
@@ -1514,7 +1514,7 @@ impl ConvertError {
 
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 /// bound. Implemented for every `Add<Output = Self>`.
-pub trait Sum {
+pub trait Sum with () {
     type Elem;
     fn sum_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
@@ -1529,7 +1529,7 @@ impl<T: Add<Output = T>> Sum for T {
 
 /// Multiplication over an iterator of `Elem`, carrying `Iterator::product`'s
 /// element bound. Implemented for every `Mul<Output = Self>`.
-pub trait Product {
+pub trait Product with () {
     type Elem;
     fn product_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
 }
@@ -1544,7 +1544,7 @@ impl<T: Mul<Output = T>> Product for T {
 
 /// Least and greatest over an iterator of `Elem`, carrying `Iterator::min` and
 /// `max`'s element bound. Implemented for every `Ord`.
-pub trait Extremum {
+pub trait Extremum with () {
     type Elem;
     fn min_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
     fn max_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Option<Self>;
@@ -1563,7 +1563,7 @@ impl<T: Ord> Extremum for T {
 }
 
 /// Trait for creating a collection from any iterator of `Elem`.
-pub trait FromIterator {
+pub trait FromIterator with () {
     type Elem;
     fn from_iter<I: Iterator<Item = Self::Elem>>(iter: &mut I) -> Self;
 }
@@ -1571,7 +1571,7 @@ pub trait FromIterator {
 /// `..base` inside a `{ … }` literal: merge `base` into `self`, last write
 /// wins. A target without this impl rejects `..base` where it is written.
 #[compiler_item("literal_spread")]
-pub trait LiteralSpread {
+pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 
@@ -1580,7 +1580,7 @@ pub trait LiteralSpread {
 /// `from_str_slice` is the fundamental operation: a `StrSlice` names part of a
 /// string without allocating a substring, so parsing a field out of a larger
 /// buffer copies nothing. `from_str` is a default that views the whole string.
-pub trait FromStr {
+pub trait FromStr with () {
     type Err;
 
     /// Parse the view as `Self`.
@@ -1616,7 +1616,7 @@ impl LenientParseError {
 /// spellings only — an undenotable value still yields `Err`, and whitespace
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
-pub trait LenientFromStr {
+pub trait LenientFromStr with () {
     type Err;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.

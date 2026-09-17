@@ -1121,12 +1121,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
+                // `with _` mints a parameter the source never wrote, and the
+                // trait head mints its own, so only written ones are compared.
                 for (list, expected, found) in [
                     (ParamList::Value, declared.param_count, method.param_count),
                     (
                         ParamList::Type,
-                        declared.type_params.len(),
-                        method.type_params.len(),
+                        ast::written_params(&declared.type_params).count(),
+                        ast::written_params(&method.type_params).count(),
                     ),
                 ] {
                     if expected != found {

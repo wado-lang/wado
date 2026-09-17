@@ -665,6 +665,46 @@ fn test_format_supertrait_clause_roundtrips() {
     );
 }
 
+/// A trait head's `with` clause round-trips in each of its three written forms,
+/// and the parameter `with _` mints stays out of the printed type-param list.
+#[test]
+fn test_format_trait_head_effects_roundtrip() {
+    let source = concat!(
+        "trait Pure with () {\n",
+        "    fn next(&mut self) -> i32;\n",
+        "}\n",
+        "\n",
+        "trait Loud with (Stdout, Stderr) {\n",
+        "    fn next(&mut self) -> i32;\n",
+        "}\n",
+        "\n",
+        "trait Open with _ {\n",
+        "    fn next(&mut self) -> i32;\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
+/// `with _` on a function signature round-trips as written, in return position
+/// and inside a parameter's function type alike.
+#[test]
+fn test_format_with_underscore_roundtrips() {
+    let source = concat!(
+        "fn wrapper(f: fn() with _) with _ {\n",
+        "    f();\n",
+        "}\n",
+        "\n",
+        "fn draw<S: Source>(s: &mut S) -> i32 with _ {\n",
+        "    return s.next();\n",
+        "}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
+
 /// Anonymous composition round-trips with spreads interleaved by position.
 #[test]
 fn test_format_anon_composition_roundtrips() {

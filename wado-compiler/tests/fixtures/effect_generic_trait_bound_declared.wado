@@ -1,0 +1,32 @@
+// The other side of `effect_generic_trait_bound_missing`: a generic function
+// that declares what the trait method needs compiles and runs.
+use { println, Stdout } from "core:cli";
+
+trait Source with () {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+struct Loud {
+    n: i32,
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {
+    return s.next();
+}
+
+export fn run() with Stdout {
+    let mut loud = Loud { n: 0 };
+    println(`${draw(&mut loud)}`);
+    println(`${draw(&mut loud)}`);
+}
+
+__DATA__
+{"stdout": "tick\n1\ntick\n2\n"}

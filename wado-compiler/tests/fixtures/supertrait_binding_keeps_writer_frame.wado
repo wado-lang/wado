@@ -3,13 +3,13 @@
 // asking frame bound it to the `A` declared here instead.
 use { println } from "core:cli";
 
-trait Hold {
+trait Hold with () {
     type Item;
 
     fn get(&self) -> Self::Item;
 }
 
-trait Chain<A>: Hold<Item = A> {
+trait Chain<A>: Hold<Item = A> with () {
     fn tag(&self) -> i32;
 }
 

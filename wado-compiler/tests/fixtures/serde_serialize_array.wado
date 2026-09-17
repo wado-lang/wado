@@ -6,16 +6,16 @@ struct SerializeError {
     message: String,
 }
 
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-trait SerializeSeq {
+trait SerializeSeq with () {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-trait Serializer {
+trait Serializer with () {
     type SeqSerializer: SerializeSeq;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;

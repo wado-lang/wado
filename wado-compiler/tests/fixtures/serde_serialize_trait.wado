@@ -8,12 +8,12 @@ struct SerializeError {
 }
 
 // The core Serialize trait — a single generic method
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
 // Minimal Serializer trait — just serialize_i32 for now
-trait Serializer {
+trait Serializer with () {
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>;
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
 }

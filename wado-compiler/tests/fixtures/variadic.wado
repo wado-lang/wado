@@ -210,7 +210,7 @@ test "spread vs field access" {
 }
 
 // for-of try-op
-trait Processable {
+trait Processable with () {
     fn process(&self) -> Result<(), String>;
 }
 
@@ -245,7 +245,7 @@ test "for-of try-op" {
 }
 // --- type-pack expansion over a trait ---
 
-trait MakeDefault {
+trait MakeDefault with () {
     fn make_default() -> Self;
 }
 
@@ -290,7 +290,7 @@ fn make_defaults_42<..T: MakeDefault42>() -> [..T] {
     return [..T::make_default_42()];
 }
 
-trait MakeDefault42 {
+trait MakeDefault42 with () {
     fn make_default_42() -> Self;
 }
 
@@ -319,11 +319,11 @@ test "type pack expansion mixed" {
 }
 
 // method with own type param
-trait Source {
+trait Source with () {
     fn read_from<R: Reader>(r: &mut R) -> Self;
 }
 
-trait Reader {
+trait Reader with () {
     fn read_i32(&mut self) -> i32;
     fn read_string(&mut self) -> String;
 }
@@ -366,7 +366,7 @@ test "type pack expansion method type param" {
 }
 
 // TryDefault trait for try-op tests
-trait TryDefault {
+trait TryDefault with () {
     fn try_default() -> Result<Self, String>;
 }
 
@@ -402,7 +402,7 @@ test "type pack expansion try-op" {
 }
 
 // try-op error path
-trait TryDefaultErr {
+trait TryDefaultErr with () {
     fn try_default_err() -> Result<Self, String>;
 }
 
@@ -437,7 +437,7 @@ test "type pack expansion try-op err" {
 }
 
 // try-op mixed with non-pack elements
-trait TryDefaultMixed {
+trait TryDefaultMixed with () {
     fn try_default_mixed() -> Result<Self, String>;
 }
 
@@ -467,7 +467,7 @@ test "type pack expansion try-op mixed" {
 }
 
 // try-op with Option
-trait TryDefaultOption {
+trait TryDefaultOption with () {
     fn try_default_option() -> Option<Self>;
 }
 
@@ -496,7 +496,7 @@ test "type pack expansion try-op option" {
 }
 
 // try-op two elements
-trait TryDefaultTwo {
+trait TryDefaultTwo with () {
     fn try_default_two() -> Result<Self, String>;
 }
 
@@ -525,7 +525,7 @@ test "type pack expansion try-op two" {
 }
 
 // with args
-trait FromInt {
+trait FromInt with () {
     fn from_int(n: i32) -> Self;
 }
 

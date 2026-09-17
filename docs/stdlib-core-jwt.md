@@ -55,7 +55,7 @@ extension is marked critical. Claims are not read: checking `exp` is
 
 ## Traits
 
-### `pub trait JwsAlgorithm`
+### `pub trait JwsAlgorithm with ()`
 
 The `alg` a key speaks for. Both halves inherit it, so a key that signs
 and verifies answers once.
@@ -64,7 +64,7 @@ and verifies answers once.
 
 The `alg` header value, e.g. `"HS256"`.
 
-### `pub trait JwsVerifier: JwsAlgorithm`
+### `pub trait JwsVerifier: JwsAlgorithm with ()`
 
 The verifying half of a JWS algorithm. Implement it on a key type to teach
 [`verify`] an algorithm this module does not carry.
@@ -75,7 +75,7 @@ Whether `signature` is this key's over `signing_input` (the token's
 `header.payload` ASCII bytes). An implementation compares with
 `eq_constant_time`, never `==`.
 
-### `pub trait JwsSigner: JwsAlgorithm`
+### `pub trait JwsSigner: JwsAlgorithm with ()`
 
 The signing half of a JWS algorithm.
 

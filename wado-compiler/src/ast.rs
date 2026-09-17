@@ -1513,6 +1513,8 @@ pub mod lint {
     pub const SHADOWED_NAME: &str = "shadowed_name";
     /// An item nothing reaches from the export boundary.
     pub const DEAD_CODE: &str = "dead_code";
+    /// A trait head that says nothing about what its impls may do.
+    pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow
@@ -2157,12 +2159,32 @@ pub struct Function {
     /// it appeared in the `with` clause. Used by the elaborator to record
     /// use->def references for LSP jump-to-def.
     pub effect_ids: Vec<(AstId, Span)>,
+<<<<<<< HEAD
+||||||| ddccc3f760a
+    /// Parameters declared in `stores[param1, param2]` — the function may store these references.
+    pub stores: Vec<String>,
+=======
+    /// Whether `effects` came from the enclosing trait's head rather than from
+    /// a `with` clause here. The formatter prints what the source wrote.
+    pub effects_inherited: bool,
+    /// Parameters declared in `stores[param1, param2]` — the function may store these references.
+    pub stores: Vec<String>,
+>>>>>>> origin/main
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
     pub body: Option<Block>,
     pub span: Span,
 }
 
 impl Function {
+    /// The effects the source wrote here. Empty when the enclosing trait's
+    /// head supplied them.
+    pub fn written_effects(&self) -> &[String] {
+        if self.effects_inherited {
+            return &[];
+        }
+        &self.effects
+    }
+
     /// Whether the Component Model supplies this declaration's body.
     pub fn is_cm_import(&self) -> bool {
         self.body.is_none() && self.attrs.iter().any(|a| a.cm_boundary.is_some())
@@ -3684,6 +3706,12 @@ impl GenericParam {
             .collect()
     }
 
+    /// Whether the source spells this param. The effect parameter `with _`
+    /// mints reads as `_` at its use sites and appears in no list.
+    pub fn is_written(&self) -> bool {
+        !(self.is_effect && self.name == EFFECT_HOLE)
+    }
+
     /// Whether this param carries an `fn`-signature bound (`<F: fn(...)>`).
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.
@@ -3915,6 +3943,60 @@ pub struct AssociatedConst {
     pub span: Span,
 }
 
+/// What a trait's head says about the effects its impls may declare. A method
+/// that writes its own `with` clause overrides it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TraitHead {
+    /// No clause: reads as [`TraitHead::Open`], and reports as undecided.
+    Undecided,
+    /// `with ()`: every impl is pure.
+    Pure { span: Span },
+    /// `with A` / `with (A, B)`: every impl gets exactly these.
+    Fixed {
+        effects: Vec<String>,
+        /// Parallel to `effects`, for use->def references.
+        effect_ids: Vec<(AstId, Span)>,
+        span: Span,
+    },
+    /// `with _`: the impl brings its own effects.
+    Open { span: Span },
+}
+
+impl TraitHead {
+    /// Whether an impl of this trait chooses its own effects.
+    pub fn is_open(&self) -> bool {
+        matches!(self, TraitHead::Open { .. } | TraitHead::Undecided)
+    }
+
+    /// The effects a method inherits when it declares none of its own.
+    pub fn inherited_effects(&self) -> Vec<String> {
+        match self {
+            TraitHead::Pure { .. } => Vec::new(),
+            TraitHead::Fixed { effects, .. } => effects.clone(),
+            TraitHead::Open { .. } | TraitHead::Undecided => vec![EFFECT_HOLE.to_string()],
+        }
+    }
+
+    /// Where the clause is written. `None` when the source wrote none.
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            TraitHead::Undecided => None,
+            TraitHead::Pure { span } | TraitHead::Open { span } | TraitHead::Fixed { span, .. } => {
+                Some(*span)
+            }
+        }
+    }
+}
+
+/// The name `with _` carries, both as an effect reference and as the name of
+/// the effect parameter it mints.
+pub const EFFECT_HOLE: &str = "_";
+
+/// The params the source spells, skipping the one `with _` mints.
+pub fn written_params(params: &[GenericParam]) -> impl Iterator<Item = &GenericParam> {
+    params.iter().filter(|p| p.is_written())
+}
+
 /// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
 pub struct TraitDecl {
@@ -3923,6 +4005,8 @@ pub struct TraitDecl {
     /// Span of the trait name identifier.
     pub name_span: Span,
     pub visibility: Visibility,
+    /// The `with` clause on the head: what every impl of this trait may do.
+    pub head: TraitHead,
     pub type_params: Vec<GenericParam>,
     /// Supertraits: the `Eq + Display` of `trait Ord: Eq + Display`. Every
     /// implementor of this trait must also implement each of them.

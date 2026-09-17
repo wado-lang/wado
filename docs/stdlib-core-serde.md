@@ -122,7 +122,7 @@ else the type's `name_policy` applies, else identity.
 
 ## Traits
 
-### `pub trait SerializeSeq`
+### `pub trait SerializeSeq with ()`
 
 #### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
@@ -130,9 +130,15 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("serialize_seq_end")]`
 
 ### `pub trait SerializeMap`
+||||||| ddccc3f760a
+### `pub trait SerializeMap`
+=======
+### `pub trait SerializeMap with ()`
+>>>>>>> origin/main
 
 #### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
 
@@ -140,7 +146,7 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeStruct`
+### `pub trait SerializeStruct with ()`
 
 #### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
@@ -148,9 +154,15 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("serialize_struct_end")]`
 
 ### `pub trait SerializeVariant`
+||||||| ddccc3f760a
+### `pub trait SerializeVariant`
+=======
+### `pub trait SerializeVariant with ()`
+>>>>>>> origin/main
 
 #### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
@@ -158,9 +170,15 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("serialize_variant_end")]`
 
 ### `pub trait Serializer`
+||||||| ddccc3f760a
+### `pub trait Serializer`
+=======
+### `pub trait Serializer with ()`
+>>>>>>> origin/main
 
 #### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
 
@@ -222,11 +240,11 @@ with no distinct byte-string form keeps working unchanged.
 
 `#[compiler_item("serializer_begin_variant")]`
 
-### `pub trait Serialize`
+### `pub trait Serialize with ()`
 
 #### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
 
-### `pub trait DeserializeSeq`
+### `pub trait DeserializeSeq with ()`
 
 #### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
@@ -234,9 +252,15 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("deserialize_seq_end")]`
 
 ### `pub trait DeserializeMap`
+||||||| ddccc3f760a
+### `pub trait DeserializeMap`
+=======
+### `pub trait DeserializeMap with ()`
+>>>>>>> origin/main
 
 #### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
 
@@ -244,7 +268,7 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait FieldSchema`
+### `pub trait FieldSchema with ()`
 
 Static, per-type, format-agnostic field-name → index mapping.
 
@@ -278,7 +302,7 @@ Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
 
-### `pub trait DeserializeStruct`
+### `pub trait DeserializeStruct with ()`
 
 #### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
@@ -294,9 +318,15 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("deserialize_struct_end")]`
 
 ### `pub trait DeserializeVariant`
+||||||| ddccc3f760a
+### `pub trait DeserializeVariant`
+=======
+### `pub trait DeserializeVariant with ()`
+>>>>>>> origin/main
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
 
@@ -314,9 +344,15 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
+<<<<<<< HEAD
 `#[compiler_item("deserialize_variant_end")]`
 
 ### `pub trait Visitor`
+||||||| ddccc3f760a
+### `pub trait Visitor`
+=======
+### `pub trait Visitor with ()`
+>>>>>>> origin/main
 
 #### `fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>`
 
@@ -360,7 +396,7 @@ The CBOR `undefined` simple value (major 7, value 23). Distinct from
 arm. The default collapses it to `null` so visitors that do not model
 the distinction (e.g. JSON) keep working.
 
-### `pub trait Deserializer`
+### `pub trait Deserializer with ()`
 
 #### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 
@@ -411,7 +447,7 @@ What this format does when the wire repeats a field or key.
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
-### `pub trait Deserialize`
+### `pub trait Deserialize with ()`
 
 #### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>`
 

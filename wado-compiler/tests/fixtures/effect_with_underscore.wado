@@ -1,0 +1,36 @@
+// `with _` mints a fresh effect parameter and forwards it, so a wrapper says
+// "as effectful as what I am given" without naming an effect. Every `_` in one
+// signature is the same parameter.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+fn wrapper(f: fn() with _) with _ {
+    f();
+}
+
+fn apply<T>(f: fn(T) -> T with _, x: T) -> T with _ {
+    return f(x);
+}
+
+fn combine(f: fn() with _, g: fn() with _) with _ {
+    f();
+    g();
+}
+
+export fn run() with (Stdout, Stderr) {
+    wrapper(|| { println("wrapped"); });
+    wrapper(|| { assert 1 + 1 == 2; });
+    let doubled = apply(|x: i32| x * 2, 21);
+    println(`${doubled}`);
+    let logged = apply(|x: i32| {
+        println(`applying to ${x}`);
+        return x + 1;
+    }, 41);
+    println(`${logged}`);
+    combine(|| { println("from f"); }, || { eprintln("from g"); });
+}
+
+__DATA__
+{
+    "stdout": "wrapped\n42\napplying to 41\n42\nfrom f\n",
+    "stderr_contains": ["from g"]
+}

@@ -1274,6 +1274,31 @@ fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 
+// A trait method's `with` clause bounds every impl of it. A call requires what
+// the trait declares, since through a bound there is no impl to read.
+trait Source { fn next(&mut self) -> i32 with Stdout; }
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching; more is an error
+}
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout { return s.next(); }
+
+// A `with` clause on the trait itself bounds the methods that declare none:
+// `with ()` forbids every effect, `with Stdout` hands that one to each impl,
+// and `with _` lets each impl bring its own.
+trait Tick with _ { fn tick(&mut self) -> i32; }
+impl Tick for Loud { fn tick(&mut self) -> i32 with Stdout { ... } }
+impl Tick for Quiet { fn tick(&mut self) -> i32 { ... } }
+fn run<T: Tick>(t: &mut T) -> i32 with _ { return t.tick(); }
+// `run(&mut loud)` requires Stdout at the call; `run(&mut quiet)` requires none
+
+// A head that writes nothing reads as `with _`, and is diagnosed (a `pub`
+// trait warns, a private one remarks). Waive it while deciding:
+#[allow(undecided_effects)]
+trait Undecided { fn tick(&mut self) -> i32; }
+
+// Every standard library trait says `with ()`, Iterator and FromStr included:
+// an impl of one that performs I/O is a design error.
+
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
@@ -1287,6 +1312,9 @@ fn wrapper<effect E>(f: fn() with E) with E {
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
     return f(x);
 }
+
+// `with _` is sugar for it: every `_` in one signature is the same parameter,
+// so `wrapper` above is `fn wrapper(f: fn() with _) with _`.
 
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });     // E = Stdout

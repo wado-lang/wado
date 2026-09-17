@@ -130,7 +130,7 @@ variable must not stop a program from starting.
 
 ## Traits
 
-### `pub trait Clock`
+### `pub trait Clock with ()`
 
 How a sink stamps an event with a time, or declines to. `None` is no stamp.
 

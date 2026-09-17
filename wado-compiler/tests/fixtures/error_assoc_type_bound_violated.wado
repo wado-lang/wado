@@ -1,13 +1,13 @@
 // An associated-type constraint on a bound is checked against the type
 // argument, whether written on the bound (`take_i32`) or in supertrait
 // position (`Sink`) — the same promise either way.
-trait Collect {
+trait Collect with () {
     type Item;
 
     fn first(&self) -> Self::Item;
 }
 
-trait Sink: Collect<Item = i32> {
+trait Sink: Collect<Item = i32> with () {
     fn drain(&self) -> i32;
 }
 

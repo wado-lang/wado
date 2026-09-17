@@ -1,11 +1,11 @@
 // A supertrait is checked at the arguments it writes. `Slot` answers
 // `Pick<i32>`, which is not the `Pick<String>` that `Text` requires.
 
-trait Pick<A = i32> {
+trait Pick<A = i32> with () {
     fn pick(&self, a: &A) -> i32;
 }
 
-trait Text: Pick<String> {
+trait Text: Pick<String> with () {
     fn text(&self) -> i32;
 }
 

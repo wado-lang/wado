@@ -8,11 +8,11 @@ use lib from "./sub/error_static_ambiguous_trait.wado";
 
 struct M {}
 
-trait Alpha {
+trait Alpha with () {
     fn make() -> i32;
 }
 
-trait Beta {
+trait Beta with () {
     fn make() -> i32;
 }
 
@@ -32,11 +32,11 @@ impl Beta for M {
 // and must report it too.
 struct S {}
 
-trait Gamma {
+trait Gamma with () {
     fn go(&self) -> i32;
 }
 
-trait Delta {
+trait Delta with () {
     fn go(&self) -> i32;
 }
 
@@ -62,13 +62,13 @@ struct Y {}
 
 struct R {}
 
-trait Ranked<T> {
+trait Ranked<T> with () {
     fn ranked() -> i32 {
         return 1;
     }
 }
 
-trait Between {
+trait Between with () {
     fn ranked() -> i32 {
         return 2;
     }
@@ -85,13 +85,13 @@ impl Ranked<Y> for R {}
 // module nothing validates.
 struct D {}
 
-trait DefA {
+trait DefA with () {
     fn defaulted(n: i32 = 1) -> i32 {
         return n;
     }
 }
 
-trait DefB {
+trait DefB with () {
     fn defaulted(a: i32, b: i32) -> i32 {
         return a + b;
     }
@@ -106,15 +106,15 @@ impl DefB for D {}
 // took the first applicable blanket and the call compiled — where the same
 // shape written as concrete impls is reported. A blanket is a candidate now,
 // and the ambiguity rule reads its trait like any other's.
-trait Marker {
+trait Marker with () {
     fn kind() -> i32;
 }
 
-trait BlanketA {
+trait BlanketA with () {
     fn built() -> i32;
 }
 
-trait BlanketB {
+trait BlanketB with () {
     fn built() -> i32;
 }
 

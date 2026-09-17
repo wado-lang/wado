@@ -5,11 +5,11 @@ struct SerializeError {
     message: String,
 }
 
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-trait Serializer {
+trait Serializer with () {
     fn serialize_string(&mut self, v: &String) -> Result<(), SerializeError>;
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
 }

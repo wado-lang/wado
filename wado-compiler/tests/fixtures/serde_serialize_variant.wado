@@ -5,16 +5,16 @@ struct SerializeError {
     message: String,
 }
 
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-trait SerializeVariant {
+trait SerializeVariant with () {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-trait Serializer {
+trait Serializer with () {
     type VariantSerializer: SerializeVariant;
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;

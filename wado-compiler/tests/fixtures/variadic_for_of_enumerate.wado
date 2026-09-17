@@ -1,7 +1,7 @@
 // `.enumerate()` over a variadic (pack-typed) for-of: the index is a
 // compile-time constant per unrolled element (WEP 2026-03-14).
 
-trait IndexedLabel {
+trait IndexedLabel with () {
     fn indexed_label(&self) -> String;
 }
 
@@ -17,7 +17,7 @@ impl<..T: Display> IndexedLabel for [..T] {
 
 // The enumerate index is the one non-literal a pack-typed tuple takes as a
 // subscript: unrolling fixes it per element, for reads and writes alike.
-trait Rebuild {
+trait Rebuild with () {
     fn same_as(&self, other: &Self) -> bool;
     fn doubled(&self) -> Self;
 }

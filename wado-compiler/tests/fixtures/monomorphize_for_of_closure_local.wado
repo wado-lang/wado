@@ -5,7 +5,7 @@
 // the enclosing function's frame corrupts unrelated slots (silently produced a
 // wrong result before the collectors stopped at closure boundaries).
 
-trait Foo { fn val(&self) -> i32; }
+trait Foo with () { fn val(&self) -> i32; }
 impl Foo for i32 { fn val(&self) -> i32 { return *self; } }
 impl Foo for String { fn val(&self) -> i32 { return 100; } }
 impl Foo for bool { fn val(&self) -> i32 { return 1; } }

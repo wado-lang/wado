@@ -1,0 +1,61 @@
+// A `pub` trait whose head decides nothing publishes an open contract, so it
+// warns. `allow` waives it, and a file-private trait only remarks.
+use { println, Stdout } from "core:cli";
+
+pub trait Undecided {
+    fn next(&mut self) -> i32;
+}
+
+#[allow(undecided_effects)]
+pub trait Deciding {
+    fn next(&mut self) -> i32;
+}
+
+trait Private {
+    fn next(&mut self) -> i32;
+}
+
+pub trait Settled with () {
+    fn next(&mut self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Undecided for Counter {
+    fn next(&mut self) -> i32 {
+        self.n += 1;
+        return self.n;
+    }
+}
+
+impl Deciding for Counter {
+    fn next(&mut self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Private for Counter {
+    fn next(&mut self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Settled for Counter {
+    fn next(&mut self) -> i32 {
+        return self.n;
+    }
+}
+
+export fn run() with Stdout {
+    let mut c = Counter { n: 0 };
+    println(`${Undecided::next(&mut c)}`);
+}
+
+__DATA__
+{
+    "stdout": "1\n",
+    "warnings_contains": ["`Undecided` says nothing about the effects"],
+    "warnings_not_contains": ["`Deciding`", "`Private`", "`Settled`"]
+}

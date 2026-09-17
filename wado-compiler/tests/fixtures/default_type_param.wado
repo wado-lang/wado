@@ -76,7 +76,7 @@ struct Priv {
     n: i32 = 5,
 }
 
-trait Tagged {
+trait Tagged with () {
     fn tag(&self) -> i32;
 }
 
@@ -138,7 +138,7 @@ test "a method on a generic impl numbers its own slots after the impl's" {
 }
 
 // `Default` here is the trait's own type parameter, not the prelude trait.
-trait Container<T, Default = i32> {
+trait Container<T, Default = i32> with () {
     fn value(&self) -> T;
 }
 

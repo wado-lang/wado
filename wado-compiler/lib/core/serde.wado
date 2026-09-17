@@ -219,7 +219,7 @@ pub fn deeper(depth: i32, max_depth: i32, offset: i64) -> Result<i32, Deserializ
 }
 
 #[compiler_item("serialize_seq")]
-pub trait SerializeSeq {
+pub trait SerializeSeq with () {
 
 
     #[compiler_item("serialize_seq_element")]
@@ -230,14 +230,14 @@ pub trait SerializeSeq {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-pub trait SerializeMap {
+pub trait SerializeMap with () {
     fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>;
     fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 #[compiler_item("serialize_struct")]
-pub trait SerializeStruct {
+pub trait SerializeStruct with () {
 
 
     #[compiler_item("serialize_struct_field")]
@@ -249,7 +249,7 @@ pub trait SerializeStruct {
 }
 
 #[compiler_item("serialize_variant")]
-pub trait SerializeVariant {
+pub trait SerializeVariant with () {
 
 
     #[compiler_item("serialize_variant_payload")]
@@ -262,7 +262,7 @@ pub trait SerializeVariant {
 
 
 #[compiler_item("serializer")]
-pub trait Serializer {
+pub trait Serializer with () {
     type SeqSerializer: SerializeSeq;
     type MapSerializer: SerializeMap;
     type StructSerializer: SerializeStruct;
@@ -336,13 +336,13 @@ pub trait Serializer {
 
 
 #[compiler_item("serialize")]
-pub trait Serialize {
+pub trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
 
 #[compiler_item("deserialize_seq")]
-pub trait DeserializeSeq {
+pub trait DeserializeSeq with () {
 
 
     #[compiler_item("deserialize_seq_next_element")]
@@ -353,7 +353,7 @@ pub trait DeserializeSeq {
     fn end(&mut self) -> Result<(), DeserializeError>;
 }
 
-pub trait DeserializeMap {
+pub trait DeserializeMap with () {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>;
     fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>;
     fn end(&mut self) -> Result<(), DeserializeError>;
@@ -383,7 +383,7 @@ pub trait DeserializeMap {
 /// ignore `positional_at` and stay backward compatible; `core:args` consults it
 /// to bind bare tokens to positional fields.
 #[compiler_item("field_schema")]
-pub trait FieldSchema {
+pub trait FieldSchema with () {
     fn lookup(key: ByteSlice) -> Option<i32>;
 
     /// Field index of the `rank`-th `#[wire(positional)]` field (in
@@ -393,7 +393,7 @@ pub trait FieldSchema {
 }
 
 #[compiler_item("deserialize_struct")]
-pub trait DeserializeStruct {
+pub trait DeserializeStruct with () {
 
 
     #[compiler_item("deserialize_struct_next_field")]
@@ -413,7 +413,7 @@ pub trait DeserializeStruct {
 }
 
 #[compiler_item("deserialize_variant")]
-pub trait DeserializeVariant {
+pub trait DeserializeVariant with () {
 
 
     #[compiler_item("deserialize_variant_variant_name")]
@@ -434,7 +434,7 @@ pub trait DeserializeVariant {
 }
 
 
-pub trait Visitor {
+pub trait Visitor with () {
     type Value;
 
     fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>;
@@ -479,7 +479,7 @@ pub trait Visitor {
 }
 
 #[compiler_item("deserializer")]
-pub trait Deserializer {
+pub trait Deserializer with () {
     type SeqAccess: DeserializeSeq;
     type MapAccess: DeserializeMap;
     type StructAccess: DeserializeStruct;
@@ -539,7 +539,7 @@ pub trait Deserializer {
 
 
 #[compiler_item("deserialize")]
-pub trait Deserialize {
+pub trait Deserialize with () {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>;
 
     /// Deserialize the next element from a sequence access.

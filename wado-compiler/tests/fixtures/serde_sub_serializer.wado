@@ -6,24 +6,24 @@ struct SerializeError {
     message: String,
 }
 
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
 // Sub-serializer for sequences
-trait SerializeSeq {
+trait SerializeSeq with () {
     fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 // Sub-serializer for structs
-trait SerializeStruct {
+trait SerializeStruct with () {
     fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
 // Serializer trait with associated types for sub-serializers
-trait Serializer {
+trait Serializer with () {
     type SeqSerializer;
     type StructSerializer;
 

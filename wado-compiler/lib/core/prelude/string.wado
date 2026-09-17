@@ -1620,8 +1620,16 @@ impl StrSlice {
 
 /// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 /// owned string, a reference to one, or a view of part of one.
+<<<<<<< HEAD
 pub trait AsStrSlice: Eq<String> {
     fn as_str_slice(&self) -> StrSlice;
+||||||| ddccc3f760a
+pub trait AsStrSlice: Eq<String> {
+    fn as_str_slice(&self) -> StrSlice with stores[self];
+=======
+pub trait AsStrSlice: Eq<String> with () {
+    fn as_str_slice(&self) -> StrSlice with stores[self];
+>>>>>>> origin/main
 
     /// Append this text to `out`. `String` overrides it to copy straight out of
     /// its own backing array: the view the default builds hides the append's

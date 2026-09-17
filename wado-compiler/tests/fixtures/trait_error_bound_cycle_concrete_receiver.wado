@@ -4,11 +4,11 @@
 // receiver, on a concrete type as on a newtype
 // (`blanket_bound_cycle_on_newtype.wado`; WEP 2026-09-01).
 
-trait Alpha {
+trait Alpha with () {
     fn alpha() -> i32;
 }
 
-trait Beta {
+trait Beta with () {
     fn beta() -> i32;
 }
 
@@ -24,7 +24,7 @@ impl<T: Alpha> Beta for T {
     }
 }
 
-trait Describe {
+trait Describe with () {
     fn describe(&self) -> String;
 }
 

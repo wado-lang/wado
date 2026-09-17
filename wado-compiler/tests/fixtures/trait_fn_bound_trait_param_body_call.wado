@@ -3,7 +3,7 @@
 // trait therefore records none for it, as the declaration's own parameter list
 // records none (WEP 2026-09-01).
 
-trait Tag {
+trait Tag with () {
     fn tag(&self) -> i32;
 }
 
@@ -13,7 +13,7 @@ impl Tag for i32 {
     }
 }
 
-trait Apply<F: fn(i32) -> i32> {
+trait Apply<F: fn(i32) -> i32> with () {
     fn apply(&self, f: F) -> i32;
 }
 

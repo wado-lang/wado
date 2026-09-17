@@ -458,7 +458,7 @@ impl SpanStack {
 /// clock: a sink over [`NoClock`] monomorphizes to code that never reads one, so
 /// the component carries no `wasi:clocks` import. A runtime flag leaves the call
 /// reachable, and at `-O0` nothing folds it away.
-pub trait Clock {
+pub trait Clock with () {
     fn now() -> Option<String>;
 }
 
