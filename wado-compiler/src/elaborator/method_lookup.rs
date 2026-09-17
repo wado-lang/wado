@@ -1436,13 +1436,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, span) = (input.slots, input.own_params, input.span);
-        let receiver = self.tysys.get_base_type(input.receiver_type);
+        let self_type = self.tysys.get_base_type(input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_empty_pack_of(own_params, &mut type_args);
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
-            self.enforce_type_arg_bounds_of(own_params, &type_args, Some(receiver), span);
+            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_type), span);
         }
         (type_args, subst)
     }

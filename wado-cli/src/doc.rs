@@ -835,9 +835,8 @@ fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
     render_md_member(out, sig, &[], doc, h);
 }
 
-/// `text` as a code span. The delimiter outruns the longest backtick run inside
-/// and pads content that starts or ends with one, as CommonMark asks:
-/// `#[unavailable("use `make`")]` otherwise closes its own span early.
+/// `text` as a code span. Text holding a backtick would close a plain span
+/// early, so the delimiter outruns the longest run inside and pads the ends.
 fn code_span(text: &str) -> String {
     let mut longest = 0;
     let mut run = 0;
@@ -854,9 +853,8 @@ fn code_span(text: &str) -> String {
     format!("{fence}{pad}{text}{pad}{fence}")
 }
 
-/// A member's heading, the attributes its declaration carries, and its doc.
-/// The heading is a one-line code span, so the attributes go on a line of their
-/// own under it rather than into the signature.
+/// A member's heading, the attributes its declaration carries, and its doc. The
+/// heading is one line, so the attributes go on a line of their own under it.
 fn render_md_member(out: &mut String, sig: &str, attrs: &[String], doc: Option<&str>, h: &str) {
     writeln!(out, "\n{h} {}", code_span(sig)).unwrap();
     if !attrs.is_empty() {

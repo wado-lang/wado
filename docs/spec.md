@@ -5824,8 +5824,8 @@ and `elements_of = p` is that parameter's elements; `into = q` names the
 parameter it lands in, and without it the destination is unknown. Silence is the
 conservative reading.
 
-`#[retain(...)]` is an error on a function with a body, and both are an error on
-a `trait` or `interface` method requirement: a call to one is statically
+Both are an error on a function with a body, which states these facts itself,
+and on a `trait` or `interface` method requirement: a call to one is statically
 dispatched to an impl that has a body, so the impl states it.
 
 ### The "mem" Core Module

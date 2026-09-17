@@ -211,10 +211,8 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
-/// What a reference points at, or the type itself. A constraint is satisfied
-/// at either reference level: `collect`ing an iterator of `&T` into a
-/// `List<T>` reads each element as its value, as every other use of a
-/// reference does.
+/// What a reference points at, or the type itself. A constraint holds at either
+/// level: collecting `&T` into a `List<T>` reads each element as its value.
 fn referent(tt: &TypeTable, type_id: TypeId) -> TypeId {
     match tt.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
@@ -2279,7 +2277,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .into_iter()
             .filter(ast::GenericParam::is_real_type_param)
             .collect();
-        self.enforce_type_arg_bounds(&type_params, type_args, span);
+        self.enforce_type_arg_bounds(&type_params, type_args, None, span);
     }
 
     /// Check the bounds on a generic type declaration's type arguments, for
@@ -2297,28 +2295,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        self.enforce_type_arg_bounds(&params, type_args, span);
+        self.enforce_type_arg_bounds(&params, type_args, None, span);
     }
 
     /// The single enforcement of trait bounds on a generic decl's type args,
-    /// shared by every generic-call kind so the rule cannot drift. Enforces only
-    /// fully concrete args: a still-parametric arg is forwarded from the caller
-    /// (verified once concrete, since impl-level bounds are not in scope here),
-    /// and `fn(...)`-bound params are realised eagerly elsewhere.
+    /// shared by every generic-call kind so the rule cannot drift. Only a fully
+    /// concrete arg is enforced, and `self_type` is what a bound's `Self::Assoc`
+    /// projects off where the call binds one.
     pub(super) fn enforce_type_arg_bounds(
-        &mut self,
-        params: &[ast::GenericParam],
-        type_args: &[TypeId],
-        span: Span,
-    ) {
-        self.enforce_type_arg_bounds_of(params, type_args, None, span);
-    }
-
-    /// [`Self::enforce_type_arg_bounds`] where the call binds `Self` — a method
-    /// call, whose receiver is what a `Self::Assoc` in a bound names. The
-    /// projection is by name, so a name two of the receiver's traits declare
-    /// leaves that one constraint unchecked rather than guessed.
-    pub(super) fn enforce_type_arg_bounds_of(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
@@ -2465,8 +2449,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // how `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
             // collects. Any other mention of `Self` has nothing to bind it
             // here; `enforce_impl_assoc_type_bounds` owns those.
-            let projectable = self_assoc_name(&constraint.ty).is_some() && self_type.is_some();
-            if (mentions_self(&constraint.ty) && !projectable) || mentions_type_pack(&constraint.ty)
+            let projection = self_assoc_name(&constraint.ty).zip(self_type);
+            if (mentions_self(&constraint.ty) && projection.is_none())
+                || mentions_type_pack(&constraint.ty)
             {
                 continue;
             }
@@ -2481,8 +2466,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }) else {
                 continue;
             };
-            let expected = match (self_assoc_name(&constraint.ty), self_type) {
-                (Some(assoc), Some(self_type)) => {
+            let expected = match projection {
+                // By name, so a name two of the receiver's traits declare
+                // leaves the constraint unchecked rather than guessed.
+                Some((assoc, self_type)) => {
                     let projected = self
                         .tysys
                         .type_table
@@ -2491,7 +2478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(projected) = projected else { continue };
                     projected
                 }
-                _ => self.resolve_type(&constraint.ty),
+                None => self.resolve_type(&constraint.ty),
             };
             let tt = self.tysys.type_table.borrow();
             if tt.contains_type_param(expected)

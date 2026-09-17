@@ -1065,7 +1065,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
-                    self.enforce_type_arg_bounds(&mtype_params, &method_type_args, call.span);
+                    self.enforce_type_arg_bounds(&mtype_params, &method_type_args, None, call.span);
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.
                 if suffix == "from" && args.len() == 1 {
