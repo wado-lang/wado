@@ -11,15 +11,8 @@ use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
 use crate::token::Span;
 use crate::unparse::{
-<<<<<<< HEAD
-    get_item_id, unparse_attributes, unparse_enum_signature, unparse_function_signature,
-||||||| 0896d43255b
-    get_item_id, unparse_enum_signature, unparse_function_signature, unparse_struct_signature,
-    unparse_type_into,
-=======
-    get_item_id, unparse_bound_arguments_into, unparse_enum_signature, unparse_function_signature,
->>>>>>> origin/main
-    unparse_struct_signature, unparse_type_into,
+    get_item_id, unparse_attributes, unparse_bound_arguments_into, unparse_enum_signature,
+    unparse_function_signature, unparse_struct_signature, unparse_type_into,
 };
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};

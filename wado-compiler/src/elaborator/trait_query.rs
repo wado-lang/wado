@@ -2571,15 +2571,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 let written = self.tysys.bound_written(bound);
                 for &subject in &subjects {
-<<<<<<< HEAD
-                    let bound_def = self.bound_trait_def(bound.id);
-                    self.enforce_single_bound(subject, &bound.name, bound_def, &param.name, span);
-                    self.enforce_assoc_type_bounds(subject, bound, self_binding, span);
-||||||| 0896d43255b
-                    let bound_def = self.bound_trait_def(bound.id);
-                    self.enforce_single_bound(subject, &bound.name, bound_def, &param.name, span);
-                    self.enforce_assoc_type_bounds(subject, bound, span);
-=======
                     self.enforce_single_bound_args(
                         subject,
                         &bound.name,
@@ -2587,8 +2578,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &param.name,
                         span,
                     );
-                    self.enforce_assoc_type_bounds(subject, bound, span);
->>>>>>> origin/main
+                    self.enforce_assoc_type_bounds(subject, bound, self_binding, span);
                 }
             }
             // A supertrait failure has the same one cause as the bound that
@@ -2760,7 +2750,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-<<<<<<< HEAD
     /// Whether every `Self::Assoc` written anywhere in `ty` projects off
     /// `binding`. A `Self` head with arguments never does: nothing spells one.
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
@@ -2798,19 +2787,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         table.resolve_assoc_type_of_instance(binding.type_id, assoc)
     }
 
-    /// The trait a bound's own reference site names.
-    pub(super) fn bound_trait_def(&self, site: AstId) -> Option<DefId> {
-        self.tysys.resolutions.declared(site)
-    }
-
-||||||| 0896d43255b
-    /// The trait a bound's own reference site names.
-    pub(super) fn bound_trait_def(&self, site: AstId) -> Option<DefId> {
-        self.tysys.resolutions.declared(site)
-    }
-
-=======
->>>>>>> origin/main
     /// Whether `type_arg` satisfies `trait_name`, registering its associated
     /// types when it does. Asking is what records an on-demand derivation
     /// request, so callers that do not report the answer still ask.
