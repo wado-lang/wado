@@ -143,6 +143,11 @@ macro_rules! with_body_facts {
             /// matches, comparison chain, for-of, while, compound assignment),
             /// keyed by the enclosing AST node's [`AstId`]. See [`DesugarKind`].
             ann_desugars => desugars: $crate::elaborator::sem::types::DesugarKind,
+            /// Where a call whose callee is a value rather than a named
+            /// function reads that value from, keyed by the call's [`AstId`].
+            /// A call of a named function, a method, or a variant constructor
+            /// leaves no entry. See [`IndirectCallee`].
+            ann_indirect_callee => indirect_callees: $crate::elaborator::sem::types::IndirectCallee,
             /// Generic instantiations decided by inference at call /
             /// construction sites. Keyed by the call expression's, struct
             /// literal's, or variant-ctor's [`AstId`]. Recorded by
@@ -1094,6 +1099,19 @@ pub(crate) struct ForOfIteratorInfo {
     /// `let mut $iter_N: <iter_type> = …;` without re-running
     /// method dispatch.
     pub(crate) iter_type: TypeId,
+}
+
+/// Where a call reads its callee from, when that callee is a value and not a
+/// named function. Reify builds the same indirect call from this tag instead of
+/// asking the question a second time.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum IndirectCallee {
+    /// A local, parameter, or captured binding holding a `fn(...)` value.
+    Binding,
+    /// A global of `fn(...)` type, in this module or imported.
+    Global,
+    /// Any other expression of callable type — `arr[i](x)`, `(f.g)(x)`.
+    Expr,
 }
 
 /// Which TIR-direct desugar path the body walk took at a source-level

@@ -44,9 +44,9 @@ use crate::elaborator::expr::{
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, KeyValueCoercionFacts,
-    LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch, SequenceCoercionFacts,
-    StaticMethodDispatch, with_body_facts,
+    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
+    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch,
+    SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
     collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
@@ -8005,39 +8005,60 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .then_some((module_source, global_name, ty))
     }
 
+    /// The callee value of a call annotate recorded as indirect, read down to
+    /// the function value as `build_indirect_call`'s `deref_to_value` does.
+    ///
+    /// Which of the three it is comes from the record, so the type test that
+    /// decided it at annotate time is not repeated here. What is left to fail
+    /// is the record naming something this frame cannot reach, which is a
+    /// disagreement between the two walks rather than a question with an
+    /// answer.
+    fn reify_indirect_callee(
+        &mut self,
+        callee: &ast::Expr,
+        kind: IndirectCallee,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let span = callee.span();
+        let name = |callee: &ast::Expr| match callee {
+            ast::Expr::Ident(ident) => ident.name.clone(),
+            other => unreachable!(
+                "annotate recorded a named callee for {:?}",
+                std::mem::discriminant(other)
+            ),
+        };
+        let value = match kind {
+            IndirectCallee::Binding => {
+                let name = name(callee);
+                let Some(var_ref) = ctx.lookup_or_capture(&name) else {
+                    unreachable!("annotate reached the binding `{name}`, reify's frame cannot")
+                };
+                var_ref_expr(var_ref, &name, span)
+            }
+            IndirectCallee::Global => {
+                let name = name(callee);
+                let Some((module_source, global_name, global_type)) = self.global_fn_callee(&name)
+                else {
+                    unreachable!("annotate read the global `{name}`, reify finds no such global")
+                };
+                TirExpr::new(
+                    TirExprKind::GlobalVarGet {
+                        module_source,
+                        name: global_name,
+                    },
+                    global_type,
+                    span,
+                )
+            }
+            IndirectCallee::Expr => self.reify_expr(callee, ctx, None),
+        };
+        deref_to_value(value, span, &self.tysys.type_table)
+    }
+
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
     /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
     /// callee.
-    /// The callee of a bare-ident call on a value binding — a local, a capture,
-    /// or a global — read down to the function value. `None` when the name is
-    /// not a binding of `fn(...)` type.
-    fn reify_value_callee(
-        &mut self,
-        ident: &ast::IdentExpr,
-        ctx: &mut FunctionContext,
-    ) -> Option<TirExpr> {
-        let callee = if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            var_ref_expr(var_ref, &ident.name, ident.span)
-        } else {
-            let (module_source, global_name, global_type) = self.global_fn_callee(&ident.name)?;
-            TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source,
-                    name: global_name,
-                },
-                global_type,
-                ident.span,
-            )
-        };
-        if !self.tysys.type_table.borrow().is_callable(callee.type_id) {
-            return None;
-        }
-        // Auto-deref a `&fn` / `&mut fn` callee down to the function value,
-        // exactly as `build_indirect_call`'s final `deref_to_value` does.
-        Some(deref_to_value(callee, ident.span, &self.tysys.type_table))
-    }
-
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -8267,16 +8288,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // dropped (no side effects: `reify_expr` is pure TIR shaping).
         }
 
-        // Closure-call shape: a bare-ident callee naming a value binding — a
-        // local, a capture, or a global — of `fn(...)` type. Annotate decides
-        // this by probing `ctx.lookup_or_capture` and then the globals; reify
-        // reproduces it against the same `ctx` it built during the body walk,
-        // which has every let-bound local in place (the walk-order invariant),
-        // so both walks read the same answer and register the same capture.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
-            && let Some(callee_expr) = self.reify_value_callee(ident, ctx)
-        {
+        // Indirect call: the callee is a value rather than a named function.
+        // Annotate recorded which value, so this arm builds the call it decided
+        // on instead of deciding again.
+        if let Some(kind) = self.ann_indirect_callee(call.id) {
+            let callee_expr = self.reify_indirect_callee(&call.callee, kind, ctx);
             let arg_exprs: Vec<TirExpr> = call
                 .args
                 .iter()
@@ -8309,39 +8325,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
-        // Indirect-call shape: callee is any non-ident expression
-        // whose type resolves to a function (e.g. `arr[i](x)`,
-        // `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`). Mirrors
-        // `Elaborator::resolve_call`'s non-ident-callee path
+        // A non-ident callee that is not callable — annotate already diagnosed
+        // it (`TypeError::CalleeNotCallable`), and the callable ones returned
+        // above. Match the elaborator's recovery shape.
         if !matches!(&call.callee, ast::Expr::Ident(_)) {
-            let callee_expr = self.reify_expr(&call.callee, ctx, None);
-            if self
-                .tysys
-                .type_table
-                .borrow()
-                .is_callable(callee_expr.type_id)
-            {
-                // Auto-deref a `&fn` / `&mut fn` callee, matching
-                // `build_indirect_call`'s `deref_to_value` in production.
-                let callee_expr =
-                    deref_to_value(callee_expr, call.callee.span(), &self.tysys.type_table);
-                let arg_exprs: Vec<TirExpr> = call
-                    .args
-                    .iter()
-                    .map(|a| self.reify_expr(a, ctx, None))
-                    .collect();
-                return TirExpr::new(
-                    TirExprKind::IndirectCall {
-                        callee: Box::new(callee_expr),
-                        args: arg_exprs,
-                    },
-                    recorded_type,
-                    span,
-                );
-            }
-            // Non-fn-typed non-ident callee — annotate already
-            // diagnosed it (`TypeError::CalleeNotCallable`).
-            // Match the elaborator's recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 

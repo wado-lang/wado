@@ -18,7 +18,7 @@ use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
 use super::scope::{BinderInScope, Scope, TraitContext};
-use super::sem::types::{CalleeParams, StaticMethodDispatch};
+use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
@@ -632,6 +632,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
 
                 if let Some(sig) = self.as_fn_signature(value_ty) {
+                    self.record_indirect_callee(
+                        call.id,
+                        match binding {
+                            Some(_) => IndirectCallee::Binding,
+                            None => IndirectCallee::Global,
+                        },
+                    );
                     // `fn mut` closures need a `mut` root binding — mirrors
                     // Rust's FnMut rule. The check goes through the same helper
                     // used by the indirect-call path below so identifier and
@@ -688,6 +695,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let callee_type = self.resolve_expr(&call.callee, ctx, None);
 
             if let Some(sig) = self.as_fn_signature(callee_type) {
+                self.record_indirect_callee(call.id, IndirectCallee::Expr);
                 // Enforce `fn mut` root-mutability for non-identifier
                 // callees too: `(h.f)()`, `arr[i]()`, `(arr[i].f)()`, …
                 // require the root binding to be `mut`. A temporary root

@@ -1495,6 +1495,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.sem.types.desugars.insert(key, kind);
     }
 
+    /// Record where the call at `ast_id` reads its callee from, so reify builds
+    /// the indirect call from the decision rather than re-deriving it. See
+    /// [`sem::types::IndirectCallee`].
+    pub(super) fn record_indirect_callee(
+        &mut self,
+        ast_id: AstId,
+        callee: sem::types::IndirectCallee,
+    ) {
+        self.sem.types.indirect_callees.insert(ast_id, callee);
+    }
+
     /// Record a local binding's [`Symbol`] and resolved [`TypeId`] so that
     /// LSP hover on a use site can retrieve the defining name / mutability
     /// and inlay hints can surface the inferred type. Called at each site
