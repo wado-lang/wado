@@ -24,7 +24,7 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
     FunctionRef, ResolvedType, RetainSpec, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -1279,11 +1279,10 @@ impl StoresWalker<'_> {
                 payload: Some(p), ..
             } => Carried::held(self.carried(p).all()),
             TirExprKind::Closure { captures, .. } => Carried::held(
-                captures
-                    .iter()
-                    .flat_map(|c| {
+                capture_source_locals(captures)
+                    .flat_map(|index| {
                         self.carries
-                            .get(&c.outer_index)
+                            .get(&index)
                             .map(Carried::all)
                             .unwrap_or_default()
                     })
@@ -1848,8 +1847,8 @@ impl TirRefVisitor for StoresWalker<'_> {
                 captures,
                 ..
             } => {
-                for capture in captures {
-                    self.reaches_any(capture.outer_index);
+                for index in capture_source_locals(captures) {
+                    self.reaches_any(index);
                 }
                 self.mint_closure(expr.span, expr.type_id, params, body);
                 return;
