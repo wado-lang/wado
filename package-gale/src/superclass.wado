@@ -815,7 +815,7 @@ fn rule_calls_super_with<S: AsStrSlice>(
     base_name: S,
     actions: bool,
 ) -> bool {
-    let needle = `${base_name.to_string()}::`;
+    let needle = `${base_name.as_str_slice()}::`;
     let mut visited: List<String> = [];
     return rule_calls_super(rule, all_rules, &needle, actions, &mut visited);
 }
@@ -845,7 +845,7 @@ fn alt_calls_super<S: AsStrSlice>(
         if !actions && a.kind matches { Action } {
             continue;
         }
-        if a.source.text.contains(needle.to_string()) {
+        if a.source.text.contains(needle) {
             return true;
         }
     }
@@ -890,7 +890,7 @@ fn elem_calls_super<S: AsStrSlice>(
 /// A predicate takes the read-only `LexerView` and returns `bool`; an action
 /// also takes the `Lexer`, for the command surface.
 pub fn gen_super_interface<S: AsStrSlice>(w: &mut CodeWriter, name: S, ops: &List<SuperOp>) {
-    w.line(`pub interface ${name.to_string()} {`);
+    w.line(`pub interface ${name.as_str_slice()} {`);
     for let op of ops {
         if op.is_predicate {
             w.line(`    fn ${to_snake_case(&op.name)}(view: LexerView${super_op_params(op)}) -> bool;`);
@@ -916,8 +916,7 @@ fn gen_super_hooks(w: &mut CodeWriter) {
 
 /// The tokenize-loop call to the `emit` hook, reading the loop's own locals.
 pub fn super_emit_hook_expr<S: AsStrSlice, S1: AsStrSlice>(base_name: S, channel: S1) -> String {
-    return `${base_name.to_string()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.to_string(
-    )})`;
+    return `${base_name.as_str_slice()}::emit(LexerView { chars: &lexer.chars, start: tok_start, pos: best_end }, best_kind, ${channel.as_str_slice()})`;
 }
 
 /// The ambient operation call for a call site, reading the locals in scope
@@ -933,7 +932,7 @@ pub fn super_call_expr<S: AsStrSlice, S1: AsStrSlice>(
         LexerAction => "LexerView { chars, start, pos }, lx",
         ParserPredicate => "p",
     };
-    return `${base_name.to_string()}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
+    return `${base_name.as_str_slice()}::${to_snake_case(method)}(${recv}${after_receiver(args)})`;
 }
 
 /// Rewrite every lexer action / predicate body in place, turning each

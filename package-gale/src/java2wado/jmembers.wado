@@ -401,7 +401,7 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     mutates: bool,
 ) -> Result<String, String> {
     let recv = if mutates { "&mut self" } else { "&self" };
-    let mut sig = `fn ${name.to_string()}(${recv}`;
+    let mut sig = `fn ${name.as_str_slice()}(${recv}`;
     for let p of params {
         sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }

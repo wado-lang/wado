@@ -409,7 +409,7 @@ fn gen_capture_vocabulary(
 }
 
 fn push_unique<S: AsStrSlice>(out: &mut List<String>, value: S) {
-    if !out.contains(&value.to_string()) {
+    if !out.into_iter().any(|v| value.eq_str(&v)) {
         out.push(value.to_string());
     }
 }

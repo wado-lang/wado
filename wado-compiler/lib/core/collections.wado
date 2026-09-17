@@ -334,6 +334,43 @@ impl<K: Ord, V> TreeMap<K, V> {
     }
 }
 
+/// Lookups that take any text, so a `StrSlice` probe reaches the map without
+/// the `to_string` copy that a `String` key would require of it.
+impl<V> TreeMap<String, V> {
+    /// Returns the value stored under text equal to `key`, or null.
+    pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V> {
+        let index = self.find_index_str(key.as_str_slice());
+        if index >= 0 {
+            return Option::Some(self.entries[index].value);
+        }
+        return null;
+    }
+
+    /// Returns true if some key spells the same text as `key`.
+    pub fn contains_key_str<S: AsStrSlice>(&self, key: S) -> bool {
+        return self.find_index_str(key.as_str_slice()) >= 0;
+    }
+
+    fn find_index_str(&self, key: StrSlice) -> i32 {
+        let mut current = self.root;
+        while let Some(n_idx) = current {
+            let n = &self.nodes[n_idx];
+            match key.cmp_str(&n.key) {
+                Ordering::Equal => {
+                    let entry = &self.entries[n.index];
+                    if entry.deleted {
+                        return -1;
+                    }
+                    return n.index;
+                },
+                Ordering::Less => current = n.left,
+                Ordering::Greater => current = n.right,
+            }
+        }
+        return -1;
+    }
+}
+
 // IndexAssign for map[key] = value
 impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;

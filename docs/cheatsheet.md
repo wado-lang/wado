@@ -1595,6 +1595,8 @@ let mut map = TreeMap::<String, i32>::new();
 map["key"] = 42;              // index assignment
 let v = map["key"];           // index access (panics if absent)
 let opt = map.get("key");     // fallible access -> Option<V>
+map.get_str(view);            // String-keyed map: look up by a view, no key copy
+map.contains_key_str(view);   // likewise -> bool
 map.remove("key");            // -> bool
 map.try_insert("k", 1);       // insert if absent -> bool
 map.get_or_insert("k", 1);    // the stored value, or the inserted one

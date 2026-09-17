@@ -533,20 +533,31 @@ impl Url {
     /// Serializes the URL back to a string.
     pub fn to_string(&self) -> String {
         let mut out = String::with_capacity(64);
+        self.write_to(&mut out);
+        return out;
+    }
+
+    /// Append the serialized form. Every part writes into the caller's buffer,
+    /// so serializing a URL allocates the one string it returns.
+    fn write_to(&self, out: &mut String) {
         out.push_str(&self.scheme);
         out.push_str("://");
-        out.push_str(&self.authority());
-        out.push_str(&self.path_with_query());
+        self.write_authority(out);
+        self.write_path_with_query(out);
         if let Some(f) = self.fragment {
             out.push('#');
             out.push_str(&f);
         }
-        return out;
     }
 
     /// Returns the authority: [userinfo@]host[:port].
     pub fn authority(&self) -> String {
         let mut out = String::with_capacity(32);
+        self.write_authority(&mut out);
+        return out;
+    }
+
+    fn write_authority(&self, out: &mut String) {
         if !self.username.is_empty() {
             out.push_str(&self.username);
             if !self.password.is_empty() {
@@ -555,6 +566,10 @@ impl Url {
             }
             out.push('@');
         }
+        self.write_host_port(out);
+    }
+
+    fn write_host_port(&self, out: &mut String) {
         if self.host.contains(":") {
             out.push('[');
             out.push_str(&self.host);
@@ -563,9 +578,9 @@ impl Url {
             out.push_str(&self.host);
         }
         if let Some(p) = self.port {
-            out.push_str(`:${p}`);
+            out.push(':');
+            out.push_display(&p);
         }
-        return out;
     }
 
     /// Returns the origin: scheme://host[:port] (excludes credentials).
@@ -573,16 +588,7 @@ impl Url {
         let mut out = String::with_capacity(32);
         out.push_str(&self.scheme);
         out.push_str("://");
-        if self.host.contains(":") {
-            out.push('[');
-            out.push_str(&self.host);
-            out.push(']');
-        } else {
-            out.push_str(&self.host);
-        }
-        if let Some(p) = self.port {
-            out.push_str(`:${p}`);
-        }
+        self.write_host_port(&mut out);
         return out;
     }
 
@@ -596,6 +602,14 @@ impl Url {
             return out;
         }
         return self.path;
+    }
+
+    fn write_path_with_query(&self, out: &mut String) {
+        out.push_str(&self.path);
+        if let Some(q) = self.query {
+            out.push('?');
+            out.push_str(&q);
+        }
     }
 
     /// Returns the effective port (explicit port or default for the scheme).
@@ -701,7 +715,7 @@ impl Url {
 
     /// Returns the value for the given query parameter key.
     pub fn query_get<S: AsStrSlice>(&self, key: S) -> Option<String> {
-        return self.query_pairs().get(key.to_string());
+        return self.query_pairs().get_str(key);
     }
 
     /// Returns all values for the given query parameter key.
@@ -769,7 +783,7 @@ fn normalize_percent_encoding<S: AsStrSlice>(input: S) -> String {
 
 impl Display for Url {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&self.to_string());
+        self.write_to(f.buf);
     }
 }
 

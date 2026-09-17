@@ -569,8 +569,7 @@ fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
 fn increment_count<S: AsStrSlice>(counts: &mut List<[String, i32]>, name: S) {
     for let mut i = 0; i < counts.len(); i += 1 {
         if counts[i].0 == name.as_str_slice() {
-            let prev = counts[i].1;
-            counts[i] = [name.to_string(), prev + 1];
+            counts[i].1 += 1;
             return;
         }
     }
