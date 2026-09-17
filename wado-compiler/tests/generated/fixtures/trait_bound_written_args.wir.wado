@@ -6,9 +6,13 @@ type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
 type "functype//trait_bound_written_args.wado/$cm_export__$test_0_a_bound_writes_a_non_default_argument_for_a_defaulted_parameter" = fn();  // TypeId(1)
 
-type "functype//trait_bound_written_args.wado/$cm_export__$test_1_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position" = fn();  // TypeId(2)
+type "functype//trait_bound_written_args.wado/$cm_export__$test_1_an_impl_s_own_bound_reaches_the_impl_that_writes_its_argument" = fn();  // TypeId(2)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
+type "functype//trait_bound_written_args.wado/$cm_export__$test_2_a_parameter_forwards_the_arguments_its_own_bounds_supply" = fn();  // TypeId(3)
+
+type "functype//trait_bound_written_args.wado/$cm_export__$test_3_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position" = fn();  // TypeId(4)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
@@ -18,9 +22,19 @@ fn "trait_bound_written_args.wado/$cm_export__$test_0_a_bound_writes_a_non_defau
     "wasi/task-return"(0);
 }
 
-fn "trait_bound_written_args.wado/$cm_export__$test_1_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position"() {
+fn "trait_bound_written_args.wado/$cm_export__$test_1_an_impl_s_own_bound_reaches_the_impl_that_writes_its_argument"() {
+    "wasi/task-return"(0);
+}
+
+fn "trait_bound_written_args.wado/$cm_export__$test_2_a_parameter_forwards_the_arguments_its_own_bounds_supply"() {
+    "wasi/task-return"(0);
+}
+
+fn "trait_bound_written_args.wado/$cm_export__$test_3_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position"() {
     "wasi/task-return"(0);
 }
 
 export fn "trait_bound_written_args.wado/$cm_export__$test_0_a_bound_writes_a_non_default_argument_for_a_defaulted_parameter" as "$test_0_a_bound_writes_a_non_default_argument_for_a_defaulted_parameter"
-export fn "trait_bound_written_args.wado/$cm_export__$test_1_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position" as "$test_1_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position"
+export fn "trait_bound_written_args.wado/$cm_export__$test_1_an_impl_s_own_bound_reaches_the_impl_that_writes_its_argument" as "$test_1_an_impl_s_own_bound_reaches_the_impl_that_writes_its_argument"
+export fn "trait_bound_written_args.wado/$cm_export__$test_2_a_parameter_forwards_the_arguments_its_own_bounds_supply" as "$test_2_a_parameter_forwards_the_arguments_its_own_bounds_supply"
+export fn "trait_bound_written_args.wado/$cm_export__$test_3_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position" as "$test_3_a_bound_writing_an_argument_reaches_the_impl_whatever_its_position"
