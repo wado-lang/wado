@@ -1,11 +1,11 @@
 // A supertrait clause writes arguments in the subtrait's parameter space, and a
 // bound naming the subtrait supplies the supertrait at what it wrote there.
 
-trait Measure<X> {
+trait Measure<X> with () {
     fn of(&self, x: X) -> i32;
 }
 
-trait Metric: Measure<i32> {
+trait Metric: Measure<i32> with () {
     fn unit(&self) -> i32;
 }
 
@@ -25,15 +25,15 @@ impl Metric for Ruler {
     }
 }
 
-fn scaled<U: Measure<i32>>(u: U, by: i32) -> i32 with _ {
+fn scaled<U: Measure<i32>>(u: U, by: i32) -> i32 {
     return u.of(by);
 }
 
-fn through_supertrait<T: Metric>(t: T, by: i32) -> i32 with _ {
+fn through_supertrait<T: Metric>(t: T, by: i32) -> i32 {
     return scaled(t, by);
 }
 
-trait Gauge<X>: Measure<X> {
+trait Gauge<X>: Measure<X> with () {
     fn zero(&self) -> X;
 }
 
@@ -43,7 +43,7 @@ impl Gauge<i32> for Ruler {
     }
 }
 
-fn through_generic_supertrait<T: Gauge<i32>>(t: T, by: i32) -> i32 with _ {
+fn through_generic_supertrait<T: Gauge<i32>>(t: T, by: i32) -> i32 {
     return scaled(t, by);
 }
 

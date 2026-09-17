@@ -2,15 +2,15 @@
 // re-spells the inherited bound at that parameter's declared default, so `C<Y>`
 // arrives as `C<i32>` rather than as the binder `Y`.
 
-trait C<Z> {
+trait C<Z> with () {
     fn c(&self, z: Z) -> i32;
 }
 
-trait B<X, Y = i32>: C<Y> {
+trait B<X, Y = i32>: C<Y> with () {
     fn b(&self, x: X) -> i32;
 }
 
-trait A<T>: B<T> {
+trait A<T>: B<T> with () {
     fn a(&self) -> i32;
 }
 
@@ -36,7 +36,7 @@ impl A<String> for S {
     }
 }
 
-fn via<T: A<String>>(t: T, z: i32) -> i32 with _ {
+fn via<T: A<String>>(t: T, z: i32) -> i32 {
     return t.c(z);
 }
 
