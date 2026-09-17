@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789631554471,
+  "lastUpdate": 1789635696231,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56421,6 +56421,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/145d94d59003ee3a340dcb3ce1d5d9103c08921c"
         },
         "date": 1789631554198,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 285109,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ddccc3f760a4e7beae5618ae963671bd602d2dee",
+          "message": "Merge pull request #2072 from wado-lang/claude/string-simd-vec-conversion-14ab1y\n\nfeat(closures): capture a binding across any depth of nesting, and call a captured `fn`",
+          "timestamp": "2026-09-17T17:43:49+09:00",
+          "tree_id": "08baec5141df768739a75dab16f0fb4841d83bf7",
+          "url": "https://github.com/wado-lang/wado/commit/ddccc3f760a4e7beae5618ae963671bd602d2dee"
+        },
+        "date": 1789635695571,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
