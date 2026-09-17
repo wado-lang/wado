@@ -1418,8 +1418,7 @@ impl EffectIndex<'_> {
         args: &[FqTypeName],
         depth: u32,
     ) -> IndexSet<EffectRef> {
-        /// A wrapper around a wrapper around … — deep enough for any real
-        /// nesting, and what stops a cyclic instantiation.
+        /// What stops a cyclic instantiation. Deeper than real nesting goes.
         const MAX_DEPTH: u32 = 8;
 
         let mut out: IndexSet<EffectRef> = IndexSet::default();
@@ -1642,9 +1641,8 @@ impl SemEffectWalker<'_> {
             // canonical form rather than by raw `module_source`.
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
             if effect.is_param() {
-                // A parameter no argument determined stands for whatever the
-                // callee brings, so only a caller carrying one of its own —
-                // `with _` — forwards it.
+                // An undetermined parameter stands for whatever the callee
+                // brings, so only a caller with one of its own forwards it.
                 if !self.current.iter().any(EffectRef::is_param) {
                     self.out.push(EffectError {
                         callee: callee.to_string(),

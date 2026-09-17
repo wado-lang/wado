@@ -1218,12 +1218,7 @@ impl<'a> Unparser<'a> {
             self.output.push_str(": ");
             self.unparse_trait_bounds(&t.supertraits);
         }
-        match &t.head {
-            TraitHead::Undecided => {}
-            TraitHead::Pure { .. } => self.output.push_str(" with ()"),
-            TraitHead::Open { .. } => self.output.push_str(" with _"),
-            TraitHead::Fixed { effects, .. } => self.unparse_with_clause(effects, &[]),
-        }
+        unparse_trait_head_into(&t.head, &mut self.output);
 
         self.with_braced_body(t.span, |this| {
             for assoc in &t.associated_types {
@@ -4183,6 +4178,7 @@ pub fn unparse_trait_header(t: &TraitDecl) -> String {
         out.push_str(": ");
         unparse_trait_bounds_into(&t.supertraits, &mut out);
     }
+    unparse_trait_head_into(&t.head, &mut out);
     out
 }
 
@@ -4400,6 +4396,17 @@ pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &
         items.push(format!("stores[{}]", stores.join(", ")));
     }
     unparse_with_row_into(&items, output);
+}
+
+/// Emit a trait head's `with` clause. An undecided head wrote none, so it
+/// emits nothing.
+pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
+    match head {
+        TraitHead::Undecided => {}
+        TraitHead::Pure { .. } => output.push_str(" with ()"),
+        TraitHead::Open { .. } => output.push_str(" with _"),
+        TraitHead::Fixed { effects, .. } => unparse_with_clause_into(effects, &[], output),
+    }
 }
 
 /// The shared row shape. `items` are the already-rendered effect names and

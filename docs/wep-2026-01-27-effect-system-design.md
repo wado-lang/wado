@@ -346,7 +346,7 @@ A method's own `with` clause overrides the head.
 
 "Should be pure" is a contract worth writing down, and writing nothing says something else. Every trait the standard library declares says `with ()`: an impl of one that performs I/O is a design error, for comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
 
-#### A head that names no hole
+#### A decided head binds every impl
 
 - [x] Implemented.
 
@@ -444,7 +444,7 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 ## Roadmap
 
-The trait head is in. What is left is recorded as gaps below.
+The trait head is in.
 
 ## Known gaps
 
@@ -454,7 +454,7 @@ Constraining an open trait's effect argument at the bound does not parse yet, so
 
 ### How deep an open head resolves
 
-A hole is filled from the impl the call names: a free call reads its type arguments, a method dispatch reads its receiver, and a receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Past that depth, and for a receiver naming no impl this phase indexed, the parameter survives and the caller forwards it with `with _` — sound, but more than the impl would have demanded.
+A hole is filled from the impl the call names: a free call reads its type arguments, a method dispatch reads its receiver, and a receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Past that depth, and for a receiver naming no impl this phase indexed, the parameter survives and the caller forwards it with `with _`. That is sound, and more than the impl would have demanded.
 
 ### One effect parameter per function
 
