@@ -29,16 +29,8 @@ pub type ByteSlice = Slice<u8>;
 /// Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 /// UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 /// `core:json` `from_bytes`) accept any of them.
-<<<<<<< HEAD
-pub trait AsByteSlice {
-    fn as_byte_slice(&self) -> ByteSlice;
-||||||| ddccc3f760a
-pub trait AsByteSlice {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self];
-=======
 pub trait AsByteSlice with () {
-    fn as_byte_slice(&self) -> ByteSlice with stores[self];
->>>>>>> origin/main
+    fn as_byte_slice(&self) -> ByteSlice;
 }
 
 impl AsByteSlice for ByteSlice {

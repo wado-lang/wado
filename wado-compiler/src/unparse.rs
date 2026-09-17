@@ -11,25 +11,11 @@ use crate::ast::{
     ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
     LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
     MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
-<<<<<<< HEAD
     ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
     StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
-    TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl,
-    UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt, WithHandlerExpr,
-    WorldDecl, WorldExport,
-||||||| ddccc3f760a
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
-    TraitBound, TraitDecl, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type,
-    UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility,
-    WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
-=======
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StoresEntry, StructDecl, StructField,
-    StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
-    TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl,
-    Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
->>>>>>> origin/main
+    TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
+    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
+    WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -886,13 +872,7 @@ impl<'a> Unparser<'a> {
                 s.output.push_str(" -> ");
                 s.unparse_type(ret);
             }
-<<<<<<< HEAD
-            unparse_with_row_into(&f.effects, &mut s.output);
-||||||| ddccc3f760a
-            s.unparse_with_clause(&f.effects, &f.stores);
-=======
-            s.unparse_with_clause(f.written_effects(), &f.stores);
->>>>>>> origin/main
+            unparse_with_row_into(f.written_effects(), &mut s.output);
         });
 
         if let Some(body) = &f.body {
@@ -4186,13 +4166,7 @@ pub fn unparse_function_signature_into(f: &Function, output: &mut String) {
         output.push_str(" -> ");
         unparse_type_into(ret, output);
     }
-<<<<<<< HEAD
-    unparse_with_row_into(&f.effects, output);
-||||||| ddccc3f760a
-    unparse_with_clause_into(&f.effects, &f.stores, output);
-=======
-    unparse_with_clause_into(f.written_effects(), &f.stores, output);
->>>>>>> origin/main
+    unparse_with_row_into(f.written_effects(), output);
 }
 
 /// Emit `[pub ]<keyword> <name>[<generics>]` into `out`.
@@ -4439,29 +4413,6 @@ fn self_param_shorthand(param: &Param) -> Option<&'static str> {
     }
 }
 
-/// Emit a `with` row: one item goes bare, more than one is parenthesized.
-<<<<<<< HEAD
-/// An empty row emits nothing.
-||||||| ddccc3f760a
-pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {
-    let mut items: Vec<String> = effects.to_vec();
-    if !stores.is_empty() {
-        items.push(format!("stores[{}]", stores.join(", ")));
-    }
-    unparse_with_row_into(&items, output);
-}
-
-/// The shared row shape. `items` are the already-rendered effect names and
-/// `stores[...]` group; an empty row emits nothing.
-=======
-pub fn unparse_with_clause_into(effects: &[String], stores: &[String], output: &mut String) {
-    let mut items: Vec<String> = effects.to_vec();
-    if !stores.is_empty() {
-        items.push(format!("stores[{}]", stores.join(", ")));
-    }
-    unparse_with_row_into(&items, output);
-}
-
 /// Emit a trait head's `with` clause. An undecided head wrote none, so it
 /// emits nothing.
 pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
@@ -4469,13 +4420,12 @@ pub fn unparse_trait_head_into(head: &TraitHead, output: &mut String) {
         TraitHead::Undecided => {}
         TraitHead::Pure { .. } => output.push_str(" with ()"),
         TraitHead::Open { .. } => output.push_str(" with _"),
-        TraitHead::Fixed { effects, .. } => unparse_with_clause_into(effects, &[], output),
+        TraitHead::Fixed { effects, .. } => unparse_with_row_into(effects, output),
     }
 }
 
-/// The shared row shape. `items` are the already-rendered effect names and
-/// `stores[...]` group; an empty row emits nothing.
->>>>>>> origin/main
+/// Emit a `with` row: one item goes bare, more than one is parenthesized.
+/// An empty row emits nothing.
 pub(crate) fn unparse_with_row_into(items: &[String], output: &mut String) {
     match items {
         [] => {}

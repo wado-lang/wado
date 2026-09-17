@@ -18,13 +18,7 @@ use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
-<<<<<<< HEAD
-use crate::elaborator::sem::types::{ForOfIteratorInfo, TypeAnnotations};
-||||||| ddccc3f760a
-use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
-=======
-use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, ImplFacts, TypeAnnotations};
->>>>>>> origin/main
+use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.

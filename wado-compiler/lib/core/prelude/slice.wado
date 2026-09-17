@@ -455,16 +455,8 @@ impl<T> IntoIterator for SliceChunks<T> {
 /// Reference view over a contiguous sequence. Implemented by `Array<T>`,
 /// `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 /// carries the real bodies.
-<<<<<<< HEAD
-pub trait AsSlice: Sequence {
-    fn as_slice(&self) -> Slice<Self::Elem>;
-||||||| ddccc3f760a
-pub trait AsSlice: Sequence {
-    fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
-=======
 pub trait AsSlice: Sequence with () {
-    fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
->>>>>>> origin/main
+    fn as_slice(&self) -> Slice<Self::Elem>;
 
     /// Sub-view over `[start, end)`, clamped to this sequence.
     fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> {

@@ -1901,13 +1901,7 @@ impl Parser {
             return_type,
             effects,
             effect_ids,
-<<<<<<< HEAD
-||||||| ddccc3f760a
-            stores,
-=======
             effects_inherited: false,
-            stores,
->>>>>>> origin/main
             body,
             span,
         })
@@ -2080,17 +2074,6 @@ impl Parser {
         Some(false)
     }
 
-<<<<<<< HEAD
-    /// Parse a `with (Effect1, Effect2)` row. Every member is an effect. The
-    /// third result says the row was written bare, with no parentheses closing
-    /// it.
-    fn parse_effect_row(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, bool)> {
-||||||| ddccc3f760a
-    /// Parse a declaration's `with (Effect1, stores[a])` clause. `stores[...]`
-    /// is a row member, so it may sit at any position. Nothing follows the row
-    /// but the body or `;`, so a comma after a bare effect is a missing paren.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
-=======
     /// Record a `with _` against the signature being parsed. Outside one there
     /// is no parameter to mint, so `_` names nothing.
     fn note_effect_hole(&mut self, span: Span) -> ParseResult<()> {
@@ -2131,11 +2114,10 @@ impl Parser {
         Some(self.effect_hole_param(span))
     }
 
-    /// Parse a declaration's `with (Effect1, stores[a])` clause. `stores[...]`
-    /// is a row member, so it may sit at any position. Nothing follows the row
-    /// but the body or `;`, so a comma after a bare effect is a missing paren.
-    fn parse_with_clause(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<String>)> {
->>>>>>> origin/main
+    /// Parse a `with (Effect1, Effect2)` row. Every member is an effect. The
+    /// third result says the row was written bare, with no parentheses closing
+    /// it.
+    fn parse_effect_row(&mut self) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, bool)> {
         let Some(parenthesized) = self.open_with_row() else {
             return Ok((Vec::new(), Vec::new(), false));
         };
@@ -2149,25 +2131,7 @@ impl Parser {
             if parenthesized && self.check(&TokenKind::RParen) {
                 break;
             }
-<<<<<<< HEAD
-            let (name, span) = self.consume_ident_with_span()?;
-            effects.push(name);
-            effect_ids.push((self.alloc_ast_id(), span));
-||||||| ddccc3f760a
-            if self.check(&TokenKind::Stores) {
-                stores.extend(self.parse_stores_list()?);
-            } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
-            }
-=======
-            if self.check(&TokenKind::Stores) {
-                stores.extend(self.parse_stores_list()?);
-            } else {
-                self.consume_effect_name(&mut effects, &mut effect_ids)?;
-            }
->>>>>>> origin/main
+            self.consume_effect_name(&mut effects, &mut effect_ids)?;
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
             }
@@ -2207,156 +2171,6 @@ impl Parser {
         Err(self.error_at_span(self.peek().span, Self::MULTI_EFFECT_NEEDS_PARENS))
     }
 
-<<<<<<< HEAD
-||||||| ddccc3f760a
-    /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
-    /// Empty lists (`stores[]`) and a trailing comma are allowed for syntactic
-    /// consistency with other comma-separated lists; both are no-ops semantically.
-    fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
-        self.expect(&TokenKind::Stores)?;
-        self.expect(&TokenKind::LBracket)?;
-        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
-        self.expect(&TokenKind::RBracket)?;
-        Ok(names)
-    }
-
-    /// Parse a function type's `with (Effect1, stores[0, 1])` clause. Same row
-    /// shape as a declaration's; `stores` takes positional indices here.
-    fn parse_with_clause_for_fn_type(
-        &mut self,
-    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
-        let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new(), Vec::new()));
-        };
-
-        let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
-        let mut stores = Vec::new();
-        if parenthesized && self.check(&TokenKind::RParen) {
-            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
-        }
-        loop {
-            if parenthesized && self.check(&TokenKind::RParen) {
-                break;
-            }
-            if self.check(&TokenKind::Stores) {
-                stores.extend(self.parse_stores_list_for_fn_type()?);
-            } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
-            }
-            if !parenthesized || !self.check(&TokenKind::Comma) {
-                break;
-            }
-            self.advance();
-        }
-
-        if parenthesized {
-            self.expect(&TokenKind::RParen)?;
-        }
-        Ok((effects, effect_ids, stores))
-    }
-
-    /// Parse `stores[0, 1]` or `stores[name]` in function type position.
-    /// Empty lists and a trailing comma are allowed for syntactic consistency
-    /// with other comma-separated lists; both are no-ops semantically.
-    fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
-        self.expect(&TokenKind::Stores)?;
-        self.expect(&TokenKind::LBracket)?;
-        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
-        self.expect(&TokenKind::RBracket)?;
-        Ok(entries)
-    }
-
-    /// Parse a single stores entry: either a number (positional) or identifier (named).
-    fn parse_stores_entry(&mut self) -> ParseResult<StoresEntry> {
-        if let TokenKind::NumberLit(num) = self.peek_kind() {
-            let n = num.parse::<u32>().map_err(|_| ParseError {
-                message: "stores index must be a non-negative integer".to_string(),
-                span: self.peek().span,
-            })?;
-            self.advance();
-            Ok(StoresEntry::Index(n))
-        } else {
-            Ok(StoresEntry::Name(self.consume_ident()?))
-        }
-    }
-
-=======
-    /// Parse `stores[name1, name2]` — the `stores` keyword has already been peeked.
-    /// Empty lists (`stores[]`) and a trailing comma are allowed for syntactic
-    /// consistency with other comma-separated lists; both are no-ops semantically.
-    fn parse_stores_list(&mut self) -> ParseResult<Vec<String>> {
-        self.expect(&TokenKind::Stores)?;
-        self.expect(&TokenKind::LBracket)?;
-        let names = self.parse_comma_separated(&TokenKind::RBracket, Self::consume_ident)?;
-        self.expect(&TokenKind::RBracket)?;
-        Ok(names)
-    }
-
-    /// Parse a function type's `with (Effect1, stores[0, 1])` clause. Same row
-    /// shape as a declaration's; `stores` takes positional indices here.
-    fn parse_with_clause_for_fn_type(
-        &mut self,
-    ) -> ParseResult<(Vec<String>, Vec<(AstId, Span)>, Vec<StoresEntry>)> {
-        let Some(parenthesized) = self.open_with_row() else {
-            return Ok((Vec::new(), Vec::new(), Vec::new()));
-        };
-
-        let mut effects = Vec::new();
-        let mut effect_ids = Vec::new();
-        let mut stores = Vec::new();
-        if parenthesized && self.check(&TokenKind::RParen) {
-            return Err(self.error_at_span(self.peek().span, Self::EMPTY_EFFECT_ROW));
-        }
-        loop {
-            if parenthesized && self.check(&TokenKind::RParen) {
-                break;
-            }
-            if self.check(&TokenKind::Stores) {
-                stores.extend(self.parse_stores_list_for_fn_type()?);
-            } else {
-                self.consume_effect_name(&mut effects, &mut effect_ids)?;
-            }
-            if !parenthesized || !self.check(&TokenKind::Comma) {
-                break;
-            }
-            self.advance();
-        }
-
-        if parenthesized {
-            self.expect(&TokenKind::RParen)?;
-        }
-        Ok((effects, effect_ids, stores))
-    }
-
-    /// Parse `stores[0, 1]` or `stores[name]` in function type position.
-    /// Empty lists and a trailing comma are allowed for syntactic consistency
-    /// with other comma-separated lists; both are no-ops semantically.
-    fn parse_stores_list_for_fn_type(&mut self) -> ParseResult<Vec<StoresEntry>> {
-        self.expect(&TokenKind::Stores)?;
-        self.expect(&TokenKind::LBracket)?;
-        let entries = self.parse_comma_separated(&TokenKind::RBracket, Self::parse_stores_entry)?;
-        self.expect(&TokenKind::RBracket)?;
-        Ok(entries)
-    }
-
-    /// Parse a single stores entry: either a number (positional) or identifier (named).
-    fn parse_stores_entry(&mut self) -> ParseResult<StoresEntry> {
-        if let TokenKind::NumberLit(num) = self.peek_kind() {
-            let n = num.parse::<u32>().map_err(|_| ParseError {
-                message: "stores index must be a non-negative integer".to_string(),
-                span: self.peek().span,
-            })?;
-            self.advance();
-            Ok(StoresEntry::Index(n))
-        } else {
-            Ok(StoresEntry::Name(self.consume_ident()?))
-        }
-    }
-
->>>>>>> origin/main
     /// Consume the `;` separating this statement from the next and return the
     /// span it ends at. A closing `}` separates just as well; nothing else
     /// does — there is no ASI.

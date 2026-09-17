@@ -130,15 +130,9 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("serialize_seq_end")]`
 
-### `pub trait SerializeMap`
-||||||| ddccc3f760a
-### `pub trait SerializeMap`
-=======
 ### `pub trait SerializeMap with ()`
->>>>>>> origin/main
 
 #### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
 
@@ -154,15 +148,9 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("serialize_struct_end")]`
 
-### `pub trait SerializeVariant`
-||||||| ddccc3f760a
-### `pub trait SerializeVariant`
-=======
 ### `pub trait SerializeVariant with ()`
->>>>>>> origin/main
 
 #### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
@@ -170,15 +158,9 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("serialize_variant_end")]`
 
-### `pub trait Serializer`
-||||||| ddccc3f760a
-### `pub trait Serializer`
-=======
 ### `pub trait Serializer with ()`
->>>>>>> origin/main
 
 #### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
 
@@ -252,15 +234,9 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("deserialize_seq_end")]`
 
-### `pub trait DeserializeMap`
-||||||| ddccc3f760a
-### `pub trait DeserializeMap`
-=======
 ### `pub trait DeserializeMap with ()`
->>>>>>> origin/main
 
 #### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
 
@@ -318,15 +294,9 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("deserialize_struct_end")]`
 
-### `pub trait DeserializeVariant`
-||||||| ddccc3f760a
-### `pub trait DeserializeVariant`
-=======
 ### `pub trait DeserializeVariant with ()`
->>>>>>> origin/main
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
 
@@ -344,15 +314,9 @@ declaration order), or `null` when `rank` is out of range. Returns
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("deserialize_variant_end")]`
 
-### `pub trait Visitor`
-||||||| ddccc3f760a
-### `pub trait Visitor`
-=======
 ### `pub trait Visitor with ()`
->>>>>>> origin/main
 
 #### `fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>`
 

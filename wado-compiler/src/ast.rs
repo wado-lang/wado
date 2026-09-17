@@ -2159,17 +2159,9 @@ pub struct Function {
     /// it appeared in the `with` clause. Used by the elaborator to record
     /// use->def references for LSP jump-to-def.
     pub effect_ids: Vec<(AstId, Span)>,
-<<<<<<< HEAD
-||||||| ddccc3f760a
-    /// Parameters declared in `stores[param1, param2]` — the function may store these references.
-    pub stores: Vec<String>,
-=======
     /// Whether `effects` came from the enclosing trait's head rather than from
     /// a `with` clause here. The formatter prints what the source wrote.
     pub effects_inherited: bool,
-    /// Parameters declared in `stores[param1, param2]` — the function may store these references.
-    pub stores: Vec<String>,
->>>>>>> origin/main
     /// Function body. None indicates a compiler built-in (bodyless declaration like `pub fn foo();`)
     pub body: Option<Block>,
     pub span: Span,

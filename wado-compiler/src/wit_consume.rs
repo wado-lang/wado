@@ -291,13 +291,7 @@ impl Builder {
                 return_type,
                 effects: Vec::new(),
                 effect_ids: Vec::new(),
-<<<<<<< HEAD
-||||||| ddccc3f760a
-                stores: Vec::new(),
-=======
                 effects_inherited: false,
-                stores: Vec::new(),
->>>>>>> origin/main
                 body: None,
                 span: syn(),
             });
@@ -384,13 +378,7 @@ impl Builder {
             return_type,
             effects: Vec::new(),
             effect_ids: Vec::new(),
-<<<<<<< HEAD
-||||||| ddccc3f760a
-            stores: Vec::new(),
-=======
             effects_inherited: false,
-            stores: Vec::new(),
->>>>>>> origin/main
             body: None,
             span: syn(),
         }));

@@ -127,25 +127,7 @@ withClause
 
 withItem
     : IDENTIFIER
-<<<<<<< HEAD
-||||||| ddccc3f760a
-    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
-    ;
-
-storesItem
-    : identifier
-    | INTEGER
-    | 'self'
-=======
     | '_'
-    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
-    ;
-
-storesItem
-    : identifier
-    | INTEGER
-    | 'self'
->>>>>>> origin/main
     ;
 
 structDecl
