@@ -239,7 +239,7 @@ type "functype//core:serde/core:serde/DeserializeError::duplicate_field<core:pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(85)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(85)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(86)
 
@@ -3127,13 +3127,10 @@ fn "core:cbor/core:cbor/CborDeserializer^core:serde/Deserializer::begin_struct<&
 
 fn "core:serde/core:serde/DeserializeError::duplicate_field<core:prelude/string.wado/String>"(name) {
     let $local_1: ref "core:prelude/string.wado//String";
-    let new_used: i32;
-    let start_15: i32;
+    let $local_2: ref "core:prelude/format.wado//Formatter";
     let $sroa_other_repr: ref Array<u8>;
-    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; $sroa_other_repr = array.new_data<u8>("duplicate field: "); new_used = 0 + 17; if @unlikely(new_used > builtin::array_len($local_1.repr)) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used);
-    }; start_15 = $local_1.used; $local_1.used = new_used; builtin::array_copy<u8>($local_1.repr, start_15, $sroa_other_repr, 0, 17); "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"($local_1, name); $local_1), offset: -1_i64 };
+    let $av_34: i32;
+    return struct.new "core:serde//DeserializeError" { kind: 3, message: ref.as_non_null($local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 }; $sroa_other_repr = array.new_data<u8>("duplicate field: "); $local_1.used = 17; builtin::array_copy<u8>($local_1.repr, 0, $sroa_other_repr, 0, 17); $local_2 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1 }; "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"($local_2, $av_34 = name.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_34); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_34); $array_clone_dst_2), used: $av_34 }); $local_1), offset: -1_i64 };
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
@@ -3156,33 +3153,35 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b375: block {
-        l376: loop {
-            break_if b375 i >= digit_count_4;
+    b374: block {
+        l375: loop {
+            break_if b374 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l376;
+            continue l375;
         };
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, content) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"(self, content) {
+    let self_9: ref "core:prelude/string.wado//String";
     let n_15: i32;
     let new_used_19: i32;
     let start_20: i32;
+    self_9 = self.buf;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {
         n_15 = content.used;
         break_if $inline_core_prelude_string_wado_String__internal_push_string_2 n_15 == 0;
-        new_used_19 = self.used + n_15;
-        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
+        new_used_19 = self_9.used + n_15;
+        if @unlikely(new_used_19 > builtin::array_len(self_9.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, new_used_19);
         }
-        start_20 = self.used;
-        self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, content.repr, 0, n_15);
+        start_20 = self_9.used;
+        self_9.used = new_used_19;
+        builtin::array_copy<u8>(self_9.repr, start_20, content.repr, 0, n_15);
     };
     return;
 }

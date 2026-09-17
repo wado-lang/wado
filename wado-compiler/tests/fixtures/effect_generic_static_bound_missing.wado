@@ -1,0 +1,27 @@
+// A static method called as `T::make()` through a bound requires what the
+// trait method declares, the way an instance method through a bound does.
+use { println, Stdout } from "core:cli";
+
+trait Make with () {
+    fn make() -> i32 with Stdout;
+}
+
+struct Loud {}
+
+impl Make for Loud {
+    fn make() -> i32 with Stdout {
+        println("made");
+        return 1;
+    }
+}
+
+fn build<T: Make>() -> i32 {
+    return T::make();
+}
+
+export fn run() with Stdout {
+    println(`${build::<Loud>()}`);
+}
+
+__DATA__
+{"compile_error": "missing effect 'Stdout'"}

@@ -107,31 +107,17 @@ fn run_with_mock_counter(f: fn() with Counter) {
 }
 ```
 
-#### Single Effect Parameter Per Function
+#### `with _`
 
-A function may declare **at most one** `<effect E>` parameter. Multiple effect parameters (`<effect E1, effect E2>`) are rejected at compile time (`effect_polymorphism_multi_param_error.wado`).
+- [x] Implemented.
 
-The single-parameter form covers higher-order combinators (`map`, `fold`, `for_each`, `wrapper`, `run_both`) without effect-set subtyping or row polymorphism, because callbacks with different effect sets are unioned into one inferred `E`.
-
-The pattern that single-`E` cannot express is **effect subtraction** — a generic combinator that handles one abstract effect and propagates another:
+`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. A function that only passes its callees' effects through writes it and names nothing:
 
 ```wado
-// Hypothetical multi-param form (currently rejected):
-fn handle_one<effect E1, effect E2>(
-    f: fn() with E1, E2,
-    h: impl E1,
-) with E2 {
-    with E1 => h do { f(); }
-}
+fn wrapper(f: fn() with _) with _ { f(); }   // == fn wrapper<effect E>(f: fn() with E) with E
 ```
 
-Wado defers multi-effect parameters because:
-
-1. The built-in `with E => h do { ... }` syntax handles the concrete-effect case inline at the use site, removing the main motivation for generic handler combinators in user code.
-2. Inference shifts from "union all callable effects into one variable" to constraint solving over multiple variables, which interacts non-trivially with signature-resource inference and effect propagation.
-3. No production code in scope today (`core:*`, `wasi:*`, examples) needs effect subtraction.
-
-This is a forward-compatible restriction: existing single-`E` code continues to work unchanged if multi-effect parameters are introduced later (e.g. for `core:test` runners or dynamic middleware composition).
+The same spelling on a trait head is what opens the trait to its impls, below.
 
 ### Closure Types
 
@@ -345,19 +331,143 @@ Limitations — these require separate work and are pinned by `#![TODO]` fixture
 - Closure body effects (`effect_propagation_indirect.wado`): a closure body that uses `Stream::new()` assigned to a declared `fn() with Stdout` cannot be rescued, because the closure's signature doesn't name `Stream`. Requires effect-set propagation-closure equivalence at the closure-typing site.
 - Generic body effects (`effect_propagation_generic_body.wado`): a `<effect E>` function body that uses a concrete resource cannot be rescued by signature inference either. Requires body-effect inference + generic monomorphization.
 
+### Traits and Effects
+
+A trait head says what every impl of it may do. It has four states, and a bare head is the one nobody has decided yet:
+
+| Head                          | Every impl of it                        |
+| ----------------------------- | --------------------------------------- |
+| `trait Foo { … }`             | undecided: reads as `with _`, diagnosed |
+| `trait Foo with () { … }`     | is pure                                 |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`                   |
+| `trait Foo with _ { … }`      | brings its own effects                  |
+
+A method's own `with` clause overrides the head.
+
+"Should be pure" is a contract worth writing down, and writing nothing says something else. Every trait the standard library declares says `with ()`: an impl of one that performs I/O is a design error, for comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
+
+#### A decided head binds every impl
+
+- [x] Implemented.
+
+An impl method may not declare an effect the trait method leaves out:
+
+```wado
+trait Source with () {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    // error: effect 'Stdout' is not declared by trait method 'Source::next'
+    fn next(&mut self) -> i32 with Stdout { ... }
+}
+```
+
+`stores` is exempt: it says which reference parameters the body keeps, so each impl declares its own.
+
+An `interface` is exempt as a whole. Its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+
+#### Dispatch through a bound
+
+- [x] Implemented.
+
+A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. Each demands the effects the trait method declares.
+
+```wado
+trait Source with Stdout {
+    fn next(&mut self) -> i32;
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // `with Stdout` is required here
+    return s.next();
+}
+```
+
+The impl is not known at such a call, so the declaration is the only thing it can demand. The head is what makes that sound: it bounds every impl.
+
+Resolving the selected impl's effects at each instantiation would admit more programs, since an impl could then add an effect and still be caught where it is used. It would also break the rule that a signature is the whole contract. A call added inside `draw` could change what every caller of `draw` must declare, with nothing in `draw`'s signature to show it.
+
+#### `with _`: the impl decides
+
+- [x] Implemented.
+
+`with _` on a trait head is the same sugar as on a function, so `trait Source with _` is `trait Source<effect E> with E`. The impl's own method signatures supply the argument, and nothing new has to be named:
+
+```wado
+trait Source with _ {
+    type Item;
+    fn read(&mut self) -> Option<Self::Item>;
+}
+
+impl Source for LineReader {
+    type Item = String;
+    fn read(&mut self) -> Option<String> with FileSystem { ... }   // E = FileSystem
+}
+```
+
+A bound leaves the argument free, or passes one to constrain it. A caller that only forwards writes `with _` and names nothing:
+
+```wado
+fn count<S: Source>(s: S) -> i32 with _ { ... }            // as effectful as `s`
+fn sum<S: Source with ()>(s: S) -> i32 { ... }             // only a pure source
+```
+
+A type implements a trait once, so two impls differing only in the effect argument are rejected. That is what keeps the argument an output of the impl rather than a choice made at the call.
+
+The parameter is resolved where the call names the type: `count(lines)` demands what `impl Source for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it. `with _` says "as effectful as `S`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
+
+A rigid dispatch is the case that does not resolve. In `fn count<S: Source>(s: S)` the body's `s.read()` has no impl to read, since `S` is a type parameter, so the hole survives and `count` forwards it. That is why every trait in the standard library and in the test corpus declares its head. A bare one would push a `with _` onto each of its callers.
+
+#### An undecided head
+
+- [x] Reads as `with _`, and is diagnosed.
+
+A bare head is not neutral. It reads as `with _`, so it publishes an open contract, and deciding it later is a breaking change: a downstream `with _` that forwarded the trait's effects has nothing left to forward once the head says `with ()`.
+
+So the compiler says the head is undecided, at the severity the trait's visibility calls for. A file-private or `internal` trait gets a remark, which is the state a trait is in while it is being written. A `pub` or `export` trait gets a warning, because publishing an undecided contract is the defect. Both are waived per declaration or per module with `allow`, the way `shadowed_name` is, and only user-authored modules are diagnosed.
+
+So nobody has to predict a trait's effects on the day they write it, and nobody publishes one without saying.
+
 ### Handlers
 
 See [WEP: Effect Handler](./wep-2026-04-11-effect-handler.md) for the full handler design including syntax, resume semantics, MockCM, handler bundling, and testing patterns.
 
-### Relation to `stores`
+### Relation to Reference Escape
 
-The `stores` annotation shares syntax with effects:
+Every `with` row member is an effect. What a function does with its reference
+parameters is not one and is never written in the row: an effect is authority a
+caller grants and a handler can intercept, while retaining a reference grants
+nothing and only tells the compiler what it may stop doing to an argument. See
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+
+## Roadmap
+
+The trait head is in.
+
+## Known gaps
+
+### An effect argument on a bound
+
+Constraining an open trait's effect argument at the bound does not parse yet, so `fn sum<S: Source with ()>(s: S)` is rejected. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
+
+### How deep an open head resolves
+
+A hole is filled from the impl the call names: a free call reads its type arguments, a method dispatch reads its receiver, and a receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Past that depth, and for a receiver naming no impl this phase indexed, the parameter survives and the caller forwards it with `with _`. That is sound, and more than the impl would have demanded.
+
+### One effect parameter per function
+
+A function may declare at most one `<effect E>`. More than one is rejected today (`effect_polymorphism_multi_param_error.wado`), which blocks effect subtraction: a combinator that handles one abstract effect and forwards another.
 
 ```wado
-fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
-    // ...
+// Rejected today:
+fn handle_one<effect E1, effect E2>(f: fn() with E1, E2, h: impl E1) with E2 {
+    with E1 => h do { f(); }
 }
 ```
+
+Nothing in the design turns on the restriction. Inference has to move from unioning every callable effect into one variable to solving over several, which interacts with signature-resource inference, and no code in scope needs it yet. Existing single-`E` code is unaffected whenever it is lifted.
+
+Note that `with _` mints a parameter, so a function cannot write `with _` and declare its own `<effect E>` until this is lifted.
 
 ## Consequences
 

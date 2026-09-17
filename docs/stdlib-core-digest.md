@@ -52,7 +52,7 @@ The one-shot counterpart to [`hmac`], as [`sha256`] is to [`Sha256`].
 
 ## Traits
 
-### `pub trait Digest`
+### `pub trait Digest with ()`
 
 A streaming message-digest algorithm.
 

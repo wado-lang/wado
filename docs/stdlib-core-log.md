@@ -62,6 +62,8 @@ The process-wide threshold set by [`set_log_level`].
 
 ### `pub fn enabled(level: Level) -> bool`
 
+`#[ambient]`
+
 The three tiers, cheapest first, each narrowing what the one before
 admitted. Exposed as a predicate too, for guarding fields too expensive to
 build:
@@ -74,6 +76,8 @@ if enabled(Level::Debug) {
 
 ### `pub fn event<T: Serialize = NoFields>(level: Level, message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
+`#[ambient]`
+
 Emit an event at a level a caller computes. The level wrappers' three gates
 apply here too; only tier 1 comes out weaker, since a level that is not a
 literal is not a comparison the optimizer can fold. Location defaults
@@ -81,21 +85,37 @@ resolve at the call site.
 
 ### `pub fn trace<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
+`#[ambient]`
+
 ### `pub fn debug<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
+
+`#[ambient]`
 
 ### `pub fn info<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
+`#[ambient]`
+
 ### `pub fn warn<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
+
+`#[ambient]`
 
 ### `pub fn error<T: Serialize = NoFields>(message: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line)`
 
+`#[ambient]`
+
 ### `pub fn span<T: Serialize = NoFields>(level: Level, name: String, fields: T = NoFields {}, target: String = #function, file: String = #file, line: i32 = #line) -> Span`
 
+`#[ambient]`
+
 ### `pub fn current() -> Option<Span>`
+
+`#[ambient]`
 
 The innermost entered span, or `null` outside any.
 
 ### `pub fn in_span<T, effect E>(s: &Span, mut body: fn mut() -> T with E) -> T with E`
+
+`#[ambient]`
 
 Run `body` inside `s`. A closure can't skip the exit/close calls, so they
 run on every body exit path, an early `return` included.
@@ -110,7 +130,7 @@ variable must not stop a program from starting.
 
 ## Traits
 
-### `pub trait Clock`
+### `pub trait Clock with ()`
 
 How a sink stamps an event with a time, or declines to. `None` is no stamp.
 
@@ -247,6 +267,8 @@ declared on them.
 #### `impl Clock for WallClock`
 
 ##### `fn now() -> Option<String>`
+
+`#[ambient]`
 
 ### `pub struct TextSink<C: Clock = NoClock>`
 

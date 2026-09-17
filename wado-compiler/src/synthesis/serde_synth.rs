@@ -496,7 +496,7 @@ fn field_schema_method_fn(
         return_type,
         task_return_type: None,
         effects: Vec::new(),
-        stores: vec![],
+        retains: vec![],
         body: Some(block(body)),
         span,
         local_count,

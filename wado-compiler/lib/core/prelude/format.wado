@@ -96,7 +96,7 @@ impl Formatter {
 
     /// Create a Formatter with the default spec, writing into the given buffer.
     #[compiler_item("formatter_new")]
-    pub fn new(buf: &mut String) -> Formatter with stores[buf] {
+    pub fn new(buf: &mut String) -> Formatter {
         return Formatter {
             fill: ' ',
             align: Alignment::Right,
@@ -421,7 +421,7 @@ impl Display for String {
 /// A trait (not an inherent `impl String`, which the coherence rules forbid on a
 /// foreign type) and placed here, not in string.wado, so `String` stays a leaf
 /// that `Formatter` depends on — mirroring `impl Display for String` above.
-pub trait PushDisplay {
+pub trait PushDisplay with () {
     fn push_display<T: Display>(&mut self, value: &T);
 }
 

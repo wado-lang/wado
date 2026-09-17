@@ -168,7 +168,6 @@ fn "shadowed_name_arm_binder_is_not_a_reference.wado/run"() with Stdout {
     let opt_20: ref "core:prelude/types.wado//Option<i32>";
     let v: i32;
     let x_23: i32;
-    let opt_24: ref "core:prelude/types.wado//Option<i32>";
     let total_26: i32;
     let sum: i32;
     let handle: i32;
@@ -189,9 +188,11 @@ condition: derived(&Option::<i32>::Some(5)) == 6
 "), used: 50 }, 50); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_13 + 50, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Option::<i32>::Some(5): "), used: 24 }, 24); $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8); "core:prelude/traits.wado/core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: $v0_0 }, $local_9); $fuse_at_14 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 26); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_14, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_14 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("&Option::<i32>::Some(5): "), used: 25 }, 25); $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8); "core:prelude/format.wado/&core:prelude/types.wado/Option<i32>^core:prelude/traits.wado/Inspect::inspect"($v1_1, $local_9); $fuse_at_15 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_8, 35); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_15, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_8.repr, $fuse_at_15 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("derived(&Option::<i32>::Some(5)): "), used: 34 }, 34); $local_9 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_8); "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: x_23 }, $local_9); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_8, global:shadowed_name_arm_binder_is_not_a_reference.wado::$const_obj_5); $local_8);
         unreachable;
     }
-    opt_24 = $v1_5 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null($v0_4 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }; $v0_4) }; $v1_5.value;
-    sum = (if ref.test "core:prelude/types.wado//Option<i32>::Some"(opt_24) -> i32 {
-        local.tee total_26(ref.cast "core:prelude/types.wado//Option<i32>::Some"(opt_24).payload_0);
+    $v1_5 = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: ref.as_non_null($v0_4 = struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 3 }; $v0_4) };
+    let $match_scrut_1: ref "core:prelude/types.wado//Option<i32>";
+    $match_scrut_1 = $v1_5.value;
+    sum = (if ref.test "core:prelude/types.wado//Option<i32>::Some"($match_scrut_1) -> i32 {
+        local.tee total_26(ref.cast "core:prelude/types.wado//Option<i32>::Some"($match_scrut_1).payload_0);
     } else {
         0;
     });

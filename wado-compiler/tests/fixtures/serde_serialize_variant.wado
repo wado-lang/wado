@@ -5,21 +5,21 @@ struct SerializeError {
     message: String,
 }
 
-trait Serialize {
+trait Serialize with () {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>;
 }
 
-trait SerializeVariant {
+trait SerializeVariant with () {
     fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>;
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
-trait Serializer {
+trait Serializer with () {
     type VariantSerializer: SerializeVariant;
 
     fn serialize_f64(&mut self, v: f64) -> Result<(), SerializeError>;
     fn serialize_unit_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<(), SerializeError>;
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self];
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>;
 }
 
 // Sub-serializer holds `&mut JsonSerializer` so writes flow back to the
@@ -45,7 +45,7 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> with stores[self] {
+    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<JsonVariantSerializer, SerializeError> {
         self.buf.push_str(&("{\"" + *variant_name + "\"" + ":"));
         return Result::<JsonVariantSerializer, SerializeError>::Ok(JsonVariantSerializer {
             ser: self,

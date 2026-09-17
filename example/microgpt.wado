@@ -104,72 +104,72 @@ impl Graph {
         return self.nodes.len();
     }
 
-    fn value(&mut self, data: f64, children: List<&mut Value>, local_grads: List<f64>) -> &mut Value with stores[self] {
+    fn value(&mut self, data: f64, children: List<&mut Value>, local_grads: List<f64>) -> &mut Value {
         self.nodes.push(Value { id: self.nodes.len(), data, grad: 0.0, children, local_grads });
         return &mut self.nodes[self.nodes.len() - 1];
     }
 
-    fn leaf(&mut self, data: f64) -> &mut Value with stores[self] {
+    fn leaf(&mut self, data: f64) -> &mut Value {
         return self.value(data, [], []);
     }
 
-    fn add(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+    fn add(&mut self, a: &mut Value, b: &mut Value) -> &mut Value {
         return self.value(a.data + b.data, [a, b], [1.0, 1.0]);
     }
 
-    fn mul(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+    fn mul(&mut self, a: &mut Value, b: &mut Value) -> &mut Value {
         return self.value(a.data * b.data, [a, b], [b.data, a.data]);
     }
 
-    fn pow(&mut self, a: &mut Value, p: f64) -> &mut Value with stores[self, a] {
+    fn pow(&mut self, a: &mut Value, p: f64) -> &mut Value {
         return self.value(f64::pow(a.data, p), [a], [p * f64::pow(a.data, p - 1.0)]);
     }
 
-    fn log(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+    fn log(&mut self, a: &mut Value) -> &mut Value {
         return self.value(f64::ln(a.data), [a], [1.0 / a.data]);
     }
 
-    fn exp(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+    fn exp(&mut self, a: &mut Value) -> &mut Value {
         return self.value(f64::exp(a.data), [a], [f64::exp(a.data)]);
     }
 
-    fn relu(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+    fn relu(&mut self, a: &mut Value) -> &mut Value {
         let slope = if a.data > 0.0 { 1.0 } else { 0.0 };
         return self.value(f64::max(0.0, a.data), [a], [slope]);
     }
 
     // Python's operators wrap a bare number in a `Value` first, so the graph
     // carries a leaf for every constant. These keep that shape.
-    fn add_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+    fn add_num(&mut self, a: &mut Value, c: f64) -> &mut Value {
         let n = self.leaf(c);
         return self.add(a, n);
     }
 
-    fn mul_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+    fn mul_num(&mut self, a: &mut Value, c: f64) -> &mut Value {
         let n = self.leaf(c);
         return self.mul(a, n);
     }
 
-    fn sub_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+    fn sub_num(&mut self, a: &mut Value, c: f64) -> &mut Value {
         return self.add_num(a, -c);
     }
 
-    fn neg(&mut self, a: &mut Value) -> &mut Value with stores[self, a] {
+    fn neg(&mut self, a: &mut Value) -> &mut Value {
         return self.mul_num(a, -1.0);
     }
 
     // `a / b` is `a * b**-1`, as `__truediv__` has it.
-    fn div(&mut self, a: &mut Value, b: &mut Value) -> &mut Value with stores[self, a, b] {
+    fn div(&mut self, a: &mut Value, b: &mut Value) -> &mut Value {
         let inv = self.pow(b, -1.0);
         return self.mul(a, inv);
     }
 
-    fn div_num(&mut self, a: &mut Value, c: f64) -> &mut Value with stores[self, a] {
+    fn div_num(&mut self, a: &mut Value, c: f64) -> &mut Value {
         return self.mul_num(a, f64::pow(c, -1.0));
     }
 
     // `sum(xs)` starts at 0, so Python's graph carries that leaf too.
-    fn sum(&mut self, xs: &List<&mut Value>) -> &mut Value with stores[self, xs] {
+    fn sum(&mut self, xs: &List<&mut Value>) -> &mut Value {
         let mut acc = self.leaf(0.0);
         for let mut i = 0; i < xs.len(); i += 1 {
             acc = self.add(acc, xs[i]);
@@ -183,7 +183,7 @@ impl Graph {
     }
 }
 
-fn build_topo(v: &mut Value, visited: &mut List<bool>, topo: &mut List<&mut Value>) with stores[v] {
+fn build_topo(v: &mut Value, visited: &mut List<bool>, topo: &mut List<&mut Value>) {
     if visited[v.id] {
         return;
     }
@@ -194,7 +194,7 @@ fn build_topo(v: &mut Value, visited: &mut List<bool>, topo: &mut List<&mut Valu
     topo.push(v);
 }
 
-fn backward(root: &mut Value, node_count: i32) with stores[root] {
+fn backward(root: &mut Value, node_count: i32) {
     let mut topo: List<&mut Value> = [];
     let mut visited = List::<bool>::filled(node_count, false);
     build_topo(root, &mut visited, &mut topo);
@@ -257,7 +257,7 @@ global BLOCK_SIZE: i32 = 16;
 global N_HEAD: i32 = 4;
 global HEAD_DIM: i32 = N_EMBD / N_HEAD;
 
-fn matrix(g: &mut Graph, rng: &mut Rng, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> with stores[g] {
+fn matrix(g: &mut Graph, rng: &mut Rng, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> {
     let mut rows: List<List<&mut Value>> = [];
     for let _ of 0..<nout {
         let mut row: List<&mut Value> = [];
@@ -287,7 +287,7 @@ struct StateDict {
 }
 
 impl StateDict {
-    fn new(g: &mut Graph, rng: &mut Rng, vocab_size: i32) -> StateDict with stores[g] {
+    fn new(g: &mut Graph, rng: &mut Rng, vocab_size: i32) -> StateDict {
         let wte = matrix(g, rng, vocab_size, N_EMBD);
         let wpe = matrix(g, rng, BLOCK_SIZE, N_EMBD);
         let lm_head = matrix(g, rng, vocab_size, N_EMBD);
@@ -306,7 +306,7 @@ impl StateDict {
     }
 
     // Flatten every matrix into a single list of parameters.
-    fn params(&self) -> List<&mut Value> with stores[self] {
+    fn params(&self) -> List<&mut Value> {
         let mut out: List<&mut Value> = [];
         flatten_into(&mut out, &self.wte);
         flatten_into(&mut out, &self.wpe);
@@ -324,7 +324,7 @@ impl StateDict {
     }
 }
 
-fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) with stores[m] {
+fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) {
     for let mut r = 0; r < m.len(); r += 1 {
         let row = &m[r];
         for let mut c = 0; c < row.len(); c += 1 {
@@ -336,7 +336,7 @@ fn flatten_into(out: &mut List<&mut Value>, m: &List<List<&mut Value>>) with sto
 // Define the model architecture: a function mapping tokens and parameters to
 // logits over what comes next. Follow GPT-2, blessed among the GPTs, with minor
 // differences: layernorm -> rmsnorm, no biases, GeLU -> ReLU.
-fn linear(g: &mut Graph, x: &List<&mut Value>, w: &List<List<&mut Value>>) -> List<&mut Value> with stores[g, x, w] {
+fn linear(g: &mut Graph, x: &List<&mut Value>, w: &List<List<&mut Value>>) -> List<&mut Value> {
     let mut out: List<&mut Value> = [];
     for let mut o = 0; o < w.len(); o += 1 {
         let row = &w[o];
@@ -346,7 +346,7 @@ fn linear(g: &mut Graph, x: &List<&mut Value>, w: &List<List<&mut Value>>) -> Li
     return out;
 }
 
-fn softmax(g: &mut Graph, logits: &List<&mut Value>) -> List<&mut Value> with stores[g, logits] {
+fn softmax(g: &mut Graph, logits: &List<&mut Value>) -> List<&mut Value> {
     let max_val = logits.into_iter().fold(f64::NEG_INFINITY, |acc, val| f64::max(acc, val.data));
     let exps: List<&mut Value> = (0..<logits.len()).into_iter().map(|i| {
         let shifted = g.sub_num(logits[i], max_val);
@@ -356,7 +356,7 @@ fn softmax(g: &mut Graph, logits: &List<&mut Value>) -> List<&mut Value> with st
     return (0..<exps.len()).into_iter().map(|i| g.div(exps[i], total)).collect();
 }
 
-fn rmsnorm(g: &mut Graph, x: &List<&mut Value>) -> List<&mut Value> with stores[g, x] {
+fn rmsnorm(g: &mut Graph, x: &List<&mut Value>) -> List<&mut Value> {
     let squares: List<&mut Value> = (0..<x.len()).into_iter().map(|i| g.mul(x[i], x[i])).collect();
     let sum_sq = g.sum(&squares);
     let ms = g.div_num(sum_sq, x.len() as f64);
@@ -365,7 +365,7 @@ fn rmsnorm(g: &mut Graph, x: &List<&mut Value>) -> List<&mut Value> with stores[
     return (0..<x.len()).into_iter().map(|i| g.mul(x[i], scale)).collect();
 }
 
-fn add_vec(g: &mut Graph, a: &List<&mut Value>, b: &List<&mut Value>) -> List<&mut Value> with stores[g, a, b] {
+fn add_vec(g: &mut Graph, a: &List<&mut Value>, b: &List<&mut Value>) -> List<&mut Value> {
     assert a.len() == b.len();
     return (0..<a.len()).into_iter().map(|i| g.add(a[i], b[i])).collect();
 }
@@ -377,7 +377,7 @@ fn gpt(
     pos_id: i32,
     keys: &mut List<List<List<&mut Value>>>,
     values: &mut List<List<List<&mut Value>>>,
-) -> List<&mut Value> with stores[g, state, keys, values] {
+) -> List<&mut Value> {
     let tok_emb = &state.wte[token_id];
     let pos_emb = &state.wpe[pos_id];
     let mut x = add_vec(g, tok_emb, pos_emb);
@@ -441,7 +441,7 @@ fn empty_cache() -> List<List<List<&mut Value>>> {
 
 // Forward the token sequence through the model, building up the computation
 // graph all the way to the loss.
-fn forward_loss(g: &mut Graph, state: &StateDict, tokens: &List<i32>) -> &mut Value with stores[g, state] {
+fn forward_loss(g: &mut Graph, state: &StateDict, tokens: &List<i32>) -> &mut Value {
     let n = i32::min(BLOCK_SIZE, tokens.len() - 1);
     let mut keys = empty_cache();
     let mut values = empty_cache();
@@ -497,13 +497,7 @@ global TEMPERATURE: f64 = 0.5;
 global NUM_SAMPLES: i32 = 20;
 
 // Repeat in sequence.
-fn train(
-    g: &mut Graph,
-    state: &StateDict,
-    tok: &Tokenizer,
-    docs: &List<String>,
-    num_steps: i32,
-) with (Stdout, stores[g, state]) {
+fn train(g: &mut Graph, state: &StateDict, tok: &Tokenizer, docs: &List<String>, num_steps: i32) with Stdout {
     let n_params = g.len();
     let mut params = state.params();
     let mut adam = Adam::new(params.len());
@@ -527,7 +521,7 @@ fn train(
 }
 
 // Inference: may the model babble back to us.
-fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String with stores[g, state] {
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String {
     let n_params = g.len();
     let mut keys = empty_cache();
     let mut values = empty_cache();
@@ -550,7 +544,7 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) ->
 }
 
 fn parse_docs(text: &String) -> List<String> {
-    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
+    return text.lines().map(|line| line.trim().to_string()).filter(|doc| !doc.is_empty()).collect();
 }
 
 // Let there be a Dataset `docs`: a list of documents, here a list of names.

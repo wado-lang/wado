@@ -177,53 +177,53 @@ fn "opt_promote_early_context_free.wado/run"() with Stdout {
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
     let $fuse_at_7: i32;
-    let self_11: ref "core:prelude/string.wado//String";
-    let other_12: ref "core:prelude/string.wado//String";
+    let self_12: ref "core:prelude/string.wado//String";
+    let other_13: ref "core:prelude/string.wado//String";
     let result: ref "core:prelude/string.wado//String";
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
-    let len_22: i32;
-    let i_23: i32;
+    let len_23: i32;
+    let i_24: i32;
     let handle: i32;
     let packed: i64;
-    let rx_30: i32;
-    let tx_31: i32;
+    let rx_31: i32;
+    let tx_32: i32;
     out = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     i_2 = 0;
     b0: block {
         l1: loop {
             break_if b0 i_2 >= 4;
-            self_11 = out;
-            other_12 = "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes$spec0"(global:opt_promote_early_context_free.wado::$const_obj_7, i_2, i_2 + 2);
-            result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_11.used + other_12.used), used: 0 };
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, self_11);
-            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, other_12);
+            self_12 = out;
+            other_13 = "core:prelude/string.wado/core:prelude/string.wado/String::substr_bytes$spec0"(global:opt_promote_early_context_free.wado::$const_obj_7, i_2, i_2 + 2);
+            result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_12.used + other_13.used), used: 0 };
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, self_12);
+            "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result, other_13);
             out = result;
             i_2 = i_2 + 1;
             continue l1;
         };
     };
-    $cond = $inline_core_prelude_array_wado_seq_eq_u8__4: block -> bool {
+    $cond = $inline_core_prelude_array_wado_seq_eq_u8__5: block -> bool {
         a = out.repr;
         a_end = out.used;
         b = global:opt_promote_early_context_free.wado::$const_obj_6;
-        len_22 = a_end - 0;
-        if len_22 != 8 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+        len_23 = a_end - 0;
+        if len_23 != 8 {
+            break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
         }
-        i_23 = 0;
+        i_24 = 0;
         b3: block {
             l4: loop {
-                break_if b3 i_23 >= len_22;
-                if builtin::array_get_value<u8>(a, 0 + i_23) != builtin::array_get_value<u8>(b, 0 + i_23) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__4: 0;
+                break_if b3 i_24 >= len_23;
+                if builtin::array_get_value<u8>(a, 0 + i_24) != builtin::array_get_value<u8>(b, 0 + i_24) {
+                    break $inline_core_prelude_array_wado_seq_eq_u8__5: 0;
                 }
-                i_23 = i_23 + 1;
+                i_24 = i_24 + 1;
                 continue l4;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__4: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__5: 1;
     };
     if @unlikely($cond == 0) {
         cold_path;
@@ -232,10 +232,10 @@ condition: out == \"abbccdde\"
 "), used: 30 }, 30); "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4_4.repr, $fuse_at_7 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("out: "), used: 5 }, 5); $local_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4_4); "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(out, $local_5); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_4_4, global:opt_promote_early_context_free.wado::$const_obj_5); $local_4_4);
         unreachable;
     }
-    rx_30 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_31 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "opt_promote_early_context_free.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
-    "core:rt/write_string_to_stream"(tx_31, out);
+    rx_31 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_32 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "opt_promote_early_context_free.wado/$cm_binding__Stdout_write_via_stream"(rx_31);
+    "core:rt/write_string_to_stream"(tx_32, out);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

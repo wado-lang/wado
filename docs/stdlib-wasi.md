@@ -11,6 +11,8 @@
 
 ##### `fn get_environment() -> List<[String, String]>`
 
+`#[cm("wasi:cli/environment@0.3.0#get-environment")]`
+
 Get the POSIX-style environment variables.
 
 Each environment variable is provided as a pair of string variable names
@@ -22,9 +24,13 @@ values each time it is called.
 
 ##### `fn get_arguments() -> List<String>`
 
+`#[cm("wasi:cli/environment@0.3.0#get-arguments")]`
+
 Get the POSIX-style arguments to the program.
 
 ##### `fn get_initial_cwd() -> Option<String>`
+
+`#[cm("wasi:cli/environment@0.3.0#get-initial-cwd")]`
 
 Return a path that programs should use as their initial current working
 directory, interpreting `.` as shorthand for this.
@@ -33,9 +39,13 @@ directory, interpreting `.` as shorthand for this.
 
 ##### `fn exit(status: Result<(), ()>)`
 
+`#[cm("wasi:cli/exit@0.3.0#exit")]` `#[cm_params("status")]`
+
 Exit the current instance and any linked instances.
 
 ##### `fn exit_with_code(status_code: u8)`
+
+`#[cm("wasi:cli/exit@0.3.0#exit-with-code")]` `#[cm_params("status-code")]`
 
 Exit the current instance and any linked instances, reporting the
 specified status code to the host.
@@ -50,11 +60,15 @@ without the connotation that something bad has happened.
 
 ##### `async fn run() -> AsyncCall<Result<(), ()>>`
 
+`#[cm("wasi:cli/run@0.3.0#run")]`
+
 Run the program.
 
 #### `pub interface Stdin`
 
 ##### `fn read_via_stream() -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:cli/stdin@0.3.0#read-via-stream")]`
 
 Return a stream for reading from stdin.
 
@@ -74,6 +88,8 @@ reads is implementation-specific.
 
 ##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
+`#[cm("wasi:cli/stdout@0.3.0#write-via-stream")]` `#[cm_params("data")]`
+
 Write the given stream to stdout.
 
 If the stream's writable end is dropped this function will either return
@@ -86,6 +102,8 @@ dropped and this function will return an error-code.
 #### `pub interface Stderr`
 
 ##### `fn write_via_stream(data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
+
+`#[cm("wasi:cli/stderr@0.3.0#write-via-stream")]` `#[cm_params("data")]`
 
 Write the given stream to stderr.
 
@@ -103,6 +121,8 @@ link-time authority.
 
 ##### `fn get_terminal_stdin() -> Option<TerminalInput>`
 
+`#[cm("wasi:cli/terminal-stdin@0.3.0#get-terminal-stdin")]`
+
 If stdin is connected to a terminal, return a `terminal-input` handle
 allowing further interaction with it.
 
@@ -113,6 +133,8 @@ link-time authority.
 
 ##### `fn get_terminal_stdout() -> Option<TerminalOutput>`
 
+`#[cm("wasi:cli/terminal-stdout@0.3.0#get-terminal-stdout")]`
+
 If stdout is connected to a terminal, return a `terminal-output` handle
 allowing further interaction with it.
 
@@ -122,6 +144,8 @@ An interface providing an optional `terminal-output` for stderr as a
 link-time authority.
 
 ##### `fn get_terminal_stderr() -> Option<TerminalOutput>`
+
+`#[cm("wasi:cli/terminal-stderr@0.3.0#get-terminal-stderr")]`
 
 If stderr is connected to a terminal, return a `terminal-output` handle
 allowing further interaction with it.
@@ -160,6 +184,8 @@ Broken pipe
 
 ##### `fn get_directories() -> List<[Descriptor, String]>`
 
+`#[cm("wasi:filesystem/preopens@0.3.0#get-directories")]`
+
 Return the set of preopened directories, and their paths.
 
 ### Resources
@@ -171,6 +197,8 @@ directory, named pipe, special file, or other object on which filesystem
 calls may be made.
 
 ##### `fn read_via_stream(&self, offset: Filesize) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.read-via-stream")]` `#[cm_params("self", "offset")]`
 
 Return a stream for reading from a file.
 
@@ -191,6 +219,8 @@ Note: This is similar to `pread` in POSIX.
 
 ##### `fn write_via_stream(&self, data: Stream<u8>, offset: Filesize) -> Future<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.write-via-stream")]` `#[cm_params("self", "data", "offset")]`
+
 Return a stream for writing to a file, if available.
 
 May fail with an error-code describing why the file cannot be written.
@@ -206,6 +236,8 @@ Note: This is similar to `pwrite` in POSIX.
 
 ##### `fn append_via_stream(&self, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.append-via-stream")]` `#[cm_params("self", "data")]`
+
 Return a stream for appending to a file, if available.
 
 May fail with an error-code describing why the file cannot be appended.
@@ -217,11 +249,15 @@ Note: This is similar to `write` with `O_APPEND` in POSIX.
 
 ##### `async fn advise(&self, offset: Filesize, length: Filesize, advice: Advice) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.advise")]` `#[cm_params("self", "offset", "length", "advice")]`
+
 Provide file advisory information on a descriptor.
 
 This is similar to `posix_fadvise` in POSIX.
 
 ##### `async fn sync_data(&self) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.sync-data")]` `#[cm_params("self")]`
 
 Synchronize the data of a file to disk.
 
@@ -232,6 +268,8 @@ Note: This is similar to `fdatasync` in POSIX.
 
 ##### `async fn get_flags(&self) -> AsyncCall<Result<DescriptorFlags, ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.get-flags")]` `#[cm_params("self")]`
+
 Get flags associated with a descriptor.
 
 Note: This returns similar flags to `fcntl(fd, F_GETFL)` in POSIX.
@@ -240,6 +278,8 @@ Note: This returns the value that was the `fs_flags` value returned
 from `fdstat_get` in earlier versions of WASI.
 
 ##### `async fn get_type(&self) -> AsyncCall<Result<DescriptorType, ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.get-type")]` `#[cm_params("self")]`
 
 Get the dynamic type of a descriptor.
 
@@ -254,12 +294,16 @@ from `fdstat_get` in earlier versions of WASI.
 
 ##### `async fn set_size(&self, size: Filesize) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.set-size")]` `#[cm_params("self", "size")]`
+
 Adjust the size of an open file. If this increases the file's size, the
 extra bytes are filled with zeros.
 
 Note: This was called `fd_filestat_set_size` in earlier versions of WASI.
 
 ##### `async fn set_times(&self, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.set-times")]` `#[cm_params("self", "data-access-timestamp", "data-modification-timestamp")]`
 
 Adjust the timestamps of an open file or directory.
 
@@ -268,6 +312,8 @@ Note: This is similar to `futimens` in POSIX.
 Note: This was called `fd_filestat_set_times` in earlier versions of WASI.
 
 ##### `fn read_directory(&self) -> [Stream<DirectoryEntry>, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.read-directory")]` `#[cm_params("self")]`
 
 Read directory entries from a directory.
 
@@ -284,6 +330,8 @@ reading full contents of the directory fails.
 
 ##### `async fn sync(&self) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.sync")]` `#[cm_params("self")]`
+
 Synchronize the data and metadata of a file to disk.
 
 This function succeeds with no effect if the file descriptor is not
@@ -293,11 +341,15 @@ Note: This is similar to `fsync` in POSIX.
 
 ##### `async fn create_directory_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.create-directory-at")]` `#[cm_params("self", "path")]`
+
 Create a directory.
 
 Note: This is similar to `mkdirat` in POSIX.
 
 ##### `async fn stat(&self) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.stat")]` `#[cm_params("self")]`
 
 Return the attributes of an open file or directory.
 
@@ -311,6 +363,8 @@ Note: This was called `fd_filestat_get` in earlier versions of WASI.
 
 ##### `async fn stat_at(&self, path_flags: PathFlags, path: String) -> AsyncCall<Result<DescriptorStat, ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.stat-at")]` `#[cm_params("self", "path-flags", "path")]`
+
 Return the attributes of a file or directory.
 
 Note: This is similar to `fstatat` in POSIX, except that it does not
@@ -321,6 +375,8 @@ Note: This was called `path_filestat_get` in earlier versions of WASI.
 
 ##### `async fn set_times_at(&self, path_flags: PathFlags, path: String, data_access_timestamp: NewTimestamp, data_modification_timestamp: NewTimestamp) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.set-times-at")]` `#[cm_params("self", "path-flags", "path", "data-access-timestamp", "data-modification-timestamp")]`
+
 Adjust the timestamps of a file or directory.
 
 Note: This is similar to `utimensat` in POSIX.
@@ -329,6 +385,8 @@ Note: This was called `path_filestat_set_times` in earlier versions of
 WASI.
 
 ##### `async fn link_at(&self, old_path_flags: PathFlags, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.link-at")]` `#[cm_params("self", "old-path-flags", "old-path", "new-descriptor", "new-path")]`
 
 Create a hard link.
 
@@ -339,6 +397,8 @@ with `error-code::exist` if the new path already exists, and
 Note: This is similar to `linkat` in POSIX.
 
 ##### `async fn open_at(&self, path_flags: PathFlags, path: String, open_flags: OpenFlags, flags: DescriptorFlags) -> AsyncCall<Result<Descriptor, ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.open-at")]` `#[cm_params("self", "path-flags", "path", "open-flags", "flags")]`
 
 Open a file or directory.
 
@@ -355,6 +415,8 @@ Note: This is similar to `openat` in POSIX.
 
 ##### `async fn readlink_at(&self, path: String) -> AsyncCall<Result<String, ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.readlink-at")]` `#[cm_params("self", "path")]`
+
 Read the contents of a symbolic link.
 
 If the contents contain an absolute or rooted path in the underlying
@@ -364,6 +426,8 @@ Note: This is similar to `readlinkat` in POSIX.
 
 ##### `async fn remove_directory_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.remove-directory-at")]` `#[cm_params("self", "path")]`
+
 Remove a directory.
 
 Return `error-code::not-empty` if the directory is not empty.
@@ -372,11 +436,15 @@ Note: This is similar to `unlinkat(fd, path, AT_REMOVEDIR)` in POSIX.
 
 ##### `async fn rename_at(&self, old_path: String, new_descriptor: &Descriptor, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.rename-at")]` `#[cm_params("self", "old-path", "new-descriptor", "new-path")]`
+
 Rename a filesystem object.
 
 Note: This is similar to `renameat` in POSIX.
 
 ##### `async fn symlink_at(&self, old_path: String, new_path: String) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.symlink-at")]` `#[cm_params("self", "old-path", "new-path")]`
 
 Create a symbolic link (also known as a "symlink").
 
@@ -386,6 +454,8 @@ If `old-path` starts with `/`, the function fails with
 Note: This is similar to `symlinkat` in POSIX.
 
 ##### `async fn unlink_file_at(&self, path: String) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.unlink-file-at")]` `#[cm_params("self", "path")]`
 
 Unlink a filesystem object that is not a directory.
 
@@ -399,6 +469,8 @@ POSIX-specified `error-code::not-permitted`.
 
 ##### `async fn is_same_object(&self, other: &Descriptor) -> AsyncCall<bool>`
 
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.is-same-object")]` `#[cm_params("self", "other")]`
+
 Test whether two descriptors refer to the same filesystem object.
 
 In POSIX, this corresponds to testing whether the two descriptors have the
@@ -407,6 +479,8 @@ wasi-filesystem does not expose device and inode numbers, so this function
 may be used instead.
 
 ##### `async fn metadata_hash(&self) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.metadata-hash")]` `#[cm_params("self")]`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a descriptor.
@@ -429,6 +503,8 @@ Implementations are encouraged to provide the following properties:
 However, none of these is required.
 
 ##### `async fn metadata_hash_at(&self, path_flags: PathFlags, path: String) -> AsyncCall<Result<MetadataHashValue, ErrorCode>>`
+
+`#[cm("wasi:filesystem/types@0.3.0#[method]descriptor.metadata-hash-at")]` `#[cm_params("self", "path-flags", "path")]`
 
 Return a hash of the metadata associated with a filesystem object referred
 to by a directory descriptor and a relative path.
@@ -861,6 +937,8 @@ the "downstream" and "upstream" directions of the middleware chain.
 
 ##### `async fn handle(request: Request) -> AsyncCall<Result<Response, ErrorCode>>`
 
+`#[cm("wasi:http/handler@0.3.0#handle")]` `#[cm_params("request")]`
+
 This function may be called with either an incoming request read from the
 network or a request synthesized or forwarded by another component.
 
@@ -878,6 +956,8 @@ instances of the same interface. A `client.send` import may be linked
 directly to a `handler.handle` export to bypass the network.
 
 ##### `async fn send(request: Request) -> AsyncCall<Result<Response, ErrorCode>>`
+
+`#[cm("wasi:http/client@0.3.0#send")]` `#[cm_params("request")]`
 
 This function may be used to either send an outgoing request over the
 network or to forward it to another component.
@@ -908,11 +988,15 @@ fail with `header-error.size-exceeded`
 
 ##### `fn new() -> Fields`
 
+`#[cm("wasi:http/types@0.3.0#[constructor]fields")]`
+
 Construct an empty HTTP Fields.
 
 The resulting `fields` is mutable.
 
 ##### `fn from_list(entries: List<[FieldName, FieldValue]>) -> Result<Fields, HeaderError>`
+
+`#[cm("wasi:http/types@0.3.0#[static]fields.from-list")]` `#[cm_params("entries")]`
 
 Construct an HTTP Fields.
 
@@ -933,6 +1017,8 @@ entries would exceed an implementation size limit.
 
 ##### `fn get(&self, name: FieldName) -> List<FieldValue>`
 
+`#[cm("wasi:http/types@0.3.0#[method]fields.get")]` `#[cm_params("self", "name")]`
+
 Get all of the values corresponding to a name. If the name is not present
 in this `fields`, an empty list is returned. However, if the name is
 present but empty, this is represented by a list with one or more
@@ -940,10 +1026,14 @@ empty field-values present.
 
 ##### `fn has(&self, name: FieldName) -> bool`
 
+`#[cm("wasi:http/types@0.3.0#[method]fields.has")]` `#[cm_params("self", "name")]`
+
 Returns `true` when the name is present in this `fields`. If the name is
 syntactically invalid, `false` is returned.
 
 ##### `fn set(&self, name: FieldName, value: List<FieldValue>) -> Result<(), HeaderError>`
+
+`#[cm("wasi:http/types@0.3.0#[method]fields.set")]` `#[cm_params("self", "name", "value")]`
 
 Set all of the values for a name. Clears any existing values for that
 name, if they have been set.
@@ -955,12 +1045,16 @@ exceed an implementation-defined size limit.
 
 ##### `fn delete(&self, name: FieldName) -> Result<(), HeaderError>`
 
+`#[cm("wasi:http/types@0.3.0#[method]fields.delete")]` `#[cm_params("self", "name")]`
+
 Delete all values for a name. Does nothing if no values for the name
 exist.
 
 Fails with `header-error.immutable` if the `fields` are immutable.
 
 ##### `fn get_and_delete(&self, name: FieldName) -> Result<List<FieldValue>, HeaderError>`
+
+`#[cm("wasi:http/types@0.3.0#[method]fields.get-and-delete")]` `#[cm_params("self", "name")]`
 
 Delete all values for a name. Does nothing if no values for the name
 exist.
@@ -971,6 +1065,8 @@ Fails with `header-error.immutable` if the `fields` are immutable.
 
 ##### `fn append(&self, name: FieldName, value: FieldValue) -> Result<(), HeaderError>`
 
+`#[cm("wasi:http/types@0.3.0#[method]fields.append")]` `#[cm_params("self", "name", "value")]`
+
 Append a value for a name. Does not change or delete any existing
 values for that name.
 
@@ -980,6 +1076,8 @@ Fails with `header-error.size-exceeded` if the value would exceed
 an implementation-defined size limit.
 
 ##### `fn copy_all(&self) -> List<[FieldName, FieldValue]>`
+
+`#[cm("wasi:http/types@0.3.0#[method]fields.copy-all")]` `#[cm_params("self")]`
 
 Retrieve the full set of names and values in the Fields. Like the
 constructor, the list represents each name-value pair.
@@ -993,6 +1091,8 @@ the order in which they will be serialized for transport.
 
 ##### `fn clone(&self) -> Fields`
 
+`#[cm("wasi:http/types@0.3.0#[method]fields.clone")]` `#[cm_params("self")]`
+
 Make a deep copy of the Fields. Equivalent in behavior to calling the
 `fields` constructor on the return value of `copy-all`. The resulting
 `fields` is mutable.
@@ -1002,6 +1102,8 @@ Make a deep copy of the Fields. Equivalent in behavior to calling the
 Represents an HTTP Request.
 
 ##### `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>, options: Option<RequestOptions>) -> [Request, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:http/types@0.3.0#[static]request.new")]` `#[cm_params("headers", "contents", "trailers", "options")]`
 
 Construct a new `request` with a default `method` of `GET`, and
 `none` values for `path-with-query`, `scheme`, and `authority`.
@@ -1027,19 +1129,27 @@ The returned future resolves to result of transmission of this request.
 
 ##### `fn get_method(&self) -> Method`
 
+`#[cm("wasi:http/types@0.3.0#[method]request.get-method")]` `#[cm_params("self")]`
+
 Get the Method for the Request.
 
 ##### `fn set_method(&self, method: Method) -> Result<(), ()>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request.set-method")]` `#[cm_params("self", "method")]`
 
 Set the Method for the Request. Fails if the string present in a
 `method.other` argument is not a syntactically valid method.
 
 ##### `fn get_path_with_query(&self) -> Option<String>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request.get-path-with-query")]` `#[cm_params("self")]`
+
 Get the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query.
 
 ##### `fn set_path_with_query(&self, path_with_query: Option<String>) -> Result<(), ()>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request.set-path-with-query")]` `#[cm_params("self", "path-with-query")]`
 
 Set the combination of the HTTP Path and Query for the Request. When
 `none`, this represents an empty Path and empty Query. Fails is the
@@ -1047,10 +1157,14 @@ string given is not a syntactically valid path and query uri component.
 
 ##### `fn get_scheme(&self) -> Option<Scheme>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request.get-scheme")]` `#[cm_params("self")]`
+
 Get the HTTP Related Scheme for the Request. When `none`, the
 implementation may choose an appropriate default scheme.
 
 ##### `fn set_scheme(&self, scheme: Option<Scheme>) -> Result<(), ()>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request.set-scheme")]` `#[cm_params("self", "scheme")]`
 
 Set the HTTP Related Scheme for the Request. When `none`, the
 implementation may choose an appropriate default scheme. Fails if the
@@ -1058,11 +1172,15 @@ string given is not a syntactically valid uri scheme.
 
 ##### `fn get_authority(&self) -> Option<String>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request.get-authority")]` `#[cm_params("self")]`
+
 Get the authority of the Request's target URI. A value of `none` may be used
 with Related Schemes which do not require an authority. The HTTP and
 HTTPS schemes always require an authority.
 
 ##### `fn set_authority(&self, authority: Option<String>) -> Result<(), ()>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request.set-authority")]` `#[cm_params("self", "authority")]`
 
 Set the authority of the Request's target URI. A value of `none` may be used
 with Related Schemes which do not require an authority. The HTTP and
@@ -1070,6 +1188,8 @@ HTTPS schemes always require an authority. Fails if the string given is
 not a syntactically valid URI authority.
 
 ##### `fn get_options(&self) -> Option<RequestOptions>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request.get-options")]` `#[cm_params("self")]`
 
 Get the `request-options` to be associated with this request
 
@@ -1082,12 +1202,16 @@ another component by e.g. `handler.handle`.
 
 ##### `fn get_headers(&self) -> Headers`
 
+`#[cm("wasi:http/types@0.3.0#[method]request.get-headers")]` `#[cm_params("self")]`
+
 Get the headers associated with the Request.
 
 The returned `headers` resource is immutable: `set`, `append`, and
 `delete` operations will fail with `header-error.immutable`.
 
 ##### `fn consume_body(this: Request, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
+
+`#[cm("wasi:http/types@0.3.0#[static]request.consume-body")]` `#[cm_params("this", "res")]`
 
 Get body of the Request.
 
@@ -1113,13 +1237,19 @@ asynchronous call.
 
 ##### `fn new() -> RequestOptions`
 
+`#[cm("wasi:http/types@0.3.0#[constructor]request-options")]`
+
 Construct a default `request-options` value.
 
 ##### `fn get_connect_timeout(&self) -> Option<Duration>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request-options.get-connect-timeout")]` `#[cm_params("self")]`
+
 The timeout for the initial connect to the HTTP Server.
 
 ##### `fn set_connect_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request-options.set-connect-timeout")]` `#[cm_params("self", "duration")]`
 
 Set the timeout for the initial connect to the HTTP Server. An error
 return value indicates that this timeout is not supported or that this
@@ -1127,9 +1257,13 @@ handle is immutable.
 
 ##### `fn get_first_byte_timeout(&self) -> Option<Duration>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request-options.get-first-byte-timeout")]` `#[cm_params("self")]`
+
 The timeout for receiving the first byte of the Response body.
 
 ##### `fn set_first_byte_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request-options.set-first-byte-timeout")]` `#[cm_params("self", "duration")]`
 
 Set the timeout for receiving the first byte of the Response body. An
 error return value indicates that this timeout is not supported or that
@@ -1137,16 +1271,22 @@ this handle is immutable.
 
 ##### `fn get_between_bytes_timeout(&self) -> Option<Duration>`
 
+`#[cm("wasi:http/types@0.3.0#[method]request-options.get-between-bytes-timeout")]` `#[cm_params("self")]`
+
 The timeout for receiving subsequent chunks of bytes in the Response
 body stream.
 
 ##### `fn set_between_bytes_timeout(&self, duration: Option<Duration>) -> Result<(), RequestOptionsError>`
+
+`#[cm("wasi:http/types@0.3.0#[method]request-options.set-between-bytes-timeout")]` `#[cm_params("self", "duration")]`
 
 Set the timeout for receiving subsequent chunks of bytes in the Response
 body stream. An error return value indicates that this timeout is not
 supported or that this handle is immutable.
 
 ##### `fn clone(&self) -> RequestOptions`
+
+`#[cm("wasi:http/types@0.3.0#[method]request-options.clone")]` `#[cm_params("self")]`
 
 Make a deep copy of the `request-options`.
 The resulting `request-options` is mutable.
@@ -1156,6 +1296,8 @@ The resulting `request-options` is mutable.
 Represents an HTTP Response.
 
 ##### `fn new(headers: Headers, contents: Option<Stream<u8>>, trailers: Future<Result<Option<Trailers>, ErrorCode>>) -> [Response, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:http/types@0.3.0#[static]response.new")]` `#[cm_params("headers", "contents", "trailers")]`
 
 Construct a new `response`, with a default `status-code` of `200`.
 If a different `status-code` is needed, it must be set via the
@@ -1173,14 +1315,20 @@ The returned future resolves to result of transmission of this response.
 
 ##### `fn get_status_code(&self) -> StatusCode`
 
+`#[cm("wasi:http/types@0.3.0#[method]response.get-status-code")]` `#[cm_params("self")]`
+
 Get the HTTP Status Code for the Response.
 
 ##### `fn set_status_code(&self, status_code: StatusCode) -> Result<(), ()>`
+
+`#[cm("wasi:http/types@0.3.0#[method]response.set-status-code")]` `#[cm_params("self", "status-code")]`
 
 Set the HTTP Status Code for the Response. Fails if the status-code
 given is not a valid http status code.
 
 ##### `fn get_headers(&self) -> Headers`
+
+`#[cm("wasi:http/types@0.3.0#[method]response.get-headers")]` `#[cm_params("self")]`
 
 Get the headers associated with the Response.
 
@@ -1188,6 +1336,8 @@ The returned `headers` resource is immutable: `set`, `append`, and
 `delete` operations will fail with `header-error.immutable`.
 
 ##### `fn consume_body(this: Response, res: Future<Result<(), ErrorCode>>) -> [Stream<u8>, Future<Result<Option<Trailers>, ErrorCode>>]`
+
+`#[cm("wasi:http/types@0.3.0#[static]response.consume-body")]` `#[cm_params("this", "res")]`
 
 Get body of the Response.
 
@@ -1442,6 +1592,8 @@ successive reads of the clock will produce non-decreasing values.
 
 ##### `fn now() -> Mark`
 
+`#[cm("wasi:clocks/monotonic-clock@0.3.0#now")]`
+
 Read the current value of the clock.
 
 The clock is monotonic, therefore calling this function repeatedly will
@@ -1454,14 +1606,20 @@ possibility of overflow in practice.
 
 ##### `fn get_resolution() -> Duration`
 
+`#[cm("wasi:clocks/monotonic-clock@0.3.0#get-resolution")]`
+
 Query the resolution of the clock. Returns the duration of time
 corresponding to a clock tick.
 
 ##### `async fn wait_until(when: Mark) -> AsyncCall<()>`
 
+`#[cm("wasi:clocks/monotonic-clock@0.3.0#wait-until")]` `#[cm_params("when")]`
+
 Wait until the specified mark has occurred.
 
 ##### `async fn wait_for(how_long: Duration) -> AsyncCall<()>`
+
+`#[cm("wasi:clocks/monotonic-clock@0.3.0#wait-for")]` `#[cm_params("how-long")]`
 
 Wait for the specified duration to elapse.
 
@@ -1480,6 +1638,8 @@ It is intended for reporting the current date and time for humans.
 
 ##### `fn now() -> Instant`
 
+`#[cm("wasi:clocks/system-clock@0.3.0#now")]`
+
 Read the current value of the clock.
 
 This clock is not monotonic, therefore calling this function repeatedly
@@ -1489,12 +1649,16 @@ The nanoseconds field of the output is always less than 1000000000.
 
 ##### `fn get_resolution() -> Duration`
 
+`#[cm("wasi:clocks/system-clock@0.3.0#get-resolution")]`
+
 Query the resolution of the clock. Returns the smallest duration of time
 that the implementation permits distinguishing.
 
 #### `pub interface Timezone`
 
 ##### `fn iana_id() -> Option<String>`
+
+`#[cm("wasi:clocks/timezone@0.3.0#iana-id")]`
 
 Return the IANA identifier of the currently configured timezone. This
 should be an identifier from the IANA Time Zone Database.
@@ -1508,6 +1672,8 @@ and UTC, or determining the current timezone fails, or the timezone does
 not have an IANA identifier, this returns nothing.
 
 ##### `fn utc_offset(when: Instant) -> Option<i64>`
+
+`#[cm("wasi:clocks/timezone@0.3.0#utc-offset")]` `#[cm_params("when")]`
 
 The number of nanoseconds difference between UTC time and the local
 time of the currently configured timezone, at the exact time of
@@ -1523,6 +1689,8 @@ and UTC, or determining the current timezone fails, this returns
 nothing.
 
 ##### `fn to_debug_string() -> String`
+
+`#[cm("wasi:clocks/timezone@0.3.0#to-debug-string")]`
 
 Returns a string that is suitable to assist humans in debugging whether
 any timezone is available, and if so, which. This may be the same string
@@ -1577,6 +1745,8 @@ Windows.
 
 ##### `fn get_insecure_seed() -> [u64, u64]`
 
+`#[cm("wasi:random/insecure-seed@0.3.0#get-insecure-seed")]`
+
 Return a 128-bit value that may contain a pseudo-random value.
 
 The returned value is not required to be computed from a CSPRNG, and may
@@ -1604,6 +1774,8 @@ Windows.
 
 ##### `fn get_insecure_random_bytes(max_len: u64) -> List<u8>`
 
+`#[cm("wasi:random/insecure@0.3.0#get-insecure-random-bytes")]` `#[cm_params("max-len")]`
+
 Return up to `max-len` insecure pseudo-random bytes.
 
 This function is not cryptographically secure. Do not use it for
@@ -1622,6 +1794,8 @@ list without trapping.
 
 ##### `fn get_insecure_random_u64() -> u64`
 
+`#[cm("wasi:random/insecure@0.3.0#get-insecure-random-u64")]`
+
 Return an insecure pseudo-random `u64` value.
 
 This function returns the same type of pseudo-random data as
@@ -1635,6 +1809,8 @@ It is intended to be portable at least between Unix-family platforms and
 Windows.
 
 ##### `fn get_random_bytes(max_len: u64) -> List<u8>`
+
+`#[cm("wasi:random/random@0.3.0#get-random-bytes")]` `#[cm_params("max-len")]`
 
 Return up to `max-len` cryptographically-secure random or pseudo-random
 bytes.
@@ -1659,6 +1835,8 @@ data.
 
 ##### `fn get_random_u64() -> u64`
 
+`#[cm("wasi:random/random@0.3.0#get-random-u64")]`
+
 Return a cryptographically-secure random or pseudo-random `u64` value.
 
 This function returns the same type of data as `get-random-bytes`,
@@ -1671,6 +1849,8 @@ represented as a `u64`.
 #### `pub interface IpNameLookup`
 
 ##### `async fn resolve_addresses(name: String) -> AsyncCall<Result<List<IpAddress>, ErrorCode>>`
+
+`#[cm("wasi:sockets/ip-name-lookup@0.3.0#resolve-addresses")]` `#[cm_params("name")]`
 
 Resolve an internet host name to a list of IP addresses.
 
@@ -1734,6 +1914,8 @@ In addition to the general error codes documented on the
 
 ##### `fn create(address_family: IpAddressFamily) -> Result<TcpSocket, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[static]tcp-socket.create")]` `#[cm_params("address-family")]`
+
 Create a new TCP socket.
 
 Similar to `socket(AF_INET or AF_INET6, SOCK_STREAM, IPPROTO_TCP)`
@@ -1756,6 +1938,8 @@ async support.
 - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
 
 ##### `fn bind(&self, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.bind")]` `#[cm_params("self", "local-address")]`
 
 Bind the socket to the provided IP address and port.
 
@@ -1796,6 +1980,8 @@ behavior and SO_REUSEADDR performs something different.
 
 ##### `async fn connect(&self, remote_address: IpSocketAddress) -> AsyncCall<Result<(), ErrorCode>>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.connect")]` `#[cm_params("self", "remote-address")]`
+
 Connect to a remote endpoint.
 
 On success, the socket is transitioned into the `connected` state
@@ -1834,6 +2020,8 @@ socket can not be used to connect more than once.
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
 ##### `fn listen(&self) -> Result<Stream<TcpSocket>, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.listen")]` `#[cm_params("self")]`
 
 Start listening and return a stream of new inbound connections.
 
@@ -1913,6 +2101,8 @@ the bind itself if the guest hasn't already done so.
 
 ##### `fn send(&self, data: Stream<u8>) -> Future<Result<(), ErrorCode>>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.send")]` `#[cm_params("self", "data")]`
+
 Transmit data to peer.
 
 The caller should close the stream when it has no more data to send
@@ -1939,6 +2129,8 @@ contents of the stream are transmitted or an error is encountered.
 - <https://man.freebsd.org/cgi/man.cgi?query=send&sektion=2>
 
 ##### `fn receive(&self) -> [Stream<u8>, Future<Result<(), ErrorCode>>]`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.receive")]` `#[cm_params("self")]`
 
 Read data from peer.
 
@@ -1973,6 +2165,8 @@ in POSIX.
 
 ##### `fn get_local_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-local-address")]` `#[cm_params("self")]`
+
 Get the bound local address.
 
 POSIX mentions:
@@ -1996,6 +2190,8 @@ WASI is stricter and requires `get-local-address` to return
 
 ##### `fn get_remote_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-remote-address")]` `#[cm_params("self")]`
+
 Get the remote address.
 
 # Typical errors
@@ -2011,11 +2207,15 @@ Get the remote address.
 
 ##### `fn get_is_listening(&self) -> bool`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-is-listening")]` `#[cm_params("self")]`
+
 Whether the socket is in the `listening` state.
 
 Equivalent to the SO_ACCEPTCONN socket option.
 
 ##### `fn get_address_family(&self) -> IpAddressFamily`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-address-family")]` `#[cm_params("self")]`
 
 Whether this is a IPv4 or IPv6 socket.
 
@@ -2024,6 +2224,8 @@ This is the value passed to the constructor.
 Equivalent to the SO_DOMAIN socket option.
 
 ##### `fn set_listen_backlog_size(&self, value: u64) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-listen-backlog-size")]` `#[cm_params("self", "value")]`
 
 Hints the desired listen queue size. Implementations are free to
 ignore this.
@@ -2040,6 +2242,8 @@ clamped and/or rounded.
 
 ##### `fn get_keep_alive_enabled(&self) -> Result<bool, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-keep-alive-enabled")]` `#[cm_params("self")]`
+
 Enables or disables keepalive.
 
 The keepalive behavior can be adjusted using:
@@ -2054,7 +2258,11 @@ Equivalent to the SO_KEEPALIVE socket option.
 
 ##### `fn set_keep_alive_enabled(&self, value: bool) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-keep-alive-enabled")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_keep_alive_idle_time(&self) -> Result<Duration, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-keep-alive-idle-time")]` `#[cm_params("self")]`
 
 Amount of time the connection has to be idle before TCP starts
 sending keepalive packets.
@@ -2072,7 +2280,11 @@ Equivalent to the TCP_KEEPIDLE socket option. (TCP_KEEPALIVE on MacOS)
 
 ##### `fn set_keep_alive_idle_time(&self, value: Duration) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-keep-alive-idle-time")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_keep_alive_interval(&self) -> Result<Duration, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-keep-alive-interval")]` `#[cm_params("self")]`
 
 The time between keepalive packets.
 
@@ -2089,7 +2301,11 @@ Equivalent to the TCP_KEEPINTVL socket option.
 
 ##### `fn set_keep_alive_interval(&self, value: Duration) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-keep-alive-interval")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_keep_alive_count(&self) -> Result<u32, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-keep-alive-count")]` `#[cm_params("self")]`
 
 The maximum amount of keepalive packets TCP should send before
 aborting the connection.
@@ -2107,7 +2323,11 @@ Equivalent to the TCP_KEEPCNT socket option.
 
 ##### `fn set_keep_alive_count(&self, value: u32) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-keep-alive-count")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_hop_limit(&self) -> Result<u8, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-hop-limit")]` `#[cm_params("self")]`
 
 Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 
@@ -2119,7 +2339,11 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 ##### `fn set_hop_limit(&self, value: u8) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-hop-limit")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_receive_buffer_size(&self) -> Result<u64, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-receive-buffer-size")]` `#[cm_params("self")]`
 
 Kernel buffer space reserved for sending/receiving on this socket.
 Implementations usually treat this as a cap the buffer can grow to,
@@ -2146,15 +2370,23 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 ##### `fn set_receive_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-receive-buffer-size")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_send_buffer_size(&self) -> Result<u64, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.get-send-buffer-size")]` `#[cm_params("self")]`
+
 ##### `fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]tcp-socket.set-send-buffer-size")]` `#[cm_params("self", "value")]`
 
 #### `pub resource UdpSocket`
 
 A UDP socket handle.
 
 ##### `fn create(address_family: IpAddressFamily) -> Result<UdpSocket, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[static]udp-socket.create")]` `#[cm_params("address-family")]`
 
 Create a new UDP socket.
 
@@ -2174,6 +2406,8 @@ async support.
 - <https://man.freebsd.org/cgi/man.cgi?query=socket&sektion=2>
 
 ##### `fn bind(&self, local_address: IpSocketAddress) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.bind")]` `#[cm_params("self", "local-address")]`
 
 Bind the socket to the provided IP address and port.
 
@@ -2198,6 +2432,8 @@ free port.
 - <https://man.freebsd.org/cgi/man.cgi?query=bind&sektion=2&format=html>
 
 ##### `fn connect(&self, remote_address: IpSocketAddress) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.connect")]` `#[cm_params("self", "remote-address")]`
 
 Associate this socket with a specific peer address.
 
@@ -2242,6 +2478,8 @@ require a disconnect before connecting to a different peer address.
 
 ##### `fn disconnect(&self) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.disconnect")]` `#[cm_params("self")]`
+
 Dissociate this socket from its peer address.
 
 After calling this method, `send` & `receive` are free to communicate
@@ -2261,6 +2499,8 @@ The POSIX equivalent of this is calling `connect` with an `AF_UNSPEC` address.
 - <https://man.freebsd.org/cgi/man.cgi?connect>
 
 ##### `async fn send(&self, data: List<u8>, remote_address: Option<IpSocketAddress>) -> AsyncCall<Result<(), ErrorCode>>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.send")]` `#[cm_params("self", "data", "remote-address")]`
 
 Send a message on the socket to a particular peer.
 
@@ -2310,6 +2550,8 @@ already done so.
 
 ##### `async fn receive(&self) -> AsyncCall<Result<[List<u8>, IpSocketAddress], ErrorCode>>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.receive")]` `#[cm_params("self")]`
+
 Receive a message on the socket.
 
 On success, the return value contains a tuple of the received data
@@ -2338,6 +2580,8 @@ match the remote address passed to `connect`.
 
 ##### `fn get_local_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-local-address")]` `#[cm_params("self")]`
+
 Get the current bound address.
 
 POSIX mentions:
@@ -2361,6 +2605,8 @@ WASI is stricter and requires `get-local-address` to return
 
 ##### `fn get_remote_address(&self) -> Result<IpSocketAddress, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-remote-address")]` `#[cm_params("self")]`
+
 Get the address the socket is currently "connected" to.
 
 # Typical errors
@@ -2376,6 +2622,8 @@ Get the address the socket is currently "connected" to.
 
 ##### `fn get_address_family(&self) -> IpAddressFamily`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-address-family")]` `#[cm_params("self")]`
+
 Whether this is a IPv4 or IPv6 socket.
 
 This is the value passed to the constructor.
@@ -2383,6 +2631,8 @@ This is the value passed to the constructor.
 Equivalent to the SO_DOMAIN socket option.
 
 ##### `fn get_unicast_hop_limit(&self) -> Result<u8, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-unicast-hop-limit")]` `#[cm_params("self")]`
 
 Equivalent to the IP_TTL & IPV6_UNICAST_HOPS socket options.
 
@@ -2394,7 +2644,11 @@ If the provided value is 0, an `invalid-argument` error is returned.
 
 ##### `fn set_unicast_hop_limit(&self, value: u8) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.set-unicast-hop-limit")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_receive_buffer_size(&self) -> Result<u64, ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-receive-buffer-size")]` `#[cm_params("self")]`
 
 Kernel buffer space reserved for sending/receiving on this socket.
 Implementations usually treat this as a cap the buffer can grow to,
@@ -2413,9 +2667,15 @@ Equivalent to the SO_RCVBUF and SO_SNDBUF socket options.
 
 ##### `fn set_receive_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.set-receive-buffer-size")]` `#[cm_params("self", "value")]`
+
 ##### `fn get_send_buffer_size(&self) -> Result<u64, ErrorCode>`
 
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.get-send-buffer-size")]` `#[cm_params("self")]`
+
 ##### `fn set_send_buffer_size(&self, value: u64) -> Result<(), ErrorCode>`
+
+`#[cm("wasi:sockets/types@0.3.0#[method]udp-socket.set-send-buffer-size")]` `#[cm_params("self", "value")]`
 
 ### Types
 
@@ -2632,11 +2892,17 @@ Similar to `AF_INET6` in POSIX.
 
 ##### `fn to_debug_string(&self) -> String`
 
+`#[cm("wasi:tls/types@0.3.0-draft#[method]error.to-debug-string")]` `#[cm_params("self")]`
+
 #### `pub resource Connector`
 
 ##### `fn new() -> Connector`
 
+`#[cm("wasi:tls/client@0.3.0-draft#[constructor]connector")]`
+
 ##### `fn send(&self, cleartext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
+
+`#[cm("wasi:tls/client@0.3.0-draft#[method]connector.send")]` `#[cm_params("self", "cleartext")]`
 
 Set up the encryption stream transform.
 This takes an unprotected `cleartext` application data stream and
@@ -2645,11 +2911,15 @@ Closing the `cleartext` stream will cause a `close_notify` packet to be emitted 
 
 ##### `fn receive(&self, ciphertext: Stream<u8>) -> [Stream<u8>, Future<Result<(), Error>>]`
 
+`#[cm("wasi:tls/client@0.3.0-draft#[method]connector.receive")]` `#[cm_params("self", "ciphertext")]`
+
 Set up the decryption stream transform.
 This takes an encrypted data stream, as received via e.g. the network,
 and returns a decrypted application data stream.
 
 ##### `async fn connect(this: Connector, server_name: String) -> AsyncCall<Result<(), Error>>`
+
+`#[cm("wasi:tls/client@0.3.0-draft#[static]connector.connect")]` `#[cm_params("this", "server-name")]`
 
 Perform the handshake.
 The `send` & `receive` streams must be set up before calling this method.

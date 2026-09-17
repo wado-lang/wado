@@ -296,6 +296,33 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// Field name of the `index`-th environment slot on a closure functor
+/// (`$capture_0`, `$capture_1`, …).
+#[must_use]
+pub fn closure_capture_field(index: u32) -> String {
+    format!("{INTERNAL_PREFIX}capture_{index}")
+}
+
+/// Display name of a capture read through the `&mut` box a mutating closure
+/// holds, where the slot rather than the binding names the read.
+#[must_use]
+pub fn deref_capture_name(index: u32) -> String {
+    format!("{INTERNAL_PREFIX}deref_cap_{index}")
+}
+
+/// The `&mut` proxy an owning frame binds for a binding a closure writes.
+#[must_use]
+pub fn mut_capture_ref_name(var_name: &str) -> String {
+    format!("{INTERNAL_PREFIX}ref_{var_name}")
+}
+
+/// Local holding one flattened field of a variant-return slot. `slot_local`
+/// trails verbatim, so a source name and a minted one cannot collide.
+#[must_use]
+pub fn variant_return_field_local(field_name: &str, slot_local: &str) -> String {
+    format!("{INTERNAL_PREFIX}vr_{field_name}_{slot_local}")
+}
+
 /// The label a block no `break` names carries: `what` says which construct put
 /// the block there, `id` makes it unique within the body.
 #[must_use]
@@ -1586,8 +1613,8 @@ pub enum TypeNameInfo {
         /// reads two ways — the effects on the inner type or on the outer — so
         /// a function-typed return is parenthesised and the two spellings part.
         return_is_function: bool,
-        /// `with (...)` members: the effects, then any `stores[i]`. Always
-        /// parenthesised, so a single member cannot run into what follows it.
+        /// `with (...)` members: the effects. Always parenthesised, so a
+        /// single member cannot run into what follows it.
         with_clause: Vec<String>,
         is_mut: bool,
     },
@@ -1861,15 +1888,6 @@ pub fn mangle_fn_type(
 #[must_use]
 pub fn is_fn_type_name(name: &str) -> bool {
     name.starts_with("fn(") || name.starts_with("fn mut(")
-}
-
-/// A `stores[...]` member of a `with` clause, by parameter position.
-///
-/// The type carries positions where source writes parameter names; a mangle is
-/// never read back, so the position is what it spells.
-#[must_use]
-pub fn mangle_stores_member(param_index: u32) -> String {
-    format!("stores[{param_index}]")
 }
 
 /// Build an Option type name from inner type name.

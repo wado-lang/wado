@@ -122,13 +122,17 @@ else the type's `name_policy` applies, else identity.
 
 ## Traits
 
-### `pub trait SerializeSeq`
+### `pub trait SerializeSeq with ()`
 
 #### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_seq_element")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeMap`
+`#[compiler_item("serialize_seq_end")]`
+
+### `pub trait SerializeMap with ()`
 
 #### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
 
@@ -136,19 +140,27 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeStruct`
+### `pub trait SerializeStruct with ()`
 
 #### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_struct_field")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait SerializeVariant`
+`#[compiler_item("serialize_struct_end")]`
+
+### `pub trait SerializeVariant with ()`
 
 #### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
 
+`#[compiler_item("serialize_variant_payload")]`
+
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
-### `pub trait Serializer`
+`#[compiler_item("serialize_variant_end")]`
+
+### `pub trait Serializer with ()`
 
 #### `fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError>`
 
@@ -192,27 +204,39 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn serialize_null(&mut self) -> Result<(), SerializeError>`
 
-#### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError> with stores[self]`
+#### `fn begin_seq(&mut self, len: i32) -> Result<Self::SeqSerializer, SerializeError>`
 
-#### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError> with stores[self]`
+`#[compiler_item("serializer_begin_seq")]`
 
-#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
+#### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>`
+
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
+
+`#[compiler_item("serializer_begin_struct")]`
 
 #### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-#### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
+`#[compiler_item("serializer_serialize_unit_variant")]`
 
-### `pub trait Serialize`
+#### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
+
+`#[compiler_item("serializer_begin_variant")]`
+
+### `pub trait Serialize with ()`
 
 #### `fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError>`
 
-### `pub trait DeserializeSeq`
+### `pub trait DeserializeSeq with ()`
 
 #### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
 
+`#[compiler_item("deserialize_seq_next_element")]`
+
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait DeserializeMap`
+`#[compiler_item("deserialize_seq_end")]`
+
+### `pub trait DeserializeMap with ()`
 
 #### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
 
@@ -220,7 +244,7 @@ with no distinct byte-string form keeps working unchanged.
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait FieldSchema`
+### `pub trait FieldSchema with ()`
 
 Static, per-type, format-agnostic field-name → index mapping.
 
@@ -254,29 +278,45 @@ Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
 
-### `pub trait DeserializeStruct`
+### `pub trait DeserializeStruct with ()`
 
 #### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
 
+`#[compiler_item("deserialize_struct_next_field")]`
+
 #### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+`#[compiler_item("deserialize_struct_value")]`
 
 #### `fn skip(&mut self) -> Result<(), DeserializeError>`
 
+`#[compiler_item("deserialize_struct_skip")]`
+
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait DeserializeVariant`
+`#[compiler_item("deserialize_struct_end")]`
+
+### `pub trait DeserializeVariant with ()`
 
 #### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
 
+`#[compiler_item("deserialize_variant_variant_name")]`
+
 #### `fn disc(&mut self) -> Result<i32, DeserializeError>`
 
+`#[compiler_item("deserialize_variant_disc")]`
+
 #### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+`#[compiler_item("deserialize_variant_payload")]`
 
 #### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
 
 #### `fn end(&mut self) -> Result<(), DeserializeError>`
 
-### `pub trait Visitor`
+`#[compiler_item("deserialize_variant_end")]`
+
+### `pub trait Visitor with ()`
 
 #### `fn visit_null(&mut self) -> Result<Self::Value, DeserializeError>`
 
@@ -320,7 +360,7 @@ The CBOR `undefined` simple value (major 7, value 23). Distinct from
 arm. The default collapses it to `null` so visitors that do not model
 the distinction (e.g. JSON) keep working.
 
-### `pub trait Deserializer`
+### `pub trait Deserializer with ()`
 
 #### `fn deserialize_i32(&mut self) -> Result<i32, DeserializeError>`
 
@@ -355,17 +395,23 @@ byte string; JSON reads base64. The default reads a sequence of `u8`.
 
 What this format does when the wire repeats a field or key.
 
-#### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError> with stores[self]`
+#### `fn begin_seq(&mut self) -> Result<Self::SeqAccess, DeserializeError>`
 
-#### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError> with stores[self]`
+`#[compiler_item("deserializer_begin_seq")]`
 
-#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
+#### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
 
-#### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
+
+`#[compiler_item("deserializer_begin_struct")]`
+
+#### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
+
+`#[compiler_item("deserializer_begin_variant")]`
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 
-### `pub trait Deserialize`
+### `pub trait Deserialize with ()`
 
 #### `fn deserialize<D: Deserializer>(d: &mut D) -> Result<Self, DeserializeError>`
 

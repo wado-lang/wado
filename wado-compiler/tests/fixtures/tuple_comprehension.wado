@@ -1,7 +1,7 @@
 // `[for let v of tuple { expr }]` — one result element per source element,
 // unrolled once the pack is concrete (WEP 2026-03-14 §8b).
 
-trait Doubled {
+trait Doubled with () {
     fn doubled(&self) -> Self;
 }
 
@@ -17,7 +17,7 @@ impl Doubled for String {
     }
 }
 
-trait DoubleAll {
+trait DoubleAll with () {
     fn double_all(&self) -> Self;
 }
 
@@ -29,7 +29,7 @@ impl<..T: Doubled> DoubleAll for [..T] {
 
 // A body whose type differs from the element maps the pack through it: the
 // result is `[..String]`, walkable like any other pack-typed tuple.
-trait Labels {
+trait Labels with () {
     fn labels(&self) -> String;
     fn indexed_labels(&self) -> String;
 }

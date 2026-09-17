@@ -12,7 +12,7 @@ pub mod last_use;
 pub mod modref;
 pub mod ownership;
 pub mod place;
-pub mod stores;
+pub mod retention;
 pub mod synthesize;
 
 use crate::compiler_item::CompilerItem;
@@ -120,14 +120,22 @@ pub struct ValueCopyPlan {
     /// What each builtin declared about storage: where its result comes from,
     /// and which arguments it keeps beyond the call.
     pub builtins: ownership::BuiltinDeclarations,
-    /// Per-callee, per-position reference-storage: which parameter positions a
-    /// callee may persist a reference to. A local whose `&`/`&mut` is passed at
-    /// a *stored* position is borrow-escaped and cannot be moved; passed at a
-    /// non-stored position it is a transient borrow. Interprocedurally inferred
-    /// (a least fixpoint over the call graph), so it is a sound superset of the
-    /// declared `stores[...]` clauses and catches undeclared stores too. Position
-    /// 0 is the receiver, so `receiver_storing_methods` is subsumed by this.
-    pub stored_params: stores::StoredParams,
+    /// Per-callee, per-position retention: which parameter positions a callee
+    /// may persist a reference to. A local whose `&`/`&mut` is passed at a
+    /// *retained* position is borrow-escaped and cannot be moved; passed
+    /// anywhere else it is a transient borrow. Interprocedurally inferred
+    /// (a least fixpoint over the call graph), so it is a sound superset of
+    /// what a `#[retain(...)]` states. Position 0 is the receiver, so
+    /// `receiver_storing_methods` is subsumed by this.
+    pub retained_params: retention::RetainedParams,
+    /// Where each bounded retention lands, so a caller with its argument list in
+    /// hand can tell a reference that stops at a local it owns from one that
+    /// outlives the frame.
+    pub bounded_retention: retention::BoundedRetention,
+    /// Per-functor-type retention: what a call through a function value of that
+    /// type may keep, joined over every expression that mints one. The answer an
+    /// indirect call reads, where no callee name is available.
+    pub functor_rows: retention::FunctorRows,
     /// Functions whose first parameter is `&mut self` — the only methods that
     /// can mutate the caller's receiver storage. The last-use move analysis
     /// treats such a call's receiver as a sibling mutation, so a by-value
@@ -184,7 +192,7 @@ pub fn plan(
     );
     let conventions =
         ownership::compute_return_conventions(flat, &call_graph, &return_paths, &builtins);
-    let stored_params = stores::compute_stored_params(flat, &call_graph);
+    let retained = retention::compute_retention(flat, &call_graph, &builtins);
     let mut mut_receiver_methods = FuncKeySet::default();
     let mut mut_ref_params = FuncKeyMap::default();
     for f in &flat.functions {
@@ -219,7 +227,9 @@ pub fn plan(
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,
         builtins,
-        stored_params,
+        retained_params: retained.retained_params,
+        bounded_retention: retained.bounded,
+        functor_rows: retained.rows,
         mut_receiver_methods,
         confined_params,
         mut_ref_params,

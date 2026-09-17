@@ -1,0 +1,62 @@
+// A head with no clause reads as `with _`: the impl brings its own effects and
+// a caller dispatching through the bound forwards them. The trait is private,
+// so the undecided head only remarks and no warning reaches the expectations.
+use { println, eprintln, Stdout, Stderr } from "core:cli";
+
+trait Source {
+    fn next(&mut self) -> i32;
+}
+
+struct Loud {
+    n: i32,
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+struct Noisy {
+    n: i32,
+}
+
+impl Source for Noisy {
+    fn next(&mut self) -> i32 with Stderr {
+        eprintln("tock");
+        self.n += 2;
+        return self.n;
+    }
+}
+
+struct Quiet {
+    n: i32,
+}
+
+impl Source for Quiet {
+    fn next(&mut self) -> i32 {
+        self.n += 3;
+        return self.n;
+    }
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with _ {
+    return s.next();
+}
+
+export fn run() with (Stdout, Stderr) {
+    let mut loud = Loud { n: 0 };
+    let mut noisy = Noisy { n: 0 };
+    let mut quiet = Quiet { n: 0 };
+    println(`${draw(&mut loud)}`);
+    println(`${draw(&mut noisy)}`);
+    println(`${draw(&mut quiet)}`);
+}
+
+__DATA__
+{
+    "stdout": "tick\n1\n2\n3\n",
+    "stderr_contains": ["tock"]
+}

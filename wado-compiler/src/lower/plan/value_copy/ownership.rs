@@ -16,10 +16,10 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
+use crate::module_source::ModuleSource;
 use crate::tir::{
-    BuiltinDeclaration, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
+    BuiltinDeclaration, FunctionKind, FunctionRef, RetainSpec, ReturnConvention, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
-    matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -39,41 +39,59 @@ fn hands_out_storage(func: &TirFunction, type_table: &TypeTable) -> bool {
     reads_through_reference(func, type_table) && carries_storage(func.return_type, type_table)
 }
 
-/// [`hands_out_storage`] asked at the declaration, where link runs before
-/// monomorphization: a builtin answering yes owes `#[returns(part_of = p)]`, or
-/// `#[returns(owned)]` that it allocates.
-pub fn owes_return_convention(func: &TirFunction, type_table: &TypeTable) -> bool {
-    reads_through_reference(func, type_table) && may_carry_storage(func.return_type, type_table)
+/// [`hands_out_storage`] asked at the declaration, before monomorphization
+/// narrows the types: a body-less declaration answering yes owes
+/// `#[result(part_of = p)]`, or `#[result(owned)]` that it allocates. Silence
+/// reads as "allocates", which elides copies, so it is not a safe default here.
+pub fn owes_return_convention(
+    params: &[TirParam],
+    return_type: TypeId,
+    type_table: &TypeTable,
+) -> bool {
+    params.iter().any(|p| is_reference(p.type_id, type_table))
+        && may_carry_storage(return_type, type_table)
 }
 
-/// Whether `func` declares `#[returns(owned)]`. Only a declaration with no body
+/// Whether `func` declares `#[result(owned)]`. Only a declaration with no body
 /// is asked: a body is inferred from below, and would be free to contradict
 /// what it declared.
 fn declares_owned(func: &TirFunction) -> bool {
     func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
 }
 
-/// What each builtin declared about storage, resolved from a call. Reads
-/// [`FlatPackage::builtin_declarations`], which link snapshots before
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Reads [`FlatPackage::builtin_declarations`], which link snapshots before
 /// monomorphization drops the generic declarations.
 #[derive(Default)]
-pub struct BuiltinDeclarations(IndexMap<String, BuiltinDeclaration>);
+pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
 
 impl BuiltinDeclarations {
     pub fn collect(project: &FlatPackage) -> Self {
         Self(project.builtin_declarations.clone())
     }
 
-    /// What `func` declared, or `None` where it declared nothing.
+    /// What `func` declared, or `None` where it declared nothing. Keyed by the
+    /// generic name a monomorphized instance came from, which is the name the
+    /// declaration was snapshot under.
     fn get(&self, func: &FunctionRef) -> Option<&BuiltinDeclaration> {
-        self.0
-            .iter()
-            .find(|(base, _)| matches_builtin(&func.name, func.monomorph_info.as_ref(), base))
-            .map(|(_, declaration)| declaration)
+        let key = |name: &str| (func.module_source.clone(), name.to_string());
+        if let Some(mono) = &func.monomorph_info
+            && let Some(declaration) = self.0.get(&key(&mono.generic_name))
+        {
+            return Some(declaration);
+        }
+        self.0.get(&key(&func.name))
     }
 
-    /// The parameter a builtin's result is a component of, for a call that
-    /// declared `#[returns(part_of = p)]`.
+    /// Whether `func` names a body-less declaration that stated a convention or
+    /// a retention — the calls that answer from a declaration rather than from
+    /// the fixpoint.
+    pub fn declares(&self, func: &FunctionRef) -> bool {
+        self.get(func).is_some()
+    }
+
+    /// The parameter a declaration's result is a component of, for a call that
+    /// declared `#[result(part_of = p)]`.
     pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
         match self.get(func)?.returns? {
             ReturnConvention::PartOf(param) => Some(param),
@@ -81,9 +99,18 @@ impl BuiltinDeclarations {
         }
     }
 
-    /// The parameters a builtin keeps beyond the call, from `with stores[p]`.
-    pub fn stored_params(&self, func: &FunctionRef) -> &[usize] {
-        self.get(func).map_or(&[], |d| &d.stores)
+    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
+    pub fn retained_params(&self, func: &FunctionRef) -> impl Iterator<Item = usize> + '_ {
+        self.retain_specs(func).map(|r| r.source)
+    }
+
+    /// Every `#[retain(...)]` clause a declaration carries, destinations
+    /// included.
+    pub fn retain_specs(
+        &self,
+        func: &FunctionRef,
+    ) -> impl Iterator<Item = &RetainSpec<usize>> + '_ {
+        self.get(func).into_iter().flat_map(|d| d.retains.iter())
     }
 }
 
@@ -125,13 +152,13 @@ impl<'a> OwnedCalls<'a> {
             .is_some_and(|set| set.contains(&return_type))
     }
 
-    /// Whether a call to `func` yields an owned (fresh) value. A `core:builtin`
-    /// answers from its declaration: one that hands out an argument's storage
-    /// must say `#[returns(part_of = p)]`, so anything that did not is fresh. A
-    /// body function is owned iff the fixpoint proved it so, and an extern /
-    /// opaque callee defaults to borrowed.
+    /// Whether a call to `func` yields an owned (fresh) value. A body-less
+    /// declaration answers from what it stated: one that hands out an argument's
+    /// storage must say `#[result(part_of = p)]`, so anything that did not is
+    /// fresh. A body function is owned iff the fixpoint proved it so, and an
+    /// extern / opaque callee defaults to borrowed.
     pub fn is_owned(&self, func: &FunctionRef) -> bool {
-        if func.module_source.is_core_builtin() {
+        if func.module_source.is_core_builtin() || self.builtins.declares(func) {
             return self.builtins.part_of(func).is_none();
         }
         self.returns_owned.contains(&func.module_source, &func.name)
@@ -139,11 +166,11 @@ impl<'a> OwnedCalls<'a> {
 
     /// The parameter `func` returns a projection of, by position, so a call to
     /// it is fresh exactly when *that* argument is. A body function answers from
-    /// the fixpoint; a `core:builtin` from `#[returns(part_of = p)]`, which says
+    /// the fixpoint; a `core:builtin` from `#[result(part_of = p)]`, which says
     /// the result is a component of `p` — and a component of a place nothing
     /// else reaches is one nothing else reaches. A wasm asset declares neither.
     pub fn self_projection_param(&self, func: &FunctionRef) -> Option<usize> {
-        if func.module_source.is_core_builtin() {
+        if func.module_source.is_core_builtin() || self.builtins.declares(func) {
             return self.builtins.part_of(func);
         }
         if func.module_source.is_wasm_asset() {
@@ -267,7 +294,7 @@ fn is_receiver_projection(
         | TirExprKind::VariantPayload { expr: inner, .. }
         | TirExprKind::Cast { expr: inner, .. }
         | TirExprKind::Index { expr: inner, .. } => recurse(inner),
-        // A builtin hands out the parameter its `#[returns(part_of = p)]` names,
+        // A builtin hands out the parameter its `#[result(part_of = p)]` names,
         // which need not be the first: `struct_field_get(v, i)` reads `v`.
         TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
             .part_of(func)
@@ -282,7 +309,7 @@ fn is_receiver_projection(
 
 /// The two return conventions, component by component. Seeds the callees that
 /// have no body to settle — a value-copy helper clones, a declaration says
-/// `#[returns(owned)]`, and a builtin that cannot hand storage out allocates —
+/// `#[result(owned)]`, and a builtin that cannot hand storage out allocates —
 /// then settles each strongly connected component of the
 /// call graph with its callees already decided: a body function is owned when
 /// every value it returns is owned, and self-projecting on parameter `p` when

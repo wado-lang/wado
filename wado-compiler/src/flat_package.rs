@@ -68,7 +68,7 @@ pub struct FlatPackage {
     /// What each bodyless `core:builtin` declared about storage, by name.
     /// Snapshotted here because monomorphization drops a generic bodyless
     /// declaration, leaving the plan phase nothing to read it from.
-    pub builtin_declarations: IndexMap<String, BuiltinDeclaration>,
+    pub builtin_declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>,
 
     /// Module name for the output (derived from filename)
     pub module_name: String,

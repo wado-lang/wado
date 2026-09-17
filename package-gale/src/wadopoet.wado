@@ -400,20 +400,12 @@ impl StructSpec {
         return StructSpec { name: name.to_string(), fields: [], visibility };
     }
 
-    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(
-        &mut self,
-        name: S,
-        type_str: S1,
-    ) -> &mut StructSpec with stores[self] {
+    pub fn add_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
         self.fields.push(FieldSpec::new(name, type_str));
         return self;
     }
 
-    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(
-        &mut self,
-        name: S,
-        type_str: S1,
-    ) -> &mut StructSpec with stores[self] {
+    pub fn add_pub_field<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut StructSpec {
         self.fields.push(FieldSpec::new_pub(name, type_str));
         return self;
     }
@@ -423,7 +415,7 @@ impl StructSpec {
         name: S,
         type_str: S1,
         default: S2,
-    ) -> &mut StructSpec with stores[self] {
+    ) -> &mut StructSpec {
         self.fields.push(FieldSpec {
             name: name.to_string(),
             type_str: type_str.to_string(),
@@ -433,7 +425,7 @@ impl StructSpec {
         return self;
     }
 
-    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec with stores[self] {
+    pub fn add_field_spec(&mut self, field: FieldSpec) -> &mut StructSpec {
         self.fields.push(field);
         return self;
     }
@@ -467,16 +459,12 @@ impl VariantSpec {
         return VariantSpec { name: name.to_string(), cases: [], visibility };
     }
 
-    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec with stores[self] {
+    pub fn add_case<S: AsStrSlice>(&mut self, name: S) -> &mut VariantSpec {
         self.cases.push(VariantCase { name: name.to_string(), payload: null });
         return self;
     }
 
-    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(
-        &mut self,
-        name: S,
-        payload: S1,
-    ) -> &mut VariantSpec with stores[self] {
+    pub fn add_case_with_payload<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, payload: S1) -> &mut VariantSpec {
         self.cases.push(VariantCase {
             name: name.to_string(),
             payload: Option::<String>::Some(payload.to_string()),
@@ -513,16 +501,12 @@ impl EnumSpec {
         return EnumSpec { name: name.to_string(), members: [], visibility };
     }
 
-    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec with stores[self] {
+    pub fn add_member<S: AsStrSlice>(&mut self, name: S) -> &mut EnumSpec {
         self.members.push(EnumMember { name: name.to_string(), trailing_comment: null });
         return self;
     }
 
-    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(
-        &mut self,
-        name: S,
-        comment: S1,
-    ) -> &mut EnumSpec with stores[self] {
+    pub fn add_member_with_comment<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, comment: S1) -> &mut EnumSpec {
         self.members.push(EnumMember {
             name: name.to_string(),
             trailing_comment: Option::<String>::Some(comment.to_string()),
@@ -584,10 +568,6 @@ pub struct FnSpec {
     /// Effect names for the `with …` clause, rendered after the return
     /// type (e.g. `["Stdout", "Stderr"]` → ` with (Stdout, Stderr)`).
     effects: List<String>,
-    /// Reference-parameter names for a `stores[…]` clause, rendered inside the
-    /// same `with` clause after the effects (e.g. `["chars"]` →
-    /// ` with (Foo, stores[chars])`).
-    stores: List<String>,
     receiver: Option<String>,
 }
 
@@ -601,49 +581,43 @@ impl FnSpec {
             is_export: false,
             generics: [],
             effects: [],
-            stores: [],
             receiver: null,
         };
     }
 
     /// Mark the function `export` (component-model export). `export` implies
     /// `pub`; the signature emits just `export`, never `pub export`.
-    pub fn set_export(&mut self) -> &mut FnSpec with stores[self] {
+    pub fn set_export(&mut self) -> &mut FnSpec {
         self.is_export = true;
         return self;
     }
 
-    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec with stores[self] {
+    pub fn add_generic<S: AsStrSlice>(&mut self, generic: S) -> &mut FnSpec {
         self.generics.push(generic.to_string());
         return self;
     }
 
-    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec with stores[self] {
+    pub fn add_effect<S: AsStrSlice>(&mut self, effect_name: S) -> &mut FnSpec {
         self.effects.push(effect_name.to_string());
         return self;
     }
 
-    pub fn add_stores<S: AsStrSlice>(&mut self, param_name: S) -> &mut FnSpec with stores[self] {
-        self.stores.push(param_name.to_string());
-        return self;
-    }
-
-    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec with stores[self] {
+    pub fn set_receiver<S: AsStrSlice>(&mut self, recv: S) -> &mut FnSpec {
         self.receiver = Option::<String>::Some(recv.to_string());
         return self;
     }
 
-    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec with stores[self] {
+    pub fn add_param<S: AsStrSlice, S1: AsStrSlice>(&mut self, name: S, type_str: S1) -> &mut FnSpec {
         self.params.push(ParamSpec::new(name, type_str));
         return self;
     }
 
-    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec with stores[self] {
+    pub fn add_param_spec(&mut self, param: ParamSpec) -> &mut FnSpec {
         self.params.push(param);
         return self;
     }
 
-    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec with stores[self] {
+    pub fn set_return_type<S: AsStrSlice>(&mut self, type_str: S) -> &mut FnSpec {
         self.return_type = Option::<String>::Some(type_str.to_string());
         return self;
     }
@@ -693,9 +667,6 @@ impl FnSpec {
         for let e of &self.effects {
             clauses.push(*e);
         }
-        if self.stores.len() > 0 {
-            clauses.push(`stores[${join_comma(&self.stores)}]`);
-        }
         if clauses.len() == 1 {
             sig.push_str(` with ${clauses[0]}`);
         } else if clauses.len() > 1 {
@@ -731,7 +702,7 @@ impl GlobalSpec {
         };
     }
 
-    pub fn set_trailing_comment<S: AsStrSlice>(&mut self, comment: S) -> &mut GlobalSpec with stores[self] {
+    pub fn set_trailing_comment<S: AsStrSlice>(&mut self, comment: S) -> &mut GlobalSpec {
         self.trailing_comment = Option::<String>::Some(comment.to_string());
         return self;
     }

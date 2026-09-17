@@ -4,15 +4,15 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
 use crate::token::Span;
 use crate::unparse::{
-    get_item_id, unparse_bound_arguments_into, unparse_enum_signature, unparse_function_signature,
-    unparse_struct_signature, unparse_type_into,
+    get_item_id, unparse_attributes, unparse_bound_arguments_into, unparse_enum_signature,
+    unparse_function_signature, unparse_struct_signature, unparse_trait_header, unparse_type_into,
 };
 use crate::wit_consume::build_bindings;
 use crate::{ParseResult, ast, parse, stdlib};
@@ -103,6 +103,10 @@ pub struct DocField {
 #[derive(Debug, Clone, Serialize)]
 pub struct DocFunction {
     pub signature: String,
+    /// The declaration's attributes, rendered as written. Beside the signature
+    /// rather than in it: a signature is one line, and a reader wants both.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub attrs: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
 }
@@ -328,17 +332,7 @@ fn dedent_synopsis(body: &str) -> String {
 }
 
 fn build_doc_trait(t: &TraitDecl, trivia: &TriviaMap) -> DocTrait {
-    let mut sig = String::new();
-    if t.visibility.is_public() {
-        sig.push_str("pub ");
-    }
-    sig.push_str("trait ");
-    sig.push_str(&t.name);
-    sig.push_str(&render_generic_params(&t.type_params));
-    if !t.supertraits.is_empty() {
-        sig.push_str(": ");
-        render_trait_bounds(&t.supertraits, &mut sig);
-    }
+    let sig = unparse_trait_header(t);
 
     let associated_types: Vec<String> = t.associated_types.iter().map(|a| a.name.clone()).collect();
 
@@ -527,6 +521,7 @@ fn build_doc_interface(e: &InterfaceDecl, trivia: &TriviaMap) -> DocEffect {
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
+            attrs: unparse_attributes(&m.attrs),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -560,6 +555,7 @@ fn build_doc_resource(
         .iter()
         .map(|m| DocFunction {
             signature: render_interface_method_signature(m),
+            attrs: unparse_attributes(&m.attrs),
             doc: extract_doc_comment_with_attrs(trivia, m.id, &m.span, &m.attrs),
         })
         .collect();
@@ -577,6 +573,7 @@ fn build_doc_resource(
 fn build_doc_function(f: &Function, trivia: &TriviaMap) -> DocFunction {
     DocFunction {
         signature: unparse_function_signature(f),
+        attrs: unparse_attributes(&f.attrs),
         doc: extract_doc_comment_with_attrs(trivia, f.id, &f.span, &f.attrs),
     }
 }
@@ -674,11 +671,11 @@ fn render_type(ty: &Type) -> String {
 }
 
 fn render_generic_params(params: &[GenericParam]) -> String {
-    if params.is_empty() {
+    if written_params(params).next().is_none() {
         return String::new();
     }
     let mut out = String::from("<");
-    for (i, param) in params.iter().enumerate() {
+    for (i, param) in written_params(params).enumerate() {
         if i > 0 {
             out.push_str(", ");
         }
@@ -1050,6 +1047,7 @@ fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     unparse_type_into(&c.ty, &mut sig);
     DocFunction {
         signature: sig,
+        attrs: Vec::new(),
         doc: extract_doc_comment_with_attrs(trivia, c.id, &c.span, &[]),
     }
 }

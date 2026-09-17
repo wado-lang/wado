@@ -21,9 +21,13 @@ assert decode(&encoded) matches { Some(round) && encode(&round) == encoded };
 
 ### `pub fn encode<S: AsByteSlice>(data: &S) -> String`
 
+`#[inline]`
+
 Encodes bytes as standard Base64 (RFC 4648 §4, padded).
 
 ### `pub fn encode_url<S: AsByteSlice>(data: &S) -> String`
+
+`#[inline]`
 
 Encodes bytes as URL-safe Base64 (RFC 4648 §5, no padding).
 Equivalent to `encode_with(data, Encoding::UrlSafe | Encoding::NoPadding)`.
@@ -34,11 +38,15 @@ Encodes bytes as Base64 with custom flags.
 
 ### `pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
 
+`#[inline]`
+
 Decodes Base64 from text or raw bytes (e.g., HTTP body, file content).
 Accepts both standard (+/) and URL-safe (-_) alphabets, with or without padding.
 Returns null on invalid input.
 
 ### `pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList>`
+
+`#[inline]`
 
 Decodes URL-safe Base64 (RFC 4648 §5, unpadded), the exact inverse of
 [`encode_url`] and the encoding JWS/JWT mandate.

@@ -3491,7 +3491,6 @@ impl CmInterfaceRegistry {
                     return_type: resolved_return,
                     effects: func_ty.effects.clone(),
                     effect_ids: func_ty.effect_ids.clone(),
-                    stores: func_ty.stores.clone(),
                 }))
             }
             // NamespacedGeneric types (like `ns::Type<T>`) are passed through

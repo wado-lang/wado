@@ -1,0 +1,27 @@
+// `with ()` on a trait head says every impl of it is pure, so an impl that
+// declares an effect is reported where it is written.
+use { println, Stdout } from "core:cli";
+
+trait Source with () {
+    fn next(&mut self) -> i32;
+}
+
+struct Loud {
+    n: i32,
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout {
+        println("tick");
+        self.n += 1;
+        return self.n;
+    }
+}
+
+export fn run() with Stdout {
+    let mut loud = Loud { n: 0 };
+    println(`${loud.next()}`);
+}
+
+__DATA__
+{"compile_error": "effect 'Stdout' is not declared by trait method 'Source::next'", "compile_error_count": 1}

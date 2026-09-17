@@ -4,7 +4,7 @@
 //! turbofish supplies it. Only on a trait declaring no parameters of its own:
 //! `Take::<A>::take(recv)` already claims the turbofish for those.
 
-trait Tagged {
+trait Tagged with () {
     fn tag(v: i32) -> i32 {
         return v * 2;
     }
@@ -23,7 +23,7 @@ impl Tagged for V {
 // The spelling names the trait, so a case `W` declares of that name does not
 // shadow it: read as `W::tag(5)` the case answered first and the trait's static
 // was unreachable.
-trait Cased {
+trait Cased with () {
     fn tag(v: i32) -> i32 {
         return v * 2;
     }
@@ -42,11 +42,11 @@ impl Cased for W {}
 // the literal as ambiguous between `i32` and `i64`.
 struct Foo {}
 
-trait A {
+trait A with () {
     fn make(v: i32) -> i32;
 }
 
-trait B {
+trait B with () {
     fn make(v: i64) -> i32;
 }
 

@@ -7,52 +7,52 @@ use std::rc::Rc;
 
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
-use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{BuiltinDeclaration, TirFunction, TypeTable};
+use crate::tir::{BuiltinDeclaration, RetainSpec, TirFunction, TypeTable};
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
 /// Snapshot what a `core:builtin` declared about storage, before
 /// monomorphization drops the generic declarations the plan phase would read.
 ///
-/// A builtin that can hand out an argument's storage must say so: the plan
-/// phase takes silence for "allocates". `core:builtin` is compiler-owned, so a
-/// missing declaration is our bug, not the program's.
-fn record_builtin_declaration(
+/// Every body-less declaration is snapshot, not only `core:builtin`'s: a CM
+/// import or a `.wasm` / `.wat` asset declares the same way, and each is keyed
+/// by its module so two of a name stay apart.
+fn record_declaration(
     func: &TirFunction,
-    type_table: &TypeTable,
-    out: &mut IndexMap<String, BuiltinDeclaration>,
+    module_source: &ModuleSource,
+    out: &mut IndexMap<(ModuleSource, String), BuiltinDeclaration>,
 ) {
     if func.body.is_some() {
         return;
     }
-    assert!(
-        func.declared_return_convention.is_some() || !owes_return_convention(func, type_table),
-        "builtin `{}` reads through a reference and returns storage: \
-         declare #[returns(part_of = p)] or #[returns(owned)]",
-        func.name,
-    );
-    let stores: Vec<usize> = func
-        .stores
-        .iter()
-        .map(|name| {
-            func.params
-                .iter()
-                .position(|p| &p.name == name)
-                .unwrap_or_else(|| panic!("builtin `{}` stores unknown `{name}`", func.name))
-        })
-        .collect();
-    if func.declared_return_convention.is_some() || !stores.is_empty() {
+    let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
+    if func.declared_return_convention.is_some() || !retains.is_empty() {
+        // A call re-homes a method's key to the impl block's module, so only a
+        // free function is found again under the module declaring it.
+        assert!(
+            func.method_info.is_none(),
+            "`{}` declares storage as a method; key the snapshot by `DefId` first",
+            func.name
+        );
         out.insert(
-            func.name.clone(),
+            (module_source.clone(), declaration_key(func)),
             BuiltinDeclaration {
                 returns: func.declared_return_convention,
-                stores,
+                retains,
             },
         );
     }
+}
+
+/// The name a call resolves a declaration by: the generic one where the call is
+/// a monomorphized instance, which is what link snapshots before
+/// monomorphization drops the declaration it came from.
+fn declaration_key(func: &TirFunction) -> String {
+    func.monomorph_info
+        .as_ref()
+        .map_or_else(|| func.name.clone(), |m| m.generic_name.clone())
 }
 
 /// Link a `Package` into a `FlatPackage`.
@@ -94,7 +94,8 @@ pub fn link(package: Package) -> FlatPackage {
     let mut imports = Vec::new();
     let mut tests = Vec::new();
     let mut wasm_module_sources: IndexMap<ModuleSource, String> = IndexMap::default();
-    let mut builtin_declarations: IndexMap<String, BuiltinDeclaration> = IndexMap::default();
+    let mut builtin_declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration> =
+        IndexMap::default();
 
     for (_ms, tir_mod) in package.tir_modules {
         let ms: ModuleSource = tir_mod.module_source.clone();
@@ -103,13 +104,7 @@ pub fn link(package: Package) -> FlatPackage {
         // Functions: set module_source on each function
         for func_rc in tir_mod.functions {
             func_rc.borrow_mut().module_source = ms.clone();
-            if ms.is_core_builtin() {
-                record_builtin_declaration(
-                    &func_rc.borrow(),
-                    &type_table.borrow(),
-                    &mut builtin_declarations,
-                );
-            }
+            record_declaration(&func_rc.borrow(), &ms, &mut builtin_declarations);
             functions.push(func_rc);
         }
 

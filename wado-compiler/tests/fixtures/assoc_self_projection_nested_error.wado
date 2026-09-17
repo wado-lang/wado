@@ -1,0 +1,47 @@
+// A constraint spells `Self::Item` under a head (`Elem = List<Self::Item>`).
+// Reading only a bare `Self::Assoc` left every other shape unchecked, and the
+// mismatch reached codegen as an invalid module.
+
+struct SBag {
+    v: List<String>,
+}
+
+trait Collectible {
+    type Elem;
+
+    fn of(v: Self::Elem) -> Self;
+}
+
+impl Collectible for SBag {
+    type Elem = List<String>;
+
+    fn of(v: List<String>) -> SBag {
+        return SBag { v };
+    }
+}
+
+struct Counter {
+    n: i32,
+}
+
+trait Producer {
+    type Item;
+
+    fn produce<C: Collectible<Elem = List<Self::Item>>>(&self, v: List<Self::Item>) -> C {
+        return C::of(v);
+    }
+}
+
+impl Producer for Counter {
+    type Item = i32;
+}
+
+export fn run() {
+    let c = Counter { n: 1 };
+    let xs: List<i32> = [1, 2];
+    let b: SBag = c.produce(xs);
+    assert b.v.len() == 2;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type 'Collectible::Elem = List<i32>'"}

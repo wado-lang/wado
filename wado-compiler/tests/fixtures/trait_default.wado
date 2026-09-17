@@ -1,7 +1,7 @@
 use { println, Stdout } from "core:cli";
 
 // from trait_default_basic.wado
-trait Greet {
+trait Greet with () {
     fn name(&self) -> String;
     fn greet(&self) -> String {
         return `Hello, ${self.name()}!`;
@@ -34,7 +34,7 @@ impl Greet for Robot {
 }
 
 // from trait_default_calls_default.wado
-trait Describable {
+trait Describable with () {
     fn label(&self) -> String;
     fn short_desc(&self) -> String {
         return `[${self.label()}]`;
@@ -56,7 +56,7 @@ impl Describable for Item {
 }
 
 // from trait_default_override.wado
-trait Summary {
+trait Summary with () {
     fn title(&self) -> String;
     fn summary(&self) -> String {
         return `Title: ${self.title()}`;

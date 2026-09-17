@@ -1180,7 +1180,7 @@ so the Wasm engine downstream is free to fold the constant.
 
 ### Value Semantics
 
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 Assignment, parameter passing, and return all perform a deep copy of the value. Primitives, structs, `String`, and `List<T>` all follow this rule uniformly. The only exceptions are reference types (`&T`, `&mut T`), which alias the underlying value.
 
@@ -2371,7 +2371,7 @@ is reported at the call, not inside the closure.
 A `?` in the body needs the return type known — via `-> Type` or an expected
 `fn(..) -> R`.
 
-A closure declares neither effects nor stores; both are inferred from the body.
+A closure declares no effects; they are inferred from the body.
 `with` after the parameter list, or after `-> Type`, would be that declaration,
 which the compiler does not carry yet and rejects. A handler body therefore
 needs a block or parentheses:
@@ -2395,7 +2395,9 @@ assert get() == 2;
 
 See [`docs/wep-2026-01-16-closure-implementation.md`](./wep-2026-01-16-closure-implementation.md) for the full design (`fn` vs `fn mut`, sub-typing, effect generics, iterator API integration).
 
-Note: `stores[...]` is a separate concept for declaring that a _function_ stores reference _parameters_ beyond the call. It is not yet implemented. See [Reference Storage](#reference-storage-stores) and [`docs/wep-2026-01-12-value-semantics-and-stores.md`](./wep-2026-01-12-value-semantics-and-stores.md).
+A closure capturing an outer binding is a separate concept from what a function
+does with its reference _parameters_, which nothing in the language states — see
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 ### Function References
 
@@ -5056,7 +5058,7 @@ Beyond a name, parameters and a return type, an operation declares nothing else.
 - a `self` receiver — an operation is called as `Effect::op(args)`, with no receiver to bind it to;
 - a parameter default — a call site is a dispatch wrapper, which takes the arguments as declared;
 - a `with` clause — an operation's effects are not required at its call sites, so one would let a default perform a capability its caller never declared; a default has to be performable wherever it is dispatched, which means pure or `#[ambient]` code;
-- a `stores` clause — nothing checks it on an operation, so it would constrain call sites on a promise the handler never makes;
+- a `#[retain(...)]` attribute — an operation dispatches to a handler, whose own body states what it keeps, so one here would constrain call sites on a promise the handler never makes;
 - type parameters — dispatch holds one slot per operation, not one per instantiation.
 
 #### Colorless Async
@@ -5114,12 +5116,7 @@ fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E { ... }
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }
 ```
 
-`stores[...]` is a row member, so it is parenthesized with the rest:
-
-```wado
-fn keep(data: &Data) -> Container with (Stdout, stores[data]) { ... }
-fn keep_only(data: &Data) -> Container with stores[data] { ... }
-```
+Every row member is an effect.
 
 ### Importing Effect Operations
 
@@ -5212,6 +5209,67 @@ Effect parameters:
 - Can coexist with type parameters: `<T, effect E>`
 - Test functions implicitly have all effects
 
+### Effects on Trait Methods
+
+A trait method's `with` clause is the contract every impl of it writes to. An impl method may not declare an effect the trait method leaves out, and a call to the method requires what the trait declares, whichever impl runs.
+
+```wado
+trait Source {
+    fn next(&mut self) -> i32 with Stdout;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching the declaration
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // required: `s.next()` needs it
+    return s.next();
+}
+```
+
+A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. None of them knows which impl runs, so each demands what the trait method declares.
+
+`stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
+
+#### The Trait Head
+
+A `with` clause on the trait itself says what every impl of it may do. A method's own clause overrides it.
+
+| Head                          | Every impl of it       |
+| ----------------------------- | ---------------------- |
+| `trait Foo { … }`             | as `with _`, diagnosed |
+| `trait Foo with () { … }`     | is pure                |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`  |
+| `trait Foo with _ { … }`      | brings its own effects |
+
+`with _` is sugar for `<effect E> with E`, so an open head hands each impl its own effects and names none of them:
+
+```wado
+trait Source with _ {
+    fn next(&mut self) -> i32;
+}
+
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // E = Stdout
+}
+
+fn draw<S: Source>(s: &mut S) -> i32 with _ {       // as effectful as `S`
+    return s.next();
+}
+
+export fn run() with Stdout {
+    println(`${draw(&mut loud)}`);                  // Stdout, from `Loud`'s impl
+}
+```
+
+A fixed head demands the same effects of every caller. An open one is resolved from the type each call names, so `draw(&mut quiet)` demands nothing when `Quiet`'s impl declares nothing. The `with _` in `draw`'s signature is what leaves that open. A caller that forwards the effects instead of resolving them writes one of its own.
+
+A head that writes nothing reads as `with _`, so a bare trait is open rather than pure. Publishing an undecided contract is reported: a `pub` trait warns, a file-private or `internal` one remarks, and `#[allow(undecided_effects)]` on the declaration or `#![allow(undecided_effects)]` on the module waives it while the decision is pending.
+
+A body dispatching on a type parameter has no impl to read. In `s.read()`, where `s: S` and `S: Source`, an open head's hole survives, and the enclosing function forwards it with `with _`. Every trait in the standard library says `with ()` instead. An impl of one that performs I/O is a design error, for comparison, conversion and iteration alike.
+
+See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
+
 ### Variadic Type Packs
 
 Use `<..T>` to declare a type pack parameter that represents zero or more types. Type packs enable writing functions that operate on tuples of any arity.
@@ -5256,72 +5314,6 @@ The spread expression is evaluated exactly once. For non-trivial expressions (e.
 // make_pair() is called once, not twice
 let t = [..make_pair(), 30];
 ```
-
-### Reference Storage (`stores[...]`)
-
-The `stores[...]` keyword declares that a function stores reference parameters beyond the function call. This enables compile-time escape analysis and automatic heap promotion. See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md) for the design rationale.
-
-#### Syntax
-
-`with stores[param1, param2, ...]`
-
-```wado
-// Function that stores a reference parameter
-fn register(data: &Data) -> Handle with stores[data] {
-    registry.push(data);    // Stores the reference
-    return new_handle();
-}
-
-// Function that does NOT store (no stores declaration)
-fn process(data: &Data) -> Result {
-    return compute(*data);  // Uses but doesn't store
-}
-
-// Combined with effects
-fn store_and_log(data: &Data) -> Handle with (Stdout, stores[data]) {
-    println("Storing data...");
-    return register(data);
-}
-```
-
-Every reference parameter follows this rule, `self` included. A method that
-returns or stores `self` declares `with stores[self]`.
-
-A reference member read out of a parameter still names what that parameter
-names, so returning it lets the caller's storage escape. Declare it:
-
-```wado
-struct Cursor { chars: &Array<char>, pos: i32 }
-
-fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
-    return Cursor { chars: c.chars, pos: at };
-}
-```
-
-A value member is copied, so nothing of the parameter escapes with it:
-
-```wado
-fn name_of(p: &Person) -> String {   // `name` is a `String`
-    return p.name;
-}
-```
-
-#### Naming Rationale
-
-The keyword is `stores` (not `captures`) because:
-
-- "Capture" is established terminology for closures (`let f = || x + 1` captures `x`)
-- `stores` describes what the function _does_ with the reference—it stores it for later use
-- This avoids conflating two different concepts: closures capturing variables vs functions storing parameters
-
-Functor types can also declare stores (positional: 0 = first parameter):
-
-```wado
-fn take_storing(f: fn(&Data) with stores[0]) { ... }
-fn take_pure(f: fn(&Data) -> Result) { ... }  // cannot store
-```
-
-See `docs/wep-2026-01-12-value-semantics-and-stores.md` for detailed design rationale.
 
 ### Handlers
 
@@ -5907,6 +5899,40 @@ The attribute is only valid inside `core::*` modules; the elaborator rejects it 
 #### `#[cm("namespace:pkg/interface@version")]` / `#[cm_params(...)]`
 
 Links Wado definitions (effects, resources, enums) to Component Model interfaces. See [Attribute Syntax for Component Model Linking](#attribute-syntax-for-component-model-linking).
+
+#### `#[retain(...)]` / `#[result(...)]`
+
+What a call does with the reference parameters it is handed: whether its result
+aliases one, and whether it keeps one past the return. Neither is a safety
+condition — every referent is GC-managed, so neither can dangle — and the
+compiler reads both from a function's body. These attributes are for a
+declaration that has none: a `core:builtin` primitive, a Component Model import,
+a `.wasm` / `.wat` asset import. See
+[WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
+
+```wado
+#[result(part_of = arr)]
+pub fn array_get_ref<T>(arr: &Array<T>, idx: i32) -> &T;
+
+#[retain(value, into = arr)]
+pub fn array_set<T>(arr: &mut Array<T>, idx: i32, value: T);
+
+#[retain(elements_of = src, into = dst)]
+pub fn array_copy<T>(dst: &mut Array<T>, dst_offset: i32, src: &Array<T>, src_offset: i32, len: i32);
+```
+
+`#[result(owned)]` says the result is freshly allocated; `#[result(part_of = p)]`
+says it is part of `p`.
+
+`#[retain(...)]` names one retained thing and repeats where there is more than
+one, so each carries its own destination. A bare name is the parameter itself
+and `elements_of = p` is that parameter's elements; `into = q` names the
+parameter it lands in, and without it the destination is unknown. Silence is the
+conservative reading.
+
+Both are an error on a function with a body, which states these facts itself,
+and on a `trait` or `interface` method requirement: a call to one is statically
+dispatched to an impl that has a body, so the impl states it.
 
 ### The "mem" Core Module
 

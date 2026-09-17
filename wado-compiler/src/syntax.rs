@@ -168,7 +168,6 @@ keyword_registry! {
     "mut" => Mut : StorageModifier,
     "async" => Async : StorageModifier,
     "unique" => Unique : StorageModifier,
-    "stores" => Stores : StorageModifier,
     "reactive" => Reactive : StorageModifier,
     "use" => Use : Other,
     "from" => From : Other,

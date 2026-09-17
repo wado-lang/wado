@@ -6,7 +6,7 @@
 // (WEP 2026-09-01), from WEP 2026-06-25's "a hand-written impl always wins over
 // a derived one — a newtype most of all". Issue #1932.
 
-trait Limit {
+trait Limit with () {
     fn limit() -> i32;
 }
 
@@ -23,7 +23,7 @@ impl Limit for Wrapped {
 }
 
 // The base's blanket is declared first.
-trait Describe {
+trait Describe with () {
     fn describe(&self) -> String;
 }
 
@@ -40,7 +40,7 @@ impl<T: Limit> Describe for T {
 }
 
 // The newtype's blanket is declared first — declaration order is not the axis.
-trait Report {
+trait Report with () {
     fn report(&self) -> String;
 }
 

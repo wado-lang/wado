@@ -74,10 +74,11 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     let other_24: ref "core:prelude/string.wado//String";
     let start_36: i32;
     let start_54: i32;
+    let message_56: ref "core:prelude/string.wado//String";
     let handle: i32;
     let packed: i64;
-    let rx_62: i32;
-    let tx_63: i32;
+    let rx_63: i32;
+    let tx_64: i32;
     let $sroa_buf_data: ref "core:prelude/string.wado//String";
     $sroa_buf_data = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     other_6 = global:serde_generic_trait_method.wado::$const_obj_2;
@@ -104,10 +105,11 @@ fn "serde_generic_trait_method.wado/run"() with Stdout {
     start_54 = $sroa_buf_data.used;
     $sroa_buf_data.used = 8;
     builtin::array_copy<u8>($sroa_buf_data.repr, start_54, s.repr, 0, 5);
-    rx_62 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_63 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "serde_generic_trait_method.wado/$cm_binding__Stdout_write_via_stream"(rx_62);
-    "core:rt/write_string_to_stream"(tx_63, $sroa_buf_data);
+    message_56 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $sroa_buf_data.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>(8); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, 8); $array_clone_dst_2), used: 8 };
+    rx_63 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_64 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "serde_generic_trait_method.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
+    "core:rt/write_string_to_stream"(tx_64, message_56);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

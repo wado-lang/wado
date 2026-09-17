@@ -10,17 +10,17 @@ struct View {
 }
 
 impl View {
-    fn inner(&self) -> &mut List<i32> with stores[self] {
+    fn inner(&self) -> &mut List<i32> {
         return self.repr;
     }
 
     /// Accessor over accessor: the path is `self.repr` one call further out.
-    fn inner_via_call(&self) -> &mut List<i32> with stores[self] {
+    fn inner_via_call(&self) -> &mut List<i32> {
         return self.inner();
     }
 
     /// The same place, reached through a local.
-    fn inner_via_local(&self) -> &mut List<i32> with stores[self] {
+    fn inner_via_local(&self) -> &mut List<i32> {
         let r = self.repr;
         return r;
     }
@@ -33,27 +33,27 @@ struct Holder {
 
 impl Holder {
     #[inline("never")]
-    fn bump_via_call(&mut self) with stores[self] {
+    fn bump_via_call(&mut self) {
         let v = View { repr: &mut self.rows };
         v.inner_via_call().push(9);
     }
 
     #[inline("never")]
-    fn bump_via_local(&mut self) with stores[self] {
+    fn bump_via_local(&mut self) {
         let v = View { repr: &mut self.rows };
         v.inner_via_local().push(9);
     }
 }
 
 #[inline("never")]
-fn len_across_call(h: &mut Holder) -> i32 with stores[h] {
+fn len_across_call(h: &mut Holder) -> i32 {
     let r = h.rows;
     h.bump_via_call();
     return r.len();
 }
 
 #[inline("never")]
-fn len_across_local(h: &mut Holder) -> i32 with stores[h] {
+fn len_across_local(h: &mut Holder) -> i32 {
     let r = h.rows;
     h.bump_via_local();
     return r.len();

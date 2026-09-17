@@ -410,8 +410,8 @@ an hour. Measured findings, `wado run … gen` (`cargo run` host):
   - `SllConfig.elements` / `SllReturn.elements` are now `&List<Element>`.
     Prediction rebuilds a config per token per alternative (`SllConfig { ..*c,
     pos }`) and deep-copied the element list — every `String` of every
-    `RuleRefElement` — per rebuild. `push_return` / `build_prediction` declare
-    the `stores[...]` the borrow needs.
+    `RuleRefElement` — per rebuild. `push_return` / `build_prediction` hand the
+    borrow out rather than copying it.
   - Five by-value `for` bindings became `for … of &…` (`lexer_elem_refs_rule`,
     `collect_literal_tokens`, `merge_grammars`, `sll_advance`,
     `try_expand_opaque`). A by-value binding deep-copies each element inside

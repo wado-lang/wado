@@ -252,7 +252,7 @@ impl Serializer for NsdSerializer {
         return Result::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<NsdSeqSerializer, SerializeError> {
         self.buf.push_str("[");
         return Result::Ok(NsdSeqSerializer {
             buf: self.buf,
@@ -260,7 +260,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> with stores[self] {
+    fn begin_map(&mut self, len: i32) -> Result<NsdMapSerializer, SerializeError> {
         self.buf.push_str("{");
         return Result::Ok(NsdMapSerializer {
             buf: self.buf,
@@ -269,11 +269,7 @@ impl Serializer for NsdSerializer {
         });
     }
 
-    fn begin_struct<S: AsStrSlice>(
-        &mut self,
-        name: S,
-        fields: i32,
-    ) -> Result<NsdStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<NsdStructSerializer, SerializeError> {
         // NSD: struct as array
         self.buf.push_str("[");
         return Result::Ok(NsdStructSerializer {
@@ -298,7 +294,7 @@ impl Serializer for NsdSerializer {
         type_name: S,
         variant_name: S1,
         disc: i32,
-    ) -> Result<NsdVariantSerializer, SerializeError> with stores[self] {
+    ) -> Result<NsdVariantSerializer, SerializeError> {
         // NSD: [disc, payload]
         self.buf.push_str(`[${disc}`);
         return Result::Ok(NsdVariantSerializer {
@@ -488,7 +484,7 @@ impl Deserializer for NsdDeserializer {
         return self.de.is_null();
     }
 
-    fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> with stores[self] {
+    fn begin_seq(&mut self) -> Result<NsdSeqAccess, DeserializeError> {
         self.de.expect_char(b'[')?;
         let depth = self.de.inner_depth()?;
         return Result::Ok(NsdSeqAccess {
@@ -498,7 +494,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> with stores[self] {
+    fn begin_map(&mut self) -> Result<NsdMapAccess, DeserializeError> {
         self.de.expect_char(b'{')?;
         let depth = self.de.inner_depth()?;
         return Result::Ok(NsdMapAccess {
@@ -508,11 +504,7 @@ impl Deserializer for NsdDeserializer {
         });
     }
 
-    fn begin_struct<S: AsStrSlice>(
-        &mut self,
-        name: S,
-        num_fields: i32,
-    ) -> Result<NsdStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<NsdStructAccess, DeserializeError> {
         // NSD: struct encoded as array
         self.de.expect_char(b'[')?;
         let depth = self.de.inner_depth()?;
@@ -529,7 +521,7 @@ impl Deserializer for NsdDeserializer {
         &mut self,
         type_name: S,
         num_cases: i32,
-    ) -> Result<NsdVariantAccess, DeserializeError> with stores[self] {
+    ) -> Result<NsdVariantAccess, DeserializeError> {
         let b = self.de.peek_after_whitespace();
         if b < 0 {
             return Result::Err(DeserializeError::eof(self.de.pos as i64));

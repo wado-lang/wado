@@ -1206,7 +1206,7 @@ fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, 
     return se;
 }
 
-fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> with stores[op] {
+fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> {
     return match op {
         RuleCall(rc) => if rc.target_name == rule_name.as_str_slice() { Option::Some(rc) } else { null },
         ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
@@ -2821,7 +2821,7 @@ fn lower_scan_shape_body(shape: &List<i32>, elements: &List<Element>, ctx: &mut 
     return ScanBody { elements: body_elems };
 }
 
-fn surface_unwrap_optional(elem: &Element) -> &Element with stores[elem] {
+fn surface_unwrap_optional(elem: &Element) -> &Element {
     return match elem {
         Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
         Label(lab) => surface_unwrap_optional(&lab.element),
@@ -3405,7 +3405,7 @@ fn lower_group_alt<S: AsStrSlice, S1: AsStrSlice>(
 /// `ScanElement::Repeat`. Every site that rebinds a repeat's caller FOLLOW asks
 /// through here, so `x+=(y*)` cannot take that rebind — and with it the reserve
 /// and decline guards — on the scan alone.
-fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> with stores[op] {
+fn op_repeat_inner(op: &Op) -> Option<&RepeatOp> {
     return match op {
         Repeat(r) => Option::Some(r),
         ListLabel(l) => if let Repeat(r) = &l.inner {
@@ -4660,7 +4660,7 @@ fn repeat_inner_is_list_label(elem: &Element) -> bool {
 /// `lower_label_op`'s `rebind_op_field`. Every reader that pairs the body op
 /// with its surface element peels through this, or the two disagree about the
 /// shape.
-pub fn peel_repeat_body_label(elem: &Element) -> &Element with stores[elem] {
+pub fn peel_repeat_body_label(elem: &Element) -> &Element {
     let mut cur = elem;
     while let Label(lab) = cur {
         cur = &lab.element;

@@ -3,11 +3,11 @@
 // via `impl<T: Base> Derived for T` over `Inner: Base`. Rank 1 asks every step
 // of a derivation at the level being ranked (WEP 2026-09-01, issue #1932).
 
-trait Base {
+trait Base with () {
     fn base() -> i32;
 }
 
-trait Derived {
+trait Derived with () {
     fn derived() -> i32;
 }
 
@@ -17,11 +17,11 @@ impl<T: Base> Derived for T {
     }
 }
 
-trait Limit {
+trait Limit with () {
     fn limit() -> i32;
 }
 
-trait Describe {
+trait Describe with () {
     fn describe(&self) -> String;
 }
 

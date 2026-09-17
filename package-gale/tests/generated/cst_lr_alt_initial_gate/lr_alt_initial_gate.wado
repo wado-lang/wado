@@ -38,11 +38,11 @@ pub struct LexerSlice {
 }
 
 impl LexerSlice {
-    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice with stores[chars] {
+    pub fn new(chars: &List<char>, start: i32, end: i32) -> LexerSlice {
         return LexerSlice { chars, start, end };
     }
 
-    pub fn empty(chars: &List<char>) -> LexerSlice with stores[chars] {
+    pub fn empty(chars: &List<char>) -> LexerSlice {
         return LexerSlice { chars, start: 0, end: 0 };
     }
 
@@ -162,7 +162,7 @@ pub struct TokenStream {
 }
 
 impl TokenStream {
-    pub fn new(chars: &List<char>) -> TokenStream with stores[chars] {
+    pub fn new(chars: &List<char>) -> TokenStream {
         let cap = chars.len() / 4 + 1;
         return TokenStream {
             kinds: List::with_capacity(cap),
@@ -1108,7 +1108,7 @@ impl Lexer {
         return self.pos >= self.chars.len();
     }
 
-    fn slice(&self, start: i32, end: i32) -> LexerSlice with stores[self] {
+    fn slice(&self, start: i32, end: i32) -> LexerSlice {
         return LexerSlice::new(&self.chars, start, end);
     }
 }

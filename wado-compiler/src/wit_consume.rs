@@ -291,7 +291,7 @@ impl Builder {
                 return_type,
                 effects: Vec::new(),
                 effect_ids: Vec::new(),
-                stores: Vec::new(),
+                effects_inherited: false,
                 body: None,
                 span: syn(),
             });
@@ -378,7 +378,7 @@ impl Builder {
             return_type,
             effects: Vec::new(),
             effect_ids: Vec::new(),
-            stores: Vec::new(),
+            effects_inherited: false,
             body: None,
             span: syn(),
         }));

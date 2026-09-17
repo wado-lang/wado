@@ -93,7 +93,7 @@ impl<T> From<Array<T>> for EitherBag<T> {
 // (`T::Value`) compiles and dispatches. These two traits are this fixture's
 // own — literal coercion has no builder protocol to test.
 
-trait KeyValueLiteralBuilder {
+trait KeyValueLiteralBuilder with () {
     type Value;
     type Output;
 
@@ -102,7 +102,7 @@ trait KeyValueLiteralBuilder {
     fn build(&self) -> Self::Output;
 }
 
-trait KeyValueLiteral {
+trait KeyValueLiteral with () {
     type Value;
     type Builder;
 }

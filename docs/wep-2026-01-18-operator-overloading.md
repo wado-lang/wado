@@ -928,7 +928,7 @@ Rust's `Deref` trait enables smart pointers and automatic coercion. This may be 
 
 - [WEP: Struct and Trait System](./wep-2026-01-13-struct-and-trait.md) - Trait foundation
 - [WEP: Operator Precedence](./wep-2026-01-11-operator-precedence.md) - Operator precedence rules
-- [WEP: Value Semantics](./wep-2026-01-12-value-semantics-and-stores.md) - Value semantics and cloning
+- [WEP: Value Semantics](./wep-2026-01-12-value-semantics-and-retention.md) - Value semantics and cloning
 
 ## Sources
 

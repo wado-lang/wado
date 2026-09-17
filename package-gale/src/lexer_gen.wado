@@ -466,7 +466,6 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     f3.add_param("start", "i32");
     f3.add_param("end", "i32");
     f3.set_return_type("LexerSlice");
-    f3.add_stores("self");
     f3.emit_begin(w);
     w.line("return LexerSlice::new(&self.chars, start, end);");
     w.end();
@@ -982,16 +981,10 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     }
     f.add_param("start", "i32");
     f.set_return_type("i32");
-    // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
-    // view literal stores the char-stream ref, so declare both `with Foo` and
-    // `stores` for that ref.
+    // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
+    // generated function carry `with Foo`.
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
-        if hm {
-            f.add_stores("lx");
-        } else {
-            f.add_stores("chars");
-        }
     }
     f.emit_begin(w);
     if hm {
@@ -1222,8 +1215,8 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
-        // A base op reached from the replayed match carries the effect and
-        // stores the char-stream ref in its `LexerView`, as in `try_`.
+        // A base op reached from the replayed match carries the effect, as in
+        // `try_`.
         let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
         f.add_param("lx", "&mut Lexer");
@@ -1231,7 +1224,6 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has
         f.add_param("end", "i32");
         if replay_super {
             f.add_effect(sc_name);
-            f.add_stores("lx");
         }
         f.emit_begin(w);
         gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, &grammar.options, ci, has_members);
@@ -3371,7 +3363,7 @@ fn gen_lexer_not<S: AsStrSlice>(
     w.line("pos += 1;");
 }
 
-pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
+pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> {
     return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.as_str_slice() && r.is_fragment);
 }
 

@@ -224,21 +224,6 @@ export fn run() with Stdout {
             "missing effect",
         ),
         (
-            "stores",
-            r#"
-struct Data {
-    value: i32,
-}
-
-fn bad_return(data: &Data) -> &Data {
-    return data;
-}
-
-export fn run() {}
-"#,
-            "stores[data]",
-        ),
-        (
             "purity",
             r#"
 use { println, Stdout } from "core:cli";

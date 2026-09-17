@@ -17,10 +17,10 @@ use crate::name::{
 use crate::package::Package;
 use crate::synthesis::common::{alloc_local, alloc_named_local, option_some, ref_expr, synth_span};
 use crate::tir::{
-    CallArg, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField, TirFunction, TirGlobal,
-    TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
-    TirTemplatePart, TypeId, TypeTable,
+    CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
+    ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
+    TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
+    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -341,7 +341,7 @@ fn synthesize_dispatch_struct(
         nullable_ref_type_id = tt.make_option(inner_ref_type_id);
         for op in &meta.operations {
             let param_types: Vec<TypeId> = op.params.iter().map(|p| p.type_id).collect();
-            let op_func_type = tt.make_function(param_types, op.return_type, vec![], vec![]);
+            let op_func_type = tt.make_function(param_types, op.return_type, vec![]);
             op_field_types.push(op_func_type);
         }
     }
@@ -946,7 +946,7 @@ fn build_dispatch_wrapper_function(
         // dispatches into the installed handler, its `else` branch emits the
         // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span,
         local_count: next_local,
@@ -2246,15 +2246,14 @@ fn build_handler_op_closure(
 
     let captures = vec![TirCapture {
         name: h_name.to_string(),
-        outer_index: h_local_index,
+        source: CaptureSource::Local(h_local_index),
         type_id: handler_type,
-        is_mut: false,
     }];
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
 
     TirExpr::new(
         TirExprKind::Closure {
@@ -2306,7 +2305,7 @@ fn build_trap_closure(
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2377,10 +2376,9 @@ fn build_default_closure(
     );
 
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-    let func_type =
-        type_table
-            .borrow_mut()
-            .make_function(param_types, op.return_type, vec![], vec![]);
+    let func_type = type_table
+        .borrow_mut()
+        .make_function(param_types, op.return_type, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -2441,7 +2439,7 @@ fn build_forward_closure(
     let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
     let func_type = type_table
         .borrow_mut()
-        .make_function(param_types, closure_ret, vec![], vec![]);
+        .make_function(param_types, closure_ret, vec![]);
     TirExpr::new(
         TirExprKind::Closure {
             params: closure_params,
@@ -3028,9 +3026,8 @@ fn open_boundary_effects(project: &Package) -> IndexSet<(ModuleSource, String)> 
 }
 
 /// **Late phase** — desugar `WithHandler` into the dispatch protocol, after
-/// `effect_check` and `stores_check`, both of which read the original shape:
-/// one for which effects are satisfied locally, the other for reference flow
-/// through handler installs. Takes the `dispatch_plans`
+/// `effect_check`, which reads the original shape to say whether effects are
+/// satisfied locally. Takes the `dispatch_plans`
 /// [`synthesize_pre_cm_binding`] left on the `Package`.
 pub fn synthesize_post_check(mut project: Package) -> Result<Package, String> {
     let plans = std::mem::take(&mut project.dispatch_plans);

@@ -90,7 +90,7 @@ impl PathParams {
     /// Deserialize captured parameters into a typed struct `T`. Scalar
     /// fields parse directly from path bytes; only `String` fields incur
     /// a substring allocation.
-    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError> with stores[self] {
+    pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError> {
         let mut d = PathParamsDeserializer { src: self, cursor: 0 };
         return T::deserialize(&mut d);
     }
@@ -202,42 +202,42 @@ impl<H> Router<H> {
 
     /// Registers a handler for `(method, pattern)`. Last-write-wins.
     /// Panics on a malformed pattern.
-    pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) with stores[handler] {
+    pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) {
         self.insert(Option::Some(method), pattern, handler);
     }
 
-    pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Get, pattern, handler);
     }
 
-    pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Post, pattern, handler);
     }
 
-    pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Put, pattern, handler);
     }
 
-    pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Patch, pattern, handler);
     }
 
-    pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Delete, pattern, handler);
     }
 
-    pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.route(Method::Options, pattern, handler);
     }
 
     /// Registers a handler that matches any HTTP method (including
     /// `Method::Other(_)`) at `pattern`. Specific-method handlers at the
     /// same pattern take precedence; `any` is the fallback.
-    pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler] {
+    pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) {
         self.insert(null, pattern, handler);
     }
 
-    fn insert<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) with stores[handler] {
+    fn insert<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
         let segs = parse_pattern(&pattern);
         if is_static_pattern(&segs) {
             self.insert_static(method_opt, pattern, handler);
@@ -246,7 +246,7 @@ impl<H> Router<H> {
         self.insert_dynamic(&method_opt, &segs, handler);
     }
 
-    fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) with stores[handler] {
+    fn insert_static<S: AsStrSlice>(&mut self, method_opt: Option<Method>, pattern: S, handler: H) {
         // `static_entries` is kept sorted by `static_entry_cmp` so both
         // `match_static` and this last-write-wins lookup can locate an
         // existing entry in O(log n). The narrow `[lo, hi)` range covers
@@ -277,7 +277,7 @@ impl<H> Router<H> {
         self.static_entries.insert(pos, new_entry);
     }
 
-    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) with stores[handler] {
+    fn insert_dynamic(&mut self, method_opt: &Option<Method>, segs: &List<Segment>, handler: H) {
         let mut cur: i32 = 0;
         let mut names: List<String> = [];
         let nseg = segs.len();
@@ -352,14 +352,14 @@ impl<H> Router<H> {
 
     /// Matches `(method, path)`. The path argument must be a URL path
     /// (no query string, no fragment).
-    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
+    pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>> {
         if let Some(rm) = self.match_static(&method, path) {
             return Option::Some(rm);
         }
         return self.match_dynamic(&method, path);
     }
 
-    fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> with stores[self] {
+    fn match_static<S: AsStrSlice>(&self, method: &Method, path: S) -> Option<&RouteMatch<H>> {
         let [lo, hi] = bsearch_pattern_range(&self.static_entries, path);
         if lo >= hi {
             return null;
@@ -385,15 +385,9 @@ impl<H> Router<H> {
     /// Dynamic DFA match.
     ///
     /// On a hit, builds a fresh `RouteMatch` plus its `PathParams` /
-    /// `ranges` storage in this function's locals and returns a reference
-    /// to that match. Wado's escape analysis automatically heap-promotes
-    /// any local whose address escapes the function (see
-    /// `docs/wep-2026-01-12-value-semantics-and-stores.md`), so the
-    /// returned `&RouteMatch<H>` is sound: `rm`, `pp`, and `ranges` all
-    /// migrate to GC-managed storage and live as long as the caller
-    /// retains the reference. The `stores[self, path]` annotation is what
-    /// makes returning a ref derived from `&self` and `path` legal here.
-    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path] {
+    /// `ranges` and returns a reference to that match, which outlives this
+    /// frame: each is a GC allocation the returned reference keeps alive.
+    fn match_dynamic(&self, method: &Method, path: &String) -> Option<&RouteMatch<H>> {
         let plen = path.len();
         let view = path.as_str_slice();
         let mut pos = if plen > 0 && path.get_byte_unchecked(0) == b'/' { 1 } else { 0 };
@@ -555,7 +549,7 @@ impl<H> Router<H> {
 
     /// Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
     /// from the path before matching.
-    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> with stores[self] {
+    pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> {
         let method = request.get_method();
         let pq = match request.get_path_with_query() {
             Some(s) => s,
@@ -899,11 +893,11 @@ impl Deserializer for PathParamsDeserializer {
         return Result::Ok(false);
     }
 
-    fn begin_seq(&mut self) -> Result<PathParamsSeqStub, DeserializeError> with stores[self] {
+    fn begin_seq(&mut self) -> Result<PathParamsSeqStub, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a seq", -1));
     }
 
-    fn begin_map(&mut self) -> Result<PathParamsMapStub, DeserializeError> with stores[self] {
+    fn begin_map(&mut self) -> Result<PathParamsMapStub, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a map", -1));
     }
 
@@ -911,7 +905,7 @@ impl Deserializer for PathParamsDeserializer {
         &mut self,
         _name: S,
         _num_fields: i32,
-    ) -> Result<PathParamsStructAccess, DeserializeError> with stores[self] {
+    ) -> Result<PathParamsStructAccess, DeserializeError> {
         // Nested structs are unsupported: `PathParams` is a flat key/value
         // surface, so a nested `begin_struct` (cursor != 0) means a field
         // typed as another struct asked us to descend into it. Refuse loudly
@@ -929,7 +923,7 @@ impl Deserializer for PathParamsDeserializer {
         &mut self,
         _type_name: S,
         _num_cases: i32,
-    ) -> Result<PathParamsVariantStub, DeserializeError> with stores[self] {
+    ) -> Result<PathParamsVariantStub, DeserializeError> {
         return Result::Err(DeserializeError::unexpected_type("path params cannot be deserialized as a variant", -1));
     }
 

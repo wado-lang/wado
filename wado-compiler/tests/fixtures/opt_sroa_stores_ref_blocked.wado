@@ -1,8 +1,8 @@
-// Test: SROA behavior when &s is passed to a stores function.
+// Test: SROA behavior when &s is passed to a function that retains it.
 //
-// When the callee declares `stores[p]`, the reference persists beyond the call.
-// However, after inlining + SROA of the Holder + ref elimination, the stores
-// semantics is resolved and `p` may be fully decomposed into scalars.
+// When the callee retains `p`, the reference persists beyond the call.
+// However, after inlining + SROA of the Holder + ref elimination, the
+// retention is resolved and `p` may be fully decomposed into scalars.
 
 struct Point {
     x: i32,
@@ -13,7 +13,7 @@ struct Holder {
     p: &Point,
 }
 
-fn store_point(p: &Point) -> Holder with stores[p] {
+fn store_point(p: &Point) -> Holder {
     return Holder { p };
 }
 

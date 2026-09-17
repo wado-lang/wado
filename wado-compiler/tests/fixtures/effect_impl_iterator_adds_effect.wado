@@ -1,0 +1,43 @@
+// A user iterator whose `next()` carries `with Stdout` implements a trait
+// method that declares no effects. The trait's `with` clause bounds every
+// impl of it, so the impl is reported where it is written.
+use { println, Stdout } from "core:cli";
+
+struct Counter {
+    n: i32,
+}
+
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> with Stdout {
+        println("tick");
+        if self.n <= 0 {
+            return null;
+        }
+        self.n = self.n - 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl IntoIterator for Counter {
+    type Item = i32;
+    type Iter = Counter;
+
+    fn into_iter(&self) -> Counter {
+        return *self;
+    }
+}
+
+fn consume(c: Counter) {
+    for let v of c {
+        let _ = v;
+    }
+}
+
+export fn run() with Stdout {
+    consume(Counter { n: 2 });
+}
+
+__DATA__
+{"compile_error": "effect 'Stdout' is not declared by trait method 'Iterator::next'"}

@@ -6,7 +6,7 @@
 // reference-shaped type while storing an i32, which the WIR pipeline rejected as
 // invalid core Wasm ("type mismatch: expected (ref null ...), found i32").
 
-trait Foo { fn val(&self) -> i32; }
+trait Foo with () { fn val(&self) -> i32; }
 impl Foo for i32 { fn val(&self) -> i32 { return *self; } }
 impl Foo for String { fn val(&self) -> i32 { return 100; } }
 impl Foo for bool { fn val(&self) -> i32 { return 1; } }

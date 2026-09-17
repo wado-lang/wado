@@ -12,6 +12,7 @@ use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
+use crate::lower::plan::value_copy::ownership::owes_return_convention;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::{FqTypeName, Receiver, global_init_function, global_name};
 use crate::symbol::SymbolTable;
@@ -36,6 +37,7 @@ use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
 use crate::elaborator::call::omits_a_default;
+use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
     compose_union_plan, int_literal_cast_operand, int_literal_repr, peel_to_struct,
@@ -43,9 +45,9 @@ use crate::elaborator::expr::{
 use crate::elaborator::item::extract_compiler_item;
 use crate::elaborator::method_lookup::adjusted_receiver_type;
 use crate::elaborator::sem::types::{
-    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, KeyValueCoercionFacts,
-    LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch, SequenceCoercionFacts,
-    StaticMethodDispatch, with_body_facts,
+    BodyFacts, CoercionKind, DesugarKind, ForOfIteratorInfo, ImplFacts, IndirectCallee,
+    KeyValueCoercionFacts, LiteralCallee, LiteralFromCall, MethodNames, OperatorDispatch,
+    SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
     collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
@@ -63,8 +65,8 @@ use crate::escape::{
 };
 use crate::format_spec::{FormatKind, TemplateFormatSpec};
 use crate::name::{
-    LocalMethodName, MethodName, display_function_name, effect_default_impl_name,
-    mangle_local_item_name, test_function_name,
+    LocalMethodName, MethodName, deref_capture_name, display_function_name,
+    effect_default_impl_name, mangle_local_item_name, test_function_name,
 };
 use crate::resolve::head_site;
 use crate::symbol::{Symbol, SymbolKind};
@@ -734,14 +736,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         is_mut,
                         params,
                         return_type,
-                        stores,
                         ..
                     } => ResolvedType::Function {
                         is_mut: *is_mut,
                         params: params.clone(),
                         return_type: *return_type,
                         effects,
-                        stores: stores.clone(),
                     },
                     _ => return resolved,
                 };
@@ -1428,7 +1428,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self
             .ann_decl_type_params(func.id)
             .expect("resolve_function records the type params for every function reify emits");
-        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.resolved_return_convention(
+            func,
+            &params,
+            return_type,
+            body.is_some(),
+            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+        );
+        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1451,7 +1458,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .get(&func.id)
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
-            stores: func.stores.clone(),
+            retains,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1843,7 +1850,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let type_params = self.ann_decl_type_params(func.id).expect(
             "resolve_method records the method type params for every impl method reify emits",
         );
-        let declared_return_convention = self.reify_return_convention_attr(&func.attrs, &params);
+        let declared_return_convention = self.resolved_return_convention(
+            func,
+            &params,
+            return_type,
+            body.is_some(),
+            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
+        );
+        let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1866,7 +1880,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .get(&func.id)
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
-            stores: func.stores.clone(),
+            retains,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1935,7 +1949,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return_type,
             task_return_type: None,
             effects: vec![],
-            stores: vec![],
+            retains: vec![],
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2123,41 +2137,181 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// The `#[returns(...)]` convention, `None` where the declaration states
+    /// A body-less declaration reading through a reference and returning
+    /// something that can carry storage must say which: silence reads as
+    /// "allocates", and a declaration that does hand out an argument's storage
+    /// then has its caller's copies elided. Reported here, where the declaration
+    /// has a span, rather than asserted in a later phase that has none.
+    ///
+    /// A Component Model import declares nothing and owes nothing: the boundary
+    /// copies, so its result is owned by construction, and the answer is the
+    /// same for every one of them.
+    fn resolved_return_convention(
+        &self,
+        func: &ast::Function,
+        params: &[tir::TirParam],
+        return_type: tir::TypeId,
+        has_body: bool,
+        declared: Option<tir::ReturnConvention>,
+    ) -> Option<tir::ReturnConvention> {
+        // The attribute, not what it resolved to: one that failed to resolve was
+        // reported already, and asking for it again says nothing new.
+        let states_one = func.attrs.iter().any(|attr| attr.name == "result");
+        if has_body || states_one || reserves_a_name_only(func) {
+            return declared;
+        }
+        if func.is_cm_import() {
+            return Some(tir::ReturnConvention::Owned);
+        }
+        if !owes_return_convention(params, return_type, &self.tysys.type_table.borrow()) {
+            return None;
+        }
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::ResultAttr,
+                message: format!(
+                    "`{}` reads through a reference and returns storage: \
+                     declare #[result(part_of = p)], or #[result(owned)] that it allocates",
+                    func.name
+                ),
+                span: Some(DiagnosticSpan::from_span(&func.name_span, None)),
+            },
+        );
+        None
+    }
+
+    /// The `#[result(...)]` convention, `None` where the declaration states
     /// none. A malformed one is reported rather than read as that silence, which
     /// means "allocates" — the reading that elides copies.
     fn reify_return_convention_attr(
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
+        has_body: bool,
     ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == "returns")?;
+        let attr = attrs.iter().find(|a| a.name == "result")?;
         let emit = |message: String| {
-            self.attr_error(Code::ReturnsAttr, attr, message);
+            self.attr_error(Code::ResultAttr, attr, message);
             None
         };
-
         let [arg] = attr.args.as_slice() else {
             return emit(
-                "#[returns] takes one convention: `owned` or `part_of = param`".to_string(),
+                "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
+        // After the argument, so an attribute that is both malformed and
+        // misplaced reports what it got wrong rather than only where it sits.
+        let placed = |convention| {
+            if has_body {
+                return emit(
+                    "#[result] belongs to a declaration with no body; a body states what it returns"
+                        .to_string(),
+                );
+            }
+            Some(convention)
+        };
         match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
+            ast::AttrArg::Ident(name) if name == "owned" => placed(tir::ReturnConvention::Owned),
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
-                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
-                    None => emit(format!("#[returns(part_of = {named})] names no parameter")),
+                    Some(index) => placed(tir::ReturnConvention::PartOf(index)),
+                    None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
             _ if arg.name() == "part_of" => {
-                emit("#[returns(part_of = ...)] takes a parameter name, unquoted".to_string())
+                emit("#[result(part_of = ...)] takes a parameter name, unquoted".to_string())
             }
             _ => emit(format!(
-                "unknown #[returns] convention: {} (expected `owned` or `part_of = param`)",
+                "unknown #[result] convention: {} (expected `owned` or `part_of = param`)",
                 arg.name()
             )),
         }
+    }
+
+    /// The `#[retain(...)]` clauses, one per attribute. A function with a body
+    /// states what it retains in that body, so an attribute there is reported
+    /// and dropped rather than read.
+    fn reify_retain_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Vec<tir::RetainSpec<String>> {
+        attrs
+            .iter()
+            .filter(|a| a.name == "retain")
+            .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
+            .collect()
+    }
+
+    fn reify_retain_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Option<tir::RetainSpec<String>> {
+        let emit = |message: String| {
+            self.attr_error(Code::RetainAttr, attr, message);
+            None
+        };
+        let named = |name: &str| params.iter().any(|p| p.name == name);
+        let unquoted = |key: &str| {
+            emit(format!(
+                "#[retain({key} = ...)] takes a parameter name, unquoted"
+            ))
+        };
+
+        let (source, elements) = match attr.args.first() {
+            Some(ast::AttrArg::Ident(name)) => (name.clone(), false),
+            Some(ast::AttrArg::KeyIdent(key, name)) if key == "elements_of" => (name.clone(), true),
+            Some(arg) if arg.name() == "elements_of" => return unquoted("elements_of"),
+            _ => {
+                return emit(
+                    "#[retain] names one parameter: `p`, or `elements_of = p`".to_string(),
+                );
+            }
+        };
+        if !named(&source) {
+            return emit(format!("#[retain] names no parameter: {source}"));
+        }
+
+        let into = match attr.args.get(1) {
+            None => None,
+            Some(ast::AttrArg::KeyIdent(key, dest)) if key == "into" => {
+                if !named(dest) {
+                    return emit(format!("#[retain(into = {dest})] names no parameter"));
+                }
+                Some(dest.clone())
+            }
+            Some(arg) if arg.name() == "into" => return unquoted("into"),
+            Some(arg) => {
+                return emit(format!(
+                    "unknown #[retain] argument: {} (expected `into = param`)",
+                    arg.name()
+                ));
+            }
+        };
+        if attr.args.len() > 2 {
+            return emit(
+                "#[retain] names one retained thing; repeat the attribute for another".to_string(),
+            );
+        }
+
+        // After the arguments, so an attribute that is both malformed and
+        // misplaced reports what it got wrong rather than only where it sits.
+        if has_body {
+            return emit(
+                "#[retain] belongs to a declaration with no body; a body states what it retains"
+                    .to_string(),
+            );
+        }
+        Some(tir::RetainSpec {
+            source,
+            elements,
+            into,
+        })
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -6681,9 +6835,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
         expected_type: Option<TypeId>,
     ) -> TirExpr {
-        use crate::tir::{
-            ResolvedType, TirBlock, TirCapture, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable,
-        };
+        use crate::tir::{ResolvedType, TirBlock, TirExprKind, TirStmtKind, TirUnaryOp, TypeTable};
 
         let span = closure.span;
 
@@ -6700,11 +6852,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut deref_overrides: hashmap::IndexMap<String, (String, TypeId)> =
             hashmap::IndexMap::default();
         for mc in &cap_info.mut_captures {
-            // The slot comes from this walk; the `&mut` goes to the reserved
-            // index, which is the one the capture list records.
-            ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
-            let ref_index = mc.ref_index;
-            ctx.address_taken_locals.insert(mc.outer_index);
+            let Some(outer) = ctx.lookup(&mc.var_name) else {
+                unreachable!(
+                    "in {}: annotate mut-captured `{}`, which this frame does not bind",
+                    ctx.function_name, mc.var_name
+                )
+            };
+            let outer_index = outer.index;
+            let ref_index = ctx.add_local(mc.ref_name.clone(), mc.ref_type, false, None);
+            assert_eq!(
+                ref_index, mc.ref_index,
+                "in {}: `{}` lands on the index `resolve_closure` reserved for it",
+                ctx.function_name, mc.ref_name
+            );
+            ctx.address_taken_locals.insert(outer_index);
             ref_stmts.push(TirStmt::new(
                 TirStmtKind::Let {
                     name: mc.ref_name.clone(),
@@ -6717,7 +6878,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             op: TirUnaryOp::MutRef,
                             expr: Box::new(TirExpr::new(
                                 TirExprKind::Local {
-                                    index: mc.outer_index,
+                                    index: outer_index,
                                     name: mc.var_name.clone(),
                                 },
                                 mc.inner_type,
@@ -6734,10 +6895,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             deref_overrides.insert(mc.var_name.clone(), (mc.ref_name.clone(), mc.inner_type));
         }
 
-        // Step 2: open the closure context with the deref overrides.
+        // Step 2: open the closure context with the deref overrides and the
+        // environment annotate settled on, whose slots the body walk reads.
         let mut closure_ctx =
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
+        closure_ctx.seed_captures(cap_info.captures.iter().map(|c| c.name.as_str()));
 
         // Step 3: add closure parameters. Their types come from `local_types`,
         // which `resolve_closure` populated per param `AstId` — reify is a pure
@@ -6812,17 +6975,9 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
         let body = self.reify_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Step 5: assemble the capture list from the recorded entries.
-        let captures: Vec<TirCapture> = cap_info
-            .captures
-            .iter()
-            .map(|c| TirCapture {
-                name: c.name.clone(),
-                outer_index: c.outer_index,
-                type_id: c.type_id,
-                is_mut: c.is_mut,
-            })
-            .collect();
+        // Step 5: assemble the capture list, making this frame capture whatever
+        // the closure only reached through it, as `resolve_closure` also did.
+        let captures = relink_recorded_captures(&cap_info.captures, &closure_ctx, ctx);
 
         // An explicit annotation wins; otherwise single-expression closure
         // bodies (e.g. `|c| c.method()`) take their body's type as the return
@@ -6841,7 +6996,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cap_info.is_mutating,
             param_types,
             return_type,
-            Vec::new(),
             Vec::new(),
         );
 
@@ -7997,22 +8151,58 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
     }
 
-    /// A function-typed global's `GlobalVarGet` parts
-    /// `(module_source, global_name, type)`, or `None` for a non-global or
-    /// non-function name. Shares `ModuleDecls::lookup_global` with the
-    /// annotate-side `Elaborator::global_var_type` so the two paths agree.
-    fn global_fn_callee(&self, name: &str) -> Option<(ModuleSource, String, TypeId)> {
-        let (module_source, global_name, ty, _mutable) = self
-            .sem
-            .decls
-            .lookup_global(name, &self.current_module_source)?;
-        let table = self.tysys.type_table.borrow();
-        let base = table.representation_head(table.peel_refs(ty));
-        matches!(table.get(base), ResolvedType::Function { .. }).then_some((
-            module_source,
-            global_name,
-            ty,
-        ))
+    /// The callee value of a call annotate recorded as indirect, read down to
+    /// the function value as `build_indirect_call`'s `deref_to_value` does.
+    ///
+    /// `kind` says which value, so the type test that decided it at annotate
+    /// time is not repeated. Only a name this frame cannot reach is left to
+    /// fail, which is the two walks disagreeing.
+    fn reify_indirect_callee(
+        &mut self,
+        callee: &ast::Expr,
+        kind: IndirectCallee,
+        ctx: &mut FunctionContext,
+    ) -> TirExpr {
+        let span = callee.span();
+        let value = match (kind, callee) {
+            (IndirectCallee::Binding, ast::Expr::Ident(ident)) => {
+                let Some(var_ref) = ctx.lookup_or_capture(&ident.name) else {
+                    unreachable!(
+                        "at {}: annotate reached the binding `{}`, reify's frame cannot",
+                        span.location(),
+                        ident.name
+                    )
+                };
+                var_ref_expr(var_ref, &ident.name, span)
+            }
+            (IndirectCallee::Global, ast::Expr::Ident(ident)) => {
+                let Some((module_source, name, global_type, _mutable)) = self
+                    .sem
+                    .decls
+                    .lookup_global(&ident.name, &self.current_module_source)
+                else {
+                    unreachable!(
+                        "at {}: annotate read the global `{}`, reify finds no such global",
+                        span.location(),
+                        ident.name
+                    )
+                };
+                TirExpr::new(
+                    TirExprKind::GlobalVarGet {
+                        module_source,
+                        name,
+                    },
+                    global_type,
+                    span,
+                )
+            }
+            (IndirectCallee::Expr, _) => self.reify_expr(callee, ctx, None),
+            (IndirectCallee::Binding | IndirectCallee::Global, other) => unreachable!(
+                "at {}: annotate recorded a named callee, and this one has no name",
+                other.span().location()
+            ),
+        };
+        deref_to_value(value, span, &self.tysys.type_table)
     }
 
     /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
@@ -8248,76 +8438,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // dropped (no side effects: `reify_expr` is pure TIR shaping).
         }
 
-        // Closure-call shape: bare-ident callee that resolves to a
-        // local with `fn(...)` type. Annotate decides this by
-        // probing `ctx.lookup`; reify reproduces by checking the
-        // ident's local + its resolved type. The same `ctx` reify
-        // built during the body walk has every let-bound local in
-        // place (the walk-order invariant), so the lookup returns the
-        // same answer.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
-            && let Some(local) = ctx.lookup(&ident.name)
-            && {
-                // The callee may be a bare `fn(...)` value or a reference
-                // to one (`&fn(...)`, `&mut fn(...)`), possibly behind a
-                // fn-type newtype. Mirror `Elaborator::as_fn_signature`:
-                // peel references and the ultimate base type before
-                // checking for `Function`.
-                let table = self.tysys.type_table.borrow();
-                let base = table.representation_head(table.peel_refs(local.type_id));
-                matches!(table.get(base), ResolvedType::Function { .. })
-            }
-        {
-            let local_index = local.index;
-            let local_type_id = local.type_id;
-            let callee_expr = TirExpr::new(
-                TirExprKind::Local {
-                    index: local_index,
-                    name: ident.name.clone(),
-                },
-                local_type_id,
-                ident.span,
-            );
-            // Auto-deref a `&fn` / `&mut fn` callee down to the function
-            // value, exactly as `build_indirect_call`'s final
-            // `deref_to_value` does in the production path.
-            let callee_expr = deref_to_value(callee_expr, ident.span, &self.tysys.type_table);
-            let arg_exprs: Vec<TirExpr> = call
-                .args
-                .iter()
-                .map(|a| self.reify_expr(a, ctx, None))
-                .collect();
-            return TirExpr::new(
-                TirExprKind::IndirectCall {
-                    callee: Box::new(callee_expr),
-                    args: arg_exprs,
-                },
-                recorded_type,
-                span,
-            );
-        }
-
-        // Global closure call: a bare-ident callee that is not a local but
-        // names a *global* (current-module or imported) of `fn(...)` type.
-        // Mirrors `resolve_call`'s global path. Annotate records no type for
-        // the callee (like the local-variable path), so build the global read
-        // directly with the global's type rather than via `reify_expr`.
-        if let ast::Expr::Ident(ident) = &call.callee
-            && !ident.name.contains("::")
-            && ctx.lookup(&ident.name).is_none()
-            && let Some((module_source, global_name, callee_ty)) =
-                self.global_fn_callee(&ident.name)
-        {
-            let callee_expr = TirExpr::new(
-                TirExprKind::GlobalVarGet {
-                    module_source,
-                    name: global_name,
-                },
-                callee_ty,
-                ident.span,
-            );
-            let callee_expr = deref_to_value(callee_expr, ident.span, &self.tysys.type_table);
+        // Indirect call: the callee is a value rather than a named function.
+        // Annotate recorded which value, so this arm builds the call it decided
+        // on instead of deciding again.
+        if let Some(kind) = self.ann_indirect_callee(call.id) {
+            let callee_expr = self.reify_indirect_callee(&call.callee, kind, ctx);
             let arg_exprs: Vec<TirExpr> = call
                 .args
                 .iter()
@@ -8350,39 +8475,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
-        // Indirect-call shape: callee is any non-ident expression
-        // whose type resolves to a function (e.g. `arr[i](x)`,
-        // `(foo.bar)(x)`, `(get_fn())(x)`, `(|x| x)(1)`). Mirrors
-        // `Elaborator::resolve_call`'s non-ident-callee path
+        // A non-ident callee that is not callable — annotate already diagnosed
+        // it (`TypeError::CalleeNotCallable`), and the callable ones returned
+        // above. Match the elaborator's recovery shape.
         if !matches!(&call.callee, ast::Expr::Ident(_)) {
-            let callee_expr = self.reify_expr(&call.callee, ctx, None);
-            let is_fn = {
-                let table = self.tysys.type_table.borrow();
-                let base = table.representation_head(table.peel_refs(callee_expr.type_id));
-                matches!(table.get(base), ResolvedType::Function { .. })
-            };
-            if is_fn {
-                // Auto-deref a `&fn` / `&mut fn` callee, matching
-                // `build_indirect_call`'s `deref_to_value` in production.
-                let callee_expr =
-                    deref_to_value(callee_expr, call.callee.span(), &self.tysys.type_table);
-                let arg_exprs: Vec<TirExpr> = call
-                    .args
-                    .iter()
-                    .map(|a| self.reify_expr(a, ctx, None))
-                    .collect();
-                return TirExpr::new(
-                    TirExprKind::IndirectCall {
-                        callee: Box::new(callee_expr),
-                        args: arg_exprs,
-                    },
-                    recorded_type,
-                    span,
-                );
-            }
-            // Non-fn-typed non-ident callee — annotate already
-            // diagnosed it (`TypeError::CalleeNotCallable`).
-            // Match the elaborator's recovery shape.
             return TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, span);
         }
 
@@ -9091,51 +9187,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         //    the parent's `AstIdSpace` + counter, see
         //    `parse_interpolation_expr`.)
         if let Some(var_ref) = ctx.lookup_or_capture(&ident.name) {
-            match var_ref {
-                VarRef::Local { index, type_id, .. } => {
-                    return TirExpr::new(
-                        TirExprKind::Local {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
-                }
-                VarRef::Capture { index, type_id, .. } => {
-                    return TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: ident.name.clone(),
-                        },
-                        type_id,
-                        ident.span,
-                    );
-                }
-                VarRef::DerefCapture {
-                    index,
-                    ref_type_id,
-                    inner_type_id,
-                    ..
-                } => {
-                    let capture_expr = TirExpr::new(
-                        TirExprKind::Capture {
-                            index,
-                            name: format!("$deref_cap_{index}"),
-                        },
-                        ref_type_id,
-                        ident.span,
-                    );
-                    return TirExpr::new(
-                        TirExprKind::Unary {
-                            op: TirUnaryOp::Deref,
-                            expr: Box::new(capture_expr),
-                        },
-                        inner_type_id,
-                        ident.span,
-                    );
-                }
-            }
+            return var_ref_expr(var_ref, &ident.name, ident.span);
         }
 
         // 2. Current-module global.
@@ -10907,6 +10959,52 @@ fn adjust_receiver_node(
     }
 }
 
+/// The TIR read of a resolved binding: a local, a by-value capture, or a
+/// dereference of a captured `&mut`.
+fn var_ref_expr(var_ref: VarRef, name: &str, span: Span) -> TirExpr {
+    match var_ref {
+        VarRef::Local { index, type_id, .. } => TirExpr::new(
+            TirExprKind::Local {
+                index,
+                name: name.to_string(),
+            },
+            type_id,
+            span,
+        ),
+        VarRef::Capture { index, type_id, .. } => TirExpr::new(
+            TirExprKind::Capture {
+                index,
+                name: name.to_string(),
+            },
+            type_id,
+            span,
+        ),
+        VarRef::DerefCapture {
+            index,
+            ref_type_id,
+            inner_type_id,
+            ..
+        } => {
+            let capture = TirExpr::new(
+                TirExprKind::Capture {
+                    index,
+                    name: deref_capture_name(index),
+                },
+                ref_type_id,
+                span,
+            );
+            TirExpr::new(
+                TirExprKind::Unary {
+                    op: TirUnaryOp::Deref,
+                    expr: Box::new(capture),
+                },
+                inner_type_id,
+                span,
+            )
+        }
+    }
+}
+
 /// Peel every reference layer off a receiver, so a by-value `self` reaches the
 /// callee as the value it declares.
 fn deref_to_value(
@@ -11225,6 +11323,13 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
             None
         }
     })
+}
+
+/// Whether the declaration reserves a name rather than a signature. Nothing
+/// ever calls a `#[unavailable]` one, so it states nothing about a call and is
+/// owed nothing about one either.
+fn reserves_a_name_only(func: &ast::Function) -> bool {
+    func.unavailable_attr().is_some()
 }
 
 /// The discriminant a variant pattern matches. Pattern resolution rejects a case

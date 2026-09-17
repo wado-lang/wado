@@ -6,7 +6,7 @@
 // (`[..P::ttag()]`, the oneOf schema shape) needs only the `Cases` pack plus
 // the §1 pack-map.
 
-trait Tag {
+trait Tag with () {
     fn tag(&self) -> String;
 }
 
@@ -40,7 +40,7 @@ impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Tag for T {
     }
 }
 
-trait Rebuild {
+trait Rebuild with () {
     fn rebuild(&self) -> Self;
 }
 
@@ -56,7 +56,7 @@ impl<T: ReflectVariant<CasePayloads = [..P]>, ..P: Tag> Rebuild for T {
     }
 }
 
-trait TypeTag {
+trait TypeTag with () {
     fn ttag() -> String;
 }
 
@@ -78,7 +78,7 @@ impl TypeTag for () {
     }
 }
 
-trait OneOf {
+trait OneOf with () {
     fn oneof(&self) -> String;
 }
 

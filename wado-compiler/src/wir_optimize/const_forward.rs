@@ -197,7 +197,7 @@ fn widen_aliased_across_copy_groups(
 }
 
 /// Locals a reference to which outlives any one statement: address taken, or
-/// passed to a call that declares `stores` for that parameter. These hold no
+/// passed at a parameter position the callee retains. These hold no
 /// fact at all; what escapes at a point in the flow is invalidated there.
 fn collect_aliased_locals(
     body: &[WirInstr],
@@ -212,7 +212,7 @@ fn collect_aliased_locals(
 }
 
 /// Recursively collect aliased locals. `in_non_stores_arg` marks a Call argument
-/// whose callee declares no `stores` for that position, where `LocalGet` — bare
+/// at a position its callee does not retain, where `LocalGet` — bare
 /// or under `RefAsNonNull` — creates no persistent alias. A plain
 /// `LocalSet(b, LocalGet a)` copy aliases neither side: it opens no untracked
 /// mutation channel, and every real one invalidates the whole copy group.
@@ -228,7 +228,7 @@ fn collect_aliased_in_instr(
         WirInstr::Call { func_id, args } => {
             // `WirFuncId` carries the absolute Wasm function index; defined
             // functions start at `defined_func_base`. Imports sit below the
-            // base and have no `stores` metadata — unknown, so conservative.
+            // base and carry no retention — unknown, so conservative.
             let callee = func_id
                 .index()
                 .checked_sub(defined_func_base)
@@ -236,7 +236,7 @@ fn collect_aliased_in_instr(
             for (i, arg) in args.iter().enumerate() {
                 let stores_param = match callee {
                     Some(f) => match f.param_names.get(i) {
-                        Some(param) => f.stores.iter().any(|s| s == param),
+                        Some(param) => f.retains.iter().any(|s| s == param),
                         None => true,
                     },
                     None => true,
@@ -749,7 +749,7 @@ fn invalidate_effects_in_instr(
             }
         }
         // A callee mutates through the references it is handed whether or not
-        // it declares `stores` for them.
+        // it retains them.
         WirInstr::Call { args, .. }
         | WirInstr::CallRef { args, .. }
         | WirInstr::CallIndirect { args, .. } => {

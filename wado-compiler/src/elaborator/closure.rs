@@ -8,17 +8,87 @@ use crate::hashmap::IndexSet;
 
 use crate::ast::{self};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::name::mut_capture_ref_name;
+use crate::tir::{CaptureSource, ResolvedType, TirCapture, TypeId, TypeTable};
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
+
+/// The captures reify emits: the seeded environment, each source resolved
+/// against `ctx`, and the recorded types, which hole inference substitutes into
+/// after annotate is done.
+pub(super) fn relink_recorded_captures(
+    recorded: &[CaptureEntry],
+    closure_ctx: &FunctionContext,
+    ctx: &mut FunctionContext,
+) -> Vec<TirCapture> {
+    let linked = link_parent_captures(closure_ctx, ctx);
+    assert_eq!(
+        linked.len(),
+        recorded.len(),
+        "in {}: the seeded environment pairs up with the record it was seeded from",
+        closure_ctx.function_name
+    );
+    linked
+        .into_iter()
+        .zip(recorded)
+        .map(|(linked, recorded)| TirCapture {
+            type_id: recorded.type_id,
+            ..linked
+        })
+        .collect()
+}
 
 /// Expected function-type info extracted from an `expected_type` hint.
 struct ExpectedFn {
     params: Vec<TypeId>,
     return_type: TypeId,
+}
+
+/// The environment slot `ctx` holds `name` in, registering the capture if this
+/// is the first inner closure to ask for it.
+fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
+    match ctx.lookup_or_capture(name) {
+        Some(VarRef::Capture { index, .. } | VarRef::DerefCapture { index, .. }) => index,
+        Some(VarRef::Local { .. }) => {
+            unreachable!(
+                "in {}: `{name}` is a local of the frame that was recorded as reaching it by capture",
+                ctx.function_name
+            )
+        }
+        None => {
+            unreachable!(
+                "in {}: `{name}` was reached through the enclosing environment but is not in it",
+                ctx.function_name
+            )
+        }
+    }
+}
+
+/// One [`TirCapture`] per capture, resolved against `ctx`, the frame that builds
+/// the closure. A binding `ctx` only reaches through its own environment makes
+/// `ctx` capture it too, which is what makes capture transitive.
+pub(super) fn link_parent_captures(
+    closure_ctx: &FunctionContext,
+    ctx: &mut FunctionContext,
+) -> Vec<TirCapture> {
+    closure_ctx
+        .get_captures()
+        .into_iter()
+        .map(|(name, local, reach)| {
+            let source = match reach {
+                OuterReach::ParentLocal(index) => CaptureSource::Local(index),
+                OuterReach::ParentEnv => CaptureSource::Capture(parent_capture_slot(ctx, &name)),
+            };
+            TirCapture {
+                name,
+                source,
+                type_id: local.type_id,
+            }
+        })
+        .collect()
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -103,7 +173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Collect outer bindings the body assigns to.
         let mut assigned_names: IndexSet<String> = IndexSet::default();
-        Self::collect_mutated_vars(&closure.body, &mut assigned_names);
+        Self::collect_mutated_vars(closure, &mut assigned_names);
 
         // For each assigned name that resolves to an outer `mut` local,
         // record a `MutCapture` (so reify replays the `$ref_<var>`
@@ -116,14 +186,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut any_mutating_capture = false;
 
         for var_name in &assigned_names {
-            if let Some(local) = ctx.lookup(var_name)
-                && local.is_mut
-            {
+            let Some(local) = ctx.lookup(var_name) else {
+                // A binding `ctx` only reaches by capture is boxed where it is
+                // owned; writing through that box is still a mutating capture.
+                any_mutating_capture |= ctx.binding(var_name).is_some_and(|b| b.is_mut);
+                continue;
+            };
+            if local.is_mut {
                 any_mutating_capture = true;
                 let inner_type = local.type_id;
                 let outer_index = local.index;
                 let ref_type = self.tysys.type_table.borrow_mut().make_mut_ref(inner_type);
-                let ref_name = format!("$ref_{var_name}");
+                let ref_name = mut_capture_ref_name(var_name);
                 let ref_index = ctx.add_local(ref_name.clone(), ref_type, false, None);
                 ctx.address_taken_locals.insert(outer_index);
 
@@ -132,7 +206,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     ref_name: ref_name.clone(),
                     inner_type,
                     ref_type,
-                    outer_index,
                     ref_index,
                 });
                 deref_overrides.insert(var_name.clone(), (ref_name, inner_type));
@@ -186,15 +259,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let body_type = self.resolve_expr(&closure.body, &mut closure_ctx, body_expected);
 
-        // Build the recorded capture list from the closure scope's captures.
-        let recorded_captures: Vec<CaptureEntry> = closure_ctx
-            .get_captures()
+        // The source each capture reads from belongs to this walk alone: reify
+        // resolves it again against its own frame, so recording it would be a
+        // second answer to one question.
+        let recorded_captures = link_parent_captures(&closure_ctx, ctx)
             .into_iter()
-            .map(|(name, _index, local)| CaptureEntry {
-                name,
-                outer_index: local.index,
-                type_id: local.type_id,
-                is_mut: local.is_mut,
+            .map(|capture| CaptureEntry {
+                name: capture.name,
+                type_id: capture.type_id,
             })
             .collect();
 
@@ -259,7 +331,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             any_mutating_capture,
             param_types,
             return_type,
-            Vec::new(),
             Vec::new(),
         );
 

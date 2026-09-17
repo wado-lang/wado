@@ -114,7 +114,6 @@ impl FnInfo {
     pub fn params(&self) -> List<TypeInfo>;
     pub fn result(&self) -> TypeInfo;
     pub fn effects(&self) -> List<DeclInfo>;   // the `with E…` row: one interface each
-    pub fn stores(&self) -> List<u32>;         // `stores[…]`, by parameter position
 }
 
 /// The Wasm primitives, at the granularity the type system has.
@@ -131,8 +130,9 @@ mints none. A Wado case carries exactly one payload type, so a reference and a
 function type, each holding several facts, take a sealed struct.
 
 A function type is the whole signature or it is not the type: `fn mut(…)`
-differs from `fn(…)`, and `with (Stdout, Stderr)` and `stores[data]` are row
-members of the type the same way the parameters are. The effect row is where an
+differs from `fn(…)`, and `with (Stdout, Stderr)` is a row member of the type
+the same way the parameters are. Retention is not: it is read from the body, so
+nothing in the type says it. The effect row is where an
 `interface` enters the model. It is a declaration Wado names, so it reads as a
 `DeclInfo` like any other and needs no identity of its own.
 

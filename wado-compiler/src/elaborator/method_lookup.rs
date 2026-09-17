@@ -2,6 +2,7 @@
 
 use super::scope::BinderInScope;
 use super::trait_env::ImplTargetKey;
+use super::trait_query::SelfBinding;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1437,12 +1438,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, span) = (input.slots, input.own_params, input.span);
+        let self_binding = SelfBinding {
+            type_id: self.tysys.get_base_type(input.receiver_type),
+            declaring_trait: input.trait_decl,
+        };
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_empty_pack_of(own_params, &mut type_args);
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
-            self.enforce_type_arg_bounds(own_params, &type_args, span);
+            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_binding), span);
         }
         (type_args, subst)
     }
@@ -1632,8 +1637,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return None;
         }
         match expr {
-            ast::Expr::Ident(id) => match binding_mutability(&id.name, ctx) {
-                Some(is_mut) => (!is_mut).then(|| id.name.clone()),
+            ast::Expr::Ident(id) => match ctx.binding(&id.name) {
+                Some(binding) => (!binding.is_mut).then(|| id.name.clone()),
                 // Only a name no binding claims can be the global; one
                 // shadowing it answers for itself.
                 None => self.is_immutable_global(&id.name).then(|| id.name.clone()),
@@ -3434,21 +3439,4 @@ pub(super) fn adjusted_receiver_type(
             }
         }
     }
-}
-
-/// How the frame sees `name`: `Some(is_mut)` for a binding it can vouch for,
-/// `None` when none claims the name and it may be a global.
-///
-/// A closure body's own scopes hold only its parameters and locals — the
-/// enclosing frame's bindings reach it as captures, which the scopes alone
-/// would leave unaccounted for.
-fn binding_mutability(name: &str, ctx: &FunctionContext) -> Option<bool> {
-    if let Some(local) = ctx.lookup(name) {
-        return Some(local.is_mut);
-    }
-    // Reading through a `&mut` box is what a mutable capture is.
-    if ctx.deref_overrides.contains_key(name) || ctx.outer_box_types.contains_key(name) {
-        return Some(true);
-    }
-    ctx.outer_locals.get(name).map(|outer| outer.is_mut)
 }

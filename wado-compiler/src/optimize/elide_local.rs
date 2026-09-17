@@ -194,8 +194,8 @@ fn deletable(engine: &Engine, value: Operand, effects: &[FnEffect]) -> bool {
         .is_some_and(|types| deletable_value(engine.body, value, types, effects))
 }
 
-/// A local is kept (not elidable) when its reference escaped via a `stores`
-/// alias, or it is read anywhere in the body.
+/// A local is kept (not elidable) when a retaining callee aliased its
+/// reference, or it is read anywhere in the body.
 fn is_kept(engine: &Engine, local: u32, stores_aliased: &IndexSet<u32>) -> bool {
     stores_aliased.contains(&local)
         || engine.is_local_read(local)

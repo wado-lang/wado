@@ -61,9 +61,6 @@
 ; context-free grammar has. `mise run check-highlight` reports what stays
 ; uncoloured, by the kind the compiler resolved it to.
 (formatSpec (IDENTIFIER) @comment)
-; `stores[b]` names a parameter, not a type. It sits inside the `fn(…) with
-; stores[b]` type that the rule below would otherwise paint.
-(storesItem (IDENTIFIER) @variable)
 (typeRef (IDENTIFIER) @type)
 (genericParam (IDENTIFIER) @type)
 ; `.method()`, and `.field` with a struct literal's and a pattern's field name.
@@ -108,7 +105,6 @@
 (identifier "of" @variable)
 (identifier "type" @variable)
 (identifier "matches" @variable)
-(identifier "stores" @variable)
 (identifier "world" @variable)
 (identifier "interface" @variable)
 (identifier "resource" @variable)
@@ -204,7 +200,6 @@
 "resource" @keyword
 "resume" @keyword
 "return" @keyword
-"stores" @keyword
 "struct" @keyword
 "task" @keyword
 "test" @keyword

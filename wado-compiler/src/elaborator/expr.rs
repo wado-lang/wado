@@ -1162,7 +1162,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             inst.param_types,
             inst.return_type,
             sig.effects.clone(),
-            Vec::new(),
         ))
     }
 
@@ -3289,16 +3288,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Collect outer-binding names that are mutated inside an expression.
-    /// Mutation = direct or compound assignment whose target's root
-    /// identifier is the binding (e.g. `count`, `point.x`, `arr[i]`,
-    /// `pair.p.children[i].name` all resolve to their root ident).
-    ///
-    /// Nested closures are skipped: they have their own capture context
-    /// and run their own collector.
-    pub(super) fn collect_mutated_vars(expr: &ast::Expr, result: &mut IndexSet<String>) {
-        let mut collector = MutatedVarsCollector { result };
-        collector.visit_expr(expr);
+    /// The outer bindings `closure` assigns to, its nested closures included. A
+    /// write names its target's root ident (`point.x`, `arr[i]` name the root).
+    pub(super) fn collect_mutated_vars(closure: &ast::ClosureExpr, result: &mut IndexSet<String>) {
+        MutatedVarsCollector {
+            result,
+            shadowed: Vec::new(),
+        }
+        .closure_body(closure);
     }
 
     /// The method replacing a rejected `Slice<T>` ↔ `List<T>` cast.
@@ -5451,13 +5448,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 }
 
-/// Walks a closure body and records the outer bindings it mutates: the root
-/// identifier of each `Assign` / `CompoundAssign` target, the one that survives
-/// `.field` and `[index]` accessors. A nested closure is not descended — it runs
-/// its own collector. Everything else falls through to `AstVisitor`'s `walk_*`
-/// defaults, so there is no `_ => {}` here for new syntax to slip past.
+/// Records the outer bindings a closure body assigns to, walking it under its
+/// own binders. Unhandled syntax falls through to `AstVisitor`'s `walk_*`.
 struct MutatedVarsCollector<'a> {
     result: &'a mut IndexSet<String>,
+    /// Names bound inside the closure and in scope at this point of the walk. A
+    /// write to one names that binding, not the outer one it shadows.
+    shadowed: Vec<String>,
 }
 
 impl MutatedVarsCollector<'_> {
@@ -5471,31 +5468,109 @@ impl MutatedVarsCollector<'_> {
             _ => None,
         }
     }
+
+    fn record_target(&mut self, target: &ast::Expr) {
+        if let Some(name) = Self::root_ident_of_lvalue(target)
+            && !self.shadowed.iter().any(|s| s == name)
+        {
+            self.result.insert(name.to_string());
+        }
+    }
+
+    /// Walk `body` and drop whatever it bound afterwards. Every `walk_*` default
+    /// visits a binder's pattern after the value it destructures, so a name
+    /// enters scope exactly where the source puts it.
+    fn scoped(&mut self, body: impl FnOnce(&mut Self)) {
+        let depth = self.shadowed.len();
+        body(self);
+        self.shadowed.truncate(depth);
+    }
+
+    /// Walk a closure's body under its own parameters. A write to one of those
+    /// names is that parameter's, not the outer binding it shadows.
+    fn closure_body(&mut self, closure: &ast::ClosureExpr) {
+        self.scoped(|s| {
+            s.shadowed
+                .extend(closure.params.iter().map(|p| p.name.clone()));
+            s.visit_expr(&closure.body);
+        });
+    }
+
+    /// Walk a condition and the block its bindings reach. They reach that block
+    /// and nothing else — an `else` arm and the statements after do not see them.
+    fn conditional(&mut self, condition: &ast::Condition, then_block: &ast::Block) {
+        self.scoped(|c| {
+            c.visit_condition(condition);
+            c.visit_block(then_block);
+        });
+    }
 }
 
 impl AstVisitor for MutatedVarsCollector<'_> {
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr {
             ast::Expr::Assign(a) => {
-                if let Some(name) = Self::root_ident_of_lvalue(&a.target) {
-                    self.result.insert(name.to_string());
-                }
+                self.record_target(&a.target);
                 // Still descend into the target (it may contain
                 // sub-expressions like `arr[bump()] = ...`) and the value.
                 ast::walk_expr(self, expr);
             }
             ast::Expr::CompoundAssign(ca) => {
-                if let Some(name) = Self::root_ident_of_lvalue(&ca.target) {
-                    self.result.insert(name.to_string());
-                }
+                self.record_target(&ca.target);
                 ast::walk_expr(self, expr);
             }
-            // Nested closures get their own capture context — skip.
-            ast::Expr::Closure(_) => {}
-            // Everything else: let the generic walker recurse into every
-            // sub-expression. Adding new `Expr` variants therefore does
-            // not require touching this collector.
+            ast::Expr::Closure(c) => self.closure_body(c),
+            ast::Expr::If(e) => {
+                self.conditional(&e.condition, &e.then_block);
+                if let Some(eb) = &e.else_block {
+                    self.visit_block(eb);
+                }
+            }
+            // A `matches` pattern binds for its guard, a comprehension's for its
+            // body, and neither outlives the expression.
+            ast::Expr::Matches(_) | ast::Expr::TupleComprehension(_) => {
+                self.scoped(|s| ast::walk_expr(s, expr));
+            }
             _ => ast::walk_expr(self, expr),
+        }
+    }
+
+    fn visit_pattern(&mut self, pattern: &ast::Pattern) {
+        let shadowed = &mut self.shadowed;
+        ast::for_each_pattern_name(pattern, &mut |name, _| shadowed.push(name.to_string()));
+    }
+
+    fn visit_block(&mut self, block: &ast::Block) {
+        self.scoped(|s| ast::walk_block(s, block));
+    }
+
+    fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        match stmt {
+            // A `let`'s binding reaches the rest of its block, which
+            // `visit_block` closes.
+            ast::Stmt::Let(_) => ast::walk_stmt(self, stmt),
+            ast::Stmt::If(s) => {
+                self.conditional(&s.condition, &s.then_block);
+                if let Some(eb) = &s.else_block {
+                    self.visit_block(eb);
+                }
+            }
+            // Every other statement's bindings — a `for` init, a `for-of`
+            // pattern, a `while let` — reach no further than the statement.
+            _ => self.scoped(|s| ast::walk_stmt(s, stmt)),
+        }
+    }
+
+    fn visit_match_expr(&mut self, m: &ast::MatchExpr) {
+        self.visit_expr(&m.expr);
+        for arm in &m.arms {
+            self.scoped(|s| {
+                s.visit_pattern(&arm.pattern);
+                if let Some(guard) = &arm.guard {
+                    s.visit_expr(guard);
+                }
+                s.visit_expr(&arm.body);
+            });
         }
     }
 }

@@ -1,0 +1,18 @@
+// A captured callee is the same binding as the outer one, so calling a
+// `fn mut` through it still requires that binding to be `mut`. Sibling of
+// closure_mut_binding_required_error.wado, one frame in.
+
+fn apply_mut(mut f: fn mut()) {
+    f();
+}
+
+test "a captured fn mut still needs a mut binding" {
+    let mut count = 0;
+    let inc = || {
+        count += 1;
+    };
+    apply_mut(|| inc());
+}
+
+__DATA__
+{"test": {}, "compile_error": "cannot call `fn mut` closure 'inc' through a non-`mut` binding"}

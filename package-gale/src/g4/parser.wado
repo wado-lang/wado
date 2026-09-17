@@ -174,7 +174,7 @@ impl G4Parser {
         };
     }
 
-    fn peek(&self) -> &Token with stores[self] {
+    fn peek(&self) -> &Token {
         return &self.tokens[self.pos];
     }
 
@@ -186,13 +186,13 @@ impl G4Parser {
         return self.peek_kind() == G4Token::Eof as i32;
     }
 
-    fn advance(&mut self) -> &Token with stores[self] {
+    fn advance(&mut self) -> &Token {
         let tok = &self.tokens[self.pos];
         self.pos += 1;
         return tok;
     }
 
-    fn expect(&mut self, kind: G4Token) -> Result<&Token, ParseError> with stores[self] {
+    fn expect(&mut self, kind: G4Token) -> Result<&Token, ParseError> {
         let tok = self.peek();
         if tok.kind == kind as i32 {
             self.pos += 1;

@@ -1,0 +1,50 @@
+// `builtin::array_copy` hands the source's elements to the destination, so a
+// reference that reached the source reaches the caller's array too. Silence on
+// `#[retain]` reads as "keeps nothing", which is why the declaration carries
+// `#[retain(elements_of = src, into = dst)]`: without it the caller is told
+// `hand_over` retains nothing at `d`, and `x` is free to be scalarized or moved
+// while `out` still names it.
+
+struct Data {
+    v: i32,
+}
+
+struct Slot {
+    d: &Data,
+}
+
+fn hand_over(out: &mut Array<Slot>, d: &Data) {
+    let mut staged: Array<Slot> = builtin::array_new(1);
+    builtin::array_set(&mut staged, 0, Slot { d });
+    builtin::array_copy(out, 0, &staged, 0, 1);
+}
+
+// The same reach through a `List`, whose growth copies the backing array.
+fn fill(out: &mut List<Slot>, d: &Data) {
+    for let mut i = 0; i < 5; i += 1 {
+        out.push(Slot { d });
+    }
+}
+
+export fn run() {
+    let x = Data {
+        v: builtin::black_box(7),
+    };
+
+    let mut direct: Array<Slot> = builtin::array_new(1);
+    hand_over(&mut direct, &x);
+    assert builtin::array_get_value(&direct, 0).d.v == 7;
+
+    let mut grown: List<Slot> = [];
+    fill(&mut grown, &x);
+    let mut total = 0;
+    for let s of grown {
+        total += s.d.v;
+    }
+    assert total == 35;
+}
+
+__DATA__
+{
+    "stdout": ""
+}

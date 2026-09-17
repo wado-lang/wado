@@ -212,13 +212,13 @@ fn "trait_multiple.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout 
 
 fn "trait_multiple.wado/$cm_export__run"() {
     let handle_5: i32;
-    let packed_36: i64;
-    let rx_37: i32;
-    let tx_38: i32;
-    let handle_46: i32;
-    let packed_77: i64;
-    let rx_78: i32;
-    let tx_79: i32;
+    let packed_37: i64;
+    let rx_38: i32;
+    let tx_39: i32;
+    let handle_47: i32;
+    let packed_79: i64;
+    let rx_80: i32;
+    let tx_81: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:trait_multiple.wado::$modules_initialized);
         cold_path;
@@ -231,16 +231,16 @@ fn "trait_multiple.wado/$cm_export__run"() {
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:trait_multiple.wado::$modules_initialized = 1;
     };
-    rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
-    tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
-    handle_5 = "trait_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
-    "core:rt/write_string_to_stream"(tx_38, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A cat named Whiskers"), used: 20 });
+    rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
+    tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
+    handle_5 = "trait_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
+    "core:rt/write_string_to_stream"(tx_39, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A cat named Whiskers"), used: 20 });
     "wasi/future-drop-readable:transmission-cli"(handle_5);
-    rx_78 = builtin::i32_wrap_i64(local.tee packed_77("wasi/stream-new"()));
-    tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
-    handle_46 = "trait_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_78);
-    "core:rt/write_string_to_stream"(tx_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A dog named Buddy"), used: 17 });
-    "wasi/future-drop-readable:transmission-cli"(handle_46);
+    rx_80 = builtin::i32_wrap_i64(local.tee packed_79("wasi/stream-new"()));
+    tx_81 = builtin::i32_wrap_i64(packed_79 >> 32_i64);
+    handle_47 = "trait_multiple.wado/$cm_binding__Stdout_write_via_stream"(rx_80);
+    "core:rt/write_string_to_stream"(tx_81, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("A dog named Buddy"), used: 17 });
+    "wasi/future-drop-readable:transmission-cli"(handle_47);
     "trait_multiple.wado/trait_multiple_methods"();
     "wasi/task-return"(0);
 }

@@ -1,4 +1,5 @@
-// stores[self]: a method that stores &self must declare stores[self].
+// `self` is a reference parameter like any other: a method may put it in the
+// value it returns, and the walk reads that retention from the body.
 
 struct Data {
     value: i32,
@@ -9,7 +10,7 @@ struct Container {
 }
 
 impl Data {
-    fn store_self(&self) -> Container with stores[self] {
+    fn store_self(&self) -> Container {
         return Container { data: self };
     }
 }

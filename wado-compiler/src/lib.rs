@@ -107,8 +107,7 @@ pub use semantics::{
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
-    StoresError, check_effects_semantic, check_purity_semantic, check_semantics,
-    check_stores_semantic,
+    check_effects_semantic, check_purity_semantic, check_semantics,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -503,6 +502,53 @@ pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
             }
         })
         .collect()
+}
+
+/// Source-level `UndecidedEffects` diagnostics: every trait head that says
+/// nothing about the effects its impls may declare.
+pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+    use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
+    use crate::compiler_host::{Code, DiagnosticSpan};
+    use crate::elaborator::liveness::is_user_authored;
+
+    let mut out = Vec::new();
+    for (src, module) in &sem.modules {
+        if !is_user_authored(src)
+            || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
+        {
+            continue;
+        }
+        for item in &module.items {
+            let Item::Trait(trait_decl) = item else {
+                continue;
+            };
+            if !matches!(trait_decl.head, ast::TraitHead::Undecided)
+                || attrs_allow(&trait_decl.attrs, lint::UNDECIDED_EFFECTS)
+            {
+                continue;
+            }
+            let (severity, code) = if trait_decl.visibility.is_public() {
+                (Severity::Warning, Code::UndecidedEffects)
+            } else {
+                (Severity::Info, Code::Remark)
+            };
+            out.push(Diagnostic {
+                severity,
+                code,
+                message: format!(
+                    "`{}` says nothing about the effects its impls may declare; \
+                     write `with ()` to forbid them, `with _` to leave them to the impl, \
+                     or `#[allow(undecided_effects)]` while deciding",
+                    trait_decl.name
+                ),
+                span: Some(DiagnosticSpan::from_span(
+                    &trait_decl.name_span,
+                    Some(src.source_path().as_str()),
+                )),
+            });
+        }
+    }
+    out
 }
 
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
@@ -1146,19 +1192,23 @@ fn compile_after_load<H: CompilerHost>(
     // so `shadowed_name` is emitted either way; it is waived per binder and per
     // module by `allow` instead.
     let mut lints = shadowing_diagnostics(&sem);
+    lints.extend(undecided_effect_diagnostics(&sem));
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
         lints.extend(unused_diagnostics(&sem, is_test_world));
     }
     for diag in lints {
-        match diag.span {
-            Some(span) => logger.warn_at(diag.code, diag.message, span),
-            None => logger.warn(diag.code, diag.message),
+        // A lint carries the severity it words itself at, so one that only
+        // remarks is not raised to a warning on the way out.
+        match (diag.severity, diag.span) {
+            (Severity::Info, Some(span)) => logger.remark(diag.message, span),
+            (_, Some(span)) => logger.warn_at(diag.code, diag.message, span),
+            (_, None) => logger.warn(diag.code, diag.message),
         }
     }
 
-    // === Phase 6b: Effect, Stores, and Purity Checks (Design B) ===
-    // All three are produced from `Semantics` (AST + recorded facts), not the
+    // === Phase 6b: Effect and Purity Checks ===
+    // Both are produced from `Semantics` (AST + recorded facts), not the
     // emitted TIR, so they see every source function regardless of what reify
     // emits and share their logic with the LSP.
     {
@@ -1172,9 +1222,6 @@ fn compile_after_load<H: CompilerHost>(
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         for error in diags.effects {
-            let _ = logger.error(error);
-        }
-        for error in diags.stores {
             let _ = logger.error(error);
         }
         for error in diags.purity {

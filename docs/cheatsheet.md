@@ -70,7 +70,7 @@ Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-ma
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
@@ -992,60 +992,6 @@ fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
 arity(&tri);             // ..P comes from `Tri::Items`
 ```
 
-### Reference Storage
-
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-Functions that store reference parameters must declare `stores[...]`:
-
-```wado
-struct Container {
-    data: &Data,
-}
-
-// Function that stores a reference parameter — must declare stores
-fn store_data(data: &Data) -> Container with stores[data] {
-    return Container { data };
-}
-
-// Function that uses but does NOT store a reference — no stores needed
-fn use_data(data: &Data) -> i32 {
-    return data.value;
-}
-
-// Combined with effects
-fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
-    println(`Storing: ${data.value}`);
-    return Container { data };
-}
-
-// `self` is a reference parameter like any other.
-impl Node {
-    fn wrap(&self) -> Ref with stores[self] {
-        return Ref { inner: self };
-    }
-}
-
-// A reference member read out of a parameter still names what the parameter
-// names, so returning it needs the declaration. A value member is copied.
-struct Cursor { chars: &Array<char>, pos: i32 }
-
-fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
-    return Cursor { chars: c.chars, pos: at };
-}
-
-fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
-    return p.name;
-}
-```
-
-Rules:
-
-- `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`, `self` included
-- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
-- In function type position, use positional indices: `fn(&Data) with stores[0]`
-
 ## Visibility
 
 Visibility has two orthogonal axes: a scope ladder (`internal` / `pub`) and a
@@ -1328,6 +1274,31 @@ fn add(a: i32, b: i32) -> i32 { return a + b; }  // no effects = pure
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T { ... }   // two parameters
 fn both(f: fn() with (Stdout, Stderr), x: i32) { ... }           // two parameters
 
+// A trait method's `with` clause bounds every impl of it. A call requires what
+// the trait declares, since through a bound there is no impl to read.
+trait Source { fn next(&mut self) -> i32 with Stdout; }
+impl Source for Loud {
+    fn next(&mut self) -> i32 with Stdout { ... }   // matching; more is an error
+}
+fn draw<S: Source>(s: &mut S) -> i32 with Stdout { return s.next(); }
+
+// A `with` clause on the trait itself bounds the methods that declare none:
+// `with ()` forbids every effect, `with Stdout` hands that one to each impl,
+// and `with _` lets each impl bring its own.
+trait Tick with _ { fn tick(&mut self) -> i32; }
+impl Tick for Loud { fn tick(&mut self) -> i32 with Stdout { ... } }
+impl Tick for Quiet { fn tick(&mut self) -> i32 { ... } }
+fn run<T: Tick>(t: &mut T) -> i32 with _ { return t.tick(); }
+// `run(&mut loud)` requires Stdout at the call; `run(&mut quiet)` requires none
+
+// A head that writes nothing reads as `with _`, and is diagnosed (a `pub`
+// trait warns, a private one remarks). Waive it while deciding:
+#[allow(undecided_effects)]
+trait Undecided { fn tick(&mut self) -> i32; }
+
+// Every standard library trait says `with ()`, Iterator and FromStr included:
+// an impl of one that performs I/O is a design error.
+
 // Effect in function type position
 fn for_each(items: List<i32>, f: fn(i32) with Stdout) with Stdout {
     for let item of items { f(item); }
@@ -1341,6 +1312,9 @@ fn wrapper<effect E>(f: fn() with E) with E {
 fn apply<T, effect E>(f: fn(T) -> T with E, x: T) -> T with E {
     return f(x);
 }
+
+// `with _` is sugar for it: every `_` in one signature is the same parameter,
+// so `wrapper` above is `fn wrapper(f: fn() with _) with _`.
 
 // E is inferred from the closure's effects at each call site
 wrapper(|| { println("hello"); });     // E = Stdout
@@ -1394,7 +1368,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `stores`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {

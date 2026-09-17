@@ -159,6 +159,8 @@ pub enum Code {
     /// A binder takes a name that already reaches a declaration or an enclosing
     /// binding.
     ShadowedName,
+    /// A trait head says nothing about the effects its impls may declare.
+    UndecidedEffects,
 
     // Kiln errors
     /// A generator's `Options` struct uses a shape not supported by Kiln.
@@ -192,9 +194,12 @@ pub enum Code {
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
     CompilerItemAttr,
-    /// A `#[returns(...)]` attribute is malformed — no argument, an unknown
+    /// A `#[result(...)]` attribute is malformed — no argument, an unknown
     /// convention, or a `part_of` naming something that is not a parameter.
-    ReturnsAttr,
+    ResultAttr,
+    /// A `#[retain(...)]` attribute is malformed, names something that is not a
+    /// parameter, or sits on a declaration that has a body to read instead.
+    RetainAttr,
     ResourceExtends,
 
     // Compile-time parameters (`#[param]`)
@@ -255,6 +260,7 @@ impl std::fmt::Display for Code {
             Code::TestOnlyFunction => "TEST_ONLY_FUNCTION",
             Code::TestOnlyGlobal => "TEST_ONLY_GLOBAL",
             Code::ShadowedName => "SHADOWED_NAME",
+            Code::UndecidedEffects => "UNDECIDED_EFFECTS",
             Code::GeneratorOptionsUnsupported => "GENERATOR_OPTIONS_UNSUPPORTED",
             Code::GeneratorOptionsInvalid => "GENERATOR_OPTIONS_INVALID",
             Code::KilnStaleCache => "KILN_STALE_CACHE",
@@ -265,7 +271,8 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
-            Code::ReturnsAttr => "RETURNS_ATTR",
+            Code::ResultAttr => "RESULT_ATTR",
+            Code::RetainAttr => "RETAIN_ATTR",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",

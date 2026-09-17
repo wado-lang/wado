@@ -215,7 +215,7 @@ pub(super) fn make_binding_function(
         return_type,
         task_return_type: None,
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: Some(body),
         span: synth_span(),
         local_count,
@@ -1479,7 +1479,6 @@ impl<'a> AdapterBuilder<'a> {
         let lift_fn_type = self.lower_ctx.type_table.borrow_mut().make_function(
             vec![TypeTable::I32],
             inner_type_id,
-            Vec::new(),
             Vec::new(),
         );
         let lift_fn_ref = TirExpr::new(

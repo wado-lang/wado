@@ -8,7 +8,7 @@
 // use reported `Cell<i32>::Item` against the concrete type — the
 // spelling-as-identity class WEP-2026-08-12 covers.
 
-trait Elems {
+trait Elems with () {
     type Item;
 
     fn at(&self, index: i32) -> Self::Item;
@@ -19,7 +19,7 @@ trait Elems {
 }
 
 // Same associated-type name, deliberately a different type.
-trait Spanned {
+trait Spanned with () {
     type Item;
 
     fn span(&self) -> Self::Item;
@@ -65,19 +65,19 @@ test "the same holds for a different element type" {
 // The same must hold when the associated type is inherited: `Derived`'s default
 // body names `Base::Elem`, and `Cell` also implements `Other`, which declares
 // `Elem` as a different type. Qualification has to follow the supertrait.
-trait Base {
+trait Base with () {
     type Elem;
 
     fn one(&self) -> Self::Elem;
 }
 
-trait Other {
+trait Other with () {
     type Elem;
 
     fn other(&self) -> Self::Elem;
 }
 
-trait Derived: Base {
+trait Derived: Base with () {
     fn twice(&self) -> Self::Elem {
         return self.one();
     }

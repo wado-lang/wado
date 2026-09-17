@@ -3,7 +3,7 @@
 // or not the parameter has a declared default. The newtype side is in
 // `bound_trait_argument`.
 
-trait Pick<A = i32> {
+trait Pick<A = i32> with () {
     fn pick(&self, a: &A) -> bool;
 }
 
@@ -21,7 +21,7 @@ fn picks<T: Pick<String>>(t: T, a: String) -> bool {
     return t.pick(&a);
 }
 
-trait Marker {
+trait Marker with () {
     fn mark(&self) -> i32;
 }
 

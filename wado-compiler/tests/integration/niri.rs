@@ -4640,8 +4640,8 @@ fn a_run_that_bails_part_way_writes_nothing() {
 }
 
 #[test]
-fn a_stores_clause_does_not_stop_a_run() {
-    // `stores` constrains a *reference* the callee keeps, and the engine has
+fn a_retain_declaration_does_not_stop_a_run() {
+    // `#[retain]` names a *reference* the callee keeps, and the engine has
     // no references: an argument reduces to its referent's value, and a
     // referent it can bind is one nothing in the frame can go on to change.
     let table = TypeTable::new();
@@ -4651,7 +4651,7 @@ fn a_stores_clause_does_not_stop_a_run() {
         TypeTable::I32,
         return_stmt(local_expr(0, TypeTable::I32)),
     );
-    keeper.stores = vec!["value".to_string()];
+    keeper.retains = vec!["value".to_string()];
     let callees = build_callee_map_test(std::slice::from_ref(&keeper));
 
     let mut interp = Interpreter::new(&table);
@@ -5243,7 +5243,7 @@ fn make_pure_fn_stmts(
         return_type,
         task_return_type: None,
         effects: Vec::new(),
-        stores: Vec::new(),
+        retains: Vec::new(),
         body: None,
         span,
         locals,
@@ -8127,7 +8127,7 @@ fn a_ref_returning_callee_does_not_fold_through_the_lost_alias() {
 
 #[test]
 fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
-    // fn keep(p: &Inner) -> Holder with stores[p] { return Holder { inner: p }; }
+    // #[retain(p)] fn keep(p: &Inner) -> Holder;
     // fn scenario() -> i32 {
     //     let mut p = Inner { x: 7 };
     //     let h = keep(&p);
@@ -8150,7 +8150,7 @@ fn a_stored_reference_parameter_does_not_fold_into_a_snapshot() {
             vec![(0, "inner", local_expr(0, ref_inner))],
         )),
     );
-    keep.stores.push("p".to_string());
+    keep.retains.push("p".to_string());
 
     let scenario = make_pure_fn_stmts(
         "scenario",

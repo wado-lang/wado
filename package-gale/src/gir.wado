@@ -1378,7 +1378,7 @@ pub struct KindSet {
 
 /// Borrow the rule header regardless of variant, so traversals don't
 /// repeat the match.
-pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
+pub fn rule_header(rule: &Rule) -> &RuleHeader {
     return match rule {
         Simple(s) => &s.header,
         MultiAlt(m) => &m.header,
@@ -1392,7 +1392,7 @@ pub fn rule_header(rule: &Rule) -> &RuleHeader with stores[rule] {
 /// `alt_index == alt_index`; for `LeftRecursive` it searches the atom's
 /// alts first and falls back to the matching LR alt's `suffix`. Returns
 /// `null` only when no alt with that index exists on either side.
-pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> with stores[rule] {
+pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&AltBody>::Some(&s.body) } else { null },
         MultiAlt(m) => m.alts.iter_ref().find(|a| a.alt_index == alt_index),
@@ -1412,7 +1412,7 @@ pub fn rule_alt_body(rule: &Rule, alt_index: i32) -> Option<&AltBody> with store
 /// `ScanBody` for the alt at the given index — `s.scan_body` for
 /// `Simple` (alt_index 0), or the parallel `scan_alts` entry for
 /// `MultiAlt` / LR atom shapes, or `lr.scan_suffix` for LR alts.
-pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> with stores[rule] {
+pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> {
     return match rule {
         Simple(s) => if alt_index == 0 { Option::<&ScanBody>::Some(&s.scan_body) } else { null },
         MultiAlt(m) => find_scan_body_in_array(&m.alts, &m.scan_alts, alt_index),
@@ -1428,11 +1428,7 @@ pub fn rule_alt_scan_body(rule: &Rule, alt_index: i32) -> Option<&ScanBody> with
     };
 }
 
-fn find_scan_body_in_array(
-    alts: &List<AltBody>,
-    scan_alts: &List<ScanBody>,
-    alt_index: i32,
-) -> Option<&ScanBody> with stores[scan_alts] {
+fn find_scan_body_in_array(alts: &List<AltBody>, scan_alts: &List<ScanBody>, alt_index: i32) -> Option<&ScanBody> {
     return match alts.iter_ref().position(|a| a.alt_index == alt_index) {
         Some(i) => Option::Some(&scan_alts[i]),
         None => null,

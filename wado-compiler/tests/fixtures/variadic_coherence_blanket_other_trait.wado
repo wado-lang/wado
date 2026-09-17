@@ -3,7 +3,7 @@
 // foreign blanket `impl<T: Inspect> A for T` would otherwise beat the local
 // `impl<..T> B for [..T]` and `[1, 2].go()` would dispatch to A.
 
-trait A {
+trait A with () {
     fn go(&self) -> String;
 }
 
@@ -13,7 +13,7 @@ impl<T: Inspect> A for T {
     }
 }
 
-trait B {
+trait B with () {
     fn go(&self) -> String;
 }
 

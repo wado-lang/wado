@@ -1,24 +1,24 @@
-//! Effect, stores, and purity checking for Wado (Design B): that every call
-//! holds the effects its callee requires, that an escaping reference parameter
-//! declares `stores[param]`, and that defaults and global initializers are
-//! pure. All three read [`Semantics`] rather than the emitted TIR, so they see
-//! every source function and run on the LSP path. Violations are returned.
+//! Effect and purity checking for Wado (Design B): that every call holds the
+//! effects its callee requires, and that defaults and global initializers are
+//! pure. Both read [`Semantics`] rather than the emitted TIR, so they see every
+//! source function and run on the LSP path. Violations are returned.
 
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::is_test_function;
+use crate::name::{FqTraitName, FqTypeName, is_test_function};
 use crate::tir::{EffectRef, FunctionRef, ResolvedType, TypeId, TypeSet, TypeTable};
 use crate::token::Span;
 
 use crate::ast::{
     self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Stmt,
+    ImplBlock, Item, Stmt, TraitDecl,
 };
 use crate::compiler_host::Diagnostic;
+use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
+use crate::elaborator::sem::types::{ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -40,15 +40,26 @@ impl EffectKind {
     }
 }
 
+/// What the effect checker found at the reported position.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EffectFault {
+    /// The caller does not hold what its callee requires.
+    Missing(EffectKind),
+    /// An `impl` method declares an effect its trait method leaves out.
+    UndeclaredByTrait,
+    /// The callee's effects are left open, and the caller forwards none.
+    MissingOpen,
+}
+
 /// Error from effect checking
 #[derive(Debug, Clone)]
 pub struct EffectError {
-    /// The function being called
+    /// The function being called, or the trait method being implemented
     pub callee: String,
-    /// The missing effect
+    /// The effect the caller lacks, or the impl adds
     pub missing_effect: String,
-    /// Whether the missing item is a resource or a regular effect
-    pub kind: EffectKind,
+    /// Which violation this is, and how it words itself
+    pub fault: EffectFault,
     /// Source location of the call
     pub span: Span,
     pub module: String,
@@ -57,37 +68,26 @@ pub struct EffectError {
 impl From<EffectError> for Diagnostic {
     fn from(e: EffectError) -> Self {
         use crate::compiler_host::{Code, DiagnosticSpan, Severity};
-        Diagnostic {
-            severity: Severity::Error,
-            code: Code::TypeMismatch,
-            message: format!(
+        let message = match e.fault {
+            EffectFault::Missing(kind) => format!(
                 "missing {} '{}' required by '{}'",
-                e.kind.noun(),
+                kind.noun(),
                 e.missing_effect,
                 e.callee
             ),
-            span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
-        }
-    }
-}
-
-/// Error from stores checking
-#[derive(Debug, Clone)]
-pub struct StoresError {
-    /// Description of the violation
-    pub message: String,
-    /// Source location
-    pub span: Span,
-    pub module: String,
-}
-
-impl From<StoresError> for Diagnostic {
-    fn from(e: StoresError) -> Self {
-        use crate::compiler_host::{Code, DiagnosticSpan, Severity};
+            EffectFault::UndeclaredByTrait => format!(
+                "effect '{}' is not declared by trait method '{}'",
+                e.missing_effect, e.callee
+            ),
+            EffectFault::MissingOpen => format!(
+                "missing effects required by '{}': its trait leaves them to the impl, so declare `with _`",
+                e.callee
+            ),
+        };
         Diagnostic {
             severity: Severity::Error,
             code: Code::TypeMismatch,
-            message: e.message.clone(),
+            message,
             span: Some(DiagnosticSpan::from_span(&e.span, Some(&e.module))),
         }
     }
@@ -303,9 +303,9 @@ pub fn check_effects_semantic(sem: &Semantics) -> Vec<EffectError> {
     out
 }
 
-/// All three Design-B semantic diagnostics, computed in one pass that builds the
+/// Both Design-B semantic diagnostics, computed in one pass that builds the
 /// shared `OwnedEffectData` once. Used by the batch driver and the LSP so
-/// effect / stores / purity stay in lockstep across both.
+/// effect and purity stay in lockstep across both.
 #[must_use]
 pub fn check_semantics(
     sem: &Semantics,
@@ -319,7 +319,6 @@ pub fn check_semantics(
     let index = data.index();
     run_effect_checks(sem, &index, &mut diags.effects);
     run_purity_checks(sem, &index, &mut diags.purity);
-    diags.stores = check_stores_semantic(sem);
     diags
 }
 
@@ -327,7 +326,6 @@ pub fn check_semantics(
 #[derive(Default)]
 pub struct SemanticDiagnostics {
     pub effects: Vec<EffectError>,
-    pub stores: Vec<StoresError>,
     pub purity: Vec<PurityError>,
 }
 
@@ -335,7 +333,7 @@ impl SemanticDiagnostics {
     /// Whether any check produced a violation.
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.effects.is_empty() && self.stores.is_empty() && self.purity.is_empty()
+        self.effects.is_empty() && self.purity.is_empty()
     }
 }
 
@@ -353,6 +351,7 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
                 }
                 Item::Impl(impl_block) => {
                     let handled = handled_effect(sem, src, impl_block, index);
+                    check_impl_effect_conformance(sem, src, impl_block, index, out);
                     for method in &impl_block.methods {
                         check_function_effects_sem(sem, src, method, index, handled.as_ref(), out);
                     }
@@ -375,6 +374,59 @@ fn run_effect_checks(sem: &Semantics, index: &EffectIndex, out: &mut Vec<EffectE
     }
 }
 
+/// A trait method, by the trait's declaring module, the trait name, and the
+/// method name.
+type TraitMethodKey = (ModuleSource, String, String);
+
+/// A trait, by its declaring module and name.
+type TraitKey = (ModuleSource, String);
+
+/// One trait impl, by the head of the type it targets and the trait it
+/// implements.
+type ImplKey = (FqTypeName, TraitKey);
+
+/// The key one `impl Trait for Type` is recorded under. `None` for a trait
+/// whose name carries no declaring module.
+fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
+    Some((
+        struct_name.head_only(),
+        (
+            trait_name.module()?.clone(),
+            trait_name.base_name().to_string(),
+        ),
+    ))
+}
+
+/// Whether `name` is an effect parameter of the trait or of the method, rather
+/// than an effect declaration the module can resolve.
+fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) -> bool {
+    let mut params = trait_decl.type_params.iter().chain(&method.type_params);
+    params.any(|p| p.is_effect && p.name == name)
+}
+
+/// The traits bounding each type parameter, by the slot
+/// `Scope::register_generic_params` gives it.
+fn bound_traits_per_slot(
+    type_params: &[ast::GenericParam],
+    sem: &Semantics,
+    trait_by_def: &IndexMap<DefId, TraitKey>,
+) -> Vec<Vec<TraitKey>> {
+    let Some(resolutions) = sem.resolutions() else {
+        return Vec::new();
+    };
+    type_params
+        .iter()
+        .filter(|p| p.is_real_type_param())
+        .map(|p| {
+            p.bounds
+                .iter()
+                .filter_map(|bound| resolutions.declared(bound.id))
+                .filter_map(|def| trait_by_def.get(&def).cloned())
+                .collect()
+        })
+        .collect()
+}
+
 /// Owns the cross-module effect maps so multiple checks (effects, default
 /// purity) can borrow a single [`EffectIndex`] view over them. Assembled once
 /// from [`Semantics`] + [`AnnotateState`].
@@ -383,6 +435,16 @@ struct OwnedEffectData {
     fn_params: IndexMap<AstId, Vec<TypeId>>,
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// The traits that leave their effects to the impl — a `with _` head, or a
+    /// bare one, which reads as the same.
+    open_traits: IndexSet<TraitKey>,
+    /// Per type-parameter slot of a function declaration, the traits bounding
+    /// it, so a call site can read what its type arguments implement.
+    fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    /// Every effect an impl's methods declare, for resolving a trait head's
+    /// effect hole against the type a call instantiates it with.
+    impl_effects: IndexMap<ImplKey, Vec<EffectRef>>,
     resource_names: IndexSet<(ModuleSource, String)>,
     members: MemberTables,
     closure: IndexMap<EffectRef, IndexSet<EffectRef>>,
@@ -454,6 +516,91 @@ impl OwnedEffectData {
             }
         }
 
+        // An empty entry is meaningful: the method exists and grants nothing.
+        // A declaration has no body, so `fn_effects` holds nothing for it.
+        let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
+            IndexMap::default();
+        let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
+        let mut open_traits: IndexSet<TraitKey> = IndexSet::default();
+        for (src, module) in &sem.modules {
+            for item in &module.items {
+                let Item::Trait(trait_decl) = item else {
+                    continue;
+                };
+                if let Some(def) = sem.resolutions().and_then(|r| r.declared(trait_decl.id)) {
+                    trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
+                }
+                if trait_decl.head.is_open() {
+                    open_traits.insert((src.clone(), trait_decl.name.clone()));
+                }
+                for method in &trait_decl.methods {
+                    let effects = method
+                        .effects
+                        .iter()
+                        .map(|name| {
+                            // A name the trait or the method declares as an
+                            // effect parameter stands for whatever the impl
+                            // brings, so it never resolves to a declaration.
+                            if declares_effect_param(trait_decl, method, name) {
+                                return EffectRef::Param { name: name.clone() };
+                            }
+                            effect_named_in(name, src, sem, &closure, &effect_by_name).unwrap_or(
+                                EffectRef::Concrete {
+                                    name: name.clone(),
+                                    module_source: src.clone(),
+                                },
+                            )
+                        })
+                        .collect();
+                    trait_method_effects.insert(
+                        (src.clone(), trait_decl.name.clone(), method.name.clone()),
+                        effects,
+                    );
+                }
+            }
+        }
+
+        let mut fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>> = IndexMap::default();
+        let mut impl_effects: IndexMap<ImplKey, Vec<EffectRef>> = IndexMap::default();
+        for (src, module) in &sem.modules {
+            let annotations = state.module_semantics.get(src).map(|m| &m.types);
+            for item in &module.items {
+                match item {
+                    Item::Function(func) if !func.type_params.is_empty() => {
+                        fn_bound_traits.insert(
+                            func.id,
+                            bound_traits_per_slot(&func.type_params, sem, &trait_by_def),
+                        );
+                    }
+                    Item::Impl(block) => {
+                        let Some(facts) = annotations.and_then(|ann| ann.impl_facts.get(&block.id))
+                        else {
+                            continue;
+                        };
+                        let Some(key) = facts
+                            .trait_name
+                            .as_ref()
+                            .and_then(|trait_name| impl_key(&facts.struct_name, trait_name))
+                        else {
+                            continue;
+                        };
+                        let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
+                        for effect in block
+                            .methods
+                            .iter()
+                            .filter_map(|method| fn_effects.get(&method.id))
+                            .flatten()
+                        {
+                            if !entry.contains(effect) {
+                                entry.push(effect.clone());
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
         let mut interface_cm_fq: IndexMap<(ModuleSource, String), Option<String>> =
             IndexMap::default();
         // Restricted to closure keys, so a host-leaf import resolves to an
@@ -488,6 +635,10 @@ impl OwnedEffectData {
             fn_params,
             mangled_index,
             mangled_params,
+            trait_method_effects,
+            open_traits,
+            fn_bound_traits,
+            impl_effects,
             resource_names,
             members,
             closure,
@@ -504,6 +655,10 @@ impl OwnedEffectData {
             fn_params: &self.fn_params,
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
+            trait_method_effects: &self.trait_method_effects,
+            open_traits: &self.open_traits,
+            fn_bound_traits: &self.fn_bound_traits,
+            impl_effects: &self.impl_effects,
             resource_names: &self.resource_names,
             members: &self.members,
             closure: &self.closure,
@@ -525,6 +680,15 @@ struct EffectIndex<'a> {
     mangled_index: &'a IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     /// `(module, mangled name)` → parameter type ids.
     mangled_params: &'a IndexMap<(ModuleSource, String), Vec<TypeId>>,
+    /// Trait method → the effects it declares. A call through a type
+    /// parameter's bound selects no impl, so this is what it can demand.
+    trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// The traits that leave their effects to the impl.
+    open_traits: &'a IndexSet<TraitKey>,
+    /// Per type-parameter slot of a function declaration, the traits bounding it.
+    fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<TraitKey>>>,
+    /// Every effect one impl's methods declare.
+    impl_effects: &'a IndexMap<ImplKey, Vec<EffectRef>>,
     /// Declared resources, for resource injection and effect classification.
     resource_names: &'a IndexSet<(ModuleSource, String)>,
     /// Declared members, for nested-resource detection.
@@ -656,6 +820,21 @@ fn operation_requirements(
     }]
 }
 
+/// What the elaborator recorded about one `impl` block.
+fn impl_facts<'a>(
+    sem: &'a Semantics,
+    module: &ModuleSource,
+    impl_block: &ImplBlock,
+) -> Option<&'a ImplFacts> {
+    sem.state
+        .as_ref()?
+        .module_semantics
+        .get(module)?
+        .types
+        .impl_facts
+        .get(&impl_block.id)
+}
+
 /// The effect an `impl E for T` block handles, when `E` is one. Read off the
 /// impl facts, which name the trait by its declaring module: a plain trait
 /// spelled like an effect is a different declaration and grants nothing.
@@ -665,14 +844,7 @@ fn handled_effect(
     impl_block: &ImplBlock,
     index: &EffectIndex,
 ) -> Option<EffectRef> {
-    let facts = sem
-        .state
-        .as_ref()?
-        .module_semantics
-        .get(module)?
-        .types
-        .impl_facts
-        .get(&impl_block.id)?;
+    let facts = impl_facts(sem, module, impl_block)?;
     if !facts.is_handler_method {
         return None;
     }
@@ -682,6 +854,51 @@ fn handled_effect(
         module_source: trait_name.module()?.clone(),
     };
     index.closure.contains_key(&effect).then_some(effect)
+}
+
+/// Reports an impl method declaring an effect its trait method leaves out.
+/// An `interface` handler and a `resource` impl declare none, so both pass.
+fn check_impl_effect_conformance(
+    sem: &Semantics,
+    module: &ModuleSource,
+    impl_block: &ImplBlock,
+    index: &EffectIndex,
+    out: &mut Vec<EffectError>,
+) {
+    let Some(trait_name) = impl_facts(sem, module, impl_block).and_then(|f| f.trait_name.as_ref())
+    else {
+        return;
+    };
+    for method in &impl_block.methods {
+        let Some(declared_by_trait) = index.effects_declared_by(trait_name, &method.name) else {
+            continue;
+        };
+        let Some(declared) = index.fn_effects.get(&method.id) else {
+            continue;
+        };
+        // An open head stands for whatever the impl brings, so it allows
+        // everything rather than one set.
+        if declared_by_trait.iter().any(EffectRef::is_param) {
+            continue;
+        }
+        let allowed: IndexSet<EffectRef> = declared_by_trait
+            .iter()
+            .map(|effect| canonicalize_effect(effect, index.closure, index.effect_by_name))
+            .collect();
+        for effect in declared {
+            let effect = &canonicalize_effect(effect, index.closure, index.effect_by_name);
+            if effect.is_param() || allowed.contains(effect) {
+                continue;
+            }
+            out.push(EffectError {
+                callee: format!("{}::{}", trait_name.base_name(), method.name),
+                missing_effect: effect.name().to_string(),
+                fault: EffectFault::UndeclaredByTrait,
+                span: method.span,
+                module: module.to_string(),
+            });
+        }
+    }
 }
 
 /// `handled` is the effect a method of `impl E for T` handles.
@@ -1045,6 +1262,7 @@ fn call_site_effects(
     {
         let params = index.fn_params.get(&def).cloned().unwrap_or_default();
         let resolved = resolve_effect_params(sem, index, effects, &params, false, args);
+        let resolved = resolve_bound_effect_params(sem, index, annotations, def, id, resolved);
         return vec![bare(ident.name.clone(), resolved)];
     }
     let dispatches = dispatches_at(annotations, id);
@@ -1109,11 +1327,17 @@ impl EffectIndex<'_> {
     /// Effects a method dispatch requires: the callee's declared effects plus,
     /// for a direct (non-trait) method on a `resource`, the resource effect.
     fn method_effects(&self, func_ref: &FunctionRef) -> Vec<EffectRef> {
-        let mut effects = self
-            .mangled_index
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default();
+        // A trait method's `with` clause bounds every impl, and a bound
+        // dispatch has no impl to read: the declaration is what a call requires.
+        let mut effects = match self.declared_by_trait(func_ref) {
+            Some(declared) => declared.to_vec(),
+            None => self
+                .mangled_index
+                .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
+                .cloned()
+                .unwrap_or_default(),
+        };
+        effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
         {
@@ -1135,6 +1359,83 @@ impl EffectIndex<'_> {
             }
         }
         effects
+    }
+
+    /// An open head's effect parameter, resolved against the receiver the
+    /// dispatch names. A receiver that is a type parameter names no impl.
+    fn resolve_open_head(&self, func_ref: &FunctionRef, effects: Vec<EffectRef>) -> Vec<EffectRef> {
+        if !effects.iter().any(EffectRef::is_param) {
+            return effects;
+        }
+        let Some(method_info) = func_ref.method_info.as_ref() else {
+            return effects;
+        };
+        let Some(key) = method_info
+            .trait_name
+            .as_ref()
+            .and_then(|trait_name| impl_key(&method_info.fq_base_struct_name(), trait_name))
+        else {
+            return effects;
+        };
+        let Some(declared) = self.impl_effects.get(&key) else {
+            return effects;
+        };
+        let brought = self.close_over_args(declared, &key.1, &method_info.struct_type_args, 0);
+        substitute_effect_param(effects, &brought)
+    }
+
+    /// What an impl brings once its own effect parameter is filled from the
+    /// receiver's type arguments. An argument implementing nothing leaves it.
+    fn close_over_args(
+        &self,
+        declared: &[EffectRef],
+        trait_key: &TraitKey,
+        args: &[FqTypeName],
+        depth: u32,
+    ) -> IndexSet<EffectRef> {
+        /// What stops a cyclic instantiation. Deeper than real nesting goes.
+        const MAX_DEPTH: u32 = 8;
+
+        let mut out: IndexSet<EffectRef> = IndexSet::default();
+        for effect in declared {
+            if !effect.is_param() || depth == MAX_DEPTH {
+                out.insert(effect.clone());
+                continue;
+            }
+            let mut filled = false;
+            for arg in args {
+                let Some(inner) = self.impl_effects.get(&(arg.head_only(), trait_key.clone()))
+                else {
+                    continue;
+                };
+                filled = true;
+                out.extend(self.close_over_args(inner, trait_key, arg.args(), depth + 1));
+            }
+            if !filled {
+                out.insert(effect.clone());
+            }
+        }
+        out
+    }
+
+    /// The effects the trait method behind a dispatch declares. `None` where
+    /// the dispatch names no trait, or names an `interface` or a `resource`.
+    fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
+        let method_info = func_ref.method_info.as_ref()?;
+        self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
+    }
+
+    /// The effects one trait method declares. `None` for a name no trait
+    /// declares, an `interface` operation, or a `resource` method.
+    fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
+        let module = trait_name.module()?;
+        self.trait_method_effects
+            .get(&(
+                module.clone(),
+                trait_name.base_name().to_string(),
+                method.to_string(),
+            ))
+            .map(Vec::as_slice)
     }
 
     /// Parameter type ids for a method / static dispatch target.
@@ -1171,10 +1472,11 @@ fn resolve_effect_params(
     if param_names.is_empty() {
         return callee_effects.to_vec();
     }
-    let mut concrete: IndexMap<String, IndexSet<EffectRef>> = param_names
-        .iter()
-        .map(|n| (n.clone(), IndexSet::default()))
-        .collect();
+    // `None` until an argument determines the parameter. An argument that
+    // determines it to be pure leaves an empty set, which is not the same
+    // answer as never having been determined.
+    let mut concrete: IndexMap<String, Option<IndexSet<EffectRef>>> =
+        param_names.iter().map(|n| (n.clone(), None)).collect();
     let type_table = &sem.types;
     let skip = usize::from(is_method && !param_types.is_empty());
     for (param_type, arg) in param_types.iter().skip(skip).zip(args.iter()) {
@@ -1201,8 +1503,9 @@ fn resolve_effect_params(
         };
         for formal_effect in formal {
             if let EffectRef::Param { name } = formal_effect
-                && let Some(set) = concrete.get_mut(name)
+                && let Some(slot) = concrete.get_mut(name)
             {
+                let set = slot.get_or_insert_with(IndexSet::default);
                 for a in actual {
                     set.insert(a.clone());
                 }
@@ -1212,17 +1515,74 @@ fn resolve_effect_params(
     let mut resolved = Vec::new();
     for effect in callee_effects {
         match effect {
-            EffectRef::Param { name } => {
-                if let Some(set) = concrete.get(name) {
-                    for c in expand_through_closure(set, index.closure) {
-                        resolved.push(c);
-                    }
-                }
-            }
+            // A parameter no argument determined — a trait bound's, say —
+            // stays the requirement, so only a caller holding it satisfies it.
+            EffectRef::Param { name } => match concrete.get(name).and_then(Option::as_ref) {
+                Some(set) => resolved.extend(expand_through_closure(set, index.closure)),
+                None => resolved.push(effect.clone()),
+            },
             EffectRef::Concrete { .. } => resolved.push(effect.clone()),
         }
     }
     resolved
+}
+
+/// An effect parameter the callee's trait bounds leave open, resolved against
+/// the types the call instantiates them with. An unreached impl leaves it.
+fn resolve_bound_effect_params(
+    sem: &Semantics,
+    index: &EffectIndex<'_>,
+    annotations: Option<&TypeAnnotations>,
+    callee: AstId,
+    site: AstId,
+    effects: Vec<EffectRef>,
+) -> Vec<EffectRef> {
+    if !effects.iter().any(EffectRef::is_param) {
+        return effects;
+    }
+    let Some(slots) = index.fn_bound_traits.get(&callee) else {
+        return effects;
+    };
+    let mut brought: IndexSet<EffectRef> = IndexSet::default();
+    let mut resolved_any = false;
+    let instantiations = annotations
+        .into_iter()
+        .flat_map(|ann| ann.all(|facts| &facts.generic_instantiations, site));
+    for instantiation in instantiations {
+        for (slot, traits) in slots.iter().enumerate() {
+            let Some(&type_arg) = instantiation.type_args.get(slot) else {
+                continue;
+            };
+            let head = sem.types.fq_base_type_name(type_arg).head_only();
+            for key in traits.iter().filter(|key| index.open_traits.contains(*key)) {
+                let Some(declared) = index.impl_effects.get(&(head.clone(), key.clone())) else {
+                    continue;
+                };
+                resolved_any = true;
+                brought.extend(declared.iter().cloned());
+            }
+        }
+    }
+    if !resolved_any {
+        return effects;
+    }
+    substitute_effect_param(effects, &brought)
+}
+
+/// Replace every effect parameter with what the impl behind it brings.
+fn substitute_effect_param<'a>(
+    effects: Vec<EffectRef>,
+    brought: impl IntoIterator<Item = &'a EffectRef> + Copy,
+) -> Vec<EffectRef> {
+    let mut out: IndexSet<EffectRef> = IndexSet::default();
+    for effect in effects {
+        if effect.is_param() {
+            out.extend(brought.into_iter().cloned());
+        } else {
+            out.insert(effect);
+        }
+    }
+    out.into_iter().collect()
 }
 
 impl SemEffectWalker<'_> {
@@ -1255,9 +1615,21 @@ impl SemEffectWalker<'_> {
             // it against `wasi:cli`), so compare through the declaration's
             // canonical form rather than by raw `module_source`.
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // Any `Param` left after resolution did not bind to a concrete
-            // effect; skip it rather than report a spurious miss.
-            if effect.is_param() || self.current.contains(&effect) {
+            if effect.is_param() {
+                // An undetermined parameter stands for whatever the callee
+                // brings, so only a caller with one of its own forwards it.
+                if !self.current.iter().any(EffectRef::is_param) {
+                    self.out.push(EffectError {
+                        callee: callee.to_string(),
+                        missing_effect: effect.name().to_string(),
+                        fault: EffectFault::MissingOpen,
+                        span,
+                        module: self.module.clone(),
+                    });
+                }
+                continue;
+            }
+            if self.current.contains(&effect) {
                 continue;
             }
             let effect = &effect;
@@ -1277,7 +1649,7 @@ impl SemEffectWalker<'_> {
             self.out.push(EffectError {
                 callee: callee.to_string(),
                 missing_effect: effect.name().to_string(),
-                kind,
+                fault: EffectFault::Missing(kind),
                 span,
                 module: self.module.clone(),
             });
@@ -1410,621 +1782,6 @@ impl SemEffectWalker<'_> {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Semantics-based stores checking (Design B)
-// ---------------------------------------------------------------------------
-
-/// Stores checking over [`Semantics`] — the Design B reference-escape checker.
-/// Two obligations, both enforced before lowering so the functor optimization
-/// can trust a slot's declared `stores`: a function whose reference parameter
-/// escapes must declare `stores[param]`, and every closure body is analysed with
-/// allowance `[]`, closure types being `stores=[]` and coercion ignoring it.
-#[must_use]
-pub fn check_stores_semantic(sem: &Semantics) -> Vec<StoresError> {
-    let mut out = Vec::new();
-    let Some(state) = sem.state.as_ref() else {
-        return out;
-    };
-
-    let tyctx = TypeRefCtx::build(sem, state);
-    let oracle = StoresOracle::build(sem, state, &tyctx);
-
-    for (src, module) in &sem.modules {
-        if !is_user_authored(src) {
-            continue;
-        }
-        let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
-            continue;
-        };
-        let ctx = StoresCtx {
-            sem,
-            annotations,
-            oracle: &oracle,
-            tyctx: &tyctx,
-            module: src.source_path(),
-        };
-        for item in &module.items {
-            match item {
-                Item::Function(func) => ctx.check_function(func, &mut out),
-                Item::Impl(impl_block) => {
-                    for method in &impl_block.methods {
-                        ctx.check_function(method, &mut out);
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    out
-}
-
-/// Declared `stores[...]` positions of every function / method in the program,
-/// so a call site can look up the callee's stored parameter positions modularly
-/// (each function's own declaration is independently verified by obligation #1).
-struct StoresOracle {
-    /// Function decl [`AstId`] → declared stored parameter positions.
-    fn_stores: IndexMap<AstId, Vec<u32>>,
-    /// `(module, mangled name)` → declared stored positions (method dispatch).
-    mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>>,
-    /// Function decl / variant-case [`AstId`] → parameter positions the return
-    /// value may borrow (return provenance). Distinct from `stores`: `stores`
-    /// describes external persistence, while this describes what the result
-    /// holds, so a call folds its arguments here to know what the result carries.
-    fn_returns: IndexMap<AstId, IndexSet<u32>>,
-    /// `(module, mangled name)` → return-provenance positions (method dispatch).
-    mangled_returns: IndexMap<(ModuleSource, String), IndexSet<u32>>,
-}
-
-impl StoresOracle {
-    fn build(sem: &Semantics, state: &AnnotateState, tyctx: &TypeRefCtx) -> Self {
-        let mut fn_stores: IndexMap<AstId, Vec<u32>> = IndexMap::default();
-        let record = |func: &Function, fn_stores: &mut IndexMap<AstId, Vec<u32>>| {
-            let positions: Vec<u32> = func
-                .params
-                .iter()
-                .enumerate()
-                .filter(|(_, p)| func.stores.contains(&p.name))
-                .map(|(i, _)| u32::try_from(i).unwrap())
-                .collect();
-            fn_stores.insert(func.id, positions);
-        };
-        for module in sem.modules.values() {
-            for item in &module.items {
-                match item {
-                    Item::Function(func) => record(func, &mut fn_stores),
-                    Item::Impl(impl_block) => {
-                        for method in &impl_block.methods {
-                            record(method, &mut fn_stores);
-                        }
-                    }
-                    Item::Trait(trait_decl) => {
-                        for method in &trait_decl.methods {
-                            record(method, &mut fn_stores);
-                        }
-                    }
-                    Item::Interface(interface_decl) => {
-                        for method in &interface_decl.methods {
-                            record(method, &mut fn_stores);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        let mut mangled_stores: IndexMap<(ModuleSource, String), Vec<u32>> = IndexMap::default();
-        for (src, module_sem) in &state.module_semantics {
-            for (key, names) in &module_sem.types.method_names {
-                if let Some(positions) = fn_stores.get(key) {
-                    mangled_stores.insert((src.clone(), names.mangled.clone()), positions.clone());
-                }
-            }
-        }
-
-        let (fn_returns, mangled_returns) = build_returns(sem, state, tyctx);
-
-        Self {
-            fn_stores,
-            mangled_stores,
-            fn_returns,
-            mangled_returns,
-        }
-    }
-}
-
-/// All functions declared by an item (free function, `impl` methods, `trait`
-/// methods), for uniform iteration in the stores/returns builders.
-fn functions_of(item: &Item) -> Vec<&Function> {
-    match item {
-        Item::Function(func) => vec![func],
-        Item::Impl(impl_block) => impl_block.methods.iter().collect(),
-        Item::Trait(trait_decl) => trait_decl.methods.iter().collect(),
-        Item::Interface(interface_decl) => interface_decl.methods.iter().collect(),
-        _ => Vec::new(),
-    }
-}
-
-/// Least-fixpoint return provenance: for every function / constructor, the
-/// parameter positions its return value may borrow — a sound upper bound, since
-/// the escape walk folds a call's arguments at these positions. Seeded from
-/// constructors (position 0) and bodyless callees (any reference argument);
-/// bodied functions start at ∅ and grow until no set changes.
-fn build_returns(
-    sem: &Semantics,
-    state: &AnnotateState,
-    tyctx: &TypeRefCtx,
-) -> (
-    IndexMap<AstId, IndexSet<u32>>,
-    IndexMap<(ModuleSource, String), IndexSet<u32>>,
-) {
-    let mut fn_returns: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
-
-    for (src, module) in &sem.modules {
-        let annotations = state.module_semantics.get(src).map(|m| &m.types);
-        for item in &module.items {
-            for func in functions_of(item) {
-                let seed = if func.body.is_some() {
-                    IndexSet::default()
-                } else {
-                    bodyless_returns(func, annotations, sem, tyctx)
-                };
-                fn_returns.insert(func.id, seed);
-            }
-        }
-    }
-
-    for info in state.tysys.all_variant_cases.values() {
-        {
-            for case in &info.cases {
-                let mut positions = IndexSet::default();
-                if !matches!(sem.types.get(case.payload), ResolvedType::Unit) {
-                    positions.insert(0);
-                }
-                fn_returns.insert(case.ast_id, positions);
-            }
-        }
-    }
-
-    loop {
-        let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
-        let mut changed = false;
-        for (src, module) in &sem.modules {
-            let Some(annotations) = state.module_semantics.get(src).map(|m| &m.types) else {
-                continue;
-            };
-            for item in &module.items {
-                for func in functions_of(item) {
-                    let Some(body) = &func.body else {
-                        continue;
-                    };
-                    let computed = compute_fn_returns(
-                        func,
-                        body,
-                        sem,
-                        annotations,
-                        tyctx,
-                        &fn_returns,
-                        &mangled_returns,
-                    );
-                    let entry = fn_returns.entry(func.id).or_default();
-                    for pos in computed {
-                        changed |= entry.insert(pos);
-                    }
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    let mangled_returns = rebuild_mangled_returns(&fn_returns, state);
-    (fn_returns, mangled_returns)
-}
-
-/// `(module, mangled name)` → return provenance, mirroring how `mangled_stores`
-/// is built from `fn_stores`.
-fn rebuild_mangled_returns(
-    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-    state: &AnnotateState,
-) -> IndexMap<(ModuleSource, String), IndexSet<u32>> {
-    let mut mangled: IndexMap<(ModuleSource, String), IndexSet<u32>> = IndexMap::default();
-    for (src, module_sem) in &state.module_semantics {
-        for (key, names) in &module_sem.types.method_names {
-            if let Some(positions) = fn_returns.get(key) {
-                mangled.insert((src.clone(), names.mangled.clone()), positions.clone());
-            }
-        }
-    }
-    mangled
-}
-
-/// Conservative return provenance of a bodyless callee: its result may borrow
-/// any argument whose type can hold a reference. Sound over-approximation for
-/// intrinsics whose body the checker cannot inspect.
-fn bodyless_returns(
-    func: &Function,
-    annotations: Option<&TypeAnnotations>,
-    sem: &Semantics,
-    tyctx: &TypeRefCtx,
-) -> IndexSet<u32> {
-    let Some(param_types) = annotations.and_then(|a| a.fn_param_types.get(&func.id)) else {
-        return (0..u32::try_from(func.params.len()).unwrap()).collect();
-    };
-    param_types
-        .iter()
-        .enumerate()
-        .filter(|&(_, &ty)| tyctx.can_hold_ref(&sem.types, ty))
-        .map(|(i, _)| u32::try_from(i).unwrap())
-        .collect()
-}
-
-/// Return provenance of one bodied function: the parameter positions its
-/// `return` / `task return` values may borrow, using the current global
-/// provenance snapshot for nested calls.
-fn compute_fn_returns(
-    func: &Function,
-    body: &ast::Block,
-    sem: &Semantics,
-    annotations: &TypeAnnotations,
-    tyctx: &TypeRefCtx,
-    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
-) -> IndexSet<u32> {
-    let param_types = annotations
-        .fn_param_types
-        .get(&func.id)
-        .map_or(&[][..], Vec::as_slice);
-    let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
-    for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
-        if matches!(
-            sem.types.get(type_id),
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        ) {
-            carries
-                .entry(param.id)
-                .or_default()
-                .insert(u32::try_from(i).unwrap());
-        }
-    }
-    let mut flow = ReturnFlow {
-        sem,
-        annotations,
-        tyctx,
-        fn_returns,
-        mangled_returns,
-        carries,
-        result: IndexSet::default(),
-    };
-    ast::walk_block(&mut flow, body);
-    flow.result
-}
-
-/// Collects return provenance over a function body: seeded with the function's
-/// reference parameters, it propagates carries through `let` / whole-local
-/// assignments and unions the carries of each `return` / `task return` value.
-/// A nested closure is not descended into — its `return` is its own.
-struct ReturnFlow<'a> {
-    sem: &'a Semantics,
-    annotations: &'a TypeAnnotations,
-    tyctx: &'a TypeRefCtx,
-    fn_returns: &'a IndexMap<AstId, IndexSet<u32>>,
-    mangled_returns: &'a IndexMap<(ModuleSource, String), IndexSet<u32>>,
-    carries: IndexMap<AstId, IndexSet<u32>>,
-    result: IndexSet<u32>,
-}
-
-impl ReturnFlow<'_> {
-    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
-        carries_of(
-            expr,
-            self.sem,
-            self.tyctx,
-            self.annotations,
-            self.fn_returns,
-            self.mangled_returns,
-            &self.carries,
-        )
-    }
-}
-
-impl AstVisitor for ReturnFlow<'_> {
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::Let(let_stmt) => {
-                if let Some(value) = &let_stmt.value {
-                    let carried = self.carries(value);
-                    if !carried.is_empty()
-                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
-                    {
-                        self.carries.entry(binding).or_default().extend(carried);
-                    }
-                }
-            }
-            Stmt::Return(ret) => {
-                if let Some(value) = &ret.value {
-                    let carried = self.carries(value);
-                    self.result.extend(carried);
-                }
-            }
-            Stmt::TaskReturn(task) => {
-                let carried = self.carries(&task.value);
-                self.result.extend(carried);
-            }
-            _ => {}
-        }
-        ast::walk_stmt(self, stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Closure(_) => return,
-            Expr::Assign(assign) => {
-                let carried = self.carries(&assign.value);
-                if !carried.is_empty() {
-                    let (root, through_deref) = place_root_of(&assign.target);
-                    if let Some(ident) = root
-                        && !through_deref
-                        && global_name_of(ident, self.annotations).is_none()
-                        && !ident_is_ref_of(ident, self.sem)
-                        && let Some(def) = self.sem.referenced_symbol(ident.id)
-                    {
-                        self.carries.entry(def).or_default().extend(carried);
-                    }
-                }
-            }
-            _ => {}
-        }
-        ast::walk_expr(self, expr);
-    }
-}
-
-/// Answers "can a value of this type transitively hold a reference?" — the gate
-/// that keeps carrying precise: a value whose type cannot contain a reference
-/// (`i32`, `String`, `Unit`) never carries a parameter, so a storing call that
-/// returns such a type folds nothing (e.g. `list.push(x)` returning `Unit`).
-struct TypeRefCtx {
-    members: MemberTables,
-    memo: std::cell::RefCell<IndexMap<(TypeId, bool), bool>>,
-}
-
-impl TypeRefCtx {
-    fn build(sem: &Semantics, state: &AnnotateState) -> Self {
-        Self {
-            members: MemberTables::collect(sem, state),
-            memo: std::cell::RefCell::new(IndexMap::default()),
-        }
-    }
-
-    fn can_hold_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
-        self.holds_ref(tt, type_id, true)
-    }
-
-    /// `can_hold_ref` restricted to what the declaration actually spells: a
-    /// generic accessor returning a bare `T` answers no, since the body is
-    /// checked once for every instantiation and none of them is in hand.
-    fn spells_ref(&self, tt: &TypeTable, type_id: TypeId) -> bool {
-        self.holds_ref(tt, type_id, false)
-    }
-
-    /// `unresolved` is the answer for a type the walk cannot resolve — an
-    /// unsubstituted parameter, a pack, an unresolved projection.
-    fn holds_ref(&self, tt: &TypeTable, type_id: TypeId, unresolved: bool) -> bool {
-        let key = (type_id, unresolved);
-        if let Some(&b) = self.memo.borrow().get(&key) {
-            return b;
-        }
-        let mut visited = TypeSet::default();
-        let r = self.walk(tt, type_id, &[], unresolved, &mut visited);
-        self.memo.borrow_mut().insert(key, r);
-        r
-    }
-
-    /// `args` fills the slots of the instance whose member is being walked, so a
-    /// slot a member buries (`List<T>`'s `Array<T>`) answers for the instance at
-    /// hand rather than for every `T`.
-    fn walk(
-        &self,
-        tt: &TypeTable,
-        type_id: TypeId,
-        args: &[TypeId],
-        unresolved: bool,
-        visited: &mut TypeSet,
-    ) -> bool {
-        if !visited.insert(type_id) {
-            return false;
-        }
-        match tt.get(type_id) {
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_) => true,
-            ResolvedType::Reactive(t) | ResolvedType::BuiltinArray(t) => {
-                self.walk(tt, *t, args, unresolved, visited)
-            }
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args
-                    .iter()
-                    .any(|t| self.walk(tt, *t, args, unresolved, visited))
-                    || self.members_hold_ref(tt, type_id, unresolved, visited)
-            }
-            ResolvedType::Newtype { base_type, .. } => {
-                self.walk(tt, *base_type, args, unresolved, visited)
-            }
-            ResolvedType::Struct { .. } | ResolvedType::Variant { .. } => {
-                self.members_hold_ref(tt, type_id, unresolved, visited)
-            }
-            ResolvedType::Function { .. } => false,
-            ResolvedType::TypeParam { index, .. } => match args.get(*index as usize) {
-                Some(&arg) => self.walk(tt, arg, &[], unresolved, visited),
-                None => unresolved,
-            },
-            ResolvedType::TypePack { .. }
-            | ResolvedType::InferVar(_)
-            | ResolvedType::AssocTypeProjection { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => unresolved,
-            ResolvedType::Primitive(_)
-            | ResolvedType::Unit
-            | ResolvedType::Never
-            | ResolvedType::Enum { .. }
-            | ResolvedType::Resource { .. }
-            | ResolvedType::Flags { .. } => false,
-        }
-    }
-
-    /// Whether a declared member holds a reference. A generic instance is asked
-    /// too: `Slice<T>` keeps `&Array<T>` in a field for every `T`.
-    fn members_hold_ref(
-        &self,
-        tt: &TypeTable,
-        type_id: TypeId,
-        unresolved: bool,
-        visited: &mut TypeSet,
-    ) -> bool {
-        let args = tt.nominal_type_args(type_id).unwrap_or_default();
-        self.members
-            .of(type_id, tt)
-            .any(|t| self.walk(tt, t, &args, unresolved, visited))
-    }
-}
-
-/// Per-module context for the escape checks.
-struct StoresCtx<'a> {
-    sem: &'a Semantics,
-    annotations: &'a TypeAnnotations,
-    oracle: &'a StoresOracle,
-    tyctx: &'a TypeRefCtx,
-    module: String,
-}
-
-impl StoresCtx<'_> {
-    /// Obligation #1 for one function/method, plus obligation #2 for every
-    /// closure literal in its body.
-    fn check_function(&self, func: &Function, out: &mut Vec<StoresError>) {
-        let Some(body) = &func.body else {
-            return;
-        };
-        if func.attrs.iter().any(|attr| attr.name == "ambient") || is_test_function(&func.name) {
-            return;
-        }
-        let param_types = self
-            .annotations
-            .fn_param_types
-            .get(&func.id)
-            .map_or(&[][..], Vec::as_slice);
-
-        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
-        let mut names: IndexMap<u32, String> = IndexMap::default();
-        let mut allowed: IndexSet<u32> = IndexSet::default();
-        for (i, (param, &type_id)) in func.params.iter().zip(param_types.iter()).enumerate() {
-            let pos = u32::try_from(i).unwrap();
-            if matches!(
-                self.sem.types.get(type_id),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            ) {
-                carries.entry(param.id).or_default().insert(pos);
-                names.insert(pos, param.name.clone());
-            }
-            if func.stores.contains(&param.name) {
-                allowed.insert(pos);
-            }
-        }
-
-        let mut walker = RefFlow {
-            ctx: self,
-            carries,
-            names,
-            allowed,
-            is_closure: false,
-            out,
-            seen: IndexSet::default(),
-        };
-        ast::walk_block(&mut walker, body);
-    }
-
-    /// Obligation #2: a closure may not store any of its reference parameters
-    /// (allowance `[]`).
-    fn check_closure(&self, closure: &ast::ClosureExpr, out: &mut Vec<StoresError>) {
-        let Some(type_id) = self.sem.expression_type(closure.id) else {
-            return;
-        };
-        let ResolvedType::Function { params, .. } = self.sem.types.get(type_id) else {
-            return;
-        };
-        let mut carries: IndexMap<AstId, IndexSet<u32>> = IndexMap::default();
-        let mut names: IndexMap<u32, String> = IndexMap::default();
-        for (j, param) in closure.params.iter().enumerate() {
-            let pos = u32::try_from(j).unwrap();
-            if params.get(j).is_some_and(|&pt| {
-                matches!(
-                    self.sem.types.get(pt),
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-                )
-            }) {
-                carries.entry(param.id).or_default().insert(pos);
-                names.insert(pos, param.name.clone());
-            }
-        }
-        if names.is_empty() {
-            return;
-        }
-        let mut walker = RefFlow {
-            ctx: self,
-            carries,
-            names,
-            allowed: IndexSet::default(),
-            is_closure: true,
-            out,
-            seen: IndexSet::default(),
-        };
-        walker.sink_return(&closure.body);
-        walker.visit_expr(&closure.body);
-    }
-}
-
-/// A resolved call's stored positions and its arguments in callee-position
-/// order (position 0 is a method receiver).
-struct ResolvedCall<'e> {
-    stored: Vec<u32>,
-    args: Vec<&'e Expr>,
-}
-
-/// Which persistence sink a carried reference reached (selects the message).
-enum Sink<'a> {
-    Return,
-    StructField,
-    Tuple,
-    Global(&'a str),
-    ThroughRef,
-    /// Forwarded as an argument to a callee that stores that position — the
-    /// reference persists inside the callee, so the caller stores it too.
-    Forward,
-}
-
-/// Reference-flow escape walker. Shared by both obligations; the seed
-/// (`carries` / `names`), the `allowed` allowance, and `is_closure` (wording)
-/// distinguish them. Nested closures are not descended into — each is checked
-/// as its own entity.
-struct RefFlow<'a, 'b> {
-    ctx: &'a StoresCtx<'a>,
-    /// Binding [`AstId`] → the parameter positions its reference currently carries.
-    carries: IndexMap<AstId, IndexSet<u32>>,
-    /// Parameter position → name (for diagnostics).
-    names: IndexMap<u32, String>,
-    /// Positions whose escape is allowed (declared `stores`).
-    allowed: IndexSet<u32>,
-    is_closure: bool,
-    out: &'b mut Vec<StoresError>,
-    seen: IndexSet<(usize, String)>,
-}
-
-/// A resolved call's return-provenance positions and its arguments in
-/// callee-position order (position 0 is a method receiver). The result value
-/// provably borrows the arguments at `returned`.
-struct ReturnedCall<'e> {
-    returned: IndexSet<u32>,
-    args: Vec<&'e Expr>,
-}
-
 /// Type of `expr`, preferring the type of the binding an identifier names —
 /// where a parameter or a function-typed local has one and the use site does not.
 fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
@@ -2035,575 +1792,6 @@ fn expr_type_of(expr: &Expr, sem: &Semantics) -> Option<TypeId> {
         return Some(ty);
     }
     sem.expression_type(expr.id())
-}
-
-/// The place a member read projects out of: a field, an element, or a referent.
-fn member_read_base(expr: &Expr) -> Option<&Expr> {
-    match expr {
-        Expr::FieldAccess(f) => Some(&f.expr),
-        Expr::Index(i) => Some(&i.expr),
-        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => Some(&u.expr),
-        _ => None,
-    }
-}
-
-/// The parameter positions the *place* operand of `&` is rooted at, ignoring
-/// the place's own type (`&p.field` roots at `p`).
-fn place_roots_of(
-    place: &Expr,
-    sem: &Semantics,
-    carries: &IndexMap<AstId, IndexSet<u32>>,
-) -> IndexSet<u32> {
-    if let Some(base) = member_read_base(place) {
-        return place_roots_of(base, sem, carries);
-    }
-    match place {
-        Expr::Ident(ident) => sem
-            .referenced_symbol(ident.id)
-            .and_then(|def| carries.get(&def))
-            .cloned()
-            .unwrap_or_default(),
-        Expr::Cast(c) => place_roots_of(&c.expr, sem, carries),
-        _ => IndexSet::default(),
-    }
-}
-
-/// Deepest identifier of an assignment target place, and whether the path
-/// crossed a dereference (a write through a reference). Pure over the AST.
-fn place_root_of(place: &Expr) -> (Option<&ast::IdentExpr>, bool) {
-    match place {
-        Expr::Ident(ident) => (Some(ident), false),
-        Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-            let (root, _) = place_root_of(&u.expr);
-            (root, true)
-        }
-        Expr::FieldAccess(f) => place_root_of(&f.expr),
-        Expr::Index(i) => place_root_of(&i.expr),
-        Expr::Cast(c) => place_root_of(&c.expr),
-        _ => (None, false),
-    }
-}
-
-/// The global's name if this identifier resolves to a module global l-value.
-fn global_name_of(ident: &ast::IdentExpr, annotations: &TypeAnnotations) -> Option<String> {
-    match annotations.assign_places.get(&ident.id) {
-        Some(AssignPlace::Global { name, .. }) => Some(name.clone()),
-        _ => None,
-    }
-}
-
-/// Whether an identifier's binding is a reference (`&T` / `&mut T`).
-fn ident_is_ref_of(ident: &ast::IdentExpr, sem: &Semantics) -> bool {
-    sem.referenced_symbol(ident.id)
-        .and_then(|def| sem.local_type(def))
-        .is_some_and(|ty| {
-            matches!(
-                sem.types.get(ty),
-                ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-            )
-        })
-}
-
-/// Return provenance of a callee identifier that names a free function or a
-/// variant / enum constructor case. Tries the whole-path id then each segment
-/// id, returning the first that resolves (through `references`) to a decl / case
-/// id present in `fn_returns`.
-fn ident_returns(
-    ident: &ast::IdentExpr,
-    sem: &Semantics,
-    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-) -> Option<IndexSet<u32>> {
-    std::iter::once(ident.id)
-        .chain(ident.segments.iter().map(|s| s.id))
-        .find_map(|use_id| {
-            sem.referenced_symbol(use_id)
-                .and_then(|def| fn_returns.get(&def))
-                .cloned()
-        })
-}
-
-/// The parameter positions a call's *result* provably borrows, and the call's
-/// arguments in callee-position order. Mirrors `call_stored_args` but reads the
-/// per-function return provenance (`fn_returns` / `mangled_returns`) instead of
-/// declared `stores`. An unresolvable direct callee borrows nothing; a functor
-/// callee is bounded by its slot's `stores`, which the closure obligation pins.
-fn resolve_returned_args<'e>(
-    expr: &'e Expr,
-    sem: &Semantics,
-    annotations: &TypeAnnotations,
-    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
-) -> Option<ReturnedCall<'e>> {
-    let mangled = |func_ref: &FunctionRef| -> IndexSet<u32> {
-        mangled_returns
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default()
-    };
-    match expr {
-        Expr::Call(call) => {
-            let args: Vec<&Expr> = call.args.iter().collect();
-            if let Expr::Ident(ident) = &call.callee
-                && let Some(returned) = ident_returns(ident, sem, fn_returns)
-            {
-                return Some(ReturnedCall { returned, args });
-            }
-            let returned: IndexSet<u32> = annotations
-                .static_dispatches(call.id)
-                .flat_map(|d| mangled(&d.function_ref))
-                .collect();
-            if !returned.is_empty() {
-                return Some(ReturnedCall { returned, args });
-            }
-            if let Some(callee_ty) = expr_type_of(&call.callee, sem) {
-                let returned = match sem.types.get(callee_ty) {
-                    ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
-                    _ => (0..u32::try_from(args.len()).unwrap()).collect(),
-                };
-                return Some(ReturnedCall { returned, args });
-            }
-            Some(ReturnedCall {
-                returned: IndexSet::default(),
-                args,
-            })
-        }
-        Expr::MethodCall(mc) => {
-            let mut args: Vec<&Expr> = vec![&mc.receiver];
-            args.extend(mc.args.iter());
-            let returned = sem
-                .method_dispatches_at(mc.id)
-                .flat_map(|d| mangled(&d.function_ref))
-                .collect();
-            Some(ReturnedCall { returned, args })
-        }
-        Expr::StaticMethodCall(sc) => {
-            let args: Vec<&Expr> = sc.args.iter().collect();
-            let returned = annotations
-                .static_dispatches(sc.id)
-                .flat_map(|d| mangled(&d.function_ref))
-                .collect();
-            Some(ReturnedCall { returned, args })
-        }
-        _ => None,
-    }
-}
-
-/// Parameter positions the reference produced by `expr` carries. The shared
-/// reference-flow behind the escape walk and the return-provenance fixpoint.
-#[allow(clippy::too_many_arguments)]
-fn carries_of(
-    expr: &Expr,
-    sem: &Semantics,
-    tyctx: &TypeRefCtx,
-    annotations: &TypeAnnotations,
-    fn_returns: &IndexMap<AstId, IndexSet<u32>>,
-    mangled_returns: &IndexMap<(ModuleSource, String), IndexSet<u32>>,
-    carries: &IndexMap<AstId, IndexSet<u32>>,
-) -> IndexSet<u32> {
-    match expr_type_of(expr, sem) {
-        Some(ty) if tyctx.can_hold_ref(&sem.types, ty) => {}
-        _ => return IndexSet::default(),
-    }
-    let recurse = |e: &Expr| {
-        carries_of(
-            e,
-            sem,
-            tyctx,
-            annotations,
-            fn_returns,
-            mangled_returns,
-            carries,
-        )
-    };
-    // `spells_ref` rather than the gate above, which answers yes for an
-    // unsubstituted parameter no instantiation has filled in.
-    if let Some(base) = member_read_base(expr) {
-        let spells_ref = expr_type_of(expr, sem).is_some_and(|t| tyctx.spells_ref(&sem.types, t));
-        return if spells_ref {
-            recurse(base)
-        } else {
-            IndexSet::default()
-        };
-    }
-    match expr {
-        Expr::Ident(ident) => sem
-            .referenced_symbol(ident.id)
-            .and_then(|def| carries.get(&def))
-            .cloned()
-            .unwrap_or_default(),
-        Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef) => {
-            place_roots_of(&u.expr, sem, carries)
-        }
-        Expr::Cast(c) => recurse(&c.expr),
-        Expr::Call(_) | Expr::MethodCall(_) | Expr::StaticMethodCall(_) => {
-            let Some(call) =
-                resolve_returned_args(expr, sem, annotations, fn_returns, mangled_returns)
-            else {
-                return IndexSet::default();
-            };
-            let mut acc = IndexSet::default();
-            for (pos, arg) in call.args.iter().enumerate() {
-                if call.returned.contains(&u32::try_from(pos).unwrap()) {
-                    acc.extend(recurse(arg));
-                }
-            }
-            acc
-        }
-        Expr::StructLiteral(lit) => {
-            let mut acc = IndexSet::default();
-            for field in &lit.fields {
-                acc.extend(recurse(&field.value));
-            }
-            acc
-        }
-        Expr::TupleLiteral(t) => {
-            let mut acc = IndexSet::default();
-            for el in &t.elements {
-                acc.extend(recurse(el));
-            }
-            acc
-        }
-        // The comprehension builds a tuple out of its body, one element per
-        // source element, so what the body carries the tuple carries.
-        Expr::TupleComprehension(c) => recurse(&c.body),
-        _ => IndexSet::default(),
-    }
-}
-
-impl RefFlow<'_, '_> {
-    /// Parameter positions the reference produced by `expr` carries — the escape
-    /// walk's view, sharing [`carries_of`] with the return-provenance fixpoint so
-    /// both fold calls at the same return-provenance positions.
-    fn carries(&self, expr: &Expr) -> IndexSet<u32> {
-        carries_of(
-            expr,
-            self.ctx.sem,
-            self.ctx.tyctx,
-            self.ctx.annotations,
-            &self.ctx.oracle.fn_returns,
-            &self.ctx.oracle.mangled_returns,
-            &self.carries,
-        )
-    }
-
-    /// `None` when `expr` is not a call. An unresolvable direct callee is
-    /// trusted to store nothing; an unresolvable functor callee stores every
-    /// position.
-    fn call_stored_args<'e>(&self, expr: &'e Expr) -> Option<ResolvedCall<'e>> {
-        match expr {
-            Expr::Call(call) => {
-                let args: Vec<&Expr> = call.args.iter().collect();
-                if let Expr::Ident(ident) = &call.callee
-                    && let Some(def) = self.ctx.sem.referenced_symbol(ident.id)
-                    && let Some(stored) = self.ctx.oracle.fn_stores.get(&def)
-                {
-                    return Some(ResolvedCall {
-                        stored: stored.clone(),
-                        args,
-                    });
-                }
-                let stored: Vec<u32> = self
-                    .ctx
-                    .annotations
-                    .static_dispatches(call.id)
-                    .flat_map(|d| self.mangled_stored(&d.function_ref))
-                    .collect();
-                if !stored.is_empty() {
-                    return Some(ResolvedCall { stored, args });
-                }
-                if let Some(callee_ty) = expr_type_of(&call.callee, self.ctx.sem) {
-                    let stored = match self.ctx.sem.types.get(callee_ty) {
-                        ResolvedType::Function { stores, .. } => stores.clone(),
-                        _ => (0..u32::try_from(args.len()).unwrap()).collect(),
-                    };
-                    return Some(ResolvedCall { stored, args });
-                }
-                Some(ResolvedCall {
-                    stored: Vec::new(),
-                    args,
-                })
-            }
-            Expr::MethodCall(mc) => {
-                let mut args: Vec<&Expr> = vec![&mc.receiver];
-                args.extend(mc.args.iter());
-                let stored = self
-                    .ctx
-                    .sem
-                    .method_dispatches_at(mc.id)
-                    .flat_map(|d| self.mangled_stored(&d.function_ref))
-                    .collect();
-                Some(ResolvedCall { stored, args })
-            }
-            Expr::StaticMethodCall(sc) => {
-                let args: Vec<&Expr> = sc.args.iter().collect();
-                let stored = self
-                    .ctx
-                    .annotations
-                    .static_dispatches(sc.id)
-                    .flat_map(|d| self.mangled_stored(&d.function_ref))
-                    .collect();
-                Some(ResolvedCall { stored, args })
-            }
-            _ => None,
-        }
-    }
-
-    fn mangled_stored(&self, func_ref: &FunctionRef) -> Vec<u32> {
-        self.ctx
-            .oracle
-            .mangled_stores
-            .get(&(func_ref.module_source.clone(), func_ref.name.clone()))
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    fn sink_value(&mut self, value: &Expr, sink: Sink) {
-        let carried = self.carries(value);
-        self.mark(&carried, value.span(), &sink);
-    }
-
-    /// Forwarding a reference parameter to a callee that stores it makes the
-    /// caller store it too. Only when the result cannot hold a reference is the
-    /// store provably external (a global, a write through a reference); when it
-    /// can, the store may be a managed borrow into the result, already tracked by
-    /// `carries`, so this defers. An unresolved (generic) result type is
-    /// `can_hold_ref = true` and also defers.
-    fn sink_call_args(&mut self, expr: &Expr) {
-        let Some(call) = self.call_stored_args(expr) else {
-            return;
-        };
-        if expr_type_of(expr, self.ctx.sem)
-            .is_some_and(|ty| self.ctx.tyctx.can_hold_ref(&self.ctx.sem.types, ty))
-        {
-            return;
-        }
-        for (pos, arg) in call.args.iter().enumerate() {
-            if call.stored.contains(&u32::try_from(pos).unwrap()) {
-                let carried = self.carries(arg);
-                self.mark(&carried, arg.span(), &Sink::Forward);
-            }
-        }
-    }
-
-    /// A `return`/task-return sink. Returning a freshly-taken borrow (`return
-    /// &self.field`, `return &xs[i]`) is a plain reference return signalled by
-    /// the `&T` return type — it does not persist the parameter the way storing
-    /// it in an aggregate / global does, so it needs no `stores`. Returning the
-    /// parameter itself, an alias of it, or a value that folded it into an
-    /// aggregate is flagged.
-    fn sink_return(&mut self, value: &Expr) {
-        if matches!(
-            value,
-            Expr::Unary(u) if matches!(u.op, ast::UnaryOp::Ref | ast::UnaryOp::MutRef)
-        ) {
-            return;
-        }
-        self.sink_value(value, Sink::Return);
-    }
-
-    fn mark(&mut self, positions: &IndexSet<u32>, span: Span, sink: &Sink) {
-        for &pos in positions {
-            if self.allowed.contains(&pos) {
-                continue;
-            }
-            let name = self.names.get(&pos).map_or("?", String::as_str);
-            let message = if self.is_closure {
-                format!(
-                    "closure may not store reference parameter '{name}' (closures cannot declare `stores`)"
-                )
-            } else {
-                match sink {
-                    Sink::Return => format!(
-                        "returning reference parameter '{name}' requires `stores[{name}]` declaration"
-                    ),
-                    Sink::StructField => format!(
-                        "storing reference parameter '{name}' in struct field requires `stores[{name}]` declaration"
-                    ),
-                    Sink::Tuple => format!(
-                        "storing reference parameter '{name}' in a tuple requires `stores[{name}]` declaration"
-                    ),
-                    Sink::Global(gname) => format!(
-                        "storing reference parameter '{name}' in global '{gname}' requires `stores[{name}]` declaration"
-                    ),
-                    Sink::ThroughRef => format!(
-                        "storing reference parameter '{name}' through a reference requires `stores[{name}]` declaration"
-                    ),
-                    Sink::Forward => format!(
-                        "passing reference parameter '{name}' to a function that stores it requires `stores[{name}]` declaration"
-                    ),
-                }
-            };
-            if !self.seen.insert((span.start, message.clone())) {
-                continue;
-            }
-            self.out.push(StoresError {
-                message,
-                span,
-                module: self.ctx.module.clone(),
-            });
-        }
-    }
-
-    /// The global's name if this identifier resolves to a module global l-value.
-    fn global_name(&self, ident: &ast::IdentExpr) -> Option<String> {
-        match self.ctx.annotations.assign_places.get(&ident.id) {
-            Some(AssignPlace::Global { name, .. }) => Some(name.clone()),
-            _ => None,
-        }
-    }
-
-    /// Reject a named-function reference argument whose declared `stores`
-    /// exceeds the functor parameter's declared `stores`.
-    fn check_functor_coercion(&mut self, call: &ast::CallExpr) {
-        // One list per walk that reached the call; a functor argument has to
-        // satisfy every one of them.
-        let per_walk: Vec<Vec<TypeId>> = self
-            .ctx
-            .annotations
-            .all(|facts| &facts.call_param_types, call.id)
-            .cloned()
-            .collect();
-        for param_types in &per_walk {
-            for (arg, &param_type) in call.args.iter().zip(param_types.iter()) {
-                let ResolvedType::Function {
-                    stores: expected, ..
-                } = self.ctx.sem.types.get(param_type)
-                else {
-                    continue;
-                };
-                let Expr::Ident(ident) = arg else {
-                    continue;
-                };
-                let Some(declared) = self
-                    .ctx
-                    .sem
-                    .referenced_symbol(ident.id)
-                    .and_then(|def| self.ctx.oracle.fn_stores.get(&def))
-                else {
-                    continue;
-                };
-                for pos in declared {
-                    if !expected.contains(pos) {
-                        self.out.push(StoresError {
-                            message: format!(
-                                "function '{}' stores parameter {pos} but is passed where a functor that stores nothing at that position is expected",
-                                ident.name
-                            ),
-                            span: arg.span(),
-                            module: self.ctx.module.clone(),
-                        });
-                    }
-                }
-            }
-        }
-    }
-
-    /// Deepest identifier of an assignment target place, and whether the path
-    /// crossed a dereference (a write through a reference).
-    fn place_root<'e>(&self, place: &'e Expr) -> (Option<&'e ast::IdentExpr>, bool) {
-        match place {
-            Expr::Ident(ident) => (Some(ident), false),
-            Expr::Unary(u) if u.op == ast::UnaryOp::Deref => {
-                let (root, _) = self.place_root(&u.expr);
-                (root, true)
-            }
-            Expr::FieldAccess(f) => self.place_root(&f.expr),
-            Expr::Index(i) => self.place_root(&i.expr),
-            Expr::Cast(c) => self.place_root(&c.expr),
-            _ => (None, false),
-        }
-    }
-}
-
-impl AstVisitor for RefFlow<'_, '_> {
-    fn visit_stmt(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::Let(let_stmt) => {
-                if let Some(value) = &let_stmt.value {
-                    let carried = self.carries(value);
-                    if !carried.is_empty()
-                        && let Some(binding) = pattern_binding_id(&let_stmt.pattern)
-                    {
-                        self.carries.entry(binding).or_default().extend(carried);
-                    }
-                }
-            }
-            Stmt::Return(ret) => {
-                if let Some(value) = &ret.value {
-                    self.sink_return(value);
-                }
-            }
-            Stmt::TaskReturn(task) => self.sink_return(&task.value),
-            _ => {}
-        }
-        ast::walk_stmt(self, stmt);
-    }
-
-    fn visit_expr(&mut self, expr: &Expr) {
-        match expr {
-            Expr::Closure(closure) => {
-                self.ctx.check_closure(closure, self.out);
-                return;
-            }
-            Expr::StructLiteral(lit) => {
-                for field in &lit.fields {
-                    self.sink_value(&field.value, Sink::StructField);
-                }
-            }
-            Expr::TupleLiteral(t) => {
-                for el in &t.elements {
-                    self.sink_value(el, Sink::Tuple);
-                }
-            }
-            Expr::TupleComprehension(c) => {
-                self.sink_value(&c.body, Sink::Tuple);
-            }
-            Expr::Assign(assign) => {
-                let carried = self.carries(&assign.value);
-                if !carried.is_empty() {
-                    let (root, through_deref) = self.place_root(&assign.target);
-                    let span = assign.value.span();
-                    match root {
-                        Some(ident) => {
-                            if let Some(name) = self.global_name(ident) {
-                                self.mark(&carried, span, &Sink::Global(&name));
-                            } else if is_ident(&assign.target) && !through_deref {
-                                if let Some(def) = self.ctx.sem.referenced_symbol(ident.id) {
-                                    self.carries.entry(def).or_default().extend(carried);
-                                }
-                            } else if through_deref || ident_is_ref_of(ident, self.ctx.sem) {
-                                self.mark(&carried, span, &Sink::ThroughRef);
-                            } else if let Some(def) = self.ctx.sem.referenced_symbol(ident.id) {
-                                self.carries.entry(def).or_default().extend(carried);
-                            }
-                        }
-                        None => self.mark(&carried, span, &Sink::ThroughRef),
-                    }
-                }
-            }
-            Expr::Call(call) => {
-                self.check_functor_coercion(call);
-                self.sink_call_args(expr);
-            }
-            Expr::MethodCall(_) | Expr::StaticMethodCall(_) => self.sink_call_args(expr),
-            _ => {}
-        }
-        ast::walk_expr(self, expr);
-    }
-}
-
-fn is_ident(expr: &Expr) -> bool {
-    matches!(expr, Expr::Ident(_))
-}
-
-/// The binding [`AstId`] of a simple `let` pattern, or `None` for a
-/// destructuring pattern (reference aliasing through destructuring is not
-/// tracked).
-fn pattern_binding_id(pattern: &ast::Pattern) -> Option<AstId> {
-    match pattern {
-        ast::Pattern::Ident { id, .. } | ast::Pattern::MutIdent { id, .. } => Some(*id),
-        _ => None,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2741,9 +1929,9 @@ impl PurityWalker<'_> {
     fn unanswered(&self, effects: &[EffectRef]) -> bool {
         effects.iter().any(|effect| {
             let effect = canonicalize_effect(effect, self.index.closure, self.index.effect_by_name);
-            // A `Param` left after resolution bound to no concrete effect, as
-            // `SemEffectWalker::report_missing` reads it.
-            !effect.is_param() && !self.granted.contains(&effect)
+            // A `Param` left after resolution stands for effects no handler
+            // here can have installed, so it is unanswered like any other.
+            effect.is_param() || !self.granted.contains(&effect)
         })
     }
 
@@ -2886,7 +2074,7 @@ mod tests {
         let error = EffectError {
             callee: "println".to_string(),
             missing_effect: "Stdout".to_string(),
-            kind: EffectKind::Effect,
+            fault: EffectFault::Missing(EffectKind::Effect),
             span: Span {
                 start: 100,
                 end: 107,

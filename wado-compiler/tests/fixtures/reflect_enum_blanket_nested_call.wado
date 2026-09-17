@@ -3,7 +3,7 @@
 // the instantiation must be queued from inside the blanket rather than from the
 // generic call site.
 
-trait Label {
+trait Label with () {
     fn label(&self) -> String;
 }
 
@@ -13,7 +13,7 @@ impl<T: ReflectEnum<Members = [..C]>, ..C> Label for T {
     }
 }
 
-trait Describe {
+trait Describe with () {
     fn describe(&self) -> String;
 }
 

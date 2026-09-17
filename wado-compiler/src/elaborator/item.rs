@@ -83,7 +83,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         return_type: TypeTable::UNIT,
         task_return_type: None,
         effects: vec![],
-        stores: vec![],
+        retains: vec![],
         body: None,
         span,
         local_count: 0,
@@ -1676,6 +1676,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
+            scope.reject_retention_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
             method_scope
                 .annotate_ctx
@@ -2006,7 +2007,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .find(|p| p.self_kind != ast::SelfKind::None)
                 })
                 .flatten();
-            let rejections: [(Option<Span>, &'static str); 6] = [
+            let rejections: [(Option<Span>, &'static str); 5] = [
                 (
                     method.body.as_ref().filter(|_| cm_backed).map(|b| b.span),
                     "cannot carry a default implementation: a Component Model import backs it, \
@@ -2029,11 +2030,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                      is dispatched — reach for an `#[ambient]` function",
                 ),
                 (
-                    (!method.stores.is_empty()).then_some(method.span),
-                    "cannot declare `stores`: nothing checks the clause on an operation, so it \
-                     would constrain call sites on a promise the handler never makes",
-                ),
-                (
                     method
                         .type_params
                         .iter()
@@ -2054,6 +2050,38 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span,
                 });
             }
+            self.reject_retention_attrs_on_requirement(owner, method);
+        }
+    }
+
+    /// Reject `#[retain(...)]` and `#[result(...)]` on a method requirement, in
+    /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
+    /// and that impl's body is what answers both.
+    pub(super) fn reject_retention_attrs_on_requirement(
+        &mut self,
+        owner: &str,
+        method: &ast::Function,
+    ) {
+        for attr in &method.attrs {
+            let detail = match attr.name.as_str() {
+                "retain" => {
+                    "cannot declare `#[retain]`: the impl it dispatches to has the body that \
+                     says what it keeps, so stating it here binds every call site to a promise \
+                     no implementation makes"
+                }
+                "result" => {
+                    "cannot declare `#[result]`: the impl it dispatches to has the body that \
+                     says what its result is made of, so stating it here binds every call site \
+                     to a promise no implementation makes"
+                }
+                _ => continue,
+            };
+            let _ = self.emit(TypeError::OperationClauseNotAllowed {
+                owner: owner.to_string(),
+                operation: method.name.clone(),
+                detail,
+                span: attr.span,
+            });
         }
     }
 
@@ -2207,35 +2235,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             cases: vec![],
             span: variant_decl.span,
             wire_name_policy: None,
-        }
-    }
-
-    /// Validate that stores declarations reference valid reference parameters.
-    fn validate_stores(&self, stores: &[String], params: &[TirParam], span: Span) {
-        let tt = self.tysys.type_table.borrow();
-        for store_name in stores {
-            if let Some(param) = params.iter().find(|p| p.name == *store_name) {
-                let resolved = tt.get(param.type_id);
-                // Allow stores on: reference types (&T, &mut T) and type parameters (T may be &U)
-                if !matches!(
-                    resolved,
-                    ResolvedType::Ref(_) | ResolvedType::MutRef(_) | ResolvedType::TypeParam { .. }
-                ) {
-                    let type_name = tt.type_name(param.type_id);
-                    let _ = self.emit(TypeError::InvalidStores {
-                        message: format!(
-                            "stores[{store_name}]: parameter '{store_name}' has type '{type_name}', \
-                             but only reference parameters (&T or &mut T) or type parameters can be stored"
-                        ),
-                        span,
-                    });
-                }
-            } else {
-                let _ = self.emit(TypeError::InvalidStores {
-                    message: format!("stores[{store_name}]: no parameter named '{store_name}'"),
-                    span,
-                });
-            }
         }
     }
 
@@ -2474,8 +2473,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param.is_mut,
                 type_id,
             );
-            // `params` survives only to feed the recorded `fn_param_types`
-            // and `validate_stores`; the TIR `default_expr` is not built.
+            // `params` survives only to feed the recorded `fn_param_types`;
+            // the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
@@ -2501,8 +2500,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: func.span,
             });
         }
-
-        scope.validate_stores(&func.stores, &params, func.span);
 
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);
@@ -2832,8 +2829,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 param.is_mut,
                 type_id,
             );
-            // `params` survives only to feed the recorded `fn_param_types`
-            // and `validate_stores`; the TIR `default_expr` is not built.
+            // `params` survives only to feed the recorded `fn_param_types`;
+            // the TIR `default_expr` is not built.
             params.push(TirParam {
                 name: param.name.clone(),
                 type_id,
@@ -2843,8 +2840,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 span: param.span,
             });
         }
-
-        scope.validate_stores(&func.stores, &params, func.span);
 
         if let Some(b) = func.body.as_ref() {
             scope.resolve_block(b, &mut ctx, None);

@@ -525,9 +525,9 @@ fn remap_locals_in_expr(expr: &mut TirExpr, remap: &IndexMap<u32, u32>) {
         // *names* is a local here, which shadowing a parameter moves.
         TirExprKind::Closure { captures, .. } => {
             for capture in captures {
-                if let Some(&new_idx) = remap.get(&capture.outer_index) {
-                    capture.outer_index = new_idx;
-                }
+                capture.source = capture
+                    .source
+                    .map_local(|index| remap.get(&index).copied().unwrap_or(index));
             }
         }
         TirExprKind::Capture { .. } => {}

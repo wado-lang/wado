@@ -64,6 +64,14 @@ test "highlight contextual keyword used as a member name" {
     assert html.contains("<span class=\"property\">forward</span>"), "member -> property";
 }
 
+test "highlight contextual keyword used as a value binder" {
+    // Every binder that names a value takes the same names, so a contextual
+    // keyword binds a parameter and a closure parameter, and is read back as an
+    // ordinary name in the body.
+    let src = "fn keep(from: &D) -> H { let c = |of| of + 1; return c(from.n); }\n";
+    assert parse(&src).ok(), "parse failed";
+}
+
 test "highlight tagged template" {
     // A tag is the function the template calls. A qualified tag's owner is a
     // `::` head like any other, so it stays uncoloured; the template itself

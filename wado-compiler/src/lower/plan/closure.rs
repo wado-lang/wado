@@ -10,12 +10,13 @@ use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
 use crate::name::{
     CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, LocalMethodName,
-    MethodName, is_fn_type_name,
+    MethodName, closure_capture_field, is_fn_type_name,
 };
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal, TirParam,
-    TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
+    StructDef, TirBlock, TirCapture, TirExpr, TirExprKind, TirField, TirFunction, TirLocal,
+    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirUnaryOp, TypeId,
+    TypeTable, capture_at, capture_source_locals,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor, shift_locals};
 use crate::token::Span;
@@ -74,6 +75,10 @@ pub struct ClosurePlan {
     /// `ClosureSafetyAnalyzer`). The fold emits a raw `StructLiteral`
     /// for these and a `ClosureToCanonical` wrap for the rest.
     pub specializable: IndexSet<u32>,
+    /// Each generated `$call` method's own environment: the `self` local and its
+    /// type. A nested closure built inside one reads through it whatever its
+    /// parent also only reached by capture.
+    pub call_method_envs: IndexMap<(ModuleSource, String), (u32, TypeId)>,
 }
 
 /// Run the closure planner.
@@ -90,6 +95,7 @@ pub fn plan(flat: &mut FlatPackage) -> ClosurePlan {
         functor_infos: std::mem::take(&mut closure_lowerer.functor_infos),
         specialized_locals: std::mem::take(&mut closure_lowerer.specialized_locals),
         specializable: std::mem::take(&mut closure_lowerer.specializable),
+        call_method_envs: std::mem::take(&mut closure_lowerer.call_method_envs),
     }
 }
 
@@ -118,23 +124,75 @@ fn format_closure_signature(
     format!("|{}| -> {}", param_names.join(", "), ret_name)
 }
 
-/// Build the `$capture_<i>` struct-field list for a functor literal from
-/// the closure's captures. Each field reads the captured value from the
-/// outer scope at `cap.outer_index`.
-fn build_capture_fields(captures: &[TirCapture], span: Span) -> Vec<TirStructField> {
+/// The environment of the frame a functor literal is built in: the `self` local
+/// and its type. `None` in a plain function, which has none.
+type EnclosingSelf = Option<(u32, TypeId)>;
+
+/// `self.$capture_<slot>`, read off the environment `enclosing_self` describes.
+fn read_capture_slot(
+    enclosing_self: (u32, TypeId),
+    slot: u32,
+    value_type: TypeId,
+    span: Span,
+) -> TirExpr {
+    let (self_index, self_type) = enclosing_self;
+    let self_expr = TirExpr::new(
+        TirExprKind::Local {
+            index: self_index,
+            name: "self".to_string(),
+        },
+        self_type,
+        span,
+    );
+    TirExpr::new(
+        TirExprKind::FieldAccess {
+            expr: Box::new(self_expr),
+            field_index: slot,
+            field_name: closure_capture_field(slot),
+        },
+        value_type,
+        span,
+    )
+}
+
+/// The expression filling one `$capture_<i>` field.
+fn capture_field_value(cap: &TirCapture, enclosing_self: EnclosingSelf, span: Span) -> TirExpr {
+    match cap.source {
+        CaptureSource::Local(index) => TirExpr::new(
+            TirExprKind::Local {
+                index,
+                name: cap.name.clone(),
+            },
+            cap.type_id,
+            span,
+        ),
+        CaptureSource::Capture(slot) => {
+            let Some(enclosing_self) = enclosing_self else {
+                unreachable!(
+                    "at {}: capture `{}` reads slot {slot} of an enclosing environment, \
+                     but the frame building the functor has none",
+                    span.location(),
+                    cap.name,
+                );
+            };
+            read_capture_slot(enclosing_self, slot, cap.type_id, span)
+        }
+    }
+}
+
+/// Build the `$capture_<i>` struct-field list for a functor literal from the
+/// closure's captures.
+fn build_capture_fields(
+    captures: &[TirCapture],
+    enclosing_self: EnclosingSelf,
+    span: Span,
+) -> Vec<TirStructField> {
     captures
         .iter()
         .enumerate()
         .map(|(i, cap)| TirStructField {
-            name: format!("$capture_{i}"),
-            value: TirExpr::new(
-                TirExprKind::Local {
-                    index: cap.outer_index,
-                    name: cap.name.clone(),
-                },
-                cap.type_id,
-                span,
-            ),
+            name: closure_capture_field(i as u32),
+            value: capture_field_value(cap, enclosing_self, span),
             field_index: i as u32,
         })
         .collect()
@@ -258,6 +316,8 @@ struct ClosureLowerer {
     /// to rewrite call sites and `Local` reads inside the specialized
     /// callee body.
     specialized_locals: IndexMap<(ModuleSource, String), Vec<SpecializedLocal>>,
+    /// Handed to [`ClosurePlan::call_method_envs`]; see it.
+    call_method_envs: IndexMap<(ModuleSource, String), (u32, TypeId)>,
 }
 
 impl ClosureLowerer {
@@ -274,6 +334,7 @@ impl ClosureLowerer {
             generated_functions: Vec::new(),
             fn_param_specializations: IndexMap::default(),
             specialized_locals: IndexMap::default(),
+            call_method_envs: IndexMap::default(),
         }
     }
 
@@ -355,8 +416,31 @@ impl ClosureLowerer {
                 )
             })
             .collect();
+        // Each `$call` method's own environment, taken from the functor that
+        // generated it rather than from any naming convention.
+        self.call_method_envs = self
+            .functor_infos
+            .iter()
+            .map(|f| {
+                let call_method = f.call_method.borrow();
+                let receiver = call_method
+                    .params
+                    .first()
+                    .filter(|p| p.name == "self")
+                    .expect("a `$call` method's first parameter is `self`");
+                (
+                    (call_method.module_source.clone(), call_method.name.clone()),
+                    (receiver.local_index, f.ref_type_id),
+                )
+            })
+            .collect();
+
         for func_rc in &lowered_funcs {
             let mut func = func_rc.borrow_mut();
+            let enclosing_self = self
+                .call_method_envs
+                .get(&(func.module_source.clone(), func.name.clone()))
+                .copied();
             // Snapshot param `(local_index, type_id)` so the seed pass
             // can run while `func.body` is borrowed mutably.
             let param_locals: Vec<(u32, TypeId)> = func
@@ -378,6 +462,7 @@ impl ClosureLowerer {
                     module_source: &self.module_source,
                     type_table: &mut tt,
                     self_offsets: &self_offsets,
+                    enclosing_self,
                 }
                 .visit_block(body);
             }
@@ -513,7 +598,7 @@ impl ClosureLowerer {
                 .iter()
                 .enumerate()
                 .map(|(i, cap)| TirField {
-                    name: format!("$capture_{i}"),
+                    name: closure_capture_field(i as u32),
                     visibility: Visibility::Private,
                     type_id: cap.type_id,
                     index: i as u32,
@@ -689,7 +774,7 @@ impl ClosureLowerer {
                 return_type,
                 task_return_type: None,
                 effects: Vec::new(),
-                stores: vec![],
+                retains: vec![],
                 body: Some(body_block),
                 span: collected.span,
                 local_count,
@@ -1027,7 +1112,7 @@ impl ClosureLowerer {
             return_type: TypeTable::UNIT,
             task_return_type: None,
             effects: Vec::new(),
-            stores: vec![],
+            retains: vec![],
             body: Some(body),
             span,
             local_count: 2,
@@ -1214,7 +1299,7 @@ impl ClosureLowerer {
             return_type: callee.return_type,
             task_return_type: None,
             effects: callee.effects.clone(),
-            stores: callee.stores.clone(),
+            retains: callee.retains.clone(),
             body: new_body,
             span: callee.span,
             local_count: callee.local_count,
@@ -1395,9 +1480,9 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             );
 
             let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-            let func_type =
-                self.type_table
-                    .make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+            let func_type = self
+                .type_table
+                .make_function(param_types, sig.return_type, Vec::new());
 
             expr.kind = TirExprKind::Closure {
                 params: closure_params,
@@ -1480,6 +1565,18 @@ struct ClosureSafetyAnalyzer<'a> {
     in_callee_position: bool,
 }
 
+impl ClosureSafetyAnalyzer<'_> {
+    /// A capture stores the value in the closure's environment, so a local
+    /// holding a closure loses its specialised form by being captured.
+    fn escape_captured_locals(&mut self, captures: &[TirCapture]) {
+        for index in capture_source_locals(captures) {
+            if let Some(&closure_id) = self.local_to_closure.get(&index) {
+                self.specializable.swap_remove(&closure_id);
+            }
+        }
+    }
+}
+
 impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
     fn visit_stmt(&mut self, stmt: &TirStmt) {
         // Let-binding a closure literal: mark the local as carrying that
@@ -1490,12 +1587,14 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         } = &stmt.kind
             && let TirExprKind::Closure {
                 body,
+                captures,
                 functor_id: Some(closure_id),
                 ..
             } = &value.kind
         {
             self.local_to_closure.insert(*local_index, *closure_id);
             self.specializable.insert(*closure_id);
+            self.escape_captured_locals(captures);
             let saved_l2c = std::mem::take(self.local_to_closure);
             let prev = std::mem::replace(&mut self.in_callee_position, false);
             self.visit_expr(body);
@@ -1510,6 +1609,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
         match &expr.kind {
             TirExprKind::Closure {
                 body,
+                captures,
                 functor_id: Some(closure_id),
                 ..
             } => {
@@ -1519,6 +1619,7 @@ impl TirRefVisitor for ClosureSafetyAnalyzer<'_> {
                 if !self.in_callee_position {
                     self.specializable.swap_remove(closure_id);
                 }
+                self.escape_captured_locals(captures);
                 let saved_l2c = std::mem::take(self.local_to_closure);
                 let prev = std::mem::replace(&mut self.in_callee_position, false);
                 self.visit_expr(body);
@@ -1610,6 +1711,9 @@ struct ClosureCallSiteLowerer<'a> {
     /// without borrowing the callee mid-walk (a recursive call would be a
     /// `RefCell` double-borrow).
     self_offsets: &'a IndexMap<(ModuleSource, String), u32>,
+    /// The walked function's own environment, when it is a `$call` method. A
+    /// nested closure built here reads through it.
+    enclosing_self: EnclosingSelf,
 }
 
 impl ClosureCallSiteLowerer<'_> {
@@ -1667,7 +1771,7 @@ impl ClosureCallSiteLowerer<'_> {
                 arg.expr.kind = TirExprKind::StructLiteral {
                     struct_type: functor.struct_type_id,
                     struct_name: functor.struct_name.clone(),
-                    fields: build_capture_fields(captures, arg.expr.span),
+                    fields: build_capture_fields(captures, self.enclosing_self, arg.expr.span),
                 };
                 arg.expr.type_id = functor.ref_type_id;
             }
@@ -1920,26 +2024,10 @@ impl TirMutVisitor for CaptureRewriter<'_> {
         match &mut expr.kind {
             TirExprKind::Capture { index, .. } => {
                 let index = *index;
-                let cap_type = self
-                    .captures
-                    .get(index as usize)
-                    .map_or(TypeTable::UNKNOWN, |c| c.type_id);
-                let span = self.self_span;
-                let self_expr = TirExpr::new(
-                    TirExprKind::Local {
-                        index: 0,
-                        name: "self".to_string(),
-                    },
-                    self.self_ref_type,
-                    span,
-                );
-                expr.kind = TirExprKind::FieldAccess {
-                    expr: Box::new(self_expr),
-                    field_index: index,
-                    field_name: format!("$capture_{index}"),
-                };
-                expr.type_id = cap_type;
-                expr.span = span;
+                let cap_type = capture_at(self.captures, index, self.self_span).type_id;
+                // The method this body becomes takes `self` as its first
+                // parameter, so the environment is local 0 of the new frame.
+                *expr = read_capture_slot((0, self.self_ref_type), index, cap_type, self.self_span);
             }
             TirExprKind::Closure { .. } => {}
             _ => self.walk_expr(expr),

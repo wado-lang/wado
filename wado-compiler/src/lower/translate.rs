@@ -28,11 +28,12 @@ use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, wide_int_literal};
 use crate::name::{
     CLOSURE_CALL_METHOD, FunctionId, case_construct_helper_name, case_extract_helper_name,
-    field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
+    closure_capture_field, field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name,
+    variant_tag_helper_name,
 };
 use crate::nir::{
-    FuncId, NirCapture, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction,
-    NirGlobal, NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
+    FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
+    NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
     NirVariantCase, NirVariantDecl,
 };
 use crate::nir_arena::{
@@ -43,11 +44,12 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::{
-    CallArg, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType, StructDef,
-    TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField, TirFlags,
-    TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal, TirMatchArm,
-    TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField, TirStructPatternField,
-    TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
+    StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
+    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
+    TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -319,6 +321,9 @@ fn tir_function_key(f: &TirFunction) -> FunctionId {
 /// methods, fn-param specialized callees).
 struct FunctionTranslator<'a, 'p> {
     base: &'a Translator<'p>,
+    /// This function's own environment — the `self` local and its type — `Some`
+    /// only inside a `$call` method. A nested closure reads through it.
+    enclosing_env: Option<(u32, tir::TypeId)>,
     /// `Some` only inside a synthesized fn-param-specialized callee.
     specialized: Option<&'p [closure::SpecializedLocal]>,
     /// `None` for global initializers / struct field defaults, where
@@ -377,6 +382,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             .specialized_locals
             .get(&key)
             .map(std::vec::Vec::as_slice);
+        let enclosing_env = base.closure.call_method_envs.get(&key).copied();
         let immutable_locals = func
             .locals
             .iter()
@@ -452,6 +458,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
             && value_copy::needs_value_copy(func.return_type, &base.type_table.borrow());
         Self {
             base,
+            enclosing_env,
             specialized,
             extra: Some(ExtraLocals {
                 base_count: func.local_count,
@@ -480,6 +487,7 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
     fn for_top_level(base: &'a Translator<'p>) -> Self {
         Self {
             base,
+            enclosing_env: None,
             specialized: None,
             extra: None,
             immutable_locals: IndexSet::default(),
@@ -569,6 +577,27 @@ impl<'a, 'p> FunctionTranslator<'a, 'p> {
 }
 
 impl Translator<'_> {
+    /// The parameters `func` keeps past its return, as the NIR passes ask it.
+    ///
+    /// The fixpoint's answer, not the declaration's: a function with a body
+    /// declares no `#[retain(...)]`, so reading the declaration here would tell
+    /// every NIR pass that every bodied function keeps nothing.
+    fn retained_param_names(&self, func: &TirFunction) -> Vec<String> {
+        let Some(positions) = self
+            .value_copy
+            .retained_params
+            .get(&func.module_source, &func.name)
+        else {
+            return Vec::new();
+        };
+        func.params
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| positions.contains(&u32::try_from(*i).unwrap()))
+            .map(|(_, p)| p.name.clone())
+            .collect()
+    }
+
     fn convert_function(&self, func: &TirFunction) -> NirFunction {
         let fctx = FunctionTranslator::new(self, func);
         // Walk the body first so any locals allocated by per-arm
@@ -606,7 +635,7 @@ impl Translator<'_> {
             return_type: func.return_type,
             task_return_type: func.task_return_type,
             effects: func.effects.clone(),
-            stores: func.stores.clone(),
+            retains: self.retained_param_names(func),
             body,
             span: func.span,
             locals,
@@ -701,7 +730,6 @@ impl Translator<'_> {
             struct_type_id: cf.struct_type_id,
             ref_type_id: cf.ref_type_id,
             call_method,
-            captures: cf.captures.iter().map(convert_capture).collect(),
             canonical_user_params: cf.canonical_user_params.clone(),
             canonical_return: cf.canonical_return,
         }
@@ -2345,14 +2373,49 @@ impl FunctionTranslator<'_, '_> {
             .iter()
             .enumerate()
             .map(|(i, cap)| {
-                let value = self.read_local(cap.outer_index, &cap.name, cap.type_id, span);
+                let value = match cap.source {
+                    CaptureSource::Local(index) => {
+                        self.read_local(index, &cap.name, cap.type_id, span)
+                    }
+                    CaptureSource::Capture(slot) => self.read_enclosing_capture(cap, slot, span),
+                };
                 ArenaStructField {
-                    name: format!("$capture_{i}"),
+                    name: closure_capture_field(i as u32),
                     value: value.into(),
                     field_index: i as u32,
                 }
             })
             .collect()
+    }
+
+    /// `self.$capture_<slot>` of the `$call` method being translated, for a
+    /// binding its own closure reached the same way.
+    fn read_enclosing_capture(&self, cap: &TirCapture, slot: u32, span: Span) -> ExprId {
+        let Some((self_index, self_type)) = self.enclosing_env else {
+            unreachable!(
+                "at {}: capture `{}` reads slot {slot} of an enclosing environment, \
+                 but the translated function has none",
+                span.location(),
+                cap.name,
+            );
+        };
+        let self_expr = self.alloc_expr(
+            ExprKind::Local {
+                index: self_index,
+                name: "self".to_string(),
+            },
+            self_type,
+            span,
+        );
+        self.alloc_expr(
+            ExprKind::FieldAccess {
+                expr: self_expr.into(),
+                field_index: slot,
+                field_name: closure_capture_field(slot),
+            },
+            cap.type_id,
+            span,
+        )
     }
 
     /// Convert a method call's receiver. It occupies `args[0]` like any other
@@ -2604,15 +2667,6 @@ fn convert_literal_pattern(lit: &TirLiteralPattern) -> NirLiteralPattern {
         TirLiteralPattern::Char(c) => NirLiteralPattern::Char(*c),
         TirLiteralPattern::String(s) => NirLiteralPattern::String(s.clone()),
         TirLiteralPattern::Null => NirLiteralPattern::Null,
-    }
-}
-
-fn convert_capture(c: &TirCapture) -> NirCapture {
-    NirCapture {
-        name: c.name.clone(),
-        outer_index: c.outer_index,
-        type_id: c.type_id,
-        is_mut: c.is_mut,
     }
 }
 

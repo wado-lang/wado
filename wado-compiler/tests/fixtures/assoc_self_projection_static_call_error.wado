@@ -1,0 +1,53 @@
+// `Counter::produce::<SBag>(42)` names the receiver type as the call's prefix,
+// so `Self` is bound there too. Passing no binding skipped the constraint and
+// the mismatch reached codegen as an invalid module.
+
+struct SBag {
+    v: String,
+}
+
+trait Collectible {
+    type Elem;
+
+    fn of(v: Self::Elem) -> Self;
+}
+
+impl Collectible for SBag {
+    type Elem = String;
+
+    fn of(v: String) -> SBag {
+        return SBag { v };
+    }
+}
+
+struct Counter {
+    n: i32,
+}
+
+trait Source {
+    type Item;
+
+    fn kind(&self) -> i32;
+}
+
+impl Source for Counter {
+    type Item = i32;
+
+    fn kind(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Counter {
+    fn produce<C: Collectible<Elem = Self::Item>>(v: i32) -> C {
+        return C::of(v);
+    }
+}
+
+export fn run() {
+    let b: SBag = Counter::produce::<SBag>(42);
+    assert b.v.len() >= 0;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type 'Collectible::Elem = i32'"}
