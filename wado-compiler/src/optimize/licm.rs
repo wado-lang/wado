@@ -62,6 +62,8 @@ struct ModifiedVars {
     /// Pointee struct types passed by `&mut` to a call/method in the loop: the
     /// callee may write *any* field, so no field of that type is invariant.
     clobbered_pointee_types: IndexSet<TypeId>,
+    /// Whether the loop calls anything at all.
+    calls: bool,
 }
 
 impl ModifiedVars {
@@ -119,6 +121,14 @@ impl ModifiedVars {
     fn is_clobbered_gc_value(&self, value_type: TypeId, type_table: &TypeTable) -> bool {
         let pointee = strip_references(value_type, type_table);
         is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
+    }
+
+    /// True when `root_type` is a `Box<T>` cell the loop may write through a
+    /// call. A closure hands its `&mut`-captured locals over as such cells
+    /// inside its env, which names no `&mut` for the clobber scan to see, so
+    /// any call at all is taken to reach one (issue #2078).
+    fn is_call_reachable_cell(&self, root_type: TypeId, type_table: &TypeTable) -> bool {
+        self.calls && type_table.is_box_instance(strip_references(root_type, type_table))
     }
 
     fn add_alias(&mut self, a: u32, b: u32) {
@@ -449,7 +459,8 @@ fn licm_loop(
                 root_ty,
                 c.field_index,
                 ctx.type_table,
-            ) {
+            ) || modified_vars.is_call_reachable_cell(root_ty, ctx.type_table)
+            {
                 return false;
             }
             let is_hoist_local = ctx.hoist_locals.contains(&c.local_index);
@@ -1557,6 +1568,7 @@ fn collect_modified_vars_in_expr(
             collect_modified_vars_in_operand(body, *inner, modified, type_table);
         }
         ExprKind::Call { args, .. } => {
+            modified.calls = true;
             let arg_ids: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();
             for a in arg_ids {
                 mark_gc_local_as_fully_modified(body, a, modified, type_table);
@@ -1565,8 +1577,23 @@ fn collect_modified_vars_in_expr(
             }
         }
         ExprKind::CmRawCall { args, .. } => {
+            modified.calls = true;
             let arg_ids = args.clone();
             for a in arg_ids {
+                collect_modified_vars_in_operand(body, a, modified, type_table);
+            }
+        }
+        // A closure arrives here, and its captures ride the callee rather than
+        // the arguments — so the callee is scanned for clobbers like an
+        // argument is.
+        ExprKind::IndirectCall { callee, args } => {
+            modified.calls = true;
+            let operands: Vec<Operand> = std::iter::once(*callee).chain(args.clone()).collect();
+            for a in operands {
+                if let Some(ae) = a.as_expr() {
+                    mark_gc_local_as_fully_modified(body, ae, modified, type_table);
+                    record_mut_ref_clobber(body, ae, modified, type_table);
+                }
                 collect_modified_vars_in_operand(body, a, modified, type_table);
             }
         }

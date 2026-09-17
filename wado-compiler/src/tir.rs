@@ -1353,6 +1353,21 @@ impl TypeTable {
         }
     }
 
+    /// Whether `ty` is an instance of `Box<T>`, the shared mutable cell a
+    /// reference to a scalar lowers to. Monomorphization leaves one as a
+    /// `GenericInstance` or as a `Struct` carrying the generic head name.
+    #[must_use]
+    pub fn is_box_instance(&self, ty: TypeId) -> bool {
+        let box_name = self.compiler_items().struct_name(CompilerItem::Box);
+        match self.get(ty) {
+            ResolvedType::GenericInstance { def, .. } => self.def_name(*def) == box_name,
+            ResolvedType::Struct { def, type_args } => {
+                !type_args.is_empty() && self.struct_head_name(*def) == box_name
+            }
+            _ => false,
+        }
+    }
+
     /// Whether `&T` / `&mut T` is represented as a `Box<T>` cell rather than
     /// `T`'s own GC handle (WEP 2026-06-13, Reference Representation). The
     /// boxing pass and every consumer deciding by representation read this one
