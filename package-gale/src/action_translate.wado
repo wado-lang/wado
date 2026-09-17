@@ -403,7 +403,7 @@ variant LexerAttr {
 }
 
 fn lexer_attr<S: AsStrSlice>(name: S) -> LexerAttr {
-    return match name.to_string() {
+    return match name.as_str_slice() {
         "text" => LexerAttr::Window(lexer_matched_text_expr()),
         "pos" => LexerAttr::Window(lexer_cursor_column_expr()),
         "index" => LexerAttr::Window("pos"),

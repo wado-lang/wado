@@ -371,6 +371,18 @@ impl<V> TreeMap<String, V> {
     }
 }
 
+/// The borrowing sibling of `get_str`, for a value a copy would be wasteful of.
+impl<V: Ref> TreeMap<String, V> {
+    /// Returns a reference to the value stored under text equal to `key`.
+    pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V> {
+        let index = self.find_index_str(key.as_str_slice());
+        if index >= 0 {
+            return Option::Some(&self.entries[index].value);
+        }
+        return null;
+    }
+}
+
 // IndexAssign for map[key] = value
 impl<K: Ord, V> IndexAssign<K> for TreeMap<K, V> {
     type Output = V;

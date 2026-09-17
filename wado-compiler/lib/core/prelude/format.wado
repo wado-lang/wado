@@ -123,9 +123,7 @@ impl Formatter {
     }
 
     /// Write a `Display` value with the default spec, as `write_str` writes
-    /// text as it stands. This formatter's spec belongs to the value being
-    /// rendered, not to a part written inside it — an exponent takes neither
-    /// the width nor the sign the number asked for.
+    /// text as it stands: the spec belongs to the value, not to its parts.
     pub fn write_display<T: Display>(&mut self, value: &T) {
         self.buf.push_display(value);
     }
@@ -425,8 +423,7 @@ fn char_prefix_end(view: StrSlice, char_count: i32) -> i32 {
 }
 
 /// Write text through the spec. Precision caps the length in characters
-/// (Rust's `{:.N}`); no marker. The cap narrows a view rather than truncating
-/// a copy, so a `StrSlice` reaches the buffer without being copied out first.
+/// (Rust's `{:.N}`), narrowing the view rather than copying it out.
 fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
     if f.precision < 0 {
         f.pad(text);
@@ -461,16 +458,11 @@ impl PushDisplay for String {
     }
 }
 
-/// Write text as a quoted, escaped literal.
-///
-/// The escape policy below is mirrored by `write_escaped` in package-gale's
-/// wadopoet.wado (it emits Wado source literals). Keep the two in lockstep —
-/// same escaped set.
-///
-/// Caps to N chars and appends `...` outside the quotes when truncated
-/// (the marker doesn't count toward N). PRECISION_DEFAULT uses the
-/// default cap; negatives below it mean no cap.
+/// Write text as a quoted, escaped literal, capped at the formatter's
+/// sequence limit with a trailing `...` outside the quotes when it cuts.
 fn inspect_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
+    // The escaped set is mirrored by `write_escaped` in package-gale's
+    // wadopoet.wado, which emits Wado source literals. Keep the two in lockstep.
     let limit = f.resolved_seq_limit();
     f.write_char('"');
     let mut count = 0;

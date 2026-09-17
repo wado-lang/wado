@@ -407,21 +407,20 @@ impl GenContext {
     }
 
     pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
-        let key = rule_name.to_string();
-        if !self.rule_captures.contains_key(key) {
-            return &NO_CAPTURES;
+        if let Some(captures) = self.rule_captures.get_ref_str(rule_name) {
+            return captures;
         }
-        return &self.rule_captures[key];
+        return &NO_CAPTURES;
     }
 
     /// Whether the rule being emitted captures `field`'s token range / builder
     /// row — the gate on emitting the capture and on resolving a reference.
     pub fn captures_span<S: AsStrSlice>(&self, field: S) -> bool {
-        return self.current_captures().spans.into_iter().any(|s| field.eq_str(&s));
+        return self.current_captures().spans.contains_str(field);
     }
 
     pub fn captures_node<S: AsStrSlice>(&self, field: S) -> bool {
-        return self.current_captures().nodes.into_iter().any(|s| field.eq_str(&s));
+        return self.current_captures().nodes.contains_str(field);
     }
 
     fn current_captures(&self) -> &RuleCaptures {
@@ -561,7 +560,7 @@ impl GenContext {
     /// `target`, so it reads the slots exactly when `target` declares them.
     pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
         let idx = self.current_rule_index;
-        if idx >= 0 && !self.follow_forward_edges[idx].into_iter().any(|e| target.eq_str(&e)) {
+        if idx >= 0 && !self.follow_forward_edges[idx].contains_str(target) {
             self.follow_forward_edges[idx].push(target.to_string());
         }
     }

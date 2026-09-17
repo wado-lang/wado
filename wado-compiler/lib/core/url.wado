@@ -594,14 +594,12 @@ impl Url {
 
     /// Returns path with query: /path[?query]. Matches wasi:http path_with_query.
     pub fn path_with_query(&self) -> String {
-        if let Some(q) = self.query {
-            let mut out = String::with_capacity(self.path.len() + 1 + q.len());
-            out.push_str(&self.path);
-            out.push('?');
-            out.push_str(&q);
-            return out;
-        }
-        return self.path;
+        let Some(q) = self.query else {
+            return self.path;
+        };
+        let mut out = String::with_capacity(self.path.len() + 1 + q.len());
+        self.write_path_with_query(&mut out);
+        return out;
     }
 
     fn write_path_with_query(&self, out: &mut String) {

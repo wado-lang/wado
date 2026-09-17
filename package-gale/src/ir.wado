@@ -1405,7 +1405,7 @@ fn visit_delegate<S: AsStrSlice>(
     order: &mut List<i32>,
     visited: &mut List<String>,
 ) -> Result<(), ParseError> {
-    if visited.into_iter().any(|v| name.eq_str(&v)) {
+    if visited.contains_str(name) {
         return Result::Ok(());
     }
     visited.push(name.to_string());

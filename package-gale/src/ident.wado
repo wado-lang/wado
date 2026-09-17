@@ -81,7 +81,7 @@ global GENERATED_LOCALS: List<String> = [
 /// Escape an identifier that would collide with a Wado reserved word or a
 /// generated local by appending '_'.
 pub fn escape_ident<S: AsStrSlice>(name: S) -> String {
-    if is_wado_reserved(name) || GENERATED_LOCALS.into_iter().any(|g| name.eq_str(&g)) {
+    if is_wado_reserved(name) || GENERATED_LOCALS.contains_str(name) {
         return `${name}_`;
     }
     return name.to_string();

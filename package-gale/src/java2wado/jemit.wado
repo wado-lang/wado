@@ -682,10 +682,10 @@ enum NameTarget {
 }
 
 fn resolve_name<S: AsStrSlice>(env: &JEnv, name: S) -> NameTarget {
-    if env.locals.into_iter().any(|l| name.eq_str(&l)) {
+    if env.locals.contains_str(name) {
         return NameTarget::Local;
     }
-    if env.args.into_iter().any(|a| name.eq_str(&a)) {
+    if env.args.contains_str(name) {
         return NameTarget::RuleArg;
     }
     if env.fields.contains(&to_snake_case(name)) {

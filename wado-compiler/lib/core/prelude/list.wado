@@ -20,7 +20,7 @@ use {
     Inspect,
 } from "core:prelude/traits.wado";
 use { Option } from "core:prelude/types.wado";
-use { String } from "core:prelude/string.wado";
+use { String, AsStrSlice } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { write_seq_inspect, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { RangeExclusive, RangeInclusive } from "core:prelude/range.wado";
@@ -366,6 +366,14 @@ impl<T> AsSlice for List<T> {
 impl<T: Eq> List<T> {
     pub fn contains(&self, value: &T) -> bool {
         return self.as_slice().contains(value);
+    }
+}
+
+impl List<String> {
+    /// Membership by text, so a view is looked up without a `to_string` copy.
+    /// Walks by reference: an element yielded by value is copied out.
+    pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool {
+        return self.as_slice().iter_ref().any(|s| value.eq_str(s));
     }
 }
 

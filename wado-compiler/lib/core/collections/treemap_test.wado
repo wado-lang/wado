@@ -596,3 +596,15 @@ test "get_str sees a removed key as absent" {
     assert !map.contains_key_str("alpha".as_str_slice());
     assert map.get_str("alpha".as_str_slice()) matches { None };
 }
+
+test "get_ref_str borrows the stored value" {
+    let mut map: TreeMap<String, List<i32>> = TreeMap::new();
+    map["alpha"] = [1, 2];
+
+    let text = "xx-alpha-xx".as_str_slice();
+    assert map.get_ref_str(text.sub(3, 8)) matches { Some(v) && v.len() == 2 };
+    assert map.get_ref_str("beta") matches { None };
+
+    map.remove("alpha");
+    assert map.get_ref_str("alpha") matches { None };
+}

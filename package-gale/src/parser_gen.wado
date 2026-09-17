@@ -976,7 +976,7 @@ fn emit_lr_atn_group_repick<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             w.begin(`if ${lr.own_prec} >= min_prec`);
             gen_scan_gate_from(w, ctx, &origin);
             w.line(
-                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr.as_str_slice()}${fsep});`,
+                `_lr_s_${*gi} = ${scan_fn}_lr_${lr.alt_index}(${tokens_expr}, ${pos_expr}${fsep});`,
             );
             w.end();
         }
@@ -7867,7 +7867,7 @@ fn lr_second_token_discriminates<S: AsStrSlice>(
     suffix_first_sets: &List<List<String>>,
 ) -> bool {
     for let mut j = 0; j < group.len(); j += 1 {
-        if j == k || !suffix_first_sets[group[j]].into_iter().any(|t| shared_tk.eq_str(&t)) {
+        if j == k || !suffix_first_sets[group[j]].contains_str(shared_tk) {
             continue;
         }
         if seconds[j].is_empty() || sets_overlap(&seconds[k], &seconds[j]) {

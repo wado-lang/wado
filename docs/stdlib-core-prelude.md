@@ -4350,6 +4350,11 @@ run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
+#### `pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool`
+
+Membership by text, so a view is looked up without a `to_string` copy.
+Walks by reference: an element yielded by value is copied out.
+
 #### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T>`
 
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
