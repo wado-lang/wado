@@ -2827,10 +2827,7 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
 
 /// [`written_arg_nodes`] with `Self` read as `target`, so an impl head's
 /// arguments say what a reader of the closure needs before it is re-spelled.
-pub(super) fn written_arg_nodes_at_target(
-    ty: &ast::Type,
-    target: &ast::Type,
-) -> Vec<ast::Type> {
+pub(super) fn written_arg_nodes_at_target(ty: &ast::Type, target: &ast::Type) -> Vec<ast::Type> {
     let self_name = ["Self".to_string()];
     let at_target = std::slice::from_ref(target);
     written_arg_nodes(ty)
