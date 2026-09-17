@@ -124,11 +124,19 @@ impl ModifiedVars {
         is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
     }
 
-    /// True when `root_type` is a `Box<T>` cell some call in the loop may write.
-    /// A closure's `&mut` captures ride its env, naming no `&mut` to scan for.
-    fn is_call_reachable_cell(&self, root_type: TypeId, type_table: &TypeTable) -> bool {
+    /// True when a call in the loop may write `local`'s `Box<T>` cell. A
+    /// closure's `&mut` captures ride its env, naming no `&mut` to scan for.
+    fn is_call_reachable_cell(
+        &self,
+        local: u32,
+        root_type: TypeId,
+        mut_escaped: &IndexSet<u32>,
+        type_table: &TypeTable,
+    ) -> bool {
         let cell = strip_references(root_type, type_table);
-        self.calls && type_table.is_compiler_struct_instance(cell, CompilerItem::Box)
+        self.calls
+            && mut_escaped.contains(&local)
+            && type_table.is_compiler_struct_instance(cell, CompilerItem::Box)
     }
 
     fn add_alias(&mut self, a: u32, b: u32) {
@@ -459,8 +467,12 @@ fn licm_loop(
                 root_ty,
                 c.field_index,
                 ctx.type_table,
-            ) || modified_vars.is_call_reachable_cell(root_ty, ctx.type_table)
-            {
+            ) || modified_vars.is_call_reachable_cell(
+                c.local_index,
+                root_ty,
+                engine.mut_escaped(),
+                ctx.type_table,
+            ) {
                 return false;
             }
             let is_hoist_local = ctx.hoist_locals.contains(&c.local_index);
