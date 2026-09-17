@@ -990,20 +990,35 @@ impl TypeSystem {
         self.trait_env.decl_index.contains(&key).then_some(key)
     }
 
-    /// Whether holding the bound spelled `bound_name` in `scope` also gives
-    /// `trait_` — the same declaration, or one of its supertraits.
-    pub(super) fn bound_decl_implies(
+    /// Whether `bound` on a type parameter supplies `trait_` at the arguments
+    /// `wanted` writes — the bound itself writing them, or a supertrait that
+    /// does (`AsStrSlice: Eq<String>`).
+    fn bound_supplies(
         &self,
         scope: &TypeLookup,
-        bound_name: &str,
+        bound: &ast::TraitBound,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> bool {
-        if self.scoped_trait_decl_key(scope, bound_name) == Some(trait_) {
-            return true;
+        // A `Self` default names the parameter, which no written argument
+        // equals, so only a declared default naming a type answers here.
+        let answers = |written: &ast::TraitBound| {
+            let args = self
+                .bound_written(written)
+                .map(|(_, args)| args)
+                .unwrap_or_default();
+            wanted.iter().enumerate().all(|(i, want)| {
+                args.get(i)
+                    .or_else(|| self.trait_env.named_default_arg(trait_, i))
+                    == Some(want)
+            })
+        };
+        if self.scoped_trait_decl_key(scope, &bound.name) == Some(trait_) {
+            return answers(bound);
         }
-        self.supertraits_of(scope, bound_name)
+        self.supertraits_of(scope, &bound.name)
             .iter()
-            .any(|s| s.decl == trait_)
+            .any(|s| s.decl == trait_ && answers(&s.bound))
     }
 
     /// The transitive supertraits of `trait_name` as seen from `scope`.
@@ -1279,7 +1294,7 @@ impl TypeSystem {
                 .is_some_and(|bounds| {
                     bounds
                         .iter()
-                        .any(|b| self.bound_decl_implies(scope, &b.name, trait_))
+                        .any(|b| self.bound_supplies(scope, b, trait_, wanted))
                 });
         }
 

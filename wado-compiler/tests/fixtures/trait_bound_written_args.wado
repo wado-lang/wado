@@ -31,6 +31,21 @@ impl<T: Pick<String>> Marker for T {
     }
 }
 
+// A parameter answers a bound from its own bounds, so the arguments have to
+// reach there too: `S: AsStrSlice` supplies `Eq<String>` through the supertrait
+// that writes it, and `T: Pick<String>` supplies `Pick<String>` itself.
+fn forwards_text<S: AsStrSlice>(s: S) -> bool {
+    return compares_text(s);
+}
+
+fn compares_text<S: Eq<String>>(s: S) -> bool {
+    return s == "x";
+}
+
+fn forwards_pick<T: Pick<String>>(t: T, a: String) -> bool {
+    return picks(t, a);
+}
+
 fn text_first<S: AsStrSlice + Ord>(s: S) -> bool {
     return s == "x";
 }
@@ -46,6 +61,13 @@ test "a bound writes a non-default argument for a defaulted parameter" {
 
 test "an impl's own bound reaches the impl that writes its argument" {
     assert Slot { width: 1 }.mark() == 1;
+}
+
+test "a parameter forwards the arguments its own bounds supply" {
+    assert forwards_text("x");
+    assert !forwards_text("y");
+    assert forwards_pick(Slot { width: 3 }, "abc");
+    assert !forwards_pick(Slot { width: 2 }, "abc");
 }
 
 test "a bound writing an argument reaches the impl whatever its position" {

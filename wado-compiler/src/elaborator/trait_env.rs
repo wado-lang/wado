@@ -1531,6 +1531,25 @@ impl TraitEnv {
         fq.with_args(args)
     }
 
+    /// The trait's declared default at `index` where it names a type. `None`
+    /// for a `= Self` default, which says whatever target is answering rather
+    /// than a type of its own.
+    pub(super) fn named_default_arg(
+        &self,
+        trait_: DefId,
+        index: usize,
+    ) -> Option<&name::FqTypeName> {
+        match self
+            .trait_decl_headers
+            .get(&trait_)?
+            .default_args
+            .get(index)?
+        {
+            Some(DefaultArg::Named(name)) => Some(name),
+            Some(DefaultArg::SelfTarget) | None => None,
+        }
+    }
+
     /// How many arguments the impl on `receiver` writes for `trait_`, among
     /// those a bound writing `wanted` reaches.
     pub(crate) fn impl_written_arg_count(
