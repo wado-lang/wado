@@ -18,9 +18,7 @@ use crate::world_registry::TEST_WORLD;
 ///
 /// Every body-less declaration is snapshot, not only `core:builtin`'s: a CM
 /// import or a `.wasm` / `.wat` asset declares the same way, and each is keyed
-/// by its module so two of a name stay apart. A `#[retain]` naming no parameter
-/// is reported at the declaration (reify), so it is dropped rather than
-/// asserted here.
+/// by its module so two of a name stay apart.
 fn record_declaration(
     func: &TirFunction,
     module_source: &ModuleSource,
@@ -29,22 +27,29 @@ fn record_declaration(
     if func.body.is_some() {
         return;
     }
-    let position = |name: &str| func.params.iter().position(|p| p.name == name);
+    let position = |name: &str| {
+        func.params
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", func.name))
+    };
     let retains: Vec<RetainSpec<usize>> = func
         .retains
         .iter()
-        .filter_map(|r| {
-            Some(RetainSpec {
-                source: position(&r.source)?,
-                elements: r.elements,
-                into: match r.into.as_deref() {
-                    Some(name) => Some(position(name)?),
-                    None => None,
-                },
-            })
+        .map(|r| RetainSpec {
+            source: position(&r.source),
+            elements: r.elements,
+            into: r.into.as_deref().map(position),
         })
         .collect();
     if func.declared_return_convention.is_some() || !retains.is_empty() {
+        // A call re-homes a method's key to the impl block's module, so only a
+        // free function is found again under the module declaring it.
+        assert!(
+            func.method_info.is_none(),
+            "`{}` declares storage as a method; key the snapshot by `DefId` first",
+            func.name
+        );
         out.insert(
             (module_source.clone(), declaration_key(func)),
             BuiltinDeclaration {

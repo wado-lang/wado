@@ -211,13 +211,22 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
-/// What a reference points at, or the type itself. A constraint holds at either
-/// level: collecting `&T` into a `List<T>` reads each element as its value.
-fn referent(tt: &TypeTable, type_id: TypeId) -> TypeId {
+/// What a reference points at, and whether it was a mutable one.
+fn referent(tt: &TypeTable, type_id: TypeId) -> (TypeId, bool) {
     match tt.get(type_id) {
-        ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => *inner,
-        _ => type_id,
+        ResolvedType::Ref(inner) => (*inner, false),
+        ResolvedType::MutRef(inner) => (*inner, true),
+        _ => (type_id, false),
     }
+}
+
+/// Whether a constraint written `expected` is what `actual` satisfies. It holds
+/// at either level — collecting `&T` into a `List<T>` reads each element as its
+/// value — but never across a mutability the two disagree on.
+fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
+    let (expected_referent, expected_mut) = referent(tt, expected);
+    let (actual_referent, actual_mut) = referent(tt, actual);
+    expected_referent == actual_referent && expected_mut == actual_mut
 }
 
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
@@ -2729,7 +2738,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let tt = self.tysys.type_table.borrow();
             if tt.contains_type_param(expected)
                 || tt.contains_type_param(actual)
-                || referent(&tt, expected) == referent(&tt, actual)
+                || satisfies(&tt, expected, actual)
             {
                 continue;
             }
@@ -2756,6 +2765,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         match ty {
             ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
                 self.project_off_self(binding, &ns.name).is_some()
+                    && self.all_project_off_self(&ns.args, binding)
             }
             ast::Type::NamespacedGeneric(ns) => self.all_project_off_self(&ns.args, binding),
             ast::Type::Generic(generic) => {

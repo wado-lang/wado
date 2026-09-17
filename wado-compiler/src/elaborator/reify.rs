@@ -2153,7 +2153,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         has_body: bool,
         declared: Option<tir::ReturnConvention>,
     ) -> Option<tir::ReturnConvention> {
-        if has_body || declared.is_some() || reserves_a_name_only(func) {
+        // The attribute, not what it resolved to: one that failed to resolve was
+        // reported already, and asking for it again says nothing new.
+        let states_one = func.attrs.iter().any(|attr| attr.name == "result");
+        if has_body || states_one || reserves_a_name_only(func) {
             return declared;
         }
         if func.is_cm_import() {

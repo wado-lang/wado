@@ -23,8 +23,8 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern, TirStmt,
-    TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, RetainSpec, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern,
+    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;
@@ -610,22 +610,14 @@ impl StoresOracle<'_> {
         }
         let mut facts = RetentionFacts::default();
         for retain in self.builtins.retain_specs(func) {
-            let source = u32::try_from(retain.source).unwrap();
-            if retain.elements {
-                facts.elements.insert(source);
-            }
-            match retain.into {
-                Some(destination) => {
-                    facts
-                        .into_param
-                        .entry(source)
-                        .or_default()
-                        .insert(u32::try_from(destination).unwrap());
-                }
-                None => {
-                    facts.escapes.insert(source);
-                }
-            }
+            declare_retention(
+                &mut facts,
+                &RetainSpec {
+                    source: u32::try_from(retain.source).unwrap(),
+                    elements: retain.elements,
+                    into: retain.into.map(|at| u32::try_from(at).unwrap()),
+                },
+            );
         }
         facts
     }
@@ -802,38 +794,55 @@ pub fn compute_retention(
     }
 }
 
-/// What a declaration's `#[retain(...)]` clauses state, by parameter position.
+/// What one `#[retain(...)]` clause states, by parameter position. The single
+/// reading of a clause, so a declaration cannot mean two things by it.
 ///
 /// `into = q` names the destination, so the clause takes the bounded channel
 /// alone. Without one the reference persists and the declaration does not say
 /// where, so both unbounded channels take it: the result is one of the places
 /// it could be. `elements_of = p` claims what the referent holds rather than
 /// the reference, which each call gates on the argument's own type.
+fn declare_retention(facts: &mut RetentionFacts, retain: &RetainSpec<u32>) {
+    if retain.elements {
+        facts.elements.insert(retain.source);
+    }
+    match retain.into {
+        Some(destination) => {
+            facts
+                .into_param
+                .entry(retain.source)
+                .or_default()
+                .insert(destination);
+        }
+        None => {
+            facts.escapes.insert(retain.source);
+            facts.into_result.insert(retain.source);
+        }
+    }
+}
+
+/// What a declaration's `#[retain(...)]` clauses state, by parameter position.
 fn declared_facts(func: &TirFunction) -> RetentionFacts {
     let position = |name: &str| {
-        func.params
+        // Reify drops a clause naming no parameter, so one reaching here names
+        // a parameter of this very declaration.
+        let at = func
+            .params
             .iter()
             .position(|p| p.name == name)
-            .map(|i| u32::try_from(i).unwrap())
+            .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", func.name));
+        u32::try_from(at).unwrap()
     };
     let mut facts = RetentionFacts::default();
     for retain in &func.retains {
-        let Some(source) = position(&retain.source) else {
-            continue;
-        };
-        if retain.elements {
-            facts.elements.insert(source);
-        }
-        if let Some(destination) = retain.into.as_deref().and_then(position) {
-            facts
-                .into_param
-                .entry(source)
-                .or_default()
-                .insert(destination);
-        } else {
-            facts.escapes.insert(source);
-            facts.into_result.insert(source);
-        }
+        declare_retention(
+            &mut facts,
+            &RetainSpec {
+                source: position(&retain.source),
+                elements: retain.elements,
+                into: retain.into.as_deref().map(position),
+            },
+        );
     }
     facts
 }
@@ -1180,6 +1189,9 @@ fn facts_of_body(
         let position = u32::try_from(i).unwrap();
         param_of_local.insert(*local_index, position);
         let entry = carries.entry(*local_index).or_default();
+        // A reference parameter is only what it points at. What its referent's
+        // elements hold is the caller's to account for, not this body's — see
+        // `retain_elements_of_a_local_view.wado`.
         if is_reference_type(*type_id, type_table) {
             entry.is.insert(position);
         } else if carrying.holds(*type_id) {

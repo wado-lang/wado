@@ -496,7 +496,7 @@ impl WriteBack<'_> {
                     // outlives every point in this body, where a replaced one
                     // has a point but no place this pass can spell.
                     let why = if escaping.contains(&u32::try_from(position).unwrap()) {
-                        "stores it, so it outlives the call"
+                        "retains it, so it outlives the call"
                     } else {
                         "replaces it, and no place here can be stored back to"
                     };
@@ -519,7 +519,7 @@ impl WriteBack<'_> {
             if escaping.contains(&u32::try_from(position).unwrap()) {
                 self.refuse(
                     arg.span,
-                    format!("'{callee}' stores it, so it outlives the call"),
+                    format!("'{callee}' retains it, so it outlives the call"),
                 );
                 continue;
             }
