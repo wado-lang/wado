@@ -1432,7 +1432,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params),
+            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
@@ -1854,7 +1854,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             &params,
             return_type,
             body.is_some(),
-            self.reify_return_convention_attr(&func.attrs, &params),
+            self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
 
@@ -2185,23 +2185,34 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         &self,
         attrs: &[ast::Attribute],
         params: &[tir::TirParam],
+        has_body: bool,
     ) -> Option<tir::ReturnConvention> {
         let attr = attrs.iter().find(|a| a.name == "result")?;
         let emit = |message: String| {
             self.attr_error(Code::ResultAttr, attr, message);
             None
         };
-
         let [arg] = attr.args.as_slice() else {
             return emit(
                 "#[result] takes one convention: `owned` or `part_of = param`".to_string(),
             );
         };
+        // After the argument, so an attribute that is both malformed and
+        // misplaced reports what it got wrong rather than only where it sits.
+        let placed = |convention| {
+            if has_body {
+                return emit(
+                    "#[result] belongs to a declaration with no body; a body states what it returns"
+                        .to_string(),
+                );
+            }
+            Some(convention)
+        };
         match arg {
-            ast::AttrArg::Ident(name) if name == "owned" => Some(tir::ReturnConvention::Owned),
+            ast::AttrArg::Ident(name) if name == "owned" => placed(tir::ReturnConvention::Owned),
             ast::AttrArg::KeyIdent(key, named) if key == "part_of" => {
                 match params.iter().position(|p| &p.name == named) {
-                    Some(index) => Some(tir::ReturnConvention::PartOf(index)),
+                    Some(index) => placed(tir::ReturnConvention::PartOf(index)),
                     None => emit(format!("#[result(part_of = {named})] names no parameter")),
                 }
             }
@@ -11363,8 +11374,6 @@ fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     })
 }
 
-/// The discriminant a variant pattern matches. Pattern resolution rejects a case
-/// the scrutinee does not declare, so reify only ever sees one it resolved.
 /// Whether the declaration reserves a name rather than a signature. Nothing
 /// ever calls a `#[unavailable]` one, so it states nothing about a call and is
 /// owed nothing about one either.
@@ -11372,6 +11381,8 @@ fn reserves_a_name_only(func: &ast::Function) -> bool {
     func.unavailable_attr().is_some()
 }
 
+/// The discriminant a variant pattern matches. Pattern resolution rejects a case
+/// the scrutinee does not declare, so reify only ever sees one it resolved.
 fn resolved_case_index(case_index: Option<u32>, case_name: &str) -> u32 {
     case_index.unwrap_or_else(|| {
         unreachable!("reify does not run on a pattern naming no case: `{case_name}`")

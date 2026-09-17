@@ -28,9 +28,17 @@ fn fifth(xs: &List<i32>) -> i32 {
     return xs[0];
 }
 
+// Well-formed, and still wrong here: a body states what it returns, so the
+// attribute belongs to a declaration that has none.
+#[result(part_of = xs)]
+fn sixth(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
 export fn run() {
     assert first(&[1, 2]) + second(&[1, 2]) + third(&[1, 2]) + fourth(&[1, 2]) + fifth(&[1, 2])
-        == 7;
+        + sixth(&[1, 2])
+        == 8;
 }
 
 __DATA__
@@ -39,6 +47,7 @@ __DATA__
     "compile_errors_contains": [
         "unknown #[result] convention: borrowed",
         "#[result] takes one convention: `owned` or `part_of = param`",
-        "#[result(part_of = ...)] takes a parameter name, unquoted"
+        "#[result(part_of = ...)] takes a parameter name, unquoted",
+        "#[result] belongs to a declaration with no body; a body states what it returns"
     ]
 }

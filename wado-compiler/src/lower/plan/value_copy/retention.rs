@@ -947,9 +947,35 @@ impl RefCarrying<'_> {
                     None => self.any(type_args, open),
                 }
             }
+            ResolvedType::Variant { def } => {
+                let def = *def;
+                match self.type_table.variant_template_cases(def) {
+                    Some(cases) => {
+                        let payloads = cases.iter().map(|(_, _, payload)| *payload).collect();
+                        self.any(payloads, open)
+                    }
+                    // A declaration the plan phase cannot see is read as
+                    // holding one, which only widens the carrier set.
+                    None => (true, false),
+                }
+            }
+            // What the pack stands for is not known here, as a type parameter
+            // is not; an inference variable is the same question unanswered.
+            ResolvedType::TypePack { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => (true, false),
             // A functor is a value; the environment it closed over is not
-            // reachable from a caller's parameter through its type.
-            _ => (false, false),
+            // reachable from a caller's parameter through its type. Neither is
+            // anything reachable from the rest: they carry no member at all.
+            ResolvedType::Function { .. }
+            | ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::GenericResource { .. } => (false, false),
         }
     }
 }

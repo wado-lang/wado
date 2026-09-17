@@ -835,13 +835,32 @@ fn render_md_entity(out: &mut String, sig: &str, doc: Option<&str>, h: &str) {
     render_md_member(out, sig, &[], doc, h);
 }
 
+/// `text` as a code span. The delimiter outruns the longest backtick run inside
+/// and pads content that starts or ends with one, as CommonMark asks:
+/// `#[unavailable("use `make`")]` otherwise closes its own span early.
+fn code_span(text: &str) -> String {
+    let mut longest = 0;
+    let mut run = 0;
+    for c in text.chars() {
+        run = if c == '`' { run + 1 } else { 0 };
+        longest = longest.max(run);
+    }
+    let fence = "`".repeat(longest + 1);
+    let pad = if text.starts_with('`') || text.ends_with('`') {
+        " "
+    } else {
+        ""
+    };
+    format!("{fence}{pad}{text}{pad}{fence}")
+}
+
 /// A member's heading, the attributes its declaration carries, and its doc.
 /// The heading is a one-line code span, so the attributes go on a line of their
 /// own under it rather than into the signature.
 fn render_md_member(out: &mut String, sig: &str, attrs: &[String], doc: Option<&str>, h: &str) {
-    writeln!(out, "\n{h} `{sig}`").unwrap();
+    writeln!(out, "\n{h} {}", code_span(sig)).unwrap();
     if !attrs.is_empty() {
-        let rendered: Vec<String> = attrs.iter().map(|a| format!("`{a}`")).collect();
+        let rendered: Vec<String> = attrs.iter().map(|a| code_span(a)).collect();
         writeln!(out, "\n{}", rendered.join(" ")).unwrap();
     }
     if let Some(d) = doc {

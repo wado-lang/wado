@@ -981,7 +981,8 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     }
     f.add_param("start", "i32");
     f.set_return_type("i32");
-    // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
+    // A `Foo::op(LexerView { chars, .. })` call in the body is what makes the
+    // generated function carry `with Foo`.
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
     }
@@ -1214,8 +1215,8 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has
             continue;
         }
         let ci = resolve_ci(&grammar.options, &rule.options);
-        // A base op reached from the replayed match carries the effect and
-        // stores the char-stream ref in its `LexerView`, as in `try_`.
+        // A base op reached from the replayed match carries the effect, as in
+        // `try_`.
         let replay_super = !sc_name.is_empty() && lexer_rule_replay_calls_super(rule, &grammar.lexer_rules, sc_name);
         let mut f = FnSpec::new(&apply_fn_name(&rule.name));
         f.add_param("lx", "&mut Lexer");

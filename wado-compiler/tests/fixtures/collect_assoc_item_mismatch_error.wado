@@ -1,0 +1,14 @@
+// `collect` names its target's element through `Self::Item`, so a target whose
+// element is another type is a bound violation. Skipping a `Self`-mentioning
+// constraint let this reach codegen as an invalid module.
+
+fn docs_of(text: &String) -> List<String> {
+    return text.lines().map(|line| line.trim()).filter(|doc| !doc.is_empty()).collect();
+}
+
+export fn run() {
+    docs_of(&"a\n\nbbb");
+}
+
+__DATA__
+{"compile_error": "associated type"}
