@@ -418,7 +418,7 @@ The parameter is resolved where the call names the type: `count(lines)` demands 
 
 #### An undecided head
 
-- [ ] Not implemented.
+- [x] Diagnosed. It does not yet read as `with _` — see the gap below.
 
 A bare head is not neutral. It reads as `with _`, so it publishes an open contract, and deciding it later is a breaking change: a downstream `with _` that forwarded the trait's effects has nothing left to forward once the head says `with ()`.
 
@@ -442,22 +442,21 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 ## Roadmap
 
-1. The undecided-head diagnostic. Finished when a bare head reports at the severity its visibility selects, `allow` waives it, and only user-authored modules are walked. It is also what lets a bare head read as `with _`, which no trait can afford while every head in the corpus is bare.
-2. The prelude heads. Finished when `Iterator` and `IntoIterator` carry `with _`, `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`, and the corpus is green.
+1. A bare head reading as `with _`. The diagnostic that makes it survivable is in, so what remains is the flip itself and the heads the corpus then has to write. Finished when `TraitHead::Undecided` inherits the hole and the corpus is green.
 
 ## Known gaps
 
 ### The rest of the prelude heads
 
-Step 2 above names the traits whose head is settled. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
+`Iterator` and `IntoIterator` carry `with _`; `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
 
 ### An effect argument on a bound
 
 `fn sum<I: Iterator with ()>(it: I)` — constraining an open trait's effect argument at the bound — does not parse yet. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
 
-### An open bound on a method
+### How deep an open head resolves
 
-A trait head's hole is resolved from the type arguments a call site names, and only a free function's are read today. A generic _method_ with an open-head bound leaves the hole unresolved, so its caller has to forward it with `with _`. Nothing in the design turns on the difference; a method dispatch names its declaration by `DefId` where a free call names it by `AstId`, and the lookup needs the second key.
+A hole is filled from the impl the call names: a free call reads its type arguments, a method dispatch reads its receiver, and a receiver that is itself a wrapper is followed through its own type arguments to a bounded depth. Past that depth, and for a receiver naming no impl this phase indexed, the parameter survives and the caller forwards it with `with _` — sound, but more than the impl would have demanded.
 
 ### One effect parameter per function
 

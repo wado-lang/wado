@@ -1341,6 +1341,7 @@ impl EffectIndex<'_> {
                 .cloned()
                 .unwrap_or_default(),
         };
+        effects = self.resolve_open_head(func_ref, effects);
         if let Some(method_info) = &func_ref.method_info
             && method_info.trait_name.is_none()
         {
@@ -1362,6 +1363,71 @@ impl EffectIndex<'_> {
             }
         }
         effects
+    }
+
+    /// Resolve an effect parameter an open trait head left in a dispatch's
+    /// effects against the receiver it names: `lines.next()` brings what
+    /// `impl Iterator for LineReader` declares. A receiver that is a type
+    /// parameter names no impl, so the parameter stays the requirement.
+    fn resolve_open_head(&self, func_ref: &FunctionRef, effects: Vec<EffectRef>) -> Vec<EffectRef> {
+        if !effects.iter().any(EffectRef::is_param) {
+            return effects;
+        }
+        let Some(method_info) = func_ref.method_info.as_ref() else {
+            return effects;
+        };
+        let Some(trait_name) = method_info.trait_name.as_ref() else {
+            return effects;
+        };
+        let Some(module) = trait_name.module() else {
+            return effects;
+        };
+        let key = (
+            method_info.fq_base_struct_name().head_only(),
+            (module.clone(), trait_name.base_name().to_string()),
+        );
+        let Some(declared) = self.impl_effects.get(&key) else {
+            return effects;
+        };
+        let brought = self.close_over_args(declared, &key.1, &method_info.struct_type_args, 0);
+        substitute_effect_param(effects, &brought)
+    }
+
+    /// What an impl brings once its own effect parameter is filled from the
+    /// receiver's type arguments: a `MapIter<LineReader>` brings what
+    /// `LineReader`'s impl of the same trait brings. An argument implementing
+    /// nothing leaves the parameter, so the caller still forwards it.
+    fn close_over_args(
+        &self,
+        declared: &[EffectRef],
+        trait_key: &TraitKey,
+        args: &[FqTypeName],
+        depth: u32,
+    ) -> IndexSet<EffectRef> {
+        /// A wrapper around a wrapper around … — deep enough for any real
+        /// nesting, and what stops a cyclic instantiation.
+        const MAX_DEPTH: u32 = 8;
+
+        let mut out: IndexSet<EffectRef> = IndexSet::default();
+        for effect in declared {
+            if !effect.is_param() || depth == MAX_DEPTH {
+                out.insert(effect.clone());
+                continue;
+            }
+            let mut filled = false;
+            for arg in args {
+                let Some(inner) = self.impl_effects.get(&(arg.head_only(), trait_key.clone()))
+                else {
+                    continue;
+                };
+                filled = true;
+                out.extend(self.close_over_args(inner, trait_key, arg.args(), depth + 1));
+            }
+            if !filled {
+                out.insert(effect.clone());
+            }
+        }
+        out
     }
 
     /// The effects the trait method behind a dispatch declares. `None` where
@@ -1525,10 +1591,18 @@ fn resolve_bound_effect_params(
     if !resolved_any {
         return effects;
     }
+    substitute_effect_param(effects, &brought)
+}
+
+/// Replace every effect parameter with what the impl behind it brings.
+fn substitute_effect_param<'a>(
+    effects: Vec<EffectRef>,
+    brought: impl IntoIterator<Item = &'a EffectRef> + Copy,
+) -> Vec<EffectRef> {
     let mut out: IndexSet<EffectRef> = IndexSet::default();
     for effect in effects {
         if effect.is_param() {
-            out.extend(brought.iter().cloned());
+            out.extend(brought.into_iter().cloned());
         } else {
             out.insert(effect);
         }

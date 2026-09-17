@@ -25,7 +25,7 @@ pub enum Ordering {
 /// Trait for equality comparisons.
 /// Types implementing this trait can be compared with `==` and `!=` operators.
 #[compiler_item("eq")]
-pub trait Eq<Rhs = Self> {
+pub trait Eq<Rhs = Self> with () {
     /// Returns true if self equals other.
     fn eq(&self, other: &Rhs) -> bool;
 }
@@ -45,7 +45,7 @@ impl<T> Eq for &mut T {
 /// Trait for ordering comparisons.
 /// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
 #[compiler_item("ord")]
-pub trait Ord: Eq {
+pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
 }
@@ -53,7 +53,7 @@ pub trait Ord: Eq {
 /// Trait for providing a default value for a type.
 /// Types implementing this trait can produce a sensible "zero" or "empty" value.
 #[compiler_item("default")]
-pub trait Default {
+pub trait Default with () {
     /// Returns the default value for this type.
     fn default() -> Self;
 }
@@ -1019,7 +1019,7 @@ pub trait UpperExp {
 /// The core iterator trait for sequences of values.
 /// Types implementing this trait can be iterated over using `for-of` loops.
 #[compiler_item("iterator")]
-pub trait Iterator {
+pub trait Iterator with _ {
     type Item;
 
     /// Advances the iterator and returns the next value.
@@ -1461,7 +1461,7 @@ impl<I: Iterator, J: Iterator> IntoIterator for IterZip<I, J> {
 /// Conversion into an Iterator.
 /// Types implementing this trait can be used in `for-of` loops directly.
 #[compiler_item("into_iterator")]
-pub trait IntoIterator {
+pub trait IntoIterator with _ {
     type Item;
     type Iter: Iterator<Item = Self::Item>;
 

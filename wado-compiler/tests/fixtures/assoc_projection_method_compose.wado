@@ -32,7 +32,7 @@ struct Peekable<I: Iterator> {
 }
 
 impl<I: Iterator> Peekable<I> {
-    fn peek(&mut self) -> Option<I::Item> {
+    fn peek(&mut self) -> Option<I::Item> with _ {
         if let Some(buffered) = self.peeked {
             return buffered;
         }
@@ -42,7 +42,7 @@ impl<I: Iterator> Peekable<I> {
     }
 
     // Composes peek() + next() — both return `Option<I::Item>`.
-    fn next_if(&mut self, mut pred: fn mut(I::Item) -> bool) -> Option<I::Item> {
+    fn next_if(&mut self, mut pred: fn mut(I::Item) -> bool) -> Option<I::Item> with _ {
         if let Some(item) = self.peek() {
             if pred(item) {
                 return self.next();
@@ -54,7 +54,7 @@ impl<I: Iterator> Peekable<I> {
 
 impl<I: Iterator> Iterator for Peekable<I> {
     type Item = I::Item;
-    fn next(&mut self) -> Option<Self::Item> {
+    fn next(&mut self) -> Option<Self::Item> with _ {
         if let Some(buffered) = self.peeked {
             self.peeked = null;
             return buffered;

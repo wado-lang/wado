@@ -1510,6 +1510,8 @@ pub mod lint {
     pub const SHADOWED_NAME: &str = "shadowed_name";
     /// An item nothing reaches from the export boundary.
     pub const DEAD_CODE: &str = "dead_code";
+    /// A trait head that says nothing about what its impls may do.
+    pub const UNDECIDED_EFFECTS: &str = "undecided_effects";
 }
 
 /// Whether `#[allow(<lint>)]` sits among `attrs`. The one reading of an allow

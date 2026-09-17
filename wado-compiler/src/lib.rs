@@ -505,6 +505,60 @@ pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
         .collect()
 }
 
+/// Source-level `UndecidedEffects` diagnostics: every trait head that says
+/// nothing about the effects its impls may declare. A published trait warns,
+/// since an open contract nobody decided is the defect; one that is still being
+/// written only remarks.
+pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
+    use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
+    use crate::compiler_host::{Code, DiagnosticSpan};
+    use crate::elaborator::liveness::is_user_authored;
+
+    let mut out = Vec::new();
+    for (src, module) in &sem.modules {
+        if !is_user_authored(src)
+            || inner_attrs_allow(&module.inner_attributes, lint::UNDECIDED_EFFECTS)
+        {
+            continue;
+        }
+        for item in &module.items {
+            let Item::Trait(trait_decl) = item else {
+                continue;
+            };
+            if !matches!(trait_decl.head, ast::TraitHead::Undecided)
+                || attrs_allow(&trait_decl.attrs, lint::UNDECIDED_EFFECTS)
+            {
+                continue;
+            }
+            let published = trait_decl.visibility.is_public();
+            let severity = if published {
+                Severity::Warning
+            } else {
+                Severity::Info
+            };
+            out.push(Diagnostic {
+                severity,
+                code: if published {
+                    Code::UndecidedEffects
+                } else {
+                    Code::Remark
+                },
+                message: format!(
+                    "`{}` says nothing about the effects its impls may declare; \
+                     write `with ()` to forbid them, `with _` to leave them to the impl, \
+                     or `#[allow(undecided_effects)]` while deciding",
+                    trait_decl.name
+                ),
+                span: Some(DiagnosticSpan::from_span(
+                    &trait_decl.name_span,
+                    Some(src.source_path().as_str()),
+                )),
+            });
+        }
+    }
+    out
+}
+
 /// The interface FQ a `core:kiln/generator` component's synthesized world uses
 /// for `generate` and its options record (Kiln WEP revision 3). A generator's
 /// `generate` is grouped into this interface (it references the local `Options`
@@ -1146,14 +1200,18 @@ fn compile_after_load<H: CompilerHost>(
     // so `shadowed_name` is emitted either way; it is waived per binder and per
     // module by `allow` instead.
     let mut lints = shadowing_diagnostics(&sem);
+    lints.extend(undecided_effect_diagnostics(&sem));
     if options.unused_diagnostics {
         let is_test_world = options.target_world.as_deref() == Some("test");
         lints.extend(unused_diagnostics(&sem, is_test_world));
     }
     for diag in lints {
-        match diag.span {
-            Some(span) => logger.warn_at(diag.code, diag.message, span),
-            None => logger.warn(diag.code, diag.message),
+        // A lint carries the severity it words itself at, so one that only
+        // remarks is not raised to a warning on the way out.
+        match (diag.severity, diag.span) {
+            (Severity::Info, Some(span)) => logger.remark(diag.message, span),
+            (_, Some(span)) => logger.warn_at(diag.code, diag.message, span),
+            (_, None) => logger.warn(diag.code, diag.message),
         }
     }
 

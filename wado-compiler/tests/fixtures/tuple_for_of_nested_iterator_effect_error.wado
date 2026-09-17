@@ -1,6 +1,6 @@
-// `Iterator::next` declares no effects, so an impl of it may not add one. The
-// impl is walked once however many times the loops around it are unrolled, so
-// the fault is one diagnostic.
+// A tuple `for-of` unrolls its body once per element, and the `for-of` inside
+// it dispatches an effectful iterator on each walk. `consume` declares none of
+// it, and the fault is one diagnostic however many times the body is walked.
 
 use { println, Stdout } from "core:cli";
 
@@ -43,4 +43,4 @@ export fn run() with Stdout {
 }
 
 __DATA__
-{"compile_error": "effect 'Stdout' is not declared by trait method 'Iterator::next'", "compile_error_count": 1}
+{"compile_error": "missing effect 'Stdout' required by 'next'", "compile_error_count": 1}
