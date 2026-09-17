@@ -2373,8 +2373,9 @@ impl FunctionTranslator<'_, '_> {
     fn read_enclosing_capture(&self, cap: &TirCapture, slot: u32, span: Span) -> ExprId {
         let Some((self_index, self_type)) = self.enclosing_env else {
             unreachable!(
-                "capture `{}` reads slot {slot} of an enclosing environment, \
+                "at {}: capture `{}` reads slot {slot} of an enclosing environment, \
                  but the translated function has none",
+                span.location(),
                 cap.name,
             );
         };

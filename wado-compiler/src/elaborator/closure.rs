@@ -30,7 +30,8 @@ pub(super) fn relink_recorded_captures(
     assert_eq!(
         linked.len(),
         recorded.len(),
-        "the seeded environment pairs up with the record it was seeded from"
+        "in {}: the seeded environment pairs up with the record it was seeded from",
+        closure_ctx.function_name
     );
     linked
         .into_iter()
@@ -56,11 +57,15 @@ fn parent_capture_slot(ctx: &mut FunctionContext, name: &str) -> u32 {
         Some(VarRef::Capture { index, .. } | VarRef::DerefCapture { index, .. }) => index,
         Some(VarRef::Local { .. }) => {
             unreachable!(
-                "`{name}` is a local of the frame that was recorded as reaching it by capture"
+                "in {}: `{name}` is a local of the frame that was recorded as reaching it by capture",
+                ctx.function_name
             )
         }
         None => {
-            unreachable!("`{name}` was reached through the enclosing environment but is not in it")
+            unreachable!(
+                "in {}: `{name}` was reached through the enclosing environment but is not in it",
+                ctx.function_name
+            )
         }
     }
 }

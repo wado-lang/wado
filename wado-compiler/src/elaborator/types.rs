@@ -2859,7 +2859,8 @@ impl FunctionContext {
         }
         assert!(
             !self.captures_seeded,
-            "`{name}` reaches this closure's environment, and the record being replayed has no slot for it"
+            "in {}: `{name}` reaches this closure's environment, and the record being replayed has no slot for it",
+            self.function_name
         );
         let index = self.captured_vars.len() as u32;
         self.captured_vars
@@ -2876,11 +2877,15 @@ impl FunctionContext {
     pub(super) fn seed_captures<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
         assert!(
             self.captured_vars.is_empty(),
-            "the environment is seeded before the body walk, which is what fills it otherwise"
+            "in {}: the environment is seeded before the body walk, which is what fills it otherwise",
+            self.function_name
         );
         for name in names {
             let Some(binding) = self.outer_locals.get(name) else {
-                unreachable!("annotate captured `{name}`, which this frame cannot reach")
+                unreachable!(
+                    "in {}: annotate captured `{name}`, which this frame cannot reach",
+                    self.function_name
+                )
             };
             let reach = binding.reach;
             self.capture_slot(name, reach);
@@ -2899,12 +2904,15 @@ impl FunctionContext {
             .map(|(position, (name, slot))| {
                 assert_eq!(
                     slot.index as usize, position,
-                    "a slot is allocated at the end, so insertion order is slot order"
+                    "in {}: a slot is allocated at the end, so insertion order is slot order",
+                    self.function_name
                 );
-                let outer = self
-                    .outer_locals
-                    .get(name)
-                    .expect("a captured name is one the enclosing frame reaches");
+                let Some(outer) = self.outer_locals.get(name) else {
+                    unreachable!(
+                        "in {}: `{name}` holds a slot, but the enclosing frame cannot reach it",
+                        self.function_name
+                    )
+                };
                 let type_id = self
                     .outer_box_types
                     .get(name)

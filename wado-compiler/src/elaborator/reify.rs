@@ -8026,7 +8026,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let name = |callee: &ast::Expr| match callee {
             ast::Expr::Ident(ident) => ident.name.clone(),
             other => unreachable!(
-                "annotate recorded a named callee for {:?}",
+                "at {}: annotate recorded a named callee for {:?}",
+                other.span().location(),
                 std::mem::discriminant(other)
             ),
         };
@@ -8034,7 +8035,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             IndirectCallee::Binding => {
                 let name = name(callee);
                 let Some(var_ref) = ctx.lookup_or_capture(&name) else {
-                    unreachable!("annotate reached the binding `{name}`, reify's frame cannot")
+                    unreachable!(
+                        "at {}: annotate reached the binding `{name}`, reify's frame cannot",
+                        span.location()
+                    )
                 };
                 var_ref_expr(var_ref, &name, span)
             }
@@ -8042,7 +8046,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 let name = name(callee);
                 let Some((module_source, global_name, global_type)) = self.global_fn_callee(&name)
                 else {
-                    unreachable!("annotate read the global `{name}`, reify finds no such global")
+                    unreachable!(
+                        "at {}: annotate read the global `{name}`, reify finds no such global",
+                        span.location()
+                    )
                 };
                 TirExpr::new(
                     TirExprKind::GlobalVarGet {
