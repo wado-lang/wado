@@ -127,6 +127,7 @@ withClause
 
 withItem
     : IDENTIFIER
+    | '_'
     | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
     ;
 
@@ -185,7 +186,7 @@ variantCase
     ;
 
 traitDecl
-    : 'trait' IDENTIFIER genericParams? (':' traitBounds)? '{' traitMember* '}'
+    : 'trait' IDENTIFIER genericParams? (':' traitBounds)? withClause? '{' traitMember* '}'
     ;
 
 interfaceDecl
