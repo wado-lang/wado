@@ -1,0 +1,20 @@
+// A primitive's built-in `Eq` is `Eq<Self>`. A bound writing another argument
+// is not answered by it, so the blanket impl does not reach `i32`.
+
+trait Marker {
+    fn mark(&self) -> i32;
+}
+
+impl<T: Eq<String>> Marker for T {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "a bound writing Eq<String> does not reach a primitive" {
+    let n = 7;
+    assert n.mark() == 1;
+}
+
+__DATA__
+{"compile_error": "no method 'mark' found on type 'i32'"}

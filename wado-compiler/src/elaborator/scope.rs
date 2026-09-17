@@ -357,10 +357,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         if let Some((existing, _)) = duplicate {
             if existing.type_args.is_empty() {
-                existing.type_args = bound.type_args.clone();
+                existing.type_args.clone_from(&bound.type_args);
             }
             if existing.assoc_types.is_empty() {
-                existing.assoc_types = bound.assoc_types.clone();
+                existing.assoc_types.clone_from(&bound.assoc_types);
             }
             return;
         }

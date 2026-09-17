@@ -2,8 +2,8 @@
 //! this one, and every step it takes is through an impl's bounds.
 
 use super::program::{
-    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, ParamBound, Program,
-    RefRule, SolverType, TraitDeclId, TypeDeclId,
+    AssocId, DerivationRequest, Env, ImplDef, ImplId, ImplOrigin, ModuleId, Program, RefRule,
+    SolverType, TraitDeclId, TypeDeclId,
 };
 
 /// A bound that holds, and the bodies its answer owes.
@@ -214,7 +214,15 @@ impl Query<'_> {
             };
             for bound in &param.bounds {
                 for element in &elements {
-                    let answer = self.holds(element, bound.trait_, &bound.args)?;
+                    // The bound writes its arguments in the impl's own
+                    // parameter space, so `T: Eq<U>` under `U = String` asks
+                    // about `Eq<String>` and not about `Eq<U>`.
+                    let args: Vec<SolverType> = bound
+                        .args
+                        .iter()
+                        .map(|arg| bound_to(arg).unwrap_or_else(|| arg.clone()))
+                        .collect();
+                    let answer = self.holds(element, bound.trait_, &args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
                     // one binding nothing is not.
                     for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
@@ -432,7 +440,9 @@ fn match_target(target: &SolverType, ty: &SolverType, bindings: &mut [Option<Bin
 
 #[cfg(test)]
 mod tests {
-    use super::super::program::{ArgDefault, Fact, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef};
+    use super::super::program::{
+        ArgDefault, Fact, ParamBound, ParamDef, Pin, TraitDef, TypeDeclId, TypeDef,
+    };
     use super::super::testing::{Builder, concrete, decl, ref_to};
     use super::*;
 

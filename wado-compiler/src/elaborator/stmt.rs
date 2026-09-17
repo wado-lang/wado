@@ -2035,16 +2035,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         // An unsettled head judges nothing: an unresolved type is reported
         // where it is unresolved, and a type parameter decided per instance.
-        let settled = matches!(
-            type_table.get(head),
+        let settled = match type_table.get(head) {
             ResolvedType::Primitive(_)
-                | ResolvedType::Struct { .. }
-                | ResolvedType::Enum { .. }
-                | ResolvedType::Variant { .. }
-                | ResolvedType::Flags { .. }
-                | ResolvedType::Unit
-        ) || (matches!(type_table.get(head), ResolvedType::GenericInstance { .. })
-            && type_table.is_concrete(head));
+            | ResolvedType::Struct { .. }
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::Unit => true,
+            ResolvedType::GenericInstance { .. } => type_table.is_concrete(head),
+            _ => false,
+        };
         drop(type_table);
         if !settled {
             return None;

@@ -440,13 +440,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.fn_signature.is_none())
-                .map(|bound| {
-                    let (def, wanted) = match self.tysys.bound_written(bound) {
-                        Some((def, wanted)) => (Some(def), wanted),
-                        None => (None, Vec::new()),
-                    };
-                    (bound.name.clone(), def, wanted)
-                })
+                .map(|bound| self.tysys.bound_named_written(bound))
                 .collect();
             if bounds.is_empty() {
                 continue;
@@ -489,19 +483,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return;
         };
-        let supertraits: Vec<(String, Option<(DefId, Vec<FqTypeName>)>)> = self
+        let supertraits: Vec<(String, Option<DefId>, Vec<FqTypeName>)> = self
             .tysys
             .trait_env
             .supertrait_closure(&trait_decl)
             .iter()
-            .map(|b| (b.bound.name.clone(), self.tysys.bound_written(&b.bound)))
+            .map(|b| self.tysys.bound_named_written(&b.bound))
             .collect();
         if supertraits.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
-        for (supertrait, written) in supertraits {
-            let Some((supertrait_def, wanted)) = written else {
+        for (supertrait, supertrait_def, wanted) in supertraits {
+            let Some(supertrait_def) = supertrait_def else {
                 continue;
             };
             if self.tysys.type_implements_trait_with_args(
@@ -644,6 +638,18 @@ impl TypeSystem {
             &self.resolutions,
         );
         Some((decl, named.args().to_vec()))
+    }
+
+    /// [`Self::bound_written`] with the bound's spelling, for the diagnostics
+    /// that name a trait the resolution did not reach.
+    pub(super) fn bound_named_written(
+        &self,
+        bound: &ast::TraitBound,
+    ) -> (String, Option<DefId>, Vec<FqTypeName>) {
+        match self.bound_written(bound) {
+            Some((decl, wanted)) => (bound.name.clone(), Some(decl), wanted),
+            None => (bound.name.clone(), None, Vec::new()),
+        }
     }
 
     /// Whether `type_id` answers every one of `bounds`, each at the arguments it
@@ -1007,6 +1013,18 @@ impl TypeSystem {
         self.trait_env.decl_index.contains(&key).then_some(key)
     }
 
+    /// Whether what a bound writes for `trait_`'s own parameters answers
+    /// `wanted`, a position it leaves open taking the trait's declared default.
+    /// A `Self` default names whatever is answering, which no written argument
+    /// equals, so only a default naming a type answers here.
+    fn args_answer(&self, args: &[FqTypeName], trait_: DefId, wanted: &[FqTypeName]) -> bool {
+        wanted.iter().enumerate().all(|(i, want)| {
+            args.get(i)
+                .or_else(|| self.trait_env.named_default_arg(trait_, i))
+                == Some(want)
+        })
+    }
+
     /// Whether `bound` on a type parameter supplies `trait_` at the arguments
     /// `wanted` writes — the bound itself writing them, or a supertrait that
     /// does (`AsStrSlice: Eq<String>`).
@@ -1017,18 +1035,12 @@ impl TypeSystem {
         trait_: DefId,
         wanted: &[FqTypeName],
     ) -> bool {
-        // A `Self` default names the parameter, which no written argument
-        // equals, so only a declared default naming a type answers here.
         let answers = |written: &ast::TraitBound| {
             let args = self
                 .bound_written(written)
                 .map(|(_, args)| args)
                 .unwrap_or_default();
-            wanted.iter().enumerate().all(|(i, want)| {
-                args.get(i)
-                    .or_else(|| self.trait_env.named_default_arg(trait_, i))
-                    == Some(want)
-            })
+            self.args_answer(&args, trait_, wanted)
         };
         if self.scoped_trait_decl_key(scope, &bound.name) == Some(trait_) {
             return answers(bound);
@@ -1329,7 +1341,9 @@ impl TypeSystem {
 
         // Primitives have built-in implementations for certain traits
         if let ResolvedType::Primitive(prim) = &resolved {
-            if is_eq_or_ord {
+            // A derived impl writes no argument, so it answers `Eq<Self>` and
+            // `Ord<Self>`. A bound writing one needs an impl that writes it.
+            if is_eq_or_ord && wanted.is_empty() {
                 return true;
             }
             // Numeric primitives implement the operator traits the compiler
@@ -1355,8 +1369,11 @@ impl TypeSystem {
         // `let`-chain lives for the whole body, and the body borrows mutably
         // to record the synthesis request.
         let nominal = self.type_table.borrow().nominal_head(type_id);
+        // A structural derivation writes no argument, so it answers the trait's
+        // declared defaults. A bound writing one needs an impl that writes it.
         if let Some(tr) = on_bound
             && tr.is_field_recursive()
+            && wanted.is_empty()
             && let Some((_, module_source)) = nominal
         {
             let receiver = self.type_table.borrow().impl_receiver_key(type_id);
@@ -1468,8 +1485,10 @@ impl TypeSystem {
                 },
             ),
             ResolvedType::Ref(inner) => {
-                // References always implement Eq via ref.eq (identity comparison)
-                if is_eq {
+                // References always implement Eq via ref.eq (identity
+                // comparison), which is `Eq<Self>`. A bound writing an argument
+                // asks the pointee instead.
+                if is_eq && wanted.is_empty() {
                     return true;
                 }
                 // Check for a specific impl Trait for &T first (e.g., impl Inspect for &T)
@@ -1492,8 +1511,7 @@ impl TypeSystem {
                 return self.type_implements_trait_with_args(ctx, scope, inner_id, trait_, wanted);
             }
             ResolvedType::MutRef(inner) => {
-                // Mutable references always implement Eq via ref.eq (identity comparison)
-                if is_eq {
+                if is_eq && wanted.is_empty() {
                     return true;
                 }
                 let inner_id = *inner;
@@ -1516,9 +1534,11 @@ impl TypeSystem {
             }
             ResolvedType::AssocTypeProjection { bounds, .. } => {
                 // An associated type projection T::Assoc implements a trait if
-                // the trait declaration for Assoc declares that bound.
-                // e.g., I::Iter: Iterator when IntoIterator::Iter: Iterator
-                return bounds.iter().any(|b| b.canonical() == Some(trait_));
+                // the trait declaration for Assoc declares that bound, at the
+                // arguments the bound writes.
+                return bounds.iter().any(|b| {
+                    b.canonical() == Some(trait_) && self.args_answer(b.args(), trait_, wanted)
+                });
             }
             ResolvedType::Newtype { base_type, .. } => {
                 // Check for a direct impl on the newtype first (e.g., impl Describe for Meters)

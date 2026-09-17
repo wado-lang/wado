@@ -3726,6 +3726,10 @@ A bound that writes one asks for that argument. `T: Eq<String>` reaches
 `impl Eq<String> for StrSlice`. On a `String` receiver it reaches
 `impl Eq for String`, whose `Rhs` is the restated `Self`.
 
+The rule is the same wherever a bound is written: on a type parameter, on a
+supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
+(`type Item: Eq<String>`).
+
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.
 
