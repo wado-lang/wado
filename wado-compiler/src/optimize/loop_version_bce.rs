@@ -525,7 +525,7 @@ fn and_floor_terms(
     let mut out = pred(engine, residual, NirBinaryOp::And, at_least);
 
     let headroom = match floor.step {
-        // `H < B` already leaves one step of headroom under the check bound.
+        // The residual already puts the last `i + 1` at or under `B`, so no wrap.
         InductionStep::Const(k) if k <= 1 => return out,
         InductionStep::Const(k) => {
             let bits = floor.type_max.wrapping_sub(k as u64);

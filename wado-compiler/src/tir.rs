@@ -1353,18 +1353,36 @@ impl TypeTable {
         }
     }
 
-    /// Whether `ty` is an instance of `Box<T>`, the shared mutable cell a
-    /// reference to a scalar lowers to. Monomorphization leaves one as a
-    /// `GenericInstance` or as a `Struct` carrying the generic head name.
+    /// Whether `ty` is an instance of the compiler struct `item`, as a generic
+    /// instance or as the monomorphized struct carrying its head name.
     #[must_use]
-    pub fn is_box_instance(&self, ty: TypeId) -> bool {
-        let box_name = self.compiler_items().struct_name(CompilerItem::Box);
+    pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
+        let head = self.compiler_items().struct_name(item);
         match self.get(ty) {
-            ResolvedType::GenericInstance { def, .. } => self.def_name(*def) == box_name,
+            ResolvedType::GenericInstance { def, .. } => self.def_name(*def) == head,
             ResolvedType::Struct { def, type_args } => {
-                !type_args.is_empty() && self.struct_head_name(*def) == box_name
+                !type_args.is_empty() && self.struct_head_name(*def) == head
             }
-            _ => false,
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
         }
     }
 
