@@ -122,7 +122,8 @@ impl SolverType {
     }
 }
 
-/// A `T: Trait<Args>` written on an impl's type parameter.
+/// A `Trait<Args>` written on an impl's type parameter or on a supertrait
+/// clause.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ParamBound {
     pub trait_: TraitDeclId,
@@ -233,8 +234,9 @@ pub enum RefRule {
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TraitDef {
     /// The traits an implementor must also implement, so a bound naming this
-    /// one answers for them too.
-    pub supertraits: Vec<TraitDeclId>,
+    /// one answers for them too, each with what the clause writes for that
+    /// trait's own parameters (`trait AsStrSlice: Eq<String>`).
+    pub supertraits: Vec<ParamBound>,
     /// Holds of every type before any body exists — `Inspect`. The unbounded
     /// blanket that would say so is rejected, so the trait says it itself.
     pub holds_for_all: bool,
@@ -379,28 +381,45 @@ impl Program {
     }
 
     /// Whether a bound on `bound` answers for `wanted`: itself or a supertrait,
-    /// transitively. The walk refuses to hang on a supertrait cycle.
+    /// transitively.
     pub(super) fn bound_reaches(&self, bound: TraitDeclId, wanted: TraitDeclId) -> bool {
-        if bound == wanted {
-            return true;
+        !self
+            .args_reaching(&ParamBound::bare(bound), wanted)
+            .is_empty()
+    }
+
+    /// Every argument list `bound` writes for `wanted`'s own parameters — its
+    /// own arguments where it names `wanted`, and each clause that reaches it.
+    /// Two edges to one trait writing different arguments are two answers, so
+    /// the walk carries on past the first rather than deciding on it.
+    pub(super) fn args_reaching(
+        &self,
+        bound: &ParamBound,
+        wanted: TraitDeclId,
+    ) -> Vec<Vec<SolverType>> {
+        if bound.trait_ == wanted {
+            return vec![bound.args.clone()];
         }
-        let Some(def) = self.traits.get(&bound) else {
-            return false;
+        let Some(def) = self.traits.get(&bound.trait_) else {
+            return Vec::new();
         };
+        let mut reaching = Vec::new();
         let mut stack = def.supertraits.clone();
-        let mut seen: Vec<TraitDeclId> = vec![bound];
+        // An edge is its trait and what it writes, so a second instantiation of
+        // one trait is walked rather than taken for a revisit.
+        let mut seen: Vec<ParamBound> = vec![bound.clone()];
         while let Some(next) = stack.pop() {
-            if next == wanted {
-                return true;
-            }
             if seen.contains(&next) {
                 continue;
             }
-            seen.push(next);
-            if let Some(def) = self.traits.get(&next) {
-                stack.extend(def.supertraits.iter().copied());
+            if next.trait_ == wanted {
+                reaching.push(next.args.clone());
             }
+            if let Some(def) = self.traits.get(&next.trait_) {
+                stack.extend(def.supertraits.iter().cloned());
+            }
+            seen.push(next);
         }
-        false
+        reaching
     }
 }

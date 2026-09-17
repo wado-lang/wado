@@ -1394,8 +1394,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .filter_map(|key| self.tysys.trait_env.impl_headers.get(key))
                         .any(|header| {
                             header.is_synthesize_request
-                                && header.trait_name.as_deref() == Some(from_trait_name.as_str())
-                                && matches!(&header.trait_type, Some(ast::Type::Generic(generic))
+                                && header.trait_head_name() == Some(from_trait_name.as_str())
+                                && matches!(header.trait_ty(), Some(ast::Type::Generic(generic))
                                     if generic.args.len() == 1
                                         && self.get_type_name_full(&generic.args[0])
                                             == from_type_name)
@@ -3564,7 +3564,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .impl_index
             .get(key)?
             .iter()
-            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_ref)
+            .filter_map(|impl_def| trait_env.impl_headers.get(impl_def)?.trait_def())
             .find_map(|trait_decl| {
                 let method = self.trait_sig_of(&trait_decl)?.method(method_name)?;
                 method.default_body.as_ref()?;

@@ -1,0 +1,28 @@
+// An impl leaving a trait parameter out stands at that parameter's declared
+// default, so `impl B<String>` owes `C<i32>` — an obligation the binder `Y`
+// left unread would skip.
+
+trait C<Z> with () {
+    fn c(&self, z: Z) -> i32;
+}
+
+trait B<X, Y = i32>: C<Y> with () {
+    fn b(&self, x: X) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl B<String> for S {
+    fn b(&self, x: String) -> i32 {
+        return x.len();
+    }
+}
+
+test "an impl omitting a parameter still owes the supertrait at its default" {
+    assert S { v: 1 }.b("abc") == 3;
+}
+
+__DATA__
+{"compile_error": "type 'S' implements trait 'B' but not its supertrait 'C'"}

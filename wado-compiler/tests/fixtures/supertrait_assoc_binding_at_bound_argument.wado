@@ -1,0 +1,40 @@
+// A supertrait clause binding an associated type to its own parameter
+// (`Collect<Item = T>`) is read at the argument the bound writes, so `U::Item`
+// under `U: Sink<i32>` is `i32`.
+
+trait Collect with () {
+    type Item;
+
+    fn item(&self) -> Self::Item;
+}
+
+trait Sink<T>: Collect<Item = T> with () {
+    fn sink(&self) -> i32;
+}
+
+struct S {
+    v: i32,
+}
+
+impl Collect for S {
+    type Item = i32;
+
+    fn item(&self) -> i32 {
+        return self.v;
+    }
+}
+
+impl Sink<i32> for S {
+    fn sink(&self) -> i32 {
+        return self.v;
+    }
+}
+
+fn use_it<U: Sink<i32>>(u: U) -> i32 {
+    let x: i32 = u.item();
+    return x;
+}
+
+test "an inherited assoc binding is read at the bound's argument" {
+    assert use_it(S { v: 7 }) == 7;
+}

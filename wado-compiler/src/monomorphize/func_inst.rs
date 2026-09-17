@@ -3350,6 +3350,30 @@ impl Monomorphizer {
         true
     }
 
+    /// The name with the template's type parameters replaced in the trait's
+    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`.
+    fn trait_named_at_instance(
+        &self,
+        info: LocalMethodName,
+        substitution: &IndexMap<u32, TypeId>,
+        type_table: &TypeTable,
+    ) -> LocalMethodName {
+        let Some(trait_name) = info.trait_name.as_ref() else {
+            return info;
+        };
+        if !trait_name.args_mention_binder() {
+            return info;
+        }
+        let asked = self
+            .current_param_substitution_key
+            .iter()
+            .filter_map(|(name, key)| Some((name, *substitution.get(key)?)))
+            .fold(trait_name.clone(), |trait_, (name, tid)| {
+                trait_.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
+            });
+        info.with_trait_type_args(asked.args())
+    }
+
     /// The name with the trait's arguments cut back to what the answering impl
     /// writes. An instance minted under a longer name defines nothing.
     fn named_by_impl(&self, info: LocalMethodName) -> LocalMethodName {
@@ -3388,6 +3412,7 @@ impl Monomorphizer {
         let Some(info) = method_func.method_info.clone() else {
             return;
         };
+        let info = self.trait_named_at_instance(info, substitution, type_table);
 
         if self.try_ref_blanket_shortcut(method_func, &info, substitution, type_table) {
             return;

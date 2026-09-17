@@ -12,7 +12,7 @@ use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::sem::types::{HandlerBindingFacts, HandlerEffectEntry};
-use crate::elaborator::trait_env::ImplTargetKey;
+use crate::elaborator::trait_env::{ImplHeader, ImplTargetKey};
 use crate::hashmap;
 use crate::name::{DeclName, FqTraitName};
 
@@ -381,7 +381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_env
                 .impl_headers
                 .get(&impl_def)
-                .and_then(|header| header.trait_ref)
+                .and_then(ImplHeader::trait_def)
             else {
                 continue;
             };
@@ -436,7 +436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_env
                 .impl_headers
                 .get(key)
-                .is_some_and(|header| header.trait_ref == Some(effect_decl))
+                .is_some_and(|header| header.trait_def() == Some(effect_decl))
         };
         // A block's arguments answer for the clause's when they are the same,
         // or where the block left a slot for monomorphization to fill —

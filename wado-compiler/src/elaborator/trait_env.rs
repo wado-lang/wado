@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
+use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -17,6 +18,7 @@ use crate::name;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::tir::TypeTable;
 use crate::token::Span;
+use crate::unparse::unparse_type_into;
 
 /// Namespace-import alias (`use ns from "…"`) → the namespace's module.
 /// Drives `ns::Type` resolution (issue #1415).
@@ -208,6 +210,25 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplInd
     out
 }
 
+/// The trait an `impl` block names, whole: one value, so the identity, the
+/// spelling and the arguments cannot disagree.
+#[derive(Clone, Debug)]
+pub(super) struct ImplTraitRef {
+    /// The trait declaration (WEP 2026-08-12); `None` for a trait position
+    /// whose site names none.
+    pub(super) def: Option<DefId>,
+    /// Identity of the trait as the impl indices key it.
+    pub(super) key: ImplTargetKey,
+    /// The head as written. A spelling, not an identity — compare
+    /// [`Self::key`] when the question is *which* trait this is.
+    pub(super) name: String,
+    /// The reference as written (`Index<K>` in `impl Index<K> for Map`).
+    pub(super) ty: Type,
+    /// Identity of each argument written, `Self` meaning
+    /// [`ImplHeader::target_id`].
+    pub(super) arg_ids: Vec<name::FqTypeName>,
+}
+
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
@@ -216,7 +237,7 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplInd
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
     /// The module that wrote this header — the vantage every name in
-    /// [`Self::ty`] and [`Self::trait_type`] is spelled from. Without it a
+    /// [`Self::ty`] and the trait reference is spelled from. Without it a
     /// consumer holding the header alone can only compare spellings, which is
     /// what makes two modules' same-named types look like one.
     pub(super) module: ModuleSource,
@@ -224,31 +245,9 @@ pub(super) struct ImplHeader {
     /// vantage. The key every impl index in this file is keyed by, so a
     /// whole-program check compares identities rather than written heads.
     pub(super) target: ImplTargetKey,
-    /// Identity of the implemented trait, resolved the same way; `None` for
-    /// inherent `impl Type { … }` blocks.
-    pub(super) trait_key: Option<ImplTargetKey>,
-    /// The trait this header implements, read from `Resolutions` rather than
-    /// resolved a second time. This is what an impl index matches against, so a
-    /// lookup compares declarations rather than spellings two modules can share
-    /// (WEP 2026-08-12). `None` for an inherent block, and for a trait position
-    /// whose site names no declaration.
-    pub(super) trait_ref: Option<DefId>,
-    /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
-    /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
-    /// The memoised head name of [`Self::trait_type`], so the index filters
-    /// that only ask "is this a trait impl?" need no allocation.
-    ///
-    /// A spelling, not an identity — compare [`Self::trait_key`] instead when
-    /// the question is *which* trait this is.
-    pub(super) trait_name: Option<String>,
-    /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
-    /// consumers that need its generic arguments rather than its head name.
-    pub(super) trait_type: Option<Type>,
-    /// Identity of each argument the header writes for the trait, `Self`
-    /// meaning [`Self::target_id`]. Resolved once from [`Self::module`]'s
-    /// vantage, so a consumer holding the header alone compares identities
-    /// rather than the spellings two modules can share.
-    pub(super) trait_arg_ids: Vec<name::FqTypeName>,
+    /// The trait this header implements; `None` for an inherent
+    /// `impl Type { … }` block.
+    pub(super) trait_: Option<ImplTraitRef>,
     /// Identity of the impl target, resolved the same way. This is what a
     /// `Self` default on the trait says at this impl.
     pub(super) target_id: name::FqTypeName,
@@ -283,17 +282,44 @@ impl ImplHeader {
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
     pub(super) fn fq_trait(&self, resolutions: &Resolutions) -> Option<name::FqTraitName> {
-        let trait_type = self.trait_type.as_ref()?;
-        match self.trait_key.as_ref()? {
+        let trait_ = self.trait_.as_ref()?;
+        match &trait_.key {
             ImplTargetKey::Decl(def) => Some(
                 name::FqTraitName::declared(resolutions.defs(), *def)
-                    .with_args(written_type_args(trait_type, resolutions)),
+                    .with_args(trait_.arg_ids.clone()),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
                 None
             }
         }
+    }
+
+    /// Whether the block writes a trait at all, whatever it resolves to.
+    pub(super) fn is_trait_impl(&self) -> bool {
+        self.trait_.is_some()
+    }
+
+    /// `None` for an inherent block, and for a trait position naming no
+    /// declaration.
+    pub(super) fn trait_def(&self) -> Option<DefId> {
+        self.trait_.as_ref()?.def
+    }
+
+    pub(super) fn trait_key(&self) -> Option<&ImplTargetKey> {
+        Some(&self.trait_.as_ref()?.key)
+    }
+
+    pub(super) fn trait_head_name(&self) -> Option<&str> {
+        Some(self.trait_.as_ref()?.name.as_str())
+    }
+
+    pub(super) fn trait_ty(&self) -> Option<&Type> {
+        Some(&self.trait_.as_ref()?.ty)
+    }
+
+    pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
+        self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
     }
 }
 
@@ -1185,38 +1211,34 @@ impl TraitEnv {
                 // Implementing a trait is naming it, so the header's own
                 // site answers and a position reaching nothing is an error —
                 // never another module's same-named trait.
-                let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
-                    trait_ref.map_or_else(
-                        || impl_target_key_at(trait_type, module_source, resolutions),
-                        ImplTargetKey::Decl,
-                    )
-                });
+                let trait_ = impl_block
+                    .trait_type
+                    .as_ref()
+                    .map(|trait_type| ImplTraitRef {
+                        def: trait_ref,
+                        key: trait_ref.map_or_else(
+                            || impl_target_key_at(trait_type, module_source, resolutions),
+                            ImplTargetKey::Decl,
+                        ),
+                        name: get_type_name_static(trait_type),
+                        ty: trait_type.clone(),
+                        arg_ids: written_arg_nodes(trait_type)
+                            .iter()
+                            .map(|arg| {
+                                let node = match arg {
+                                    Type::Named(named) if named.name == "Self" => &impl_block.ty,
+                                    _ => arg,
+                                };
+                                written_type_arg(node, resolutions)
+                            })
+                            .collect(),
+                    });
                 impl_headers.insert(
                     impl_def,
                     ImplHeader {
                         module: module_source.clone(),
                         target: type_key.clone(),
-                        trait_key,
-                        trait_ref,
-                        trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
-                        trait_type: impl_block.trait_type.clone(),
-                        trait_arg_ids: impl_block.trait_type.as_ref().map_or_else(
-                            Vec::new,
-                            |trait_type| {
-                                written_arg_nodes(trait_type)
-                                    .iter()
-                                    .map(|arg| {
-                                        let node = match arg {
-                                            Type::Named(named) if named.name == "Self" => {
-                                                &impl_block.ty
-                                            }
-                                            _ => arg,
-                                        };
-                                        written_type_arg(node, resolutions)
-                                    })
-                                    .collect()
-                            },
-                        ),
+                        trait_,
                         target_id: written_type_arg(&impl_block.ty, resolutions),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
@@ -1408,7 +1430,10 @@ impl TraitEnv {
     }
 
     /// Every trait with its supertrait closure.
-    pub(super) fn supertrait_closures(
+    /// Every trait's closure, each spelled in that trait's own parameter space
+    /// — the space a caller stating declarations rather than reading a site
+    /// wants. A caller reading a site owes [`Self::supertrait_closure_at`].
+    pub(super) fn supertrait_closures_in_own_space(
         &self,
     ) -> impl Iterator<Item = (&DefId, &Vec<InheritedBound>)> {
         self.supertrait_closures.iter()
@@ -1417,7 +1442,10 @@ impl TraitEnv {
     /// The transitive supertraits of the trait `key` names, deduplicated by
     /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
-    pub(super) fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
+    ///
+    /// Spelled in `key`'s own parameter space, so a caller reading an argument
+    /// owes [`Self::supertrait_closure_at`] instead.
+    fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or_else(
             || self.supertrait_closure_named(self.defs.name(*key)),
             Vec::as_slice,
@@ -1427,10 +1455,48 @@ impl TraitEnv {
     /// [`Self::supertrait_closure`] for a caller holding a bare name with no
     /// import context to canonicalise it. Empty when the name is declared by
     /// more than one module.
-    pub(super) fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
+    fn supertrait_closure_named(&self, name: &str) -> &[InheritedBound] {
         self.supertrait_closures_by_name
             .get(name)
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// The transitive supertraits of `key`, re-spelled at `written` — the
+    /// arguments the reading site gives `key`'s parameters. The only way out of
+    /// the index, so no reader can take a clause for one of its own bounds.
+    pub(super) fn supertrait_closure_at(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+    ) -> Vec<InheritedBound> {
+        let params = self.trait_decl_params(*key);
+        self.supertrait_closure(key)
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: bound_at_args(&inherited.bound, params, written),
+                ..inherited.clone()
+            })
+            .collect()
+    }
+
+    /// [`Self::supertrait_closure_at`] for a name with no import context.
+    pub(super) fn supertrait_closure_named_at(
+        &self,
+        name: &str,
+        written: &[ast::Type],
+    ) -> Vec<InheritedBound> {
+        let params = self
+            .trait_decl_headers
+            .iter()
+            .find(|(decl, _)| self.defs.name(**decl) == name)
+            .map_or(&[][..], |(_, header)| header.type_params.as_slice());
+        self.supertrait_closure_named(name)
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: bound_at_args(&inherited.bound, params, written),
+                ..inherited.clone()
+            })
+            .collect()
     }
 
     /// Keys of every impl block on `type_key`, in global build order —
@@ -1453,7 +1519,7 @@ impl TraitEnv {
                     .filter(|key| {
                         self.impl_headers
                             .get(*key)
-                            .is_some_and(|h| h.trait_name.is_none())
+                            .is_some_and(|h| h.trait_.is_none())
                     })
                     .copied()
                     .collect()
@@ -1483,8 +1549,7 @@ impl TraitEnv {
         resolutions: &Resolutions,
     ) -> Option<name::FqTraitName> {
         let fq = header.fq_trait(resolutions)?;
-        let trait_type = header.trait_type.as_ref()?;
-        Some(self.fq_trait_named_by_impl(fq, trait_type, &header.ty, resolutions))
+        Some(self.fq_trait_named_by_impl(fq, &header.ty, resolutions))
     }
 
     /// [`Self::fq_trait_of_impl`] for a caller holding the written trait
@@ -1492,24 +1557,18 @@ impl TraitEnv {
     pub(super) fn fq_trait_named_by_impl(
         &self,
         fq: name::FqTraitName,
-        trait_type: &ast::Type,
         target: &ast::Type,
         resolutions: &Resolutions,
     ) -> name::FqTraitName {
+        let written = args_at_impl_target(fq.args().to_vec(), target, resolutions);
         let Some(params) = fq
             .canonical()
             .and_then(|decl| self.trait_decl_headers.get(&decl))
             .map(|header| &header.type_params)
         else {
-            return fq;
+            return fq.with_args(written);
         };
-        let args = args_without_declared_defaults(
-            fq.args().to_vec(),
-            written_arg_nodes(trait_type),
-            Some(target),
-            params,
-            resolutions,
-        );
+        let args = args_without_declared_defaults(written, Some(target), params, resolutions);
         fq.with_args(args)
     }
 
@@ -1536,8 +1595,7 @@ impl TraitEnv {
             .iter()
             .map(|arg| written_type_arg(arg, resolutions))
             .collect();
-        let args =
-            args_without_declared_defaults(written, &bound.type_args, None, params, resolutions);
+        let args = args_without_declared_defaults(written, None, params, resolutions);
         fq.with_args(args)
     }
 
@@ -1560,6 +1618,14 @@ impl TraitEnv {
         }
     }
 
+    /// The type parameters `trait_` declares, empty for one that declares none
+    /// and for a name reaching no declaration.
+    pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
+        self.trait_decl_headers
+            .get(&trait_)
+            .map_or(&[], |header| header.type_params.as_slice())
+    }
+
     /// How many arguments the impl on `receiver` writes for `trait_`, among
     /// those a bound writing `wanted` reaches.
     pub(crate) fn impl_written_arg_count(
@@ -1571,21 +1637,21 @@ impl TraitEnv {
         let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
-            if header.trait_ref != Some(trait_) {
+            if header.trait_def() != Some(trait_) {
                 return None;
             }
+            let default_at =
+                |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
+            let args = header.trait_arg_ids();
             let answers = wanted.iter().enumerate().all(|(i, want)| {
-                let Some(effective) = header
-                    .trait_arg_ids
-                    .get(i)
-                    .cloned()
-                    .or_else(|| Some(defaults.get(i)?.as_ref()?.at(&header.target_id)))
-                else {
+                let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
                     return false;
                 };
                 effective.head_only() == want.head_only()
             });
-            answers.then_some(header.trait_arg_ids.len())
+            // The count the impl's own name spells, not every argument
+            // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
+            answers.then(|| non_default_named_arg_count(args, &default_at))
         })
     }
 
@@ -1681,7 +1747,7 @@ impl TraitEnv {
             .flat_map(|entries| entries.iter())
             .any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
-                    h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
+                    h.trait_.is_none() && h.methods.iter().any(|m| m.name == method_name)
                 })
             })
     }
@@ -1689,7 +1755,7 @@ impl TraitEnv {
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         self.impl_headers
             .get(&entry)
-            .is_some_and(|header| !header.methods.is_empty() && header.trait_ref == Some(trait_))
+            .is_some_and(|header| !header.methods.is_empty() && header.trait_def() == Some(trait_))
     }
 
     /// Return the home module of a *value* blanket (`impl<T: Bound> Trait for
@@ -2010,7 +2076,7 @@ fn check_orphan_rfc2451(
     resolve: ResolveWritten<'_>,
 ) -> bool {
     // Build the sequence: self type first, then trait type arguments
-    let trait_args: &[Type] = match header.trait_type.as_ref() {
+    let trait_args: &[Type] = match header.trait_ty() {
         Some(Type::Generic(g)) => &g.args,
         _ => &[],
     };
@@ -2055,15 +2121,87 @@ type ResolveTrait<'a> = &'a dyn Fn(&ast::TraitBound) -> Option<DefId>;
 type ResolveWritten<'a> =
     &'a dyn Fn(&ModuleSource, &ast::Type, &[ast::GenericParam]) -> ImplTargetKey;
 
-/// Add an inherited bound unless the list already holds its declaration, so
-/// two spellings of one supertrait collapse.
+/// The arguments a bound writes, as written: the key two edges to one trait
+/// are the same edge at, so `D<X>` and `D<List<X>>` stay two.
+fn written_args_key(bound: &ast::TraitBound) -> String {
+    let mut out = String::new();
+    for arg in &bound.type_args {
+        unparse_type_into(arg, &mut out);
+        out.push(',');
+    }
+    out
+}
+
+/// Add an inherited bound unless the list already holds that supertrait at
+/// those arguments, so two spellings of one supertrait collapse.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
-    let Some(existing) = bounds.iter_mut().find(|b| b.decl == bound.decl) else {
+    let key = written_args_key(&bound.bound);
+    let Some(existing) = bounds
+        .iter_mut()
+        .find(|b| b.decl == bound.decl && written_args_key(&b.bound) == key)
+    else {
         bounds.push(bound.clone());
         return;
     };
     if existing.bound.assoc_types.is_empty() && !bound.bound.assoc_types.is_empty() {
         *existing = bound.clone();
+    }
+}
+
+/// A trait reference written against `params` re-spelled at `written`, the
+/// arguments a site gives them: `C<Y>` under `B<X, Y = i32>` written `B<String>`
+/// reaches `C<i32>`. Every reader of an inherited bound owes this, since the
+/// bound arrives in the declaring trait's parameter space and not the reader's.
+pub(super) fn bound_at_args(
+    bound: &ast::TraitBound,
+    params: &[ast::GenericParam],
+    written: &[ast::Type],
+) -> ast::TraitBound {
+    let mut names: Vec<String> = Vec::new();
+    let mut args: Vec<ast::Type> = Vec::new();
+    for (index, param) in params.iter().enumerate() {
+        // A position the site leaves out stands at the declared default, so an
+        // inherited bound spelling it arrives as a type and not a binder. A
+        // default naming a parameter to its left means that parameter's
+        // argument, not the name the reading site happens to use.
+        let arg = match written.get(index) {
+            Some(arg) => arg.clone(),
+            None => match param.default.as_ref() {
+                Some(default) => substitute_type_params(default, &names, &args),
+                None => break,
+            },
+        };
+        names.push(param.name.clone());
+        args.push(arg);
+    }
+    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &args);
+    ast::TraitBound {
+        type_args: bound.type_args.iter().map(at).collect(),
+        assoc_types: bound
+            .assoc_types
+            .iter()
+            .map(|a| ast::AssocTypeBound {
+                ty: at(&a.ty),
+                ..a.clone()
+            })
+            .collect(),
+        ..bound.clone()
+    }
+}
+
+/// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying
+/// what `params` are there: `trait A<X>: B<X>` over `trait B<Y>: C<Y>` reaches
+/// `C<X>`.
+fn at_writer(
+    inherited: &InheritedBound,
+    params: &[ast::GenericParam],
+    direct: &ast::TraitBound,
+    writer: DefId,
+) -> InheritedBound {
+    InheritedBound {
+        bound: bound_at_args(&inherited.bound, params, &direct.type_args),
+        decl: inherited.decl,
+        writer,
     }
 }
 
@@ -2142,10 +2280,16 @@ fn expand_supertraits(
                 writer: loc,
             },
         );
+        let super_params = headers
+            .get(&super_loc)
+            .map_or(&[][..], |h| h.type_params.as_slice());
         for inherited in expand_supertraits(
             defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_inherited(&mut closure, &inherited);
+            push_unique_inherited(
+                &mut closure,
+                &at_writer(&inherited, super_params, direct, loc),
+            );
         }
     }
     stack.pop();
@@ -2352,9 +2496,9 @@ fn check_impl_coherence(
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
     let trait_name = |header: &ImplHeader| {
         header
-            .trait_name
-            .clone()
+            .trait_head_name()
             .expect("a coherence finding names a trait impl")
+            .to_string()
     };
     let mut violations = Vec::new();
     for error in coherence_errors(&program) {
@@ -2403,7 +2547,7 @@ fn check_variadic_impl_overlap(
     let mut groups: IndexMap<&ImplTargetKey, Vec<VariadicImpl<'_>>> = IndexMap::default();
 
     for header in impl_headers.values() {
-        let Some(trait_key) = &header.trait_key else {
+        let Some(trait_key) = header.trait_key() else {
             continue;
         };
         let Some(target) = variadic_target(&header.ty) else {
@@ -2425,7 +2569,7 @@ fn check_variadic_impl_overlap(
             module_source: &header.module,
             span: header.span,
             trait_name: trait_key.display_name(defs).to_string(),
-            trait_args: match header.trait_type.as_ref() {
+            trait_args: match header.trait_ty() {
                 Some(ast::Type::Generic(generic)) => &generic.args,
                 _ => &[],
             },
@@ -2510,7 +2654,7 @@ fn check_inherent_impl_collisions(
     let mut instantiations = Vec::new();
 
     for header in impl_headers.values() {
-        if header.trait_key.is_some() {
+        if header.trait_.is_some() {
             continue;
         }
         let params: IndexSet<&str> = header.type_params.iter().map(|p| p.name.as_str()).collect();
@@ -2601,7 +2745,7 @@ fn check_all_orphan_rules(
             continue;
         }
 
-        let Some(trait_key) = &header.trait_key else {
+        let Some(trait_key) = header.trait_key() else {
             // Inherent impl: the orphan rule does not apply, but coherence does
             // — a package may only define inherent methods on types it owns, or
             // two packages could add colliding methods to `String`. Use a trait
@@ -2681,6 +2825,17 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     }
 }
 
+/// [`written_arg_nodes`] with `Self` read as `target`, so an impl head's
+/// arguments say what a reader of the closure needs before it is re-spelled.
+pub(super) fn written_arg_nodes_at_target(ty: &ast::Type, target: &ast::Type) -> Vec<ast::Type> {
+    let self_name = ["Self".to_string()];
+    let at_target = std::slice::from_ref(target);
+    written_arg_nodes(ty)
+        .iter()
+        .map(|arg| substitute_type_params(arg, &self_name, at_target))
+        .collect()
+}
+
 /// The type arguments a written trait position supplies, each read off the node
 /// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
@@ -2701,43 +2856,40 @@ pub(super) fn written_type_args(
 /// `impl Add<Cm> for Cm` reaches `T: Add` and `impl Add<Inch> for Cm` does not.
 fn args_without_declared_defaults(
     written: Vec<name::FqTypeName>,
-    ast_args: &[ast::Type],
     target: Option<&ast::Type>,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> Vec<name::FqTypeName> {
-    let mut kept = written;
-    kept.truncate(non_default_arg_count(ast_args, target, params, resolutions));
-    kept
+    let kept = non_default_named_arg_count(&written, &|index| {
+        declared_default_arg(params, index, target, resolutions)
+    });
+    let mut written = written;
+    written.truncate(kept);
+    written
 }
 
 /// Whether the header answers a bound writing `wanted`: at every position each
 /// side says its written argument, or the declared default where it wrote none.
 pub(super) fn header_answers_bound_args(
-    trait_type: &ast::Type,
+    written: &[name::FqTypeName],
     target: &ast::Type,
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
     wanted: &[name::FqTypeName],
 ) -> bool {
-    let ast_args = written_arg_nodes(trait_type);
     let default_at = |i: usize| declared_default_arg(params, i, Some(target), resolutions);
-    (0..ast_args.len().max(wanted.len())).all(|i| {
+    (0..written.len().max(wanted.len())).all(|i| {
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
         let Some(asks) = wanted.get(i).cloned().or_else(|| default_at(i)) else {
             return true;
         };
-        ast_args
-            .get(i)
-            .map(|arg| written_type_arg(arg, resolutions))
-            .or_else(|| default_at(i))
-            == Some(asks)
+        written.get(i).cloned().or_else(|| default_at(i)) == Some(asks)
     })
 }
 
 /// What the trait's declared default at `index` says, `Self` meaning the impl's
-/// target. A bound has no target node, so there a `Self` default says nothing.
+/// target. A bound has no target node, so there `Self` says only itself.
 fn declared_default_arg(
     params: &[ast::GenericParam],
     index: usize,
@@ -2746,9 +2898,10 @@ fn declared_default_arg(
 ) -> Option<name::FqTypeName> {
     let default = params.get(index)?.default.as_ref()?;
     match default {
-        ast::Type::Named(named) if named.name == "Self" => {
-            Some(written_type_arg(target?, resolutions))
-        }
+        ast::Type::Named(named) if named.name == "Self" => Some(match target {
+            Some(target) => written_type_arg(target, resolutions),
+            None => written_type_arg(default, resolutions),
+        }),
         _ => Some(written_type_arg(default, resolutions)),
     }
 }
@@ -2762,12 +2915,24 @@ pub(super) fn non_default_arg_count(
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> usize {
-    let mut kept = ast_args.len();
+    let written: Vec<name::FqTypeName> = ast_args
+        .iter()
+        .map(|arg| written_type_arg(arg, resolutions))
+        .collect();
+    non_default_named_arg_count(&written, &|index| {
+        declared_default_arg(params, index, target, resolutions)
+    })
+}
+
+/// [`non_default_arg_count`] over identities rather than spellings, for a
+/// consumer holding the arguments already resolved.
+pub(super) fn non_default_named_arg_count(
+    args: &[name::FqTypeName],
+    default_at: &dyn Fn(usize) -> Option<name::FqTypeName>,
+) -> usize {
+    let mut kept = args.len();
     while let Some(last) = kept.checked_sub(1) {
-        let Some(arg) = ast_args.get(last) else {
-            break;
-        };
-        if !restates_default(arg, params, last, target, resolutions) {
+        if args.get(last) != default_at(last).as_ref() {
             break;
         }
         kept = last;
@@ -2775,26 +2940,18 @@ pub(super) fn non_default_arg_count(
     kept
 }
 
-/// Whether a written trait argument says exactly what the declared default at
-/// `index` does.
-fn restates_default(
-    arg: &ast::Type,
-    params: &[ast::GenericParam],
-    index: usize,
-    target: Option<&ast::Type>,
+/// Written trait arguments with `Self` read as the impl's own target, so
+/// `impl Add<Self> for Feet` says `Add<Feet>` wherever an impl head is read.
+pub(super) fn args_at_impl_target(
+    written: Vec<name::FqTypeName>,
+    target: &ast::Type,
     resolutions: &Resolutions,
-) -> bool {
-    let Some(default) = params.get(index).and_then(|p| p.default.as_ref()) else {
-        return false;
-    };
-    // A bound has no target, so there only the `Self` spelling restates `Self`.
-    if matches!(default, ast::Type::Named(d) if d.name == "Self")
-        && matches!(arg, ast::Type::Named(a) if a.name == "Self")
-    {
-        return true;
-    }
-    declared_default_arg(params, index, target, resolutions)
-        .is_some_and(|default| written_type_arg(arg, resolutions) == default)
+) -> Vec<name::FqTypeName> {
+    let target_id = written_type_arg(target, resolutions);
+    written
+        .into_iter()
+        .map(|arg| arg.substitute(&name::FqTypeName::binder("Self"), &target_id))
+        .collect()
 }
 
 /// One written type argument as the identity it names.

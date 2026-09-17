@@ -3010,7 +3010,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         keys.extend(declared.iter().filter(|k| !is_current(k)).copied());
         keys.retain(|key| {
             let header = &env.impl_headers[key];
-            header.trait_type.is_some()
+            header.is_trait_impl()
                 && self.impl_head_decl_name(header, defs.module(*key)) == declared_name
         });
         keys
@@ -3063,10 +3063,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if !header.is_synthesize_request {
                 return false;
             }
-            let Some(trait_type) = &header.trait_type else {
+            let Some(trait_type) = header.trait_ty() else {
                 return false;
             };
-            if header.trait_name.as_deref() != Some(from_trait_name.as_str())
+            if header.trait_head_name() != Some(from_trait_name.as_str())
                 || get_type_name_static(&header.ty) != target_name
             {
                 return false;
@@ -3290,9 +3290,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             let trait_name = || {
                 header
-                    .trait_name
-                    .clone()
+                    .trait_head_name()
                     .expect("trait_impls_for_receiver yields trait impls alone")
+                    .to_string()
             };
             // The selection's own question, asked through the selection's own
             // answer: a blanket accepts a family rather than a type, so the
