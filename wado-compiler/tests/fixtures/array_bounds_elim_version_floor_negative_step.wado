@@ -1,0 +1,34 @@
+// The runtime floor rests on a step that never lowers the index. A negative
+// step walks below zero while the `i <= limit` guard still holds, so the
+// residual must fail and the slow arm report the out-of-bounds index with the
+// standard message.
+
+use { println, Stdout } from "core:cli";
+
+fn mark_and_sum(xs: &mut List<i32>, limit: i32, start: i32, step: i32) -> i32 {
+    let mut sum = 0;
+    for let mut r = 0; r < 2; r += 1 {
+        for let mut i = start; i <= limit; i += step {
+            xs[i] = 9;
+        }
+        for let mut n = 0; n <= limit; n += 1 {
+            sum += xs[n];
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${mark_and_sum(&mut xs, builtin::black_box(10), builtin::black_box(2), builtin::black_box(-1))}`);
+}
+
+__DATA__
+{
+    "stderr_contains": [
+        "Assertion failed in List::index_assign",
+        "index out of bounds",
+        "index: -1"
+    ],
+    "trapped": true
+}

@@ -3,6 +3,10 @@
 //! `if H < B { <clone, checks deleted> } else { <original> }`, sound by
 //! per-iteration transitivity from the guard's `i <= H`. A fast arm that is
 //! exactly `a[i] = CONST; i += 1` then collapses to one [`try_fill_idiom`].
+//!
+//! Where the entry value reads as no constant, the check's floor joins the
+//! residual too: `i >= FLOOR` at the version point, carried to every later
+//! value by a step the residual proves non-negative and clear of the wrap.
 
 use std::ops::ControlFlow;
 
@@ -16,10 +20,10 @@ use crate::token::Span;
 
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
-    eliminate_condition, induction_entry, negated_operand, node_modifies, panic_guard_check,
-    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
-    stmt_modifies,
+    Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
+    check_conjuncts, eliminate_condition, induction_entry, induction_step, negated_operand,
+    node_modifies, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset,
+    peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -54,6 +58,16 @@ struct Plan {
     guard_le: bool,
     /// Check bound local `B`.
     check_bound: u32,
+    /// The floor the checks demand, when it is the residual's to establish.
+    floor: Option<RuntimeFloor>,
+}
+
+/// A floor the residual tests at the version point, with the step that carries
+/// it: non-negative, and leaving `H` a step below `type_max` so none wraps.
+struct RuntimeFloor {
+    demanded: i64,
+    step: InductionStep,
+    type_max: u64,
 }
 
 /// The two blocks [`apply_version`] produces for a versioned loop: the version
@@ -329,11 +343,6 @@ fn analyze_loop(
     // A floor is answered from the fast arm's own facts, so it must hold for
     // every collected check before any of them is deleted.
     let demanded = checks.iter().map(|c| c.floor).max()?;
-    if demanded > i64::MIN
-        && induction_entry(engine, binds, parent, loop_stmt, loop_body, var)? < demanded
-    {
-        return None;
-    }
     let b = checks.first()?.bound;
     if b == h {
         // Same bound as the guard: statically decidable, not our case.
@@ -348,15 +357,36 @@ fn analyze_loop(
     {
         return None;
     }
-    // `H` and `B` must be loop-invariant: the residual is evaluated once at
-    // the version point. `var` re-bindings would break the guard-to-check
-    // window scan the same way.
+    let floor = match demanded {
+        i64::MIN => None,
+        _ => match induction_entry(engine, binds, parent, loop_stmt, loop_body, var) {
+            Some(entry) if entry >= demanded => None,
+            // A constant entry below the floor is a loop no fast arm can take.
+            Some(_) => return None,
+            None => Some(runtime_floor(
+                engine, binds, type_table, loop_body, var, ty, demanded,
+            )?),
+        },
+    };
+    let step_local = floor.as_ref().and_then(|f| match f.step {
+        InductionStep::Local(s) => Some(s),
+        InductionStep::Const(..) => None,
+    });
+    if step_local.is_some_and(|s| locals.get(s as usize).map(|l| l.type_id) != Some(ty)) {
+        return None;
+    }
+    // `H`, `B` and the step must be loop-invariant: the residual is evaluated
+    // once at the version point. `var` re-bindings would break the
+    // guard-to-check window scan the same way.
     for &s in &stmts {
-        if node_modifies(engine, NodeRef::Stmt(s), h, BoundKey::Local(b)) {
+        let node = NodeRef::Stmt(s);
+        if node_modifies(engine, node, h, BoundKey::Local(b))
+            || step_local.is_some_and(|sl| node_modifies(engine, node, sl, BoundKey::Local(b)))
+        {
             return None;
         }
     }
-    if subtree_redefines(engine, loop_body, &[var, h, b]) {
+    if subtree_redefines(engine, loop_body, &[var, h, b, step_local.unwrap_or(h)]) {
         return None;
     }
     Some(Plan {
@@ -368,6 +398,38 @@ fn analyze_loop(
         bound: h,
         guard_le,
         check_bound: b,
+        floor,
+    })
+}
+
+/// The floor terms for a loop whose entry reads as no constant: a step that
+/// never lowers `var`, and the type maximum the no-wrap term compares against.
+fn runtime_floor(
+    engine: &Engine,
+    binds: &Binds,
+    type_table: &TypeTable,
+    loop_body: BlockId,
+    var: u32,
+    ty: TypeId,
+    demanded: i64,
+) -> Option<RuntimeFloor> {
+    // The residual spells the floor as raw constant bits, which only a
+    // non-negative value reads the same in every integer width.
+    if demanded < 0 {
+        return None;
+    }
+    let step = induction_step(engine, binds, loop_body, var)?;
+    if let InductionStep::Const(k) = step
+        && k < 0
+    {
+        return None;
+    }
+    let max = type_table.primitive_head(ty)?.int_max()?;
+    let type_max = u64::try_from(max).expect("a scalar integer maximum fits u64");
+    Some(RuntimeFloor {
+        demanded,
+        step,
+        type_max,
     })
 }
 
@@ -418,7 +480,10 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     } else {
         NirBinaryOp::LtEq
     };
-    let residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
+    let mut residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
+    if let Some(floor) = &plan.floor {
+        residual = and_floor_terms(engine, plan, floor, residual, span);
+    }
     let if_stmt = engine.alloc_stmt(
         StmtKind::If {
             condition: residual,
@@ -440,6 +505,45 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
         then_block,
         fast_body,
     }
+}
+
+/// Conjoin the floor terms onto `residual`: `var >= demanded`, and the
+/// `step >= 0` / `H <= MAX - step` pair that says `var` rises without wrapping.
+fn and_floor_terms(
+    engine: &mut Engine,
+    plan: &Plan,
+    floor: &RuntimeFloor,
+    residual: Operand,
+    span: Span,
+) -> Operand {
+    let ty = engine.locals()[plan.var as usize].type_id;
+    let pred = |e: &mut Engine, l, op, r| alloc_binary(e, l, op, r, TypeTable::BOOL, span);
+
+    let var_read = local_read(engine, plan.var, span);
+    let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
+    let at_least = pred(engine, var_read, NirBinaryOp::GtEq, demanded);
+    let mut out = pred(engine, residual, NirBinaryOp::And, at_least);
+
+    let headroom = match floor.step {
+        // The residual already puts the last `i + 1` at or under `B`, so no wrap.
+        InductionStep::Const(k) if k <= 1 => return out,
+        InductionStep::Const(k) => {
+            let bits = floor.type_max.wrapping_sub(k as u64);
+            engine.const_operand(ValueKind::Int(bits, ty), ty)
+        }
+        InductionStep::Local(s) => {
+            let step_read = local_read(engine, s, span);
+            let zero = engine.const_operand(ValueKind::Int(0, ty), ty);
+            let rising = pred(engine, step_read, NirBinaryOp::GtEq, zero);
+            out = pred(engine, out, NirBinaryOp::And, rising);
+            let max = engine.const_operand(ValueKind::Int(floor.type_max, ty), ty);
+            let step_read = local_read(engine, s, span);
+            alloc_binary(engine, max, NirBinaryOp::Sub, step_read, ty, span)
+        }
+    };
+    let h_read = local_read(engine, plan.bound, span);
+    let no_wrap = pred(engine, h_read, NirBinaryOp::LtEq, headroom);
+    pred(engine, out, NirBinaryOp::And, no_wrap)
 }
 
 /// In the fast clone, drive every implied check to `false` (the paired
