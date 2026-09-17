@@ -1437,9 +1437,8 @@ impl EffectIndex<'_> {
         self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
     }
 
-    /// The effects one trait method declares. `None` for a name no trait
-    /// declares, an `interface` operation, or a `resource` method.
-    /// Whether the trait leaves its effects to the impl — a `with _` head.
+    /// Whether the trait leaves its effects to the impl — a `with _` head, or
+    /// a bare one, which reads as the same.
     fn trait_is_open(&self, key: &TraitKey) -> bool {
         self.trait_method_effects
             .iter()
@@ -1448,6 +1447,8 @@ impl EffectIndex<'_> {
             })
     }
 
+    /// The effects one trait method declares. `None` for a name no trait
+    /// declares, an `interface` operation, or a `resource` method.
     fn effects_declared_by(&self, trait_name: &FqTraitName, method: &str) -> Option<&[EffectRef]> {
         let module = trait_name.module()?;
         self.trait_method_effects

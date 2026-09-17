@@ -442,13 +442,16 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 
 ## Roadmap
 
-1. A bare head reading as `with _`. The diagnostic that makes it survivable is in, so what remains is the flip itself and the heads the corpus then has to write. Finished when `TraitHead::Undecided` inherits the hole and the corpus is green.
+1. The rest of the prelude heads, below. The flip depends on them, so they come first.
+2. A bare head reading as `with _`. Finished when `TraitHead::Undecided` inherits the hole and the corpus is green.
 
 ## Known gaps
 
 ### The rest of the prelude heads
 
-`Iterator` and `IntoIterator` carry `with _`; `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
+`Iterator` and `IntoIterator` carry `with _`; `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings, `Sequence`, `AsSlice`, `AsStrSlice`, `Reflect` and its siblings, and `core:serde`'s `Serializer` and `Deserializer`) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
+
+Step 2 of the roadmap is what forces the order. A rigid dispatch — `a.widen()` where `a: T` and `T: Widen` — cannot resolve the hole, because inside the generic function there is no impl to read, so the caller must write `with _`. The moment a bare head reads as open, every such call through an undecided prelude trait demands one: `package-marl` alone takes them on `to_string`, `to_chars`, `len` and `chars`, and `package-jade` on all four `Serializer` operations. Deciding the heads first leaves only the traits the corpus declares for itself.
 
 ### An effect argument on a bound
 
