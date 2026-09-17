@@ -6733,10 +6733,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             deref_overrides.insert(mc.var_name.clone(), (mc.ref_name.clone(), mc.inner_type));
         }
 
-        // Step 2: open the closure context with the deref overrides.
+        // Step 2: open the closure context with the deref overrides, and with
+        // the environment annotate settled on, so the body walk reads slots
+        // rather than deciding them.
         let mut closure_ctx =
             FunctionContext::new_closure(TypeTable::UNKNOWN, ctx, &self.tysys.type_table);
         closure_ctx.deref_overrides = deref_overrides;
+        closure_ctx.seed_captures(cap_info.captures.iter().map(|c| c.name.as_str()));
 
         // Step 3: add closure parameters. Their types come from `local_types`,
         // which `resolve_closure` populated per param `AstId` — reify is a pure

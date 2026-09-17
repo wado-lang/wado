@@ -2476,6 +2476,11 @@ pub(super) struct FunctionContext {
     /// Captured bindings detected during resolution (name -> slot). Only used
     /// for closure contexts.
     pub(super) captured_vars: IndexMap<String, CaptureSlot>,
+    /// Whether [`Self::seed_captures`] filled `captured_vars`, which closes it:
+    /// a frame replaying a recorded environment reads slots, and reaching a
+    /// binding that has none means the record it replays is not the one this
+    /// walk needs.
+    captures_seeded: bool,
     /// Stack of labeled block expression targets for tracking break types
     pub(super) labeled_block_targets: Vec<LabeledBlockTarget>,
     /// Stack of all active labels (from labeled blocks and labeled block expressions)
@@ -2572,6 +2577,7 @@ impl FunctionContext {
             address_taken_locals: IndexSet::default(),
             outer_locals: IndexMap::default(),
             captured_vars: IndexMap::default(),
+            captures_seeded: false,
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -2654,6 +2660,7 @@ impl FunctionContext {
             address_taken_locals: IndexSet::default(),
             outer_locals,
             captured_vars: IndexMap::default(),
+            captures_seeded: false,
             labeled_block_targets: Vec::new(),
             active_labels: Vec::new(),
             function_name,
@@ -2850,10 +2857,35 @@ impl FunctionContext {
         if let Some(slot) = self.captured_vars.get(name) {
             return slot.index;
         }
+        assert!(
+            !self.captures_seeded,
+            "`{name}` reaches this closure's environment, and the record being replayed has no slot for it"
+        );
         let index = self.captured_vars.len() as u32;
         self.captured_vars
             .insert(name.to_string(), CaptureSlot { index, reach });
         index
+    }
+
+    /// Open this frame's environment with the slots annotate settled on, in its
+    /// order. Every read during the body walk then finds a slot already there,
+    /// so which slot holds what is annotate's answer and not a second walk's.
+    ///
+    /// How each name is reached stays this frame's own question: its parent
+    /// context answers it, and no index is replayed.
+    pub(super) fn seed_captures<'n>(&mut self, names: impl IntoIterator<Item = &'n str>) {
+        assert!(
+            self.captured_vars.is_empty(),
+            "the environment is seeded before the body walk, which is what fills it otherwise"
+        );
+        for name in names {
+            let Some(binding) = self.outer_locals.get(name) else {
+                unreachable!("annotate captured `{name}`, which this frame cannot reach")
+            };
+            let reach = binding.reach;
+            self.capture_slot(name, reach);
+        }
+        self.captures_seeded = true;
     }
 
     /// The captures in slot order, for building `TirCapture` entries. For an

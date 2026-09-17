@@ -15,10 +15,12 @@ use super::types::{FunctionContext, OuterReach, TypeError, VarRef};
 use crate::elaborator::sem::types::{CaptureEntry, ClosureCaptureInfo, MutCapture};
 use crate::hashmap::IndexMap;
 
-/// The captures reify emits: sources resolved against `ctx` by the same step
-/// annotate ran, so the two walks agree on which environment slot holds what;
-/// types from the recorded entries, which hole inference substitutes into after
-/// annotate is done.
+/// The captures reify emits: the environment annotate settled on, with each
+/// source resolved against `ctx`, and types from the recorded entries, which
+/// hole inference substitutes into after annotate is done.
+///
+/// The order is `closure_ctx`'s seeded order, so it is the recorded one. What
+/// a seeding cannot settle is a name reify reaches and annotate never saw.
 pub(super) fn relink_recorded_captures(
     recorded: &[CaptureEntry],
     closure_ctx: &FunctionContext,
@@ -28,21 +30,15 @@ pub(super) fn relink_recorded_captures(
     assert_eq!(
         linked.len(),
         recorded.len(),
-        "annotate and reify disagree on how many captures this closure has"
+        "the seeded environment pairs up with the record it was seeded from"
     );
     linked
         .into_iter()
         .zip(recorded)
-        .map(|(linked, recorded)| {
-            assert_eq!(
-                linked.name, recorded.name,
-                "annotate and reify disagree on this closure's capture order"
-            );
-            TirCapture {
-                type_id: recorded.type_id,
-                is_mut: recorded.is_mut,
-                ..linked
-            }
+        .map(|(linked, recorded)| TirCapture {
+            type_id: recorded.type_id,
+            is_mut: recorded.is_mut,
+            ..linked
         })
         .collect()
 }

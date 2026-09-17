@@ -54,6 +54,8 @@ Each capture records where the frame building the closure reads the value from: 
 
 A binding is boxed by the frame that owns it, whatever depth the write comes from. The frames in between pass the box along, so they all see the one cell.
 
+Which slot holds what is decided once. The annotate walk settles a closure's environment and records it; reify opens the frame with those slots already in place, so its own walk reads them rather than deciding again, and reaching a binding with no slot is a disagreement the frame reports on the spot. How a binding is reached — a local of the enclosing frame, or a slot of its environment — stays each frame's own question, answered against its parent context. No index crosses between the walks.
+
 ### Wasm GC representation
 
 A closure is an environment struct paired with a funcref. Flat closure plus trampoline, defunctionalization, and CM resource handles were all rejected — respectively for not sharing mutable state, interpreter dispatch overhead, and explicit drop plus indirection.
