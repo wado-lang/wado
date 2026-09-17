@@ -2254,18 +2254,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 inner_type_id = t;
             }
-            let into_iterator = self.tysys.compiler_trait_def(CompilerItem::IntoIterator);
+            let into_iterator = self.tysys.compiler_trait(CompilerItem::IntoIterator);
             let implements_into_iter = into_iterator.is_some_and(|trait_| {
                 self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     iterable_type_id,
-                    trait_,
+                    &trait_,
                 ) || self.tysys.type_implements_trait(
                     &self.annotate_ctx,
                     &self.type_lookup(),
                     inner_type_id,
-                    trait_,
+                    &trait_,
                 )
             }) || matches!(
                 self.tysys.type_table.borrow().get(iterable_type_id),
@@ -2633,13 +2633,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Iterator-trait conformance check, mirroring the pre-refactor
         // surface error.
-        let iterator = self.tysys.compiler_trait_def(CompilerItem::Iterator);
+        let iterator = self.tysys.compiler_trait(CompilerItem::Iterator);
         if !iterator.is_some_and(|trait_| {
             self.tysys.type_implements_trait(
                 &self.annotate_ctx,
                 &self.type_lookup(),
                 iter_type,
-                trait_,
+                &trait_,
             )
         }) && !matches!(
             self.tysys.type_table.borrow().get(iter_type),

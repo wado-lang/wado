@@ -114,6 +114,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let effect_decl = effect_ty
             .id()
             .and_then(|id| self.tysys.resolutions.declared(id));
+        // An effect declares its own parameter defaults, and a `with` clause
+        // writes no argument for them.
+        let effect_trait =
+            effect_decl.map(|def| FqTraitName::declared(self.tysys.resolutions.defs(), def));
 
         // The name must point at an actual effect or resource
         // declaration, not a regular trait or arbitrary identifier. Both
@@ -193,12 +197,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             );
             if is_real_type
                 && (is_type_param
-                    || !effect_decl.is_some_and(|trait_| {
+                    || !effect_trait.is_some_and(|trait_| {
                         self.tysys.type_implements_trait(
                             &self.annotate_ctx,
                             &self.type_lookup(),
                             handler_type,
-                            trait_,
+                            &trait_,
                         )
                     }))
             {

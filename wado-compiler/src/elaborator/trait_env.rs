@@ -420,16 +420,21 @@ pub(crate) enum BlanketReceiver {
 #[derive(Clone, Debug)]
 pub(crate) struct BlanketBound {
     pub(crate) name: String,
-    /// The trait the bound's reference site names, `None` where it reaches no
-    /// declaration.
-    pub(crate) decl_ref: Option<DefId>,
-    /// Identity of each argument the bound writes for that trait's own
-    /// parameters. Empty asks for the declared defaults.
-    pub(crate) written_args: Vec<name::FqTypeName>,
+    /// The trait the bound's reference site names, with the arguments it
+    /// writes for that trait's own parameters. `None` where the site reaches no
+    /// declaration; no argument asks for the declared defaults.
+    pub(crate) trait_: Option<name::FqTraitName>,
     /// Associated types the bound pins to the receiver param itself (`Output`
     /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
     /// receiver; any other right-hand side is the instantiation's to answer.
     pub(crate) pinned_to_receiver: Vec<String>,
+}
+
+impl BlanketBound {
+    /// The declaration alone, for a question the trait's arguments do not enter.
+    pub(crate) fn decl(&self) -> Option<DefId> {
+        self.trait_.as_ref()?.canonical()
+    }
 }
 
 /// A reified blanket impl `impl<Param: Bounds, ..> Trait for <receiver>`.
@@ -1240,12 +1245,17 @@ impl TraitEnv {
                                     .iter()
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
-                                        decl_ref: resolutions.declared(b.id),
-                                        written_args: b
-                                            .type_args
-                                            .iter()
-                                            .map(|arg| written_type_arg(arg, resolutions))
-                                            .collect(),
+                                        trait_: resolutions.declared(b.id).map(|decl| {
+                                            name::FqTraitName::declared(resolutions.defs(), decl)
+                                                .with_args(
+                                                    b.type_args
+                                                        .iter()
+                                                        .map(|arg| {
+                                                            written_type_arg(arg, resolutions)
+                                                        })
+                                                        .collect(),
+                                                )
+                                        }),
                                         pinned_to_receiver: b
                                             .assoc_types
                                             .iter()

@@ -6,7 +6,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTypeName, is_builtin_shape_name};
+use crate::name::{FqTraitName, FqTypeName, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
@@ -728,7 +728,7 @@ impl SolverBridge {
                 let kind = blanket
                     .bounds
                     .iter()
-                    .find_map(|bound| reflect.get(&bound.decl_ref?).copied())?;
+                    .find_map(|bound| reflect.get(&bound.decl()?).copied())?;
                 Some((blanket.def, kind))
             })
             .collect()
@@ -1261,16 +1261,16 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
-        wanted: &[FqTypeName],
+        asked: &FqTraitName,
     ) -> Option<Question> {
+        let decl = asked.canonical()?;
         if tysys
-            .compiler_item_of_trait(trait_)
+            .compiler_item_of_trait(decl)
             .is_some_and(|item| !Self::states(item))
         {
             return None;
         }
-        let trait_ = self.lowering.known_trait(trait_)?;
+        let trait_ = self.lowering.known_trait(decl)?;
         let (env, names) = self.env_at(tysys, ctx)?;
         let ty =
             self.lowering
@@ -1281,7 +1281,8 @@ impl SolverBridge {
             return None;
         }
         let module = self.lowering.known_module(scope.current_module_source)?;
-        let args = wanted
+        let args = asked
+            .args()
             .iter()
             .map(|name| self.wanted_arg(name))
             .collect::<Option<Vec<_>>>()?;
@@ -1316,10 +1317,9 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
-        wanted: &[FqTypeName],
+        asked: &FqTraitName,
     ) -> Option<bool> {
-        let q = self.question(tysys, ctx, scope, type_id, trait_, wanted)?;
+        let q = self.question(tysys, ctx, scope, type_id, asked)?;
         Some(holds_with_args(&self.program, &q.env, &q.ty, q.trait_, q.module, &q.args).is_some())
     }
 
@@ -1429,10 +1429,9 @@ impl SolverBridge {
         ctx: &scope::Scope,
         scope: &TypeLookup,
         type_id: TypeId,
-        trait_: DefId,
-        wanted: &[FqTypeName],
+        asked: &FqTraitName,
     ) -> String {
-        let Some(q) = self.question(tysys, ctx, scope, type_id, trait_, wanted) else {
+        let Some(q) = self.question(tysys, ctx, scope, type_id, asked) else {
             return "outside what the lowering states".to_string();
         };
         let name_of = |id: u32| -> String {
