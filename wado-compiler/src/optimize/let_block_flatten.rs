@@ -87,7 +87,17 @@ fn flattenable_inner_block(body: &Body, sid: StmtId) -> Option<(ExprId, BlockId)
     let StmtKind::Let { value, .. } = &body.stmts[sid].kind else {
         return None;
     };
-    let value_e = value.as_expr()?;
+    // A borrow of the block is the same binding one indirection out: the
+    // reference is taken on the tail's value either way, so the leading
+    // statements hoist the same. `&mut { …; Struct { … } }` is what an
+    // inlined by-reference receiver leaves.
+    let value_e = match &body.exprs[value.as_expr()?].kind {
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: borrowed,
+        } => borrowed.as_expr()?,
+        _ => value.as_expr()?,
+    };
     // Flattening a block a `break` names would strip the target the jump needs.
     let inner = body.unbroken_block(value_e)?;
     let (&tail, leading) = body.blocks[inner].stmts.split_last()?;

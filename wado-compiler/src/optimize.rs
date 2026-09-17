@@ -9,6 +9,7 @@ mod alias;
 mod arena_query;
 mod census;
 mod clone_forward;
+mod closure_devirt;
 mod cold_outline;
 mod condition_implication;
 mod const_branch_prune;

@@ -1,0 +1,45 @@
+// Regression test: `closure_devirt` turns the `call_ref` an iterator adaptor
+// leaves into a direct call to the functor's `$call`.
+//
+// `lower` devirtualizes a call through a closure-bearing local, but `map`
+// parks the functor in `IterMap.f`, and the loop only appears once `inline`
+// copies `from_iter` and `IterMap::next` into the caller. Before the rule,
+// every element paid a `ref.cast` and an indirect call through a wrapper.
+//
+// `let_block_flatten` is what hoists the functor binding out of the
+// `&mut { …; IterMap { … } }` the adaptor leaves, into the block holding the
+// call — without that the rule refuses, since the region could be dropped.
+
+use { println, Stdout } from "core:cli";
+
+fn rows(w: &List<List<i32>>, x: &List<i32>) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut o = 0; o < w.len(); o += 1 {
+        let row = &w[o];
+        let terms: List<i32> = (0..<row.len()).into_iter().map(|i| row[i] * x[i]).collect();
+        let mut acc = 0;
+        for let t of terms {
+            acc += t;
+        }
+        out.push(acc);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    let w: List<List<i32>> = [[1, 2], [3, 4]];
+    let x: List<i32> = [10, 20];
+    let ys = rows(&w, &x);
+    println(`${ys[0]} ${ys[1]}`);
+}
+
+__DATA__
+{
+    "stdout": "50 110\n",
+    "wir_expect:O2": [
+        "$Closure_0::$call\"("
+    ],
+    "wir_not_expect:O2": [
+        "call_ref"
+    ]
+}
