@@ -547,6 +547,7 @@ impl Analyzer<'_> {
         &mut self,
         func: &tir::FunctionRef,
         handle: &TirExpr,
+        position: u32,
         live: &IndexSet<u32>,
     ) {
         let writes = self.mod_ref.writes(&func.module_source, &func.name);
@@ -555,11 +556,11 @@ impl Analyzer<'_> {
             self.record_mutation(handle, live);
             return;
         };
-        if writes.is_opaque() || !writes.re_rootable_at(owner) {
+        if writes.is_opaque() || !writes.re_rootable_at(position, owner) {
             self.record_mutation(handle, live);
             return;
         }
-        for field in writes.fields_of(owner) {
+        for field in writes.fields_of(position, owner) {
             let mut written = path.clone();
             written.selectors.push(Selector::Field {
                 owner,
@@ -1078,6 +1079,7 @@ impl Analyzer<'_> {
         &mut self,
         arg: &TirExpr,
         callee: Option<&FunctionRef>,
+        position: u32,
         kept: &Kept,
         borrowing_receiver: bool,
         live: &mut IndexSet<u32>,
@@ -1092,7 +1094,7 @@ impl Analyzer<'_> {
             // own answer. Only one this walk cannot name writes the whole place.
             if record && matches!(op, TirUnaryOp::MutRef) && !borrowing_receiver {
                 match callee {
-                    Some(c) => self.record_call_mutation(c, place, live),
+                    Some(c) => self.record_call_mutation(c, place, position, live),
                     None => self.record_mutation(place, live),
                 }
             }
@@ -1690,7 +1692,7 @@ impl Analyzer<'_> {
                     let exprs: Vec<&TirExpr> = siblings.iter().map(|a| &a.expr).collect();
                     self.mark_sibling_mut_aliases(&exprs, mutated_receiver.and_then(alias_root));
                     if let Some(receiver) = mutated_receiver {
-                        self.record_call_mutation(func, receiver, live);
+                        self.record_call_mutation(func, receiver, 0, live);
                     }
                 }
                 // A `&self` / `&mut self` receiver is a place the callee reads
@@ -1709,6 +1711,7 @@ impl Analyzer<'_> {
                     self.walk_call_arg(
                         &arg.expr,
                         Some(func),
+                        pos as u32,
                         kept.get(pos).unwrap_or(&Kept::Transient),
                         borrowing_receiver && pos == 0,
                         live,
@@ -1717,8 +1720,16 @@ impl Analyzer<'_> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for arg in args.iter().rev() {
-                    self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
+                for (pos, arg) in args.iter().enumerate().rev() {
+                    self.walk_call_arg(
+                        arg,
+                        None,
+                        pos as u32,
+                        &Kept::Transient,
+                        false,
+                        live,
+                        record,
+                    );
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {

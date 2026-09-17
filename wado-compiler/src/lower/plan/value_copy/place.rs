@@ -217,9 +217,10 @@ pub struct Resolver<'a> {
     returns_owned: &'a FuncKeySet,
     /// Where each builtin declared its result comes from.
     builtins: &'a BuiltinDeclarations,
-    /// Parameters naming storage the caller lent, by the type lent. The only
-    /// roots a write in this body reaches out through.
-    lent: IndexMap<u32, TypeId>,
+    /// Parameters naming storage the caller lent, by position and type lent.
+    /// The only roots a write in this body reaches out through, and the
+    /// position is which of the caller's handles each one is.
+    lent: IndexMap<u32, (u32, TypeId)>,
     bindings: Bindings,
 }
 
@@ -242,10 +243,14 @@ impl<'a> Resolver<'a> {
             lent: IndexMap::default(),
             bindings: Bindings::default(),
         };
-        for param in func.params.iter().filter(|p| lends_storage(p, type_table)) {
+        for (position, param) in func.params.iter().enumerate() {
+            if !lends_storage(param, type_table) {
+                continue;
+            }
+            let owner = field_owner(param.type_id, type_table);
             resolver
                 .lent
-                .insert(param.local_index, field_owner(param.type_id, type_table));
+                .insert(param.local_index, (position as u32, owner));
         }
         if let Some(body) = &func.body {
             let mut collector = BindingCollector {
@@ -265,7 +270,14 @@ impl<'a> Resolver<'a> {
     /// The type `local` was lent, for a parameter naming a caller's storage.
     #[must_use]
     pub fn lent(&self, local: u32) -> Option<TypeId> {
-        self.lent.get(&local).copied()
+        self.lent.get(&local).map(|(_, owner)| *owner)
+    }
+
+    /// Which of the caller's handles `local` is, for a parameter naming a
+    /// caller's storage.
+    #[must_use]
+    pub fn lent_position(&self, local: u32) -> Option<u32> {
+        self.lent.get(&local).map(|(position, _)| *position)
     }
 
     /// What `expr` names. Total over the expression kinds: a shape with no arm

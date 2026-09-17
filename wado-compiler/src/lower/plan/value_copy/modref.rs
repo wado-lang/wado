@@ -5,19 +5,32 @@ use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::ownership::BuiltinDeclarations;
 use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
 use crate::flat_package::FlatPackage;
-use crate::hashmap::IndexSet;
+use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::is_reference;
 use crate::module_source::ModuleSource;
 use crate::tir::{TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
 
-/// The fields one function writes, by the type carrying each.
+/// Which of a function's incoming handles a write is reached through. The
+/// same type reached two ways is two origins: a formatter's scratch buffer
+/// under `panic` and a parser's input are both `Array<u8>`.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Origin {
+    /// The parameter at this position.
+    Param(u32),
+    /// A handle this walk could not trace to one parameter. It may be any of
+    /// them, so every question about a single handle answers conservatively.
+    Unknown,
+}
+
+/// The fields one function writes, by the handle each is reached through and
+/// the type carrying it.
 #[derive(Default, Clone, PartialEq)]
 pub struct Writes {
-    fields: IndexSet<(TypeId, u32)>,
+    fields: IndexSet<(Origin, TypeId, u32)>,
     /// Types written past any one field: what a `*p = v` through a reference
     /// parameter replaces.
-    whole: IndexSet<TypeId>,
+    whole: IndexSet<(Origin, TypeId)>,
     /// A write this analysis could not name. Everything is written.
     opaque: bool,
 }
@@ -36,29 +49,42 @@ impl Writes {
         self.opaque || !self.whole.is_empty() || !self.fields.is_empty()
     }
 
-    /// Whether every write named here is a field of `owner` itself, so a caller
-    /// holding such a handle can rebuild each as a path from it.
+    /// Whether every write the handle at `position` carries is a field of
+    /// `owner` itself, so a caller holding it can rebuild each as a path from
+    /// it. A write traced to no one handle could be this one's.
     #[must_use]
-    pub fn re_rootable_at(&self, owner: TypeId) -> bool {
-        self.whole.is_empty() && self.fields.iter().all(|(ty, _)| *ty == owner)
+    pub fn re_rootable_at(&self, position: u32, owner: TypeId) -> bool {
+        let mine = |origin: Origin| origin == Origin::Param(position) || origin == Origin::Unknown;
+        !self.whole.iter().any(|(origin, _)| mine(*origin))
+            && self
+                .fields
+                .iter()
+                .all(|(origin, ty, _)| !mine(*origin) || *ty == owner)
     }
 
-    /// The fields of `owner` this writes, for a caller re-rooting them at the
-    /// handle it passed.
-    pub fn fields_of(&self, owner: TypeId) -> impl Iterator<Item = u32> + '_ {
+    /// The fields of `owner` the handle at `position` is written through, for
+    /// a caller re-rooting them at what it passed.
+    pub fn fields_of(&self, position: u32, owner: TypeId) -> impl Iterator<Item = u32> + '_ {
         self.fields
             .iter()
-            .filter(move |(ty, _)| *ty == owner)
-            .map(|(_, field)| *field)
+            .filter(move |(origin, ty, _)| *origin == Origin::Param(position) && *ty == owner)
+            .map(|(_, _, field)| *field)
     }
 
-    fn absorb(&mut self, other: &Writes) {
+    /// Absorb a callee's writes, each re-tagged with the handle this caller
+    /// passed in that position. A position the caller filled with storage of
+    /// its own reaches no caller of this one, so its writes are dropped.
+    fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Origin>) {
         self.opaque |= other.opaque;
-        for f in &other.fields {
-            self.fields.insert(*f);
+        for (origin, ty, field) in &other.fields {
+            if let Some(mapped) = re_tag(*origin, handed) {
+                self.fields.insert((mapped, *ty, *field));
+            }
         }
-        for t in &other.whole {
-            self.whole.insert(*t);
+        for (origin, ty) in &other.whole {
+            if let Some(mapped) = re_tag(*origin, handed) {
+                self.whole.insert((mapped, *ty));
+            }
         }
     }
 }
@@ -87,13 +113,23 @@ enum WholeOf {
     Handed(TypeId),
 }
 
-/// One call this body makes to a callee this scan reads, and whether it hands
-/// over storage this frame's own caller can observe. A call handed none can
-/// name no write the caller can see: what it writes is this frame's, or a
-/// global, which is opaque either way.
+/// The handle this caller filled a callee's parameter position with. A
+/// position absent from the map got storage of this frame's own, whose writes
+/// reach no caller of it.
+fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Origin>) -> Option<Origin> {
+    match callee_origin {
+        Origin::Param(position) => handed.get(&position).copied(),
+        // The callee could not say which of its handles it wrote, so this
+        // caller cannot say either.
+        Origin::Unknown => Some(Origin::Unknown),
+    }
+}
+
+/// One call this body makes to a callee this scan reads, and what it put in
+/// each of the callee's writable parameter positions.
 struct CallSite {
     callee: (ModuleSource, String),
-    reaches_caller: bool,
+    handed: IndexMap<u32, Origin>,
 }
 
 /// A known callee's own writes are still unsettled while its body is being
@@ -103,12 +139,12 @@ struct CallSite {
 /// unconditionally would claim a write neither this function nor its callee
 /// makes, and reject a share that is safe.
 struct PendingProjection {
-    /// The `(owner, field)` pairs the argument's path projects through, added
-    /// together once the condition below is met.
-    fields: Vec<(TypeId, u32)>,
+    /// The fields the argument's path projects through, added together once
+    /// the condition below is met.
+    fields: Vec<(Origin, TypeId, u32)>,
     /// A whole-root write to add instead, for a path with no field-typed key
     /// of its own — reached only through an `Index` or `Variant` step.
-    whole: Option<TypeId>,
+    whole: Option<(Origin, TypeId)>,
     callee: (ModuleSource, String),
 }
 
@@ -168,15 +204,8 @@ pub fn compute_mod_ref(
         for (module, name, _, callees, pending) in &direct {
             let mut merged = per_func.get(module, name).cloned().unwrap_or_default();
             for site in callees {
-                let Some(callee) = per_func.get(&site.callee.0, &site.callee.1) else {
-                    continue;
-                };
-                if site.reaches_caller {
-                    merged.absorb(callee);
-                } else {
-                    // Its named writes land in storage this frame owns. One it
-                    // could not name may still go anywhere.
-                    merged.opaque |= callee.is_opaque();
+                if let Some(callee) = per_func.get(&site.callee.0, &site.callee.1) {
+                    merged.absorb_through(callee, &site.handed);
                 }
             }
             for p in pending {
@@ -248,15 +277,19 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    /// Whether a field of `place` is visible outside this frame: reached
-    /// through a reference, or rooted at what the caller lent. A frame-local
-    /// aggregate's own field is neither — nothing a caller passed can observe
-    /// it.
-    fn reachable_from_caller(&self, place: &Names) -> bool {
+    /// Which of this body's handles `place` is reached through, or `None` for
+    /// one that reaches out of this frame not at all — a frame-local
+    /// aggregate's own field, which nothing a caller passed can observe. A
+    /// path rooted at a lent parameter is that handle; a borrow whose root
+    /// this walk cannot tie to a parameter could be any of them.
+    fn origin_of(&self, place: &Names) -> Option<Origin> {
         let Names::Place(place) = place else {
-            return false;
+            return None;
         };
-        place.through_borrow || self.resolver.lent(place.root).is_some()
+        if let Some(position) = self.resolver.lent_position(place.root) {
+            return Some(Origin::Param(position));
+        }
+        place.through_borrow.then_some(Origin::Unknown)
     }
 
     /// Record a write to what `names` stands for: every field the path names,
@@ -275,10 +308,10 @@ impl Walker<'_> {
                 .iter()
                 .any(|s| matches!(s, Selector::Field { .. }));
         if named_a_field {
-            if self.reachable_from_caller(names) {
+            if let Some(origin) = self.origin_of(names) {
                 for selector in &place.selectors {
                     if let Selector::Field { owner, index } = selector {
-                        self.writes.fields.insert((*owner, *index));
+                        self.writes.fields.insert((origin, *owner, *index));
                     }
                 }
             }
@@ -292,8 +325,10 @@ impl Walker<'_> {
             WholeOf::Lent => None,
             WholeOf::Handed(ty) => Some(field_owner(ty, self.type_table)),
         });
-        if let Some(whole) = whole {
-            self.writes.whole.insert(whole);
+        if let Some(whole) = whole
+            && let Some(origin) = self.origin_of(names)
+        {
+            self.writes.whole.insert((origin, whole));
         }
     }
 
@@ -320,40 +355,41 @@ impl Walker<'_> {
             return;
         };
         let handed = field_owner(handed, self.type_table);
+        let Some(origin) = self.origin_of(names) else {
+            return;
+        };
         if !place.field_addressable() {
             if let Some(lent) = self.resolver.lent(place.root)
                 && lent != handed
             {
                 self.pending.push(PendingProjection {
                     fields: Vec::new(),
-                    whole: Some(lent),
+                    whole: Some((origin, lent)),
                     callee,
                 });
             }
             return;
         }
-        let fields: Vec<(TypeId, u32)> = place
+        let fields: Vec<(Origin, TypeId, u32)> = place
             .selectors
             .iter()
             .filter_map(|s| match s {
-                Selector::Field { owner, index } => Some((*owner, *index)),
+                Selector::Field { owner, index } => Some((origin, *owner, *index)),
                 Selector::Variant(_) | Selector::Index => None,
             })
             .collect();
         if !fields.is_empty() {
-            if self.reachable_from_caller(names) {
-                self.pending.push(PendingProjection {
-                    fields,
-                    whole: None,
-                    callee,
-                });
-            }
+            self.pending.push(PendingProjection {
+                fields,
+                whole: None,
+                callee,
+            });
             return;
         }
         if let Some(lent) = self.resolver.lent(place.root)
             && lent != handed
         {
-            self.writes.whole.insert(lent);
+            self.writes.whole.insert((origin, lent));
         }
     }
 }
@@ -383,24 +419,28 @@ impl TirRefVisitor for Walker<'_> {
                 let known = self.defined.contains(&func.module_source, &func.name);
                 let aliases_only =
                     func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
-                let handed: Vec<&TirExpr> = if aliases_only {
+                let writable: Vec<(u32, &TirExpr)> = if aliases_only {
                     Vec::new()
                 } else {
                     args.iter()
-                        .map(|a| &a.expr)
-                        .filter(|e| could_write_through(e.type_id, self.type_table))
+                        .enumerate()
+                        .map(|(position, a)| (position as u32, &a.expr))
+                        .filter(|(_, e)| could_write_through(e.type_id, self.type_table))
                         .collect()
                 };
-                let reaches_caller = handed
-                    .iter()
-                    .any(|e| self.reachable_from_caller(&self.resolver.names(e)));
                 if known {
+                    let handed = writable
+                        .iter()
+                        .filter_map(|(position, e)| {
+                            Some((*position, self.origin_of(&self.resolver.names(e))?))
+                        })
+                        .collect();
                     self.callees.push(CallSite {
                         callee: (func.module_source.clone(), func.name.clone()),
-                        reaches_caller,
+                        handed,
                     });
                 }
-                for expr in handed {
+                for (_, expr) in writable {
                     let names = self.resolver.names(expr);
                     if known {
                         let callee = (func.module_source.clone(), func.name.clone());
