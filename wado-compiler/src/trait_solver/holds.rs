@@ -206,12 +206,12 @@ impl Query<'_> {
                 Binding::One(ty) => vec![ty],
                 Binding::Pack(elems) => elems.iter().collect(),
             };
-            for &bound in &param.bounds {
+            for bound in &param.bounds {
                 for element in &elements {
-                    let answer = self.holds(element, bound, &[])?;
+                    let answer = self.holds(element, bound.trait_, &bound.args)?;
                     // An impl binding the pinned assoc otherwise is refuted;
                     // one binding nothing is not.
-                    for pin in param.pins.iter().filter(|pin| pin.trait_ == bound) {
+                    for pin in param.pins.iter().filter(|pin| pin.trait_ == bound.trait_) {
                         let Some(expected) = bound_to(&pin.ty) else {
                             continue;
                         };

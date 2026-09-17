@@ -244,6 +244,14 @@ pub(super) struct ImplHeader {
     /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
     /// consumers that need its generic arguments rather than its head name.
     pub(super) trait_type: Option<Type>,
+    /// Identity of each argument the header writes for the trait, `Self`
+    /// meaning [`Self::target_id`]. Resolved once from [`Self::module`]'s
+    /// vantage, so a consumer holding the header alone compares identities
+    /// rather than the spellings two modules can share.
+    pub(super) trait_arg_ids: Vec<name::FqTypeName>,
+    /// Identity of the impl target, resolved the same way. This is what a
+    /// `Self` default on the trait says at this impl.
+    pub(super) target_id: name::FqTypeName,
     /// The impl target type (`impl_block.ty`).
     pub(super) ty: Type,
     /// The impl block's type parameters.
@@ -415,6 +423,9 @@ pub(crate) struct BlanketBound {
     /// The trait the bound's reference site names, `None` where it reaches no
     /// declaration.
     pub(crate) decl_ref: Option<DefId>,
+    /// Identity of each argument the bound writes for that trait's own
+    /// parameters. Empty asks for the declared defaults.
+    pub(crate) written_args: Vec<name::FqTypeName>,
     /// Associated types the bound pins to the receiver param itself (`Output`
     /// in `T: Mul<Output = T>`) — the only shape decidable against a candidate
     /// receiver; any other right-hand side is the instantiation's to answer.
@@ -490,6 +501,9 @@ fn classify_blanket_receiver(
 #[derive(Clone, Debug)]
 pub(super) struct TraitDeclHeader {
     pub(super) name: String,
+    /// What each type parameter's declared default says, resolved once from the
+    /// trait's own module. One entry per parameter, in declaration order.
+    pub(super) default_args: Vec<Option<DefaultArg>>,
     /// The trait's own type parameters (e.g. `<T, U>` in `trait Foo<T, U>`).
     pub(super) type_params: Vec<ast::GenericParam>,
     /// Direct supertraits as written (`trait Ord: Eq`). The transitive form
@@ -502,6 +516,32 @@ pub(super) struct TraitDeclHeader {
     /// before any digest exists.
     pub(super) assoc_types: Vec<ast::AssociatedTypeDecl>,
     pub(super) span: Span,
+}
+
+/// A trait type parameter's declared default (`trait Eq<Rhs = Self>`).
+#[derive(Clone, Debug)]
+pub(super) enum DefaultArg {
+    /// `= Self`, which says the target of whichever impl is answering.
+    SelfTarget,
+    /// Any other type, whose identity the trait's own module fixes.
+    Named(name::FqTypeName),
+}
+
+impl DefaultArg {
+    fn of(param: &ast::GenericParam, resolutions: &Resolutions) -> Option<Self> {
+        match param.default.as_ref()? {
+            Type::Named(named) if named.name == "Self" => Some(Self::SelfTarget),
+            default => Some(Self::Named(written_type_arg(default, resolutions))),
+        }
+    }
+
+    /// What it says at an impl whose target is `target`.
+    fn at(&self, target: &name::FqTypeName) -> name::FqTypeName {
+        match self {
+            Self::SelfTarget => target.clone(),
+            Self::Named(name) => name.clone(),
+        }
+    }
 }
 
 /// Every `trait` declaration in the program. Membership is the question — is
@@ -1113,6 +1153,11 @@ impl TraitEnv {
                         trait_def,
                         TraitDeclHeader {
                             name: trait_decl.name.clone(),
+                            default_args: trait_decl
+                                .type_params
+                                .iter()
+                                .map(|p| DefaultArg::of(p, resolutions))
+                                .collect(),
                             type_params: trait_decl.type_params.clone(),
                             supertraits: trait_decl.supertraits.clone(),
                             methods: method_headers(defs, &trait_decl.methods),
@@ -1150,6 +1195,24 @@ impl TraitEnv {
                         trait_ref,
                         trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
                         trait_type: impl_block.trait_type.clone(),
+                        trait_arg_ids: impl_block.trait_type.as_ref().map_or_else(
+                            Vec::new,
+                            |trait_type| {
+                                written_arg_nodes(trait_type)
+                                    .iter()
+                                    .map(|arg| {
+                                        let node = match arg {
+                                            Type::Named(named) if named.name == "Self" => {
+                                                &impl_block.ty
+                                            }
+                                            _ => arg,
+                                        };
+                                        written_type_arg(node, resolutions)
+                                    })
+                                    .collect()
+                            },
+                        ),
+                        target_id: written_type_arg(&impl_block.ty, resolutions),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
                         methods: method_headers(defs, &impl_block.methods),
@@ -1178,6 +1241,11 @@ impl TraitEnv {
                                     .map(|b| BlanketBound {
                                         name: b.name.clone(),
                                         decl_ref: resolutions.declared(b.id),
+                                        written_args: b
+                                            .type_args
+                                            .iter()
+                                            .map(|arg| written_type_arg(arg, resolutions))
+                                            .collect(),
                                         pinned_to_receiver: b
                                             .assoc_types
                                             .iter()
@@ -1471,27 +1539,24 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<usize> {
-        let params = &self.trait_decl_headers.get(&trait_)?.type_params;
+        let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
             if header.trait_ref != Some(trait_) {
                 return None;
             }
-            let written = written_arg_nodes(header.trait_type.as_ref()?);
             let answers = wanted.iter().enumerate().all(|(i, want)| {
-                let Some(node) = written
+                let Some(effective) = header
+                    .trait_arg_ids
                     .get(i)
-                    .or_else(|| params.get(i).and_then(|p| p.default.as_ref()))
+                    .cloned()
+                    .or_else(|| Some(defaults.get(i)?.as_ref()?.at(&header.target_id)))
                 else {
                     return false;
                 };
-                let effective = match node {
-                    ast::Type::Named(named) if named.name == "Self" => &header.ty,
-                    _ => node,
-                };
-                get_type_name_static(effective) == want.head_only().to_display()
+                effective.head_only() == want.head_only()
             });
-            answers.then_some(written.len())
+            answers.then_some(header.trait_arg_ids.len())
         })
     }
 

@@ -21,6 +21,16 @@ fn picks<T: Pick<String>>(t: T, a: String) -> bool {
     return t.pick(&a);
 }
 
+trait Marker {
+    fn mark(&self) -> i32;
+}
+
+impl<T: Pick<String>> Marker for T {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+
 fn text_first<S: AsStrSlice + Ord>(s: S) -> bool {
     return s == "x";
 }
@@ -32,6 +42,10 @@ fn ord_first<S: Ord + AsStrSlice>(s: S) -> bool {
 test "a bound writes a non-default argument for a defaulted parameter" {
     assert picks(Slot { width: 3 }, "abc");
     assert !picks(Slot { width: 2 }, "abc");
+}
+
+test "an impl's own bound reaches the impl that writes its argument" {
+    assert Slot { width: 1 }.mark() == 1;
 }
 
 test "a bound writing an argument reaches the impl whatever its position" {

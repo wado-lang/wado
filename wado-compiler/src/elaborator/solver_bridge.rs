@@ -10,8 +10,8 @@ use crate::name::{FqTypeName, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
-    ModuleId, ModuleScope, ParamDef, Pin, Program, RefRule, Selection, SolverType, TraitDeclId,
-    TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
+    ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, Selection, SolverType,
+    TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
 use super::trait_env::{BlanketReceiver, ImplHeader};
@@ -447,7 +447,19 @@ pub(super) fn lower_impls<'a>(
                         continue;
                     };
                     let bound = lowering.trait_decl(bound);
-                    def.bounds.push(bound);
+                    // A bound writing an argument the lowering cannot spell
+                    // asks for the defaults, which every impl of the trait
+                    // answers — never for something narrower than written.
+                    let args = b
+                        .type_args
+                        .iter()
+                        .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
+                        .collect::<Option<Vec<_>>>()
+                        .unwrap_or_default();
+                    def.bounds.push(ParamBound {
+                        trait_: bound,
+                        args,
+                    });
                     // A pin the lowering cannot spell is dropped, as the
                     // compiler's own check drops one to anything but the
                     // receiver.

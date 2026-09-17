@@ -2802,11 +2802,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|(_, bounds)| {
                 bounds.iter().all(|bound| {
                     bound.decl_ref.is_some_and(|bound_def| {
-                        self.tysys.type_implements_trait(
+                        self.tysys.type_implements_trait_with_args(
                             &self.annotate_ctx,
                             &self.type_lookup(),
                             receiver_type_id,
                             bound_def,
+                            &bound.written_args,
                         )
                     })
                 })

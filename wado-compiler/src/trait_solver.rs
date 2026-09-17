@@ -16,7 +16,7 @@ pub use derive::derive;
 pub use holds::{Holds, holds, holds_with_args};
 pub use program::{
     ArgDefault, AssocId, Declaration, DerivationRequest, Env, Fact, ImplDef, ImplId, ImplOrigin,
-    MethodId, ModuleId, ModuleScope, ParamDef, Pin, Program, RefRule, SolverType, TraitDeclId,
-    TraitDef, TypeDeclId, TypeDef,
+    MethodId, ModuleId, ModuleScope, ParamBound, ParamDef, Pin, Program, RefRule, SolverType,
+    TraitDeclId, TraitDef, TypeDeclId, TypeDef,
 };
 pub use rank::{Candidate, Generality, Selection, rank};

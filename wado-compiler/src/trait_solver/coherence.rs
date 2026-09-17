@@ -1,6 +1,8 @@
 //! The checks that read the program alone — no receiver, no bounds in force.
 
-use super::program::{ImplDef, ImplId, ImplOrigin, Pin, Program, SolverType, TraitDeclId};
+use super::program::{
+    ImplDef, ImplId, ImplOrigin, ParamBound, Pin, Program, SolverType, TraitDeclId,
+};
 use crate::hashmap::IndexMap;
 
 /// What a coherence check found. It names impls; the caller turns an id into a
@@ -44,7 +46,7 @@ type ImplKey = (
     TraitDeclId,
     Vec<SolverType>,
     SolverType,
-    Vec<(Vec<TraitDeclId>, Vec<Pin>)>,
+    Vec<(Vec<ParamBound>, Vec<Pin>)>,
 );
 
 /// An inherent impl and a marker have no key: several inherent impls spread a

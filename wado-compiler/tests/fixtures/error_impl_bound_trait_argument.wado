@@ -1,0 +1,23 @@
+// An impl's type-parameter bound is checked at the arguments it writes.
+// `Plain` derives `Eq<Self>` and nothing else, so it does not answer
+// `Eq<String>` and the blanket impl does not reach it.
+
+trait Marker {
+    fn mark(&self) -> i32;
+}
+
+struct Plain { v: i32 }
+
+impl<T: Eq<String>> Marker for T {
+    fn mark(&self) -> i32 {
+        return 1;
+    }
+}
+
+test "a blanket impl bounded on Eq<String> does not reach a type with only Eq<Self>" {
+    let p = Plain { v: 7 };
+    assert p.mark() == 1;
+}
+
+__DATA__
+{"compile_error": "no method 'mark' found on type 'Plain'"}

@@ -620,6 +620,38 @@ impl TypeSystem {
         result
     }
 
+    /// The trait a bound names and the arguments it writes for that trait's own
+    /// parameters, spelled the way the impl that answers it spells them.
+    pub(super) fn bound_written(
+        &self,
+        bound: &ast::TraitBound,
+    ) -> Option<(DefId, Vec<FqTypeName>)> {
+        let decl = self.resolutions.declared(bound.id)?;
+        if bound.type_args.is_empty() {
+            return Some((decl, Vec::new()));
+        }
+        let named = self.trait_env.fq_trait_named_by_bound(
+            FqTraitName::declared(self.resolutions.defs(), decl),
+            bound,
+            &self.resolutions,
+        );
+        Some((decl, named.args().to_vec()))
+    }
+
+    /// Whether `type_id` answers every one of `bounds`, each at the arguments it
+    /// writes.
+    fn bounds_hold(
+        &self,
+        ctx: &Scope,
+        scope: &TypeLookup,
+        type_id: TypeId,
+        bounds: &[(DefId, Vec<FqTypeName>)],
+    ) -> bool {
+        bounds.iter().all(|(trait_, wanted)| {
+            self.type_implements_trait_with_args(ctx, scope, type_id, *trait_, wanted)
+        })
+    }
+
     /// `answer` under the recursion guard. A question already open answers
     /// without it: a repeat reached through a member is a recursive type and
     /// holds; one reached through bounds alone grounds nothing (WEP 2026-09-01).
@@ -685,13 +717,14 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_id: TypeId,
         trait_: DefId,
+        wanted: &[FqTypeName],
     ) -> bool {
         let is_newtype = matches!(
             self.type_table.borrow().get(type_id),
             ResolvedType::Newtype { .. }
         );
         if !is_newtype {
-            return self.type_implements_trait(ctx, scope, type_id, trait_);
+            return self.type_implements_trait_with_args(ctx, scope, type_id, trait_, wanted);
         }
         // The two facts a newtype owns rather than inherits: it has a name, and
         // it is a newtype (WEP 2026-06-13). Both are synthesized, so no impl
@@ -713,7 +746,7 @@ impl TypeSystem {
                 &receiver,
                 trait_,
                 NewtypePeel::Here,
-                &[],
+                wanted,
             )
         })
     }
@@ -1663,32 +1696,24 @@ impl TypeSystem {
         type_key: &Receiver,
         bound_trait: DefId,
         peel: NewtypePeel,
+        wanted: &[FqTypeName],
     ) -> bool {
         match (peel, subject) {
             (NewtypePeel::Here, Some(id)) => {
-                self.type_implements_trait_here(ctx, scope, id, bound_trait)
+                self.type_implements_trait_here(ctx, scope, id, bound_trait, wanted)
             }
-            (NewtypePeel::Here, None) => self.find_trait_impl_for_subject(
-                ctx,
-                scope,
-                subject,
-                type_key,
-                bound_trait,
-                peel,
-                &[],
-            ),
             // The general question already searches the impls, under the guard.
             (NewtypePeel::Follow, Some(id)) => {
-                self.type_implements_trait(ctx, scope, id, bound_trait)
+                self.type_implements_trait_with_args(ctx, scope, id, bound_trait, wanted)
             }
-            (NewtypePeel::Follow, None) => self.find_trait_impl_for_subject(
+            (_, None) => self.find_trait_impl_for_subject(
                 ctx,
                 scope,
                 subject,
                 type_key,
                 bound_trait,
                 peel,
-                &[],
+                wanted,
             ),
         }
     }
@@ -1731,7 +1756,15 @@ impl TypeSystem {
                 self.synthesized_reflect_bound_holds(scope, &type_key.decl_key(), &bound.name)
                     || self.primitive_satisfies_builtin_trait(type_key, bound)
                     || bound.decl_ref.is_some_and(|bound_trait| {
-                        self.blanket_bound_holds(ctx, scope, subject, type_key, bound_trait, peel)
+                        self.blanket_bound_holds(
+                            ctx,
+                            scope,
+                            subject,
+                            type_key,
+                            bound_trait,
+                            peel,
+                            &bound.written_args,
+                        )
                     })
             });
             if bounds_satisfied && self.blanket_assoc_constraints_hold(subject, &blanket.bounds) {
@@ -2217,19 +2250,18 @@ impl TypeSystem {
             return true;
         };
 
-        // Build name → bounds map from impl block type params (trait names only)
-        let bounds_map: IndexMap<&str, Vec<DefId>> = type_params
+        // The bound's own site says which trait it names and what it writes for
+        // that trait's parameters, so the check compares declarations rather
+        // than the spelling the impl header happened to write.
+        let bounds_map: IndexMap<&str, Vec<(DefId, Vec<FqTypeName>)>> = type_params
             .iter()
             .filter(|p| !p.bounds.is_empty())
             .map(|p| {
                 (
                     p.name.as_str(),
-                    // The bound's own site says which trait it names, so the
-                    // check compares declarations rather than the spelling the
-                    // impl header happened to write.
                     p.bounds
                         .iter()
-                        .filter_map(|b| self.resolutions.declared(b.id))
+                        .filter_map(|b| self.bound_written(b))
                         .collect(),
                 )
             })
@@ -2252,12 +2284,9 @@ impl TypeSystem {
                 if let ast::Type::Named(named) = arg
                     && let Some(bounds) = bounds_map.get(named.name.as_str())
                     && let Some(&type_arg) = type_args.get(i)
+                    && !self.bounds_hold(ctx, scope, type_arg, bounds)
                 {
-                    for &bound in bounds {
-                        if !self.type_implements_trait(ctx, scope, type_arg, bound) {
-                            return false;
-                        }
-                    }
+                    return false;
                 }
             }
         } else if let Some(inner_name) = inner_type_name {
@@ -2265,12 +2294,9 @@ impl TypeSystem {
             // type_args[0] is the inner type T.
             if let Some(bounds) = bounds_map.get(inner_name)
                 && let Some(&type_arg) = type_args.first()
+                && !self.bounds_hold(ctx, scope, type_arg, bounds)
             {
-                for &bound in bounds {
-                    if !self.type_implements_trait(ctx, scope, type_arg, bound) {
-                        return false;
-                    }
-                }
+                return false;
             }
         } else if let ast::Type::Tuple(elements) = impl_ty {
             // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
@@ -2285,10 +2311,8 @@ impl TypeSystem {
                     continue;
                 };
                 for &type_arg in type_args {
-                    for &bound in bounds {
-                        if !self.type_implements_trait(ctx, scope, type_arg, bound) {
-                            return false;
-                        }
+                    if !self.bounds_hold(ctx, scope, type_arg, bounds) {
+                        return false;
                     }
                 }
             }
@@ -2370,9 +2394,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
-                let wanted = self.bound_written_args(bound);
+                let written = self.tysys.bound_written(bound);
+                let (bound_def, wanted) = match written {
+                    Some((def, wanted)) => (Some(def), wanted),
+                    None => (None, Vec::new()),
+                };
                 for &subject in &subjects {
-                    let bound_def = self.bound_trait_def(bound.id);
                     self.enforce_single_bound_args(
                         subject,
                         &bound.name,
@@ -2548,26 +2575,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The trait a bound's own reference site names.
     pub(super) fn bound_trait_def(&self, site: AstId) -> Option<DefId> {
         self.tysys.resolutions.declared(site)
-    }
-
-    /// The arguments a bound writes for the trait's own parameters, spelled the
-    /// way the impl that answers it spells them.
-    fn bound_written_args(&self, bound: &ast::TraitBound) -> Vec<FqTypeName> {
-        if bound.type_args.is_empty() {
-            return Vec::new();
-        }
-        let Some(decl) = self.bound_trait_def(bound.id) else {
-            return Vec::new();
-        };
-        self.tysys
-            .trait_env
-            .fq_trait_named_by_bound(
-                FqTraitName::declared(self.tysys.resolutions.defs(), decl),
-                bound,
-                &self.tysys.resolutions,
-            )
-            .args()
-            .to_vec()
     }
 
     /// Whether `type_arg` satisfies `trait_name`, registering its associated
