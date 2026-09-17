@@ -19,6 +19,7 @@ use super::dae::is_dae_sroa_eligible;
 use super::dce::reachable_function_positions;
 use super::extract::is_place_read;
 use super::gate::FunctionGate;
+use super::inline::find_recursive_functions;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -211,22 +212,29 @@ struct Signatures {
     /// Whether the function's scalar arguments may move into a clone. A callee
     /// writing through a reference is one a compile-time frame runs for those
     /// writes, and a constant it no longer receives is one that frame cannot
-    /// see — which costs a whole folded region to save a parameter.
+    /// see — which costs a whole folded region to save a parameter. A callee on
+    /// a call cycle is one whose recursion the constant decides nothing about,
+    /// and cloning one member splits a cycle the return-ABI analysis reasons
+    /// about whole.
     scalar_specializable: Vec<bool>,
 }
 
 impl Signatures {
     fn build(project: &NirPackage, types: &TypeTable) -> Self {
+        let recursive = find_recursive_functions(&project.functions);
         let mut param_locals = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
         let mut specializable = Vec::with_capacity(project.functions.len());
         let mut param_fixed = Vec::with_capacity(project.functions.len());
         let mut scalar_specializable = Vec::with_capacity(project.functions.len());
-        for func in &project.functions {
+        for (index, func) in project.functions.iter().enumerate() {
             let func = func.borrow();
             param_locals.push(func.params.iter().map(|p| p.local_index).collect());
-            scalar_specializable.push(!func.params.iter().any(|p| p.is_mut_ref));
+            scalar_specializable.push(
+                !func.params.iter().any(|p| p.is_mut_ref)
+                    && !recursive.contains(&FuncId::new(index)),
+            );
             param_fixed.push(
                 func.params
                     .iter()

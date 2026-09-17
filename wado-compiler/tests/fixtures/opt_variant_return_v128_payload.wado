@@ -30,9 +30,11 @@ fn use_it(n: i32) -> i32 {
     return -1;
 }
 
+// `black_box` keeps the arguments off the constant path: specializing `use_it`
+// on them renames the callee the expectation below pins.
 export fn run() {
-    assert use_it(5) == 5;
-    assert use_it(-3) == -1;
+    assert use_it(builtin::black_box(5)) == 5;
+    assert use_it(builtin::black_box(-3)) == -1;
 }
 
 __DATA__
