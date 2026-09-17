@@ -23,6 +23,7 @@ use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
 use super::trait_env;
 use super::trait_env::ImplTargetKey;
+use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, TypeError};
 use super::tysys::TypeSystem;
 use super::util::parse_i128_literal;
@@ -1063,9 +1064,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     call.span,
                     None,
                 );
+                // The type prefix is what `Self` means here, so a bound written
+                // `Assoc = Self::Item` projects off it as it does on a method call.
+                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 // Enforce the static method's type-arg bounds (shared rule).
                 if !method_type_args.is_empty() {
-                    self.enforce_type_arg_bounds(&mtype_params, &method_type_args, None, call.span);
+                    let self_binding = SelfBinding {
+                        type_id: self.tysys.get_base_type(receiver_type),
+                        declaring_trait: None,
+                    };
+                    self.enforce_type_arg_bounds(
+                        &mtype_params,
+                        &method_type_args,
+                        Some(self_binding),
+                        call.span,
+                    );
                 }
                 // Handle From conversions with no explicit impl: reflexive and newtype.
                 if suffix == "from" && args.len() == 1 {
@@ -1135,7 +1148,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // bare name asks the caller's frame, which an alias leaves
                 // without that name at all.
                 let receiver_key = self.impl_target_at(receiver_site, prefix);
-                let receiver_type = self.resolve_unsited_type_name(prefix, call.span);
                 // The same argument the selection above read: without it this
                 // re-check resolves a different declaration than the call was
                 // mangled to.

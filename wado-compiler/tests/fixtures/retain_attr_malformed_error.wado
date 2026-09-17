@@ -1,23 +1,76 @@
-// A body says what it retains, so the attribute there would state a second
-// answer with nothing to reconcile it against. `#[retain]` belongs to a
-// declaration that has no body to read — a builtin, or a Component Model
-// import.
+// A malformed `#[retain(...)]` is reported, never read as silence: silence
+// means the reference does not outlive the call, which is what elides a copy.
 
 struct Item {
     v: i32,
 }
 
+#[retain(nope)]
+fn first(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+#[retain(elements_of = "value")]
+fn second(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+#[retain]
+fn third(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+#[retain(value, into = nope)]
+fn fourth(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+#[retain(value, into = "dst")]
+fn fifth(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+#[retain(value, bogus = dst)]
+fn sixth(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+// One retained thing per attribute: a surplus argument is an author error, and
+// reading past it would state a row nobody wrote.
+#[retain(value, into = dst, dst)]
+fn seventh(dst: &mut Array<Item>, value: Item) {
+    dst[0] = value;
+}
+
+// Well-formed, and still wrong here: a body states what it retains, so the
+// attribute belongs to a declaration that has none.
 #[retain(value)]
-fn keep(dst: &mut Array<Item>, value: Item) {
+fn eighth(dst: &mut Array<Item>, value: Item) {
     dst[0] = value;
 }
 
 export fn run() {
     let mut dst = Array::<Item>::new(1);
-    keep(&mut dst, Item { v: 1 });
+    first(&mut dst, Item { v: 1 });
+    second(&mut dst, Item { v: 1 });
+    third(&mut dst, Item { v: 1 });
+    fourth(&mut dst, Item { v: 1 });
+    fifth(&mut dst, Item { v: 1 });
+    sixth(&mut dst, Item { v: 1 });
+    seventh(&mut dst, Item { v: 1 });
+    eighth(&mut dst, Item { v: 1 });
 }
 
 __DATA__
 {
-    "compile_error": "#[retain] belongs to a declaration with no body; a body states what it retains"
+    "compile_error": "#[retain] names no parameter: nope",
+    "compile_errors_contains": [
+        "#[retain(elements_of = ...)] takes a parameter name, unquoted",
+        "#[retain] names one parameter: `p`, or `elements_of = p`",
+        "#[retain(into = nope)] names no parameter",
+        "#[retain(into = ...)] takes a parameter name, unquoted",
+        "unknown #[retain] argument: bogus (expected `into = param`)",
+        "#[retain] names one retained thing; repeat the attribute for another",
+        "#[retain] belongs to a declaration with no body; a body states what it retains"
+    ]
 }

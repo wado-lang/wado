@@ -15,6 +15,7 @@ use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
+use super::trait_query::SelfBinding;
 use crate::ast::AstId;
 use crate::defs::DefId;
 use crate::name::FqTraitName;
@@ -269,6 +270,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
     /// [`Self::with_self_type`], `None` here is a value: it returns the walk to
     /// its own module.
+    /// Run `body` with `Self` standing for `binding`'s receiver, and the
+    /// enclosing impl's own bindings out of reach so a `Self::Assoc` inside
+    /// projects off that receiver alone.
+    pub(super) fn with_self_binding<R>(
+        &mut self,
+        binding: SelfBinding,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        self.with_scope_field(
+            |scope| &mut scope.trait_ctx.assoc_type_bindings,
+            IndexMap::default(),
+            |elaborator| {
+                elaborator.with_scope_field(
+                    |scope| &mut scope.trait_ctx.self_trait,
+                    binding.declaring_trait,
+                    |elaborator| elaborator.with_self_type(binding.type_id, body),
+                )
+            },
+        )
+    }
+
     pub(super) fn with_resolving_home<R>(
         &mut self,
         module: Option<ModuleSource>,

@@ -2252,12 +2252,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.attr_error(Code::RetainAttr, attr, message);
             None
         };
-        if has_body {
-            return emit(
-                "#[retain] belongs to a declaration with no body; a body states what it retains"
-                    .to_string(),
-            );
-        }
         let named = |name: &str| params.iter().any(|p| p.name == name);
         let unquoted = |key: &str| {
             emit(format!(
@@ -2301,6 +2295,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             );
         }
 
+        // After the arguments, so an attribute that is both malformed and
+        // misplaced reports what it got wrong rather than only where it sits.
+        if has_body {
+            return emit(
+                "#[retain] belongs to a declaration with no body; a body states what it retains"
+                    .to_string(),
+            );
+        }
         Some(tir::RetainSpec {
             source,
             elements,

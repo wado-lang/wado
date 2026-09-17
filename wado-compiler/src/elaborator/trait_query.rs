@@ -228,16 +228,6 @@ pub(super) struct SelfBinding {
     pub(super) declaring_trait: Option<DefId>,
 }
 
-/// The associated type `Self::Item` names, for a constraint written that way.
-fn self_assoc_name(ty: &ast::Type) -> Option<&str> {
-    match ty {
-        ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" && ns.args.is_empty() => {
-            Some(&ns.name)
-        }
-        _ => None,
-    }
-}
-
 /// Whether an AST type is phrased against `Self` anywhere, and so only means
 /// something where an implementing type is bound.
 fn mentions_self(ty: &ast::Type) -> bool {
@@ -2453,12 +2443,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
     ) {
         for constraint in &bound.assoc_types {
-            // A bare `Self::Assoc` projects off the receiver the call names —
-            // how `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
-            // collects. Any other mention of `Self` has nothing to bind it
+            // `Self` in a constraint means the receiver the call names — how
+            // `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
+            // collects. With no receiver to bind it there is nothing to check
             // here; `enforce_impl_assoc_type_bounds` owns those.
-            let projection = self_assoc_name(&constraint.ty).zip(self_binding);
-            if (mentions_self(&constraint.ty) && projection.is_none())
+            let binding = self_binding.filter(|_| mentions_self(&constraint.ty));
+            if (binding.is_none() && mentions_self(&constraint.ty))
                 || mentions_type_pack(&constraint.ty)
             {
                 continue;
@@ -2474,13 +2464,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }) else {
                 continue;
             };
-            let expected = match projection {
-                Some((assoc, binding)) => {
-                    let Some(projected) = self.project_off_self(binding, assoc) else {
-                        continue;
-                    };
-                    projected
+            let expected = match binding {
+                // Every `Self::Assoc` it spells must project before the
+                // resolver runs, which reports what it cannot resolve: a bound
+                // nothing answers goes unchecked rather than reported.
+                Some(binding) if self.projects_off_self(&constraint.ty, binding) => {
+                    self.with_self_binding(binding, |e| e.resolve_type(&constraint.ty))
                 }
+                Some(_) => continue,
                 None => self.resolve_type(&constraint.ty),
             };
             let tt = self.tysys.type_table.borrow();
@@ -2507,17 +2498,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Whether every `Self::Assoc` written anywhere in `ty` projects off
+    /// `binding`. A `Self` head with arguments never does: nothing spells one.
+    fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
+        match ty {
+            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
+                self.project_off_self(binding, &ns.name).is_some()
+            }
+            ast::Type::NamespacedGeneric(ns) => self.all_project_off_self(&ns.args, binding),
+            ast::Type::Generic(generic) => {
+                generic.name != "Self" && self.all_project_off_self(&generic.args, binding)
+            }
+            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
+                self.projects_off_self(inner, binding)
+            }
+            ast::Type::Tuple(elements) => self.all_project_off_self(elements, binding),
+            _ => true,
+        }
+    }
+
+    fn all_project_off_self(&mut self, types: &[ast::Type], binding: SelfBinding) -> bool {
+        types.iter().all(|ty| self.projects_off_self(ty, binding))
+    }
+
     /// `Self::assoc` where `Self` is `binding`'s receiver. The trait that wrote
-    /// the constraint qualifies the lookup, so a name several of the receiver's
-    /// traits declare is still one answer.
+    /// the constraint qualifies the lookup, and the unqualified rule answers
+    /// where it declared the name but a supertrait's impl registered it.
     fn project_off_self(&mut self, binding: SelfBinding, assoc: &str) -> Option<TypeId> {
         let mut table = self.tysys.type_table.borrow_mut();
-        match binding.declaring_trait {
-            Some(trait_) => {
+        if let Some(trait_) = binding.declaring_trait
+            && let Some(resolved) =
                 table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, assoc)
-            }
-            None => table.resolve_assoc_type_of_instance(binding.type_id, assoc),
+        {
+            return Some(resolved);
         }
+        table.resolve_assoc_type_of_instance(binding.type_id, assoc)
     }
 
     /// The trait a bound's own reference site names.
