@@ -1574,8 +1574,8 @@ pub(super) fn induction_step(
     if parse_var_offset(engine, binds, *left) != Some((var, 0)) {
         return None;
     }
-    let s = peel_capture_block(engine, binds, *right);
-    operand_local(engine.body, s).map(InductionStep::Local)
+    let step = peel_capture_block(engine, binds, *right);
+    operand_local(engine.body, step).map(InductionStep::Local)
 }
 
 /// The operand `block` writes to `var` when exactly one of its own statements

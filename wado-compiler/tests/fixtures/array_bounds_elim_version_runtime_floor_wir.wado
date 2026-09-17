@@ -1,8 +1,8 @@
 // Loop-versioned BCE where the entry value is no constant. A sieve's marking
 // loop enters at `p * p` and steps by `p`, so neither the floor `0 <= index`
-// nor the step reads as a constant. The residual establishes both at the
-// version point — `start >= 0`, `step >= 0`, and `limit` a step below the wrap
-// — and the fast arm then carries the bare `array_set`.
+// nor the step reads as a constant. The residual tests all three at the version
+// point: `i >= 0`, `step >= 0`, and `limit` a step below the wrap. The fast arm
+// then carries the bare `array_set`.
 
 use { println, Stdout } from "core:cli";
 

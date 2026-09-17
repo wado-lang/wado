@@ -4,9 +4,9 @@
 //! per-iteration transitivity from the guard's `i <= H`. A fast arm that is
 //! exactly `a[i] = CONST; i += 1` then collapses to one [`try_fill_idiom`].
 //!
-//! A check's floor (`assert 0 <= i < n`) joins the residual where the entry
-//! value is no constant: `i >= FLOOR` reads the variable at the version point,
-//! and a non-negative non-wrapping step carries it to every later value.
+//! Where the entry value reads as no constant, the check's floor joins the
+//! residual too: `i >= FLOOR` at the version point, carried to every later
+//! value by a step the residual proves non-negative and clear of the wrap.
 
 use std::ops::ControlFlow;
 
@@ -15,13 +15,13 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, 
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
-    Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
-    InductionStep, eliminate_condition, induction_entry, induction_step, negated_operand,
+    Binds, BoundKey, Conjunct, InductionStep, build_copy_bindings, capture_block_binding,
+    check_conjuncts, eliminate_condition, induction_entry, induction_step, negated_operand,
     node_modifies, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset,
     peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
@@ -62,9 +62,8 @@ struct Plan {
     floor: Option<RuntimeFloor>,
 }
 
-/// A floor `var >= demanded` the residual tests at the version point, together
-/// with what it takes for the step to keep it: a non-negative step that leaves
-/// `H` a full step below the type's maximum, so no `var + step` wraps.
+/// A floor the residual tests at the version point, with the step that carries
+/// it: non-negative, and leaving `H` a step below `type_max` so none wraps.
 struct RuntimeFloor {
     demanded: i64,
     step: InductionStep,
@@ -362,19 +361,17 @@ fn analyze_loop(
         i64::MIN => None,
         _ => match induction_entry(engine, binds, parent, loop_stmt, loop_body, var) {
             Some(entry) if entry >= demanded => None,
-            // A constant entry under the floor is a loop the fast arm could
-            // never take; the residual is for an entry that reads as none.
+            // A constant entry below the floor is a loop no fast arm can take.
             Some(_) => return None,
-            None => Some(runtime_floor(engine, binds, type_table, loop_body, var, demanded)?),
+            None => Some(runtime_floor(
+                engine, binds, type_table, loop_body, var, ty, demanded,
+            )?),
         },
     };
-    let step_local = match &floor {
-        Some(RuntimeFloor {
-            step: InductionStep::Local(s),
-            ..
-        }) => Some(*s),
-        _ => None,
-    };
+    let step_local = floor.as_ref().and_then(|f| match f.step {
+        InductionStep::Local(s) => Some(s),
+        InductionStep::Const(..) => None,
+    });
     if step_local.is_some_and(|s| locals.get(s as usize).map(|l| l.type_id) != Some(ty)) {
         return None;
     }
@@ -405,17 +402,19 @@ fn analyze_loop(
     })
 }
 
-/// The floor terms the residual must carry for a loop whose entry value is no
-/// constant: a step that never decreases `var`, and a type maximum a step
-/// clears, so `var >= demanded` at the version point holds at every check.
+/// The floor terms for a loop whose entry reads as no constant: a step that
+/// never lowers `var`, and the type maximum the no-wrap term compares against.
 fn runtime_floor(
     engine: &Engine,
     binds: &Binds,
     type_table: &TypeTable,
     loop_body: BlockId,
     var: u32,
+    ty: TypeId,
     demanded: i64,
 ) -> Option<RuntimeFloor> {
+    // The residual spells the floor as raw constant bits, which only a
+    // non-negative value reads the same in every integer width.
     if demanded < 0 {
         return None;
     }
@@ -425,32 +424,12 @@ fn runtime_floor(
     {
         return None;
     }
-    let ty = engine.locals().get(var as usize)?.type_id;
-    let type_max = integer_max(type_table.primitive_head(ty)?)?;
+    let max = type_table.primitive_head(ty)?.int_max()?;
+    let type_max = u64::try_from(max).expect("a scalar integer maximum fits u64");
     Some(RuntimeFloor {
         demanded,
         step,
         type_max,
-    })
-}
-
-/// The largest value a scalar integer primitive holds, as the bits a NIR
-/// constant of that type carries.
-fn integer_max(p: PrimitiveType) -> Option<u64> {
-    Some(match p {
-        PrimitiveType::I8 => i8::MAX as u64,
-        PrimitiveType::I16 => i16::MAX as u64,
-        PrimitiveType::I32 => i32::MAX as u64,
-        PrimitiveType::I64 => i64::MAX as u64,
-        PrimitiveType::U8 => u64::from(u8::MAX),
-        PrimitiveType::U16 => u64::from(u16::MAX),
-        PrimitiveType::U32 => u64::from(u32::MAX),
-        PrimitiveType::U64 => u64::MAX,
-        PrimitiveType::F32
-        | PrimitiveType::F64
-        | PrimitiveType::Bool
-        | PrimitiveType::Char
-        | PrimitiveType::V128 => return None,
     })
 }
 
@@ -540,24 +519,14 @@ fn and_floor_terms(
     span: Span,
 ) -> Operand {
     let ty = engine.locals()[plan.var as usize].type_id;
+    let pred =
+        |engine: &mut Engine, l, op, r| alloc_binary(engine, l, op, r, TypeTable::BOOL, span);
+
     let var_read = local_read(engine, plan.var, span);
     let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
-    let at_least = alloc_binary(
-        engine,
-        var_read,
-        NirBinaryOp::GtEq,
-        demanded,
-        TypeTable::BOOL,
-        span,
-    );
-    let mut out = alloc_binary(
-        engine,
-        residual,
-        NirBinaryOp::And,
-        at_least,
-        TypeTable::BOOL,
-        span,
-    );
+    let at_least = pred(engine, var_read, NirBinaryOp::GtEq, demanded);
+    let mut out = pred(engine, residual, NirBinaryOp::And, at_least);
+
     let headroom = match floor.step {
         // `H < B` already leaves one step of headroom under the check bound.
         InductionStep::Const(k) if k <= 1 => return out,
@@ -568,30 +537,16 @@ fn and_floor_terms(
         InductionStep::Local(s) => {
             let step_read = local_read(engine, s, span);
             let zero = engine.const_operand(ValueKind::Int(0, ty), ty);
-            let rising = alloc_binary(
-                engine,
-                step_read,
-                NirBinaryOp::GtEq,
-                zero,
-                TypeTable::BOOL,
-                span,
-            );
-            out = alloc_binary(engine, out, NirBinaryOp::And, rising, TypeTable::BOOL, span);
+            let rising = pred(engine, step_read, NirBinaryOp::GtEq, zero);
+            out = pred(engine, out, NirBinaryOp::And, rising);
             let max = engine.const_operand(ValueKind::Int(floor.type_max, ty), ty);
             let step_read = local_read(engine, s, span);
             alloc_binary(engine, max, NirBinaryOp::Sub, step_read, ty, span)
         }
     };
     let h_read = local_read(engine, plan.bound, span);
-    let no_wrap = alloc_binary(
-        engine,
-        h_read,
-        NirBinaryOp::LtEq,
-        headroom,
-        TypeTable::BOOL,
-        span,
-    );
-    alloc_binary(engine, out, NirBinaryOp::And, no_wrap, TypeTable::BOOL, span)
+    let no_wrap = pred(engine, h_read, NirBinaryOp::LtEq, headroom);
+    pred(engine, out, NirBinaryOp::And, no_wrap)
 }
 
 /// In the fast clone, drive every implied check to `false` (the paired

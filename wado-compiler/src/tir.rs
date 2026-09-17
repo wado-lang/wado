@@ -333,6 +333,23 @@ impl PrimitiveType {
         }
     }
 
+    /// The largest value a scalar integer holds; `None` for every other
+    /// primitive.
+    #[must_use]
+    pub fn int_max(self) -> Option<u128> {
+        Some(match self {
+            Self::I8 => i8::MAX as u128,
+            Self::I16 => i16::MAX as u128,
+            Self::I32 => i32::MAX as u128,
+            Self::I64 => i64::MAX as u128,
+            Self::U8 => u128::from(u8::MAX),
+            Self::U16 => u128::from(u16::MAX),
+            Self::U32 => u128::from(u32::MAX),
+            Self::U64 => u128::from(u64::MAX),
+            Self::F32 | Self::F64 | Self::Bool | Self::Char | Self::V128 => return None,
+        })
+    }
+
     /// Check if a name is a primitive type name.
     #[must_use]
     pub fn is_primitive_name(name: &str) -> bool {

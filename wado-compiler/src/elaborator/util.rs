@@ -19,17 +19,8 @@ pub(super) fn check_int_range_positive(
 ) -> Option<String> {
     let base_id = type_table.representation_head(target_type);
     let in_range = match type_table.get(base_id) {
-        ResolvedType::Primitive(prim) => match prim {
-            PrimitiveType::I8 => value <= i8::MAX as u128,
-            PrimitiveType::I16 => value <= i16::MAX as u128,
-            PrimitiveType::I32 => value <= i32::MAX as u128,
-            PrimitiveType::I64 => value <= i64::MAX as u128,
-            PrimitiveType::U8 => value <= u128::from(u8::MAX),
-            PrimitiveType::U16 => value <= u128::from(u16::MAX),
-            PrimitiveType::U32 => value <= u128::from(u32::MAX),
-            PrimitiveType::U64 => value <= u128::from(u64::MAX),
-            _ => return None, // i128/u128/f32/f64/bool/char handled elsewhere
-        },
+        // i128/u128/f32/f64/bool/char are handled elsewhere.
+        ResolvedType::Primitive(prim) => value <= prim.int_max()?,
         _ => return None,
     };
     if in_range {
