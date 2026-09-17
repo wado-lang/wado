@@ -23,6 +23,25 @@ pub enum Origin {
     Unknown,
 }
 
+impl Origin {
+    /// Whether a write from here could be one the handle at `position`
+    /// carries. Every question about one handle goes through this, so a gate
+    /// and the extractor behind it cannot disagree about [`Origin::Unknown`].
+    #[must_use]
+    fn could_be(self, position: u32) -> bool {
+        self == Origin::Param(position) || self == Origin::Unknown
+    }
+}
+
+/// What a caller put in one of a callee's parameter positions.
+#[derive(Clone, Copy)]
+enum Handed {
+    /// Storage this frame's own caller can observe, through that handle.
+    Caller(Origin),
+    /// Storage this frame owns. A write to it reaches no caller of this one.
+    FrameLocal,
+}
+
 /// The fields one function writes, by the handle each is reached through and
 /// the type carrying it.
 #[derive(Default, Clone, PartialEq)]
@@ -54,27 +73,31 @@ impl Writes {
     /// it. A write traced to no one handle could be this one's.
     #[must_use]
     pub fn re_rootable_at(&self, position: u32, owner: TypeId) -> bool {
-        let mine = |origin: Origin| origin == Origin::Param(position) || origin == Origin::Unknown;
-        !self.whole.iter().any(|(origin, _)| mine(*origin))
+        !self
+            .whole
+            .iter()
+            .any(|(origin, _)| origin.could_be(position))
             && self
                 .fields
                 .iter()
-                .all(|(origin, ty, _)| !mine(*origin) || *ty == owner)
+                .all(|(origin, ty, _)| !origin.could_be(position) || *ty == owner)
     }
 
     /// The fields of `owner` the handle at `position` is written through, for
-    /// a caller re-rooting them at what it passed.
+    /// a caller re-rooting them at what it passed. Takes the same writes
+    /// [`Writes::re_rootable_at`] weighed, so one it let through is one the
+    /// caller goes on to record.
     pub fn fields_of(&self, position: u32, owner: TypeId) -> impl Iterator<Item = u32> + '_ {
         self.fields
             .iter()
-            .filter(move |(origin, ty, _)| *origin == Origin::Param(position) && *ty == owner)
+            .filter(move |(origin, ty, _)| origin.could_be(position) && *ty == owner)
             .map(|(_, _, field)| *field)
     }
 
     /// Absorb a callee's writes, each re-tagged with the handle this caller
     /// passed in that position. A position the caller filled with storage of
     /// its own reaches no caller of this one, so its writes are dropped.
-    fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Origin>) {
+    fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Handed>) {
         self.opaque |= other.opaque;
         for (origin, ty, field) in &other.fields {
             if let Some(mapped) = re_tag(*origin, handed) {
@@ -113,23 +136,28 @@ enum WholeOf {
     Handed(TypeId),
 }
 
-/// The handle this caller filled a callee's parameter position with. A
-/// position absent from the map got storage of this frame's own, whose writes
-/// reach no caller of it.
-fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Origin>) -> Option<Origin> {
-    match callee_origin {
-        Origin::Param(position) => handed.get(&position).copied(),
+/// The handle this caller carries a callee's write out through, or `None` for
+/// one that reaches no caller of it.
+fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origin> {
+    let Origin::Param(position) = callee_origin else {
         // The callee could not say which of its handles it wrote, so this
         // caller cannot say either.
-        Origin::Unknown => Some(Origin::Unknown),
+        return Some(Origin::Unknown);
+    };
+    match handed.get(&position) {
+        Some(Handed::Caller(origin)) => Some(*origin),
+        Some(Handed::FrameLocal) => None,
+        // Absent is not empty: it is a position this walk could not classify,
+        // and dropping its writes would hide one the caller can see.
+        None => Some(Origin::Unknown),
     }
 }
 
 /// One call this body makes to a callee this scan reads, and what it put in
-/// each of the callee's writable parameter positions.
+/// each of the callee's parameter positions it could classify.
 struct CallSite {
     callee: (ModuleSource, String),
-    handed: IndexMap<u32, Origin>,
+    handed: IndexMap<u32, Handed>,
 }
 
 /// A known callee's own writes are still unsettled while its body is being
@@ -277,19 +305,33 @@ struct Walker<'a> {
 }
 
 impl Walker<'_> {
-    /// Which of this body's handles `place` is reached through, or `None` for
-    /// one that reaches out of this frame not at all — a frame-local
-    /// aggregate's own field, which nothing a caller passed can observe. A
-    /// path rooted at a lent parameter is that handle; a borrow whose root
-    /// this walk cannot tie to a parameter could be any of them.
-    fn origin_of(&self, place: &Names) -> Option<Origin> {
-        let Names::Place(place) = place else {
+    /// Which of this body's handles `names` is reached through, or `None` for
+    /// storage this frame owns. Only a named place can be answered for: a
+    /// value this walk cannot tie to one may still alias a caller's, so
+    /// [`Walker::handed_at`] is what an argument goes through.
+    fn origin_of(&self, names: &Names) -> Option<Origin> {
+        let Names::Place(place) = names else {
             return None;
         };
         if let Some(position) = self.resolver.lent_position(place.root) {
             return Some(Origin::Param(position));
         }
         place.through_borrow.then_some(Origin::Unknown)
+    }
+
+    /// What this call puts in one parameter position, or `None` where the walk
+    /// cannot tell — a `Value` naming no place still aliases its argument when
+    /// it came from `builtin::select`, so it is neither this frame's storage
+    /// nor a handle this walk can name.
+    fn handed_at(&self, arg: &TirExpr) -> Option<Handed> {
+        let names = self.resolver.names(arg);
+        let Names::Place(_) = names else {
+            return None;
+        };
+        Some(match self.origin_of(&names) {
+            Some(origin) => Handed::Caller(origin),
+            None => Handed::FrameLocal,
+        })
     }
 
     /// Record a write to what `names` stands for: every field the path names,
@@ -429,10 +471,14 @@ impl TirRefVisitor for Walker<'_> {
                         .collect()
                 };
                 if known {
-                    let handed = writable
+                    // Every position, not just the writable ones: a callee
+                    // writing through a `&T` parameter is one `lends_storage`
+                    // admits and `could_write_through` does not.
+                    let handed = args
                         .iter()
-                        .filter_map(|(position, e)| {
-                            Some((*position, self.origin_of(&self.resolver.names(e))?))
+                        .enumerate()
+                        .filter_map(|(position, a)| {
+                            Some((position as u32, self.handed_at(&a.expr)?))
                         })
                         .collect();
                     self.callees.push(CallSite {
