@@ -211,6 +211,20 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
     }
 }
 
+/// A bound as the call site asks it: its trait arguments are spelled in the
+/// declaring item's parameter space, so each of them becomes what the call
+/// passed for it.
+///
+/// `None` where one stays a binder, which the call left parametric: that
+/// question belongs to the caller's own instantiation, and asking it here of a
+/// concrete type answers no.
+fn asked_at_call(trait_: FqTraitName, at_call: &[(FqTypeName, FqTypeName)]) -> Option<FqTraitName> {
+    let asked = at_call
+        .iter()
+        .fold(trait_, |trait_, (param, arg)| trait_.substitute(param, arg));
+    (!asked.args_mention_binder()).then_some(asked)
+}
+
 /// Whether an AST type is phrased against `Self` anywhere, and so only means
 /// something where an implementing type is bound.
 fn mentions_self(ty: &ast::Type) -> bool {
@@ -1623,7 +1637,7 @@ impl TypeSystem {
     /// Whether a bound writing `wanted` selects the header — see
     /// [`super::trait_env::header_answers_bound_args`].
     fn header_answers_bound_args(&self, header: &ImplHeader, wanted: &[FqTypeName]) -> bool {
-        let (Some(trait_type), Some(decl)) = (header.trait_type.as_ref(), header.trait_ref) else {
+        let (Some(trait_type), Some(decl)) = (header.trait_ty(), header.trait_def()) else {
             return true;
         };
         let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
@@ -1663,7 +1677,7 @@ impl TypeSystem {
                 // the module that wrote it. Comparing spellings instead is what
                 // made an aliased bound unsatisfiable and a same-named foreign
                 // trait satisfied (#1785).
-                if header.trait_ref == Some(trait_)
+                if header.trait_def() == Some(trait_)
                     && self.header_answers_bound_args(header, wanted)
                     && self.inherent_impl_type_args_match(&header.ty, type_args)
                     && self.check_impl_block_bounds(
@@ -2531,6 +2545,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: Span,
     ) {
+        let at_call = self.call_site_types(params, type_args);
         for (i, param) in params.iter().enumerate() {
             let Some(&type_arg) = type_args.get(i) else {
                 continue;
@@ -2552,7 +2567,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if bound.fn_signature.is_some() {
                     continue;
                 }
-                let written = self.tysys.bound_written(bound);
+                let written = self
+                    .tysys
+                    .bound_written(bound)
+                    .and_then(|trait_| asked_at_call(trait_, &at_call));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
                         subject,
@@ -2573,13 +2591,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 for &subject in &subjects {
-                    if let Some(trait_) = self.tysys.bound_written(&bound) {
+                    if let Some(trait_) = self
+                        .tysys
+                        .bound_written(&bound)
+                        .and_then(|trait_| asked_at_call(trait_, &at_call))
+                    {
                         self.check_and_register_bound(subject, &trait_);
                     }
                     self.enforce_assoc_type_bounds(subject, &bound, span);
                 }
             }
         }
+    }
+
+    /// What the call passes for each of `params`, as the names a trait argument
+    /// spells its own parameters with. A parameter the call leaves parametric
+    /// contributes nothing, so a bound mentioning it keeps its binder.
+    fn call_site_types(
+        &self,
+        params: &[ast::GenericParam],
+        type_args: &[TypeId],
+    ) -> Vec<(FqTypeName, FqTypeName)> {
+        let tt = self.tysys.type_table.borrow();
+        params
+            .iter()
+            .zip(type_args)
+            .filter(|(_, arg)| !tt.contains_type_param(**arg))
+            .map(|(param, &arg)| (FqTypeName::binder(&param.name), tt.fq_type_name(arg)))
+            .collect()
     }
 
     /// Whether one concrete type argument meets one trait bound — the primitive
@@ -2794,7 +2833,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let Some(header) = trait_env.impl_headers.get(&entry) else {
                         continue;
                     };
-                    if header.trait_ref == Some(trait_) && !header.associated_types.is_empty() {
+                    if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
                         let impl_ty_param_names: Vec<String> = match &header.ty {
                             ast::Type::Generic(g) => g
                                 .args
@@ -2815,7 +2854,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         else {
                             continue;
                         };
-                        let Some(trait_type) = header.trait_type.clone() else {
+                        let Some(trait_type) = header.trait_ty().cloned() else {
                             continue;
                         };
                         result.push(ImplInfo {

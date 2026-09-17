@@ -1,0 +1,48 @@
+// A bound may write the type parameter it constrains as a trait argument.
+// `T: Add<T>` asks for `Meters: Add<Meters>` at a call passing `Meters`, so the
+// arguments have to arrive in the call's parameter space and not the callee's.
+
+struct Meters {
+    v: i32,
+}
+
+impl Add<Meters> for Meters {
+    type Output = Meters;
+
+    fn add(&self, rhs: &Meters) -> Meters {
+        return Meters { v: self.v + rhs.v };
+    }
+}
+
+impl Add<i32> for Meters {
+    type Output = Meters;
+
+    fn add(&self, rhs: &i32) -> Meters {
+        return Meters { v: self.v + *rhs * 100 };
+    }
+}
+
+fn twice<T: Add<T, Output = T>>(t: T, o: T) -> T {
+    return t + o;
+}
+
+fn scaled<T: Add<i32, Output = T>>(t: T, by: i32) -> T {
+    return t + by;
+}
+
+struct Pair<A, B> {
+    a: A,
+    b: B,
+}
+
+// The argument is another of the callee's own parameters, so the substitution
+// has to reach every one of them and not only the bounded parameter.
+fn join<A: Add<B, Output = A>, B>(p: Pair<A, B>) -> A {
+    return p.a + p.b;
+}
+
+test "a bound writing its own type parameter" {
+    assert twice(Meters { v: 3 }, Meters { v: 4 }).v == 7;
+    assert scaled(Meters { v: 1 }, 2).v == 201;
+    assert join(Pair { a: Meters { v: 5 }, b: 1 }).v == 105;
+}

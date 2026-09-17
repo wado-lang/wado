@@ -5244,8 +5244,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .impl_headers
                 .get(key)
                 .is_some_and(|header| {
-                    header.trait_name.as_deref() == Some(from_trait_name.as_str())
-                        && matches!(&header.trait_type, Some(ast::Type::Generic(g))
+                    header.trait_head_name() == Some(from_trait_name.as_str())
+                        && matches!(header.trait_ty(), Some(ast::Type::Generic(g))
                         if g.args.first().is_some_and(|arg| {
                             // The header's argument and the call's source type
                             // are compared as the declarations they name, not

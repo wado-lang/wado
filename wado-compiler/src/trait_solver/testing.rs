@@ -1,7 +1,8 @@
 //! What a solver test states a program with.
 
 use super::program::{
-    Fact, ImplDef, ImplOrigin, ParamDef, Program, SolverType, TraitDeclId, TraitDef, TypeDeclId,
+    Fact, ImplDef, ImplOrigin, ParamBound, ParamDef, Program, SolverType, TraitDeclId, TraitDef,
+    TypeDeclId,
 };
 
 pub(super) fn decl(id: TypeDeclId) -> SolverType {
@@ -76,7 +77,13 @@ impl Builder {
         self
     }
 
-    pub(super) fn supertrait(mut self, sub: TraitDeclId, super_: TraitDeclId) -> Self {
+    pub(super) fn supertrait(self, sub: TraitDeclId, super_: TraitDeclId) -> Self {
+        self.supertrait_args(sub, ParamBound::bare(super_))
+    }
+
+    /// [`Self::supertrait`] where the clause writes the supertrait's own
+    /// arguments (`trait AsStrSlice: Eq<String>`).
+    pub(super) fn supertrait_args(mut self, sub: TraitDeclId, super_: ParamBound) -> Self {
         self.program.traits.insert(
             sub,
             TraitDef {

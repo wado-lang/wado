@@ -53,28 +53,22 @@ pub fn holds_with_args(
 ///
 /// A bare request asks for the declared defaults and any bound reaching the
 /// trait answers it, which is what lets a supertrait such as
-/// `AsStrSlice: Eq<String>` supply a bare `Eq`. A request that writes
-/// arguments is answered only by a bound on that same trait writing them too:
-/// a supertrait edge carries no arguments across, so it cannot answer one.
+/// `AsStrSlice: Eq<String>` supply a bare `Eq`. A request that writes arguments
+/// is answered by whatever the walk to the trait writes there — the bound's own
+/// arguments, or the supertrait clause's — defaulted where it writes none.
 fn bound_answers(
     program: &Program,
     bound: &ParamBound,
     trait_: TraitDeclId,
     wanted: &[SolverType],
 ) -> bool {
-    if !program.bound_reaches(bound.trait_, trait_) {
+    let Some(args) = program.args_reaching(bound, trait_) else {
         return false;
-    }
-    if wanted.is_empty() || bound.trait_ != trait_ {
-        return true;
-    }
-    wanted.iter().enumerate().all(|(i, want)| {
-        bound
-            .args
-            .get(i)
-            .or_else(|| named_default(program, trait_, i))
-            == Some(want)
-    })
+    };
+    wanted
+        .iter()
+        .enumerate()
+        .all(|(i, want)| args.get(i).or_else(|| named_default(program, trait_, i)) == Some(want))
 }
 
 /// The trait's declared default at `index` where it names a type. A `Self`
@@ -619,6 +613,42 @@ mod tests {
             holds(&p, &env(vec![vec![SUB]]), &SolverType::Param(0), BASE, HERE),
             Some(Holds::default())
         );
+    }
+
+    /// A supertrait clause writing an argument answers the supertrait at that
+    /// argument, and only there — `trait AsStrSlice: Eq<String>`.
+    #[test]
+    fn a_supertrait_clause_answers_at_the_arguments_it_writes() {
+        let p = Builder::default()
+            .supertrait_args(
+                SUB,
+                ParamBound {
+                    trait_: BASE,
+                    args: vec![decl(I32)],
+                },
+            )
+            .build();
+        let bound = env(vec![vec![SUB]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), BASE, HERE, args)
+        };
+        assert_eq!(ask(&[]), Some(Holds::default()));
+        assert_eq!(ask(&[decl(I32)]), Some(Holds::default()));
+        assert_eq!(ask(&[decl(POINT)]), None);
+    }
+
+    /// A clause writing no argument says the supertrait's declared defaults, so
+    /// `T: Ord` does not answer `Eq<i32>`.
+    #[test]
+    fn a_bare_supertrait_clause_does_not_answer_a_written_argument() {
+        let mut p = Builder::default().supertrait(SUB, BASE).build();
+        p.traits.entry(BASE).or_default().arg_defaults = vec![Some(ArgDefault::SelfType)];
+        let bound = env(vec![vec![SUB]]);
+        let ask = |args: &[SolverType]| {
+            holds_with_args(&p, &bound, &SolverType::Param(0), BASE, HERE, args)
+        };
+        assert_eq!(ask(&[]), Some(Holds::default()));
+        assert_eq!(ask(&[decl(I32)]), None);
     }
 
     /// The ways a bound holds that are properties of the type arrive as facts,

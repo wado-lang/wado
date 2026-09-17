@@ -368,7 +368,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .impl_headers
                     .get(entry)
-                    .is_some_and(|h| h.trait_name.is_some())
+                    .is_some_and(|h| h.trait_.is_some())
                 {
                     refs.push(ImplBlockRef(*entry));
                 }
@@ -388,7 +388,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .trait_env
                         .impl_headers
                         .get(entry)
-                        .is_some_and(|h| h.trait_name.is_some())
+                        .is_some_and(|h| h.trait_.is_some())
                     {
                         refs.push(ImplBlockRef(*entry));
                     }
@@ -423,8 +423,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_refs = self.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
-            let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
-            if !trait_matches(&trait_name, header.trait_ref) {
+            let trait_name = self.get_type_name(header.trait_ty().unwrap());
+            if !trait_matches(&trait_name, header.trait_def()) {
                 continue;
             }
             let impl_sig = signatures
@@ -1136,9 +1136,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if header.methods.iter().any(|m| m.name == method_name)
-                && let Some(trait_name) = &header.trait_name
+                && let Some(trait_name) = header.trait_head_name()
             {
-                return Some(trait_name.clone());
+                return Some(trait_name.to_string());
             }
         }
         None
@@ -2123,7 +2123,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .clone();
                 (sig, m.type_params.clone())
             });
-        let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
+        let trait_type_for_name = header.trait_ty().unwrap().clone();
         let target_for_name = header.ty.clone();
         // The trait's identity, resolved in the impl's own frame: the decl key
         // from the impl module's imports (so an alias resolves to the declaring

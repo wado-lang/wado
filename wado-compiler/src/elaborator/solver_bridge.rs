@@ -148,6 +148,18 @@ impl Lowering {
         self.decls.get(key).map(|&i| TypeDeclId(i))
     }
 
+    /// A written trait argument as the solver spells it; `None` for a name the
+    /// lowering states nothing about.
+    fn named_arg(&self, name: &FqTypeName) -> Option<SolverType> {
+        let head = self.known_type(&DeclKey::Def(name.head().def()?))?;
+        let args = name
+            .args()
+            .iter()
+            .map(|arg| self.named_arg(arg))
+            .collect::<Option<Vec<_>>>()?;
+        Some(SolverType::Decl(head, args))
+    }
+
     /// The declaration a trait id was given for. Every trait id is minted from
     /// one, so a builtin key here is a lowering bug.
     fn trait_def_of(&self, id: TraitDeclId) -> DefId {
@@ -425,7 +437,7 @@ pub(super) fn lower_impls<'a>(
             continue;
         };
         let mut trait_args = Vec::new();
-        if let Some(Type::Generic(generic)) = header.trait_type.as_ref() {
+        if let Some(Type::Generic(generic)) = header.trait_ty() {
             let lowered: Option<Vec<SolverType>> = generic
                 .args
                 .iter()
@@ -436,7 +448,7 @@ pub(super) fn lower_impls<'a>(
             };
             trait_args = lowered;
         }
-        let implemented = header.trait_ref.map(|t| lowering.trait_decl(t));
+        let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
         let params = header
             .type_params
             .iter()
@@ -674,7 +686,7 @@ impl SolverBridge {
                 .trait_env
                 .impl_headers
                 .get(&def)
-                .and_then(|header| header.trait_ref)
+                .and_then(ImplHeader::trait_def)
             {
                 let trait_ = lowering.trait_decl(trait_);
                 lowering.derivation_source.insert((trait_, kind), def);
@@ -847,9 +859,24 @@ impl SolverBridge {
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
         for (trait_, closure) in tysys.trait_env.supertrait_closures() {
             let id = lowering.trait_decl(*trait_);
+            // An edge whose arguments the lowering cannot say states none,
+            // which answers the supertrait at its declared defaults and no
+            // written argument.
             program.traits.entry(id).or_default().supertraits = closure
                 .iter()
-                .map(|b| lowering.trait_decl(b.decl))
+                .map(|b| ParamBound {
+                    trait_: lowering.trait_decl(b.decl),
+                    args: tysys
+                        .bound_written(&b.bound)
+                        .and_then(|written| {
+                            written
+                                .args()
+                                .iter()
+                                .map(|arg| lowering.named_arg(arg))
+                                .collect::<Option<Vec<_>>>()
+                        })
+                        .unwrap_or_default(),
+                })
                 .collect();
         }
         if let Some(inspect) = tysys.compiler_trait_def(CompilerItem::Inspect) {
@@ -1310,15 +1337,7 @@ impl SolverBridge {
     /// One argument a bound writes, as the solver reads it. Its own arguments
     /// come with it, so `Eq<List<i32>>` does not lower as `Eq<List>`.
     fn wanted_arg(&self, name: &FqTypeName) -> Option<SolverType> {
-        let head = self
-            .lowering
-            .known_type(&DeclKey::Def(name.head().def()?))?;
-        let args = name
-            .args()
-            .iter()
-            .map(|arg| self.wanted_arg(arg))
-            .collect::<Option<Vec<_>>>()?;
-        Some(SolverType::Decl(head, args))
+        self.lowering.named_arg(name)
     }
 
     /// The solver's answer to the question `type_implements_trait` just

@@ -208,6 +208,32 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplInd
     out
 }
 
+/// The trait an `impl` block names, whole: one value, so the identity, the
+/// spelling and the arguments cannot disagree about which trait at which
+/// arguments.
+#[derive(Clone, Debug)]
+pub(super) struct ImplTraitRef {
+    /// The trait declaration, read from `Resolutions` rather than resolved a
+    /// second time. This is what an impl index matches against, so a lookup
+    /// compares declarations rather than spellings two modules can share
+    /// (WEP 2026-08-12). `None` for a trait position whose site names no
+    /// declaration.
+    pub(super) def: Option<DefId>,
+    /// Identity of the trait as the impl indices key it.
+    pub(super) key: ImplTargetKey,
+    /// The head name as written, memoised so the index filters that only ask
+    /// "is this a trait impl?" need no allocation. A spelling, not an identity
+    /// — compare [`Self::key`] when the question is *which* trait this is.
+    pub(super) name: String,
+    /// The reference as written (`Index<K>` in `impl Index<K> for Map`), for
+    /// consumers that need its arguments' spellings.
+    pub(super) ty: Type,
+    /// Identity of each argument the header writes, `Self` meaning
+    /// [`ImplHeader::target_id`]. Resolved once from the header's module, so a
+    /// consumer holding it alone compares identities rather than spellings.
+    pub(super) arg_ids: Vec<name::FqTypeName>,
+}
+
 /// Digested header of an `impl` block, pre-extracted at [`TraitEnv::build`]
 /// time so trait/method queries read its trait name, target type, methods,
 /// and type parameters without re-fetching the impl block from
@@ -216,7 +242,7 @@ fn index_by_receiver(index: &TraitImplIndex, defs: &DefTable) -> ReceiverImplInd
 #[derive(Clone, Debug)]
 pub(super) struct ImplHeader {
     /// The module that wrote this header — the vantage every name in
-    /// [`Self::ty`] and [`Self::trait_type`] is spelled from. Without it a
+    /// [`Self::ty`] and the trait reference is spelled from. Without it a
     /// consumer holding the header alone can only compare spellings, which is
     /// what makes two modules' same-named types look like one.
     pub(super) module: ModuleSource,
@@ -224,31 +250,9 @@ pub(super) struct ImplHeader {
     /// vantage. The key every impl index in this file is keyed by, so a
     /// whole-program check compares identities rather than written heads.
     pub(super) target: ImplTargetKey,
-    /// Identity of the implemented trait, resolved the same way; `None` for
-    /// inherent `impl Type { … }` blocks.
-    pub(super) trait_key: Option<ImplTargetKey>,
-    /// The trait this header implements, read from `Resolutions` rather than
-    /// resolved a second time. This is what an impl index matches against, so a
-    /// lookup compares declarations rather than spellings two modules can share
-    /// (WEP 2026-08-12). `None` for an inherent block, and for a trait position
-    /// whose site names no declaration.
-    pub(super) trait_ref: Option<DefId>,
-    /// Trait name for `impl Trait for Type` blocks (via `get_type_name_static`
-    /// on the trait reference); `None` for inherent `impl Type { … }` blocks.
-    /// The memoised head name of [`Self::trait_type`], so the index filters
-    /// that only ask "is this a trait impl?" need no allocation.
-    ///
-    /// A spelling, not an identity — compare [`Self::trait_key`] instead when
-    /// the question is *which* trait this is.
-    pub(super) trait_name: Option<String>,
-    /// The full trait reference (`Index<K>` in `impl Index<K> for Map`), for
-    /// consumers that need its generic arguments rather than its head name.
-    pub(super) trait_type: Option<Type>,
-    /// Identity of each argument the header writes for the trait, `Self`
-    /// meaning [`Self::target_id`]. Resolved once from [`Self::module`]'s
-    /// vantage, so a consumer holding the header alone compares identities
-    /// rather than the spellings two modules can share.
-    pub(super) trait_arg_ids: Vec<name::FqTypeName>,
+    /// The trait this header implements; `None` for an inherent
+    /// `impl Type { … }` block.
+    pub(super) trait_: Option<ImplTraitRef>,
     /// Identity of the impl target, resolved the same way. This is what a
     /// `Self` default on the trait says at this impl.
     pub(super) target_id: name::FqTypeName,
@@ -283,17 +287,43 @@ impl ImplHeader {
     /// `None` for an inherent impl, and for a trait position filled by a
     /// binder or a name that reaches no declaration.
     pub(super) fn fq_trait(&self, resolutions: &Resolutions) -> Option<name::FqTraitName> {
-        let trait_type = self.trait_type.as_ref()?;
-        match self.trait_key.as_ref()? {
+        let trait_ = self.trait_.as_ref()?;
+        match &trait_.key {
             ImplTargetKey::Decl(def) => Some(
                 name::FqTraitName::declared(resolutions.defs(), *def)
-                    .with_args(written_type_args(trait_type, resolutions)),
+                    .with_args(written_type_args(&trait_.ty, resolutions)),
             ),
             ImplTargetKey::TypeParam(_, name) => Some(name::FqTraitName::binder(name)),
             ImplTargetKey::Ref(_) | ImplTargetKey::Builtin(_) | ImplTargetKey::Undeclared(..) => {
                 None
             }
         }
+    }
+
+    /// The trait declaration this header implements; `None` for an inherent
+    /// block and for a trait position that names none.
+    pub(super) fn trait_def(&self) -> Option<DefId> {
+        self.trait_.as_ref()?.def
+    }
+
+    /// Identity of the implemented trait as the impl indices key it.
+    pub(super) fn trait_key(&self) -> Option<&ImplTargetKey> {
+        Some(&self.trait_.as_ref()?.key)
+    }
+
+    /// The head name of the implemented trait, as written.
+    pub(super) fn trait_head_name(&self) -> Option<&str> {
+        Some(self.trait_.as_ref()?.name.as_str())
+    }
+
+    /// The implemented trait as written, arguments included.
+    pub(super) fn trait_ty(&self) -> Option<&Type> {
+        Some(&self.trait_.as_ref()?.ty)
+    }
+
+    /// The identity of each argument the header writes for the trait.
+    pub(super) fn trait_arg_ids(&self) -> &[name::FqTypeName] {
+        self.trait_.as_ref().map_or(&[], |t| t.arg_ids.as_slice())
     }
 }
 
@@ -1185,38 +1215,34 @@ impl TraitEnv {
                 // Implementing a trait is naming it, so the header's own
                 // site answers and a position reaching nothing is an error —
                 // never another module's same-named trait.
-                let trait_key = impl_block.trait_type.as_ref().map(|trait_type| {
-                    trait_ref.map_or_else(
-                        || impl_target_key_at(trait_type, module_source, resolutions),
-                        ImplTargetKey::Decl,
-                    )
-                });
+                let trait_ = impl_block
+                    .trait_type
+                    .as_ref()
+                    .map(|trait_type| ImplTraitRef {
+                        def: trait_ref,
+                        key: trait_ref.map_or_else(
+                            || impl_target_key_at(trait_type, module_source, resolutions),
+                            ImplTargetKey::Decl,
+                        ),
+                        name: get_type_name_static(trait_type),
+                        ty: trait_type.clone(),
+                        arg_ids: written_arg_nodes(trait_type)
+                            .iter()
+                            .map(|arg| {
+                                let node = match arg {
+                                    Type::Named(named) if named.name == "Self" => &impl_block.ty,
+                                    _ => arg,
+                                };
+                                written_type_arg(node, resolutions)
+                            })
+                            .collect(),
+                    });
                 impl_headers.insert(
                     impl_def,
                     ImplHeader {
                         module: module_source.clone(),
                         target: type_key.clone(),
-                        trait_key,
-                        trait_ref,
-                        trait_name: impl_block.trait_type.as_ref().map(get_type_name_static),
-                        trait_type: impl_block.trait_type.clone(),
-                        trait_arg_ids: impl_block.trait_type.as_ref().map_or_else(
-                            Vec::new,
-                            |trait_type| {
-                                written_arg_nodes(trait_type)
-                                    .iter()
-                                    .map(|arg| {
-                                        let node = match arg {
-                                            Type::Named(named) if named.name == "Self" => {
-                                                &impl_block.ty
-                                            }
-                                            _ => arg,
-                                        };
-                                        written_type_arg(node, resolutions)
-                                    })
-                                    .collect()
-                            },
-                        ),
+                        trait_,
                         target_id: written_type_arg(&impl_block.ty, resolutions),
                         ty: impl_block.ty.clone(),
                         type_params: impl_block.type_params.clone(),
@@ -1453,7 +1479,7 @@ impl TraitEnv {
                     .filter(|key| {
                         self.impl_headers
                             .get(*key)
-                            .is_some_and(|h| h.trait_name.is_none())
+                            .is_some_and(|h| h.trait_.is_none())
                     })
                     .copied()
                     .collect()
@@ -1483,7 +1509,7 @@ impl TraitEnv {
         resolutions: &Resolutions,
     ) -> Option<name::FqTraitName> {
         let fq = header.fq_trait(resolutions)?;
-        let trait_type = header.trait_type.as_ref()?;
+        let trait_type = header.trait_ty()?;
         Some(self.fq_trait_named_by_impl(fq, trait_type, &header.ty, resolutions))
     }
 
@@ -1571,21 +1597,21 @@ impl TraitEnv {
         let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
-            if header.trait_ref != Some(trait_) {
+            if header.trait_def() != Some(trait_) {
                 return None;
             }
+            let default_at =
+                |index: usize| Some(defaults.get(index)?.as_ref()?.at(&header.target_id));
+            let args = header.trait_arg_ids();
             let answers = wanted.iter().enumerate().all(|(i, want)| {
-                let Some(effective) = header
-                    .trait_arg_ids
-                    .get(i)
-                    .cloned()
-                    .or_else(|| Some(defaults.get(i)?.as_ref()?.at(&header.target_id)))
-                else {
+                let Some(effective) = args.get(i).cloned().or_else(|| default_at(i)) else {
                     return false;
                 };
                 effective.head_only() == want.head_only()
             });
-            answers.then_some(header.trait_arg_ids.len())
+            // The count the impl's own name spells, not every argument
+            // written: `impl Add<Cm> for Cm` mangles as a bare `Add`.
+            answers.then(|| non_default_named_arg_count(args, &default_at))
         })
     }
 
@@ -1681,7 +1707,7 @@ impl TraitEnv {
             .flat_map(|entries| entries.iter())
             .any(|key| {
                 self.impl_headers.get(key).is_some_and(|h| {
-                    h.trait_name.is_none() && h.methods.iter().any(|m| m.name == method_name)
+                    h.trait_.is_none() && h.methods.iter().any(|m| m.name == method_name)
                 })
             })
     }
@@ -1689,7 +1715,7 @@ impl TraitEnv {
     fn methodful_header_matches(&self, entry: DefId, trait_: DefId) -> bool {
         self.impl_headers
             .get(&entry)
-            .is_some_and(|header| !header.methods.is_empty() && header.trait_ref == Some(trait_))
+            .is_some_and(|header| !header.methods.is_empty() && header.trait_def() == Some(trait_))
     }
 
     /// Return the home module of a *value* blanket (`impl<T: Bound> Trait for
@@ -2010,7 +2036,7 @@ fn check_orphan_rfc2451(
     resolve: ResolveWritten<'_>,
 ) -> bool {
     // Build the sequence: self type first, then trait type arguments
-    let trait_args: &[Type] = match header.trait_type.as_ref() {
+    let trait_args: &[Type] = match header.trait_ty() {
         Some(Type::Generic(g)) => &g.args,
         _ => &[],
     };
@@ -2352,9 +2378,9 @@ fn check_impl_coherence(
     let header_of = |id: ImplId| -> &ImplHeader { sources[id.0 as usize] };
     let trait_name = |header: &ImplHeader| {
         header
-            .trait_name
-            .clone()
+            .trait_head_name()
             .expect("a coherence finding names a trait impl")
+            .to_string()
     };
     let mut violations = Vec::new();
     for error in coherence_errors(&program) {
@@ -2403,7 +2429,7 @@ fn check_variadic_impl_overlap(
     let mut groups: IndexMap<&ImplTargetKey, Vec<VariadicImpl<'_>>> = IndexMap::default();
 
     for header in impl_headers.values() {
-        let Some(trait_key) = &header.trait_key else {
+        let Some(trait_key) = header.trait_key() else {
             continue;
         };
         let Some(target) = variadic_target(&header.ty) else {
@@ -2425,7 +2451,7 @@ fn check_variadic_impl_overlap(
             module_source: &header.module,
             span: header.span,
             trait_name: trait_key.display_name(defs).to_string(),
-            trait_args: match header.trait_type.as_ref() {
+            trait_args: match header.trait_ty() {
                 Some(ast::Type::Generic(generic)) => &generic.args,
                 _ => &[],
             },
@@ -2510,7 +2536,7 @@ fn check_inherent_impl_collisions(
     let mut instantiations = Vec::new();
 
     for header in impl_headers.values() {
-        if header.trait_key.is_some() {
+        if header.trait_.is_some() {
             continue;
         }
         let params: IndexSet<&str> = header.type_params.iter().map(|p| p.name.as_str()).collect();
@@ -2601,7 +2627,7 @@ fn check_all_orphan_rules(
             continue;
         }
 
-        let Some(trait_key) = &header.trait_key else {
+        let Some(trait_key) = header.trait_key() else {
             // Inherent impl: the orphan rule does not apply, but coherence does
             // — a package may only define inherent methods on types it owns, or
             // two packages could add colliding methods to `String`. Use a trait
@@ -2737,7 +2763,7 @@ pub(super) fn header_answers_bound_args(
 }
 
 /// What the trait's declared default at `index` says, `Self` meaning the impl's
-/// target. A bound has no target node, so there a `Self` default says nothing.
+/// target. A bound has no target node, so there `Self` says only itself.
 fn declared_default_arg(
     params: &[ast::GenericParam],
     index: usize,
@@ -2746,9 +2772,10 @@ fn declared_default_arg(
 ) -> Option<name::FqTypeName> {
     let default = params.get(index)?.default.as_ref()?;
     match default {
-        ast::Type::Named(named) if named.name == "Self" => {
-            Some(written_type_arg(target?, resolutions))
-        }
+        ast::Type::Named(named) if named.name == "Self" => Some(match target {
+            Some(target) => written_type_arg(target, resolutions),
+            None => written_type_arg(default, resolutions),
+        }),
         _ => Some(written_type_arg(default, resolutions)),
     }
 }
@@ -2762,39 +2789,29 @@ pub(super) fn non_default_arg_count(
     params: &[ast::GenericParam],
     resolutions: &Resolutions,
 ) -> usize {
-    let mut kept = ast_args.len();
+    let written: Vec<name::FqTypeName> = ast_args
+        .iter()
+        .map(|arg| written_type_arg(arg, resolutions))
+        .collect();
+    non_default_named_arg_count(&written, &|index| {
+        declared_default_arg(params, index, target, resolutions)
+    })
+}
+
+/// [`non_default_arg_count`] over identities rather than spellings, for a
+/// consumer holding the arguments already resolved.
+pub(super) fn non_default_named_arg_count(
+    args: &[name::FqTypeName],
+    default_at: &dyn Fn(usize) -> Option<name::FqTypeName>,
+) -> usize {
+    let mut kept = args.len();
     while let Some(last) = kept.checked_sub(1) {
-        let Some(arg) = ast_args.get(last) else {
-            break;
-        };
-        if !restates_default(arg, params, last, target, resolutions) {
+        if args.get(last) != default_at(last).as_ref() {
             break;
         }
         kept = last;
     }
     kept
-}
-
-/// Whether a written trait argument says exactly what the declared default at
-/// `index` does.
-fn restates_default(
-    arg: &ast::Type,
-    params: &[ast::GenericParam],
-    index: usize,
-    target: Option<&ast::Type>,
-    resolutions: &Resolutions,
-) -> bool {
-    let Some(default) = params.get(index).and_then(|p| p.default.as_ref()) else {
-        return false;
-    };
-    // A bound has no target, so there only the `Self` spelling restates `Self`.
-    if matches!(default, ast::Type::Named(d) if d.name == "Self")
-        && matches!(arg, ast::Type::Named(a) if a.name == "Self")
-    {
-        return true;
-    }
-    declared_default_arg(params, index, target, resolutions)
-        .is_some_and(|default| written_type_arg(arg, resolutions) == default)
 }
 
 /// One written type argument as the identity it names.
