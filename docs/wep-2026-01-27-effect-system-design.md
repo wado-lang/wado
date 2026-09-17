@@ -107,31 +107,17 @@ fn run_with_mock_counter(f: fn() with Counter) {
 }
 ```
 
-#### Single Effect Parameter Per Function
+#### `with _`
 
-A function may declare **at most one** `<effect E>` parameter. Multiple effect parameters (`<effect E1, effect E2>`) are rejected at compile time (`effect_polymorphism_multi_param_error.wado`).
+- [ ] Not implemented.
 
-The single-parameter form covers higher-order combinators (`map`, `fold`, `for_each`, `wrapper`, `run_both`) without effect-set subtyping or row polymorphism, because callbacks with different effect sets are unioned into one inferred `E`.
-
-The pattern that single-`E` cannot express is **effect subtraction** — a generic combinator that handles one abstract effect and propagates another:
+`with _` introduces a fresh effect parameter and forwards it, so it is sugar for `<effect E> with E`. A function that only passes its callees' effects through writes it and names nothing:
 
 ```wado
-// Hypothetical multi-param form (currently rejected):
-fn handle_one<effect E1, effect E2>(
-    f: fn() with E1, E2,
-    h: impl E1,
-) with E2 {
-    with E1 => h do { f(); }
-}
+fn wrapper(f: fn() with _) with _ { f(); }   // == fn wrapper<effect E>(f: fn() with E) with E
 ```
 
-Wado defers multi-effect parameters because:
-
-1. The built-in `with E => h do { ... }` syntax handles the concrete-effect case inline at the use site, removing the main motivation for generic handler combinators in user code.
-2. Inference shifts from "union all callable effects into one variable" to constraint solving over multiple variables, which interacts non-trivially with signature-resource inference and effect propagation.
-3. No production code in scope today (`core:*`, `wasi:*`, examples) needs effect subtraction.
-
-This is a forward-compatible restriction: existing single-`E` code continues to work unchanged if multi-effect parameters are introduced later (e.g. for `core:test` runners or dynamic middleware composition).
+The same spelling on a trait head is what opens the trait to its impls, below.
 
 ### Closure Types
 
@@ -347,12 +333,27 @@ Limitations — these require separate work and are pinned by `#![TODO]` fixture
 
 ### Traits and Effects
 
+A trait head says what every impl of it may do. It has four states, and a bare head is the one nobody has decided yet:
+
+| Head                          | Every impl of it                            |
+| ----------------------------- | ------------------------------------------- |
+| `trait Foo { … }`             | undecided: reads as `with _`, and is warned |
+| `trait Foo with () { … }`     | is pure                                     |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`                       |
+| `trait Foo with _ { … }`      | brings its own effects                      |
+
+A method's own `with` clause overrides the head.
+
+The point of the table is that "should be pure" is a contract worth writing down, and that writing nothing is not the same statement. `Eq` and `Serialize` performing I/O is a design error, so they say `with ()`. An iterator that reads a file is ordinary, so `Iterator` says `with _`. Most traits sit between the two, and their author does not have to guess on the first day.
+
+#### A head that names no hole
+
 - [x] Implemented.
 
-A trait method's `with` clause is the contract every impl writes to. An impl method may not declare an effect the trait method leaves out:
+An impl method may not declare an effect the trait method leaves out:
 
 ```wado
-trait Source {
+trait Source with () {
     fn next(&mut self) -> i32;
 }
 
@@ -366,11 +367,15 @@ impl Source for Loud {
 
 An `interface` is exempt as a whole. Its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
+#### Dispatch through a bound
+
+- [x] Implemented.
+
 A call reaches a method through a type parameter's bound in three shapes: a method call on a receiver whose type is the parameter, a static call written `T::make()`, and a `for-of` over an iterable whose type is the parameter. Each demands the effects the trait method declares.
 
 ```wado
-trait Source {
-    fn next(&mut self) -> i32 with Stdout;
+trait Source with Stdout {
+    fn next(&mut self) -> i32;
 }
 
 fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // `with Stdout` is required here
@@ -378,9 +383,46 @@ fn draw<S: Source>(s: &mut S) -> i32 with Stdout {  // `with Stdout` is required
 }
 ```
 
-The impl is not known at such a call, so the declaration is the only thing it can demand. The conformance rule is what makes that sound: the trait's `with` clause bounds every impl.
+The impl is not known at such a call, so the declaration is the only thing it can demand. The head is what makes that sound: it bounds every impl.
 
 Resolving the selected impl's effects at each instantiation would admit more programs, since an impl could then add an effect and still be caught where it is used. It would also break the rule that a signature is the whole contract. A call added inside `draw` could change what every caller of `draw` must declare, with nothing in `draw`'s signature to show it.
+
+#### `with _`: the impl decides
+
+- [ ] Not implemented.
+
+`with _` on a trait head is the same sugar as on a function, so `trait Iterator with _` is `trait Iterator<effect E> with E`. The impl's own method signatures supply the argument, and nothing new has to be named:
+
+```wado
+trait Iterator with _ {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+impl Iterator for LineReader {
+    type Item = String;
+    fn next(&mut self) -> Option<String> with FileSystem { ... }   // E = FileSystem
+}
+```
+
+A bound leaves the argument free, or passes one to constrain it. A caller that only forwards writes `with _` and names nothing:
+
+```wado
+fn count<I: Iterator>(it: I) -> i32 with _ { ... }            // as effectful as `it`
+fn sum<I: Iterator with ()>(it: I) -> i32 { ... }             // only a pure iterator
+```
+
+A type implements a trait once, so two impls differing only in the effect argument are rejected. That is what keeps the argument an output of the impl rather than a choice made at the call.
+
+#### An undecided head
+
+- [ ] Not implemented.
+
+A bare head is not neutral. It reads as `with _`, so it publishes an open contract, and deciding it later is a breaking change: a downstream `with _` that forwarded the trait's effects has nothing left to forward once the head says `with ()`.
+
+So the compiler says the head is undecided, at the severity the trait's visibility calls for. A file-private or `internal` trait gets a remark, which is the state a trait is in while it is being written. A `pub` or `export` trait gets a warning, because publishing an undecided contract is the defect. Both are waived per declaration or per module with `allow`, the way `shadowed_name` is, and only user-authored modules are diagnosed.
+
+The effect of this is that nobody has to predict a trait's effects on the day they write it, and nobody can publish one without saying.
 
 ### Handlers
 
@@ -396,15 +438,32 @@ fn register(data: &Data) -> Handle with (Stdout, stores[data]) {
 }
 ```
 
+## Roadmap
+
+1. `with _`, on a function signature and on a trait head. Finished when it desugars to a fresh effect parameter in both positions, and a generic function forwards an impl's effects without naming them.
+2. The undecided-head diagnostic. Finished when a bare head reports at the severity its visibility selects, `allow` waives it, and only user-authored modules are walked.
+3. The prelude heads. Finished when `Iterator` and `IntoIterator` carry `with _`, `Eq`, `Ord`, `Default`, `Serialize` and `Deserialize` carry `with ()`, and the corpus is green.
+
 ## Known gaps
 
-### An impl cannot bring its own effect
+### The rest of the prelude heads
 
-A trait fixes one effect set for every impl of it. `Iterator` declares none, so no `impl Iterator` can read a file or write a line, and the trait cannot grant that to one impl without granting it to all.
+Step 3 above names the traits whose head is settled. The others (`Display`, `FromStr`, `Add` and the operator traits, `IndexRef` and its siblings) each need the same call, and until one is made they sit in the undecided state that the diagnostic reports.
 
-Closing this takes an associated effect: the trait declares a hole, each impl fills it, and a use site names it through the type parameter the way an associated type is named today. The impl then chooses its effects, and a generic function still says in its signature what it needs, so nothing the conformance rule protects is lost. Flix's associated effects and Rust's `~const Trait` bounds are the closest precedents; Java's generic exception parameters solve the same problem for checked exceptions.
+### One effect parameter per function
 
-The syntax is open. `effect` is a keyword and `effects` is not, so the declaration form, the way an impl fills the hole, and the spelling a use site writes for it are all undecided.
+A function may declare at most one `<effect E>`. More than one is rejected today (`effect_polymorphism_multi_param_error.wado`), which blocks effect subtraction: a combinator that handles one abstract effect and forwards another.
+
+```wado
+// Rejected today:
+fn handle_one<effect E1, effect E2>(f: fn() with E1, E2, h: impl E1) with E2 {
+    with E1 => h do { f(); }
+}
+```
+
+Nothing in the design turns on the restriction. Inference has to move from unioning every callable effect into one variable to solving over several, which interacts with signature-resource inference, and no code in scope needs it yet. Existing single-`E` code is unaffected whenever it is lifted.
+
+Note that `with _` mints a parameter, so a function cannot write `with _` and declare its own `<effect E>` until this is lifted.
 
 ## Consequences
 

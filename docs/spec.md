@@ -5189,7 +5189,7 @@ A call reaches a method through a type parameter's bound in three shapes: a meth
 
 `stores` is exempt, since it says which reference parameters a body keeps. An `interface` is exempt as a whole: its operations declare no effects, and a handler method answers an operation rather than implementing a trait contract.
 
-There is no way today to write an impl that needs an effect its trait does not declare. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md) for what closing that would take.
+There is no way today to write an impl that needs an effect its trait does not declare. The design that admits one moves the declaration from each method to the trait head, where `with _` says the impl decides and `with ()` says every impl is pure. See [WEP: Effect System Design](./wep-2026-01-27-effect-system-design.md).
 
 ### Variadic Type Packs
 
