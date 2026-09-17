@@ -1789,8 +1789,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         Rc::clone(&state.interner),
                         // Gate dead function / method emission on the live set
                         // (globals are emitted unconditionally; see
-                        // `reify_module`). The semantic diagnostics (effect /
-                        // stores / purity) are produced from `Semantics`, not
+                        // `reify_module`). The semantic diagnostics (effect
+                        // and purity) are produced from `Semantics`, not
                         // the emitted TIR (Design B), so dropping a dead
                         // function no longer suppresses any diagnostic. The
                         // liveness graph traces bodies, global initializers,
@@ -3522,7 +3522,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     params,
                     return_type,
                     effects: vec![],
-                    stores: vec![],
                 })
             }
             // A variadic type-pack spread `..T` resolves to a `TypePack`

@@ -1,0 +1,53 @@
+// A malformed `#[result(...)]` is reported, never read as silence: silence
+// means the result is freshly allocated, which is what elides a copy.
+
+#[result(part_of = nope)]
+fn first(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+#[result(borrowed)]
+fn second(xs: &List<i32>) -> i32 {
+    return xs[1];
+}
+
+#[result]
+fn third(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+#[result(part_of = "xs")]
+fn fourth(xs: &List<i32>) -> i32 {
+    return xs[1];
+}
+
+// One convention, not the first of several: a surplus argument is an author
+// error, and reading past it would apply a row nobody wrote.
+#[result(owned, bogus)]
+fn fifth(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+// Well-formed, and still wrong here: a body states what it returns, so the
+// attribute belongs to a declaration that has none.
+#[result(part_of = xs)]
+fn sixth(xs: &List<i32>) -> i32 {
+    return xs[0];
+}
+
+export fn run() {
+    assert first(&[1, 2]) + second(&[1, 2]) + third(&[1, 2]) + fourth(&[1, 2]) + fifth(&[1, 2])
+        + sixth(&[1, 2])
+        == 8;
+}
+
+__DATA__
+{
+    "compile_error": "#[result(part_of = nope)] names no parameter",
+    "compile_errors_contains": [
+        "unknown #[result] convention: borrowed",
+        "#[result] takes one convention: `owned` or `part_of = param`",
+        "#[result(part_of = ...)] takes a parameter name, unquoted",
+        "#[result] belongs to a declaration with no body; a body states what it returns"
+    ]
+}

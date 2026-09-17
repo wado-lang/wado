@@ -1,4 +1,4 @@
-// A forwarder that declares `stores[d]` may honestly persist `d` through the callee.
+// A forwarder may persist `d` through the callee; the walk reads that from the body.
 
 struct Data {
     v: i32,
@@ -8,11 +8,11 @@ struct Box {
     d: &Data,
 }
 
-fn keep(d: &Data) -> Box with stores[d] {
+fn keep(d: &Data) -> Box {
     return Box { d };
 }
 
-fn forward(d: &Data) -> Box with stores[d] {
+fn forward(d: &Data) -> Box {
     return keep(d);
 }
 

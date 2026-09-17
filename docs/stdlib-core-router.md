@@ -66,7 +66,7 @@ Look up a captured parameter by name. Returns `None` if absent.
 The returned `String` is freshly allocated from the matched
 byte range of the path.
 
-#### `pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError> with stores[self]`
+#### `pub fn deserialize<T: Deserialize>(&self) -> Result<T, DeserializeError>`
 
 Deserialize captured parameters into a typed struct `T`. Scalar
 fields parse directly from path bytes; only `String` fields incur
@@ -92,30 +92,30 @@ _Fields are private._
 
 #### `pub fn new() -> Router<H>`
 
-#### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) with stores[handler]`
+#### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H)`
 
 Registers a handler for `(method, pattern)`. Last-write-wins.
 Panics on a malformed pattern.
 
-#### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-#### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
+#### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
 Registers a handler that matches any HTTP method (including
 `Method::Other(_)`) at `pattern`. Specific-method handlers at the
 same pattern take precedence; `any` is the fallback.
 
-#### `pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>> with stores[self, path]`
+#### `pub fn match_path(&self, method: Method, path: &String) -> Option<&RouteMatch<H>>`
 
 Matches `(method, path)`. The path argument must be a URL path
 (no query string, no fragment).
@@ -125,7 +125,7 @@ Matches `(method, path)`. The path argument must be a URL path
 Returns the specific methods registered for `path`. `any` does not
 contribute. Empty array on a 404 or when only `any` is registered.
 
-#### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>> with stores[self]`
+#### `pub fn match_request(&self, request: &Request) -> Option<&RouteMatch<H>>`
 
 Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
 from the path before matching.

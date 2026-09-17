@@ -774,7 +774,7 @@ impl ClosureLowerer {
                 return_type,
                 task_return_type: None,
                 effects: Vec::new(),
-                stores: vec![],
+                retains: vec![],
                 body: Some(body_block),
                 span: collected.span,
                 local_count,
@@ -1112,7 +1112,7 @@ impl ClosureLowerer {
             return_type: TypeTable::UNIT,
             task_return_type: None,
             effects: Vec::new(),
-            stores: vec![],
+            retains: vec![],
             body: Some(body),
             span,
             local_count: 2,
@@ -1299,7 +1299,7 @@ impl ClosureLowerer {
             return_type: callee.return_type,
             task_return_type: None,
             effects: callee.effects.clone(),
-            stores: callee.stores.clone(),
+            retains: callee.retains.clone(),
             body: new_body,
             span: callee.span,
             local_count: callee.local_count,
@@ -1480,9 +1480,9 @@ impl TirMutVisitor for FuncRefToClosureRewriter<'_> {
             );
 
             let param_types: Vec<TypeId> = closure_params.iter().map(|(_, t)| *t).collect();
-            let func_type =
-                self.type_table
-                    .make_function(param_types, sig.return_type, Vec::new(), Vec::new());
+            let func_type = self
+                .type_table
+                .make_function(param_types, sig.return_type, Vec::new());
 
             expr.kind = TirExprKind::Closure {
                 params: closure_params,

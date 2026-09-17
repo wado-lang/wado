@@ -168,12 +168,15 @@ impl Ctx<'_> {
     }
 
     /// Whether the operand at `param_index` outlives this call. A value-copy
-    /// helper keeps nothing, a builtin keeps what `with stores[p]` names, a body
+    /// helper keeps nothing, a builtin keeps what `#[retain(p)]` names, a body
     /// answers from the fixpoint, and a callee this scan cannot read keeps all.
     fn callee_keeps(&self, func: &FunctionRef, param_index: usize) -> bool {
         match self.kind(func) {
             Kind::ValueCopy => false,
-            Kind::Builtin => self.builtins.stored_params(func).contains(&param_index),
+            Kind::Builtin => self
+                .builtins
+                .retained_params(func)
+                .any(|p| p == param_index),
             Kind::HasBody => self.callee_escape(func, param_index, |pe| &pe.side),
             Kind::Opaque => true,
         }

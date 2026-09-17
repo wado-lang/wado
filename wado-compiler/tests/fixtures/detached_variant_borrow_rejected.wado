@@ -54,7 +54,7 @@ fn written_through_a_capture(b: &mut Bag) {
 
 // The borrow reaches the `return` through a variable, which is the same escape
 // as returning it there.
-fn returned_through_a_variable(b: &mut Bag) -> &mut Payload with stores[b] {
+fn returned_through_a_variable(b: &mut Bag) -> &mut Payload {
     let r = &mut b.item;
     return r
 }
@@ -64,15 +64,15 @@ fn bound_through_a_branch(b: &mut Bag, c: bool) {
     *r = Payload::Text(`xyz`);
 }
 
-fn stored_in_an_aggregate(b: &mut Bag) -> View with stores[b] {
+fn stored_in_an_aggregate(b: &mut Bag) -> View {
     return View { slot: &mut b.item }
 }
 
-fn stored_in_a_variant_payload(b: &mut Bag) -> Slot with stores[b] {
+fn stored_in_a_variant_payload(b: &mut Bag) -> Slot {
     return Slot::Held(&mut b.item)
 }
 
-fn returned(b: &mut Bag) -> &mut Payload with stores[b] {
+fn returned(b: &mut Bag) -> &mut Payload {
     return &mut b.item
 }
 

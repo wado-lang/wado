@@ -369,7 +369,7 @@ fn "wasi_filesystem_write_stream.wado/run"() with Stdout, Stderr, Preopens {
                 let chunk_mv_items: ref "core:prelude//List<u8>";
                 let chunk_mv_result: "core:prelude/types.wado//enum:CopyResult";
                 multivalue_bind [chunk_mv_items, chunk_mv_result] = "core:rt/cm_stream_read_u8"(file_rx, 4096);
-                drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_36, chunk_mv_items));
+                drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_36, struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = chunk_mv_items.repr; let $array_clone_len_3: i32; $array_clone_len_3 = chunk_mv_items.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: chunk_mv_items.used }));
                 break_if b4 chunk_mv_result != 0;
                 continue l5;
             };

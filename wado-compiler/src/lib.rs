@@ -107,8 +107,7 @@ pub use semantics::{
 pub use compiler_host::InMemoryCompilerHost;
 pub use effect_check::{
     EffectError, INDIRECT_CALLEE, Impurity, PureContext, PurityError, SemanticDiagnostics,
-    StoresError, check_effects_semantic, check_purity_semantic, check_semantics,
-    check_stores_semantic,
+    check_effects_semantic, check_purity_semantic, check_semantics,
 };
 pub use elaborator::{Elaborator, TypeError};
 pub use flat_package::FlatPackage;
@@ -1208,8 +1207,8 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    // === Phase 6b: Effect, Stores, and Purity Checks (Design B) ===
-    // All three are produced from `Semantics` (AST + recorded facts), not the
+    // === Phase 6b: Effect and Purity Checks ===
+    // Both are produced from `Semantics` (AST + recorded facts), not the
     // emitted TIR, so they see every source function regardless of what reify
     // emits and share their logic with the LSP.
     {
@@ -1223,9 +1222,6 @@ fn compile_after_load<H: CompilerHost>(
         let move_errors = resource_move_check::check_resource_moves_semantic(&sem);
         let had_error = !diags.is_empty() || !move_errors.is_empty();
         for error in diags.effects {
-            let _ = logger.error(error);
-        }
-        for error in diags.stores {
             let _ = logger.error(error);
         }
         for error in diags.purity {

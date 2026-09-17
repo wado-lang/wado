@@ -263,10 +263,11 @@ where it cannot prove move / share / fresh; no elision pass):
   returns owned), plus the literals that materialize their own storage: a string
   _and_ a bytes literal, both of which lower to a fresh aggregate over a packed
   array. Where a result comes from is one fact: a body is read for it, a
-  `core:builtin` declares it. `#[returns(owned)]` says the result is a fresh
-  place; `#[returns(part_of = p)]` says it names a component of parameter `p`.
-  The declaration is mandatory. Link asserts that a bodyless `core:builtin`
-  reading through a reference and returning storage carries one. What is left
+  `core:builtin` declares it. `#[result(owned)]` says the result is a fresh
+  place; `#[result(part_of = p)]` says it names a component of parameter `p`.
+  The declaration is mandatory. A bodyless declaration reading through a
+  reference and returning storage is refused without one, at the declaration,
+  where there is a span to point at. What is left
   undeclared cannot hand storage out at all, so reading it as fresh is a fact
   rather than a guess. The obligation is checkable from the
   signature because only a reference argument can carry storage out: a by-value
@@ -280,7 +281,7 @@ where it cannot prove move / share / fresh; no elision pass):
   receiver. `VariantCase::extract(&self, w)` returns a component of `w`; testing
   `self` asks about a member descriptor the walk built fresh, and calls the
   result fresh while `w` is still held. A `core:builtin` answers the same
-  question from `#[returns(part_of = p)]`, which names `p` outright.
+  question from `#[result(part_of = p)]`, which names `p` outright.
 
   An _indirect_ call is fresh when every closure `$call` of its
   return type returns owned: closure lowering rewrites every callable value —
@@ -314,7 +315,7 @@ where it cannot prove move / share / fresh; no elision pass):
   so an escape recorded against a binding closes back over the binding's
   referent (`propagate_escapes_to_referents`). A reference binding therefore
   pins the scrutinee exactly as `&op` itself would wherever it outlives the
-  match — a `stores` callee, an aggregate literal, a global, a write through a
+  match — a retaining callee, an aggregate literal, a global, a write through a
   place, the result.
 - Confinement — `confine.rs` per-parameter escape fixpoint. A builtin declares
   no function, so it is absent from the table that walk builds; reading absence
@@ -323,8 +324,8 @@ where it cannot prove move / share / fresh; no elision pass):
   `String::cmp`, and so `TreeMap::find_index`, whose key every lookup then
   deep-copied.
 
-  What a builtin keeps of what it was passed is read from its `with stores[p]`,
-  the same clause a body carries. `array_set` and `array_fill` store their
+  What a builtin keeps of what it was passed is read from its `#[retain(...)]`,
+  which only a body-less declaration carries. `array_set` and `array_fill` store their
   `value` into the array; nothing else a builtin is handed outlives the call.
   Link snapshots the positions alongside the return convention, since
   monomorphization drops the declarations either fact would be read from.
@@ -333,8 +334,8 @@ where it cannot prove move / share / fresh; no elision pass):
   through a reference the caller owns. A caller must assume the union, but the
   fixpoint must not: an iterator holds a reference to what it walks, so one set
   makes every `&List` parameter stored the moment the body iterates it, while a
-  `collect()` that drops the iterator stores nothing. A declared `stores[p]`
-  names no destination: a value-returning body is read as handing it out with
+  `collect()` that drops the iterator stores nothing. A `#[retain(p)]` with no
+  `into` names no destination: a value-returning body is read as handing it out with
   the result, a void one (`List::push`, storing through a builtin) has nowhere
   visible to put it and keeps the strong reading. A builtin has no body to read
   either, so a reference-typed call result carries every argument —
@@ -522,35 +523,23 @@ inliner nor any NIR pass can substitute — the copy is chosen before NIR exists
 and `#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
 untouched even with the cloned array provably unread.
 
-### Known gap: a declared `stores` the walk does not confirm
+### Known gap: a declared retention the walk does not confirm
 
-`stores.rs` reads a `stores[p]` on a value-returning body as naming the result,
-which is what `iter()` and `as_slice()` do and what keeps a `collect()` that
-drops the iterator from pinning the list it walked. The reading is not derived:
-a body that instead puts the reference somewhere the walk cannot follow — a raw
-builtin, a `CmRawCall` — and returns a value is read as routing it to the
-result. What still covers it is not the analysis: the published answer is the
-union of both channels, so every direct caller stays conservative, and the
-frontend makes a caller handing on its own reference parameter declare
-`stores` in turn. A carried value that is neither — a reference inside an
-aggregate — passed to such a callee whose result the caller drops is the shape
-that would escape both.
+Only a body-less declaration carries retention now
+([Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)),
+and it has no body for the walk to confirm it against. A `#[retain(p)]` is taken
+at its word on both channels, so a caller stays conservative whether or not the
+declaration was right; what nothing can catch is a declaration that understates
+what the callee keeps.
 
-`carries` drops the same way at a projection whose type only _holds_ a
-reference — `w.h` where `Held { r: &Rep }` — since the arm keys on the
-projection being a reference itself. A carrier is seeded only from a reference
-parameter, and the frontend rejects storing one in a struct field without
-`stores[p]`, so the declaration covers what the walk lets go. Naming it instead
-takes a "can a value of this type hold a reference" predicate, memoized per
-`TypeId`.
-
-Deriving it instead means promoting a declaration the walk did not confirm to
-the strong reading, and that is only sound-and-precise once the walk confirms
-the routings that are real: measured, it promotes `List::as_slice` and every
-`AsSlice` iterator built on it, which restores the deep copy of each `Op` in
-`lower_alt_body` and costs gale-gen ~2%. So the order is fixed — make `carries`
-follow a reference through the adapter chain first, then let an unconfirmed
-declaration mean "anywhere".
+`carries` drops at a projection whose type only _holds_ a reference — `w.h`
+where `Held { r: &Rep }` — since the arm keys on the projection being a
+reference itself. A parameter that only holds one is seeded, through
+`RefCarrying`: the memoized "can a value of this type hold a reference"
+predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
+that no frontend obligation makes the caller declare it. The projection arm is
+still the narrower reading, and closing it is what would let the walk follow a
+reference through an adapter chain rather than lose it at the first projection.
 
 ### Known gap: a generic resource a user module declares
 
@@ -766,7 +755,7 @@ Verified against the tree.
       `SliceValueIter` holds `repr: &Array<T>`, so the element it hands back is
       a projection of the _list_, not of the iterator, and `ReturnPath`'s
       `through_borrow` closes the gate rather than claim a place it cannot
-      justify. `stores[...]` already records which parameter a callee persists;
+      justify. The walk already records which parameter a callee persists;
       what is missing is _into which field_, which is what would let a caller
       re-root `it.repr[i]` at the list `into_iter` was handed.
       On gale-gen the copy inside `SliceValueIter::next` is 7.9% of the run, ~5%
@@ -777,9 +766,9 @@ Verified against the tree.
 
 - [ ] Say which _field_ a stored parameter is stored into. The gap above needs
       it to re-root an iterator's element read at the list, and `array_copy`
-      needs it because its elements reach `dst`. Recorded with the rest of what
-      `stores[...]` cannot yet say, in
-      [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+      needs it because its elements reach `dst`. Recorded with the rest of
+      what the facts cannot yet say, in
+      [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 - [ ] Read a call through `projection_param`, and `&fresh` through
       `is_owned_value`. Together, not separately.
@@ -836,7 +825,7 @@ client.
 - [Redesign Wasm CM Builtins as Resource Canonical Attributes](./wep-2026-03-01-cm-resource-canonical-attrs.md)
 - [Resource Inheritance and Narrowing](./wep-2026-04-28-resource-inheritance.md)
 - [Migration to GC in Components](./wep-2026-03-28-gc-in-components.md)
-- [Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md)
+- [Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md)
 - [`core:icu`](./wep-2026-08-09-core-icu.md) — the non-owning token's second
   backing.
 - [NIR Optimizer Architecture](./wep-2026-06-05-nir-optimizer-architecture.md)

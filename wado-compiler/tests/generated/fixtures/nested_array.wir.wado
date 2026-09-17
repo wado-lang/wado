@@ -440,7 +440,6 @@ fn "nested_array.wado/nested_array_method_test"() with Stdout {
 
 fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     let row: ref "core:prelude//List<i32>";
-    let new_row: ref "core:prelude//List<i32>";
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/format.wado//Formatter";
     let $local_5_5: ref "core:prelude/string.wado//String";
@@ -487,10 +486,9 @@ fn "nested_array.wado/nested_array_mutate_test"() with Stdout {
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_38, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr_94, start: 0, end: self_95 + 1 });
     "wasi/stream-drop-writable"(tx_38);
     "wasi/future-drop-readable:transmission-cli"(handle_29);
-    new_row = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 };
     block {
     };
-    builtin::array_set<ref "core:prelude//List<i32>">($sroa_matrix_repr, 0, new_row);
+    builtin::array_set<ref "core:prelude//List<i32>">($sroa_matrix_repr, 0, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20, 30), used: 3 });
     $local_5_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_6_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5_5 };
     "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<core:prelude/list.wado/List<i32>>"($sroa_matrix_repr, $local_6_6, 256);

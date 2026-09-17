@@ -568,7 +568,7 @@ impl Deserializer for ArgvDeserializer {
         return Result::Ok(false);
     }
 
-    fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> with stores[self] {
+    fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> {
         if self.cur_is_option {
             let vals = self.gather_option_values()?;
             return Result::Ok(ArgvSeqAccess {
@@ -586,15 +586,11 @@ impl Deserializer for ArgvDeserializer {
         });
     }
 
-    fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> with stores[self] {
+    fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> {
         return Result::Err(unsupported("map"));
     }
 
-    fn begin_struct<S: AsStrSlice>(
-        &mut self,
-        name: S,
-        num_fields: i32,
-    ) -> Result<ArgvStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError> {
         return Result::Ok(ArgvStructAccess {
             de: self,
             pos_rank: 0,
@@ -605,7 +601,7 @@ impl Deserializer for ArgvDeserializer {
         &mut self,
         type_name: S,
         num_cases: i32,
-    ) -> Result<ArgvVariantAccess, DeserializeError> with stores[self] {
+    ) -> Result<ArgvVariantAccess, DeserializeError> {
         // Externally tagged: the next bare token is the case tag. A subcommand
         // field is reached as a positional slot (`#[wire(positional)]`), so the
         // token the outer `next_field` saw is the tag.

@@ -1533,7 +1533,7 @@ fn invalidate_bad_call_sites(
                 .then_some((local, site.callee))
         })
         .collect();
-    // A bound temp whose address is taken, or which a `stores` parameter
+    // A bound temp whose address is taken, or which a retained parameter
     // aliases, is not a pure destructure target.
     for (&local, &f) in &bound {
         if func.address_taken_locals.contains(&local) || func.stores_aliased_locals.contains(&local)
@@ -1697,7 +1697,7 @@ enum Rebound<'a> {
 }
 
 /// Per-function facts deciding whether a payload binding can be re-minted, and
-/// in what form. A local a `stores` parameter aliases cannot: the alias is
+/// in what form. A local a retained parameter aliases cannot: the alias is
 /// established outside this body, and the `let` would not re-establish it.
 /// Neither can one whose declared type is neither the payload nor a `Box` of it
 /// — local indices are pooled, so a declaration matching neither belongs to

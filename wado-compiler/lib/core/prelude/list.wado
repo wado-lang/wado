@@ -108,7 +108,7 @@ impl<T> List<T> {
 
     /// Appends a single element to the end.
     #[compiler_item("list_push")]
-    pub fn push(&mut self, value: T) with stores[value] {
+    pub fn push(&mut self, value: T) {
         let used = self.used;
         if used >= self.repr.len() {
             builtin::cold_path();
@@ -123,7 +123,7 @@ impl<T> List<T> {
     /// a burst of appends after one `reserve` pays a single capacity check
     /// instead of one per element. The Wasm array bounds check still guards the
     /// store, so an under-reserved call traps rather than corrupting memory.
-    pub fn push_within_capacity(&mut self, value: T) with stores[value] {
+    pub fn push_within_capacity(&mut self, value: T) {
         let used = self.used;
         self.repr[used] = value;
         self.used = used + 1;
@@ -151,7 +151,7 @@ impl<T> List<T> {
 
     /// Inserts an element at the given index, shifting all elements after it to the right.
     /// Panics if `index > len()`.
-    pub fn insert(&mut self, index: i32, value: T) with stores[value] {
+    pub fn insert(&mut self, index: i32, value: T) {
         assert 0 <= index <= self.used, "index out of bounds";
         if self.used >= self.repr.len() {
             builtin::cold_path();
@@ -321,7 +321,7 @@ impl<T> IndexValue<i32> for List<T> {
 impl<T> IndexAssign<i32> for List<T> {
     type Output = T;
 
-    fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value] {
+    fn index_assign(&mut self, index: i32, value: Self::Output) {
         assert 0 <= index < self.used, "index out of bounds";
         self.repr[index] = value;
     }
@@ -358,7 +358,7 @@ impl<T> Sequence for List<T> {
 }
 
 impl<T> AsSlice for List<T> {
-    fn as_slice(&self) -> Slice<T> with stores[self] {
+    fn as_slice(&self) -> Slice<T> {
         return Slice::internal_new(&self.repr, 0, self.used);
     }
 }
@@ -384,7 +384,7 @@ impl<T: Ord> Ord for List<T> {
 impl<T> List<T> {
     /// Yields `&mut T` only where `T: RefMut`: a scalar element has no
     /// addressable cell, so a write through the reference would be lost.
-    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self] {
+    pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> {
         return SliceRefMutIter::internal_new(&mut self.repr, 0, self.used);
     }
 

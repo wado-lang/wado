@@ -649,7 +649,7 @@ pub(super) fn can_move_past(expr_mr: &ModRef, int_mr: &ModRef, candidate: u32) -
 /// transitively across the call graph — the callee-side refinement of the
 /// per-expression [`ModRef`], which stops at a call boundary. Only globals,
 /// linear memory and I/O are modelled; the GC heap is deliberately absent,
-/// since `stores` (checked by the client) is what would let a reference escape.
+/// since retention (checked by the client) is what lets a reference escape.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(super) struct FnEffect {
     /// Reads process-wide mutable state (a global, or linear memory), so two
@@ -819,9 +819,9 @@ pub(super) fn compute_fn_effects(
             }
             body.for_each_child(node, |c| stack.push(c));
         }
-        // A declared effect or a `stores` clause is a caller-visible promise in
-        // its own right; treat either as opaque rather than re-deriving it.
-        if !f.effects.is_empty() || !f.stores.is_empty() || f.is_async {
+        // A declared effect or a retention is a caller-visible promise in its
+        // own right; treat either as opaque rather than re-deriving it.
+        if !f.effects.is_empty() || !f.retains.is_empty() || f.is_async {
             own.opaque = true;
         }
         effects[i] = own;

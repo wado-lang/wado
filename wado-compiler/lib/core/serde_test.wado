@@ -48,7 +48,7 @@ struct MockSerializer {
 }
 
 impl SerializeSeq for MockSeqSerializer {
-    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.w.buf.push_str(",");
         }
@@ -65,7 +65,7 @@ impl SerializeSeq for MockSeqSerializer {
 }
 
 impl SerializeMap for MockMapSerializer {
-    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> with stores[self] {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.w.buf.push_str(",");
         }
@@ -75,7 +75,7 @@ impl SerializeMap for MockMapSerializer {
         return r;
     }
 
-    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         self.count += 1;
@@ -89,7 +89,7 @@ impl SerializeMap for MockMapSerializer {
 }
 
 impl SerializeStruct for MockStructSerializer {
-    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.w.buf.push_str(",");
         }
@@ -107,7 +107,7 @@ impl SerializeStruct for MockStructSerializer {
 }
 
 impl SerializeVariant for MockVariantSerializer {
-    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         let mut ser = MockSerializer { w: self.w };
         let r = value.serialize::<MockSerializer>(&mut ser);
         return r;
@@ -179,21 +179,17 @@ impl Serializer for MockSerializer {
         return Result::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<MockSeqSerializer, SerializeError> {
         self.w.buf.push_str("[");
         return Result::Ok(MockSeqSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> with stores[self] {
+    fn begin_map(&mut self, len: i32) -> Result<MockMapSerializer, SerializeError> {
         self.w.buf.push_str("{");
         return Result::Ok(MockMapSerializer { w: self.w, count: 0 });
     }
 
-    fn begin_struct<S: AsStrSlice>(
-        &mut self,
-        name: S,
-        fields: i32,
-    ) -> Result<MockStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<MockStructSerializer, SerializeError> {
         self.w.buf.push_str("{");
         return Result::Ok(MockStructSerializer { w: self.w, count: 0 });
     }
@@ -213,7 +209,7 @@ impl Serializer for MockSerializer {
         type_name: S,
         variant_name: S1,
         disc: i32,
-    ) -> Result<MockVariantSerializer, SerializeError> with stores[self] {
+    ) -> Result<MockVariantSerializer, SerializeError> {
         self.w.buf.push_str(`{"${variant_name}":`);
         return Result::Ok(MockVariantSerializer { w: self.w });
     }

@@ -21,7 +21,7 @@ use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{
     FqTraitName, FqTypeName, LocalMethodName, RefKind, TEMPLATE_SHAPE_PREFIX, TUPLE_TYPE_NAME,
     TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
-    mangle_local_item_name, mangle_stores_member, mangle_tuple_type,
+    mangle_local_item_name, mangle_tuple_type,
 };
 use crate::symbol_notation::render;
 use crate::token::Span;
@@ -237,14 +237,13 @@ impl SubstitutionContext {
                 params,
                 return_type,
                 effects,
-                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
                     .map(|&p| self.substitute(p, type_table))
                     .collect();
                 let new_return = self.substitute(return_type, type_table);
-                type_table.make_function_with_mut(is_mut, new_params, new_return, effects, stores)
+                type_table.make_function_with_mut(is_mut, new_params, new_return, effects)
             }
             ResolvedType::GenericResource { def, type_args } => {
                 let new_args: Vec<TypeId> = type_args
@@ -487,8 +486,6 @@ pub enum ResolvedType {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        /// Positional indices of parameters the function may store.
-        stores: Vec<u32>,
     },
     Reactive(TypeId),
     /// Type parameter (e.g., `T` in `struct Box<T>`) — a *rigid* variable.
@@ -2301,9 +2298,8 @@ impl TypeTable {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        stores: Vec<u32>,
     ) -> TypeId {
-        self.make_function_with_mut(false, params, return_type, effects, stores)
+        self.make_function_with_mut(false, params, return_type, effects)
     }
 
     pub fn make_function_with_mut(
@@ -2312,14 +2308,12 @@ impl TypeTable {
         params: Vec<TypeId>,
         return_type: TypeId,
         effects: Vec<EffectRef>,
-        stores: Vec<u32>,
     ) -> TypeId {
         self.intern(ResolvedType::Function {
             is_mut,
             params,
             return_type,
             effects,
-            stores,
         })
     }
 
@@ -3269,7 +3263,6 @@ impl TypeTable {
                 params,
                 return_type,
                 effects,
-                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
@@ -3279,13 +3272,7 @@ impl TypeTable {
                 if new_params == params && new_return_type == return_type {
                     type_id
                 } else {
-                    self.make_function_with_mut(
-                        is_mut,
-                        new_params,
-                        new_return_type,
-                        effects,
-                        stores,
-                    )
+                    self.make_function_with_mut(is_mut, new_params, new_return_type, effects)
                 }
             }
             ResolvedType::GenericResource { def, type_args } => {
@@ -4498,11 +4485,8 @@ impl TypeTable {
         params: &[TypeId],
         return_type: TypeId,
         effects: &[EffectRef],
-        stores: &[u32],
     ) -> TypeNameInfo {
-        let mut with_clause: Vec<String> =
-            effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
-        with_clause.extend(stores.iter().map(|i| mangle_stores_member(*i)));
+        let with_clause: Vec<String> = effects.iter().map(|e| self.mangle_effect_ref(e)).collect();
         TypeNameInfo::Function {
             is_mut,
             params: params.iter().map(|p| self.mangle_type_name(*p)).collect(),
@@ -4520,12 +4504,11 @@ impl TypeTable {
             params,
             return_type,
             effects,
-            stores,
         } = resolved
         else {
             panic!("fn_receiver_name expects a function type");
         };
-        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects, stores);
+        let info = self.fn_type_name_info(*is_mut, params, *return_type, effects);
         FqTypeName::builtin(&format_type_name(info))
     }
 
@@ -4724,8 +4707,7 @@ impl TypeTable {
                 params,
                 return_type,
                 effects,
-                stores,
-            } => self.fn_type_name_info(*is_mut, params, *return_type, effects, stores),
+            } => self.fn_type_name_info(*is_mut, params, *return_type, effects),
             ResolvedType::BuiltinArray(elem) => {
                 TypeNameInfo::BuiltinArray(self.mangle_type_name(*elem))
             }
@@ -5915,8 +5897,9 @@ pub struct TirFunction {
     /// to infer signature resources.
     pub task_return_type: Option<TypeId>,
     pub effects: Vec<EffectRef>,
-    /// Parameter names declared in `stores[...]` — the function may store these references.
-    pub stores: Vec<String>,
+    /// `#[retain(...)]` on a bodyless declaration — what the call keeps past
+    /// its return. A function with a body declares none: the body is read.
+    pub retains: Vec<RetainSpec<String>>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -5931,9 +5914,9 @@ pub struct TirFunction {
     /// For mutable primitives, these locals are stored in box structs.
     pub address_taken_locals: IndexSet<u32>,
 
-    /// Local indices whose references were stored by inlined `stores` functions.
-    /// When inlining `fn f(x: &T) with stores[x]` with argument `&local`,
-    /// `local` is added here to prevent SROA from decomposing it.
+    /// Local indices a decomposed struct's field held a reference to, which
+    /// SROA must not decompose in turn. Written by SROA alone; every earlier
+    /// phase leaves it empty and later ones only carry and remap it.
     pub stores_aliased_locals: IndexSet<u32>,
 
     /// Whether this function is a synthesized CM binding (generated by `synthesis::cm_binding`).
@@ -5979,7 +5962,7 @@ pub struct TirFunction {
     /// Allocator tag from `#[allocator("...")]` attribute (e.g., `"bump"`, `"debug"`).
     pub allocator_tag: Option<String>,
 
-    /// What `#[returns(...)]` declared. Read only where there is no body to
+    /// What `#[result(...)]` declared. Read only where there is no body to
     /// infer from, so one written on a body is recorded and ignored.
     pub declared_return_convention: Option<ReturnConvention>,
 
@@ -6064,23 +6047,35 @@ pub enum InlineHint {
 /// a fresh place or a projection of one parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnConvention {
-    /// `#[returns(owned)]` — every returned value is freshly materialized, so a
+    /// `#[result(owned)]` — every returned value is freshly materialized, so a
     /// caller may consume it as a move.
     Owned,
-    /// `#[returns(part_of = p)]` — the result names a component of parameter `p`
+    /// `#[result(part_of = p)]` — the result names a component of parameter `p`
     /// in place, so it lives as long as that argument's storage does.
     PartOf(usize),
+}
+
+/// One `#[retain(...)]` clause on a bodyless declaration: what the call keeps
+/// past its return, and where that lands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RetainSpec<Param> {
+    /// The retained parameter.
+    pub source: Param,
+    /// `elements_of = p` — what is retained is what `p` holds, not `p`.
+    pub elements: bool,
+    /// `into = q` — the parameter the retained reference lands in, `None`
+    /// where the declaration names no destination.
+    pub into: Option<Param>,
 }
 
 /// What a bodyless `core:builtin` declared about storage, by parameter position.
 /// Link snapshots it because monomorphization drops the generic declarations.
 #[derive(Debug, Clone, Default)]
 pub struct BuiltinDeclaration {
-    /// `#[returns(...)]`, or `None` where the declaration states none.
+    /// `#[result(...)]`, or `None` where the declaration states none.
     pub returns: Option<ReturnConvention>,
-    /// `with stores[p]` — the parameters this call keeps beyond it, into the
-    /// `&mut` one it was handed.
-    pub stores: Vec<usize>,
+    /// `#[retain(...)]` — what this call keeps beyond it.
+    pub retains: Vec<RetainSpec<usize>>,
 }
 
 /// A body's local frame. Taken and given whole, so a caller moving a body
@@ -6112,6 +6107,23 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// This declaration's `#[retain(...)]` clauses by parameter position.
+    /// Reify drops a clause naming no parameter, so one reaching here names a
+    /// parameter of this very declaration.
+    pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
+        let position = |name: &str| {
+            self.params
+                .iter()
+                .position(|p| p.name == name)
+                .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", self.name))
+        };
+        self.retains.iter().map(move |r| RetainSpec {
+            source: position(&r.source),
+            elements: r.elements,
+            into: r.into.as_deref().map(position),
+        })
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6166,7 +6178,7 @@ impl TirFunction {
             return_type,
             task_return_type: None,
             effects: Vec::new(),
-            stores: Vec::new(),
+            retains: Vec::new(),
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),

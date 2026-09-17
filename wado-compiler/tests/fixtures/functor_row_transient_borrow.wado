@@ -1,0 +1,35 @@
+// The other side of the row: every function value of this type keeps nothing,
+// so a borrow through it is as transient as one through a named callee that
+// keeps nothing, and the struct behind it stays open to SROA. Read as "keeps
+// everything" — retention being no part of a function type — `p` would be
+// pinned by the indirect call alone.
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+#[inline("never")]
+fn read_point(p: &Point) -> i32 {
+    return p.x + p.y;
+}
+
+#[inline("never")]
+fn apply(f: fn(&Point) -> i32, p: &Point) -> i32 {
+    return f(p);
+}
+
+export fn run() {
+    let p = Point {
+        x: builtin::black_box(10),
+        y: builtin::black_box(20),
+    };
+    let r = apply(read_point, &p);
+    assert p.x + r == 40;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O2": ["p = Point"]
+}

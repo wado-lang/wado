@@ -129,13 +129,13 @@ consumes its later occurrences.
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-##### `fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError> with stores[self]`
+##### `fn begin_seq(&mut self) -> Result<ArgvSeqAccess, DeserializeError>`
 
-##### `fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError> with stores[self]`
+##### `fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError>`
 
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError> with stores[self]`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError>`
 
-##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError> with stores[self]`
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

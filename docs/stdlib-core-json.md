@@ -277,13 +277,13 @@ Skips the next JSON value without allocating.
 
 ##### `fn is_null(&mut self) -> Result<bool, DeserializeError>`
 
-##### `fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError> with stores[self]`
+##### `fn begin_seq(&mut self) -> Result<JsonSeqAccess, DeserializeError>`
 
-##### `fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError> with stores[self]`
+##### `fn begin_map(&mut self) -> Result<JsonMapAccess, DeserializeError>`
 
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<JsonStructAccess, DeserializeError> with stores[self]`
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<JsonStructAccess, DeserializeError>`
 
-##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError> with stores[self]`
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<JsonVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

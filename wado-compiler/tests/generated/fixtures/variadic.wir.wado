@@ -617,6 +617,7 @@ fn "variadic.wado/variadic.wado/collect_for_of<[i32,core:prelude/string.wado/Str
     let b_120: ref Array<u8>;
     let len_123: i32;
     let i_124: i32;
+    let $av_157: i32;
     elements = array.new_fixed<ref "core:prelude/string.wado//String">();
     result = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements, used: 0 };
     item_18 = items.0;
@@ -631,7 +632,7 @@ fn "variadic.wado/variadic.wado/collect_for_of<[i32,core:prelude/string.wado/Str
     item_19 = items.1;
     $local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_20 };
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"($local_21, item_19);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"($local_21, $av_157 = item_19.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = item_19.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_157); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_157); $array_clone_dst_2), used: $av_157 });
     used_50 = result.used;
     if @unlikely(used_50 >= builtin::array_len(result.repr)) {
         cold_path;

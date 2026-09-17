@@ -3,6 +3,7 @@
 
 use super::value_copy::callgraph::CallGraph;
 use super::value_copy::funcset::FuncKeyMap;
+use super::value_copy::retention::{FunctorRows, RefCarrying, RetainedParams};
 use super::whole_value_writes::{self, WholeValueWrites};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::flat_package::FlatPackage;
@@ -20,12 +21,14 @@ use crate::token::Span;
 pub fn insert_write_backs(
     flat: &mut FlatPackage,
     call_graph: &CallGraph,
+    escaping: &RetainedParams,
+    functor_rows: &FunctorRows,
     errors: &dyn ErrorSink,
 ) -> Result<(), Bail> {
-    let escaping = escaping_params(flat);
     let type_table = flat.type_table.clone();
     let type_table = type_table.borrow();
-    let replaced = whole_value_writes::compute(flat, call_graph, &type_table);
+    let carrying = RefCarrying::new(&flat.structs, &type_table);
+    let replaced = whole_value_writes::compute(flat, call_graph, &carrying);
     for func_rc in &flat.functions {
         let mut func = func_rc.borrow_mut();
         let local_count = func.local_count;
@@ -37,13 +40,15 @@ pub fn insert_write_backs(
                 whole_value_writes::replaced_locals(
                     whole_value_writes::Body::Block(body),
                     &replaced,
-                    &type_table,
+                    &carrying,
                 )
             })
             .unwrap_or_default();
         let mut pass = WriteBack {
             type_table: &type_table,
-            escaping: &escaping,
+            carrying: &carrying,
+            escaping,
+            functor_rows,
             replaced: &replaced,
             replaced_locals,
             local_count,
@@ -81,30 +86,14 @@ pub fn insert_write_backs(
     Ok(())
 }
 
-/// Parameter positions each function declares in `stores[...]`: a borrow handed
-/// to one outlives the call, so the call is no place to write it back.
-fn escaping_params(flat: &FlatPackage) -> FuncKeyMap<IndexSet<u32>> {
-    let mut out = FuncKeyMap::default();
-    for func_rc in &flat.functions {
-        let func = func_rc.borrow();
-        if func.stores.is_empty() {
-            continue;
-        }
-        let positions = func
-            .params
-            .iter()
-            .enumerate()
-            .filter(|(_, p)| func.stores.contains(&p.name))
-            .map(|(i, _)| u32::try_from(i).unwrap())
-            .collect();
-        out.insert(func.module_source.clone(), func.name.clone(), positions);
-    }
-    out
-}
-
 struct WriteBack<'a> {
     type_table: &'a TypeTable,
+    carrying: &'a RefCarrying<'a>,
     escaping: &'a FuncKeyMap<IndexSet<u32>>,
+    /// What a call through a function value of each functor type keeps. Read
+    /// where no callee name is available, so an indirect call is refused on the
+    /// same ground a direct one is rather than on a different reading.
+    functor_rows: &'a FunctorRows,
     /// Positions a callee replaces outright — what a lost write-back costs.
     replaced: &'a WholeValueWrites,
     /// Local slots this body replaces through, so a binding used only to mutate
@@ -240,14 +229,16 @@ impl WriteBack<'_> {
         let local_base = u32::try_from(param_count).unwrap();
         let mut inner = WriteBack {
             type_table: self.type_table,
+            carrying: self.carrying,
             escaping: self.escaping,
+            functor_rows: self.functor_rows,
             replaced: self.replaced,
             // A closure body's slots are its own, so what it replaces through
             // is its own question too.
             replaced_locals: whole_value_writes::replaced_locals(
                 whole_value_writes::Body::Expr(body),
                 self.replaced,
-                self.type_table,
+                self.carrying,
             ),
             local_count: local_base + u32::try_from(body_locals.len()).unwrap(),
             local_base,
@@ -447,16 +438,13 @@ impl WriteBack<'_> {
                     args.iter_mut().map(|a| &mut a.expr).collect(),
                 ),
                 TirExprKind::IndirectCall { callee, args } => {
-                    let every =
-                        || -> IndexSet<u32> { (0..u32::try_from(args.len()).unwrap()).collect() };
-                    let stores = match self.type_table.get(callee.type_id) {
-                        ResolvedType::Function { stores, .. } => stores.iter().copied().collect(),
-                        // A callee whose type says nothing has declared nothing
-                        // it keeps, which is not the same as keeping nothing.
-                        _ => every(),
-                    };
-                    // A functor says nothing about what it replaces either.
-                    let replaced = every();
+                    // Nothing here names the body that will run, so what it
+                    // keeps is the join over every function value of the
+                    // callee's type — the same reading the copy analysis takes,
+                    // so the two no longer disagree. What it replaces is still
+                    // unknown, and over-approximating that only costs a store.
+                    let stores = self.functor_rows.retained(callee, args.len()).positions();
+                    let replaced: IndexSet<u32> = (0..u32::try_from(args.len()).unwrap()).collect();
                     (
                         "a function value".to_string(),
                         stores,
@@ -508,7 +496,7 @@ impl WriteBack<'_> {
                     // outlives every point in this body, where a replaced one
                     // has a point but no place this pass can spell.
                     let why = if escaping.contains(&u32::try_from(position).unwrap()) {
-                        "stores it, so it outlives the call"
+                        "retains it, so it outlives the call"
                     } else {
                         "replaces it, and no place here can be stored back to"
                     };
@@ -531,7 +519,7 @@ impl WriteBack<'_> {
             if escaping.contains(&u32::try_from(position).unwrap()) {
                 self.refuse(
                     arg.span,
-                    format!("'{callee}' stores it, so it outlives the call"),
+                    format!("'{callee}' retains it, so it outlives the call"),
                 );
                 continue;
             }

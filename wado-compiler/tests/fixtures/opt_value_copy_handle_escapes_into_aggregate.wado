@@ -15,14 +15,14 @@ struct Holder {
 impl Holder {
     /// The borrow reaches `self.rows` through a struct literal.
     #[inline("never")]
-    fn bump_via_field(&mut self) with stores[self] {
+    fn bump_via_field(&mut self) {
         let v = View { repr: &mut self.rows, tag: 0 };
         v.repr.push(9);
     }
 
     /// The same, read back out by destructuring rather than field access.
     #[inline("never")]
-    fn bump_via_destructure(&mut self) with stores[self] {
+    fn bump_via_destructure(&mut self) {
         let v = View { repr: &mut self.rows, tag: 0 };
         let View { repr, tag } = v;
         repr.push(9);
@@ -30,14 +30,14 @@ impl Holder {
 }
 
 #[inline("never")]
-fn len_across_field(h: &mut Holder) -> i32 with stores[h] {
+fn len_across_field(h: &mut Holder) -> i32 {
     let r = h.rows;
     h.bump_via_field();
     return r.len();
 }
 
 #[inline("never")]
-fn len_across_destructure(h: &mut Holder) -> i32 with stores[h] {
+fn len_across_destructure(h: &mut Holder) -> i32 {
     let r = h.rows;
     h.bump_via_destructure();
     return r.len();

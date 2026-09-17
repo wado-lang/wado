@@ -13,7 +13,7 @@ trait Seq with () {
 
 trait De with () {
     type Acc: Seq;
-    fn begin(&mut self) -> Self::Acc with stores[self];
+    fn begin(&mut self) -> Self::Acc;
 }
 
 trait Deser with () {
@@ -34,7 +34,7 @@ struct MyDe {
 }
 impl De for MyDe {
     type Acc = MyAcc;
-    fn begin(&mut self) -> MyAcc with stores[self] {
+    fn begin(&mut self) -> MyAcc {
         return MyAcc { v: self.x };
     }
 }

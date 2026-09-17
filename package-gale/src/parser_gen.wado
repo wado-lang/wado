@@ -3307,7 +3307,7 @@ fn gen_multi_alt_body<S: AsStrSlice>(
 /// The `while` accommodates a theoretical future where lower stacks
 /// multiple scalar labels (`a=b=expr`); the g4 parser does not produce
 /// that today, but the loop is free defensive cost.
-fn peel_scalar_label(elem: &Element) -> &Element with stores[elem] {
+fn peel_scalar_label(elem: &Element) -> &Element {
     let mut cur = elem;
     loop {
         if let Label(lab) = cur {
@@ -3706,7 +3706,7 @@ fn gen_group_body(
     gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
 }
 
-fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody with stores[alts] {
+fn alt_by_index(alts: &List<AltBody>, idx: i32) -> &AltBody {
     for let a of alts {
         if a.alt_index == idx {
             return a;
@@ -4579,7 +4579,7 @@ fn gen_op_dispatch_element(
 /// dispatched at its unwrapped op (which carries the actual emit
 /// shape) rather than through `gen_op_repeat`'s optional gate (the
 /// shape already promised the element is present).
-fn unwrap_optional_op(op: &Op) -> &Op with stores[op] {
+fn unwrap_optional_op(op: &Op) -> &Op {
     if let Repeat(rep_op) = op {
         if let Optional = rep_op.kind {
             return &rep_op.body;
@@ -4939,7 +4939,7 @@ fn any_alt_gated(branches: &List<DecisionBranch>) -> bool {
 
 /// The alternatives of a repeat's group body, or `null` when the body is not a
 /// group (a leaf or a rule call has no per-alternative gate).
-fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> with stores[inner] {
+fn repeat_body_group_alts(inner: &Element) -> Option<&List<Alternative>> {
     if let Group(g) = peel_repeat_body_label(inner) {
         return Option::Some(&g.alternatives);
     }
@@ -6736,7 +6736,7 @@ fn compute_non_greedy_condition(
     return `(${peek0_cond}) && (${peek1_cond})`;
 }
 
-fn unwrap_optional(elem: &Element) -> &Element with stores[elem] {
+fn unwrap_optional(elem: &Element) -> &Element {
     return match elem {
         Repeat(rep) => if rep.kind matches { Optional } { &rep.element } else { elem },
         Label(lab) => unwrap_optional(&lab.element),

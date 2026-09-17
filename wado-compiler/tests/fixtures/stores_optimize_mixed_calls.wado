@@ -1,6 +1,6 @@
 // Optimization: mixed forwarding outcomes.
-// `read_point` (no stores) inlines and `a.x` forwards → its assert folds.
-// `capture_point` (stores[p]) aliases `b`; mutating `b.x` through the stored
+// `read_point` (retains nothing) inlines and `a.x` forwards → its assert folds.
+// `capture_point` (retains `p`) aliases `b`; mutating `b.x` through the stored
 // reference blocks forwarding → `b.x`'s assert survives (forwarding the stale
 // 30 past the write would be a miscompile).
 
@@ -21,7 +21,7 @@ fn read_point(p: &Point) -> i32 {
 }
 
 // Stores the reference — causes aliasing after inlining.
-fn capture_point(p: &mut Point) -> Ref with stores[p] {
+fn capture_point(p: &mut Point) -> Ref {
     return Ref { p };
 }
 

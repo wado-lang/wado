@@ -256,10 +256,10 @@ fn "bug_sroa_variant_return_boxed_payload_binding.wado/describe"(inputs) {
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $local_6: ref "core:prelude/string.wado//String";
     let self_25: ref "core:prelude/string.wado//String";
-    let other_55: ref "core:prelude/string.wado//String";
-    let n_60: i32;
-    let new_used_64: i32;
-    let start_65: i32;
+    let v: ref "core:prelude/string.wado//String";
+    let new_used_65: i32;
+    let start_66: i32;
+    let $sroa_other_used_76: i32;
     let $sroa_result_value_mv_0: i32;
     let $sroa_result_value_mv_1: ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Big";
     let $sroa_result_value_mv_2: ref null "bug_sroa_variant_return_boxed_payload_binding.wado//Failure";
@@ -271,17 +271,16 @@ fn "bug_sroa_variant_return_boxed_payload_binding.wado/describe"(inputs) {
     }
     if $sroa_result_value_mv_0 == 0 {
         big = ref.as_non_null($sroa_result_value_mv_1);
-        return $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, $local_6.used = 4, builtin::array_copy<u8>($local_6.repr, 0, global:bug_sroa_variant_return_boxed_payload_binding.wado::$const_obj_0, 0, 4), other_55 = big.name, $inline_core_prelude_string_wado_String__internal_push_string_22: block {
-            n_60 = other_55.used;
-            break_if $inline_core_prelude_string_wado_String__internal_push_string_22 n_60 == 0;
-            new_used_64 = 4 + n_60;
-            if @unlikely(new_used_64 > 20) {
+        return $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 }, $local_6.used = 4, builtin::array_copy<u8>($local_6.repr, 0, global:bug_sroa_variant_return_boxed_payload_binding.wado::$const_obj_0, 0, 4), v = big.name, let $array_clone_src_1: ref Array<u8>, $array_clone_src_1 = v.repr, let $array_clone_len_3: i32, $array_clone_len_3 = v.used, let $array_clone_dst_2: ref Array<u8>, $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3), builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3), $sroa_other_used_76 = v.used, $inline_core_prelude_string_wado_String__internal_push_string_23: block {
+            break_if $inline_core_prelude_string_wado_String__internal_push_string_23 $sroa_other_used_76 == 0;
+            new_used_65 = 4 + $sroa_other_used_76;
+            if @unlikely(new_used_65 > 20) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_64);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_65);
             }
-            start_65 = $local_6.used;
-            $local_6.used = new_used_64;
-            builtin::array_copy<u8>($local_6.repr, start_65, other_55.repr, 0, n_60);
+            start_66 = $local_6.used;
+            $local_6.used = new_used_65;
+            builtin::array_copy<u8>($local_6.repr, start_66, $array_clone_dst_2, 0, $sroa_other_used_76);
         }, $local_6;
     } else {
     }

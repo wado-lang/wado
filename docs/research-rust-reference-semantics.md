@@ -301,7 +301,7 @@ let r = &String::from("hello");  // temporary extended to live as long as r
 
 **None of this applies to Wado.** GC-based memory means:
 
-- No lifetime annotations needed (Wado uses `stores[...]` for escape analysis instead)
+- No lifetime annotations needed (Wado infers escape from the body instead)
 - No temporary lifetime concerns — GC keeps values alive
 - `&T` in struct fields just works
 
@@ -503,7 +503,7 @@ Wado's closure design is simpler than Rust's thanks to GC and the absence of a b
 
 | Feature                       | Reason                                                            |
 | ----------------------------- | ----------------------------------------------------------------- |
-| Lifetime annotations (`'a`)   | GC manages memory; `stores[...]` handles escape analysis          |
+| Lifetime annotations (`'a`)   | GC manages memory; escape is inferred from the body               |
 | Reborrowing                   | `&mut T` is Copy-like in Wado; no uniqueness invariant            |
 | `ref` / `ref mut` in patterns | No move semantics; pattern matching always copies values          |
 | `FnOnce` (consume-only)       | No move semantics; calls never consume captures (see closure WEP) |

@@ -85,7 +85,7 @@ internal trait Sequence {
 
 /// Contiguously-backed sequences. View-producing operations live here.
 internal trait AsSlice: Sequence {
-    fn as_slice(&self) -> Slice<Self::Elem> with stores[self];
+    fn as_slice(&self) -> Slice<Self::Elem>;
 
     // default bodies forwarding to `Slice`'s inherent implementations
     fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>;

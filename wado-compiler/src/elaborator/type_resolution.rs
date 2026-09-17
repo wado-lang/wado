@@ -10,7 +10,7 @@ use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::TypeError;
 use crate::ast;
-use crate::ast::{NamespacedGenericType, StoresEntry, TraitBound};
+use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
@@ -79,14 +79,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .map(|p| self.resolve_type(p))
                     .collect();
                 let return_type = self.resolve_type(&func_ty.return_type);
-                let stores: Vec<u32> = func_ty
-                    .stores
-                    .iter()
-                    .filter_map(|e| match e {
-                        StoresEntry::Index(n) => Some(*n),
-                        StoresEntry::Name(_) => None, // Names only valid in fn decls
-                    })
-                    .collect();
                 // Resolve effect names in function type position
                 let effects = self.resolve_effects(&func_ty.effects, &func_ty.effect_ids);
                 self.tysys.type_table.borrow_mut().make_function_with_mut(
@@ -94,7 +86,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     params,
                     return_type,
                     effects,
-                    stores,
                 )
             }
             Type::Tuple(elements) => {

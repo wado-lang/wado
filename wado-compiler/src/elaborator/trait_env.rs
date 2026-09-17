@@ -2826,15 +2826,7 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             // The written spelling: an effect has no reference site, so there
             // is no identity to ask for. The resolved side qualifies a concrete
             // effect by module, so the two agree on a binder and not on one.
-            let mut with_clause: Vec<String> = ft.effects.clone();
-            for entry in &ft.stores {
-                with_clause.push(match entry {
-                    ast::StoresEntry::Index(index) => name::mangle_stores_member(*index),
-                    // A name has no parameter position here, and inventing one
-                    // would name a parameter the type never mentions.
-                    ast::StoresEntry::Name(name) => format!("stores[{name}]"),
-                });
-            }
+            let with_clause: Vec<String> = ft.effects.clone();
             name::FqTypeName::builtin(&name::mangle_fn_type(
                 ft.is_mut,
                 &params,

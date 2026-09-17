@@ -99,20 +99,20 @@ impl Serializer for Sink {
     fn serialize_null(&mut self) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
-    fn begin_seq(&mut self, len: i32) -> Result<SeqSink, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<SeqSink, SerializeError> {
         return Result::Ok(SeqSink {});
     }
-    fn begin_map(&mut self, len: i32) -> Result<MapSink, SerializeError> with stores[self] {
+    fn begin_map(&mut self, len: i32) -> Result<MapSink, SerializeError> {
         return Result::Ok(MapSink {});
     }
-    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<StructSink, SerializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<StructSink, SerializeError> {
         self.out = name.to_string();
         return Result::Ok(StructSink {});
     }
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
-    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<VariantSink, SerializeError> with stores[self] {
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<VariantSink, SerializeError> {
         return Result::Ok(VariantSink {});
     }
 }

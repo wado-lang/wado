@@ -154,11 +154,11 @@ fn "wasm_name_conflict_pub_use_alias.wado/run"() with Stdout {
     let handle: i32;
     let new_used_24: i32;
     let start_25: i32;
-    let new_used_37: i32;
-    let start_38: i32;
+    let new_used_38: i32;
+    let start_39: i32;
     let packed: i64;
-    let rx_41: i32;
-    let tx_42: i32;
+    let rx_42: i32;
+    let tx_43: i32;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:wasm_name_conflict_pub_use_alias.wado::$modules_initialized);
         cold_path;
@@ -175,18 +175,18 @@ fn "wasm_name_conflict_pub_use_alias.wado/run"() with Stdout {
     start_25 = $local_1.used;
     $local_1.used = new_used_24;
     builtin::array_copy<u8>($local_1.repr, start_25, global:wasm_name_conflict_pub_use_alias.wado::$const_obj_16, 0, 1);
-    new_used_37 = $local_1.used + 6;
-    if @unlikely(new_used_37 > builtin::array_len($local_1.repr)) {
+    new_used_38 = $local_1.used + 6;
+    if @unlikely(new_used_38 > builtin::array_len($local_1.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_37);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_38);
     }
-    start_38 = $local_1.used;
-    $local_1.used = new_used_37;
-    builtin::array_copy<u8>($local_1.repr, start_38, global:wasm_name_conflict_pub_use_alias.wado::$const_obj_15, 0, 6);
-    rx_41 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_42 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "wasm_name_conflict_pub_use_alias.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
-    "core:rt/write_string_to_stream"(tx_42, $local_1);
+    start_39 = $local_1.used;
+    $local_1.used = new_used_38;
+    builtin::array_copy<u8>($local_1.repr, start_39, global:wasm_name_conflict_pub_use_alias.wado::$const_obj_15, 0, 6);
+    rx_42 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_43 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "wasm_name_conflict_pub_use_alias.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
+    "core:rt/write_string_to_stream"(tx_43, $local_1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

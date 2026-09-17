@@ -3469,7 +3469,6 @@ fn test_format_effect_row_parentheses() {
     let source = concat!(
         "fn one() with Stdout {\n}\n",
         "fn many() with (Stdout, Stderr) {\n}\n",
-        "fn keep(d: &Data) with (Stdout, stores[d]) {\n}\n",
         "fn nested(f: fn() with (A, B), x: i32) {\n}\n",
     );
     let formatted = wado_compiler::format(source).expect("format failed");
@@ -3600,7 +3599,7 @@ fn test_format_keeps_parens_around_a_handler_closure_body() {
     }
 }
 
-/// `#[returns(part_of = p)]` names a parameter, so the value stays an
+/// `#[result(part_of = p)]` names a parameter, so the value stays an
 /// identifier while `#[param(name = "...")]` keeps its quotes.
 #[test]
 fn test_format_keeps_an_attribute_identifier_value_unquoted() {
@@ -3608,14 +3607,14 @@ fn test_format_keeps_an_attribute_identifier_value_unquoted() {
         "#[param(name = \"build.id\")]\n",
         "global BUILD_ID: String = \"dev\";\n",
         "\n",
-        "#[returns(part_of = xs)]\n",
+        "#[result(part_of = xs)]\n",
         "fn first(xs: &List<i32>) -> i32 {\n",
         "    return xs[0];\n",
         "}\n"
     );
     let formatted = wado_compiler::format(source).expect("format failed");
     assert!(
-        formatted.contains("#[returns(part_of = xs)]"),
+        formatted.contains("#[result(part_of = xs)]"),
         "expected the parameter name to stay unquoted, got:\n{formatted}"
     );
     assert!(

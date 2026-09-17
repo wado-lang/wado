@@ -102,7 +102,7 @@ impl Serializer for JsonSerializer {
         return Result::<(), SerializeError>::Ok(());
     }
 
-    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> with stores[self] {
+    fn begin_seq(&mut self, len: i32) -> Result<JsonSeqSerializer, SerializeError> {
         self.w.write(&"[");
         return Result::<JsonSeqSerializer, SerializeError>::Ok(JsonSeqSerializer {
             w: self.w,
@@ -110,7 +110,7 @@ impl Serializer for JsonSerializer {
         });
     }
 
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> with stores[self] {
+    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<JsonStructSerializer, SerializeError> {
         self.w.write(&"{");
         return Result::<JsonStructSerializer, SerializeError>::Ok(JsonStructSerializer {
             w: self.w,
@@ -120,7 +120,7 @@ impl Serializer for JsonSerializer {
 }
 
 impl SerializeSeq for JsonSeqSerializer {
-    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.w.write(&",");
         }
@@ -137,7 +137,7 @@ impl SerializeSeq for JsonSeqSerializer {
 }
 
 impl SerializeStruct for JsonStructSerializer {
-    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> with stores[self] {
+    fn field<T: Serialize>(&mut self, name: &String, value: &T) -> Result<(), SerializeError> {
         if self.count > 0 {
             self.w.write(&",");
         }

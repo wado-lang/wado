@@ -255,7 +255,7 @@ impl WasmModuleInfo {
                 locals,
                 generic_origin: None,
                 effects: Vec::new(),
-                stores: Vec::new(),
+                retains: Vec::new(),
                 compiler_item: None,
                 export_name: None,
             });
@@ -854,9 +854,9 @@ pub struct WirFunction {
     pub generic_origin: Option<WirGenericOrigin>,
     /// Effect requirements (for unparse display).
     pub effects: Vec<EffectRef>,
-    /// Parameter names declared in `stores[...]` — the function may store these references.
-    /// Used by WIR optimizations for stores-aware alias analysis.
-    pub stores: Vec<String>,
+    /// Parameter names a `#[retain(...)]` declaration names as retained.
+    /// Used by WIR optimizations for retention-aware alias analysis.
+    pub retains: Vec<String>,
     /// The compiler-recognized stdlib role this function fills, if any.
     /// Set from `#[compiler_item("...")]` on the source declaration; see
     /// [`crate::compiler_item::CompilerItem`].

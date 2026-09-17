@@ -292,7 +292,6 @@ impl Builder {
                 effects: Vec::new(),
                 effect_ids: Vec::new(),
                 effects_inherited: false,
-                stores: Vec::new(),
                 body: None,
                 span: syn(),
             });
@@ -380,7 +379,6 @@ impl Builder {
             effects: Vec::new(),
             effect_ids: Vec::new(),
             effects_inherited: false,
-            stores: Vec::new(),
             body: None,
             span: syn(),
         }));

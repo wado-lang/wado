@@ -574,7 +574,6 @@ fn representative(
                     params: Vec::new(),
                     return_type: TypeTable::UNIT,
                     effects: Vec::new(),
-                    stores: Vec::new(),
                 })
             } else {
                 None

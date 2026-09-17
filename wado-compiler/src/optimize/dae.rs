@@ -182,8 +182,8 @@ fn find_dead_params(func: &NirFunction) -> Vec<bool> {
         let is_read = reads.contains(&p.local_index);
         let is_kept = kept_locals.contains(&p.local_index);
         let is_aliased = stores_aliased.contains(&p.local_index);
-        let in_stores = func.stores.contains(&p.name);
-        dead.push(!(is_read || is_kept || is_aliased || in_stores));
+        let is_retained = func.retains.contains(&p.name);
+        dead.push(!(is_read || is_kept || is_aliased || is_retained));
     }
     dead
 }

@@ -332,7 +332,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             param_types,
             return_type,
             Vec::new(),
-            Vec::new(),
         );
 
         // Placeholder — reify is the sole producer of the closure's TIR shape.

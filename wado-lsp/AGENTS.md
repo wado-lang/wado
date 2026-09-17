@@ -150,7 +150,7 @@ prints it. The compiler owes every located diagnostic its module
 (`Elaborator::emit` / `Logger::error_in`, never `Logger::error`); its e2e
 host asserts that on emit, so the whole fixture corpus enforces it.
 
-The Design-B semantic checks (effect / stores / default-purity / resource
+The Design-B semantic checks (effect / default-purity / resource
 moves) are derived from the snapshot lazily, on the first `diagnostics`
 call, and cached on the `Snapshot`. Every other query reuses the same
 snapshot without paying for them.

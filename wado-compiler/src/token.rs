@@ -132,7 +132,6 @@ pub enum TokenKind {
     Global,
     Const,
     Matches,
-    Stores,
     // Note: "test", "do", "resume" are contextual keywords handled by the parser,
     // not as TokenKinds. `do` is only treated as a keyword inside the trailing
     // position of a `with ... do { ... }` clause; `resume` is only treated as a
@@ -379,8 +378,8 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         Internal, LBrace, LBracket, LParen, Let, Loop, Lt, LtEq, LtLt, Match, Matches, Minus,
         MinusEq, Mut, Not, NotEq, Null, NumberLit, Of, Or, Percent, PercentEq, Pipe, PipeEq, Plus,
         PlusEq, Pub, Question, RBrace, RBracket, RParen, Reactive, Resource, Return, Semicolon,
-        ShlEq, ShrEq, Slash, SlashEq, Star, StarEq, Stores, StringLit, Struct, TemplateStringLit,
-        Tilde, Trait, True, Type, Unique, Use, Variant, While, With, World,
+        ShlEq, ShrEq, Slash, SlashEq, Star, StarEq, StringLit, Struct, TemplateStringLit, Tilde,
+        Trait, True, Type, Unique, Use, Variant, While, With, World,
     };
     // `Error` is excluded: it only appears in malformed lex output, which
     // kiln gates out before reaching this function. Omitting it from the
@@ -446,7 +445,6 @@ pub fn canonical_token_bytes(out: &mut Vec<u8>, kind: &TokenKind) {
         Global => write_str(out, b'V', "Global"),
         Const => write_str(out, b'V', "Const"),
         Matches => write_str(out, b'V', "Matches"),
-        Stores => write_str(out, b'V', "Stores"),
 
         // Literals with payload
         Ident(s) => write_payload(out, b'P', "Ident", s.as_bytes()),

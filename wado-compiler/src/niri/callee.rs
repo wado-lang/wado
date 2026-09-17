@@ -32,13 +32,13 @@ pub struct Callee {
     pub func: Rc<RefCell<NirFunction>>,
     arity: usize,
     mut_params: Vec<bool>,
-    stored_params: Vec<bool>,
+    retained_params: Vec<bool>,
 }
 
 impl Callee {
     #[must_use]
     pub fn new(func: Rc<RefCell<NirFunction>>) -> Self {
-        let (arity, mut_params, stored_params) = {
+        let (arity, mut_params, retained_params) = {
             let borrowed = func.borrow();
             (
                 borrowed.params.len(),
@@ -46,7 +46,7 @@ impl Callee {
                 borrowed
                     .params
                     .iter()
-                    .map(|p| borrowed.stores.contains(&p.name))
+                    .map(|p| borrowed.retains.contains(&p.name))
                     .collect(),
             )
         };
@@ -54,7 +54,7 @@ impl Callee {
             func,
             arity,
             mut_params,
-            stored_params,
+            retained_params,
         }
     }
 
@@ -69,10 +69,12 @@ impl Callee {
         self.mut_params.get(index).copied().unwrap_or(true)
     }
 
-    /// A stored parameter outlives the call, so naming its referent is not the
+    /// A retained parameter outlives the call, so naming its referent is not the
     /// passing read the other arguments are.
     pub(super) fn reads_only(&self, index: usize) -> bool {
-        self.stored_params.get(index).is_some_and(|stored| !stored)
+        self.retained_params
+            .get(index)
+            .is_some_and(|retained| !retained)
     }
 }
 

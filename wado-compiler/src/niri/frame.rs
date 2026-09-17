@@ -664,9 +664,9 @@ impl Interpreter<'_> {
 
     /// The value bound to a by-value or shared-reference parameter. A shared
     /// reference cannot write, so the referent's own constant stands; one
-    /// retained past the callee's return is refused by `stores`. An alias
-    /// local passes its place's value, as `&place` does: the parameter reads
-    /// through what it receives.
+    /// retained past the callee's return is refused. An alias local passes its
+    /// place's value, as `&place` does: the parameter reads through what it
+    /// receives.
     fn shared_ref_arg_value(&mut self, body: &Body, arg: Operand) -> Option<Value> {
         if let Some(e) = arg.as_expr()
             && let ExprKind::Unary {
@@ -775,14 +775,14 @@ impl Interpreter<'_> {
             return self.decline(&key, "two arguments reach one place");
         }
         // A result may embed a parameter's storage — `Formatter::new(&mut buf)`
-        // returns a `Formatter` holding that borrow, and `stores[p]` declares
-        // the same of a shared one. The engine has no reference values, so it
-        // would stand as a snapshot the next write to that storage leaves
-        // stale. A scalar embeds nothing.
-        let stores_a_reference = callee.params.iter().any(|p| {
-            callee.stores.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
+        // returns a `Formatter` holding that borrow, and a retained shared one
+        // does the same. The engine has no reference values, so it would stand
+        // as a snapshot the next write to that storage leaves stale. A scalar
+        // embeds nothing.
+        let retains_a_reference = callee.params.iter().any(|p| {
+            callee.retains.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
         });
-        let may_embed_caller_storage = !targets.is_empty() || stores_a_reference;
+        let may_embed_caller_storage = !targets.is_empty() || retains_a_reference;
 
         // Below here is the expensive half: a whole-body copy and a
         // trackability walk over it.

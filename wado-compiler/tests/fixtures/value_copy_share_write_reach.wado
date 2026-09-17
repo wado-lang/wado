@@ -21,12 +21,12 @@ struct HeldOuter {
 
 // The handle outlives the call, so what the callee writes through it is the
 // whole of what it was handed rather than any field it names.
-fn stash(i: &mut Inner) -> Held with stores[i] {
+fn stash(i: &mut Inner) -> Held {
     return Held { r: i };
 }
 
 impl Outer {
-    fn stash_self(&mut self) -> HeldOuter with stores[self] {
+    fn stash_self(&mut self) -> HeldOuter {
         return HeldOuter { r: self };
     }
 }

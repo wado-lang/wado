@@ -1,7 +1,7 @@
 // Optimization: SROA should decompose struct locals even when &s is taken,
-// if the reference is only passed to functions that don't declare `stores`.
+// if the reference is only passed to functions that retain nothing.
 //
-// With stores-aware analysis: if the callee doesn't declare `stores[param]`,
+// With retention-aware analysis: if the callee does not retain the parameter,
 // the reference doesn't persist beyond the call, so SROA can reconstruct
 // the struct at the call boundary and decompose the rest.
 

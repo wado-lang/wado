@@ -21,7 +21,7 @@ use crate::nir_package::NirPackage;
 use crate::tir::TypeId;
 use crate::token::Span;
 
-/// Maps a callee → the set of its parameter indices that have `stores` declared.
+/// Maps a callee → the set of its parameter indices it retains.
 type StoresLookup = IndexMap<FuncId, IndexSet<usize>>;
 
 /// Information about a struct/tuple local that may be decomposable.
@@ -42,14 +42,14 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
     let mut lookup = StoresLookup::default();
     for func_rc in &project.functions {
         let func = func_rc.borrow();
-        if func.stores.is_empty() {
+        if func.retains.is_empty() {
             continue;
         }
         let stored_indices: IndexSet<usize> = func
             .params
             .iter()
             .enumerate()
-            .filter(|(_, param)| func.stores.iter().any(|s| s == &param.name))
+            .filter(|(_, param)| func.retains.iter().any(|s| s == &param.name))
             .map(|(i, _)| i)
             .collect();
         if !stored_indices.is_empty()

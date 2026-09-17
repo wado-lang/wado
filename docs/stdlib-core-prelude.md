@@ -89,9 +89,13 @@ compiler-synthesized like the kinds. See WEP 2026-06-13.
 
 #### `fn type_name() -> String`
 
+`#[compiler_item("reflect_type_name")]`
+
 Returns the declaration's name.
 
 #### `fn wire_name_policy() -> CaseStyle`
+
+`#[compiler_item("reflect_wire_name_policy")]`
 
 The declaration's `#[wire(name_policy)]` (`Identity` if none). Every
 kind carries the attribute, and it says the same thing on each: the
@@ -106,19 +110,27 @@ See WEP 2026-06-13.
 
 #### `fn members() -> Self::Members`
 
+`#[compiler_item("reflect_struct_members")]`
+
 Returns the per-field members.
 
 #### `fn from_fields(fields: Self::FieldTypes) -> Self`
 
+`#[compiler_item("reflect_struct_from_fields")]`
+
 Assembles the struct from its field values.
 
 #### `fn defaults() -> Self::FieldSlots`
+
+`#[compiler_item("reflect_struct_defaults")]`
 
 The declared field defaults (`f: T = expr`), `None` where a field
 declares none. Read per field, so only a slot the wire left empty
 evaluates its default.
 
 #### `fn empty_slots() -> Self::FieldSlots`
+
+`#[compiler_item("reflect_struct_empty_slots")]`
 
 All slots empty. Starting here is what makes a filled slot mean "the
 wire wrote this", so a repeat is visible without a second record.
@@ -130,9 +142,13 @@ compiler-synthesized; user impls are rejected. See WEP 2026-06-13.
 
 #### `fn name(&self) -> String`
 
+`#[compiler_item("member_name")]`
+
 The source field name.
 
 #### `fn wire_name_override(&self) -> Option<String>`
+
+`#[compiler_item("member_wire_name_override")]`
 
 The raw `#[wire(name)]` value (casing not applied), or `None`.
 
@@ -145,9 +161,13 @@ See WEP 2026-06-13 §3.
 
 #### `fn discriminant(&self) -> i32`
 
+`#[compiler_item("reflect_variant_discriminant")]`
+
 Returns the live case's tag.
 
 #### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_variant_members")]`
 
 Returns the per-case members.
 
@@ -160,13 +180,19 @@ See WEP 2026-06-13 §3b.
 
 #### `fn discriminant(&self) -> i32`
 
+`#[compiler_item("reflect_enum_discriminant")]`
+
 Returns the value's tag.
 
 #### `fn from_discriminant(disc: i32) -> Option<Self>`
 
+`#[compiler_item("reflect_enum_from_discriminant")]`
+
 Returns the case with the given tag; `None` for an unknown tag.
 
 #### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_enum_members")]`
 
 Returns the per-case members.
 
@@ -179,14 +205,20 @@ See WEP 2026-06-13 §3c.
 
 #### `fn bits(&self) -> u64`
 
+`#[compiler_item("reflect_flags_bits")]`
+
 Returns the value's bits, u64-normalized.
 
 #### `fn from_bits(raw: u64) -> Option<Self>`
+
+`#[compiler_item("reflect_flags_from_bits")]`
 
 Returns the value with the given bits; `None` when unknown bits
 are set.
 
 #### `fn members() -> Self::Members`
+
+`#[compiler_item("reflect_flags_members")]`
 
 Returns the per-bit members.
 
@@ -211,14 +243,20 @@ type a template literal denotes). See WEP 2026-01-10.
 
 #### `fn members() -> Self::Members`
 
+`#[compiler_item("reflect_template_members")]`
+
 Returns the per-hole members.
 
 #### `fn tail() -> String`
+
+`#[compiler_item("reflect_template_tail")]`
 
 The literal text after the last hole — the whole template when it has
 none — with escapes processed.
 
 #### `fn raw_tail() -> String`
+
+`#[compiler_item("reflect_template_raw_tail")]`
 
 `tail()` with escapes preserved.
 
@@ -716,22 +754,22 @@ Reference view over a contiguous sequence. Implemented by `Array<T>`,
 `List<T>`, and `Slice<T>`; the implementations forward to `Slice`, which
 carries the real bodies.
 
-#### `fn as_slice(&self) -> Slice<Self::Elem> with stores[self]`
+#### `fn as_slice(&self) -> Slice<Self::Elem>`
 
-#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem> with stores[self]`
+#### `fn slice(&self, start: i32, end: i32) -> Slice<Self::Elem>`
 
 Sub-view over `[start, end)`, clamped to this sequence.
 
-#### `fn iter_value(&self) -> SliceValueIter<Self::Elem> with stores[self]`
+#### `fn iter_value(&self) -> SliceValueIter<Self::Elem>`
 
-#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem> with stores[self]`
+#### `fn iter_ref(&self) -> SliceRefIter<Self::Elem>`
 
-#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem> with stores[self]`
+#### `fn windows(&self, size: i32) -> SliceWindows<Self::Elem>`
 
 Overlapping windows of `size` consecutive elements. Panics if `size` is
 not positive.
 
-#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem> with stores[self]`
+#### `fn chunks(&self, size: i32) -> SliceChunks<Self::Elem>`
 
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
@@ -741,7 +779,7 @@ shorter. Panics if `size` is not positive.
 Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 owned string, a reference to one, or a view of part of one.
 
-#### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+#### `fn as_str_slice(&self) -> StrSlice`
 
 #### `fn internal_append_to(&self, out: &mut String)`
 
@@ -758,15 +796,15 @@ literals stops folding to one.
 
 #### `fn is_char_boundary(&self, index: i32) -> bool`
 
-#### `fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `fn sub(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `fn as_bytes(&self) -> ByteSlice`
 
-#### `fn chars(&self) -> StrCharIter with stores[self]`
+#### `fn chars(&self) -> StrCharIter`
 
-#### `fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `fn bytes(&self) -> StrUtf8ByteIter`
 
 #### `fn to_string(&self) -> String`
 
@@ -780,9 +818,9 @@ literals stops folding to one.
 
 #### `fn rfind<P: AsStrSlice>(&self, pat: P) -> Option<i32>`
 
-#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self]`
+#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice>`
 
-#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self]`
+#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice>`
 
 #### `fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering`
 
@@ -792,31 +830,31 @@ literals stops folding to one.
 
 #### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
-#### `fn trim_ascii_start(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii_start(&self) -> StrSlice`
 
-#### `fn trim_ascii_end(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii_end(&self) -> StrSlice`
 
-#### `fn trim_ascii(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii(&self) -> StrSlice`
 
-#### `fn trim_start(&self) -> StrSlice with stores[self]`
+#### `fn trim_start(&self) -> StrSlice`
 
-#### `fn trim_end(&self) -> StrSlice with stores[self]`
+#### `fn trim_end(&self) -> StrSlice`
 
-#### `fn trim(&self) -> StrSlice with stores[self]`
+#### `fn trim(&self) -> StrSlice`
 
-#### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+#### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter`
 
-#### `fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+#### `fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter`
 
-#### `fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
-#### `fn lines(&self) -> StrLinesIter with stores[self]`
+#### `fn lines(&self) -> StrLinesIter`
 
-#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `fn char_indices(&self) -> StrCharIndicesIter`
 
 #### `fn to_chars(&self) -> List<char>`
 
@@ -848,7 +886,7 @@ Implemented by `ByteArray`, `ByteList`, and `ByteSlice` (and `String`, whose
 UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 `core:json` `from_bytes`) accept any of them.
 
-#### `fn as_byte_slice(&self) -> ByteSlice with stores[self]`
+#### `fn as_byte_slice(&self) -> ByteSlice`
 
 ### `pub trait Step with ()`
 
@@ -868,18 +906,26 @@ The readable end is passed to consumers; the writable end fulfills the future.
 
 #### `fn new() -> [Future<T>, FutureWritable<T>]`
 
+`#[cm("future-new")]`
+
 Create a new future pair: [Future<T>, FutureWritable<T>].
 
 #### `fn read(&self) -> Option<T>`
+
+`#[cm("future-read")]`
 
 Read the value from the future.
 Returns Some(value) when fulfilled, None if the writer dropped without writing.
 
 #### `fn cancel_read(&self)`
 
+`#[cm("future-cancel-read")]`
+
 Cancel an in-progress read. Blocks until cancellation completes.
 
 #### `fn drop(self)`
+
+`#[cm("future-drop-readable")]`
 
 Drop the readable end of the future.
 
@@ -890,13 +936,19 @@ Opaque i32 handle managed by the runtime.
 
 #### `fn write(&self, value: T)`
 
+`#[cm("future-write")]`
+
 Fulfill the future with a value.
 
 #### `fn cancel_write(&self)`
 
+`#[cm("future-cancel-write")]`
+
 Cancel an in-progress write. Blocks until cancellation completes.
 
 #### `fn drop(self)`
+
+`#[cm("future-drop-writable")]`
 
 Drop this writable end handle. Traps if no value has been written yet.
 
@@ -907,7 +959,11 @@ Readable end of an async sequence (WASI Component Model stream).
 
 #### `fn new() -> [Stream<T>, StreamWritable<T>]`
 
+`#[cm("stream-new")]`
+
 #### `fn read(&self, max: i32) -> StreamChunk<T>`
+
+`#[cm("stream-read")]`
 
 One Component Model copy of up to `max` elements, blocking until at
 least one arrives or the writable end drops. A `Dropped` result can
@@ -917,9 +973,13 @@ traps, so a loop breaks on the result, never on an empty chunk.
 
 #### `fn cancel_read(&self)`
 
+`#[cm("stream-cancel-read")]`
+
 Cancel an in-progress read. Blocks until cancellation completes.
 
 #### `fn drop(self)`
+
+`#[cm("stream-drop-readable")]`
 
 Drop the readable end of the stream.
 
@@ -935,6 +995,8 @@ Writable end of an async sequence (WASI Component Model stream).
 
 #### `fn write(&self, data: List<T>) -> StreamWrite`
 
+`#[cm("stream-write")]`
+
 One Component Model copy of `data`, blocking until the reader takes at
 least one element or drops. The reader may take a prefix, so the count
 can be short of `data.len()`. Writing to an end whose result was
@@ -944,6 +1006,8 @@ blocks until a reader rendezvouses rather than writing nothing.
 
 #### `fn write_raw(&self, data: Slice<T>) -> StreamWrite`
 
+`#[cm("stream-write-raw")]`
+
 Write a view directly to the stream, without the deep copy that
 value-semantics `write` makes. The slice references its backing array
 (`list.as_slice()`, `array.slice(start, end)`, `string.as_bytes()`), so
@@ -952,9 +1016,13 @@ type is a compile error, and `write` is what carries it.
 
 #### `fn cancel_write(&self)`
 
+`#[cm("stream-cancel-write")]`
+
 Cancel an in-progress write. Blocks until cancellation completes.
 
 #### `fn drop(self)`
+
+`#[cm("stream-drop-writable")]`
 
 Drop the writable end, signaling end-of-stream.
 
@@ -981,17 +1049,25 @@ drop subtasks before dropping the set.
 
 #### `fn new() -> WaitableSet`
 
+`#[cm("waitable-set-new")]`
+
 Create a new waitable set.
 
 #### `fn wait(&self) -> WaitEvent`
+
+`#[cm("waitable-set-wait")]`
 
 Block until an event occurs. Returns the event details.
 
 #### `fn poll(&self) -> Option<WaitEvent>`
 
+`#[cm("waitable-set-poll")]`
+
 Non-blocking poll. Returns Some(event) if ready, None otherwise.
 
 #### `fn drop(self)`
+
+`#[cm("waitable-set-drop")]`
 
 Drop the waitable set. Traps if waitables are still joined to this set.
 
@@ -1014,14 +1090,20 @@ ws.drop(); // safe — no children
 
 #### `fn drop(self)`
 
+`#[cm("subtask-drop")]`
+
 Drop a completed subtask. Automatically unjoins from its WaitableSet.
 Traps if the subtask has not yet resolved.
 
 #### `fn cancel(&self)`
 
+`#[cm("subtask-cancel")]`
+
 Cancel this in-progress subtask. Blocks until cancellation completes.
 
 #### `fn join(&self, set: &WaitableSet) -> Waitable`
+
+`#[cm("waitable-join")]`
 
 Join this subtask to a waitable set for monitoring.
 Returns a Waitable token identifying this subtask in wait results.
@@ -1032,13 +1114,19 @@ An error context carrying a debug message across component boundaries.
 
 #### `fn new(message: String) -> ErrorContext`
 
+`#[cm("error-context-new")]`
+
 Create a new error context with the given message.
 
 #### `fn debug_message(&self) -> String`
 
+`#[cm("error-context-debug-message")]`
+
 Get the debug message from this error context.
 
 #### `fn drop(self)`
+
+`#[cm("error-context-drop")]`
 
 Drop the error context.
 
@@ -1049,6 +1137,8 @@ The current async task handle.
 Provides operations that apply to the currently executing async task.
 
 #### `fn cancel()`
+
+`#[cm("task-cancel")]`
 
 Acknowledge cancellation of the current task.
 
@@ -2738,7 +2828,9 @@ The element/char cap a sequence Inspect should apply: the explicit
 precision when given, else `DEFAULT_SEQ_LIMIT`. A negative result
 (`PRECISION_INFINITE`) means uncapped.
 
-#### `pub fn new(buf: &mut String) -> Formatter with stores[buf]`
+#### `pub fn new(buf: &mut String) -> Formatter`
+
+`#[compiler_item("formatter_new")]`
 
 Create a Formatter with the default spec, writing into the given buffer.
 
@@ -2816,9 +2908,13 @@ _Fields are private._
 
 #### `pub fn from_u64(value: u64) -> u128`
 
+`#[compiler_item("u128_from_u64")]`
+
 Create a u128 from a u64 value (zero-extended)
 
 #### `pub fn from_pair(low: u64, high: u64) -> u128`
+
+`#[compiler_item("u128_from_pair")]`
 
 Create a u128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
@@ -2857,6 +2953,8 @@ The smaller of two values.
 
 #### `pub fn low(&self) -> u64`
 
+`#[compiler_item("u128_low")]`
+
 Gets the low 64 bits
 Used by the compiler to lower truncating `u128 as <int>` casts.
 
@@ -2866,16 +2964,22 @@ Gets the high 64 bits
 
 #### `pub fn from_i128(val: i128) -> u128`
 
+`#[compiler_item("u128_from_i128")]`
+
 Create a u128 from an i128 (reinterpret bits)
 Used by the compiler to lower `i128 as u128` casts.
 
 #### `pub fn as_f64(&self) -> f64`
+
+`#[compiler_item("u128_as_f64")]`
 
 Convert to `f64`, rounding to the nearest representable value with
 ties to even — the same semantics as Rust's `value as f64` cast.
 Used by the compiler to lower `u128 as f64` casts.
 
 #### `pub fn as_f32(&self) -> f32`
+
+`#[compiler_item("u128_as_f32")]`
 
 Convert to `f32`, rounding to the nearest representable value with
 ties to even; values above `f32::MAX` become infinity — the same
@@ -3020,9 +3124,13 @@ _Fields are private._
 
 #### `pub fn from_i64(value: i64) -> i128`
 
+`#[compiler_item("i128_from_i64")]`
+
 Create an i128 from an i64 value (sign-extended)
 
 #### `pub fn from_pair(low: u64, high: i64) -> i128`
+
+`#[compiler_item("i128_from_pair")]`
 
 Create an i128 from low and high 64-bit parts
 Used by the compiler for efficient large literal construction
@@ -3061,6 +3169,8 @@ The smaller of two values.
 
 #### `pub fn low(&self) -> u64`
 
+`#[compiler_item("i128_low")]`
+
 Gets the low 64 bits (unsigned)
 Used by the compiler to lower truncating `i128 as <int>` casts.
 
@@ -3078,16 +3188,22 @@ Get absolute value as u128
 
 #### `pub fn from_u128(val: u128) -> i128`
 
+`#[compiler_item("i128_from_u128")]`
+
 Create i128 from u128 (reinterpret bits)
 Used by the compiler to lower `u128 as i128` casts.
 
 #### `pub fn as_f64(&self) -> f64`
+
+`#[compiler_item("i128_as_f64")]`
 
 Convert to `f64`, rounding to the nearest representable value with
 ties to even — the same semantics as Rust's `value as f64` cast.
 Used by the compiler to lower `i128 as f64` casts.
 
 #### `pub fn as_f32(&self) -> f32`
+
+`#[compiler_item("i128_as_f32")]`
 
 Convert to `f32`, rounding to the nearest representable value with
 ties to even — the same semantics as Rust's `value as f32` cast.
@@ -3349,11 +3465,15 @@ _Fields are private._
 
 #### `pub fn len(&self) -> i32`
 
+`#[compiler_item("byte_slice_len")]`
+
 Also the byte-length anchor for the synthesised `FieldSchema::lookup`
 (on `Slice<u8>`), routed through `#[compiler_item]` so a rename here
 cannot silently break code generation.
 
 #### `pub fn get_unchecked(&self, index: i32) -> T`
+
+`#[compiler_item("byte_slice_get_unchecked")]`
 
 The caller must guarantee `0 <= index < len()`; an out-of-range `index`
 reads past the view into the backing array or traps. Also the byte-read
@@ -3364,16 +3484,16 @@ anchor for `FieldSchema::lookup`, as `len` is for byte length.
 Sub-slice over `[start, end)` relative to this one, clamped to its
 bounds.
 
-#### `pub fn iter_value(&self) -> SliceValueIter<T> with stores[self]`
+#### `pub fn iter_value(&self) -> SliceValueIter<T>`
 
-#### `pub fn iter_ref(&self) -> SliceRefIter<T> with stores[self]`
+#### `pub fn iter_ref(&self) -> SliceRefIter<T>`
 
-#### `pub fn windows(&self, size: i32) -> SliceWindows<T> with stores[self]`
+#### `pub fn windows(&self, size: i32) -> SliceWindows<T>`
 
 Overlapping windows of `size` consecutive elements. Panics if `size` is
 not positive.
 
-#### `pub fn chunks(&self, size: i32) -> SliceChunks<T> with stores[self]`
+#### `pub fn chunks(&self, size: i32) -> SliceChunks<T>`
 
 Non-overlapping chunks of up to `size` elements; the last may be
 shorter. Panics if `size` is not positive.
@@ -3392,7 +3512,7 @@ shorter. Panics if `size` is not positive.
 
 #### `impl AsSlice for Slice<T>`
 
-##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+##### `fn as_slice(&self) -> Slice<T>`
 
 #### `impl IndexValue<i32> for Slice<T>`
 
@@ -3404,11 +3524,11 @@ shorter. Panics if `size` is not positive.
 
 #### `impl IndexValue<RangeExclusive<i32>> for Slice<T>`
 
-##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T> with stores[self]`
+##### `fn index_value(&self, range: RangeExclusive<i32>) -> Slice<T>`
 
 #### `impl IndexValue<RangeInclusive<i32>> for Slice<T>`
 
-##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T> with stores[self]`
+##### `fn index_value(&self, range: RangeInclusive<i32>) -> Slice<T>`
 
 #### `impl Eq for Slice<T>`
 
@@ -3511,9 +3631,13 @@ them. See WEP 2026-01-10.
 
 #### `pub fn with_capacity(capacity: i32) -> String`
 
+`#[compiler_item("string_with_capacity")]`
+
 Create an empty string with space for `capacity` bytes.
 
 #### `pub fn len(&self) -> i32`
+
+`#[compiler_item("string_len")]`
 
 Get the length of the string in bytes
 
@@ -3523,6 +3647,8 @@ Check if the string is empty
 
 #### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
 
+`#[compiler_item("string_get_byte_unchecked")]`
+
 Read the byte at `index` without bounds checks. For safe access use `bytes()`.
 
 # Safety (caller-side preconditions)
@@ -3531,6 +3657,8 @@ Read the byte at `index` without bounds checks. For safe access use `bytes()`.
 
 #### `pub fn set_byte_unchecked(&mut self, index: i32, value: u8)`
 
+`#[compiler_item("string_set_byte_unchecked")]`
+
 Write the byte at `index` without bounds or UTF-8 checks.
 
 # Safety (caller-side preconditions)
@@ -3538,7 +3666,7 @@ Write the byte at `index` without bounds or UTF-8 checks.
 - `0 <= index < self.len()`.
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `pub fn as_bytes(&self) -> ByteSlice`
 
 Read-only view of the string's UTF-8 bytes as an `Slice<u8>` over `[0, len())`.
 
@@ -3551,6 +3679,8 @@ Ensure capacity for at least `min_capacity` bytes.
 Append `n` copies of `byte` to this string.
 
 #### `pub fn push_str<S: AsStrSlice>(&mut self, other: S)`
+
+`#[compiler_item("string_push_str")]`
 
 Append any `AsStrSlice` text to this one.
 
@@ -3573,15 +3703,15 @@ Append the byte range `[start, end)` of `s` to this string.
 - `start` and `end` must lie on UTF-8 character boundaries of `s`.
 - The resulting byte sequence must remain valid UTF-8.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
 Returns an iterator over the UTF-8 bytes of the string.
 
-#### `pub fn chars(&self) -> StrCharIter with stores[self]`
+#### `pub fn chars(&self) -> StrCharIter`
 
 Returns an iterator over the Unicode scalar values (chars) of the string.
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter`
 
 Returns an iterator over characters with their byte indices.
 
@@ -3608,9 +3738,13 @@ Decodes the UTF-8 character starting at `byte_index` without bounds checks.
 
 #### `pub fn push(&mut self, c: char)`
 
+`#[compiler_item("string_push_char")]`
+
 Appends a Unicode scalar value (char) to this string.
 
 #### `pub fn push_ascii_unchecked(&mut self, byte: u8)`
+
+`#[compiler_item("string_push_ascii")]`
 
 Appends a single byte, assumed to be a complete one-byte UTF-8 sequence
 (`byte < 0x80`). A larger byte breaks the String's UTF-8 invariant — the
@@ -3807,29 +3941,29 @@ Build a `String` from an iterable of bytes without UTF-8 validation.
 
 The caller must ensure the bytes form valid UTF-8.
 
-#### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter with stores[self]`
+#### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter`
 
 Returns an iterator over substrings split by the given separator.
 
-#### `pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter with stores[self]`
+#### `pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]>`
 
 Splits at the first `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]>`
 
 Splits at the last `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
 Returns an iterator over whitespace-separated substrings.
 
-#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
+#### `pub fn lines(&self) -> StrLinesIter`
 
 Returns an iterator over the lines of this string.
 
@@ -3861,7 +3995,7 @@ Identity: any text parses to the string it spells. Never fails.
 
 #### `impl AsStrSlice for String`
 
-##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+##### `fn as_str_slice(&self) -> StrSlice`
 
 ##### `fn internal_append_to(&self, out: &mut String)`
 
@@ -3893,6 +4027,8 @@ _Fields are private._
 
 ##### `pub fn next(&mut self) -> Option<Self::Item>`
 
+`#[inline]`
+
 ### `pub struct StrCharIter`
 
 Iterator over the Unicode scalar values (chars) of a String.
@@ -3918,6 +4054,8 @@ Length in bytes.
 
 #### `pub fn get_byte_unchecked(&self, index: i32) -> u8`
 
+`#[inline]`
+
 Read the byte at `index`, counted from the view's start, without bounds
 checks.
 
@@ -3930,13 +4068,15 @@ checks.
 Returns true if `index`, counted from the view's start, is 0, `len()`,
 or the start of a character.
 
-#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
 
 A sub-view over `[start, end)`, counted from this view's start.
 Panics if the range is out of bounds or either end is off a character
 boundary.
 
-#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+
+`#[inline]`
 
 A sub-view without bounds or UTF-8 boundary checks.
 
@@ -3945,15 +4085,15 @@ A sub-view without bounds or UTF-8 boundary checks.
 - `0 <= start <= end <= self.len()`.
 - `start` and `end` lie on UTF-8 character boundaries.
 
-#### `pub fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `pub fn as_bytes(&self) -> ByteSlice`
 
 The view's UTF-8 bytes.
 
-#### `pub fn chars(&self) -> StrCharIter with stores[self]`
+#### `pub fn chars(&self) -> StrCharIter`
 
 Returns an iterator over the Unicode scalar values (chars) of the view.
 
-#### `pub fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `pub fn bytes(&self) -> StrUtf8ByteIter`
 
 Returns an iterator over the UTF-8 bytes of the view.
 
@@ -3983,12 +4123,12 @@ start, or None.
 The byte index of the last occurrence of `pat`, counted from the view's
 start, or None.
 
-#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> with stores[self]`
+#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice>`
 
 The view with `prefix` removed from the front, or None when it does not
 start with `prefix`.
 
-#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> with stores[self]`
+#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice>`
 
 The view with `suffix` removed from the end, or None when it does not
 end with `suffix`.
@@ -4013,46 +4153,46 @@ Non-ASCII bytes are compared exactly.
 The character starting at `byte_index`, counted from the view's start,
 or None past the end.
 
-#### `pub fn trim_ascii_start(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii_start(&self) -> StrSlice`
 
 The view with leading ASCII whitespace removed.
 
-#### `pub fn trim_ascii_end(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii_end(&self) -> StrSlice`
 
 The view with trailing ASCII whitespace removed.
 
-#### `pub fn trim_ascii(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii(&self) -> StrSlice`
 
 The view with leading and trailing ASCII whitespace removed.
 
-#### `pub fn trim_start(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_start(&self) -> StrSlice`
 
 The view with leading Unicode whitespace removed.
 
-#### `pub fn trim_end(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_end(&self) -> StrSlice`
 
 The view with trailing Unicode whitespace removed.
 
-#### `pub fn trim(&self) -> StrSlice with stores[self]`
+#### `pub fn trim(&self) -> StrSlice`
 
 The view with leading and trailing Unicode whitespace removed.
 
-#### `pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+#### `pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter`
 
-#### `pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+#### `pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter`
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
-#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
+#### `pub fn lines(&self) -> StrLinesIter`
 
-#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
 The parts either side of the first `sep`, or None when it does not
 occur. Both parts view this one; `to_string` copies whichever is kept.
 
-#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter`
 
 #### `pub fn to_chars(&self) -> List<char>`
 
@@ -4083,7 +4223,7 @@ If `count` is negative, replaces all occurrences.
 
 #### `impl AsStrSlice for StrSlice`
 
-##### `fn as_str_slice(&self) -> StrSlice with stores[self]`
+##### `fn as_str_slice(&self) -> StrSlice`
 
 #### `impl Eq for StrSlice`
 
@@ -4109,6 +4249,8 @@ _Fields are private._
 
 #### `pub fn from_tuple<..Elems>(elements: [..Elems]) -> List<T>`
 
+`#[compiler_item("list_from_tuple")]`
+
 Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 #### `pub fn len(&self) -> i32`
@@ -4117,11 +4259,13 @@ Collect a homogeneous tuple `[T, T, ...]` into a `List<T>`.
 
 Returns the total number of elements the list can hold without reallocating.
 
-#### `pub fn push(&mut self, value: T) with stores[value]`
+#### `pub fn push(&mut self, value: T)`
+
+`#[compiler_item("list_push")]`
 
 Appends a single element to the end.
 
-#### `pub fn push_within_capacity(&mut self, value: T) with stores[value]`
+#### `pub fn push_within_capacity(&mut self, value: T)`
 
 Appends a single element assuming the capacity was already reserved
 (see `reserve`). Skips the grow check `push` performs on every call, so
@@ -4140,7 +4284,7 @@ without `List[]`'s power-assert diagnostic, so index-heavy readers (e.g. a
 generated parser over a fixed token stream) avoid that per-access cost.
 Unlike `internal_raw_data`, the result is sized to `len()`, not capacity.
 
-#### `pub fn insert(&mut self, index: i32, value: T) with stores[value]`
+#### `pub fn insert(&mut self, index: i32, value: T)`
 
 Inserts an element at the given index, shifting all elements after it to the right.
 Panics if `index > len()`.
@@ -4191,13 +4335,15 @@ Returns a new list containing this list's elements repeated `n` times.
 
 #### `pub fn copy_within_append(&mut self, src_start: i32, count: i32)`
 
+`#[inline(always)]`
+
 Copies `count` elements from `self[src_start..]` and appends them.
 Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
 run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 
-#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T> with stores[self]`
+#### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T>`
 
 Yields `&mut T` only where `T: RefMut`: a scalar element has no
 addressable cell, so a write through the reference would be lost.
@@ -4222,7 +4368,7 @@ Joins elements into a string with the given separator.
 
 #### `impl IndexAssign<i32> for List<T>`
 
-##### `fn index_assign(&mut self, index: i32, value: Self::Output) with stores[value]`
+##### `fn index_assign(&mut self, index: i32, value: Self::Output)`
 
 #### `impl IndexRef<i32> for List<T>`
 
@@ -4240,7 +4386,7 @@ Joins elements into a string with the given separator.
 
 #### `impl AsSlice for List<T>`
 
-##### `fn as_slice(&self) -> Slice<T> with stores[self]`
+##### `fn as_slice(&self) -> Slice<T>`
 
 #### `impl Eq for List<T>`
 

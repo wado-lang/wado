@@ -1,0 +1,53 @@
+// An element claim asks what the source's elements hold, and a local that is
+// merely a reference into a parameter holds nothing of its own: `view` names
+// `src`'s storage, and this body put nothing in it. One carrier set per value
+// cannot say that — "what a reference to this was derived from" and "what was
+// written into this" are the same set — so `src` would read as retained into
+// `dst`, `&origin.slots` would pin `origin` at the call, and the push below
+// would copy it instead of moving it.
+
+struct Data {
+    v: i32,
+}
+
+struct Slot {
+    d: &Data,
+}
+
+struct Bag {
+    tags: List<String>,
+    slots: Array<Slot>,
+}
+
+#[inline("never")]
+fn copy_across(dst: &mut Array<Slot>, src: &Array<Slot>) {
+    let view = src;
+    builtin::array_copy(dst, 0, view, 0, 1);
+}
+
+export fn run() {
+    let x = Data {
+        v: builtin::black_box(7),
+    };
+
+    let mut origin = Bag {
+        tags: [`a${builtin::black_box(1)}`, "b"],
+        slots: builtin::array_new(1),
+    };
+    builtin::array_set(&mut origin.slots, 0, Slot { d: &x });
+
+    let mut copy: Array<Slot> = builtin::array_new(1);
+    copy_across(&mut copy, &origin.slots);
+
+    let mut kept: List<Bag> = [];
+    kept.push(origin);
+
+    assert builtin::array_get_value(&copy, 0).d.v == 7;
+    assert kept[0].tags.len() == 2;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$retain_elements_of_a_local_view.wado/Bag"]
+}

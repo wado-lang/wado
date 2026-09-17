@@ -97,7 +97,7 @@ funcSig
 
 identifier
     : IDENTIFIER
-    | 'from' | 'of' | 'type' | 'matches' | 'stores' | 'world'
+    | 'from' | 'of' | 'type' | 'matches' | 'world'
     | 'interface' | 'resource' | 'import' | 'export' | 'reactive'
     | 'unique' | 'forward' | 'trap' | 'effect' | 'flags' | 'variant'
     | 'test' | 'do' | 'task' | 'extends'
@@ -128,13 +128,6 @@ withClause
 withItem
     : IDENTIFIER
     | '_'
-    | 'stores' '[' (storesItem (',' storesItem)* ','?)? ']'
-    ;
-
-storesItem
-    : identifier
-    | INTEGER
-    | 'self'
     ;
 
 structDecl
@@ -303,7 +296,7 @@ memberName
     | 'reactive' | 'unique' | 'struct' | 'enum' | 'variant' | 'flags'
     | 'type' | 'impl' | 'trait' | 'resource' | 'world' | 'async'
     | 'import' | 'export' | 'assert' | 'global' | 'const' | 'matches'
-    | 'stores' | 'true' | 'false' | 'null' | 'trap' | 'forward'
+    | 'true' | 'false' | 'null' | 'trap' | 'forward'
     | 'test' | 'do' | 'task' | 'extends' | 'internal' | 'resume' | 'self'
     ;
 

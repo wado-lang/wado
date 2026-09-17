@@ -482,7 +482,7 @@ fn register_single_function(
             }
         }),
         effects,
-        stores: tir_func.stores.clone(),
+        retains: tir_func.retains.clone(),
         compiler_item: tir_func.compiler_item,
         export_name: tir_func.export_name.clone(),
     };

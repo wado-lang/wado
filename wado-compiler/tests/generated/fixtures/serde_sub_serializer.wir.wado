@@ -188,29 +188,29 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     let new_used_115: i32;
     let start_116: i32;
     let handle_121: i32;
-    let other_138: ref "core:prelude/string.wado//String";
-    let n_143: i32;
-    let new_used_147: i32;
-    let start_148: i32;
-    let packed_150: i64;
-    let rx_151: i32;
-    let tx_152: i32;
-    let other_161: ref "core:prelude/string.wado//String";
-    let self_166: ref "core:prelude/string.wado//String";
-    let new_used_172: i32;
-    let start_173: i32;
-    let other_177: ref "core:prelude/string.wado//String";
-    let out_181: ref "core:prelude/string.wado//String";
-    let new_used_188: i32;
-    let start_189: i32;
-    let handle_194: i32;
-    let other_211: ref "core:prelude/string.wado//String";
-    let n_216: i32;
-    let new_used_220: i32;
-    let start_221: i32;
-    let packed_223: i64;
-    let rx_224: i32;
-    let tx_225: i32;
+    let v_139: ref "core:prelude/string.wado//String";
+    let new_used_148: i32;
+    let start_149: i32;
+    let packed_151: i64;
+    let rx_152: i32;
+    let tx_153: i32;
+    let other_162: ref "core:prelude/string.wado//String";
+    let self_167: ref "core:prelude/string.wado//String";
+    let new_used_173: i32;
+    let start_174: i32;
+    let other_178: ref "core:prelude/string.wado//String";
+    let out_182: ref "core:prelude/string.wado//String";
+    let new_used_189: i32;
+    let start_190: i32;
+    let handle_195: i32;
+    let v_213: ref "core:prelude/string.wado//String";
+    let new_used_222: i32;
+    let start_223: i32;
+    let packed_225: i64;
+    let rx_226: i32;
+    let tx_227: i32;
+    let $sroa_other_used_257: i32;
+    let $sroa_other_used_262: i32;
     ser = struct.new "serde_sub_serializer.wado//TextSerializer" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     other_19 = global:serde_sub_serializer.wado::$const_obj_21;
     self_24 = ser.buf;
@@ -289,35 +289,42 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_10.used = 5;
     builtin::array_copy<u8>($local_10.repr, 0, global:serde_sub_serializer.wado::$const_obj_13, 0, 5);
-    other_138 = ser.buf;
-    $inline_core_prelude_string_wado_String__internal_push_string_51: block {
-        n_143 = other_138.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_51 n_143 == 0;
-        new_used_147 = 5 + n_143;
-        if @unlikely(new_used_147 > 21) {
+    v_139 = ser.buf;
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = v_139.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = v_139.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_257 = v_139.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_52: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_52 $sroa_other_used_257 == 0;
+        new_used_148 = 5 + $sroa_other_used_257;
+        if @unlikely(new_used_148 > 21) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_147);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_10, new_used_148);
         }
-        start_148 = $local_10.used;
-        $local_10.used = new_used_147;
-        builtin::array_copy<u8>($local_10.repr, start_148, other_138.repr, 0, n_143);
+        start_149 = $local_10.used;
+        $local_10.used = new_used_148;
+        builtin::array_copy<u8>($local_10.repr, start_149, $array_clone_dst_2, 0, $sroa_other_used_257);
     };
-    rx_151 = builtin::i32_wrap_i64(local.tee packed_150("wasi/stream-new"()));
-    tx_152 = builtin::i32_wrap_i64(packed_150 >> 32_i64);
-    handle_121 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_151);
-    "core:rt/write_string_to_stream"(tx_152, $local_10);
+    rx_152 = builtin::i32_wrap_i64(local.tee packed_151("wasi/stream-new"()));
+    tx_153 = builtin::i32_wrap_i64(packed_151 >> 32_i64);
+    handle_121 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_152);
+    "core:rt/write_string_to_stream"(tx_153, $local_10);
     "wasi/future-drop-readable:transmission-cli"(handle_121);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-    other_161 = global:serde_sub_serializer.wado::$const_obj_12;
-    self_166 = ser.buf;
-    new_used_172 = self_166.used + 1;
-    if @unlikely(new_used_172 > builtin::array_len(self_166.repr)) {
+    other_162 = global:serde_sub_serializer.wado::$const_obj_12;
+    self_167 = ser.buf;
+    new_used_173 = self_167.used + 1;
+    if @unlikely(new_used_173 > builtin::array_len(self_167.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_166, new_used_172);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_167, new_used_173);
     }
-    start_173 = self_166.used;
-    self_166.used = new_used_172;
-    builtin::array_copy<u8>(self_166.repr, start_173, other_161.repr, 0, 1);
+    start_174 = self_167.used;
+    self_167.used = new_used_173;
+    builtin::array_copy<u8>(self_167.repr, start_174, other_162.repr, 0, 1);
     st = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_sub_serializer.wado/TextStructSerializer>, core:prelude/types.wado/Option<serde_sub_serializer.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_sub_serializer.wado//TextStructSerializer" { parent: ser, count: 0 }, 2: ref.null none };
     $match_15 = block -> ref "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(st.1) };
@@ -326,40 +333,47 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
         $local_13 = ref.cast "core:prelude/types.wado//Result<serde_sub_serializer.wado/TextStructSerializer,serde_sub_serializer.wado/SerializeError>::Ok"($match_15).payload_0;
         drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<core:prelude/string.wado/String>"($local_13, global:serde_sub_serializer.wado::$const_obj_10, global:serde_sub_serializer.wado::$const_obj_11));
         drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar"($local_13, global:serde_sub_serializer.wado::$const_obj_9, 30));
-        other_177 = global:serde_sub_serializer.wado::$const_obj_8;
-        out_181 = $local_13.parent.buf;
-        new_used_188 = out_181.used + 1;
-        if @unlikely(new_used_188 > builtin::array_len(out_181.repr)) {
+        other_178 = global:serde_sub_serializer.wado::$const_obj_8;
+        out_182 = $local_13.parent.buf;
+        new_used_189 = out_182.used + 1;
+        if @unlikely(new_used_189 > builtin::array_len(out_182.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_181, new_used_188);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_182, new_used_189);
         }
-        start_189 = out_181.used;
-        out_181.used = new_used_188;
-        builtin::array_copy<u8>(out_181.repr, start_189, other_177.repr, 0, 1);
+        start_190 = out_182.used;
+        out_182.used = new_used_189;
+        builtin::array_copy<u8>(out_182.repr, start_190, other_178.repr, 0, 1);
         drop(ref.null none);
     } else {
     }
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
     $local_11.used = 8;
     builtin::array_copy<u8>($local_11.repr, 0, global:serde_sub_serializer.wado::$const_obj_7, 0, 8);
-    other_211 = ser.buf;
-    $inline_core_prelude_string_wado_String__internal_push_string_80: block {
-        n_216 = other_211.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_80 n_216 == 0;
-        new_used_220 = 8 + n_216;
-        if @unlikely(new_used_220 > 24) {
+    v_213 = ser.buf;
+    let $array_clone_src_4: ref Array<u8>;
+    $array_clone_src_4 = v_213.repr;
+    let $array_clone_len_6: i32;
+    $array_clone_len_6 = v_213.used;
+    let $array_clone_dst_5: ref Array<u8>;
+    $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
+    builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
+    $sroa_other_used_262 = v_213.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_82: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_82 $sroa_other_used_262 == 0;
+        new_used_222 = 8 + $sroa_other_used_262;
+        if @unlikely(new_used_222 > 24) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_220);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, new_used_222);
         }
-        start_221 = $local_11.used;
-        $local_11.used = new_used_220;
-        builtin::array_copy<u8>($local_11.repr, start_221, other_211.repr, 0, n_216);
+        start_223 = $local_11.used;
+        $local_11.used = new_used_222;
+        builtin::array_copy<u8>($local_11.repr, start_223, $array_clone_dst_5, 0, $sroa_other_used_262);
     };
-    rx_224 = builtin::i32_wrap_i64(local.tee packed_223("wasi/stream-new"()));
-    tx_225 = builtin::i32_wrap_i64(packed_223 >> 32_i64);
-    handle_194 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_224);
-    "core:rt/write_string_to_stream"(tx_225, $local_11);
-    "wasi/future-drop-readable:transmission-cli"(handle_194);
+    rx_226 = builtin::i32_wrap_i64(local.tee packed_225("wasi/stream-new"()));
+    tx_227 = builtin::i32_wrap_i64(packed_225 >> 32_i64);
+    handle_195 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_226);
+    "core:rt/write_string_to_stream"(tx_227, $local_11);
+    "wasi/future-drop-readable:transmission-cli"(handle_195);
 }
 
 fn "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -461,108 +475,134 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_ca
 
 fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(self, v) {
     let $local_2: ref "core:prelude/string.wado//String";
-    let self_21: i32;
-    let new_used_24: i32;
-    let start_25: i32;
-    let self_27: ref Array<u8>;
-    let self_31: ref Array<u8>;
-    let offset_32: i32;
-    let out_38: ref "core:prelude/string.wado//String";
-    let n_41: i32;
-    let new_used_45: i32;
-    let start_46: i32;
+    let new_used_30: i32;
+    let start_31: i32;
+    let new_used_43: i32;
+    let start_44: i32;
+    let out_49: ref "core:prelude/string.wado//String";
+    let n_52: i32;
+    let new_used_56: i32;
+    let start_57: i32;
+    let $sroa_other_used_62: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
     $local_2.used = 1;
     builtin::array_copy<u8>($local_2.repr, 0, global:serde_sub_serializer.wado::$const_obj_1, 0, 1);
-    self_21 = v.used;
-    new_used_24 = 1 + (1 + self_21);
-    if @unlikely(new_used_24 > 18) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_24);
-    }
-    start_25 = $local_2.used;
-    $local_2.used = new_used_24;
-    self_27 = $local_2.repr;
-    builtin::array_copy<u8>(self_27, start_25, v.repr, 0, self_21);
-    self_31 = $local_2.repr;
-    offset_32 = start_25 + self_21;
-    builtin::array_copy<u8>(self_31, offset_32, global:serde_sub_serializer.wado::$const_obj_1, 0, 1);
-    out_38 = self.buf;
-    $inline_core_prelude_string_wado_String__internal_push_string_14: block {
-        n_41 = $local_2.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_14 n_41 == 0;
-        new_used_45 = out_38.used + n_41;
-        if @unlikely(new_used_45 > builtin::array_len(out_38.repr)) {
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = v.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = v.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_62 = v.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_10: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_10 $sroa_other_used_62 == 0;
+        new_used_30 = 1 + $sroa_other_used_62;
+        if @unlikely(new_used_30 > 18) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_38, new_used_45);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_30);
         }
-        start_46 = out_38.used;
-        out_38.used = new_used_45;
-        builtin::array_copy<u8>(out_38.repr, start_46, $local_2.repr, 0, n_41);
+        start_31 = $local_2.used;
+        $local_2.used = new_used_30;
+        builtin::array_copy<u8>($local_2.repr, start_31, $array_clone_dst_2, 0, $sroa_other_used_62);
+    };
+    new_used_43 = $local_2.used + 1;
+    if @unlikely(new_used_43 > builtin::array_len($local_2.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used_43);
+    }
+    start_44 = $local_2.used;
+    $local_2.used = new_used_43;
+    builtin::array_copy<u8>($local_2.repr, start_44, global:serde_sub_serializer.wado::$const_obj_1, 0, 1);
+    out_49 = self.buf;
+    $inline_core_prelude_string_wado_String__internal_push_string_20: block {
+        n_52 = $local_2.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_20 n_52 == 0;
+        new_used_56 = out_49.used + n_52;
+        if @unlikely(new_used_56 > builtin::array_len(out_49.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_49, new_used_56);
+        }
+        start_57 = out_49.used;
+        out_49.used = new_used_56;
+        builtin::array_copy<u8>(out_49.repr, start_57, $local_2.repr, 0, n_52);
     };
     return ref.null none;
 }
 
 fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<core:prelude/string.wado/String>"(self, name, value) {
     let $local_3: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
-    let out_11: ref "core:prelude/string.wado//String";
-    let new_used_18: i32;
-    let start_19: i32;
-    let self_37: i32;
-    let new_used_40: i32;
-    let start_41: i32;
-    let self_43: ref Array<u8>;
-    let self_47: ref Array<u8>;
-    let offset_48: i32;
-    let out_54: ref "core:prelude/string.wado//String";
-    let n_57: i32;
-    let new_used_61: i32;
-    let start_62: i32;
-    let s_65: ref "serde_sub_serializer.wado//TextSerializer";
+    let other_5: ref "core:prelude/string.wado//String";
+    let out_9: ref "core:prelude/string.wado//String";
+    let new_used_16: i32;
+    let start_17: i32;
+    let new_used_46: i32;
+    let start_47: i32;
+    let new_used_59: i32;
+    let start_60: i32;
+    let out_65: ref "core:prelude/string.wado//String";
+    let n_68: i32;
+    let new_used_72: i32;
+    let start_73: i32;
+    let s: ref "serde_sub_serializer.wado//TextSerializer";
+    let $sroa_other_used_80: i32;
     if self.count > 0 {
-        other_7 = global:serde_sub_serializer.wado::$const_obj_16;
-        out_11 = self.parent.buf;
-        new_used_18 = out_11.used + 1;
-        if @unlikely(new_used_18 > builtin::array_len(out_11.repr)) {
+        other_5 = global:serde_sub_serializer.wado::$const_obj_16;
+        out_9 = self.parent.buf;
+        new_used_16 = out_9.used + 1;
+        if @unlikely(new_used_16 > builtin::array_len(out_9.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, new_used_18);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_9, new_used_16);
         }
-        start_19 = out_11.used;
-        out_11.used = new_used_18;
-        builtin::array_copy<u8>(out_11.repr, start_19, other_7.repr, 0, 1);
+        start_17 = out_9.used;
+        out_9.used = new_used_16;
+        builtin::array_copy<u8>(out_9.repr, start_17, other_5.repr, 0, 1);
     }
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $local_3.used = 1;
     builtin::array_copy<u8>($local_3.repr, 0, global:serde_sub_serializer.wado::$const_obj_1, 0, 1);
-    self_37 = name.used;
-    new_used_40 = 1 + (2 + self_37);
-    if @unlikely(new_used_40 > 19) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_40);
-    }
-    start_41 = $local_3.used;
-    $local_3.used = new_used_40;
-    self_43 = $local_3.repr;
-    builtin::array_copy<u8>(self_43, start_41, name.repr, 0, self_37);
-    self_47 = $local_3.repr;
-    offset_48 = start_41 + self_37;
-    builtin::array_copy<u8>(self_47, offset_48, global:serde_sub_serializer.wado::$const_obj_25, 0, 2);
-    out_54 = self.parent.buf;
-    $inline_core_prelude_string_wado_String__internal_push_string_20: block {
-        n_57 = $local_3.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_20 n_57 == 0;
-        new_used_61 = out_54.used + n_57;
-        if @unlikely(new_used_61 > builtin::array_len(out_54.repr)) {
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = name.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = name.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_80 = name.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_16: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 $sroa_other_used_80 == 0;
+        new_used_46 = 1 + $sroa_other_used_80;
+        if @unlikely(new_used_46 > 19) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_54, new_used_61);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_46);
         }
-        start_62 = out_54.used;
-        out_54.used = new_used_61;
-        builtin::array_copy<u8>(out_54.repr, start_62, $local_3.repr, 0, n_57);
+        start_47 = $local_3.used;
+        $local_3.used = new_used_46;
+        builtin::array_copy<u8>($local_3.repr, start_47, $array_clone_dst_2, 0, $sroa_other_used_80);
     };
-    s_65 = self.parent;
-    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(s_65, value));
+    new_used_59 = $local_3.used + 2;
+    if @unlikely(new_used_59 > builtin::array_len($local_3.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3, new_used_59);
+    }
+    start_60 = $local_3.used;
+    $local_3.used = new_used_59;
+    builtin::array_copy<u8>($local_3.repr, start_60, global:serde_sub_serializer.wado::$const_obj_25, 0, 2);
+    out_65 = self.parent.buf;
+    $inline_core_prelude_string_wado_String__internal_push_string_26: block {
+        n_68 = $local_3.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_26 n_68 == 0;
+        new_used_72 = out_65.used + n_68;
+        if @unlikely(new_used_72 > builtin::array_len(out_65.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_65, new_used_72);
+        }
+        start_73 = out_65.used;
+        out_65.used = new_used_72;
+        builtin::array_copy<u8>(out_65.repr, start_73, $local_3.repr, 0, n_68);
+    };
+    s = self.parent;
+    drop("serde_sub_serializer.wado/serde_sub_serializer.wado/TextSerializer^serde_sub_serializer.wado/Serializer::serialize_string"(s, value));
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -595,14 +635,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $av_52 + ($av_53 - $av_52);
     offset = data.start;
     block {
-        l44: loop {
+        l46: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b45: block {
-                l46: loop {
-                    break_if b45 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b47: block {
+                l48: loop {
+                    break_if b47 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
                     i = i + 1;
-                    continue l46;
+                    continue l48;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -635,7 +675,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l44;
+            continue l46;
         };
     };
 }
@@ -660,65 +700,78 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:pre
 
 fn "serde_sub_serializer.wado/serde_sub_serializer.wado/TextStructSerializer^serde_sub_serializer.wado/SerializeStruct::field<i32>$scalar"(self, name, value) {
     let $local_3_3: ref "core:prelude/string.wado//String";
-    let other_7: ref "core:prelude/string.wado//String";
-    let out_11: ref "core:prelude/string.wado//String";
-    let new_used_18: i32;
-    let start_19: i32;
-    let self_37: i32;
-    let new_used_40: i32;
-    let start_41: i32;
-    let self_43: ref Array<u8>;
-    let self_47: ref Array<u8>;
-    let offset_48: i32;
-    let out_54: ref "core:prelude/string.wado//String";
-    let n_57: i32;
-    let new_used_61: i32;
-    let start_62: i32;
-    let s_65: ref "serde_sub_serializer.wado//TextSerializer";
+    let other_5: ref "core:prelude/string.wado//String";
+    let out_9: ref "core:prelude/string.wado//String";
+    let new_used_16: i32;
+    let start_17: i32;
+    let new_used_46: i32;
+    let start_47: i32;
+    let new_used_59: i32;
+    let start_60: i32;
+    let out_65: ref "core:prelude/string.wado//String";
+    let n_68: i32;
+    let new_used_72: i32;
+    let start_73: i32;
+    let s: ref "serde_sub_serializer.wado//TextSerializer";
     let $local_2: ref "core:prelude/string.wado//String";
+    let $sroa_other_used_90: i32;
     if self.count > 0 {
-        other_7 = global:serde_sub_serializer.wado::$const_obj_16;
-        out_11 = self.parent.buf;
-        new_used_18 = out_11.used + 1;
-        if @unlikely(new_used_18 > builtin::array_len(out_11.repr)) {
+        other_5 = global:serde_sub_serializer.wado::$const_obj_16;
+        out_9 = self.parent.buf;
+        new_used_16 = out_9.used + 1;
+        if @unlikely(new_used_16 > builtin::array_len(out_9.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_11, new_used_18);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_9, new_used_16);
         }
-        start_19 = out_11.used;
-        out_11.used = new_used_18;
-        builtin::array_copy<u8>(out_11.repr, start_19, other_7.repr, 0, 1);
+        start_17 = out_9.used;
+        out_9.used = new_used_16;
+        builtin::array_copy<u8>(out_9.repr, start_17, other_5.repr, 0, 1);
     }
     $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(19), used: 0 };
     $local_3_3.used = 1;
     builtin::array_copy<u8>($local_3_3.repr, 0, global:serde_sub_serializer.wado::$const_obj_1, 0, 1);
-    self_37 = name.used;
-    new_used_40 = 1 + (2 + self_37);
-    if @unlikely(new_used_40 > 19) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, new_used_40);
-    }
-    start_41 = $local_3_3.used;
-    $local_3_3.used = new_used_40;
-    self_43 = $local_3_3.repr;
-    builtin::array_copy<u8>(self_43, start_41, name.repr, 0, self_37);
-    self_47 = $local_3_3.repr;
-    offset_48 = start_41 + self_37;
-    builtin::array_copy<u8>(self_47, offset_48, global:serde_sub_serializer.wado::$const_obj_25, 0, 2);
-    out_54 = self.parent.buf;
-    $inline_core_prelude_string_wado_String__internal_push_string_20: block {
-        n_57 = $local_3_3.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_20 n_57 == 0;
-        new_used_61 = out_54.used + n_57;
-        if @unlikely(new_used_61 > builtin::array_len(out_54.repr)) {
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = name.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = name.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_90 = name.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_16: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_16 $sroa_other_used_90 == 0;
+        new_used_46 = 1 + $sroa_other_used_90;
+        if @unlikely(new_used_46 > 19) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_54, new_used_61);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, new_used_46);
         }
-        start_62 = out_54.used;
-        out_54.used = new_used_61;
-        builtin::array_copy<u8>(out_54.repr, start_62, $local_3_3.repr, 0, n_57);
+        start_47 = $local_3_3.used;
+        $local_3_3.used = new_used_46;
+        builtin::array_copy<u8>($local_3_3.repr, start_47, $array_clone_dst_2, 0, $sroa_other_used_90);
     };
-    s_65 = self.parent;
-    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s_65.buf, $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(value, $local_2); $local_2);
+    new_used_59 = $local_3_3.used + 2;
+    if @unlikely(new_used_59 > builtin::array_len($local_3_3.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_3_3, new_used_59);
+    }
+    start_60 = $local_3_3.used;
+    $local_3_3.used = new_used_59;
+    builtin::array_copy<u8>($local_3_3.repr, start_60, global:serde_sub_serializer.wado::$const_obj_25, 0, 2);
+    out_65 = self.parent.buf;
+    $inline_core_prelude_string_wado_String__internal_push_string_26: block {
+        n_68 = $local_3_3.used;
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_26 n_68 == 0;
+        new_used_72 = out_65.used + n_68;
+        if @unlikely(new_used_72 > builtin::array_len(out_65.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_65, new_used_72);
+        }
+        start_73 = out_65.used;
+        out_65.used = new_used_72;
+        builtin::array_copy<u8>(out_65.repr, start_73, $local_3_3.repr, 0, n_68);
+    };
+    s = self.parent;
+    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s.buf, $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(value, $local_2); $local_2);
     self.count = self.count + 1;
     return ref.null none;
 }
@@ -763,14 +816,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b59: block {
-        l60: loop {
-            break_if b59 i >= digit_count_4;
+    b62: block {
+        l63: loop {
+            break_if b62 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l60;
+            continue l63;
         };
     };
 }

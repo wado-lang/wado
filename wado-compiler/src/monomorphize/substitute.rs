@@ -220,20 +220,13 @@ impl Monomorphizer {
                 params,
                 return_type,
                 effects,
-                stores,
             } => {
                 let new_params: Vec<TypeId> = params
                     .iter()
                     .map(|&p| self.substitute_type(p, substitution, type_table))
                     .collect();
                 let new_return_type = self.substitute_type(return_type, substitution, type_table);
-                type_table.make_function_with_mut(
-                    is_mut,
-                    new_params,
-                    new_return_type,
-                    effects,
-                    stores,
-                )
+                type_table.make_function_with_mut(is_mut, new_params, new_return_type, effects)
             }
             // Only a param-embedding base is re-mangled; a concrete-base newtype
             // keeps its identity so its trait impls resolve. See wado-lang/wado#1626.

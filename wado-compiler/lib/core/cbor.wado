@@ -1853,21 +1853,17 @@ impl Deserializer for CborDeserializer {
         }
     }
 
-    fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> with stores[self] {
+    fn begin_seq(&mut self) -> Result<CborSeqAccess, DeserializeError> {
         let [remaining, indef, depth] = self.begin_container(MAJOR_ARRAY, &MSG_EXPECTED_ARRAY)?;
         return Result::Ok(CborSeqAccess { de: self, depth, remaining, indef, done: false });
     }
 
-    fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> with stores[self] {
+    fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError> {
         let [remaining, indef, depth] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP)?;
         return Result::Ok(CborMapAccess { de: self, depth, remaining, indef });
     }
 
-    fn begin_struct<S: AsStrSlice>(
-        &mut self,
-        name: S,
-        num_fields: i32,
-    ) -> Result<CborStructAccess, DeserializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<CborStructAccess, DeserializeError> {
         let [remaining, indef, depth] = self.begin_container(MAJOR_MAP, &MSG_EXPECTED_MAP_FOR_STRUCT)?;
         return Result::Ok(CborStructAccess { de: self, depth, remaining, indef });
     }
@@ -1876,7 +1872,7 @@ impl Deserializer for CborDeserializer {
         &mut self,
         type_name: S,
         num_cases: i32,
-    ) -> Result<CborVariantAccess, DeserializeError> with stores[self] {
+    ) -> Result<CborVariantAccess, DeserializeError> {
         loop {
             let [major, ai, arg, indef] = self.read_head()?;
             match major {
@@ -1925,7 +1921,7 @@ impl Deserializer for CborDeserializer {
         let i64_min128: i128 = i64::MIN as i128;
         loop {
             // Peek the major type without consuming, so the container paths can
-            // delegate to `begin_seq` / `begin_map` (which carry `stores[self]`).
+            // delegate to `begin_seq` / `begin_map`, which retain `self`.
             let major = self.peek_byte()? >> 5;
             match major {
                 MAJOR_UINT => {

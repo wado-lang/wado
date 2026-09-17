@@ -29,7 +29,7 @@ pub fn slice_chars(chars: &List<char>, s: i32, e: i32) -> String {
 }
 
 impl StrCursor {
-    pub fn over(chars: &List<char>) -> StrCursor with stores[chars] {
+    pub fn over(chars: &List<char>) -> StrCursor {
         return StrCursor { chars, start: 0, pos: 0, end: chars.len() };
     }
 
@@ -75,7 +75,7 @@ impl StrCursor {
     }
 
     /// A sub-cursor over `[s, e)` sharing the same buffer, positioned at `s`.
-    pub fn sub(&self, s: i32, e: i32) -> StrCursor with stores[self] {
+    pub fn sub(&self, s: i32, e: i32) -> StrCursor {
         return StrCursor { chars: self.chars, start: s, pos: s, end: e };
     }
 }

@@ -1,0 +1,49 @@
+// A write through a reference-typed local lands wherever that local points. A
+// local whose every assignment roots at one of this body's own parameters
+// points nowhere else, so `stash` writing through `target` is a bounded
+// retention into its first parameter rather than an escape. `fill` resolves it
+// against the argument it passed there — its own `h`, which dies with the call
+// — and so keeps nothing itself. Read as an escape, `fill` would inherit one on
+// `p`, and the detached `&mut b.item` below would be refused for a borrow that
+// outlives the call.
+
+variant Payload {
+    Text(String),
+    Empty,
+}
+
+struct Holder {
+    p: &mut Payload,
+}
+
+#[inline("never")]
+fn stash(slot: &mut Holder, p: &mut Payload) {
+    let target = slot;
+    target.p = p;
+}
+
+#[inline("never")]
+fn fill(p: &mut Payload) {
+    let mut h = Holder { p };
+    stash(&mut h, p);
+    *h.p = Payload::Text("filled");
+}
+
+struct Bag {
+    item: Payload,
+}
+
+fn fill_field(b: &mut Bag) {
+    fill(&mut b.item);
+}
+
+test "a bounded retention leaves the write-back standing" {
+    let mut b = Bag { item: Payload::Empty };
+    fill_field(&mut b);
+    assert b.item matches { Text(_) };
+}
+
+__DATA__
+{
+    "test": {}
+}

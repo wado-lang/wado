@@ -256,9 +256,9 @@ type "functype//core:prelude/primitive.wado/i32::clamp$cold0" = fn(i32, i32);  /
 
 type "functype//core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32, i32);  // TypeId(90)
 
-type "functype//core:json/core/json/to_string<i64>$scalar" = fn(i64, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(91)
+type "functype//core:json/core/json/to_string<u64>$scalar" = fn(u64, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(91)
 
-type "functype//core:json/core/json/to_string<u64>$scalar" = fn(u64, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(92)
+type "functype//core:json/core/json/to_string<i64>$scalar" = fn(i64, ref "core:prelude/types.wado//Option<char>") -> [i32, ref null "core:prelude/string.wado//String", ref null "core:serde//SerializeError"];  // TypeId(92)
 
 type "functype//core:json/core:json/JsonDeserializer::peek_after_whitespace" = fn(ref "core:json//JsonDeserializer") -> i32;  // TypeId(93)
 
@@ -332,11 +332,11 @@ type "functype//core:prelude/slice.wado/core:prelude/slice.wado/Slice<u8>::len" 
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(128)
 
-type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(129)
+type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(129)
 
-type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(130)
+type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(130)
 
-type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(131)
+type "functype//core:prelude/primitive.wado/i64::fmt_decimal$scalar" = fn(i64, ref "core:prelude/format.wado//Formatter");  // TypeId(131)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(132)
 
@@ -2500,13 +2500,13 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<u64>^core:prelude/traits.
     unreachable;
 }
 
-fn "core:json/core/json/to_string<i64>$scalar"(value, trailing_char) {
+fn "core:json/core/json/to_string<u64>$scalar"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let c: char;
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    $match_7 = "core:json/write_json_i64"(buf, value);
+    $match_7 = "core:json/write_json_u64"(buf, value);
     if @likely(ref.is_null($match_7)) {
     } else {
         $qm_e = ref.as_non_null($match_7);
@@ -2521,13 +2521,13 @@ fn "core:json/core/json/to_string<i64>$scalar"(value, trailing_char) {
     return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; let $array_clone_len_3: i32; $array_clone_len_3 = buf.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: buf.used }, ref.null none;
 }
 
-fn "core:json/core/json/to_string<u64>$scalar"(value, trailing_char) {
+fn "core:json/core/json/to_string<i64>$scalar"(value, trailing_char) {
     let buf: ref "core:prelude/string.wado//String";
     let $qm_e: ref "core:serde//SerializeError";
     let c: char;
     let $match_7: ref null "core:serde//SerializeError";
     buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
-    $match_7 = "core:json/write_json_u64"(buf, value);
+    $match_7 = "core:json/write_json_i64"(buf, value);
     if @likely(ref.is_null($match_7)) {
     } else {
         $qm_e = ref.as_non_null($match_7);
@@ -5067,6 +5067,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
+fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
+    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
+}
+
 fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar"(self) {
     return self;
 }
@@ -5099,10 +5103,6 @@ fn "core:prelude/primitive.wado/i64::fmt_decimal$scalar"(self, f) {
             continue l600;
         };
     };
-}
-
-fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
-    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {

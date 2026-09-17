@@ -1,0 +1,42 @@
+// `Self::Item` in `collect`'s bound is `Iterator`'s, and the receiver may
+// implement another trait declaring that name. Projecting by name alone gives
+// up on the pair and lets the mismatch through.
+
+trait Tagged {
+    type Item;
+
+    fn tag(&self) -> i32;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Iterator for Counter {
+    type Item = i32;
+
+    fn next(&mut self) -> Option<i32> {
+        if self.n <= 0 {
+            return null;
+        }
+        self.n -= 1;
+        return Option::Some(self.n);
+    }
+}
+
+impl Tagged for Counter {
+    type Item = String;
+
+    fn tag(&self) -> i32 {
+        return 7;
+    }
+}
+
+export fn run() {
+    let mut c = Counter { n: 3 };
+    let xs: List<String> = c.collect();
+    assert xs.len() == 3;
+}
+
+__DATA__
+{"compile_error": "does not satisfy the associated type 'FromIterator::Elem = i32'"}

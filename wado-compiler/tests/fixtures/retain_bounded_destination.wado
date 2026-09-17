@@ -1,0 +1,56 @@
+// A call that only puts a reference into another of its own arguments keeps it
+// for that argument's extent, not for the whole frame. `park` puts a `&Bag` in
+// a `Slot`, and both bags below outlive every read of the slot they were put
+// in, so each push moves rather than copies. Read off the retention alone —
+// position 1 is kept, never mind where — both would be pinned to the end of
+// `run`.
+
+struct Bag {
+    tags: List<String>,
+}
+
+struct Slot {
+    b: &Bag,
+}
+
+#[inline("never")]
+fn park(slot: &mut Slot, b: &Bag) {
+    slot.b = b;
+}
+
+#[inline("never")]
+fn tag_count(slot: &Slot) -> i32 {
+    return slot.b.tags.len();
+}
+
+export fn run() {
+    let filler = Bag { tags: [] };
+    let mut kept: List<Bag> = [];
+
+    // Nothing reads the slot after the call, so its extent ends there.
+    let mut unread = Slot { b: &filler };
+    let origin = Bag {
+        tags: [`a${builtin::black_box(1)}`, "b"],
+    };
+    park(&mut unread, &origin);
+    kept.push(origin);
+
+    // The slot outlives the call and is read once, before the push: the
+    // reference is gone by the time the bag is moved out.
+    let mut seen = Slot { b: &filler };
+    let later = Bag {
+        tags: [`c${builtin::black_box(3)}`],
+    };
+    park(&mut seen, &later);
+    assert tag_count(&seen) == 1;
+    kept.push(later);
+
+    assert kept[0].tags.len() == 2;
+    assert kept[1].tags.len() == 1;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_not_expect:O0": ["$value_copy$retain_bounded_destination.wado/Bag"]
+}

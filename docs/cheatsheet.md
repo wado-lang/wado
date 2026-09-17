@@ -70,7 +70,7 @@ Wado↔CM type correspondence at the boundary is in [the spec](./spec.md#type-ma
 
 ## Value Semantics
 
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
+See [WEP: Value Semantics and Reference Retention](./wep-2026-01-12-value-semantics-and-retention.md).
 
 Wado uses Wasm GC for memory management. There is no borrow checker or lifetime annotations. Primitives and composite types have value semantics: assignment creates a copy. Reference types (`&T`, `&mut T`) share the underlying value.
 
@@ -992,60 +992,6 @@ fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
 arity(&tri);             // ..P comes from `Tri::Items`
 ```
 
-### Reference Storage
-
-See [WEP: Value Semantics and Reference Stores](./wep-2026-01-12-value-semantics-and-stores.md).
-
-Functions that store reference parameters must declare `stores[...]`:
-
-```wado
-struct Container {
-    data: &Data,
-}
-
-// Function that stores a reference parameter — must declare stores
-fn store_data(data: &Data) -> Container with stores[data] {
-    return Container { data };
-}
-
-// Function that uses but does NOT store a reference — no stores needed
-fn use_data(data: &Data) -> i32 {
-    return data.value;
-}
-
-// Combined with effects
-fn store_and_log(data: &Data) -> Container with (Stdout, stores[data]) {
-    println(`Storing: ${data.value}`);
-    return Container { data };
-}
-
-// `self` is a reference parameter like any other.
-impl Node {
-    fn wrap(&self) -> Ref with stores[self] {
-        return Ref { inner: self };
-    }
-}
-
-// A reference member read out of a parameter still names what the parameter
-// names, so returning it needs the declaration. A value member is copied.
-struct Cursor { chars: &Array<char>, pos: i32 }
-
-fn rebase(c: &Cursor, at: i32) -> Cursor with stores[c] {
-    return Cursor { chars: c.chars, pos: at };
-}
-
-fn name_of(p: &Person) -> String {   // `name` is a `String`: copied
-    return p.name;
-}
-```
-
-Rules:
-
-- `stores[param]` declares that the function may store the reference parameter
-- Only reference parameters (`&T` or `&mut T`) can appear in `stores[...]`, `self` included
-- Without `stores[param]`, a function cannot return, store in struct fields, or assign to globals the reference parameter
-- In function type position, use positional indices: `fn(&Data) with stores[0]`
-
 ## Visibility
 
 Visibility has two orthogonal axes: a scope ladder (`internal` / `pub`) and a
@@ -1422,7 +1368,7 @@ fn main() {
 
 `resume value` (only valid inside a handler) hands `value` back to the caller of the operation.
 
-An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, `stores`, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
+An `interface` is a trait with a different dispatch story, so its members are written as a trait's are — and an operation with a body declares its default implementation: what it does when dispatched with no handler installed, and what fills a handler that leaves the operation out. Without one, an unhandled operation traps. Beyond a name, parameters and a return type an operation declares nothing else (no receiver, effects, parameter defaults or type parameters); see [the spec](./spec.md#default-implementations).
 
 ```wado
 interface Log {

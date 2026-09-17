@@ -133,8 +133,6 @@ pub(crate) struct VariantCaseData {
     /// Payload type for this case. Unit variants have `()` (unit type) payload.
     pub(crate) payload: TypeId,
     /// `AstId` of the case declaration (`VariantCase::id`) in the owning module.
-    /// `pub(crate)` so the Semantics-based stores checker can key a
-    /// constructor call's return provenance by this id.
     pub(crate) ast_id: AstId,
 }
 
@@ -898,12 +896,6 @@ pub enum TypeError {
     /// the impl's frame.
     UnknownTraitImpl {
         name: String,
-        span: Span,
-    },
-
-    /// Invalid stores declaration
-    InvalidStores {
-        message: String,
         span: Span,
     },
 
@@ -1930,9 +1922,6 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::InvalidStores { message, span } => {
-                (Code::InvalidSyntax, message.clone(), *span)
-            }
             TypeError::PrivateFieldAccess {
                 struct_name,
                 field_name,

@@ -122,7 +122,7 @@ side-effect free, so it is a closed constant expression in the same sense.
 Purity comes from `optimize::mod_ref::FnEffect`, a per-callee summary resolved
 as a least fixpoint over the call graph, tracking globals, linear memory and
 component-model I/O. It deliberately excludes the GC heap: a callee that mutates
-objects it allocated itself stays deterministic to its caller, and `stores` is
+objects it allocated itself stays deterministic to its caller, and retention is
 what would let a reference escape. Without that exclusion no `String`-building
 function would qualify.
 

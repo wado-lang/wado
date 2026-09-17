@@ -3,7 +3,7 @@
 //
 // Everything `push` needs opens at once: it returns nothing, so the caller's
 // place is the only thing running it produces; it is a method, not a free call;
-// and it carries `stores[value]`. Its grow path allocates and splices through
+// and it retains `value`. Its grow path allocates and splices through
 // `array_new` / `array_copy`, with `cold_path()` sitting on that very path — a
 // hint the frame could not step past would end the run one statement before the
 // growth it guards.
