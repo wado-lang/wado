@@ -2,6 +2,7 @@
 
 use super::scope::BinderInScope;
 use super::trait_env::ImplTargetKey;
+use super::trait_query::SelfBinding;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -1436,13 +1437,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, span) = (input.slots, input.own_params, input.span);
-        let self_type = self.tysys.get_base_type(input.receiver_type);
+        let self_binding = SelfBinding {
+            type_id: self.tysys.get_base_type(input.receiver_type),
+            declaring_trait: input.trait_decl,
+        };
         let mut type_args = self.resolve_method_type_args(explicit, input);
         self.settle_empty_pack_of(own_params, &mut type_args);
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);
-            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_type), span);
+            self.enforce_type_arg_bounds(own_params, &type_args, Some(self_binding), span);
         }
         (type_args, subst)
     }

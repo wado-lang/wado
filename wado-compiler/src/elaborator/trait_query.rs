@@ -220,6 +220,14 @@ fn referent(tt: &TypeTable, type_id: TypeId) -> TypeId {
     }
 }
 
+/// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
+/// trait whose declaration wrote the constraint.
+#[derive(Clone, Copy)]
+pub(super) struct SelfBinding {
+    pub(super) type_id: TypeId,
+    pub(super) declaring_trait: Option<DefId>,
+}
+
 /// The associated type `Self::Item` names, for a constraint written that way.
 fn self_assoc_name(ty: &ast::Type) -> Option<&str> {
     match ty {
@@ -2300,13 +2308,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The single enforcement of trait bounds on a generic decl's type args,
     /// shared by every generic-call kind so the rule cannot drift. Only a fully
-    /// concrete arg is enforced, and `self_type` is what a bound's `Self::Assoc`
-    /// projects off where the call binds one.
+    /// concrete arg is enforced, and `self_binding` is what a bound's
+    /// `Self::Assoc` projects off where the call binds one.
     pub(super) fn enforce_type_arg_bounds(
         &mut self,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
-        self_type: Option<TypeId>,
+        self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         for (i, param) in params.iter().enumerate() {
@@ -2333,7 +2341,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 for &subject in &subjects {
                     let bound_def = self.bound_trait_def(bound.id);
                     self.enforce_single_bound(subject, &bound.name, bound_def, &param.name, span);
-                    self.enforce_assoc_type_bounds(subject, bound, self_type, span);
+                    self.enforce_assoc_type_bounds(subject, bound, self_binding, span);
                 }
             }
             // A supertrait failure has the same one cause as the bound that
@@ -2348,7 +2356,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if let Some(trait_) = self.bound_trait_def(bound.id) {
                         self.check_and_register_bound(subject, trait_);
                     }
-                    self.enforce_assoc_type_bounds(subject, &bound, self_type, span);
+                    self.enforce_assoc_type_bounds(subject, &bound, self_binding, span);
                 }
             }
         }
@@ -2441,7 +2449,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         type_arg: TypeId,
         bound: &ast::TraitBound,
-        self_type: Option<TypeId>,
+        self_binding: Option<SelfBinding>,
         span: Span,
     ) {
         for constraint in &bound.assoc_types {
@@ -2449,7 +2457,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // how `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
             // collects. Any other mention of `Self` has nothing to bind it
             // here; `enforce_impl_assoc_type_bounds` owns those.
-            let projection = self_assoc_name(&constraint.ty).zip(self_type);
+            let projection = self_assoc_name(&constraint.ty).zip(self_binding);
             if (mentions_self(&constraint.ty) && projection.is_none())
                 || mentions_type_pack(&constraint.ty)
             {
@@ -2467,15 +2475,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             let expected = match projection {
-                // By name, so a name two of the receiver's traits declare
-                // leaves the constraint unchecked rather than guessed.
-                Some((assoc, self_type)) => {
-                    let projected = self
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .resolve_assoc_type_of_instance(self_type, assoc);
-                    let Some(projected) = projected else { continue };
+                Some((assoc, binding)) => {
+                    let Some(projected) = self.project_off_self(binding, assoc) else {
+                        continue;
+                    };
                     projected
                 }
                 None => self.resolve_type(&constraint.ty),
@@ -2501,6 +2504,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 actual: actual_name,
                 span,
             });
+        }
+    }
+
+    /// `Self::assoc` where `Self` is `binding`'s receiver. The trait that wrote
+    /// the constraint qualifies the lookup, so a name several of the receiver's
+    /// traits declare is still one answer.
+    fn project_off_self(&mut self, binding: SelfBinding, assoc: &str) -> Option<TypeId> {
+        let mut table = self.tysys.type_table.borrow_mut();
+        match binding.declaring_trait {
+            Some(trait_) => {
+                table.resolve_trait_assoc_type_of_instance(binding.type_id, &trait_, assoc)
+            }
+            None => table.resolve_assoc_type_of_instance(binding.type_id, assoc),
         }
     }
 
