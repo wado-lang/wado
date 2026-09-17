@@ -199,12 +199,12 @@ test "LexerSlice eq" {
     assert a != c;
 }
 
-test "LexerSlice eq_str" {
+test "LexerSlice compares with text" {
     let s = ls("hello");
-    assert LexerSlice::eq_str("hello", &s);
-    assert !LexerSlice::eq_str("world", &s);
-    assert !LexerSlice::eq_str("hell", &s);
-    assert !LexerSlice::eq_str("helloo", &s);
+    assert s == "hello";
+    assert s != "world";
+    assert s != "hell";
+    assert s != "helloo";
 }
 
 test "LexerSlice push_to" {

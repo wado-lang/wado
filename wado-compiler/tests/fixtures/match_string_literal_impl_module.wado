@@ -1,0 +1,25 @@
+// A string-literal pattern mints its `Eq::eq` call, so the call must name the
+// module defining the impl. Named after the module declaring the type, it minted
+// an extern stub for a function this package defines.
+
+use { Tag } from "./sub/match_string_literal_impl_module_tag.wado";
+
+impl Eq<String> for Tag {
+    fn eq(&self, other: &String) -> bool {
+        return self.name == *other;
+    }
+}
+
+fn kind(t: Tag) -> i32 {
+    return match t {
+        "http" => 1,
+        "ftp" => 2,
+        _ => 0,
+    };
+}
+
+test "a string-literal pattern reaches an impl outside the type's module" {
+    assert kind(Tag { name: "http" }) == 1;
+    assert kind(Tag { name: "ftp" }) == 2;
+    assert kind(Tag { name: "ws" }) == 0;
+}

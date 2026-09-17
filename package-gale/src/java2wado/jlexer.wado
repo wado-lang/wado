@@ -101,16 +101,7 @@ fn scan_punct(chars: &List<char>, pos: i32, n: i32) -> Option<String> {
 }
 
 fn is_two_char_op<S: AsStrSlice>(s: S) -> bool {
-    return s.eq_str("==")
-        || s.eq_str("!=")
-        || s.eq_str(">=")
-        || s.eq_str("<=")
-        || s.eq_str("&&")
-        || s.eq_str("||")
-        || s.eq_str("+=")
-        || s.eq_str("-=")
-        || s.eq_str("*=")
-        || s.eq_str("/=");
+    return s matches { "==" | "!=" | ">=" | "<=" | "&&" | "||" | "+=" | "-=" | "*=" | "/=" };
 }
 
 fn is_one_char_punct(c: char) -> bool {

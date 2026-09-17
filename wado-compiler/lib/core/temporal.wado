@@ -254,7 +254,7 @@ fn format_zoned(zdt: &ZonedDateTime, f: &mut Formatter, default_digits: i32) {
 /// A fixed UTC offset zone string as a signed second count, or `None` when the
 /// zone is not one: `"Z"`/`"z"`, `"UTC"`, and ±HH:MM are the forms understood.
 fn try_fixed_offset<S: AsStrSlice>(zone: S) -> Option<i64> {
-    if zone.eq_str("UTC") {
+    if zone == "UTC" {
         return Option::Some(0);
     }
     if let Ok(offset) = parse_zone_designator(&zone.as_str_slice(), 0) {

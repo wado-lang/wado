@@ -406,7 +406,7 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }
     sig.push(')');
-    if !ret_java.eq_str("void") {
+    if ret_java != "void" {
         let rty = match map_java_type(ret_java) {
             Some(t) => t,
             None => {

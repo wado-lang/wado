@@ -1,0 +1,28 @@
+// Two bounds on one trait at two arguments are two bounds. `Slot` answers
+// `Pick<String>` alone, so the second still rejects it.
+
+trait Pick<A = i32> {
+    fn pick(&self, a: &A) -> i32;
+}
+
+struct Slot {
+    v: i32,
+}
+
+impl Pick<String> for Slot {
+    fn pick(&self, a: &String) -> i32 {
+        return a.len();
+    }
+}
+
+fn both<T: Pick<String> + Pick<bool>>(t: &T) -> i32 {
+    return 1;
+}
+
+test "a second bound on the same trait is not merged away" {
+    let s = Slot { v: 1 };
+    assert both(&s) == 1;
+}
+
+__DATA__
+{"compile_error": "type 'Slot' does not implement trait 'Pick' required by bound on 'T'"}

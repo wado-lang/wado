@@ -342,7 +342,7 @@ type "functype//core:prelude/traits.wado/core:args/ArgsErrorKind^core:prelude/tr
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String") -> bool;  // TypeId(106)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String") -> bool;  // TypeId(107)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/string.wado//StrSlice", ref "core:prelude/string.wado//String") -> bool;  // TypeId(107)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(108)
 
@@ -3888,20 +3888,24 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelud
 
 fn "core:prelude/primitive.wado/bool^core:prelude/traits.wado/LenientFromStr::from_str_lenient<&core:prelude/string.wado/String>"(s) {
     let text: ref "core:prelude/string.wado//StrSlice";
+    let other_5: ref "core:prelude/string.wado//String";
+    let other_7: ref "core:prelude/string.wado//String";
     let repr: ref Array<u8>;
     repr = s.repr;
     text = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: s.used };
     if (if "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text, global:core:prelude/primitive.wado::$const_obj_23) -> i32 {
         1;
     } else {
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<core:prelude/string.wado/String>$spec0"(text, global:core:prelude/primitive.wado::$const_obj_22);
+        other_5 = global:core:prelude/primitive.wado::$const_obj_22;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text, other_5);
     }) {
         return 0, 1, ref.null none;
     }
     if (if "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_case<core:prelude/string.wado/String>$spec0"(text, global:core:prelude/primitive.wado::$const_obj_21) -> i32 {
         1;
     } else {
-        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<core:prelude/string.wado/String>$spec0"(text, global:core:prelude/primitive.wado::$const_obj_20);
+        other_7 = global:core:prelude/primitive.wado::$const_obj_20;
+        "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(text, other_7);
     }) {
         return 0, 0, ref.null none;
     }
@@ -5203,22 +5207,22 @@ fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_ignore_ascii_
     return 1;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<core:prelude/string.wado/String>$spec0"(self, other) {
+fn "core:prelude/string.wado/core:prelude/string.wado/StrSlice::eq_str<&core:prelude/string.wado/String>$spec0"(self, other) {
     let len: i32;
     let i: i32;
+    let $licm_repr_13: ref Array<u8>;
     let repr: ref Array<u8>;
-    let $licm_repr_18: ref Array<u8>;
     len = self.end - 0;
     repr = other.repr;
     if len != (other.used - 0) {
         return 0;
     }
     i = 0;
-    $licm_repr_18 = self.repr;
+    $licm_repr_13 = self.repr;
     b531: block {
         l532: loop {
             break_if b531 i >= len;
-            if builtin::array_get_value<u8>($licm_repr_18, 0 + i) != builtin::array_get_value<u8>(repr, 0 + i) {
+            if builtin::array_get_value<u8>($licm_repr_13, 0 + i) != builtin::array_get_value<u8>(repr, 0 + i) {
                 return 0;
             }
             i = i + 1;

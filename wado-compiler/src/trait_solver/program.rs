@@ -122,10 +122,29 @@ impl SolverType {
     }
 }
 
+/// A `T: Trait<Args>` written on an impl's type parameter.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ParamBound {
+    pub trait_: TraitDeclId,
+    /// What the bound writes for the trait's own parameters; empty asks for the
+    /// declared defaults.
+    pub args: Vec<SolverType>,
+}
+
+impl ParamBound {
+    #[must_use]
+    pub fn bare(trait_: TraitDeclId) -> Self {
+        Self {
+            trait_,
+            args: Vec::new(),
+        }
+    }
+}
+
 /// One of an impl's type parameters.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct ParamDef {
-    pub bounds: Vec<TraitDeclId>,
+    pub bounds: Vec<ParamBound>,
     pub pins: Vec<Pin>,
 }
 
@@ -133,7 +152,7 @@ impl ParamDef {
     #[must_use]
     pub fn bounded(bounds: Vec<TraitDeclId>) -> Self {
         Self {
-            bounds,
+            bounds: bounds.into_iter().map(ParamBound::bare).collect(),
             pins: Vec::new(),
         }
     }
@@ -315,7 +334,9 @@ pub struct Program {
 /// and [`SolverType::Pack`], a pack's bound holding of each element.
 #[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct Env {
-    pub param_bounds: Vec<Vec<TraitDeclId>>,
+    /// Each parameter's bounds, whole: a bound carries the arguments it writes,
+    /// which decide whether it answers a question at those arguments.
+    pub param_bounds: Vec<Vec<ParamBound>>,
 }
 
 impl Program {

@@ -69,7 +69,7 @@ pub fn resolve_attr_ref<S: AsStrSlice>(
 /// The single source of truth for the `$ctx.toStringTree` special: a `ctx`
 /// reference with the `toStringTree` member.
 fn is_ctx_to_string_tree_ref<S: AsStrSlice>(name: S, member: &Option<String>) -> bool {
-    return name.eq_str("ctx") && *member matches { Some("toStringTree") };
+    return name == "ctx" && *member matches { Some("toStringTree") };
 }
 
 fn is_ctx_to_string_tree(r: &ResolvedAttr) -> bool {
@@ -729,16 +729,5 @@ pub fn wado_type_default<S: AsStrSlice>(type_text: S) -> Option<String> {
 }
 
 fn is_numeric_type<S: AsStrSlice>(t: S) -> bool {
-    return t.eq_str("i8")
-        || t.eq_str("i16")
-        || t.eq_str("i32")
-        || t.eq_str("i64")
-        || t.eq_str("u8")
-        || t.eq_str("u16")
-        || t.eq_str("u32")
-        || t.eq_str("u64")
-        || t.eq_str("f32")
-        || t.eq_str("f64")
-        || t.eq_str("usize")
-        || t.eq_str("isize");
+    return t matches { "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "usize" | "isize" };
 }

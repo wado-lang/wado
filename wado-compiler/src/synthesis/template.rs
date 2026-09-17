@@ -1092,7 +1092,7 @@ pub(crate) fn ranked_value_blanket<'a>(
 
 /// The reflection trait `bound` names, or `None` for any other bound.
 fn reflect_bound_item(bound: &BlanketBound, tt: &TypeTable) -> Option<CompilerItem> {
-    let declared = bound.decl_ref.map(|decl| tt.defs().ast_id(decl))?;
+    let declared = bound.decl().map(|decl| tt.defs().ast_id(decl))?;
     let items = tt.compiler_items();
     [
         CompilerItem::Reflect,
