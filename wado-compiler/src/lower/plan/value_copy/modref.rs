@@ -1,5 +1,5 @@
-//! What a call writes through a `&mut` it is handed, as fields of the type
-//! carrying them. A callee this analysis cannot read through writes everything.
+//! What a call writes through a `&mut` it is handed, by the handle each write
+//! is reached through. A callee this analysis cannot read writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::ownership::BuiltinDeclarations;
@@ -11,22 +11,20 @@ use crate::module_source::ModuleSource;
 use crate::tir::{TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable};
 use crate::tir_visitor::TirRefVisitor;
 
-/// Which of a function's incoming handles a write is reached through. The
-/// same type reached two ways is two origins: a formatter's scratch buffer
-/// under `panic` and a parser's input are both `Array<u8>`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Origin {
+/// Which of a function's incoming handles a write is reached through: a
+/// formatter's scratch `Array<u8>` and a parser's input are two origins.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Origin {
     /// The parameter at this position.
     Param(u32),
-    /// A handle this walk could not trace to one parameter. It may be any of
-    /// them, so every question about a single handle answers conservatively.
+    /// A handle this walk could not trace to one parameter, so it may be any
+    /// of them.
     Unknown,
 }
 
 impl Origin {
     /// Whether a write from here could be one the handle at `position`
-    /// carries. Every question about one handle goes through this, so a gate
-    /// and the extractor behind it cannot disagree about [`Origin::Unknown`].
+    /// carries. Every question about a single handle goes through this.
     #[must_use]
     fn could_be(self, position: u32) -> bool {
         self == Origin::Param(position) || self == Origin::Unknown
@@ -69,8 +67,7 @@ impl Writes {
     }
 
     /// Whether every write the handle at `position` carries is a field of
-    /// `owner` itself, so a caller holding it can rebuild each as a path from
-    /// it. A write traced to no one handle could be this one's.
+    /// `owner` itself, so a caller holding it can rebuild each as a path.
     #[must_use]
     pub fn re_rootable_at(&self, position: u32, owner: TypeId) -> bool {
         !self
@@ -84,9 +81,7 @@ impl Writes {
     }
 
     /// The fields of `owner` the handle at `position` is written through, for
-    /// a caller re-rooting them at what it passed. Takes the same writes
-    /// [`Writes::re_rootable_at`] weighed, so one it let through is one the
-    /// caller goes on to record.
+    /// a caller re-rooting them at what it passed.
     pub fn fields_of(&self, position: u32, owner: TypeId) -> impl Iterator<Item = u32> + '_ {
         self.fields
             .iter()
@@ -95,8 +90,7 @@ impl Writes {
     }
 
     /// Absorb a callee's writes, each re-tagged with the handle this caller
-    /// passed in that position. A position the caller filled with storage of
-    /// its own reaches no caller of this one, so its writes are dropped.
+    /// passed in that position.
     fn absorb_through(&mut self, other: &Writes, handed: &IndexMap<u32, Handed>) {
         self.opaque |= other.opaque;
         for (origin, ty, field) in &other.fields {
@@ -306,9 +300,7 @@ struct Walker<'a> {
 
 impl Walker<'_> {
     /// Which of this body's handles `names` is reached through, or `None` for
-    /// storage this frame owns. Only a named place can be answered for: a
-    /// value this walk cannot tie to one may still alias a caller's, so
-    /// [`Walker::handed_at`] is what an argument goes through.
+    /// storage this frame owns.
     fn origin_of(&self, names: &Names) -> Option<Origin> {
         let Names::Place(place) = names else {
             return None;
@@ -319,12 +311,13 @@ impl Walker<'_> {
         place.through_borrow.then_some(Origin::Unknown)
     }
 
-    /// What this call puts in one parameter position, or `None` where the walk
-    /// cannot tell — a `Value` naming no place still aliases its argument when
-    /// it came from `builtin::select`, so it is neither this frame's storage
-    /// nor a handle this walk can name.
+    /// What this call puts in one parameter position, or `None` where this
+    /// walk cannot tell.
     fn handed_at(&self, arg: &TirExpr) -> Option<Handed> {
         let names = self.resolver.names(arg);
+        // A value naming no place still aliases its argument where
+        // `builtin::select` returned it: neither this frame's storage nor a
+        // handle that can be named.
         let Names::Place(_) = names else {
             return None;
         };
@@ -459,17 +452,6 @@ impl TirRefVisitor for Walker<'_> {
             // write, if any, is charged at whoever uses that reference.
             TirExprKind::Call { func, args, .. } => {
                 let known = self.defined.contains(&func.module_source, &func.name);
-                let aliases_only =
-                    func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
-                let writable: Vec<(u32, &TirExpr)> = if aliases_only {
-                    Vec::new()
-                } else {
-                    args.iter()
-                        .enumerate()
-                        .map(|(position, a)| (position as u32, &a.expr))
-                        .filter(|(_, e)| could_write_through(e.type_id, self.type_table))
-                        .collect()
-                };
                 if known {
                     // Every position, not just the writable ones: a callee
                     // writing through a `&T` parameter is one `lends_storage`
@@ -486,13 +468,20 @@ impl TirRefVisitor for Walker<'_> {
                         handed,
                     });
                 }
-                for (_, expr) in writable {
-                    let names = self.resolver.names(expr);
-                    if known {
-                        let callee = (func.module_source.clone(), func.name.clone());
-                        self.record_pending(&names, expr.type_id, callee);
-                    } else {
-                        self.record(&names, WholeOf::Handed(expr.type_id));
+                let aliases_only =
+                    func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
+                if !aliases_only {
+                    for arg in args
+                        .iter()
+                        .filter(|a| could_write_through(a.expr.type_id, self.type_table))
+                    {
+                        let names = self.resolver.names(&arg.expr);
+                        if known {
+                            let callee = (func.module_source.clone(), func.name.clone());
+                            self.record_pending(&names, arg.expr.type_id, callee);
+                        } else {
+                            self.record(&names, WholeOf::Handed(arg.expr.type_id));
+                        }
                     }
                 }
             }

@@ -1078,8 +1078,7 @@ impl Analyzer<'_> {
     fn walk_call_arg(
         &mut self,
         arg: &TirExpr,
-        callee: Option<&FunctionRef>,
-        position: u32,
+        callee: Option<(&FunctionRef, u32)>,
         kept: &Kept,
         borrowing_receiver: bool,
         live: &mut IndexSet<u32>,
@@ -1094,7 +1093,7 @@ impl Analyzer<'_> {
             // own answer. Only one this walk cannot name writes the whole place.
             if record && matches!(op, TirUnaryOp::MutRef) && !borrowing_receiver {
                 match callee {
-                    Some(c) => self.record_call_mutation(c, place, position, live),
+                    Some((c, position)) => self.record_call_mutation(c, place, position, live),
                     None => self.record_mutation(place, live),
                 }
             }
@@ -1710,8 +1709,7 @@ impl Analyzer<'_> {
                 for (pos, arg) in args.iter().enumerate().rev() {
                     self.walk_call_arg(
                         &arg.expr,
-                        Some(func),
-                        pos as u32,
+                        Some((func, pos as u32)),
                         kept.get(pos).unwrap_or(&Kept::Transient),
                         borrowing_receiver && pos == 0,
                         live,
@@ -1720,16 +1718,8 @@ impl Analyzer<'_> {
                 }
             }
             TirExprKind::CmRawCall { args, .. } => {
-                for (pos, arg) in args.iter().enumerate().rev() {
-                    self.walk_call_arg(
-                        arg,
-                        None,
-                        pos as u32,
-                        &Kept::Transient,
-                        false,
-                        live,
-                        record,
-                    );
+                for arg in args.iter().rev() {
+                    self.walk_call_arg(arg, None, &Kept::Transient, false, live, record);
                 }
             }
             TirExprKind::IndirectCall { callee, args } => {

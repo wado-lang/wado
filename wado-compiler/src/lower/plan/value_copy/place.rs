@@ -218,8 +218,7 @@ pub struct Resolver<'a> {
     /// Where each builtin declared its result comes from.
     builtins: &'a BuiltinDeclarations,
     /// Parameters naming storage the caller lent, by position and type lent.
-    /// The only roots a write in this body reaches out through, and the
-    /// position is which of the caller's handles each one is.
+    /// The only roots a write in this body reaches out through.
     lent: IndexMap<u32, (u32, TypeId)>,
     bindings: Bindings,
 }

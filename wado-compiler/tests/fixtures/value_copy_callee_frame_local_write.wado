@@ -3,7 +3,7 @@
 // defensive copy. `modref` used to absorb a callee's writes whole, so
 // `List<i64>`'s own fields landed in this parser's `Writes`, no write was
 // re-rootable at the handle, and `let raw = self.repr` copied the whole input
-// on every call — json_catalog_v2's `parse_area` at 1.2 MB/s.
+// on every call.
 //
 // The callee that really does write the handle is
 // `value_copy_callee_writes_handle_field`.
