@@ -24,7 +24,7 @@ use super::tysys::TypeSystem;
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
-use crate::elaborator::synth::ArgClass;
+use crate::elaborator::synth::{ArgClass, ArgProbe};
 use crate::elaborator::trait_env::{
     BlanketBound, BlanketImpl, BlanketReceiver, ImplHeader, TraitDeclHeader, TraitEnv,
     get_type_name_static, header_answers_bound_args,
@@ -1965,20 +1965,6 @@ fn declaring_module_of_kind(
     }
 }
 
-/// One bound per trait declaration, keeping the first that writes arguments.
-/// Several bounds on one trait are one method at several instantiations.
-fn one_bound_per_trait(candidates: Vec<(ast::TraitBound, DefId)>) -> Vec<(ast::TraitBound, DefId)> {
-    let mut out: Vec<(ast::TraitBound, DefId)> = Vec::new();
-    for (bound, key) in candidates {
-        match out.iter_mut().find(|(_, kept)| *kept == key) {
-            Some(kept) if kept.0.type_args.is_empty() => *kept = (bound, key),
-            Some(_) => {}
-            None => out.push((bound, key)),
-        }
-    }
-    out
-}
-
 /// An associated type paired with the trait that *declares* it: a subtrait's
 /// default body may name a supertrait's, and keying the projection to the
 /// dispatched-through trait made `<T as Base>::Elem` and `Derived`'s two types.
@@ -2131,6 +2117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         span: Span,
         required_trait: Option<&RequiredTrait>,
+        probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<(FqTraitName, MethodInfo)> {
         self.find_method_in_trait_bounds_with(
             bounds,
@@ -2139,7 +2126,100 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self_type_id,
             span,
             required_trait,
+            probe,
         )
+    }
+
+    /// One bound per trait declaration. Several bounds on one trait are one
+    /// method at several instantiations, which the call's arguments choose.
+    fn one_bound_per_trait(
+        &mut self,
+        candidates: Vec<(ast::TraitBound, DefId)>,
+        method_name: &str,
+        self_type_id: TypeId,
+        probe: Option<&mut ArgProbe<'_>>,
+    ) -> Vec<(ast::TraitBound, DefId)> {
+        let mut groups: Vec<Vec<(ast::TraitBound, DefId)>> = Vec::new();
+        for (bound, key) in candidates {
+            match groups.iter_mut().find(|group| group[0].1 == key) {
+                Some(group) => group.push((bound, key)),
+                None => groups.push(vec![(bound, key)]),
+            }
+        }
+        let mut probe = probe;
+        groups
+            .into_iter()
+            .map(|group| {
+                self.select_instantiation(group, method_name, self_type_id, probe.as_deref_mut())
+            })
+            .collect()
+    }
+
+    /// The instantiation of one trait that the call's arguments admit. The
+    /// bound writing arguments wins where nothing selects, a bare one beside it
+    /// naming only the declared default.
+    fn select_instantiation(
+        &mut self,
+        group: Vec<(ast::TraitBound, DefId)>,
+        method_name: &str,
+        self_type_id: TypeId,
+        probe: Option<&mut ArgProbe<'_>>,
+    ) -> (ast::TraitBound, DefId) {
+        let written = group.iter().any(|(bound, _)| !bound.type_args.is_empty());
+        if group.len() > 1
+            && written
+            && let Some(probe) = probe
+        {
+            // Classification costs something, so it waits for an overload set,
+            // as `select_trait_match` makes it wait (WEP 2026-07-31).
+            let classes: Vec<ArgClass> = (0..probe.len()).map(|i| probe.class(self, i)).collect();
+            let admitted: Vec<usize> = (0..group.len())
+                .filter(|&i| {
+                    let Some(params) =
+                        self.bound_param_types(&group[i].0, group[i].1, method_name, self_type_id)
+                    else {
+                        return false;
+                    };
+                    classes.len() <= params.len()
+                        && classes
+                            .iter()
+                            .zip(params.iter())
+                            .all(|(class, &param)| self.class_admits(param, class))
+                })
+                .collect();
+            // Unique-or-nothing, as among impls: several admitted candidates
+            // select none, and the written bound answers below.
+            if let [winner] = admitted.as_slice() {
+                let mut group = group;
+                return group.swap_remove(*winner);
+            }
+        }
+        let first_written = group
+            .iter()
+            .position(|(bound, _)| !bound.type_args.is_empty())
+            .unwrap_or(0);
+        let mut group = group;
+        group.swap_remove(first_written)
+    }
+
+    /// The value parameters `method_name` takes under `bound`, for selection.
+    fn bound_param_types(
+        &mut self,
+        bound: &ast::TraitBound,
+        decl: DefId,
+        method_name: &str,
+        self_type_id: TypeId,
+    ) -> Option<Vec<TypeId>> {
+        let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
+        let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
+        let slots = self.bound_slots(bound, decl, self_type_id);
+        let instantiated = sig.decl.instantiate_slots_with(
+            &self.tysys.type_table,
+            &slots,
+            &SlotProjections::from_iter([(0, answers)]),
+        );
+        let first_value_param = sig.first_value_param().min(instantiated.param_types.len());
+        Some(instantiated.param_types[first_value_param..].to_vec())
     }
 
     /// [`Self::find_method_in_trait_bounds`] for bounds that carry no reference
@@ -2158,6 +2238,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self_type_id: TypeId,
         span: Span,
         required_trait: Option<&RequiredTrait>,
+        probe: Option<&mut ArgProbe<'_>>,
     ) -> Option<(FqTraitName, MethodInfo)> {
         let bounds = self.elaborate_bounds_with(bounds, known);
         // Which trait each bound means is settled once, here: a bound reached
@@ -2194,7 +2275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }) && self.trait_declares_method_of(key, method_name)
             })
             .collect();
-        let candidates = one_bound_per_trait(candidates);
+        let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, probe);
         let resolved = candidates.first().and_then(|(bound, key)| {
             self.trait_method_of(key, method_name)
                 .map(|found| (bound.clone(), *key, found))

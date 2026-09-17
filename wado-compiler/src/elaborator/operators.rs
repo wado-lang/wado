@@ -526,6 +526,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             left,
                             span,
                             required.as_ref(),
+                            None,
                         )
                     }
                 {
@@ -567,6 +568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         left,
                         span,
                         required.as_ref(),
+                        None,
                     )
                 } {
                     let ord_trait_name = self
@@ -720,6 +722,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     left,
                     span,
                     required.as_ref(),
+                    None,
                 ) {
                     let return_type = self.operator_output_type(operand_type_id, &found_trait);
                     let resolved = ResolvedTraitMethod {
@@ -778,6 +781,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     left,
                     span,
                     Some(&required),
+                    None,
                 )
             {
                 let return_type = self.operator_output_type(left, &found_trait);
@@ -1146,6 +1150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expr_type,
                     unary.span,
                     Some(&required),
+                    None,
                 )
             {
                 let return_type = self.operator_output_type(expr_type, &found_trait);

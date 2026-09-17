@@ -3712,6 +3712,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_param_type_id,
                     call.span,
                     None,
+                    None,
                 )
             }
         {

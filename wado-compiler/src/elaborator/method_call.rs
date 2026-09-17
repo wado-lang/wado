@@ -472,10 +472,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             blanket_binder = trait_match.blanket_binder;
         }
 
-        // Selection is over; the classes come out of the probe so the arguments
-        // can be elaborated (which needs `ctx` mutably) and then checked.
-        let synthesized = probe.take_classes();
-
         // If still not found and receiver is a TypeParam, try trait bounds
         // e.g., T: Ord -> look up cmp() in Ord trait declaration
         if method_info.is_none() {
@@ -489,21 +485,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     None
                 }
             };
-            if let Some(name) = type_param_name
-                && let Some(bounds) = self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .get(&name)
-                    .cloned()
-                && let Some((found_trait, info)) = self.find_method_in_trait_bounds(
-                    &bounds,
-                    method_name,
-                    base_type_id,
-                    span,
-                    required_trait,
-                )
-            {
+            // Resolved into a local so the probe's borrow ends here: a `let`
+            // chain would hold it across the body, which still needs the probe.
+            let from_bounds = type_param_name
+                .and_then(|name| {
+                    self.annotate_ctx
+                        .trait_ctx
+                        .type_param_bounds
+                        .get(&name)
+                        .cloned()
+                })
+                .and_then(|bounds| {
+                    self.find_method_in_trait_bounds(
+                        &bounds,
+                        method_name,
+                        base_type_id,
+                        span,
+                        required_trait,
+                        Some(&mut probe),
+                    )
+                });
+            if let Some((found_trait, info)) = from_bounds {
                 trait_name = Some(found_trait);
                 method_info = Some(info);
             }
@@ -563,6 +565,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         base_type_id,
                         span,
                         required_trait,
+                        Some(&mut probe),
                     )
                 }
             {
@@ -570,6 +573,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_info = Some(info);
             }
         }
+
+        // Selection is over; the classes come out of the probe so the arguments
+        // can be elaborated (which needs `ctx` mutably) and then checked.
+        let synthesized = probe.take_classes();
 
         // Get method info (error if method not found)
         // Track whether the lookup actually found a real method. The
