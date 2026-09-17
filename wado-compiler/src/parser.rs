@@ -86,9 +86,8 @@ pub struct Parser {
     effect_hole: EffectHole,
 }
 
-/// Where the parse is with respect to `with _`, which names an effect only
-/// inside a declaration's signature and mints one parameter however often it
-/// is written there.
+/// Where the parse stands on `with _`, which names an effect only inside a
+/// signature and mints one parameter however often that signature writes it.
 #[derive(Debug, Clone, Copy)]
 enum EffectHole {
     /// Not in a signature, so `_` names no effect.
@@ -2092,6 +2091,21 @@ impl Parser {
         }
     }
 
+    /// Take one effect name of a `with` row, noting it if it is the hole.
+    fn consume_effect_name(
+        &mut self,
+        effects: &mut Vec<String>,
+        effect_ids: &mut Vec<(AstId, Span)>,
+    ) -> ParseResult<()> {
+        let (name, span) = self.consume_ident_with_span()?;
+        if name == EFFECT_HOLE {
+            self.note_effect_hole(span)?;
+        }
+        effects.push(name);
+        effect_ids.push((self.alloc_ast_id(), span));
+        Ok(())
+    }
+
     /// The effect parameter a signature's `with _` minted, if it carries one.
     /// `_` is its name, so the clause that asked for it already reads it.
     fn take_effect_hole_param(&mut self, held: EffectHole) -> Option<GenericParam> {
@@ -2122,12 +2136,7 @@ impl Parser {
             if self.check(&TokenKind::Stores) {
                 stores.extend(self.parse_stores_list()?);
             } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                if name == EFFECT_HOLE {
-                    self.note_effect_hole(span)?;
-                }
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
+                self.consume_effect_name(&mut effects, &mut effect_ids)?;
             }
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;
@@ -2192,12 +2201,7 @@ impl Parser {
             if self.check(&TokenKind::Stores) {
                 stores.extend(self.parse_stores_list_for_fn_type()?);
             } else {
-                let (name, span) = self.consume_ident_with_span()?;
-                if name == EFFECT_HOLE {
-                    self.note_effect_hole(span)?;
-                }
-                effects.push(name);
-                effect_ids.push((self.alloc_ast_id(), span));
+                self.consume_effect_name(&mut effects, &mut effect_ids)?;
             }
             if !parenthesized || !self.check(&TokenKind::Comma) {
                 break;

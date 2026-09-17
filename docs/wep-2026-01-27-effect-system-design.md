@@ -335,16 +335,16 @@ Limitations — these require separate work and are pinned by `#![TODO]` fixture
 
 A trait head says what every impl of it may do. It has four states, and a bare head is the one nobody has decided yet:
 
-| Head                          | Every impl of it                            |
-| ----------------------------- | ------------------------------------------- |
-| `trait Foo { … }`             | undecided: reads as `with _`, and is warned |
-| `trait Foo with () { … }`     | is pure                                     |
-| `trait Foo with Stdout { … }` | gets exactly `Stdout`                       |
-| `trait Foo with _ { … }`      | brings its own effects                      |
+| Head                          | Every impl of it                        |
+| ----------------------------- | --------------------------------------- |
+| `trait Foo { … }`             | undecided: reads as `with _`, diagnosed |
+| `trait Foo with () { … }`     | is pure                                 |
+| `trait Foo with Stdout { … }` | gets exactly `Stdout`                   |
+| `trait Foo with _ { … }`      | brings its own effects                  |
 
 A method's own `with` clause overrides the head.
 
-The point of the table is that "should be pure" is a contract worth writing down, and that writing nothing is not the same statement. Every trait the standard library declares says `with ()`: an impl of one performing I/O is a design error, comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
+"Should be pure" is a contract worth writing down, and writing nothing says something else. Every trait the standard library declares says `with ()`: an impl of one that performs I/O is a design error, for comparison, conversion and iteration alike. A trait that means to admit an effect says so, and its author does not have to guess on the first day.
 
 #### A head that names no hole
 
@@ -414,9 +414,9 @@ fn sum<S: Source with ()>(s: S) -> i32 { ... }             // only a pure source
 
 A type implements a trait once, so two impls differing only in the effect argument are rejected. That is what keeps the argument an output of the impl rather than a choice made at the call.
 
-The parameter is resolved where the call names the type: `count(lines)` demands what `impl Source for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it — `with _` says "as effectful as `S`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
+The parameter is resolved where the call names the type: `count(lines)` demands what `impl Source for LineReader` declares, and `count(nums)` demands nothing. That is the one place an instantiation decides a requirement, and the signature is what admits it. `with _` says "as effectful as `S`", where a fixed head's `with Stdout` says `Stdout` and nothing else. A caller that forwards rather than resolves writes `with _` of its own.
 
-A rigid dispatch is the case that does not resolve: in `fn count<S: Source>(s: S)` the body's `s.read()` has no impl to read, since `S` is a type parameter, so the hole survives and `count` forwards it. That is why every trait in the standard library and in the test corpus declares its head — a bare one would push a `with _` onto each of its callers.
+A rigid dispatch is the case that does not resolve. In `fn count<S: Source>(s: S)` the body's `s.read()` has no impl to read, since `S` is a type parameter, so the hole survives and `count` forwards it. That is why every trait in the standard library and in the test corpus declares its head. A bare one would push a `with _` onto each of its callers.
 
 #### An undecided head
 
@@ -426,7 +426,7 @@ A bare head is not neutral. It reads as `with _`, so it publishes an open contra
 
 So the compiler says the head is undecided, at the severity the trait's visibility calls for. A file-private or `internal` trait gets a remark, which is the state a trait is in while it is being written. A `pub` or `export` trait gets a warning, because publishing an undecided contract is the defect. Both are waived per declaration or per module with `allow`, the way `shadowed_name` is, and only user-authored modules are diagnosed.
 
-The effect of this is that nobody has to predict a trait's effects on the day they write it, and nobody can publish one without saying.
+So nobody has to predict a trait's effects on the day they write it, and nobody publishes one without saying.
 
 ### Handlers
 
@@ -450,7 +450,7 @@ The trait head is in. What is left is recorded as gaps below.
 
 ### An effect argument on a bound
 
-`fn sum<S: Source with ()>(s: S)` — constraining an open trait's effect argument at the bound — does not parse yet. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
+Constraining an open trait's effect argument at the bound does not parse yet, so `fn sum<S: Source with ()>(s: S)` is rejected. Until it does, a caller that wants only a pure impl has no way to say so, and writes `with _` to accept any.
 
 ### How deep an open head resolves
 

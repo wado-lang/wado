@@ -19,7 +19,7 @@ use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
 use crate::elaborator::liveness::is_user_authored;
 use crate::elaborator::orchestration::AnnotateState;
-use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, TypeAnnotations};
+use crate::elaborator::sem::types::{AssignPlace, ForOfIteratorInfo, ImplFacts, TypeAnnotations};
 use crate::semantics::Semantics;
 
 /// Whether a missing `with` entry refers to a resource or a regular effect.
@@ -410,6 +410,18 @@ type TraitKey = (ModuleSource, String);
 /// implements.
 type ImplKey = (FqTypeName, TraitKey);
 
+/// The key one `impl Trait for Type` is recorded under. `None` for a trait
+/// whose name carries no declaring module.
+fn impl_key(struct_name: &FqTypeName, trait_name: &FqTraitName) -> Option<ImplKey> {
+    Some((
+        struct_name.head_only(),
+        (
+            trait_name.module()?.clone(),
+            trait_name.base_name().to_string(),
+        ),
+    ))
+}
+
 /// Whether `name` is an effect parameter of the trait or of the method, rather
 /// than an effect declaration the module can resolve.
 fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) -> bool {
@@ -418,8 +430,7 @@ fn declares_effect_param(trait_decl: &TraitDecl, method: &Function, name: &str) 
 }
 
 /// The traits bounding each type parameter, by the slot
-/// `Scope::register_generic_params` gives it: an effect parameter and an
-/// `fn`-bound parameter take none.
+/// `Scope::register_generic_params` gives it.
 fn bound_traits_per_slot(
     type_params: &[ast::GenericParam],
     sem: &Semantics,
@@ -430,8 +441,7 @@ fn bound_traits_per_slot(
     };
     type_params
         .iter()
-        .filter(|p| !p.is_effect)
-        .filter(|p| p.is_pack || p.bounds.iter().all(|b| b.fn_signature.is_none()))
+        .filter(|p| p.is_real_type_param())
         .map(|p| {
             p.bounds
                 .iter()
@@ -451,6 +461,9 @@ struct OwnedEffectData {
     mangled_index: IndexMap<(ModuleSource, String), Vec<EffectRef>>,
     mangled_params: IndexMap<(ModuleSource, String), Vec<TypeId>>,
     trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// The traits that leave their effects to the impl — a `with _` head, or a
+    /// bare one, which reads as the same.
+    open_traits: IndexSet<TraitKey>,
     /// Per type-parameter slot of a function declaration, the traits bounding
     /// it, so a call site can read what its type arguments implement.
     fn_bound_traits: IndexMap<AstId, Vec<Vec<TraitKey>>>,
@@ -533,6 +546,7 @@ impl OwnedEffectData {
         let mut trait_method_effects: IndexMap<TraitMethodKey, Vec<EffectRef>> =
             IndexMap::default();
         let mut trait_by_def: IndexMap<DefId, TraitKey> = IndexMap::default();
+        let mut open_traits: IndexSet<TraitKey> = IndexSet::default();
         for (src, module) in &sem.modules {
             for item in &module.items {
                 let Item::Trait(trait_decl) = item else {
@@ -540,6 +554,9 @@ impl OwnedEffectData {
                 };
                 if let Some(def) = sem.resolutions().and_then(|r| r.declared(trait_decl.id)) {
                     trait_by_def.insert(def, (src.clone(), trait_decl.name.clone()));
+                }
+                if trait_decl.head.is_open() {
+                    open_traits.insert((src.clone(), trait_decl.name.clone()));
                 }
                 for method in &trait_decl.methods {
                     let effects = method
@@ -585,16 +602,13 @@ impl OwnedEffectData {
                         else {
                             continue;
                         };
-                        let Some(trait_name) = facts.trait_name.as_ref() else {
+                        let Some(key) = facts
+                            .trait_name
+                            .as_ref()
+                            .and_then(|trait_name| impl_key(&facts.struct_name, trait_name))
+                        else {
                             continue;
                         };
-                        let Some(trait_module) = trait_name.module() else {
-                            continue;
-                        };
-                        let key = (
-                            facts.struct_name.head_only(),
-                            (trait_module.clone(), trait_name.base_name().to_string()),
-                        );
                         let entry: &mut Vec<EffectRef> = impl_effects.entry(key).or_default();
                         for effect in block
                             .methods
@@ -647,6 +661,7 @@ impl OwnedEffectData {
             mangled_index,
             mangled_params,
             trait_method_effects,
+            open_traits,
             fn_bound_traits,
             impl_effects,
             resource_names,
@@ -666,6 +681,7 @@ impl OwnedEffectData {
             mangled_index: &self.mangled_index,
             mangled_params: &self.mangled_params,
             trait_method_effects: &self.trait_method_effects,
+            open_traits: &self.open_traits,
             fn_bound_traits: &self.fn_bound_traits,
             impl_effects: &self.impl_effects,
             resource_names: &self.resource_names,
@@ -692,6 +708,8 @@ struct EffectIndex<'a> {
     /// Trait method → the effects it declares. A call through a type
     /// parameter's bound selects no impl, so this is what it can demand.
     trait_method_effects: &'a IndexMap<TraitMethodKey, Vec<EffectRef>>,
+    /// The traits that leave their effects to the impl.
+    open_traits: &'a IndexSet<TraitKey>,
     /// Per type-parameter slot of a function declaration, the traits bounding it.
     fn_bound_traits: &'a IndexMap<AstId, Vec<Vec<TraitKey>>>,
     /// Every effect one impl's methods declare.
@@ -827,6 +845,21 @@ fn operation_requirements(
     }]
 }
 
+/// What the elaborator recorded about one `impl` block.
+fn impl_facts<'a>(
+    sem: &'a Semantics,
+    module: &ModuleSource,
+    impl_block: &ImplBlock,
+) -> Option<&'a ImplFacts> {
+    sem.state
+        .as_ref()?
+        .module_semantics
+        .get(module)?
+        .types
+        .impl_facts
+        .get(&impl_block.id)
+}
+
 /// The effect an `impl E for T` block handles, when `E` is one. Read off the
 /// impl facts, which name the trait by its declaring module: a plain trait
 /// spelled like an effect is a different declaration and grants nothing.
@@ -836,14 +869,7 @@ fn handled_effect(
     impl_block: &ImplBlock,
     index: &EffectIndex,
 ) -> Option<EffectRef> {
-    let facts = sem
-        .state
-        .as_ref()?
-        .module_semantics
-        .get(module)?
-        .types
-        .impl_facts
-        .get(&impl_block.id)?;
+    let facts = impl_facts(sem, module, impl_block)?;
     if !facts.is_handler_method {
         return None;
     }
@@ -864,12 +890,7 @@ fn check_impl_effect_conformance(
     index: &EffectIndex,
     out: &mut Vec<EffectError>,
 ) {
-    let Some(trait_name) = sem
-        .state
-        .as_ref()
-        .and_then(|state| state.module_semantics.get(module))
-        .and_then(|module_sem| module_sem.types.impl_facts.get(&impl_block.id))
-        .and_then(|facts| facts.trait_name.as_ref())
+    let Some(trait_name) = impl_facts(sem, module, impl_block).and_then(|f| f.trait_name.as_ref())
     else {
         return;
     };
@@ -1365,10 +1386,8 @@ impl EffectIndex<'_> {
         effects
     }
 
-    /// Resolve an effect parameter an open trait head left in a dispatch's
-    /// effects against the receiver it names: `lines.next()` brings what
-    /// `impl Iterator for LineReader` declares. A receiver that is a type
-    /// parameter names no impl, so the parameter stays the requirement.
+    /// An open head's effect parameter, resolved against the receiver the
+    /// dispatch names. A receiver that is a type parameter names no impl.
     fn resolve_open_head(&self, func_ref: &FunctionRef, effects: Vec<EffectRef>) -> Vec<EffectRef> {
         if !effects.iter().any(EffectRef::is_param) {
             return effects;
@@ -1376,16 +1395,13 @@ impl EffectIndex<'_> {
         let Some(method_info) = func_ref.method_info.as_ref() else {
             return effects;
         };
-        let Some(trait_name) = method_info.trait_name.as_ref() else {
+        let Some(key) = method_info
+            .trait_name
+            .as_ref()
+            .and_then(|trait_name| impl_key(&method_info.fq_base_struct_name(), trait_name))
+        else {
             return effects;
         };
-        let Some(module) = trait_name.module() else {
-            return effects;
-        };
-        let key = (
-            method_info.fq_base_struct_name().head_only(),
-            (module.clone(), trait_name.base_name().to_string()),
-        );
         let Some(declared) = self.impl_effects.get(&key) else {
             return effects;
         };
@@ -1394,9 +1410,7 @@ impl EffectIndex<'_> {
     }
 
     /// What an impl brings once its own effect parameter is filled from the
-    /// receiver's type arguments: a `MapIter<LineReader>` brings what
-    /// `LineReader`'s impl of the same trait brings. An argument implementing
-    /// nothing leaves the parameter, so the caller still forwards it.
+    /// receiver's type arguments. An argument implementing nothing leaves it.
     fn close_over_args(
         &self,
         declared: &[EffectRef],
@@ -1435,16 +1449,6 @@ impl EffectIndex<'_> {
     fn declared_by_trait(&self, func_ref: &FunctionRef) -> Option<&[EffectRef]> {
         let method_info = func_ref.method_info.as_ref()?;
         self.effects_declared_by(method_info.trait_name.as_ref()?, &method_info.method_name)
-    }
-
-    /// Whether the trait leaves its effects to the impl — a `with _` head, or
-    /// a bare one, which reads as the same.
-    fn trait_is_open(&self, key: &TraitKey) -> bool {
-        self.trait_method_effects
-            .iter()
-            .any(|((module, trait_name, _), effects)| {
-                (module, trait_name) == (&key.0, &key.1) && effects.iter().any(EffectRef::is_param)
-            })
     }
 
     /// The effects one trait method declares. `None` for a name no trait
@@ -1549,12 +1553,8 @@ fn resolve_effect_params(
     resolved
 }
 
-/// Resolve an effect parameter the callee's trait bounds leave open against the
-/// types the call instantiates them with: `S: Source` filled with `Loud` brings
-/// what `impl Source for Loud` declares.
-///
-/// An instantiation reaching no impl this phase indexed leaves the parameter
-/// alone, so an unresolved bound stays the caller's requirement.
+/// An effect parameter the callee's trait bounds leave open, resolved against
+/// the types the call instantiates them with. An unreached impl leaves it.
 fn resolve_bound_effect_params(
     sem: &Semantics,
     index: &EffectIndex<'_>,
@@ -1580,7 +1580,7 @@ fn resolve_bound_effect_params(
                 continue;
             };
             let head = sem.types.fq_base_type_name(type_arg).head_only();
-            for key in traits.iter().filter(|key| index.trait_is_open(key)) {
+            for key in traits.iter().filter(|key| index.open_traits.contains(*key)) {
                 let Some(declared) = index.impl_effects.get(&(head.clone(), key.clone())) else {
                     continue;
                 };

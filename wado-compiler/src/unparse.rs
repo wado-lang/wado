@@ -15,7 +15,7 @@ use crate::ast::{
     StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl,
     TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl,
     Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl,
-    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport,
+    Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -1001,11 +1001,10 @@ impl<'a> Unparser<'a> {
 
     /// Unparse generic type parameters: `<T, U: Ord>`
     fn unparse_generic_params(&mut self, params: &[GenericParam]) {
-        let written: Vec<&GenericParam> = params.iter().filter(|p| p.is_written()).collect();
-        if written.is_empty() {
+        if written_params(params).next().is_none() {
             return;
         }
-        self.delimited("<", ">", written, |s, param| {
+        self.delimited("<", ">", written_params(params), |s, param| {
             s.emit_inline_attrs(&param.attrs);
             s.emit_kw_if(param.is_effect, "effect ");
             s.emit_kw_if(param.is_pack, "..");
@@ -4339,11 +4338,10 @@ fn unparse_trait_bounds_into(bounds: &[TraitBound], o: &mut String) {
 }
 
 pub fn unparse_generic_params_into(params: &[GenericParam], output: &mut String) {
-    let written: Vec<&GenericParam> = params.iter().filter(|p| p.is_written()).collect();
-    if written.is_empty() {
+    if written_params(params).next().is_none() {
         return;
     }
-    delimited_into("<", ">", written, output, |param, o| {
+    delimited_into("<", ">", written_params(params), output, |param, o| {
         emit_kw_if_into(param.is_effect, "effect ", o);
         emit_kw_if_into(param.is_pack, "..", o);
         o.push_str(&param.name);

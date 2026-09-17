@@ -506,9 +506,7 @@ pub fn shadowing_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
 }
 
 /// Source-level `UndecidedEffects` diagnostics: every trait head that says
-/// nothing about the effects its impls may declare. A published trait warns,
-/// since an open contract nobody decided is the defect; one that is still being
-/// written only remarks.
+/// nothing about the effects its impls may declare.
 pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnostic> {
     use crate::ast::{Item, attrs_allow, inner_attrs_allow, lint};
     use crate::compiler_host::{Code, DiagnosticSpan};
@@ -530,19 +528,14 @@ pub fn undecided_effect_diagnostics(sem: &semantics::Semantics) -> Vec<Diagnosti
             {
                 continue;
             }
-            let published = trait_decl.visibility.is_public();
-            let severity = if published {
-                Severity::Warning
+            let (severity, code) = if trait_decl.visibility.is_public() {
+                (Severity::Warning, Code::UndecidedEffects)
             } else {
-                Severity::Info
+                (Severity::Info, Code::Remark)
             };
             out.push(Diagnostic {
                 severity,
-                code: if published {
-                    Code::UndecidedEffects
-                } else {
-                    Code::Remark
-                },
+                code,
                 message: format!(
                     "`{}` says nothing about the effects its impls may declare; \
                      write `with ()` to forbid them, `with _` to leave them to the impl, \

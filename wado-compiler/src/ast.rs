@@ -3983,12 +3983,13 @@ impl TraitHead {
         }
     }
 
-    /// Where the clause is written, for a diagnostic that points at it.
+    /// Where the clause is written. `None` when the source wrote none.
     pub fn span(&self) -> Option<Span> {
         match self {
             TraitHead::Undecided => None,
-            TraitHead::Pure { span } | TraitHead::Open { span } => Some(*span),
-            TraitHead::Fixed { span, .. } => Some(*span),
+            TraitHead::Pure { span } | TraitHead::Open { span } | TraitHead::Fixed { span, .. } => {
+                Some(*span)
+            }
         }
     }
 }
@@ -3996,6 +3997,11 @@ impl TraitHead {
 /// The name `with _` carries, both as an effect reference and as the name of
 /// the effect parameter it mints.
 pub const EFFECT_HOLE: &str = "_";
+
+/// The params the source spells, skipping the one `with _` mints.
+pub fn written_params(params: &[GenericParam]) -> impl Iterator<Item = &GenericParam> {
+    params.iter().filter(|p| p.is_written())
+}
 
 /// Trait declaration: `trait Foo { type Output; fn method(&self) -> Self::Output; }`
 #[derive(Debug, Clone)]
