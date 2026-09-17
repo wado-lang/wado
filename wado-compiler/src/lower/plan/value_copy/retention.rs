@@ -1825,10 +1825,8 @@ impl TirRefVisitor for StoresWalker<'_> {
                 self.functor_args_reach(None, &exprs);
             }
             // A function value's own facts belong to its functor type, not to
-            // the body that mints it. The closure body is analysed in its own
-            // parameter namespace, so the default walk must not descend into it
-            // with this body's carriers. A capture the closure may replace is
-            // the same hole a reference is, so the outer local widens too.
+            // the body that mints it. A capture the closure may replace is the
+            // same hole a reference is, so the outer local widens too.
             TirExprKind::Closure {
                 params,
                 body,

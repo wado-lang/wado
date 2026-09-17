@@ -309,10 +309,8 @@ impl<'a> WriteWalker<'a> {
         }
     }
 
-    /// A closure body numbers its locals in its own namespace, so walking it
-    /// against this one would both invent slots it never named and miss the
-    /// ones it did: only what it reaches through a capture is storage the
-    /// enclosing body owns.
+    /// Settle the closure in its own frame and map what it found back: only
+    /// what it reaches through a capture is storage the enclosing body owns.
     fn walk_closure(&mut self, body: &TirExpr, captures: &[TirCapture]) {
         let mut inner = WriteWalker::new(self.computed, self.carrying);
         settle(&mut inner, Body::Expr(body));
