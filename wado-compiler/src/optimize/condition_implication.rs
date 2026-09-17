@@ -1539,6 +1539,45 @@ pub(super) fn induction_entry(
         .flatten()
 }
 
+/// How far `var` advances per iteration, for a caller that establishes the
+/// floor at run time instead of reading a constant entry.
+pub(super) enum InductionStep {
+    /// `var = var + K`.
+    Const(i64),
+    /// `var = var + S`, `S` a local the caller must still prove invariant.
+    Local(u32),
+}
+
+/// The step of a counting loop whose body's only write to `var` is
+/// `var = var + <constant or local>`.
+pub(super) fn induction_step(
+    engine: &Engine,
+    binds: &Binds,
+    loop_body: BlockId,
+    var: u32,
+) -> Option<InductionStep> {
+    let step = sole_unconditional_write(engine, loop_body, var, None)?;
+    if let Some((v, k)) = parse_var_offset(engine, binds, step) {
+        return (v == var).then_some(InductionStep::Const(k));
+    }
+    let Operand::Expr(e) = resolve(engine, binds, step) else {
+        return None;
+    };
+    let ExprKind::Binary {
+        left,
+        op: NirBinaryOp::Add,
+        right,
+    } = &engine.body.exprs[e].kind
+    else {
+        return None;
+    };
+    if parse_var_offset(engine, binds, *left) != Some((var, 0)) {
+        return None;
+    }
+    let s = peel_capture_block(engine, binds, *right);
+    operand_local(engine.body, s).map(InductionStep::Local)
+}
+
 /// The operand `block` writes to `var` when exactly one of its own statements
 /// is that write. `stop` ends the scan at a statement, for a caller that means
 /// "before this one".

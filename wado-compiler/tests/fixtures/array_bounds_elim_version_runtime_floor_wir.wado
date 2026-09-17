@@ -1,0 +1,33 @@
+// Loop-versioned BCE where the entry value is no constant. A sieve's marking
+// loop enters at `p * p` and steps by `p`, so neither the floor `0 <= index`
+// nor the step reads as a constant. The residual establishes both at the
+// version point — `start >= 0`, `step >= 0`, and `limit` a step below the wrap
+// — and the fast arm then carries the bare `array_set`.
+
+use { println, Stdout } from "core:cli";
+
+fn mark_and_sum(xs: &mut List<i32>, limit: i32, start: i32, step: i32) -> i32 {
+    let mut sum = 0;
+    for let mut r = 0; r < 2; r += 1 {
+        for let mut i = start; i <= limit; i += step {
+            xs[i] = 9;
+        }
+        for let mut n = 0; n <= limit; n += 1 {
+            sum += xs[n];
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${mark_and_sum(&mut xs, builtin::black_box(10), builtin::black_box(4), builtin::black_box(3))}`);
+}
+
+__DATA__
+{
+    "stdout": "54\n",
+    "wir_expect:O2": [
+        "i >= 0, 0), step >= 0, 0), limit <= (2147483647 - step), 0)"
+    ]
+}

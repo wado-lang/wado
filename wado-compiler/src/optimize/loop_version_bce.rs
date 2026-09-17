@@ -3,6 +3,10 @@
 //! `if H < B { <clone, checks deleted> } else { <original> }`, sound by
 //! per-iteration transitivity from the guard's `i <= H`. A fast arm that is
 //! exactly `a[i] = CONST; i += 1` then collapses to one [`try_fill_idiom`].
+//!
+//! A check's floor (`assert 0 <= i < n`) joins the residual where the entry
+//! value is no constant: `i >= FLOOR` reads the variable at the version point,
+//! and a non-negative non-wrapping step carries it to every later value.
 
 use std::ops::ControlFlow;
 
@@ -11,15 +15,15 @@ use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprKind, NodeRef, Operand, 
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{PrimitiveType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::arena_query::{block_contains_loop, has_break_to};
 use super::condition_implication::{
     Binds, BoundKey, Conjunct, build_copy_bindings, capture_block_binding, check_conjuncts,
-    eliminate_condition, induction_entry, negated_operand, node_modifies, panic_guard_check,
-    parse_break_guard_head, parse_cmp, parse_var_offset, peel_capture_block, resolve_panic_ids,
-    stmt_modifies,
+    InductionStep, eliminate_condition, induction_entry, induction_step, negated_operand,
+    node_modifies, panic_guard_check, parse_break_guard_head, parse_cmp, parse_var_offset,
+    peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::dce::{build_callee_descriptors, callee_descriptor};
@@ -54,6 +58,17 @@ struct Plan {
     guard_le: bool,
     /// Check bound local `B`.
     check_bound: u32,
+    /// The floor the checks demand, when it is the residual's to establish.
+    floor: Option<RuntimeFloor>,
+}
+
+/// A floor `var >= demanded` the residual tests at the version point, together
+/// with what it takes for the step to keep it: a non-negative step that leaves
+/// `H` a full step below the type's maximum, so no `var + step` wraps.
+struct RuntimeFloor {
+    demanded: i64,
+    step: InductionStep,
+    type_max: u64,
 }
 
 /// The two blocks [`apply_version`] produces for a versioned loop: the version
@@ -329,11 +344,6 @@ fn analyze_loop(
     // A floor is answered from the fast arm's own facts, so it must hold for
     // every collected check before any of them is deleted.
     let demanded = checks.iter().map(|c| c.floor).max()?;
-    if demanded > i64::MIN
-        && induction_entry(engine, binds, parent, loop_stmt, loop_body, var)? < demanded
-    {
-        return None;
-    }
     let b = checks.first()?.bound;
     if b == h {
         // Same bound as the guard: statically decidable, not our case.
@@ -348,15 +358,38 @@ fn analyze_loop(
     {
         return None;
     }
-    // `H` and `B` must be loop-invariant: the residual is evaluated once at
-    // the version point. `var` re-bindings would break the guard-to-check
-    // window scan the same way.
+    let floor = match demanded {
+        i64::MIN => None,
+        _ => match induction_entry(engine, binds, parent, loop_stmt, loop_body, var) {
+            Some(entry) if entry >= demanded => None,
+            // A constant entry under the floor is a loop the fast arm could
+            // never take; the residual is for an entry that reads as none.
+            Some(_) => return None,
+            None => Some(runtime_floor(engine, binds, type_table, loop_body, var, demanded)?),
+        },
+    };
+    let step_local = match &floor {
+        Some(RuntimeFloor {
+            step: InductionStep::Local(s),
+            ..
+        }) => Some(*s),
+        _ => None,
+    };
+    if step_local.is_some_and(|s| locals.get(s as usize).map(|l| l.type_id) != Some(ty)) {
+        return None;
+    }
+    // `H`, `B` and the step must be loop-invariant: the residual is evaluated
+    // once at the version point. `var` re-bindings would break the
+    // guard-to-check window scan the same way.
     for &s in &stmts {
-        if node_modifies(engine, NodeRef::Stmt(s), h, BoundKey::Local(b)) {
+        let node = NodeRef::Stmt(s);
+        if node_modifies(engine, node, h, BoundKey::Local(b))
+            || step_local.is_some_and(|sl| node_modifies(engine, node, sl, BoundKey::Local(b)))
+        {
             return None;
         }
     }
-    if subtree_redefines(engine, loop_body, &[var, h, b]) {
+    if subtree_redefines(engine, loop_body, &[var, h, b, step_local.unwrap_or(h)]) {
         return None;
     }
     Some(Plan {
@@ -368,6 +401,56 @@ fn analyze_loop(
         bound: h,
         guard_le,
         check_bound: b,
+        floor,
+    })
+}
+
+/// The floor terms the residual must carry for a loop whose entry value is no
+/// constant: a step that never decreases `var`, and a type maximum a step
+/// clears, so `var >= demanded` at the version point holds at every check.
+fn runtime_floor(
+    engine: &Engine,
+    binds: &Binds,
+    type_table: &TypeTable,
+    loop_body: BlockId,
+    var: u32,
+    demanded: i64,
+) -> Option<RuntimeFloor> {
+    if demanded < 0 {
+        return None;
+    }
+    let step = induction_step(engine, binds, loop_body, var)?;
+    if let InductionStep::Const(k) = step
+        && k < 0
+    {
+        return None;
+    }
+    let ty = engine.locals().get(var as usize)?.type_id;
+    let type_max = integer_max(type_table.primitive_head(ty)?)?;
+    Some(RuntimeFloor {
+        demanded,
+        step,
+        type_max,
+    })
+}
+
+/// The largest value a scalar integer primitive holds, as the bits a NIR
+/// constant of that type carries.
+fn integer_max(p: PrimitiveType) -> Option<u64> {
+    Some(match p {
+        PrimitiveType::I8 => i8::MAX as u64,
+        PrimitiveType::I16 => i16::MAX as u64,
+        PrimitiveType::I32 => i32::MAX as u64,
+        PrimitiveType::I64 => i64::MAX as u64,
+        PrimitiveType::U8 => u64::from(u8::MAX),
+        PrimitiveType::U16 => u64::from(u16::MAX),
+        PrimitiveType::U32 => u64::from(u32::MAX),
+        PrimitiveType::U64 => u64::MAX,
+        PrimitiveType::F32
+        | PrimitiveType::F64
+        | PrimitiveType::Bool
+        | PrimitiveType::Char
+        | PrimitiveType::V128 => return None,
     })
 }
 
@@ -418,7 +501,10 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
     } else {
         NirBinaryOp::LtEq
     };
-    let residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
+    let mut residual = alloc_binary(engine, h_read, op, b_read, TypeTable::BOOL, span);
+    if let Some(floor) = &plan.floor {
+        residual = and_floor_terms(engine, plan, floor, residual, span);
+    }
     let if_stmt = engine.alloc_stmt(
         StmtKind::If {
             condition: residual,
@@ -440,6 +526,72 @@ fn apply_version(engine: &mut Engine, binds: &Binds, plan: &Plan) -> FastArm {
         then_block,
         fast_body,
     }
+}
+
+/// Conjoin the floor terms onto `residual`: `var >= demanded` at the version
+/// point, and for a step the residual cannot read as a constant, `step >= 0`
+/// and `H <= MAX - step` — together these say `var` only rises, and never past
+/// the wrap.
+fn and_floor_terms(
+    engine: &mut Engine,
+    plan: &Plan,
+    floor: &RuntimeFloor,
+    residual: Operand,
+    span: Span,
+) -> Operand {
+    let ty = engine.locals()[plan.var as usize].type_id;
+    let var_read = local_read(engine, plan.var, span);
+    let demanded = engine.const_operand(ValueKind::Int(floor.demanded as u64, ty), ty);
+    let at_least = alloc_binary(
+        engine,
+        var_read,
+        NirBinaryOp::GtEq,
+        demanded,
+        TypeTable::BOOL,
+        span,
+    );
+    let mut out = alloc_binary(
+        engine,
+        residual,
+        NirBinaryOp::And,
+        at_least,
+        TypeTable::BOOL,
+        span,
+    );
+    let headroom = match floor.step {
+        // `H < B` already leaves one step of headroom under the check bound.
+        InductionStep::Const(k) if k <= 1 => return out,
+        InductionStep::Const(k) => {
+            let bits = floor.type_max.wrapping_sub(k as u64);
+            engine.const_operand(ValueKind::Int(bits, ty), ty)
+        }
+        InductionStep::Local(s) => {
+            let step_read = local_read(engine, s, span);
+            let zero = engine.const_operand(ValueKind::Int(0, ty), ty);
+            let rising = alloc_binary(
+                engine,
+                step_read,
+                NirBinaryOp::GtEq,
+                zero,
+                TypeTable::BOOL,
+                span,
+            );
+            out = alloc_binary(engine, out, NirBinaryOp::And, rising, TypeTable::BOOL, span);
+            let max = engine.const_operand(ValueKind::Int(floor.type_max, ty), ty);
+            let step_read = local_read(engine, s, span);
+            alloc_binary(engine, max, NirBinaryOp::Sub, step_read, ty, span)
+        }
+    };
+    let h_read = local_read(engine, plan.bound, span);
+    let no_wrap = alloc_binary(
+        engine,
+        h_read,
+        NirBinaryOp::LtEq,
+        headroom,
+        TypeTable::BOOL,
+        span,
+    );
+    alloc_binary(engine, out, NirBinaryOp::And, no_wrap, TypeTable::BOOL, span)
 }
 
 /// In the fast clone, drive every implied check to `false` (the paired
