@@ -83,13 +83,13 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     let handle: i32;
     let new_used_26: i32;
     let start_27: i32;
-    let other_30: ref "core:prelude/string.wado//String";
-    let n_35: i32;
-    let new_used_39: i32;
-    let start_40: i32;
+    let v: ref "core:prelude/string.wado//String";
+    let new_used_40: i32;
+    let start_41: i32;
     let packed: i64;
-    let rx_43: i32;
-    let tx_44: i32;
+    let rx_44: i32;
+    let tx_45: i32;
+    let $sroa_other_used_55: i32;
     c = black_box(struct.new "ctfe_struct_result.wado//Config" { width: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(119, 105, 100, 101), used: 4 } });
     $local_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(c.width, $local_1);
@@ -101,23 +101,30 @@ fn "ctfe_struct_result.wado/run"() with Stdout {
     start_27 = $local_1.used;
     $local_1.used = new_used_26;
     builtin::array_copy<u8>($local_1.repr, start_27, global:ctfe_struct_result.wado::$const_obj_1, 0, 1);
-    other_30 = c.name;
-    $inline_core_prelude_string_wado_String__internal_push_string_14: block {
-        n_35 = other_30.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_14 n_35 == 0;
-        new_used_39 = $local_1.used + n_35;
-        if @unlikely(new_used_39 > builtin::array_len($local_1.repr)) {
+    v = c.name;
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = v.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = v.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_55 = v.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_15: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_15 $sroa_other_used_55 == 0;
+        new_used_40 = $local_1.used + $sroa_other_used_55;
+        if @unlikely(new_used_40 > builtin::array_len($local_1.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_39);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_1, new_used_40);
         }
-        start_40 = $local_1.used;
-        $local_1.used = new_used_39;
-        builtin::array_copy<u8>($local_1.repr, start_40, other_30.repr, 0, n_35);
+        start_41 = $local_1.used;
+        $local_1.used = new_used_40;
+        builtin::array_copy<u8>($local_1.repr, start_41, $array_clone_dst_2, 0, $sroa_other_used_55);
     };
-    rx_43 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
-    tx_44 = builtin::i32_wrap_i64(packed >> 32_i64);
-    handle = "ctfe_struct_result.wado/$cm_binding__Stdout_write_via_stream"(rx_43);
-    "core:rt/write_string_to_stream"(tx_44, $local_1);
+    rx_44 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
+    tx_45 = builtin::i32_wrap_i64(packed >> 32_i64);
+    handle = "ctfe_struct_result.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
+    "core:rt/write_string_to_stream"(tx_45, $local_1);
     "wasi/future-drop-readable:transmission-cli"(handle);
 }
 

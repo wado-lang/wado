@@ -8,22 +8,27 @@ struct index_mut_method_call_infers_from_expected.wado//Bag {  // TypeId(0)
 
 array Array<index_mut_method_call_infers_from_expected.wado/Bag> (mut ref "index_mut_method_call_infers_from_expected.wado//Bag");  // TypeId(1)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
+struct core:prelude//List<index_mut_method_call_infers_from_expected.wado/Bag> {  // TypeId(2)
+    mut repr: ref "Array<index_mut_method_call_infers_from_expected.wado/Bag>",
+    mut used: i32,
+}
 
-type "functype//index_mut_method_call_infers_from_expected.wado/$cm_export__$test_0_a_subscript_receiver_infers_from_the_expected_type" = fn();  // TypeId(3)
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//index_mut_method_call_infers_from_expected.wado/$cm_export__$test_1_a_plain_receiver_infers_from_the_expected_type" = fn();  // TypeId(4)
+type "functype//index_mut_method_call_infers_from_expected.wado/$cm_export__$test_0_a_subscript_receiver_infers_from_the_expected_type" = fn();  // TypeId(4)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(5)
+type "functype//index_mut_method_call_infers_from_expected.wado/$cm_export__$test_1_a_plain_receiver_infers_from_the_expected_type" = fn();  // TypeId(5)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(6)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "index_mut_method_call_infers_from_expected.wado/$cm_export__$test_0_a_subscript_receiver_infers_from_the_expected_type"() {
-    let $sroa_xs_repr: ref "Array<index_mut_method_call_infers_from_expected.wado/Bag>";
-    $sroa_xs_repr = array.new_fixed<ref "index_mut_method_call_infers_from_expected.wado//Bag">(struct.new "index_mut_method_call_infers_from_expected.wado//Bag" { n: 1 });
-    drop(builtin::array_get_value<ref "index_mut_method_call_infers_from_expected.wado//Bag">($sroa_xs_repr, 0).n);
+    let xs: ref "core:prelude//List<index_mut_method_call_infers_from_expected.wado/Bag>";
+    xs = struct.new "core:prelude//List<index_mut_method_call_infers_from_expected.wado/Bag>" { repr: array.new_fixed<ref "index_mut_method_call_infers_from_expected.wado//Bag">(struct.new "index_mut_method_call_infers_from_expected.wado//Bag" { n: 1 }), used: 1 };
+    drop(builtin::array_get_value<ref "index_mut_method_call_infers_from_expected.wado//Bag">(xs.repr, 0).n);
     "wasi/task-return"(0);
 }
 

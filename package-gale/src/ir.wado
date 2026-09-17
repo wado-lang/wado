@@ -1510,16 +1510,8 @@ fn drop_empty_modes(g: &mut Grammar) {
     }
 }
 
-<<<<<<< HEAD
-fn find_parser_rule(all_rules: &List<ParserRule>, name: &String) -> Option<&ParserRule> {
-    return all_rules.iter_ref().find(|r: &ParserRule| r.name == *name);
-||||||| 5708464fb8e
-fn find_parser_rule(all_rules: &List<ParserRule>, name: &String) -> Option<&ParserRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &ParserRule| r.name == *name);
-=======
-fn find_parser_rule<S: AsStrSlice>(all_rules: &List<ParserRule>, name: S) -> Option<&ParserRule> with stores[all_rules] {
+fn find_parser_rule<S: AsStrSlice>(all_rules: &List<ParserRule>, name: S) -> Option<&ParserRule> {
     return all_rules.iter_ref().find(|r: &ParserRule| r.name == name.as_str_slice());
->>>>>>> origin/main
 }
 
 fn find_lexer_rule_index<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> i32 {
@@ -1531,16 +1523,8 @@ fn find_lexer_rule_index<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) ->
     return -1;
 }
 
-<<<<<<< HEAD
-pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name);
-||||||| 5708464fb8e
-pub fn find_lexer_rule(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name);
-=======
-pub fn find_lexer_rule<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
+pub fn find_lexer_rule<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> {
     return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.as_str_slice());
->>>>>>> origin/main
 }
 
 /// `g`'s lexer rules with their mode indices and channel ids rebased onto the

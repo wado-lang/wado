@@ -115,32 +115,32 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     let f_56: ref "core:prelude/format.wado//Formatter";
     let new_used_69: i32;
     let start_70: i32;
-    let other_73: ref "core:prelude/string.wado//String";
-    let n_78: i32;
-    let new_used_82: i32;
-    let start_83: i32;
-    let packed_85: i64;
-    let rx_86: i32;
-    let tx_87: i32;
-    let handle_117: i32;
-    let f_122: ref "core:prelude/format.wado//Formatter";
-    let new_used_135: i32;
-    let start_136: i32;
-    let f_140: ref "core:prelude/format.wado//Formatter";
-    let new_used_153: i32;
-    let start_154: i32;
-    let other_157: ref "core:prelude/string.wado//String";
-    let n_162: i32;
-    let new_used_166: i32;
-    let start_167: i32;
-    let packed_169: i64;
-    let rx_170: i32;
-    let tx_171: i32;
-    let $sroa_slot_177: ref null "wir_optimize_value_copy_multivalue_fresh.wado//Data";
+    let v_74: ref "core:prelude/string.wado//String";
+    let new_used_83: i32;
+    let start_84: i32;
+    let packed_86: i64;
+    let rx_87: i32;
+    let tx_88: i32;
+    let handle_118: i32;
+    let f_123: ref "core:prelude/format.wado//Formatter";
+    let new_used_136: i32;
+    let start_137: i32;
+    let f_141: ref "core:prelude/format.wado//Formatter";
+    let new_used_154: i32;
+    let start_155: i32;
+    let v_159: ref "core:prelude/string.wado//String";
+    let new_used_168: i32;
+    let start_169: i32;
+    let packed_171: i64;
+    let rx_172: i32;
+    let tx_173: i32;
     let $sroa_slot_179: ref null "wir_optimize_value_copy_multivalue_fresh.wado//Data";
-    $sroa_slot_177 = ref.null none;
-    $sroa_slot_177 = struct.new "wir_optimize_value_copy_multivalue_fresh.wado//Data" { x: 5, y: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_5"), used: 6 } };
-    data = ref.as_non_null($sroa_slot_177);
+    let $sroa_slot_181: ref null "wir_optimize_value_copy_multivalue_fresh.wado//Data";
+    let $sroa_other_used_193: i32;
+    let $sroa_other_used_201: i32;
+    $sroa_slot_179 = ref.null none;
+    $sroa_slot_179 = struct.new "wir_optimize_value_copy_multivalue_fresh.wado//Data" { x: 5, y: 10, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_5"), used: 6 } };
+    data = ref.as_non_null($sroa_slot_179);
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4_4 };
     f_38 = $local_5;
@@ -164,68 +164,82 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     start_70 = $local_4_4.used;
     $local_4_4.used = new_used_69;
     builtin::array_copy<u8>($local_4_4.repr, start_70, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_1, 0, 1);
-    other_73 = data.name;
-    $inline_core_prelude_string_wado_String__internal_push_string_31: block {
-        n_78 = other_73.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_31 n_78 == 0;
-        new_used_82 = $local_4_4.used + n_78;
-        if @unlikely(new_used_82 > builtin::array_len($local_4_4.repr)) {
+    v_74 = data.name;
+    let $array_clone_src_1: ref Array<u8>;
+    $array_clone_src_1 = v_74.repr;
+    let $array_clone_len_3: i32;
+    $array_clone_len_3 = v_74.used;
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
+    $sroa_other_used_193 = v_74.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_32: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_32 $sroa_other_used_193 == 0;
+        new_used_83 = $local_4_4.used + $sroa_other_used_193;
+        if @unlikely(new_used_83 > builtin::array_len($local_4_4.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_82);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4_4, new_used_83);
         }
-        start_83 = $local_4_4.used;
-        $local_4_4.used = new_used_82;
-        builtin::array_copy<u8>($local_4_4.repr, start_83, other_73.repr, 0, n_78);
+        start_84 = $local_4_4.used;
+        $local_4_4.used = new_used_83;
+        builtin::array_copy<u8>($local_4_4.repr, start_84, $array_clone_dst_2, 0, $sroa_other_used_193);
     };
-    rx_86 = builtin::i32_wrap_i64(local.tee packed_85("wasi/stream-new"()));
-    tx_87 = builtin::i32_wrap_i64(packed_85 >> 32_i64);
-    handle_33 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_86);
-    "core:rt/write_string_to_stream"(tx_87, $local_4_4);
+    rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
+    tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
+    handle_33 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_87);
+    "core:rt/write_string_to_stream"(tx_88, $local_4_4);
     "wasi/future-drop-readable:transmission-cli"(handle_33);
-    $sroa_slot_179 = ref.null none;
-    $sroa_slot_179 = struct.new "wir_optimize_value_copy_multivalue_fresh.wado//Data" { x: 10, y: 20, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_10"), used: 7 } };
-    d = ref.as_non_null($sroa_slot_179);
+    $sroa_slot_181 = ref.null none;
+    $sroa_slot_181 = struct.new "wir_optimize_value_copy_multivalue_fresh.wado//Data" { x: 10, y: 20, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_10"), used: 7 } };
+    d = ref.as_non_null($sroa_slot_181);
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
-    f_122 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(d.x, f_122);
-    new_used_135 = $local_6.used + 1;
-    if @unlikely(new_used_135 > builtin::array_len($local_6.repr)) {
+    f_123 = $local_7;
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(d.x, f_123);
+    new_used_136 = $local_6.used + 1;
+    if @unlikely(new_used_136 > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_135);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_136);
     }
-    start_136 = $local_6.used;
-    $local_6.used = new_used_135;
-    builtin::array_copy<u8>($local_6.repr, start_136, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_1, 0, 1);
+    start_137 = $local_6.used;
+    $local_6.used = new_used_136;
+    builtin::array_copy<u8>($local_6.repr, start_137, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_1, 0, 1);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
-    f_140 = $local_7;
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(d.y, f_140);
-    new_used_153 = $local_6.used + 1;
-    if @unlikely(new_used_153 > builtin::array_len($local_6.repr)) {
+    f_141 = $local_7;
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(d.y, f_141);
+    new_used_154 = $local_6.used + 1;
+    if @unlikely(new_used_154 > builtin::array_len($local_6.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_153);
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_154);
     }
-    start_154 = $local_6.used;
-    $local_6.used = new_used_153;
-    builtin::array_copy<u8>($local_6.repr, start_154, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_1, 0, 1);
-    other_157 = d.name;
-    $inline_core_prelude_string_wado_String__internal_push_string_67: block {
-        n_162 = other_157.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_67 n_162 == 0;
-        new_used_166 = $local_6.used + n_162;
-        if @unlikely(new_used_166 > builtin::array_len($local_6.repr)) {
+    start_155 = $local_6.used;
+    $local_6.used = new_used_154;
+    builtin::array_copy<u8>($local_6.repr, start_155, global:wir_optimize_value_copy_multivalue_fresh.wado::$const_obj_1, 0, 1);
+    v_159 = d.name;
+    let $array_clone_src_4: ref Array<u8>;
+    $array_clone_src_4 = v_159.repr;
+    let $array_clone_len_6: i32;
+    $array_clone_len_6 = v_159.used;
+    let $array_clone_dst_5: ref Array<u8>;
+    $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
+    builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
+    $sroa_other_used_201 = v_159.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_69: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_69 $sroa_other_used_201 == 0;
+        new_used_168 = $local_6.used + $sroa_other_used_201;
+        if @unlikely(new_used_168 > builtin::array_len($local_6.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_166);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_6, new_used_168);
         }
-        start_167 = $local_6.used;
-        $local_6.used = new_used_166;
-        builtin::array_copy<u8>($local_6.repr, start_167, other_157.repr, 0, n_162);
+        start_169 = $local_6.used;
+        $local_6.used = new_used_168;
+        builtin::array_copy<u8>($local_6.repr, start_169, $array_clone_dst_5, 0, $sroa_other_used_201);
     };
-    rx_170 = builtin::i32_wrap_i64(local.tee packed_169("wasi/stream-new"()));
-    tx_171 = builtin::i32_wrap_i64(packed_169 >> 32_i64);
-    handle_117 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_170);
-    "core:rt/write_string_to_stream"(tx_171, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_117);
+    rx_172 = builtin::i32_wrap_i64(local.tee packed_171("wasi/stream-new"()));
+    tx_173 = builtin::i32_wrap_i64(packed_171 >> 32_i64);
+    handle_118 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_172);
+    "core:rt/write_string_to_stream"(tx_173, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_118);
 }
 
 fn "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

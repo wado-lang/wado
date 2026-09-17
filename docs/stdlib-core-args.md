@@ -133,21 +133,9 @@ consumes its later occurrences.
 
 ##### `fn begin_map(&mut self) -> Result<ArgvMapAccess, DeserializeError>`
 
-<<<<<<< HEAD
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError>`
-||||||| 5708464fb8e
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError> with stores[self]`
-=======
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<ArgvStructAccess, DeserializeError>`
 
-<<<<<<< HEAD
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError>`
-||||||| 5708464fb8e
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError> with stores[self]`
-=======
-##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<ArgvVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

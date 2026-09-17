@@ -635,16 +635,8 @@ impl String {
     }
 
     /// Returns an iterator over characters with their byte indices.
-<<<<<<< HEAD
     pub fn char_indices(&self) -> StrCharIndicesIter {
-        return StrCharIndicesIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
-||||||| 5708464fb8e
-    pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
-        return StrCharIndicesIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
-=======
-    pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
         return self.as_str_slice().char_indices();
->>>>>>> origin/main
     }
 
     /// Decode the whole string into a `List<char>`.
@@ -1100,121 +1092,35 @@ impl String {
     }
 
     /// Returns an iterator over substrings split by the given separator.
-<<<<<<< HEAD
-    pub fn split(&self, sep: String) -> StrSplitIter {
-        let sep_len = sep.len();
-        return StrSplitIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            finished: false,
-        };
-||||||| 5708464fb8e
-    pub fn split(&self, sep: String) -> StrSplitIter with stores[self] {
-        let sep_len = sep.len();
-        return StrSplitIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            finished: false,
-        };
-=======
-    pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter with stores[self] {
+    pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter {
         return self.as_str_slice().split(sep);
->>>>>>> origin/main
     }
 
     /// Returns an iterator over at most `n` substrings split by the given separator.
-<<<<<<< HEAD
-    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter {
-        let sep_len = sep.len();
-        return StrSplitNIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            remaining: n,
-            finished: n <= 0,
-        };
-    }
-
-    /// The parts either side of a separator of `sep_len` bytes found at `at`.
-    fn cut_at(&self, at: i32, sep_len: i32) -> [String, String] {
-        let repr = &self.repr as &Array<u8>;
-        let rest = at + sep_len;
-        return [
-            substring(repr, 0, at),
-            substring(repr, rest, self.used - rest),
-        ];
-||||||| 5708464fb8e
-    pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self] {
-        let sep_len = sep.len();
-        return StrSplitNIter {
-            repr: &self.repr as &Array<u8>,
-            used: self.used,
-            pos: 0,
-            sep_repr: sep.repr as Array<u8>,
-            sep_len,
-            remaining: n,
-            finished: n <= 0,
-        };
-    }
-
-    /// The parts either side of a separator of `sep_len` bytes found at `at`.
-    fn cut_at(&self, at: i32, sep_len: i32) -> [String, String] {
-        let repr = &self.repr as &Array<u8>;
-        let rest = at + sep_len;
-        return [
-            substring(repr, 0, at),
-            substring(repr, rest, self.used - rest),
-        ];
-=======
-    pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter with stores[self] {
+    pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter {
         return self.as_str_slice().splitn(n, sep);
->>>>>>> origin/main
     }
 
     /// Splits at the first `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> {
         return self.as_str_slice().split_once(sep);
     }
 
     /// Splits at the last `sep` into the parts before and after it, or None
     /// when `sep` does not occur.
-    pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> {
         return self.as_str_slice().rsplit_once(sep);
     }
 
     /// Returns an iterator over whitespace-separated substrings.
-<<<<<<< HEAD
     pub fn split_whitespace(&self) -> StrSplitWhitespaceIter {
-        return StrSplitWhitespaceIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0 };
-||||||| 5708464fb8e
-    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
-        return StrSplitWhitespaceIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0 };
-=======
-    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
         return self.as_str_slice().split_whitespace();
->>>>>>> origin/main
     }
 
     /// Returns an iterator over the lines of this string.
-<<<<<<< HEAD
     pub fn lines(&self) -> StrLinesIter {
-        return StrLinesIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, finished: false };
-||||||| 5708464fb8e
-    pub fn lines(&self) -> StrLinesIter with stores[self] {
-        return StrLinesIter { repr: &self.repr as &Array<u8>, used: self.used, pos: 0, finished: false };
-=======
-    pub fn lines(&self) -> StrLinesIter with stores[self] {
         return self.as_str_slice().lines();
->>>>>>> origin/main
     }
 }
 
@@ -1339,7 +1245,7 @@ impl StrSlice {
 
     /// The backing array and this view's offset into it (stdlib use only):
     /// what a byte-at-a-time reader needs to index without a bounds check.
-    internal fn internal_raw_bytes(&self) -> &Array<u8> with stores[self] {
+    internal fn internal_raw_bytes(&self) -> &Array<u8> {
         return self.repr;
     }
 
@@ -1429,7 +1335,7 @@ impl StrSlice {
 
     /// The view with `prefix` removed from the front, or None when it does not
     /// start with `prefix`.
-    pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> with stores[self] {
+    pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> {
         let start = prefix.as_str_slice().len();
         if !self.starts_with(prefix) {
             return null;
@@ -1439,7 +1345,7 @@ impl StrSlice {
 
     /// The view with `suffix` removed from the end, or None when it does not
     /// end with `suffix`.
-    pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> with stores[self] {
+    pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> {
         let suffix_len = suffix.as_str_slice().len();
         if !self.ends_with(suffix) {
             return null;
@@ -1497,7 +1403,7 @@ impl StrSlice {
     }
 
     /// The view with leading ASCII whitespace removed.
-    pub fn trim_ascii_start(&self) -> StrSlice with stores[self] {
+    pub fn trim_ascii_start(&self) -> StrSlice {
         let mut start = self.start;
         while start < self.end && self.repr[start].is_ascii_whitespace() {
             start += 1;
@@ -1506,7 +1412,7 @@ impl StrSlice {
     }
 
     /// The view with trailing ASCII whitespace removed.
-    pub fn trim_ascii_end(&self) -> StrSlice with stores[self] {
+    pub fn trim_ascii_end(&self) -> StrSlice {
         let mut end = self.end;
         while end > self.start && self.repr[end - 1].is_ascii_whitespace() {
             end -= 1;
@@ -1515,12 +1421,12 @@ impl StrSlice {
     }
 
     /// The view with leading and trailing ASCII whitespace removed.
-    pub fn trim_ascii(&self) -> StrSlice with stores[self] {
+    pub fn trim_ascii(&self) -> StrSlice {
         return self.trim_ascii_start().trim_ascii_end();
     }
 
     /// The view with leading Unicode whitespace removed.
-    pub fn trim_start(&self) -> StrSlice with stores[self] {
+    pub fn trim_start(&self) -> StrSlice {
         let mut start = self.start;
         while start < self.end {
             let [code, len] = decode_char_at(self.repr, start);
@@ -1533,7 +1439,7 @@ impl StrSlice {
     }
 
     /// The view with trailing Unicode whitespace removed.
-    pub fn trim_end(&self) -> StrSlice with stores[self] {
+    pub fn trim_end(&self) -> StrSlice {
         let mut end = self.end;
         while end > self.start {
             let pos = char_start_backward(self.repr, end - 1);
@@ -1546,11 +1452,11 @@ impl StrSlice {
     }
 
     /// The view with leading and trailing Unicode whitespace removed.
-    pub fn trim(&self) -> StrSlice with stores[self] {
+    pub fn trim(&self) -> StrSlice {
         return self.trim_start().trim_end();
     }
 
-    pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self] {
+    pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter {
         let s = sep.as_str_slice();
         return StrSplitIter {
             repr: self.repr,
@@ -1563,7 +1469,7 @@ impl StrSlice {
         };
     }
 
-    pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self] {
+    pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter {
         let s = sep.as_str_slice();
         return StrSplitNIter {
             repr: self.repr,
@@ -1577,17 +1483,17 @@ impl StrSlice {
         };
     }
 
-    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
+    pub fn split_whitespace(&self) -> StrSplitWhitespaceIter {
         return StrSplitWhitespaceIter { repr: self.repr, used: self.end, pos: self.start };
     }
 
-    pub fn lines(&self) -> StrLinesIter with stores[self] {
+    pub fn lines(&self) -> StrLinesIter {
         return StrLinesIter { repr: self.repr, used: self.end, pos: self.start, finished: false };
     }
 
     /// The parts either side of the first `sep`, or None when it does not
     /// occur. Both parts view this one; `to_string` copies whichever is kept.
-    pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> {
         let sep_len = sep.as_str_slice().len();
         let Some(at) = self.find(sep) else {
             return null;
@@ -1595,7 +1501,7 @@ impl StrSlice {
         return Option::Some(self.cut_at(at, sep_len));
     }
 
-    pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> {
         let sep_len = sep.as_str_slice().len();
         let Some(at) = self.rfind(sep) else {
             return null;
@@ -1603,14 +1509,14 @@ impl StrSlice {
         return Option::Some(self.cut_at(at, sep_len));
     }
 
-    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] with stores[self] {
+    fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] {
         return [
             self.sub_unchecked(0, at),
             self.sub_unchecked(at + sep_len, self.len()),
         ];
     }
 
-    pub fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
+    pub fn char_indices(&self) -> StrCharIndicesIter {
         return StrCharIndicesIter { repr: self.repr, used: self.end, byte_index: self.start, base: self.start };
     }
 
@@ -1715,12 +1621,7 @@ impl StrSlice {
 /// Conversion to a `StrSlice` that copies no bytes, so one signature takes an
 /// owned string, a reference to one, or a view of part of one.
 pub trait AsStrSlice {
-<<<<<<< HEAD
     fn as_str_slice(&self) -> StrSlice;
-||||||| 5708464fb8e
-    fn as_str_slice(&self) -> StrSlice with stores[self];
-=======
-    fn as_str_slice(&self) -> StrSlice with stores[self];
 
     /// Append this text to `out`. `String` overrides it to copy straight out of
     /// its own backing array: the view the default builds hides the append's
@@ -1747,23 +1648,23 @@ pub trait AsStrSlice {
         return self.as_str_slice().is_char_boundary(index);
     }
 
-    fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+    fn sub(&self, start: i32, end: i32) -> StrSlice {
         return self.as_str_slice().sub(start, end);
     }
 
-    fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self] {
+    fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
         return self.as_str_slice().sub_unchecked(start, end);
     }
 
-    fn as_bytes(&self) -> ByteSlice with stores[self] {
+    fn as_bytes(&self) -> ByteSlice {
         return self.as_str_slice().as_bytes();
     }
 
-    fn chars(&self) -> StrCharIter with stores[self] {
+    fn chars(&self) -> StrCharIter {
         return self.as_str_slice().chars();
     }
 
-    fn bytes(&self) -> StrUtf8ByteIter with stores[self] {
+    fn bytes(&self) -> StrUtf8ByteIter {
         return self.as_str_slice().bytes();
     }
 
@@ -1791,11 +1692,11 @@ pub trait AsStrSlice {
         return self.as_str_slice().rfind(pat);
     }
 
-    fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self] {
+    fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> {
         return self.as_str_slice().strip_prefix(prefix);
     }
 
-    fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self] {
+    fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> {
         return self.as_str_slice().strip_suffix(suffix);
     }
 
@@ -1815,55 +1716,55 @@ pub trait AsStrSlice {
         return self.as_str_slice().char_at_byte(byte_index);
     }
 
-    fn trim_ascii_start(&self) -> StrSlice with stores[self] {
+    fn trim_ascii_start(&self) -> StrSlice {
         return self.as_str_slice().trim_ascii_start();
     }
 
-    fn trim_ascii_end(&self) -> StrSlice with stores[self] {
+    fn trim_ascii_end(&self) -> StrSlice {
         return self.as_str_slice().trim_ascii_end();
     }
 
-    fn trim_ascii(&self) -> StrSlice with stores[self] {
+    fn trim_ascii(&self) -> StrSlice {
         return self.as_str_slice().trim_ascii();
     }
 
-    fn trim_start(&self) -> StrSlice with stores[self] {
+    fn trim_start(&self) -> StrSlice {
         return self.as_str_slice().trim_start();
     }
 
-    fn trim_end(&self) -> StrSlice with stores[self] {
+    fn trim_end(&self) -> StrSlice {
         return self.as_str_slice().trim_end();
     }
 
-    fn trim(&self) -> StrSlice with stores[self] {
+    fn trim(&self) -> StrSlice {
         return self.as_str_slice().trim();
     }
 
-    fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self] {
+    fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter {
         return self.as_str_slice().split(sep);
     }
 
-    fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self] {
+    fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter {
         return self.as_str_slice().splitn(n, sep);
     }
 
-    fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self] {
+    fn split_whitespace(&self) -> StrSplitWhitespaceIter {
         return self.as_str_slice().split_whitespace();
     }
 
-    fn lines(&self) -> StrLinesIter with stores[self] {
+    fn lines(&self) -> StrLinesIter {
         return self.as_str_slice().lines();
     }
 
-    fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> {
         return self.as_str_slice().split_once(sep);
     }
 
-    fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self] {
+    fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> {
         return self.as_str_slice().rsplit_once(sep);
     }
 
-    fn char_indices(&self) -> StrCharIndicesIter with stores[self] {
+    fn char_indices(&self) -> StrCharIndicesIter {
         return self.as_str_slice().char_indices();
     }
 
@@ -1910,7 +1811,6 @@ pub trait AsStrSlice {
     fn replacen<F: AsStrSlice, T: AsStrSlice>(&self, from: F, to: T, count: i32) -> String {
         return self.as_str_slice().replacen(from, to, count);
     }
->>>>>>> origin/main
 }
 
 impl AsStrSlice for String {
@@ -1944,7 +1844,7 @@ impl AsStrSlice for String {
 }
 
 impl<T: AsStrSlice> AsStrSlice for &T {
-    fn as_str_slice(&self) -> StrSlice with stores[self] {
+    fn as_str_slice(&self) -> StrSlice {
         return (*self).as_str_slice();
     }
 

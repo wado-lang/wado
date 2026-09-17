@@ -200,20 +200,8 @@ is the type-mismatch diagnostic, by reference so success allocates none.
 
 ##### `fn begin_map(&mut self) -> Result<CborMapAccess, DeserializeError>`
 
-<<<<<<< HEAD
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError>`
-||||||| 5708464fb8e
-##### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
-=======
-##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<CborStructAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
+##### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<CborStructAccess, DeserializeError>`
 
-<<<<<<< HEAD
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError>`
-||||||| 5708464fb8e
-##### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
-=======
-##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<CborVariantAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
+##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<CborVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`

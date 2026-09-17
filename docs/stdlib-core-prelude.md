@@ -796,15 +796,15 @@ literals stops folding to one.
 
 #### `fn is_char_boundary(&self, index: i32) -> bool`
 
-#### `fn sub(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `fn sub(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice with stores[self]`
+#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn as_bytes(&self) -> ByteSlice with stores[self]`
+#### `fn as_bytes(&self) -> ByteSlice`
 
-#### `fn chars(&self) -> StrCharIter with stores[self]`
+#### `fn chars(&self) -> StrCharIter`
 
-#### `fn bytes(&self) -> StrUtf8ByteIter with stores[self]`
+#### `fn bytes(&self) -> StrUtf8ByteIter`
 
 #### `fn to_string(&self) -> String`
 
@@ -818,9 +818,9 @@ literals stops folding to one.
 
 #### `fn rfind<P: AsStrSlice>(&self, pat: P) -> Option<i32>`
 
-#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice> with stores[self]`
+#### `fn strip_prefix<P: AsStrSlice>(&self, prefix: P) -> Option<StrSlice>`
 
-#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice> with stores[self]`
+#### `fn strip_suffix<P: AsStrSlice>(&self, suffix: P) -> Option<StrSlice>`
 
 #### `fn cmp_str<P: AsStrSlice>(&self, other: P) -> Ordering`
 
@@ -830,31 +830,31 @@ literals stops folding to one.
 
 #### `fn char_at_byte(&self, byte_index: i32) -> Option<char>`
 
-#### `fn trim_ascii_start(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii_start(&self) -> StrSlice`
 
-#### `fn trim_ascii_end(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii_end(&self) -> StrSlice`
 
-#### `fn trim_ascii(&self) -> StrSlice with stores[self]`
+#### `fn trim_ascii(&self) -> StrSlice`
 
-#### `fn trim_start(&self) -> StrSlice with stores[self]`
+#### `fn trim_start(&self) -> StrSlice`
 
-#### `fn trim_end(&self) -> StrSlice with stores[self]`
+#### `fn trim_end(&self) -> StrSlice`
 
-#### `fn trim(&self) -> StrSlice with stores[self]`
+#### `fn trim(&self) -> StrSlice`
 
-#### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+#### `fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter`
 
-#### `fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+#### `fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter`
 
-#### `fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
-#### `fn lines(&self) -> StrLinesIter with stores[self]`
+#### `fn lines(&self) -> StrLinesIter`
 
-#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `fn char_indices(&self) -> StrCharIndicesIter`
 
 #### `fn to_chars(&self) -> List<char>`
 
@@ -3680,15 +3680,9 @@ Append `n` copies of `byte` to this string.
 
 #### `pub fn push_str<S: AsStrSlice>(&mut self, other: S)`
 
-<<<<<<< HEAD
 `#[compiler_item("string_push_str")]`
 
-Append another string to this one.
-||||||| 5708464fb8e
-Append another string to this one.
-=======
 Append any `AsStrSlice` text to this one.
->>>>>>> origin/main
 
 #### `pub fn push_bytes_unchecked<S: AsByteSlice>(&mut self, bytes: &S)`
 
@@ -3947,32 +3941,20 @@ Build a `String` from an iterable of bytes without UTF-8 validation.
 
 The caller must ensure the bytes form valid UTF-8.
 
-<<<<<<< HEAD
-#### `pub fn split(&self, sep: String) -> StrSplitIter`
-||||||| 5708464fb8e
-#### `pub fn split(&self, sep: String) -> StrSplitIter with stores[self]`
-=======
-#### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter with stores[self]`
->>>>>>> origin/main
+#### `pub fn split<S: AsStrSlice>(&self, sep: S) -> StrSplitIter`
 
 Returns an iterator over substrings split by the given separator.
 
-<<<<<<< HEAD
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter`
-||||||| 5708464fb8e
-#### `pub fn splitn(&self, n: i32, sep: String) -> StrSplitNIter with stores[self]`
-=======
-#### `pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter with stores[self]`
->>>>>>> origin/main
+#### `pub fn splitn<S: AsStrSlice>(&self, n: i32, sep: S) -> StrSplitNIter`
 
 Returns an iterator over at most `n` substrings split by the given separator.
 
-#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn split_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]>`
 
 Splits at the first `sep` into the parts before and after it, or None
 when `sep` does not occur.
 
-#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn rsplit_once<S: AsStrSlice>(&self, sep: S) -> Option<[StrSlice, StrSlice]>`
 
 Splits at the last `sep` into the parts before and after it, or None
 when `sep` does not occur.
@@ -4141,12 +4123,12 @@ start, or None.
 The byte index of the last occurrence of `pat`, counted from the view's
 start, or None.
 
-#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice> with stores[self]`
+#### `pub fn strip_prefix<S: AsStrSlice>(&self, prefix: S) -> Option<StrSlice>`
 
 The view with `prefix` removed from the front, or None when it does not
 start with `prefix`.
 
-#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice> with stores[self]`
+#### `pub fn strip_suffix<S: AsStrSlice>(&self, suffix: S) -> Option<StrSlice>`
 
 The view with `suffix` removed from the end, or None when it does not
 end with `suffix`.
@@ -4171,46 +4153,46 @@ Non-ASCII bytes are compared exactly.
 The character starting at `byte_index`, counted from the view's start,
 or None past the end.
 
-#### `pub fn trim_ascii_start(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii_start(&self) -> StrSlice`
 
 The view with leading ASCII whitespace removed.
 
-#### `pub fn trim_ascii_end(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii_end(&self) -> StrSlice`
 
 The view with trailing ASCII whitespace removed.
 
-#### `pub fn trim_ascii(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_ascii(&self) -> StrSlice`
 
 The view with leading and trailing ASCII whitespace removed.
 
-#### `pub fn trim_start(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_start(&self) -> StrSlice`
 
 The view with leading Unicode whitespace removed.
 
-#### `pub fn trim_end(&self) -> StrSlice with stores[self]`
+#### `pub fn trim_end(&self) -> StrSlice`
 
 The view with trailing Unicode whitespace removed.
 
-#### `pub fn trim(&self) -> StrSlice with stores[self]`
+#### `pub fn trim(&self) -> StrSlice`
 
 The view with leading and trailing Unicode whitespace removed.
 
-#### `pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter with stores[self]`
+#### `pub fn split<P: AsStrSlice>(&self, sep: P) -> StrSplitIter`
 
-#### `pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter with stores[self]`
+#### `pub fn splitn<P: AsStrSlice>(&self, n: i32, sep: P) -> StrSplitNIter`
 
-#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter with stores[self]`
+#### `pub fn split_whitespace(&self) -> StrSplitWhitespaceIter`
 
-#### `pub fn lines(&self) -> StrLinesIter with stores[self]`
+#### `pub fn lines(&self) -> StrLinesIter`
 
-#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn split_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
 The parts either side of the first `sep`, or None when it does not
 occur. Both parts view this one; `to_string` copies whichever is kept.
 
-#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]> with stores[self]`
+#### `pub fn rsplit_once<P: AsStrSlice>(&self, sep: P) -> Option<[StrSlice, StrSlice]>`
 
-#### `pub fn char_indices(&self) -> StrCharIndicesIter with stores[self]`
+#### `pub fn char_indices(&self) -> StrCharIndicesIter`
 
 #### `pub fn to_chars(&self) -> List<char>`
 

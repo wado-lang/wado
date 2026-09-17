@@ -92,72 +92,24 @@ _Fields are private._
 
 #### `pub fn new() -> Router<H>`
 
-<<<<<<< HEAD
-#### `pub fn route(&mut self, method: Method, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn route(&mut self, method: Method, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn route<S: AsStrSlice>(&mut self, method: Method, pattern: S, handler: H)`
 
 Registers a handler for `(method, pattern)`. Last-write-wins.
 Panics on a malformed pattern.
 
-<<<<<<< HEAD
-#### `pub fn get(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn get(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn get<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn post(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn post(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn post<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn put(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn put(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn put<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn patch(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn patch(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn patch<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn delete(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn delete(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn delete<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn options(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn options(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn options<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
-<<<<<<< HEAD
-#### `pub fn any(&mut self, pattern: String, handler: H)`
-||||||| 5708464fb8e
-#### `pub fn any(&mut self, pattern: String, handler: H) with stores[handler]`
-=======
-#### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H) with stores[handler]`
->>>>>>> origin/main
+#### `pub fn any<S: AsStrSlice>(&mut self, pattern: S, handler: H)`
 
 Registers a handler that matches any HTTP method (including
 `Method::Other(_)`) at `pattern`. Specific-method handlers at the

@@ -214,7 +214,6 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     let $fuse_at_17: i32;
     let $fuse_at_18: i32;
     let elements_19: ref "Array<core:prelude/string.wado/String>";
-    let value_24: ref "core:prelude/string.wado//String";
     let a_44: ref Array<u8>;
     let a_end: i32;
     let b_47: ref Array<u8>;
@@ -228,10 +227,9 @@ fn "deref_assign_rhs_copy.wado/$test_1_deref_assign_deep_copies_a_reference_elem
     $sroa_b_repr = array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 });
     $sroa_$deref_val_12_repr = builtin::array_clone_deep_prefix<ref "core:prelude/string.wado//String">($sroa_b_repr, 2);
     $sroa_a_repr = $sroa_$deref_val_12_repr;
-    value_24 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 };
     block {
     };
-    builtin::array_set<ref "core:prelude/string.wado//String">($sroa_b_repr, 0, value_24);
+    builtin::array_set<ref "core:prelude/string.wado//String">($sroa_b_repr, 0, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("mutated"), used: 7 });
     $v1_5 = builtin::array_get_value<ref "core:prelude/string.wado//String">($sroa_a_repr, 0);
     $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__9: block -> bool {
         a_44 = $v1_5.repr;

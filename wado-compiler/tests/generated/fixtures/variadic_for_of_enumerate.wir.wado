@@ -150,7 +150,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(54)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(55)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0" = fn(ref "core:prelude/format.wado//Formatter", ref "core:prelude/string.wado//String");  // TypeId(55)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(56)
 
@@ -793,20 +793,21 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let byte_pos: i32;
     let chars_seen: i32;
     let b0: u8;
-    let $licm_repr_12: ref Array<u8>;
-    let $av_13: i32;
+    let $licm_repr_13: ref Array<u8>;
+    let $av_14: i32;
+    let $av_15: i32;
     if f.precision >= 0 {
-        $av_13 = self.used;
-        capped = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = self.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_13); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_13); $array_clone_dst_2), used: $av_13 };
+        $av_14 = self.used;
+        capped = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = self.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_14); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_14); $array_clone_dst_2), used: $av_14 };
         char_count = f.precision;
         byte_pos = 0;
         chars_seen = 0;
-        $licm_repr_12 = capped.repr;
+        $licm_repr_13 = capped.repr;
         b68: block {
             l69: loop {
-                break_if b68 select i32(byte_pos < $av_13, chars_seen < char_count, 0) == 0;
+                break_if b68 select i32(byte_pos < $av_14, chars_seen < char_count, 0) == 0;
                 byte_pos = byte_pos + $inline_utf8_seq_len_3: block -> i32 {
-                    b0 = builtin::array_get_value<u8>($licm_repr_12, byte_pos);
+                    b0 = builtin::array_get_value<u8>($licm_repr_13, byte_pos);
                     if b0 <u 128 {
                         break $inline_utf8_seq_len_3: 1;
                     }
@@ -825,7 +826,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
         capped.used = byte_pos;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, capped);
     } else {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, self);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, $av_15 = self.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = self.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_15); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_15); $array_clone_dst_5), used: $av_15 });
     }
 }
 
@@ -2191,14 +2192,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::join"(self, separator) {
     let buf_2: ref "core:prelude/string.wado//String";
+    let f_3: ref "core:prelude/format.wado//Formatter";
     let i: i32;
     let item: ref "core:prelude/string.wado//String";
+    let self_8: ref "core:prelude/string.wado//String";
     let n_18: i32;
     let new_used: i32;
     let start_23: i32;
     let $licm_used_27: i32;
     let $licm_repr_28: ref "Array<core:prelude/string.wado/String>";
+    let $av_43: i32;
     buf_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used * 8), used: 0 };
+    f_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: buf_2 };
     i = 0;
     $licm_used_27 = self.used;
     $licm_repr_28 = self.repr;
@@ -2206,21 +2211,22 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/
         l222: loop {
             break_if b221 i >= $licm_used_27;
             if i > 0 {
+                self_8 = f_3.buf;
                 $inline_core_prelude_string_wado_String__internal_push_string_6: block {
                     n_18 = separator.used;
                     break_if $inline_core_prelude_string_wado_String__internal_push_string_6 n_18 == 0;
-                    new_used = buf_2.used + n_18;
-                    if @unlikely(new_used > builtin::array_len(buf_2.repr)) {
+                    new_used = self_8.used + n_18;
+                    if @unlikely(new_used > builtin::array_len(self_8.repr)) {
                         cold_path;
-                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf_2, new_used);
+                        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_8, new_used);
                     }
-                    start_23 = buf_2.used;
-                    buf_2.used = new_used;
-                    builtin::array_copy<u8>(buf_2.repr, start_23, separator.repr, 0, n_18);
+                    start_23 = self_8.used;
+                    self_8.used = new_used;
+                    builtin::array_copy<u8>(self_8.repr, start_23, separator.repr, 0, n_18);
                 };
             }
             item = builtin::array_get_value<ref "core:prelude/string.wado//String">($licm_repr_28, i);
-            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(buf_2, item);
+            "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"(f_3, $av_43 = item.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = item.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_43); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_43); $array_clone_dst_2), used: $av_43 });
             i = i + 1;
             continue l222;
         };
@@ -2337,21 +2343,23 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     };
 }
 
-fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, content) {
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"(self, content) {
+    let self_9: ref "core:prelude/string.wado//String";
     let n_15: i32;
     let new_used_19: i32;
     let start_20: i32;
+    self_9 = self.buf;
     $inline_core_prelude_string_wado_String__internal_push_string_2: block {
         n_15 = content.used;
         break_if $inline_core_prelude_string_wado_String__internal_push_string_2 n_15 == 0;
-        new_used_19 = self.used + n_15;
-        if @unlikely(new_used_19 > builtin::array_len(self.repr)) {
+        new_used_19 = self_9.used + n_15;
+        if @unlikely(new_used_19 > builtin::array_len(self_9.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_19);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_9, new_used_19);
         }
-        start_20 = self.used;
-        self.used = new_used_19;
-        builtin::array_copy<u8>(self.repr, start_20, content.repr, 0, n_15);
+        start_20 = self_9.used;
+        self_9.used = new_used_19;
+        builtin::array_copy<u8>(self_9.repr, start_20, content.repr, 0, n_15);
     };
     return;
 }

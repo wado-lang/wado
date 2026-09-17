@@ -137,7 +137,8 @@ global global:core:prelude/format.wado::$const_obj_1: ref null "core:prelude/str
 global global:core:prelude/format.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
 global global:static_own_type_args.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:static_own_type_args.wado::$const_obj_6: ref null Array<u8> = array.new_fixed<u8>(120);
-global global:core:prelude/primitive.wado::$const_obj_25: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:static_own_type_args.wado::$const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
+global global:core:prelude/primitive.wado::$const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "static_own_type_args.wado/$test_0_the_argument_solves_the_method_s_own_slot"() {
     let $cond_3: bool;
@@ -145,7 +146,6 @@ fn "static_own_type_args.wado/$test_0_the_argument_solves_the_method_s_own_slot"
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_10: i32;
     let $fuse_at_11: i32;
-    let v_31: ref "core:prelude/string.wado//String";
     let $local_1_32: ref "core:prelude/string.wado//String";
     let $local_2_33: ref "core:prelude/format.wado//Formatter";
     let a_38: ref Array<u8>;
@@ -153,10 +153,9 @@ fn "static_own_type_args.wado/$test_0_the_argument_solves_the_method_s_own_slot"
     let b_41: ref Array<u8>;
     let len_44: i32;
     let i_45: i32;
-    v_31 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 };
     $local_1_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $local_2_33 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_1_32 };
-    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"($local_2_33, v_31);
+    "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0"($local_2_33, global:static_own_type_args.wado::$const_obj_7);
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__11: block -> bool {
         a_38 = $local_1_32.repr;
         a_end_40 = $local_1_32.used;
@@ -1201,7 +1200,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_25, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_26, digit_count_4);
     self_14 = f.buf;
     arr = self_14.repr;
     pos = offset_5 + digit_count_4;

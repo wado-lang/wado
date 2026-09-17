@@ -208,31 +208,19 @@ with no distinct byte-string form keeps working unchanged.
 
 `#[compiler_item("serializer_begin_seq")]`
 
-<<<<<<< HEAD
 #### `fn begin_map(&mut self, len: i32) -> Result<Self::MapSerializer, SerializeError>`
 
-#### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError>`
 
 `#[compiler_item("serializer_begin_struct")]`
-||||||| 5708464fb8e
-#### `fn begin_struct(&mut self, name: &String, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
-=======
-#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<Self::StructSerializer, SerializeError> with stores[self]`
->>>>>>> origin/main
 
 #### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
-<<<<<<< HEAD
 `#[compiler_item("serializer_serialize_unit_variant")]`
 
-#### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
+#### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError>`
 
 `#[compiler_item("serializer_begin_variant")]`
-||||||| 5708464fb8e
-#### `fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
-=======
-#### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<Self::VariantSerializer, SerializeError> with stores[self]`
->>>>>>> origin/main
 
 ### `pub trait Serialize`
 
@@ -411,27 +399,15 @@ What this format does when the wire repeats a field or key.
 
 `#[compiler_item("deserializer_begin_seq")]`
 
-<<<<<<< HEAD
 #### `fn begin_map(&mut self) -> Result<Self::MapAccess, DeserializeError>`
-||||||| 5708464fb8e
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
-=======
-#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
 
-<<<<<<< HEAD
-#### `fn begin_struct(&mut self, name: &String, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
+#### `fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<Self::StructAccess, DeserializeError>`
 
 `#[compiler_item("deserializer_begin_struct")]`
 
-#### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
+#### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError>`
 
 `#[compiler_item("deserializer_begin_variant")]`
-||||||| 5708464fb8e
-#### `fn begin_variant(&mut self, type_name: &String, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
-=======
-#### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<Self::VariantAccess, DeserializeError> with stores[self]`
->>>>>>> origin/main
 
 #### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
 

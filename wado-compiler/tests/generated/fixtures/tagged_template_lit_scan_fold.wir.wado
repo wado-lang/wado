@@ -539,20 +539,21 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
     let byte_pos: i32;
     let chars_seen: i32;
     let b0: u8;
-    let $licm_repr_12: ref Array<u8>;
-    let $av_13: i32;
+    let $licm_repr_13: ref Array<u8>;
+    let $av_14: i32;
+    let $av_15: i32;
     if f.precision >= 0 {
-        $av_13 = self.used;
-        capped = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = self.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_13); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_13); $array_clone_dst_2), used: $av_13 };
+        $av_14 = self.used;
+        capped = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = self.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_14); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_14); $array_clone_dst_2), used: $av_14 };
         char_count = f.precision;
         byte_pos = 0;
         chars_seen = 0;
-        $licm_repr_12 = capped.repr;
+        $licm_repr_13 = capped.repr;
         b42: block {
             l43: loop {
-                break_if b42 select i32(byte_pos < $av_13, chars_seen < char_count, 0) == 0;
+                break_if b42 select i32(byte_pos < $av_14, chars_seen < char_count, 0) == 0;
                 byte_pos = byte_pos + $inline_utf8_seq_len_3: block -> i32 {
-                    b0 = builtin::array_get_value<u8>($licm_repr_12, byte_pos);
+                    b0 = builtin::array_get_value<u8>($licm_repr_13, byte_pos);
                     if b0 <u 128 {
                         break $inline_utf8_seq_len_3: 1;
                     }
@@ -571,7 +572,7 @@ fn "core:prelude/format.wado/core:prelude/string.wado/String^core:prelude/traits
         capped.used = byte_pos;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, capped);
     } else {
-        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, self);
+        "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(f, $av_15 = self.used; struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = self.repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($av_15); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $av_15); $array_clone_dst_5), used: $av_15 });
     }
 }
 

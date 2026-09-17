@@ -105,28 +105,14 @@ impl Serializer for Sink {
     fn begin_map(&mut self, len: i32) -> Result<MapSink, SerializeError> {
         return Result::Ok(MapSink {});
     }
-<<<<<<< HEAD
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<StructSink, SerializeError> {
-        self.out = *name;
-||||||| 5708464fb8e
-    fn begin_struct(&mut self, name: &String, fields: i32) -> Result<StructSink, SerializeError> with stores[self] {
-        self.out = *name;
-=======
-    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<StructSink, SerializeError> with stores[self] {
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, fields: i32) -> Result<StructSink, SerializeError> {
         self.out = name.to_string();
->>>>>>> origin/main
         return Result::Ok(StructSink {});
     }
     fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError> {
         return Result::Ok(());
     }
-<<<<<<< HEAD
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<VariantSink, SerializeError> {
-||||||| 5708464fb8e
-    fn begin_variant(&mut self, type_name: &String, variant_name: &String, disc: i32) -> Result<VariantSink, SerializeError> with stores[self] {
-=======
-    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<VariantSink, SerializeError> with stores[self] {
->>>>>>> origin/main
+    fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<VariantSink, SerializeError> {
         return Result::Ok(VariantSink {});
     }
 }

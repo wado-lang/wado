@@ -63,36 +63,48 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:serde_deserialize_trait.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 111, 111, 108, 58, 32, 116, 114, 117, 101), used: 10 };
+global global:serde_deserialize_trait.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(83, 116, 114, 105, 110, 103, 58, 32);
 global global:serde_deserialize_trait.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 51, 50, 58, 32, 52, 50), used: 7 };
 
 fn "serde_deserialize_trait.wado/run"() with Stdout {
+    let $local_9: ref "core:prelude/string.wado//String";
     let handle_15: i32;
     let packed_36: i64;
     let rx_37: i32;
     let tx_38: i32;
     let handle_48: i32;
-    let packed_77: i64;
-    let rx_78: i32;
-    let tx_79: i32;
-    let handle_89: i32;
-    let packed_91: i64;
-    let rx_92: i32;
-    let tx_93: i32;
+    let packed_78: i64;
+    let rx_79: i32;
+    let tx_80: i32;
+    let handle_90: i32;
+    let packed_92: i64;
+    let rx_93: i32;
+    let tx_94: i32;
+    let $sroa_$sroa_d_str_val_repr: ref Array<u8>;
+    $sroa_$sroa_d_str_val_repr = array.new_data<u8>("hello");
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_15 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, global:serde_deserialize_trait.wado::$const_obj_3);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
-    rx_78 = builtin::i32_wrap_i64(local.tee packed_77("wasi/stream-new"()));
-    tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
-    handle_48 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_78);
-    "core:rt/write_string_to_stream"(tx_79, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("String: hello"), used: 13 });
+    $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
+    $local_9.used = 8;
+    builtin::array_copy<u8>($local_9.repr, 0, global:serde_deserialize_trait.wado::$const_obj_2, 0, 8);
+    let $array_clone_dst_2: ref Array<u8>;
+    $array_clone_dst_2 = builtin::array_new<u8>(5);
+    builtin::array_copy<u8>($array_clone_dst_2, 0, $sroa_$sroa_d_str_val_repr, 0, 5);
+    $local_9.used = 13;
+    builtin::array_copy<u8>($local_9.repr, 8, $array_clone_dst_2, 0, 5);
+    rx_79 = builtin::i32_wrap_i64(local.tee packed_78("wasi/stream-new"()));
+    tx_80 = builtin::i32_wrap_i64(packed_78 >> 32_i64);
+    handle_48 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_79);
+    "core:rt/write_string_to_stream"(tx_80, $local_9);
     "wasi/future-drop-readable:transmission-cli"(handle_48);
-    rx_92 = builtin::i32_wrap_i64(local.tee packed_91("wasi/stream-new"()));
-    tx_93 = builtin::i32_wrap_i64(packed_91 >> 32_i64);
-    handle_89 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_92);
-    "core:rt/write_string_to_stream"(tx_93, global:serde_deserialize_trait.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_89);
+    rx_93 = builtin::i32_wrap_i64(local.tee packed_92("wasi/stream-new"()));
+    tx_94 = builtin::i32_wrap_i64(packed_92 >> 32_i64);
+    handle_90 = "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_93);
+    "core:rt/write_string_to_stream"(tx_94, global:serde_deserialize_trait.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_90);
 }
 
 fn "serde_deserialize_trait.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

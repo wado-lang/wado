@@ -3094,18 +3094,22 @@ pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(c
 
 pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
+#[retain(self)]
 fn "core:prelude/bytes.wado/ByteSlice^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Slice<u8>) -> Slice<u8> {
     return *self;
 }
 
+#[retain(self)]
 fn "core:prelude/bytes.wado/ByteList^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &List<u8>) -> Slice<u8> {
     return self."core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
 }
 
+#[retain(self)]
 fn "core:prelude/bytes.wado/ByteArray^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &Array<u8>) -> Slice<u8> {
     return self."Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"() as Slice<u8>;
 }
 
+#[retain(self)]
 fn "core:prelude/string.wado/String^core:prelude/bytes.wado/AsByteSlice::as_byte_slice"(self: &String) -> Slice<u8> {
     return self."core:prelude/string.wado/String::as_bytes"();
 }
@@ -3177,6 +3181,7 @@ pub fn "core:prelude/format.wado/Formatter::resolved_seq_limit"(self: &Formatter
     return self.precision;
 }
 
+#[retain(buf)]
 pub fn "core:prelude/format.wado/Formatter::new"(buf: &mut String) -> Formatter {
     return Formatter { fill: ' ', align: Alignment::Right, sign_plus: false, alternate: false, zero_pad: false, width: -1, precision: -2, indent: 0, buf: buf };
 }
@@ -3354,7 +3359,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(s
         capped."core:prelude/string.wado/String::truncate_chars"(f.precision);
         f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(capped);
     } else {
-        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(*self);
+        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(*self));
     }
 }
 
@@ -3446,6 +3451,7 @@ pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/ReflectStruc
     return [StructField<core:prelude/format.wado/Formatter,char> { index: 0, field_name: String { repr: packed"fill", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: 1, field_name: String { repr: packed"align", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 2, field_name: String { repr: packed"sign_plus", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 3, field_name: String { repr: packed"alternate", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 4, field_name: String { repr: packed"zero_pad", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 5, field_name: String { repr: packed"width", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 6, field_name: String { repr: packed"precision", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 7, field_name: String { repr: packed"indent", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: 8, field_name: String { repr: packed"buf", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [char, Alignment, bool, bool, bool, i32, i32, i32, &mut String]) -> Formatter {
     return Formatter { fill: fields.0, align: fields.1, sign_plus: fields.2, alternate: fields.3, zero_pad: fields.4, width: fields.5, precision: fields.6, indent: fields.7, buf: fields.8 };
 }
@@ -3495,6 +3501,7 @@ pub fn "$field_get$core:prelude/format.wado/Formatter$i32"(v: &Formatter, index:
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/format.wado/Formatter$&mut core:prelude/string.wado/String"(v: &Formatter, index: i32) -> &mut String {
     return match index {
         8 => v.buf,
@@ -7518,14 +7525,17 @@ pub fn "core:prelude/string.wado/String::set_byte_unchecked"(self: &mut String, 
     self.repr."Array<u8>^core:prelude/traits.wado/IndexAssign<i32>::index_assign"(index, value);
 }
 
+#[retain(self)]
 pub fn "core:prelude/string.wado/String::as_bytes"(self: &String) -> Slice<u8> {
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr as &Array<u8>, 0, self.used) as Slice<u8>;
 }
 
+#[retain(self)]
 fn "core:prelude/string.wado/String::internal_raw_bytes"(self: &String) -> &Array<u8> {
     return &self.repr as &Array<u8>;
 }
 
+#[retain(self)]
 fn "core:prelude/string.wado/String::internal_raw_bytes_mut"(self: &mut String) -> &mut Array<u8> {
     return &mut self.repr as &mut Array<u8>;
 }
@@ -7589,6 +7599,7 @@ fn "core:prelude/string.wado/String::internal_push_view"(self: &mut String, view
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, start, view.repr, view.start, n);
 }
 
+#[retain(self)]
 pub fn "core:prelude/string.wado/String::chars"(self: &String) -> StrCharIter {
     return StrCharIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
 }
@@ -7742,7 +7753,8 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Ord::cmp"(self:
     return "core::prelude/array.wado::core/prelude/array.wado/seq_cmp<u8>"(&self.repr as &Array<u8>, 0, self.used, &other.repr as &Array<u8>, 0, other.used);
 }
 
-fn "core:prelude/string.wado/StrSlice::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> StrSlice with stores[repr] {
+#[retain(repr)]
+fn "core:prelude/string.wado/StrSlice::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> StrSlice {
     return StrSlice { repr: repr, start: start, end: end };
 }
 
@@ -7756,11 +7768,13 @@ pub fn "core:prelude/string.wado/StrSlice::get_byte_unchecked"(self: &StrSlice, 
 }
 
 #[inline]
-pub fn "core:prelude/string.wado/StrSlice::sub_unchecked"(self: &StrSlice, start: i32, end: i32) -> StrSlice with stores[self] {
+#[retain(self)]
+pub fn "core:prelude/string.wado/StrSlice::sub_unchecked"(self: &StrSlice, start: i32, end: i32) -> StrSlice {
     return StrSlice { repr: self.repr, start: (self.start + start), end: (self.start + end) };
 }
 
-pub fn "core:prelude/string.wado/StrSlice::chars"(self: &StrSlice) -> StrCharIter with stores[self] {
+#[retain(self)]
+pub fn "core:prelude/string.wado/StrSlice::chars"(self: &StrSlice) -> StrCharIter {
     return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
 }
 
@@ -7772,7 +7786,8 @@ pub fn "core:prelude/string.wado/StrSlice::char_at_byte_unchecked"(self: &StrSli
     return "core::prelude/primitive.wado::char::from_u32_unchecked"("core::prelude/string.wado::decode_char_at"(self.repr, (self.start + byte_index)).0);
 }
 
-fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &String) -> StrSlice with stores[self] {
+#[retain(self)]
+fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &String) -> StrSlice {
     return "core::prelude/string.wado::core:prelude/string.wado/StrSlice::internal_new"(&self.repr as &Array<u8>, 0, self.used);
 }
 
@@ -7788,7 +7803,8 @@ fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::get_byt
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
-fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &StrSlice) -> StrSlice with stores[self] {
+#[retain(self)]
+fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &StrSlice) -> StrSlice {
     return *self;
 }
 
@@ -7906,6 +7922,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Reflec
     return [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 2, field_name: String { repr: packed"index", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32]) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: fields.0, used: fields.1, index: fields.2 };
 }
@@ -7923,6 +7940,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Reflec
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrUtf8ByteIter$&Array<u8>"(v: &StrUtf8ByteIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -7946,6 +7964,7 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/ReflectStr
     return [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32]) -> StrCharIter {
     return StrCharIter { repr: fields.0, used: fields.1, byte_index: fields.2 };
 }
@@ -7963,6 +7982,7 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Reflect::w
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrCharIter$&Array<u8>"(v: &StrCharIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -7986,6 +8006,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ref
     return [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 3, field_name: String { repr: packed"base", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32, i32]) -> StrCharIndicesIter {
     return StrCharIndicesIter { repr: fields.0, used: fields.1, byte_index: fields.2, base: fields.3 };
 }
@@ -8003,6 +8024,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ref
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrCharIndicesIter$&Array<u8>"(v: &StrCharIndicesIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -8027,6 +8049,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/ReflectSt
     return [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,bool> { index: 6, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32, &Array<u8>, i32, i32, bool]) -> StrSplitIter {
     return StrSplitIter { repr: fields.0, used: fields.1, pos: fields.2, sep_repr: fields.3, sep_at: fields.4, sep_len: fields.5, finished: fields.6 };
 }
@@ -8044,6 +8067,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Reflect::
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrSplitIter$&Array<u8>"(v: &StrSplitIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -8077,6 +8101,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/ReflectS
     return [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 6, field_name: String { repr: packed"remaining", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: 7, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32, &Array<u8>, i32, i32, i32, bool]) -> StrSplitNIter {
     return StrSplitNIter { repr: fields.0, used: fields.1, pos: fields.2, sep_repr: fields.3, sep_at: fields.4, sep_len: fields.5, remaining: fields.6, finished: fields.7 };
 }
@@ -8094,6 +8119,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Reflect:
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrSplitNIter$&Array<u8>"(v: &StrSplitNIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -8128,6 +8154,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     return [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32]) -> StrSplitWhitespaceIter {
     return StrSplitWhitespaceIter { repr: fields.0, used: fields.1, pos: fields.2 };
 }
@@ -8145,6 +8172,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrSplitWhitespaceIter$&Array<u8>"(v: &StrSplitWhitespaceIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -8168,6 +8196,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/ReflectSt
     return [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,bool> { index: 3, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32, bool]) -> StrLinesIter {
     return StrLinesIter { repr: fields.0, used: fields.1, pos: fields.2, finished: fields.3 };
 }
@@ -8185,6 +8214,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Reflect::
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrLinesIter$&Array<u8>"(v: &StrLinesIter, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -8215,6 +8245,7 @@ pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct
     return [StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 1, field_name: String { repr: packed"start", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 2, field_name: String { repr: packed"end", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
 }
 
+#[retain(fields)]
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [&Array<u8>, i32, i32]) -> StrSlice {
     return StrSlice { repr: fields.0, start: fields.1, end: fields.2 };
 }
@@ -8232,6 +8263,7 @@ pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Reflect::wire
     return CaseStyle::Identity;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/string.wado/StrSlice$&Array<u8>"(v: &StrSlice, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -9929,6 +9961,7 @@ fn "core:prelude/slice.wado/Slice<u8>::internal_start"(self: &Slice<u8>) -> i32 
     return self.start;
 }
 
+#[retain(self)]
 fn "core:prelude/slice.wado/Slice<u8>::internal_repr"(self: &Slice<u8>) -> &Array<u8> {
     return self.repr;
 }
@@ -9937,6 +9970,7 @@ fn "core:prelude/list.wado/List<u8>::internal_from_raw"(repr: Array<u8>, used: i
     return List<u8> { repr: repr, used: used };
 }
 
+#[retain(self)]
 fn "core:prelude/list.wado/List<u8>::internal_raw_data_ref"(self: &List<u8>) -> &Array<u8> {
     return &self.repr;
 }
@@ -10070,6 +10104,7 @@ pub fn "Array<u8>::len"(self: &Array<u8>) -> i32 {
     return core::builtin::array_len::<u8>(self);
 }
 
+#[retain(repr)]
 fn "core:prelude/slice.wado/Slice<u8>::internal_new"(repr: &Array<u8>, start: i32, end: i32) -> Slice<u8> {
     return Slice<u8> { repr: repr, start: start, end: end };
 }
@@ -10168,6 +10203,7 @@ pub fn "core:prelude/string.wado/String::push_str<&core:prelude/string.wado/Stri
     other."&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
+#[retain(src)]
 pub fn "core/builtin/array_copy<u8>"(dst: &mut Array<u8>, dst_offset: i32, src: &Array<u8>, src_offset: i32, len: i32);
 
 #[retain(value)]
@@ -10214,15 +10250,11 @@ pub fn "core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/S
     self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s);
 }
 
+#[retain(self)]
 fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
     return *self;
 }
 
-<<<<<<< HEAD
-fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> {
-||||||| 5708464fb8e
-fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
-=======
 pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self: &mut Formatter, content: String) {
     if (self.width <= 0) {
         self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
@@ -10277,11 +10309,12 @@ fn "core/prelude/format.wado/leading_sign_byte_len<&mut core:prelude/string.wado
     return 0;
 }
 
-fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> with stores[self] {
->>>>>>> origin/main
+#[retain(self)]
+fn "Array<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &Array<u8>) -> Slice<u8> {
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(self, 0, core::builtin::array_len::<u8>(self));
 }
 
+#[retain(self)]
 fn "core:prelude/list.wado/List<u8>^core:prelude/slice.wado/AsSlice::as_slice"(self: &List<u8>) -> Slice<u8> {
     return "core::prelude/slice.wado::core:prelude/slice.wado/Slice<u8>::internal_new"(&self.repr, 0, self.used);
 }
@@ -10386,6 +10419,7 @@ fn "core:prelude/list.wado/List<i32>^core:prelude/slice.wado/Sequence::get_unche
     return self.repr."Array<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
+#[retain(self)]
 fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/IntoIterator::into_iter"(self: &List<u8>) -> SliceValueIter<u8> {
     return "core::prelude/slice.wado::core:prelude/slice.wado/SliceValueIter<u8>::internal_new"(&self.repr, 0, self.used);
 }
@@ -10455,7 +10489,8 @@ pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSl
     other."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
 }
 
-fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &&String) -> StrSlice with stores[self] {
+#[retain(self)]
+fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &&String) -> StrSlice {
     return *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
 }
 
@@ -10479,6 +10514,7 @@ fn "core:prelude/list.wado/List<u8>^core:prelude/traits.wado/FromIterator::from_
     return result;
 }
 
+#[retain(repr)]
 fn "core:prelude/slice.wado/SliceValueIter<u8>::internal_new"(repr: &Array<u8>, index: i32, end: i32) -> SliceValueIter<u8> {
     return SliceValueIter<u8> { repr: repr, index: index, end: end };
 }
@@ -10555,6 +10591,7 @@ pub fn "core:prelude/list.wado/List<u8>::grow"(self: &mut List<u8>) {
     self.repr = new_repr;
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>$core:prelude/string.wado/StrCharIter"(v: &IterMap<core:prelude/string.wado/StrCharIter,char>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
@@ -10569,6 +10606,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterMap<core:prelude/string.wado/Str
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: &IterSkip<core:prelude/string.wado/StrLinesIter>, index: i32) -> StrLinesIter {
     return match index {
         0 => v.inner,
@@ -10583,6 +10621,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: &IterTake<core:prelude/string.wado/StrLinesIter>, index: i32) -> StrLinesIter {
     return match index {
         0 => v.inner,
@@ -10597,6 +10636,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: &IterEnumerate<core:prelude/string.wado/StrLinesIter>, index: i32) -> StrLinesIter {
     return match index {
         0 => v.inner,
@@ -10611,6 +10651,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: &IterFilter<core:prelude/string.wado/StrLinesIter>, index: i32) -> StrLinesIter {
     return match index {
         0 => v.inner,
@@ -10625,6 +10666,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> StrSplitWhitespaceIter {
     return match index {
         0 => v.inner,
@@ -10639,6 +10681,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> StrSplitWhitespaceIter {
     return match index {
         0 => v.inner,
@@ -10653,6 +10696,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> StrSplitWhitespaceIter {
     return match index {
         0 => v.inner,
@@ -10667,6 +10711,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: &IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>, index: i32) -> StrSplitWhitespaceIter {
     return match index {
         0 => v.inner,
@@ -10681,6 +10726,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: &IterSkip<core:prelude/string.wado/StrSplitNIter>, index: i32) -> StrSplitNIter {
     return match index {
         0 => v.inner,
@@ -10695,6 +10741,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: &IterTake<core:prelude/string.wado/StrSplitNIter>, index: i32) -> StrSplitNIter {
     return match index {
         0 => v.inner,
@@ -10709,6 +10756,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: &IterEnumerate<core:prelude/string.wado/StrSplitNIter>, index: i32) -> StrSplitNIter {
     return match index {
         0 => v.inner,
@@ -10723,6 +10771,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: &IterFilter<core:prelude/string.wado/StrSplitNIter>, index: i32) -> StrSplitNIter {
     return match index {
         0 => v.inner,
@@ -10737,6 +10786,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: &IterSkip<core:prelude/string.wado/StrSplitIter>, index: i32) -> StrSplitIter {
     return match index {
         0 => v.inner,
@@ -10751,6 +10801,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: &IterTake<core:prelude/string.wado/StrSplitIter>, index: i32) -> StrSplitIter {
     return match index {
         0 => v.inner,
@@ -10765,6 +10816,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: &IterEnumerate<core:prelude/string.wado/StrSplitIter>, index: i32) -> StrSplitIter {
     return match index {
         0 => v.inner,
@@ -10779,6 +10831,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: &IterFilter<core:prelude/string.wado/StrSplitIter>, index: i32) -> StrSplitIter {
     return match index {
         0 => v.inner,
@@ -10793,6 +10846,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterSkip<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> StrCharIndicesIter {
     return match index {
         0 => v.inner,
@@ -10807,6 +10861,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterTake<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> StrCharIndicesIter {
     return match index {
         0 => v.inner,
@@ -10821,6 +10876,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> StrCharIndicesIter {
     return match index {
         0 => v.inner,
@@ -10835,6 +10891,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: &IterFilter<core:prelude/string.wado/StrCharIndicesIter>, index: i32) -> StrCharIndicesIter {
     return match index {
         0 => v.inner,
@@ -10849,6 +10906,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: &IterSkip<core:prelude/string.wado/StrCharIter>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
@@ -10863,6 +10921,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: &IterTake<core:prelude/string.wado/StrCharIter>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
@@ -10877,6 +10936,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: &IterEnumerate<core:prelude/string.wado/StrCharIter>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
@@ -10891,6 +10951,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: &IterFilter<core:prelude/string.wado/StrCharIter>, index: i32) -> StrCharIter {
     return match index {
         0 => v.inner,
@@ -10905,6 +10966,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterSkip<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> StrUtf8ByteIter {
     return match index {
         0 => v.inner,
@@ -10919,6 +10981,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterSkip<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterTake<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> StrUtf8ByteIter {
     return match index {
         0 => v.inner,
@@ -10933,6 +10996,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterTake<core:prelude/string.wado/St
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> StrUtf8ByteIter {
     return match index {
         0 => v.inner,
@@ -10947,6 +11011,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterEnumerate<core:prelude/string.wa
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: &IterFilter<core:prelude/string.wado/StrUtf8ByteIter>, index: i32) -> StrUtf8ByteIter {
     return match index {
         0 => v.inner,
@@ -10961,6 +11026,7 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &SliceValueIter<u8>, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -11013,6 +11079,7 @@ pub fn "$field_get$core:prelude/range.wado/RangeExclusive<i32>$i32"(v: &RangeExc
     };
 }
 
+#[retain(v)]
 pub fn "$field_get$core:prelude/slice.wado/Slice<u8>$&Array<u8>"(v: &Slice<u8>, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -11752,6 +11819,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/int128.wado/u12
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$[bool,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> [bool, StrSlice] {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -11762,6 +11830,7 @@ pub fn "$case_extract$core:prelude/types.wado/Result<[bool,core:prelude/string.w
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>$[bool,core:prelude/string.wado/StrSlice]"(payload: [bool, StrSlice], index: i32) -> Result<[bool, StrSlice], IntErrorKind> {
     return match index {
         0 => Result<[bool, StrSlice], IntErrorKind>::Ok(payload),
@@ -11796,6 +11865,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<[bool,core:prelude/string.wa
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/string.wado/StrSlice"(v: Box<core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>>, index: i32) -> StrSlice {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -11806,6 +11876,7 @@ pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>$core:prelude/string.wado/StrSlice"(payload: StrSlice, index: i32) -> Result<StrSlice, IntErrorKind> {
     return match index {
         0 => Result<StrSlice, IntErrorKind>::Ok(payload),
@@ -13481,6 +13552,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) -> [StrSlice, StrSlice] {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -13491,6 +13563,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/S
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(payload: [StrSlice, StrSlice], index: i32) -> Option<[StrSlice, StrSlice]> {
     return match index {
         0 => Option<[StrSlice, StrSlice]>::Some(payload),
@@ -13563,6 +13636,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>>, index: i32) -> StrSlice {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -13573,6 +13647,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>$core:prelude/string.wado/StrSlice"(payload: StrSlice, index: i32) -> Option<StrSlice> {
     return match index {
         0 => Option<StrSlice>::Some(payload),
@@ -13753,6 +13828,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<bool>"(self: Box<core:prelud
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>>, index: i32) -> &mut String {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -13763,6 +13839,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&mut core:prelude/string.wa
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>$&mut core:prelude/string.wado/String"(payload: &mut String, index: i32) -> Option<&mut String> {
     return match index {
         0 => Option<&mut String>::Some(payload),
@@ -13905,6 +13982,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<Array<u8>>"(self: Box<core:p
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(v: Box<core:prelude/types.wado/Option<&Array<u8>>>, index: i32) -> &Array<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -13915,6 +13993,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(v: 
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<&Array<u8>>$&Array<u8>"(payload: &Array<u8>, index: i32) -> Option<&Array<u8>> {
     return match index {
         0 => Option<&Array<u8>>::Some(payload),
@@ -14133,6 +14212,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<wasi:cli/types.wado/ErrorCod
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>>, index: i32) -> StrCharIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14143,6 +14223,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>$core:prelude/string.wado/StrCharIter"(payload: StrCharIter, index: i32) -> Option<StrCharIter> {
     return match index {
         0 => Option<StrCharIter>::Some(payload),
@@ -14209,6 +14290,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(char)->char>"(self: B
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>>, index: i32) -> StrLinesIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14219,6 +14301,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>$core:prelude/string.wado/StrLinesIter"(payload: StrLinesIter, index: i32) -> Option<StrLinesIter> {
     return match index {
         0 => Option<StrLinesIter>::Some(payload),
@@ -14285,6 +14368,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(core:prelude/string.w
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>>, index: i32) -> StrSplitWhitespaceIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14295,6 +14379,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>$core:prelude/string.wado/StrSplitWhitespaceIter"(payload: StrSplitWhitespaceIter, index: i32) -> Option<StrSplitWhitespaceIter> {
     return match index {
         0 => Option<StrSplitWhitespaceIter>::Some(payload),
@@ -14323,6 +14408,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>>, index: i32) -> StrSplitNIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14333,6 +14419,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>$core:prelude/string.wado/StrSplitNIter"(payload: StrSplitNIter, index: i32) -> Option<StrSplitNIter> {
     return match index {
         0 => Option<StrSplitNIter>::Some(payload),
@@ -14361,6 +14448,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>>, index: i32) -> StrSplitIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14371,6 +14459,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>$core:prelude/string.wado/StrSplitIter"(payload: StrSplitIter, index: i32) -> Option<StrSplitIter> {
     return match index {
         0 => Option<StrSplitIter>::Some(payload),
@@ -14399,6 +14488,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>>, index: i32) -> StrCharIndicesIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14409,6 +14499,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>$core:prelude/string.wado/StrCharIndicesIter"(payload: StrCharIndicesIter, index: i32) -> Option<StrCharIndicesIter> {
     return match index {
         0 => Option<StrCharIndicesIter>::Some(payload),
@@ -14513,6 +14604,7 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(char)->bool>"(self: B
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(v: Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>>, index: i32) -> StrUtf8ByteIter {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -14523,6 +14615,7 @@ pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/string.wado/St
     };
 }
 
+#[retain(payload)]
 pub fn "$case_construct$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>$core:prelude/string.wado/StrUtf8ByteIter"(payload: StrUtf8ByteIter, index: i32) -> Option<StrUtf8ByteIter> {
     return match index {
         0 => Option<StrUtf8ByteIter>::Some(payload),
@@ -14641,6 +14734,7 @@ pub fn "$initialize_modules"() {
     ops.mess_dirty.wado::$modules_initialized = true;
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>"(v: Option<List<u8>>) -> Option<List<u8>> {
     return match v {
         Some($vc_payload_0) => Option<List<u8>>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/list.wado/List<u8>"($vc_payload_0)),
@@ -14648,6 +14742,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>"
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8ByteIter>"(v: Option<StrUtf8ByteIter>) -> Option<StrUtf8ByteIter> {
     return match v {
         Some($vc_payload_0) => Option<StrUtf8ByteIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrUtf8ByteIter"($vc_payload_0)),
@@ -14655,6 +14750,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8B
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIndicesIter>"(v: Option<StrCharIndicesIter>) -> Option<StrCharIndicesIter> {
     return match v {
         Some($vc_payload_0) => Option<StrCharIndicesIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIndicesIter"($vc_payload_0)),
@@ -14662,6 +14758,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharI
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitIter>"(v: Option<StrSplitIter>) -> Option<StrSplitIter> {
     return match v {
         Some($vc_payload_0) => Option<StrSplitIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitIter"($vc_payload_0)),
@@ -14669,6 +14766,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplit
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitNIter>"(v: Option<StrSplitNIter>) -> Option<StrSplitNIter> {
     return match v {
         Some($vc_payload_0) => Option<StrSplitNIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitNIter"($vc_payload_0)),
@@ -14676,6 +14774,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplit
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplitWhitespaceIter>"(v: Option<StrSplitWhitespaceIter>) -> Option<StrSplitWhitespaceIter> {
     return match v {
         Some($vc_payload_0) => Option<StrSplitWhitespaceIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"($vc_payload_0)),
@@ -14683,6 +14782,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSplit
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrLinesIter>"(v: Option<StrLinesIter>) -> Option<StrLinesIter> {
     return match v {
         Some($vc_payload_0) => Option<StrLinesIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrLinesIter"($vc_payload_0)),
@@ -14690,6 +14790,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrLines
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharIter>"(v: Option<StrCharIter>) -> Option<StrCharIter> {
     return match v {
         Some($vc_payload_0) => Option<StrCharIter>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"($vc_payload_0)),
@@ -14697,6 +14798,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrCharI
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/StrSlice>"(v: Option<StrSlice>) -> Option<StrSlice> {
     return match v {
         Some($vc_payload_0) => Option<StrSlice>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_0)),
@@ -14711,6 +14813,7 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/String,c
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>"(v: Option<[StrSlice, StrSlice]>) -> Option<[StrSlice, StrSlice]> {
     return match v {
         Some($vc_payload_0) => Option<[StrSlice, StrSlice]>::Some("ops.mess_dirty.wado::$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"($vc_payload_0)),
@@ -14722,6 +14825,7 @@ fn "$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrS
     return [core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/ConvertError>"(v: Result<u8, ConvertError>) -> Result<u8, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<u8, ConvertError>::Ok($vc_payload_0),
@@ -14729,6 +14833,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/Conve
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/ConvertError>"(v: Result<u16, ConvertError>) -> Result<u16, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<u16, ConvertError>::Ok($vc_payload_0),
@@ -14736,6 +14841,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/ConvertError>"(v: Result<u32, ConvertError>) -> Result<u32, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<u32, ConvertError>::Ok($vc_payload_0),
@@ -14743,6 +14849,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/ConvertError>"(v: Result<i8, ConvertError>) -> Result<i8, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<i8, ConvertError>::Ok($vc_payload_0),
@@ -14750,6 +14857,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/Conve
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/ConvertError>"(v: Result<i16, ConvertError>) -> Result<i16, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<i16, ConvertError>::Ok($vc_payload_0),
@@ -14757,6 +14865,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/ConvertError>"(v: Result<i32, ConvertError>) -> Result<i32, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<i32, ConvertError>::Ok($vc_payload_0),
@@ -14764,6 +14873,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/LenientParseError>"(v: Result<f64, LenientParseError>) -> Result<f64, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<f64, LenientParseError>::Ok($vc_payload_0),
@@ -14771,6 +14881,7 @@ fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/LenientParseError>"(v: Result<f32, LenientParseError>) -> Result<f32, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<f32, LenientParseError>::Ok($vc_payload_0),
@@ -14778,6 +14889,7 @@ fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f32, ParseFloatError>) -> Result<f32, ParseFloatError> {
     return match v {
         Ok($vc_payload_0) => Result<f32, ParseFloatError>::Ok($vc_payload_0),
@@ -14785,6 +14897,7 @@ fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/LenientParseError>"(v: Result<u64, LenientParseError>) -> Result<u64, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<u64, LenientParseError>::Ok($vc_payload_0),
@@ -14792,6 +14905,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/LenientParseError>"(v: Result<i64, LenientParseError>) -> Result<i64, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<i64, LenientParseError>::Ok($vc_payload_0),
@@ -14799,6 +14913,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/LenientParseError>"(v: Result<u32, LenientParseError>) -> Result<u32, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<u32, LenientParseError>::Ok($vc_payload_0),
@@ -14806,6 +14921,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/intparse.wado/ParseIntError>"(v: Result<u32, ParseIntError>) -> Result<u32, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<u32, ParseIntError>::Ok($vc_payload_0),
@@ -14813,6 +14929,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u32,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/LenientParseError>"(v: Result<i32, LenientParseError>) -> Result<i32, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<i32, LenientParseError>::Ok($vc_payload_0),
@@ -14820,6 +14937,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/ParseIntError>"(v: Result<i32, ParseIntError>) -> Result<i32, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<i32, ParseIntError>::Ok($vc_payload_0),
@@ -14827,6 +14945,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/LenientParseError>"(v: Result<u16, LenientParseError>) -> Result<u16, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<u16, LenientParseError>::Ok($vc_payload_0),
@@ -14834,6 +14953,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/intparse.wado/ParseIntError>"(v: Result<u16, ParseIntError>) -> Result<u16, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<u16, ParseIntError>::Ok($vc_payload_0),
@@ -14841,6 +14961,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u16,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/LenientParseError>"(v: Result<i16, LenientParseError>) -> Result<i16, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<i16, LenientParseError>::Ok($vc_payload_0),
@@ -14848,6 +14969,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/traits.wado/Leni
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/intparse.wado/ParseIntError>"(v: Result<i16, ParseIntError>) -> Result<i16, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<i16, ParseIntError>::Ok($vc_payload_0),
@@ -14855,6 +14977,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i16,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/LenientParseError>"(v: Result<u8, LenientParseError>) -> Result<u8, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<u8, LenientParseError>::Ok($vc_payload_0),
@@ -14862,6 +14985,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/traits.wado/Lenie
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/intparse.wado/ParseIntError>"(v: Result<u8, ParseIntError>) -> Result<u8, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<u8, ParseIntError>::Ok($vc_payload_0),
@@ -14869,6 +14993,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u8,core:prelude/intparse.wado/Par
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/LenientParseError>"(v: Result<i8, LenientParseError>) -> Result<i8, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<i8, LenientParseError>::Ok($vc_payload_0),
@@ -14876,6 +15001,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/traits.wado/Lenie
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/intparse.wado/ParseIntError>"(v: Result<i8, ParseIntError>) -> Result<i8, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<i8, ParseIntError>::Ok($vc_payload_0),
@@ -14883,6 +15009,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i8,core:prelude/intparse.wado/Par
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<char,core:prelude/traits.wado/LenientParseError>"(v: Result<char, LenientParseError>) -> Result<char, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<char, LenientParseError>::Ok($vc_payload_0),
@@ -14890,6 +15017,7 @@ fn "$value_copy$core:prelude/types.wado/Result<char,core:prelude/traits.wado/Len
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<bool,core:prelude/traits.wado/LenientParseError>"(v: Result<bool, LenientParseError>) -> Result<bool, LenientParseError> {
     return match v {
         Ok($vc_payload_0) => Result<bool, LenientParseError>::Ok($vc_payload_0),
@@ -14897,6 +15025,7 @@ fn "$value_copy$core:prelude/types.wado/Result<bool,core:prelude/traits.wado/Len
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/ParseFloatError>"(v: Result<f64, ParseFloatError>) -> Result<f64, ParseFloatError> {
     return match v {
         Ok($vc_payload_0) => Result<f64, ParseFloatError>::Ok($vc_payload_0),
@@ -14904,6 +15033,7 @@ fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/ParseIntError>"(v: Result<u64, ParseIntError>) -> Result<u64, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<u64, ParseIntError>::Ok($vc_payload_0),
@@ -14911,6 +15041,7 @@ fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/ParseIntError>"(v: Result<i64, ParseIntError>) -> Result<i64, ParseIntError> {
     return match v {
         Ok($vc_payload_0) => Result<i64, ParseIntError>::Ok($vc_payload_0),
@@ -14918,6 +15049,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/intparse.wado/Pa
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice,core:prelude/intparse.wado/IntErrorKind>"(v: Result<StrSlice, IntErrorKind>) -> Result<StrSlice, IntErrorKind> {
     return match v {
         Ok($vc_payload_0) => Result<StrSlice, IntErrorKind>::Ok("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"($vc_payload_0)),
@@ -14925,6 +15057,7 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/string.wado/StrSlice
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<[bool,core:prelude/string.wado/StrSlice],core:prelude/intparse.wado/IntErrorKind>"(v: Result<[bool, StrSlice], IntErrorKind>) -> Result<[bool, StrSlice], IntErrorKind> {
     return match v {
         Ok($vc_payload_0) => Result<[bool, StrSlice], IntErrorKind>::Ok("ops.mess_dirty.wado::$value_copy$[bool,core:prelude/string.wado/StrSlice]"($vc_payload_0)),
@@ -14936,6 +15069,7 @@ fn "$value_copy$[bool,core:prelude/string.wado/StrSlice]"(v: [bool, StrSlice]) -
     return [bool,core:prelude/string.wado/StrSlice] { 0: v.0, 1: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/IntErrorKind>"(v: Result<u128, IntErrorKind>) -> Result<u128, IntErrorKind> {
     return match v {
         Ok($vc_payload_0) => Result<u128, IntErrorKind>::Ok("ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
@@ -14954,6 +15088,7 @@ fn "$value_copy$[core:prelude/string.wado/String,u32]"(v: [String, u32]) -> [Str
     return [core:prelude/string.wado/String,u32] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.0), 1: v.1 };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/ConvertError>"(v: Result<f32, ConvertError>) -> Result<f32, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<f32, ConvertError>::Ok($vc_payload_0),
@@ -14961,6 +15096,7 @@ fn "$value_copy$core:prelude/types.wado/Result<f32,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<f64,core:prelude/traits.wado/ConvertError>"(v: Result<f64, ConvertError>) -> Result<f64, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<f64, ConvertError>::Ok($vc_payload_0),
@@ -14982,6 +15118,7 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/i128,cor
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/ConvertError>"(v: Result<i64, ConvertError>) -> Result<i64, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<i64, ConvertError>::Ok($vc_payload_0),
@@ -14989,6 +15126,7 @@ fn "$value_copy$core:prelude/types.wado/Result<i64,core:prelude/traits.wado/Conv
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Result<u64,core:prelude/traits.wado/ConvertError>"(v: Result<u64, ConvertError>) -> Result<u64, ConvertError> {
     return match v {
         Ok($vc_payload_0) => Result<u64, ConvertError>::Ok($vc_payload_0),
@@ -15148,6 +15286,7 @@ fn "$value_copy$core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCha
     return IterMap<core:prelude/string.wado/StrCharIter,char> { inner: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(v.inner), f: v.f };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<u8>"(v: SliceValueIter<u8>) -> SliceValueIter<u8> {
     return SliceValueIter<u8> { repr: v.repr, index: v.index, end: v.end };
 }
@@ -15176,6 +15315,7 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode
     return [core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>,core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<wasi:cli/types.wado/ErrorCode>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/types.wado/WaitEvent>"(v: Option<WaitEvent>) -> Option<WaitEvent> {
     return match v {
         Some($vc_payload_0) => Option<WaitEvent>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/WaitEvent"($vc_payload_0)),
@@ -15199,6 +15339,7 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyR
     return [core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>,core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/types.wado/CopyResult>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<u32>]"(v: [Option<i32>, Option<i32>, Option<u32>]) -> [Option<i32>, Option<i32>, Option<u32>] {
     return [core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<u32>] { 0: v.0, 1: v.1, 2: v.2 };
 }
@@ -15223,6 +15364,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/types.wado/Wa
     return [core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>]"(v: [Option<i32>, Option<CopyResult>]) -> [Option<i32>, Option<CopyResult>] {
     return [core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<core:prelude/types.wado/CopyResult>] { 0: v.0, 1: v.1 };
 }
@@ -15307,10 +15449,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>] {
     return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
 }
 
+#[retain(v)]
 fn "$value_copy$[&Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i32, i32, bool]) -> [&Array<u8>, i32, i32, bool] {
     return [&Array<u8>,i32,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
 }
@@ -15343,10 +15487,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<&Array<u8>>, Option<i32>, Option<i32>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<&Array<u8>>, Option<i32>, Option<i32>, Option<i32>, Option<bool>] {
     return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7 };
 }
 
+#[retain(v)]
 fn "$value_copy$[&Array<u8>,i32,i32,&Array<u8>,i32,i32,i32,bool]"(v: [&Array<u8>, i32, i32, &Array<u8>, i32, i32, i32, bool]) -> [&Array<u8>, i32, i32, &Array<u8>, i32, i32, i32, bool] {
     return [&Array<u8>,i32,i32,&Array<u8>,i32,i32,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7 };
 }
@@ -15367,10 +15513,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.2), 3: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>"(v.3), 4: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.4), 5: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.5), 6: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v.6), 7: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>"(v.7) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<&Array<u8>>, Option<i32>, Option<i32>, Option<bool>] {
     return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6 };
 }
 
+#[retain(v)]
 fn "$value_copy$[&Array<u8>,i32,i32,&Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i32, i32, &Array<u8>, i32, i32, bool]) -> [&Array<u8>, i32, i32, &Array<u8>, i32, i32, bool] {
     return [&Array<u8>,i32,i32,&Array<u8>,i32,i32,bool] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6 };
 }
@@ -15391,10 +15539,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.2), 3: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>"(v.3), 4: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.4), 5: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v.5), 6: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>"(v.6) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<i32>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>, Option<i32>] {
     return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
 }
 
+#[retain(v)]
 fn "$value_copy$[&Array<u8>,i32,i32,i32]"(v: [&Array<u8>, i32, i32, i32]) -> [&Array<u8>, i32, i32, i32] {
     return [&Array<u8>,i32,i32,i32] { 0: v.0, 1: v.1, 2: v.2, 3: v.3 };
 }
@@ -15423,10 +15573,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<&Array<u8>>, Option<i32>, Option<i32>]) -> [Option<&Array<u8>>, Option<i32>, Option<i32>] {
     return [core:prelude/types.wado/Option<&Array<u8>>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2 };
 }
 
+#[retain(v)]
 fn "$value_copy$[&Array<u8>,i32,i32]"(v: [&Array<u8>, i32, i32]) -> [&Array<u8>, i32, i32] {
     return [&Array<u8>,i32,i32] { 0: v.0, 1: v.1, 2: v.2 };
 }
@@ -15443,6 +15595,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v: Option<Array<u8>>) -> Option<Array<u8>> {
     return match v {
         Some($vc_payload_0) => Option<Array<u8>>::Some(core::builtin::array_clone::<u8>(&$vc_payload_0)),
@@ -15450,6 +15603,7 @@ fn "$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v: Option<Array<u8>>)
     };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>]"(v: [Option<Array<u8>>, Option<i32>]) -> [Option<Array<u8>>, Option<i32>] {
     return [core:prelude/types.wado/Option<Array<u8>>,core:prelude/types.wado/Option<i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<Array<u8>>"(v.0), 1: v.1 };
 }
@@ -15462,6 +15616,7 @@ fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/St
     return StructField<core:prelude/string.wado/String,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>"(v: StructField<core:prelude/string.wado/String,Array<u8>>) -> StructField<core:prelude/string.wado/String,Array<u8>> {
     return v;
 }
@@ -15470,6 +15625,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,Array<u8>>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>"(v.1) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<u32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>]"(v: [Option<u32>, Option<i32>, Option<bool>]) -> [Option<u32>, Option<i32>, Option<bool>] {
     return [core:prelude/types.wado/Option<u32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<bool>] { 0: v.0, 1: v.1, 2: v.2 };
 }
@@ -15498,18 +15654,22 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/U
     return [core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrLinesIter"(v: StrLinesIter) -> StrLinesIter {
     return StrLinesIter { repr: v.repr, used: v.used, pos: v.pos, finished: v.finished };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrSplitWhitespaceIter"(v: StrSplitWhitespaceIter) -> StrSplitWhitespaceIter {
     return StrSplitWhitespaceIter { repr: v.repr, used: v.used, pos: v.pos };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrSplitNIter"(v: StrSplitNIter) -> StrSplitNIter {
     return StrSplitNIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: v.sep_repr, sep_at: v.sep_at, sep_len: v.sep_len, remaining: v.remaining, finished: v.finished };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrSplitIter"(v: StrSplitIter) -> StrSplitIter {
     return StrSplitIter { repr: v.repr, used: v.used, pos: v.pos, sep_repr: v.sep_repr, sep_at: v.sep_at, sep_len: v.sep_len, finished: v.finished };
 }
@@ -15518,6 +15678,7 @@ fn "$value_copy$[i32,char]"(v: [i32, char]) -> [i32, char] {
     return [i32,char] { 0: v.0, 1: v.1 };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char]>) -> Option<[i32, char]> {
     return match v {
         Some($vc_payload_0) => Option<[i32, char]>::Some("ops.mess_dirty.wado::$value_copy$[i32,char]"($vc_payload_0)),
@@ -15525,10 +15686,12 @@ fn "$value_copy$core:prelude/types.wado/Option<[i32,char]>"(v: Option<[i32, char
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIter) -> StrCharIndicesIter {
     return StrCharIndicesIter { repr: v.repr, used: v.used, byte_index: v.byte_index, base: v.base };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
 }
@@ -15553,6 +15716,7 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/In
     return [core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>,core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.2), 3: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/intparse.wado/IntErrorKind>"(v.3) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>]"(v: [Option<FloatErrorKind>]) -> [Option<FloatErrorKind>] {
     return [core:prelude/types.wado/Option<core:prelude/intparse.wado/FloatErrorKind>] { 0: v.0 };
 }
@@ -15573,6 +15737,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado
     return [core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>"(v.0) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>]"(v: [Option<IntErrorKind>]) -> [Option<IntErrorKind>] {
     return [core:prelude/types.wado/Option<core:prelude/intparse.wado/IntErrorKind>] { 0: v.0 };
 }
@@ -15593,6 +15758,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado
     return [core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>"(v.0) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i64>]"(v: [Option<u64>, Option<i64>]) -> [Option<u64>, Option<i64>] {
     return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i64>] { 0: v.0, 1: v.1 };
 }
@@ -15617,6 +15783,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/u
     return [core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v.1) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>"(v: Option<i128>) -> Option<i128> {
     return match v {
         Some($vc_payload_0) => Option<i128>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/i128"($vc_payload_0)),
@@ -15624,6 +15791,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/i128>"(v
     };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/int128.wado/u128>"(v: Option<u128>) -> Option<u128> {
     return match v {
         Some($vc_payload_0) => Option<u128>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
@@ -15651,6 +15819,7 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/Speci
     return [core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>,core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.2), 3: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/fpfmt.wado/SpecialKind>"(v.3) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>]"(v: [Option<u64>, Option<i32>, Option<i32>]) -> [Option<u64>, Option<i32>, Option<i32>] {
     return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1, 2: v.2 };
 }
@@ -15671,6 +15840,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/Fo
     return [core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<u64>]"(v: [Option<u64>, Option<u64>]) -> [Option<u64>, Option<u64>] {
     return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<u64>] { 0: v.0, 1: v.1 };
 }
@@ -15687,6 +15857,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/Pm
     return [core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v.1) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>]"(v: [Option<u64>, Option<i32>]) -> [Option<u64>, Option<i32>] {
     return [core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Option<i32>] { 0: v.0, 1: v.1 };
 }
@@ -15731,10 +15902,12 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alig
     return [core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>,core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/EnumCase<core:prelude/format.wado/Alignment>"(v.2) };
 }
 
+#[retain(v)]
 fn "$value_copy$[core:prelude/types.wado/Option<char>,core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>]"(v: [Option<char>, Option<Alignment>, Option<bool>, Option<bool>, Option<bool>, Option<i32>, Option<i32>, Option<i32>, Option<&mut String>]) -> [Option<char>, Option<Alignment>, Option<bool>, Option<bool>, Option<bool>, Option<i32>, Option<i32>, Option<i32>, Option<&mut String>] {
     return [core:prelude/types.wado/Option<char>,core:prelude/types.wado/Option<core:prelude/format.wado/Alignment>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<bool>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<i32>,core:prelude/types.wado/Option<&mut core:prelude/string.wado/String>] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7, 8: v.8 };
 }
 
+#[retain(v)]
 fn "$value_copy$[char,core:prelude/format.wado/Alignment,bool,bool,bool,i32,i32,i32,&mut core:prelude/string.wado/String]"(v: [char, Alignment, bool, bool, bool, i32, i32, i32, &mut String]) -> [char, Alignment, bool, bool, bool, i32, i32, i32, &mut String] {
     return [char,core:prelude/format.wado/Alignment,bool,bool,bool,i32,i32,i32,&mut core:prelude/string.wado/String] { 0: v.0, 1: v.1, 2: v.2, 3: v.3, 4: v.4, 5: v.5, 6: v.6, 7: v.7, 8: v.8 };
 }
@@ -15755,6 +15928,7 @@ fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Fo
     return StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v: Option<String>) -> Option<String> {
     return match v {
         Some($vc_payload_0) => Option<String>::Some("ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"($vc_payload_0)),
@@ -15770,10 +15944,12 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/format.wado/F
     return [core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>] { 0: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>"(v.0), 1: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>"(v.1), 2: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.2), 3: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.3), 4: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v.4), 5: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.5), 6: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.6), 7: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v.7), 8: "ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>"(v.8) };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
     return StrSlice { repr: v.repr, start: v.start, end: v.end };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
     return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
@@ -15782,6 +15958,7 @@ fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {
     return core::builtin::array_clone::<u8>(&v);
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/slice.wado/Slice<u8>"(v: Slice<u8>) -> Slice<u8> {
     return Slice<u8> { repr: v.repr, start: v.start, end: v.end };
 }
@@ -15817,6 +15994,7 @@ fn "$value_copy$[i64,i64]"(v: [i64, i64]) -> [i64, i64] {
     return [i64,i64] { 0: v.0, 1: v.1 };
 }
 
+#[retain(v)]
 fn "$value_copy$core:prelude/format.wado/Formatter"(v: Formatter) -> Formatter {
     return Formatter { fill: v.fill, align: v.align, sign_plus: v.sign_plus, alternate: v.alternate, zero_pad: v.zero_pad, width: v.width, precision: v.precision, indent: v.indent, buf: v.buf };
 }

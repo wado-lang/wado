@@ -199,14 +199,14 @@ fn "opt_variant_known_case.wado/run"() with Stdout {
     let handle_127: i32;
     let new_used_144: i32;
     let start_145: i32;
-    let n_153: i32;
-    let new_used_157: i32;
-    let start_158: i32;
-    let packed_160: i64;
-    let rx_161: i32;
-    let tx_162: i32;
+    let new_used_158: i32;
+    let start_159: i32;
+    let packed_161: i64;
+    let rx_162: i32;
+    let tx_163: i32;
     let $sroa_user_name: ref "core:prelude/string.wado//String";
-    let $av_211: i32;
+    let $sroa_other_used_186: i32;
+    let $av_214: i32;
     v_1 = black_box(7);
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     new_used_34 = 0 + 4;
@@ -258,8 +258,8 @@ fn "opt_variant_known_case.wado/run"() with Stdout {
     $sroa_user_name = black_box(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 });
     elements = array.new_fixed<ref "opt_variant_known_case.wado//Param">();
     params = struct.new "core:prelude//List<opt_variant_known_case.wado/Param>" { repr: elements, used: 0 };
-    $av_211 = $sroa_user_name.used;
-    value_113 = struct.new "opt_variant_known_case.wado//Param::Text" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $sroa_user_name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_211); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_211); $array_clone_dst_2), used: $av_211 } };
+    $av_214 = $sroa_user_name.used;
+    value_113 = struct.new "opt_variant_known_case.wado//Param::Text" { discriminant: 1, payload_0: struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = $sroa_user_name.repr; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($av_214); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $av_214); $array_clone_dst_2), used: $av_214 } };
     if @unlikely(0 >= builtin::array_len(params.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<opt_variant_known_case.wado/Param>::grow"(params);
@@ -277,22 +277,29 @@ fn "opt_variant_known_case.wado/run"() with Stdout {
     start_145 = $local_16.used;
     $local_16.used = new_used_144;
     builtin::array_copy<u8>($local_16.repr, start_145, global:opt_variant_known_case.wado::$const_obj_7, 0, 1);
-    $inline_core_prelude_string_wado_String__internal_push_string_59: block {
-        n_153 = $sroa_user_name.used;
-        break_if $inline_core_prelude_string_wado_String__internal_push_string_59 n_153 == 0;
-        new_used_157 = $local_16.used + n_153;
-        if @unlikely(new_used_157 > builtin::array_len($local_16.repr)) {
+    let $array_clone_src_4: ref Array<u8>;
+    $array_clone_src_4 = $sroa_user_name.repr;
+    let $array_clone_len_6: i32;
+    $array_clone_len_6 = $sroa_user_name.used;
+    let $array_clone_dst_5: ref Array<u8>;
+    $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6);
+    builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
+    $sroa_other_used_186 = $sroa_user_name.used;
+    $inline_core_prelude_string_wado_String__internal_push_string_60: block {
+        break_if $inline_core_prelude_string_wado_String__internal_push_string_60 $sroa_other_used_186 == 0;
+        new_used_158 = $local_16.used + $sroa_other_used_186;
+        if @unlikely(new_used_158 > builtin::array_len($local_16.repr)) {
             cold_path;
-            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_157);
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, new_used_158);
         }
-        start_158 = $local_16.used;
-        $local_16.used = new_used_157;
-        builtin::array_copy<u8>($local_16.repr, start_158, $sroa_user_name.repr, 0, n_153);
+        start_159 = $local_16.used;
+        $local_16.used = new_used_158;
+        builtin::array_copy<u8>($local_16.repr, start_159, $array_clone_dst_5, 0, $sroa_other_used_186);
     };
-    rx_161 = builtin::i32_wrap_i64(local.tee packed_160("wasi/stream-new"()));
-    tx_162 = builtin::i32_wrap_i64(packed_160 >> 32_i64);
-    handle_127 = "opt_variant_known_case.wado/$cm_binding__Stdout_write_via_stream"(rx_161);
-    "core:rt/write_string_to_stream"(tx_162, $local_16);
+    rx_162 = builtin::i32_wrap_i64(local.tee packed_161("wasi/stream-new"()));
+    tx_163 = builtin::i32_wrap_i64(packed_161 >> 32_i64);
+    handle_127 = "opt_variant_known_case.wado/$cm_binding__Stdout_write_via_stream"(rx_162);
+    "core:rt/write_string_to_stream"(tx_163, $local_16);
     "wasi/future-drop-readable:transmission-cli"(handle_127);
 }
 

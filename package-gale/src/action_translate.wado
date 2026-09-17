@@ -640,16 +640,8 @@ fn field_type<S: AsStrSlice>(rule: &ParserRule, name: S) -> String {
     };
 }
 
-<<<<<<< HEAD
-fn find_field(rule: &ParserRule, name: &String) -> Option<&AttrDecl> {
-    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == *name) {
-||||||| 5708464fb8e
-fn find_field(rule: &ParserRule, name: &String) -> Option<&AttrDecl> with stores[rule] {
-    if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == *name) {
-=======
-fn find_field<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<&AttrDecl> with stores[rule] {
+fn find_field<S: AsStrSlice>(rule: &ParserRule, name: S) -> Option<&AttrDecl> {
     if let Some(d) = rule.returns_decls.iter_ref().find(|d| d.name == name.as_str_slice()) {
->>>>>>> origin/main
         return Option::Some(d);
     }
     return rule.locals_decls.iter_ref().find(|d| d.name == name.as_str_slice());

@@ -406,16 +406,8 @@ impl GenContext {
         self.rule_captures = captures;
     }
 
-<<<<<<< HEAD
-    pub fn rule_captures(&self, rule_name: &String) -> &RuleCaptures {
-        if !self.rule_captures.contains_key(*rule_name) {
-||||||| 5708464fb8e
-    pub fn rule_captures(&self, rule_name: &String) -> &RuleCaptures with stores[self] {
-        if !self.rule_captures.contains_key(*rule_name) {
-=======
-    pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures with stores[self] {
+    pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
         if !self.rule_captures.contains_key(rule_name.to_string()) {
->>>>>>> origin/main
             return &NO_CAPTURES;
         }
         return &self.rule_captures[rule_name.to_string()];
@@ -916,16 +908,8 @@ impl GenContext {
         return -1;
     }
 
-<<<<<<< HEAD
-    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> {
-        let idx = self.rule_index.get(*name);
-||||||| 5708464fb8e
-    pub fn find_rule(&self, name: &String) -> Option<&ParserRule> with stores[self] {
-        let idx = self.rule_index.get(*name);
-=======
-    pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> with stores[self] {
+    pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> {
         let idx = self.rule_index.get(name.to_string());
->>>>>>> origin/main
         if let Some(i) = idx {
             return Option::Some(&self.parser_rules[i]);
         }

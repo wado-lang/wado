@@ -461,27 +461,11 @@ fn gen_lexer_struct(w: &mut CodeWriter, members: &MemberDecls, surface: &LexerSu
     w.end();
     w.blank();
 
-<<<<<<< HEAD
-    let mut f3 = FnSpec::new(&"slice");
-    f3.set_receiver(&"&self");
-    f3.add_param(&"start", &"i32");
-    f3.add_param(&"end", &"i32");
-    f3.set_return_type(&"LexerSlice");
-||||||| 5708464fb8e
-    let mut f3 = FnSpec::new(&"slice");
-    f3.set_receiver(&"&self");
-    f3.add_param(&"start", &"i32");
-    f3.add_param(&"end", &"i32");
-    f3.set_return_type(&"LexerSlice");
-    f3.add_stores(&"self");
-=======
     let mut f3 = FnSpec::new("slice");
     f3.set_receiver("&self");
     f3.add_param("start", "i32");
     f3.add_param("end", "i32");
     f3.set_return_type("LexerSlice");
-    f3.add_stores("self");
->>>>>>> origin/main
     f3.emit_begin(w);
     w.line("return LexerSlice::new(&self.chars, start, end);");
     w.end();
@@ -1000,20 +984,6 @@ fn gen_lexer_match_fn<S: AsStrSlice>(
     // The `Foo::op(LexerView { chars, .. })` call carries the effect and the
     if !sc_name.is_empty() && lexer_rule_match_calls_super(rule, all_rules, sc_name) {
         f.add_effect(sc_name);
-<<<<<<< HEAD
-||||||| 5708464fb8e
-        if hm {
-            f.add_stores(&"lx");
-        } else {
-            f.add_stores(&"chars");
-        }
-=======
-        if hm {
-            f.add_stores("lx");
-        } else {
-            f.add_stores("chars");
-        }
->>>>>>> origin/main
     }
     f.emit_begin(w);
     if hm {
@@ -1253,12 +1223,6 @@ fn gen_lexer_apply_fns<S: AsStrSlice>(w: &mut CodeWriter, grammar: &Grammar, has
         f.add_param("end", "i32");
         if replay_super {
             f.add_effect(sc_name);
-<<<<<<< HEAD
-||||||| 5708464fb8e
-            f.add_stores(&"lx");
-=======
-            f.add_stores("lx");
->>>>>>> origin/main
         }
         f.emit_begin(w);
         gen_lexer_apply_replay_body(w, rule, &grammar.lexer_rules, &grammar.options, ci, has_members);
@@ -3398,16 +3362,8 @@ fn gen_lexer_not<S: AsStrSlice>(
     w.line("pos += 1;");
 }
 
-<<<<<<< HEAD
-pub fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name && r.is_fragment);
-||||||| 5708464fb8e
-pub fn find_fragment(all_rules: &List<LexerRule>, name: &String) -> Option<&LexerRule> with stores[all_rules] {
-    return all_rules.iter_ref().find(|r: &LexerRule| r.name == *name && r.is_fragment);
-=======
-pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> with stores[all_rules] {
+pub fn find_fragment<S: AsStrSlice>(all_rules: &List<LexerRule>, name: S) -> Option<&LexerRule> {
     return all_rules.iter_ref().find(|r: &LexerRule| r.name == name.as_str_slice() && r.is_fragment);
->>>>>>> origin/main
 }
 
 /// Tries to extract a single lowercase char from a case-insensitive CharClass (e.g., [aA]).

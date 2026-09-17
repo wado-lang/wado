@@ -286,28 +286,6 @@ test "FnSpec with a single effect" {
     assert sig == "export fn run() with Stdout", `got: ${sig}`;
 }
 
-<<<<<<< HEAD
-||||||| 5708464fb8e
-test "FnSpec with one effect and stores" {
-    let mut f = FnSpec::new(&"keep", Vis::Pub);
-    f.add_effect(&"Stdout");
-    f.add_stores(&"self");
-
-    let sig = f.signature();
-    assert sig == "pub fn keep() with (Stdout, stores[self])", `got: ${sig}`;
-}
-
-=======
-test "FnSpec with one effect and stores" {
-    let mut f = FnSpec::new("keep", Vis::Pub);
-    f.add_effect("Stdout");
-    f.add_stores("self");
-
-    let sig = f.signature();
-    assert sig == "pub fn keep() with (Stdout, stores[self])", `got: ${sig}`;
-}
-
->>>>>>> origin/main
 test "FnSpec generic type parameter" {
     let mut f = FnSpec::new("walk_stmt", Vis::Pub);
     f.add_generic("V: Visitor");

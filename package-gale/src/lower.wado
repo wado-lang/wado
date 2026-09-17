@@ -1206,13 +1206,7 @@ fn rebind_scan_self_ref_min_prec<S: AsStrSlice>(se: ScanElement, rule_snake: S, 
     return se;
 }
 
-<<<<<<< HEAD
-fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> {
-||||||| 5708464fb8e
-fn find_self_ref_rule_call(op: &Op, rule_name: &String) -> Option<&RuleCallOp> with stores[op] {
-=======
-fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> with stores[op] {
->>>>>>> origin/main
+fn find_self_ref_rule_call<S: AsStrSlice>(op: &Op, rule_name: S) -> Option<&RuleCallOp> {
     return match op {
         RuleCall(rc) => if rc.target_name == rule_name.as_str_slice() { Option::Some(rc) } else { null },
         ListLabel(ll) => find_self_ref_rule_call(&ll.inner, rule_name),
