@@ -58,7 +58,7 @@ pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 use crate::ast::UseDecl;
-use crate::component_model::wado_primitive_name_to_cm;
+use crate::component_model::{declares_cm_binding, wado_primitive_name_to_cm};
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -1111,18 +1111,6 @@ async fn resolve_inline_providers<H: CompilerHost>(
     Ok(providers)
 }
 
-/// Whether `module` declares an interface operation bound to a CM import.
-fn declares_cm_import(module: &ast::Module) -> bool {
-    module.items.iter().any(|item| {
-        let ast::Item::Interface(decl) = item else {
-            return false;
-        };
-        decl.methods
-            .iter()
-            .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
-    })
-}
-
 /// Internal: run compilation phases after module loading.
 fn compile_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
@@ -1515,7 +1503,7 @@ fn compile_after_load<H: CompilerHost>(
             !source.is_core()
                 && !source.is_binding()
                 && !source.is_wasm_asset()
-                && declares_cm_import(module)
+                && declares_cm_binding(module)
         })
         .map(|(source, module)| (source.clone(), module.clone()))
         .collect();
@@ -1581,7 +1569,15 @@ fn compile_after_load<H: CompilerHost>(
     if !user_cm_modules.is_empty() {
         let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
         for (source, module) in &user_cm_modules {
-            registry.register_user_cm_decls(module, source);
+            if let Err(msg) = registry.register_user_cm_decls(module, source) {
+                let _ = logger.error(compiler_host::Diagnostic {
+                    severity: compiler_host::Severity::Error,
+                    code: compiler_host::Code::DuplicateDefinition,
+                    message: msg,
+                    span: None,
+                });
+                return Err(Bail);
+            }
         }
     }
 

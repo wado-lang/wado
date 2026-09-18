@@ -2378,19 +2378,24 @@ fn generate_cm_imports(
             .iter()
             .any(|e| e.fq == interface_info.path && e.kind == ImportKind::Component);
 
-        // Which functions of this interface to expose in its instance type.
+        // The used bindings of this interface: one per Wado name, so two names
+        // binding one CM operation appear twice. Each mints its own alias.
         let supported_functions: Vec<_> = interface_info
             .functions
             .iter()
             .filter(|func| emits_function(project, func))
             .collect();
 
+        // The CM operations behind them, one per CM name. The instance type
+        // describes the imported interface, which exports each name once.
+        let cm_functions = one_per_cm_name(&supported_functions);
+
         // Collect resource types referenced in any function signature. The plan
         // guarantees these resolve to resources this interface defines itself
         // (a signature touching an externally-defined resource would have been
         // categorized `ResourceUsingInterface` and handled by Phase 3 instead).
         let mut needed_resources: Vec<String> = Vec::new();
-        for func in &supported_functions {
+        for func in &cm_functions {
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
@@ -2475,7 +2480,7 @@ fn generate_cm_imports(
 
             // Collect all named types referenced in function signatures
             let mut referenced_types: Vec<String> = Vec::new();
-            for func in &supported_functions {
+            for func in &cm_functions {
                 for (_, _, ty) in &func.params {
                     collect_named_types(ty, &mut referenced_types);
                 }
@@ -2677,7 +2682,7 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
             );
 
-            for func in &supported_functions {
+            for func in &cm_functions {
                 // Pre-define param-only types (stream for params, result for params)
                 let needs_stream_u8 = func
                     .params
@@ -2868,9 +2873,6 @@ fn generate_cm_imports(
             }
         }
 
-        // Expose ErrorCode from this interface at outer component scope.
-        // Different interfaces (cli, filesystem, sockets) define different error-code types.
-        // We register them with source-qualified keys (e.g., "filesystem-error-code").
         alias_own_error_code(
             builder,
             ctx,
@@ -2880,7 +2882,7 @@ fn generate_cm_imports(
         );
 
         for func in &supported_functions {
-            alias_interface_func(builder, ctx, project, &interface_info, func);
+            alias_interface_func(builder, ctx, &interface_info, func);
         }
     }
 
@@ -3906,10 +3908,11 @@ fn import_resource_using_interfaces(
             .iter()
             .filter(|func| emits_function(project, func))
             .collect();
+        let cm_functions = one_per_cm_name(&supported_functions);
 
         // Collect resources used in function signatures
         let mut needed_resources: Vec<String> = Vec::new();
-        for func in &supported_functions {
+        for func in &cm_functions {
             if let Some(ret_ty) = &func.return_type {
                 collect_resources_in_type(
                     ret_ty,
@@ -4055,7 +4058,7 @@ fn import_resource_using_interfaces(
             // Build function types using the aliased resource indices
             let mut deferred_func_exports: Vec<(String, u32)> = Vec::new();
 
-            for func in &supported_functions {
+            for func in &cm_functions {
                 // Resolve params: for `self` borrow params use the borrow handle,
                 // for owned-resource params use the own handle, otherwise lower
                 // the type via emit_cm_val_type.
@@ -4153,7 +4156,7 @@ fn import_resource_using_interfaces(
         expose_self_owned_resources(builder, ctx, project, &interface_info, &needed_resources);
 
         for func in &supported_functions {
-            alias_interface_func(builder, ctx, project, &interface_info, func);
+            alias_interface_func(builder, ctx, &interface_info, func);
         }
     }
 }
@@ -4400,36 +4403,33 @@ fn generate_cm_world_func_imports(
     }
 }
 
-/// Alias `func` out of its interface instance once per local name bound to it.
-/// One CM function carries several when a user module binds an operation the
-/// stdlib already binds: each Wado name mints its own alias, and the core
-/// module imports whichever one its call site named.
+/// One entry per CM function name, keeping the first binding of each. A CM
+/// interface exports a name once however many Wado names bind it, so anything
+/// describing the interface walks this rather than the bindings.
+fn one_per_cm_name<'a>(funcs: &[&'a CmFunctionInfo]) -> Vec<&'a CmFunctionInfo> {
+    let mut seen = IndexSet::default();
+    funcs
+        .iter()
+        .filter(|func| seen.insert(func.wasi_func_name.clone()))
+        .copied()
+        .collect()
+}
+
+/// Alias `func` out of its interface instance under its own local name. Two
+/// Wado names binding one CM operation are two `func`s here, so each gets its
+/// own alias and the core module imports whichever one its call site named.
 fn alias_interface_func(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    project: &NirPackage,
     interface_info: &CmInterfaceInfo,
     func: &CmFunctionInfo,
 ) {
-    let mut local_names: Vec<String> = project
-        .cm_interface_registry
-        .local_names_for(&interface_info.path, &func.wasi_func_name)
-        .cloned()
-        .collect();
-    if local_names.is_empty() {
-        local_names.push(format!(
-            "{}-{}",
-            interface_info.interface, func.wasi_func_name
-        ));
-    }
-    for local_name in &local_names {
-        ctx.register_comp_func(local_name);
-        builder.alias_export(
-            ctx.instance_idx(&interface_info.instance_key()),
-            &func.wasi_func_name,
-            ComponentExportKind::Func,
-        );
-    }
+    ctx.register_comp_func(&func.local_alias_name());
+    builder.alias_export(
+        ctx.instance_idx(&interface_info.instance_key()),
+        &func.wasi_func_name,
+        ComponentExportKind::Func,
+    );
 }
 
 fn lower_wasi_functions(

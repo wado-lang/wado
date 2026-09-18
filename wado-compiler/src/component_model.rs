@@ -928,6 +928,37 @@ struct ModuleSourceIndex {
     flags: IndexMap<(String, String), String>,
 }
 
+/// Whether `module` declares anything a [`CmDeclScope::CmAttributed`] scope
+/// would admit. What decides the scan must read `#[cm(…)]` off exactly the item
+/// kinds the scope admits, or a module is skipped and its declarations are
+/// missing where nothing looks.
+pub fn declares_cm_binding(module: &ast::Module) -> bool {
+    use crate::ast::Item;
+
+    let attributed = |attrs: &[Attribute]| attrs.iter().any(|a| a.as_cm_import().is_some());
+    module.items.iter().any(|item| match item {
+        Item::Newtype(decl) => attributed(&decl.attrs),
+        Item::Struct(decl) => attributed(&decl.attrs),
+        Item::Enum(decl) => attributed(&decl.attrs),
+        Item::Variant(decl) => attributed(&decl.attrs),
+        Item::Flags(decl) => decl.attributes.as_deref().is_some_and(attributed),
+        Item::Resource(decl) => {
+            attributed(&decl.attrs) || decl.methods.iter().any(|m| attributed(&m.attrs))
+        }
+        Item::Interface(decl) => decl.methods.iter().any(|m| attributed(&m.attrs)),
+        Item::Function(decl) => attributed(&decl.attrs),
+        Item::Use(_)
+        | Item::TupleTypeDecl(_)
+        | Item::BuiltinTypeDecl(_)
+        | Item::Impl(_)
+        | Item::Trait(_)
+        | Item::World(_)
+        | Item::Test(_)
+        | Item::Global(_)
+        | Item::Error(_) => false,
+    })
+}
+
 /// Which declarations of a module enter the registry.
 enum CmDeclScope {
     /// Everything the module declares: a bundled binding module is all CM, and
@@ -978,6 +1009,17 @@ fn register_unique<V>(
         key.0,
     );
     map.insert(key, value);
+}
+
+/// The first name a `(source_interface, name)`-keyed map holds under
+/// `iface_fq`, which says that some module already declares into it.
+fn first_name_in_interface<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    iface_fq: &str,
+) -> Option<&'a str> {
+    map.keys()
+        .find(|(source, _)| source == iface_fq)
+        .map(|(_, name)| name.as_str())
 }
 
 /// Return the value for `name` in a `(source_interface, name)`-keyed map when
@@ -2029,22 +2071,40 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Register the `#[cm(…)]` interface operations a user module declares, so
-    /// a call to one lowers to that import instead of reaching WIR unresolved.
-    /// An operation without `#[cm(…)]` stays out: it is the module's own
-    /// effect, not a binding.
-    pub fn register_user_cm_decls(&mut self, module: &ast::Module, module_source: &ModuleSource) {
+    /// Register the `#[cm(…)]` declarations a user module makes, so a call to
+    /// one lowers to that import instead of reaching WIR unresolved. An item
+    /// without `#[cm(…)]` stays out: it is the module's own, not a binding.
+    /// `Err` names an interface another module already declares.
+    pub fn register_user_cm_decls(
+        &mut self,
+        module: &ast::Module,
+        module_source: &ModuleSource,
+    ) -> Result<(), String> {
         // The resolver keys cross-module `use` by path, and a user binding
         // module resolves its own declarations, so one placeholder key serves.
         const SELF_PATH: &str = "";
         let definitions = collect_cm_definitions(module);
+        // A CM interface has one declaring module. Registering into one another
+        // module already owns would overwrite that owner, leaving every type it
+        // declares unresolvable, and collide in `register_unique`, which would
+        // report user code as a stdlib bug.
+        for source in definitions.values() {
+            if let Some(existing) = self.existing_cm_decl(source) {
+                return Err(format!(
+                    "`{module_source}` declares a Component Model type in interface \
+                     `{source}`, which already declares `{existing}`. An interface has \
+                     one declaring module: bind an interface of your own instead."
+                ));
+            }
+        }
         // Every interface this module binds maps back to it, as a component
         // dependency's and a lib entry's do. The type-id lookup starts from the
         // interface a type names and asks which module declares it, so without
         // this a record the module has just registered answers "no TypeId".
         for source in definitions.values() {
             self.cm_interface_module_sources
-                .insert(source.clone(), module_source.clone());
+                .entry(source.clone())
+                .or_insert_with(|| module_source.clone());
         }
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
@@ -2052,6 +2112,7 @@ impl CmInterfaceRegistry {
         let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
         self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
         self.register_module_decls(module, &CmDeclScope::CmAttributed);
+        Ok(())
     }
 
     /// Register every `#[cm(…)]` operation an `interface` in `module` declares.
@@ -2737,6 +2798,19 @@ impl CmInterfaceRegistry {
     /// derived from the FQ by naming convention) or an unknown FQ.
     pub fn cm_interface_module_source_of(&self, iface_fq: &str) -> Option<&ModuleSource> {
         self.cm_interface_module_sources.get(iface_fq)
+    }
+
+    /// A type `iface_fq` already declares, if any. A bundled `wasi:` / `core:`
+    /// interface is absent from `cm_interface_module_sources` by design, so that
+    /// map alone reports the whole stdlib as unowned; what the keyspaces hold is
+    /// the fact itself.
+    fn existing_cm_decl(&self, iface_fq: &str) -> Option<&str> {
+        first_name_in_interface(&self.newtypes, iface_fq)
+            .or_else(|| first_name_in_interface(&self.resources, iface_fq))
+            .or_else(|| first_name_in_interface(&self.flags, iface_fq))
+            .or_else(|| first_name_in_interface(&self.enums, iface_fq))
+            .or_else(|| first_name_in_interface(&self.variants, iface_fq))
+            .or_else(|| first_name_in_interface(&self.structs, iface_fq))
     }
 
     /// The module that defines a lib-local named type, when known. Locates a
