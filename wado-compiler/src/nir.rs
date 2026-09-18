@@ -12,9 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{
-    CLOSURE_CALL_METHOD, FunctionId, LocalMethodName, closure_call_name, closure_functor_type,
-};
+use crate::name::{FunctionId, LocalMethodName, closure_call_method_info, closure_call_name};
 use crate::nir_arena::{Body, ExprBody};
 use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
@@ -156,11 +154,7 @@ impl FunctionRef {
             module_source: module.clone(),
             name: closure_call_name(module, functor_id),
             monomorph_info: None,
-            method_info: Some(LocalMethodName::new(
-                closure_functor_type(module, functor_id),
-                None,
-                CLOSURE_CALL_METHOD.to_string(),
-            )),
+            method_info: Some(closure_call_method_info(module, functor_id)),
         }
     }
 

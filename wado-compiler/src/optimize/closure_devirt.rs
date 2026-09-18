@@ -7,7 +7,7 @@
 //! instead, and the read of that field only exists after `inline`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{CLOSURE_CALL_METHOD, FunctionId};
+use crate::name::{FunctionId, is_closure_call_name};
 use crate::nir::{FuncId, FunctionRef};
 use crate::nir_arena::{
     ArenaCallArg, BlockId, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
@@ -24,9 +24,8 @@ use cranelift_entity::EntityRef;
 /// long chain costs a fixed amount. Well past what the adaptor shapes need.
 const MAX_DEPTH: u32 = 12;
 
-/// One functor's `$call`: the callee to name, and one flag per parameter
-/// (`self` first) saying whether it writes the caller's storage. Its length is
-/// the arity a call has to agree with.
+/// One functor's `$call`: the callee to name, and whether each parameter
+/// (`self` first) writes the caller's storage.
 struct CallTarget {
     func_id: FuncId,
     params_is_mut: Vec<bool>,
@@ -39,13 +38,12 @@ pub(super) struct ClosureDevirtRule {
 /// Index every functor's `$call` under the key [`FunctionRef::closure_call`]
 /// builds from what a `ClosureToCanonical` carries.
 pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
-    let suffix = format!("::{CLOSURE_CALL_METHOD}");
     let mut targets: IndexMap<FunctionId, CallTarget> = IndexMap::default();
     for (id, &func_id) in &project.func_index {
         let FunctionId::Free(free) = id else {
             continue;
         };
-        if !free.name.ends_with(&suffix) {
+        if !is_closure_call_name(&free.name) {
             continue;
         }
         let func = project.functions[func_id.index()].borrow();
@@ -71,6 +69,10 @@ fn past_transparent(engine: &Engine, op: Operand, mut depth: u32) -> Option<(Exp
         depth -= 1;
         expr = strip_refs(engine.body, yielded.as_expr().filter(|_| depth > 0)?);
     }
+    assert!(
+        depth > 0,
+        "every caller spends a step on what it resolves past"
+    );
     Some((expr, depth))
 }
 
@@ -102,9 +104,8 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
     }
 }
 
-/// The struct literal the operand's value was built by. Every local holding
-/// the object on the way must be read through a plain field access alone —
-/// that is what keeps the field the literal wrote the field the read sees.
+/// The struct literal the operand's value was built by, when nothing on the
+/// way could have written the field since.
 fn resolve_struct_literal(engine: &mut Engine, op: Operand, depth: u32) -> Option<ExprId> {
     let (expr, depth) = past_transparent(engine, op, depth)?;
     match &engine.body.exprs[expr].kind {
@@ -192,9 +193,8 @@ fn ancestor_positions(engine: &Engine, node: NodeRef) -> Vec<(BlockId, usize)> {
 /// Whether the wrapper's statement runs before the call's, in a block that
 /// holds them both.
 ///
-/// The devirtualized call is what makes the wrapper's own value dead, so a
-/// later pass is free to drop the region the wrapper sits in. Nothing outside
-/// that region may be left reading the binding it carries.
+/// The devirtualized call is what makes the wrapper's value dead, so a later
+/// pass may drop the region the wrapper sits in.
 fn runs_before(engine: &Engine, canonical: ExprId, call: ExprId) -> bool {
     let Some(&(block, at)) = ancestor_positions(engine, NodeRef::Expr(canonical)).first() else {
         return false;
@@ -262,7 +262,7 @@ impl ClosureDevirtRule {
 
     /// The wrapper `call` dispatches through, when this rule can make the
     /// dispatch direct.
-    fn devirt_site(&self, engine: &mut Engine, call: ExprId) -> Option<ExprId> {
+    fn dispatched_wrapper(&self, engine: &mut Engine, call: ExprId) -> Option<ExprId> {
         let ExprKind::IndirectCall { callee, args } = &engine.body.exprs[call].kind else {
             return None;
         };
@@ -281,10 +281,10 @@ impl ClosureDevirtRule {
 
     /// Every wrapper in the body some `IndirectCall` dispatches through.
     /// Parking a functor nothing devirtualizes would only add a binding.
-    fn devirt_sites(&self, engine: &mut Engine) -> IndexSet<ExprId> {
+    fn dispatched_wrappers(&self, engine: &mut Engine) -> IndexSet<ExprId> {
         reachable_exprs(engine.body)
             .into_iter()
-            .filter_map(|call| self.devirt_site(engine, call))
+            .filter_map(|call| self.dispatched_wrapper(engine, call))
             .collect()
     }
 }
@@ -292,19 +292,19 @@ impl ClosureDevirtRule {
 impl Rule for ClosureDevirtRule {
     /// `f(args)` where `f`'s value came from one functor → `$call(f, args)`.
     fn apply_expr(&self, engine: &mut Engine, id: ExprId) -> bool {
-        let Some(canonical) = self.devirt_site(engine, id) else {
+        let Some(canonical) = self.dispatched_wrapper(engine, id) else {
             return false;
         };
         let Some((local, name)) = functor_local(engine, canonical) else {
             return false;
         };
         let ExprKind::IndirectCall { args, .. } = &engine.body.exprs[id].kind else {
-            unreachable!("`devirt_site` matched an IndirectCall");
+            unreachable!("`dispatched_wrapper` matched an IndirectCall");
         };
         let args = args.clone();
         let target = self
             .target(engine, canonical, args.len())
-            .expect("`devirt_site` found this target");
+            .expect("`dispatched_wrapper` found this target");
         let (func_id, params_is_mut) = (target.func_id, target.params_is_mut.clone());
         let type_id = engine.locals()[local as usize].type_id;
         let span = engine.body.exprs[id].span;
@@ -327,10 +327,10 @@ impl Rule for ClosureDevirtRule {
         if candidates.is_empty() {
             return false;
         }
-        let sites = self.devirt_sites(engine);
+        let dispatched = self.dispatched_wrappers(engine);
         let Some((at, canonical, functor)) = candidates
             .into_iter()
-            .find(|&(_, canonical, _)| sites.contains(&canonical))
+            .find(|&(_, canonical, _)| dispatched.contains(&canonical))
         else {
             return false;
         };
