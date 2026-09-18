@@ -1058,15 +1058,20 @@ impl TypeTable {
         id
     }
 
+    /// The slot holding `id`'s value: itself, or what a redirect points it at.
+    /// One hop — [`Self::redefine_to`] refuses a target that is redirected.
+    fn resolved_id(&self, id: TypeId) -> TypeId {
+        self.redirects.get(id).copied().unwrap_or(id)
+    }
+
     /// [`Self::get`] for a caller holding an id from another table. One this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
-        self.types.get(id)
+        self.types.get(self.resolved_id(id))
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
+        let id = self.resolved_id(id);
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
@@ -1088,8 +1093,7 @@ impl TypeTable {
 
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
-        self.types.get(id)
+        self.types.get(self.resolved_id(id))
     }
 
     /// The [`TypeKey`] for `id`.
@@ -1098,20 +1102,13 @@ impl TypeTable {
     /// one type, so an id is a slot and not a type identity.
     #[must_use]
     pub fn type_key(&self, id: TypeId) -> TypeKey {
-        let resolved = self.redirects.get(id).copied().unwrap_or(id);
+        let resolved = self.resolved_id(id);
         TypeKey(
             self.types
                 .get(resolved)
                 .and_then(|ty| self.intern_map.get(ty).copied())
                 .unwrap_or(resolved),
         )
-    }
-
-    /// Whether two ids name the same type, however each was spelled. Ask this
-    /// rather than `a == b`; [`Self::type_key`] says why.
-    #[must_use]
-    pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
-        a == b || self.type_key(a) == self.type_key(b)
     }
 
     /// True when `id` resolves to the never type `!`. An expression of this type
@@ -6973,9 +6970,8 @@ mod tests {
         table.redefine_to(redefined, shared);
 
         assert_ne!(shared, redefined);
-        assert!(table.same_type(shared, redefined));
         assert_eq!(table.type_key(redefined), table.type_key(shared));
-        assert!(!table.same_type(shared, TypeTable::I32));
+        assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
     }
 
     /// A redefined slot keeps its own spelling for `get_unerased`, and loses it

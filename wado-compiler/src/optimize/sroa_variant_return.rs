@@ -1709,9 +1709,8 @@ struct Rebind<'t> {
     type_table: &'t TypeTable,
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
-    /// Each declared local type keyed with its `&` / `&mut` layers stripped:
-    /// `&T` is `T` at WIR level (`wir_build::context`), what needs a cell
-    /// arriving as `Box<T>` instead.
+    /// The key of each declared local type, references stripped: `&T` is `T` at
+    /// WIR level (`wir_build::context`), what needs a cell arriving as `Box<T>`.
     peeled_keys: Vec<TypeKey>,
     /// Declared `Box<T>` local type → (`T`'s key, the struct's rendered name).
     boxes: IndexMap<TypeId, (TypeKey, String)>,
