@@ -1,9 +1,12 @@
 //! What a call writes through a `&mut` it is handed, by the handle each write
 //! is reached through. A callee this analysis cannot read writes everything.
 
+use super::analyze::is_fresh_value;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::ownership::BuiltinDeclarations;
-use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
+use super::ownership::{BuiltinDeclarations, OwnedCalls};
+use super::place::{
+    Names, Resolver, ReturnPaths, Selector, carries_storage, could_write_through, field_owner,
+};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::is_reference;
@@ -36,8 +39,9 @@ impl Origin {
 enum Handed {
     /// Storage this frame's own caller can observe, through that handle.
     Caller(Origin),
-    /// Storage this frame owns. A write to it reaches no caller of this one.
-    FrameLocal,
+    /// Nothing a caller of this frame reaches: storage this frame owns, or a
+    /// value carrying no storage for the callee to write through.
+    Unobservable,
 }
 
 /// The fields one function writes, by the handle each is reached through and
@@ -149,9 +153,9 @@ fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origi
     };
     match handed.get(&position) {
         Some(Handed::Caller(origin)) => Some(*origin),
-        Some(Handed::FrameLocal) => None,
-        // Absent is not empty: it is a position this walk could not classify,
-        // and dropping its writes would hide one the caller can see.
+        Some(Handed::Unobservable) => None,
+        // `handed_at` classifies every argument, so this is a position no
+        // argument reached at all.
         None => Some(Origin::Unknown),
     }
 }
@@ -188,6 +192,7 @@ pub fn compute_mod_ref(
     flat: &FlatPackage,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
+    oracle: &OwnedCalls,
     builtins: &BuiltinDeclarations,
 ) -> ModRef {
     let type_table = flat.type_table.borrow();
@@ -216,6 +221,7 @@ pub fn compute_mod_ref(
             &defined,
             return_paths,
             returns_owned,
+            oracle,
             builtins,
         );
         direct.push((
@@ -273,6 +279,7 @@ fn scan(
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
     returns_owned: &FuncKeySet,
+    oracle: &OwnedCalls,
     builtins: &BuiltinDeclarations,
 ) -> (Writes, Vec<CallSite>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
@@ -290,6 +297,7 @@ fn scan(
         type_table,
         defined,
         builtins,
+        oracle,
         resolver: &resolver,
         writes: Writes::default(),
         callees: Vec::new(),
@@ -303,6 +311,7 @@ struct Walker<'a> {
     type_table: &'a TypeTable,
     defined: &'a FuncKeySet,
     builtins: &'a BuiltinDeclarations,
+    oracle: &'a OwnedCalls<'a>,
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<CallSite>,
@@ -322,20 +331,27 @@ impl Walker<'_> {
         place.through_borrow.then_some(Origin::Unknown)
     }
 
-    /// What this call puts in one parameter position, or `None` where this
-    /// walk cannot tell.
-    fn handed_at(&self, arg: &TirExpr) -> Option<Handed> {
-        let names = self.resolver.names(arg);
-        // A value naming no place still aliases its argument where
-        // `builtin::select` returned it: neither this frame's storage nor a
-        // handle that can be named.
-        let Names::Place(_) = names else {
-            return None;
-        };
-        Some(match self.origin_of(&names) {
-            Some(origin) => Handed::Caller(origin),
-            None => Handed::FrameLocal,
-        })
+    /// What this call puts in one parameter position. Total, so every position
+    /// is classified and none is left for [`re_tag`] to guess at.
+    fn handed_at(&self, arg: &TirExpr) -> Handed {
+        // A value carrying no storage hands the callee nothing to write
+        // through, and a fresh one aliases nothing this frame was handed.
+        if !carries_storage(arg.type_id, self.type_table)
+            || is_fresh_value(arg, self.oracle, self.type_table)
+        {
+            return Handed::Unobservable;
+        }
+        match self.resolver.names(arg) {
+            names @ Names::Place(_) => match self.origin_of(&names) {
+                Some(origin) => Handed::Caller(origin),
+                None => Handed::Unobservable,
+            },
+            // A value names storage of its own, so a write into it reaches no
+            // caller of this frame. One that may alias an operand instead is
+            // `Names::Unknown`, which `names` is what decides.
+            Names::Value => Handed::Unobservable,
+            Names::Unknown => Handed::Caller(Origin::Unknown),
+        }
     }
 
     /// Record a write to what `names` stands for: every field the path names,
@@ -478,9 +494,7 @@ impl TirRefVisitor for Walker<'_> {
                     let handed = args
                         .iter()
                         .enumerate()
-                        .filter_map(|(position, a)| {
-                            Some((position as u32, self.handed_at(&a.expr)?))
-                        })
+                        .map(|(position, a)| (position as u32, self.handed_at(&a.expr)))
                         .collect();
                     self.callees.push(CallSite {
                         callee: (func.module_source.clone(), func.name.clone()),

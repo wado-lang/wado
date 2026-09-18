@@ -215,14 +215,23 @@ pub fn plan(
     );
     let indirect_owned_returns =
         ownership::compute_indirect_owned_returns(flat, &conventions.returns_owned);
-    ValueCopyPlan {
-        helpers,
-        mod_ref: modref::compute_mod_ref(
+    let mod_ref = {
+        let oracle = ownership::OwnedCalls::new(
+            &conventions.returns_owned,
+            &conventions.returns_self_projection,
+            &builtins,
+        );
+        modref::compute_mod_ref(
             flat,
             &return_paths,
             &conventions.returns_owned,
+            &oracle,
             &builtins,
-        ),
+        )
+    };
+    ValueCopyPlan {
+        helpers,
+        mod_ref,
         return_paths,
         returns_owned: conventions.returns_owned,
         returns_self_projection: conventions.returns_self_projection,

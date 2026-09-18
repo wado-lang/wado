@@ -1,0 +1,46 @@
+// An argument that names a value rather than a place names storage of its
+// own, so a callee writing through that position writes nothing a caller of
+// this frame reaches. Reading such an argument as unclassifiable instead tags
+// the callee's writes with a handle that could be any of them: `sub` writes
+// nothing at all, yet `take` came away reported as writing `P` through its
+// receiver, and `scan`'s field read had to copy the whole input buffer.
+//
+// That is json_catalog_v2's `parse_area`, whose every call went through a
+// stdlib helper carrying one such write.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    repr: Array<u8>,
+    pos: i32,
+}
+
+impl P {
+    fn take(&mut self, s: &String) -> i32 {
+        let v = s.as_str_slice().sub(0, 1);
+        self.pos += 1;
+        return v.len();
+    }
+
+    fn scan(&mut self, s: &String) -> i64 {
+        let raw = self.repr;
+        let n = self.take(s);
+        return builtin::array_get_value_u8(&raw, 0) as i64 + n as i64;
+    }
+}
+
+export fn run() with Stdout {
+    let mut bytes = builtin::array_new::<u8>(4);
+    builtin::array_set::<u8>(&mut bytes, 0, 5);
+    let mut p = P { repr: bytes, pos: 0 };
+    let s = "hello";
+    println(`${p.scan(&s)}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_not_expect:O2": [
+        "$array_clone_dst"
+    ]
+}
