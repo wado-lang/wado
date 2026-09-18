@@ -9,8 +9,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::ast::Visibility;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, LocalMethodName,
-    MethodName, closure_capture_field, is_fn_type_name,
+    FqTraitName, FqTypeName, LocalMethodName, MethodName, closure_call_method_info,
+    closure_call_name, closure_capture_field, closure_functor_struct_name, is_fn_type_name,
 };
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionKind, FunctionRef, InlineHint, ResolvedType,
@@ -581,11 +581,7 @@ impl ClosureLowerer {
                 _ => collected.return_type,
             };
 
-            let struct_name = format!(
-                "{prefix}{id}",
-                prefix = CLOSURE_STRUCT_PREFIX,
-                id = collected.id,
-            );
+            let struct_name = closure_functor_struct_name(collected.id);
             // A closure environment names no declaration — lowering mints it
             // — so its head is the shape, under the name lowering assigns.
             let head = StructDef::Anon(
@@ -627,11 +623,7 @@ impl ClosureLowerer {
             // Use a qualified name to avoid collisions in the inliner's
             // candidate map. `LocalMethodName` stays unqualified so codegen
             // re-mangles it consistently with other methods.
-            let qualified_method_name = MethodName::format_local(
-                &FqTypeName::shape(&self.module_source, &struct_name),
-                None,
-                CLOSURE_CALL_METHOD,
-            );
+            let qualified_method_name = closure_call_name(&self.module_source, collected.id);
             let self_ref_type = type_table.make_ref(struct_type_id);
 
             let mut params = Vec::with_capacity(1 + collected.params.len());
@@ -753,11 +745,7 @@ impl ClosureLowerer {
 
             // `method_info` carries the unmangled (struct, trait, method)
             // triple so codegen can produce the canonical mangled name.
-            let method_info = LocalMethodName::new(
-                FqTypeName::shape(&self.module_source, &struct_name),
-                None,
-                CLOSURE_CALL_METHOD.to_string(),
-            );
+            let method_info = closure_call_method_info(&self.module_source, collected.id);
 
             let call_method = TirFunction {
                 module_source: self.module_source.clone(),

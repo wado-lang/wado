@@ -23,6 +23,15 @@ pub trait NirRefVisitor {
 /// A body with no block structure is a bare expression — a global initializer —
 /// and everything it holds is reachable by construction.
 pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
+    if body.blocks.is_empty() {
+        return body.exprs.iter().map(|(e, _)| e).collect();
+    }
+    exprs_under(body, NodeRef::Block(body.root))
+}
+
+/// Every expression id reachable from `node`, in walk order — the region a
+/// pass walks when one region answers its question.
+pub(crate) fn exprs_under(body: &Body, node: NodeRef) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
     impl NirRefVisitor for Collect {
         fn visit_node(&mut self, body: &Body, node: NodeRef) {
@@ -32,10 +41,7 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
             self.walk_node(body, node);
         }
     }
-    if body.blocks.is_empty() {
-        return body.exprs.iter().map(|(e, _)| e).collect();
-    }
     let mut collect = Collect(Vec::new());
-    collect.visit_node(body, NodeRef::Block(body.root));
+    collect.visit_node(body, node);
     collect.0
 }

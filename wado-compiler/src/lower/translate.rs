@@ -18,7 +18,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place;
 use crate::lower::plan::{LowerPlan, closure, value_copy};
-use crate::name::{FqTypeName, LocalMethodName, MethodName};
+use crate::name::MethodName;
 use cranelift_entity::EntityRef;
 
 use crate::compiler_item::CompilerItem;
@@ -27,9 +27,8 @@ use crate::lower::plan::string;
 use crate::lower::wide_int_literal::literal_from_repr;
 use crate::lower::{bare_asserts, wide_int_literal};
 use crate::name::{
-    CLOSURE_CALL_METHOD, FunctionId, case_construct_helper_name, case_extract_helper_name,
-    closure_capture_field, field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name,
-    variant_tag_helper_name,
+    FunctionId, case_construct_helper_name, case_extract_helper_name, closure_capture_field,
+    field_get_helper_name, hole_fmt_helper_name, hole_get_helper_name, variant_tag_helper_name,
 };
 use crate::nir::{
     FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
@@ -1544,10 +1543,6 @@ impl FunctionTranslator<'_, '_> {
                 .get(spec.functor_id as usize)
         {
             let nir_receiver = self.convert_expr(callee);
-            let functor_fq = FqTypeName::shape(&functor.module_source, &functor.struct_name);
-            let call_method_name = MethodName::format_local(&functor_fq, None, CLOSURE_CALL_METHOD);
-            let call_method_info =
-                LocalMethodName::new(functor_fq, None, CLOSURE_CALL_METHOD.to_string());
             let call_method_borrow = functor.call_method.borrow();
             // `ArenaCallArg::is_mut` means "the callee may write the caller's
             // storage through this slot", which is `is_mut_ref` — the same
@@ -1577,12 +1572,7 @@ impl FunctionTranslator<'_, '_> {
                         is_mut,
                     }),
             );
-            let func = nir::FunctionRef {
-                module_source: functor.module_source.clone(),
-                name: call_method_name,
-                monomorph_info: None,
-                method_info: Some(call_method_info),
-            };
+            let func = nir::FunctionRef::closure_call(&functor.module_source, functor.id);
             let func_id = self.base.interner.borrow_mut().resolve(&func);
             return self.alloc_expr(
                 ExprKind::Call {

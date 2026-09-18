@@ -2844,13 +2844,12 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
     let evt_ptr: i32;
     let status_29: i32;
     let elements: ref Array<u8>;
-    let self_38: ref "core:prelude/slice.wado//Slice<u8>";
     let start_39: i32;
     let end_40: i32;
-    let len_41: i32;
     let s: i32;
     let e: i32;
     let i: i32;
+    let end_52: i32;
     let a_59: i32;
     let a_69: i32;
     let $licm_repr_73: ref Array<u8>;
@@ -2898,15 +2897,15 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_al
             }
             elements = array.new_fixed<u8>();
             remainder = struct.new "core:prelude//List<u8>" { repr: elements, used: 0 };
-            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(remainder, self_38 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: rest.repr, start: 0, end: rest.used }; start_39 = written_11.count; end_40 = rest.used; len_41 = self_38.end; if @unlikely(0 > len_41) {
+            "core:prelude/list.wado/core:prelude/list.wado/List<u8>::extend_from_slice"(remainder, end_52 = rest.used; start_39 = written_11.count; end_40 = rest.used; if @unlikely(0 > end_52) {
                 cold_path;
-                "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(0, len_41);
+                "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(0, end_52);
                 unreachable;
-            }; a_59 = select i32(start_39 > 0, start_39, 0); s = select i32(a_59 < len_41, a_59, len_41); if @unlikely(s > len_41) {
+            }; a_59 = select i32(start_39 > 0, start_39, 0); s = select i32(a_59 < end_52, a_59, end_52); if @unlikely(s > end_52) {
                 cold_path;
-                "core:prelude/primitive.wado/i32::clamp$cold0"(s, len_41);
+                "core:prelude/primitive.wado/i32::clamp$cold0"(s, end_52);
                 unreachable;
-            }; a_69 = select i32(end_40 > s, end_40, s); e = select i32(a_69 < len_41, a_69, len_41); struct.new "core:prelude/slice.wado//Slice<u8>" { repr: self_38.repr, start: s, end: e });
+            }; a_69 = select i32(end_40 > s, end_40, s); e = select i32(a_69 < end_52, a_69, end_52); struct.new "core:prelude/slice.wado//Slice<u8>" { repr: rest.repr, start: s, end: e });
             rest = remainder;
             continue l488;
         };

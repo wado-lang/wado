@@ -259,6 +259,21 @@ pub(super) fn strip_refs(body: &Body, id: ExprId) -> ExprId {
     }
 }
 
+/// Whether `expr` sits directly under a `&` or `&mut`, so its storage rather
+/// than its value is what the parent takes.
+pub(super) fn is_addressed(engine: &Engine, expr: ExprId) -> bool {
+    let Some(NodeRef::Expr(parent)) = engine.parent_of(NodeRef::Expr(expr)) else {
+        return false;
+    };
+    matches!(
+        engine.body.exprs[parent].kind,
+        ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            ..
+        }
+    )
+}
+
 /// Strip a single `$value_copy$T(inner)` wrapper, returning its inner
 /// expression, or `None` when `e` is not a one-argument value-copy call.
 pub(super) fn strip_one_value_copy(

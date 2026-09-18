@@ -229,19 +229,17 @@ fn "iterator_filter_o3_regression.wado/run"() {
     let $v1_58: i32;
     let self_64: ref "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>>";
     let pred_67: ref struct;
-    let self_68: ref "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>";
     let pred_69: ref struct;
     let result_71: ref "core:prelude//List<i32>";
     let $v1_77: i32;
     let elements_92: ref Array<i32>;
     let used_95: i32;
-    let v_110: ref "core:prelude/slice.wado//SliceValueIter<i32>";
     let elements_111: ref Array<i32>;
     let used_114: i32;
     let $sroa_arr_repr: ref Array<i32>;
     $sroa_arr_repr = array.new_fixed<i32>(1, 2, 3, 4, 5);
     pred_42 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iterator_filter_o3_regression.wado//$Closure_0" {  }, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_0" };
-    self_39 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr, index: 0, end: 5 }), pred: pred_42 };
+    self_39 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr, index: 0, end: 5 }, pred: pred_42 };
     elements_92 = array.new_fixed<i32>();
     result_44 = struct.new "core:prelude//List<i32>" { repr: elements_92, used: 0 };
     b0: block {
@@ -300,9 +298,8 @@ condition: evens[1] == 4
         unreachable;
     }
     pred_67 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iterator_filter_o3_regression.wado//$Closure_1" {  }, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_1" };
-    self_68 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: ref.as_non_null(struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr, index: 0, end: 5 }), pred: pred_67 };
     pred_69 = struct.new "canonical//CanonicalClosure_0" { env: struct.new "iterator_filter_o3_regression.wado//$Closure_2" {  }, func: ref.func "closure/iterator_filter_o3_regression.wado/$closure_wrapper_2" };
-    self_64 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>>" { inner: ref.as_non_null(struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: ref.as_non_null(v_110 = self_68.inner; struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: v_110.repr, index: v_110.index, end: v_110.end }), pred: self_68.pred }), pred: pred_69 };
+    self_64 = struct.new "core:prelude/traits.wado//IterFilter<core:prelude/traits.wado/IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>>" { inner: struct.new "core:prelude/traits.wado//IterFilter<core:prelude/slice.wado/SliceValueIter<i32>>" { inner: struct.new "core:prelude/slice.wado//SliceValueIter<i32>" { repr: $sroa_arr_repr, index: 0, end: 5 }, pred: pred_67 }, pred: pred_69 };
     elements_111 = array.new_fixed<i32>();
     result_71 = struct.new "core:prelude//List<i32>" { repr: elements_111, used: 0 };
     b9: block {

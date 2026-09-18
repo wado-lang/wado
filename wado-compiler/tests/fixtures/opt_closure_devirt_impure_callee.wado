@@ -1,0 +1,28 @@
+// `closure_devirt` names the functor's local and drops the callee operand, so
+// it must decline a callee that does anything on the way. Inlining `bump`
+// leaves the callee as a block that writes `SIDE` and then yields the closure.
+// Devirtualizing there deleted the write.
+
+use { println, Stdout } from "core:cli";
+
+global mut SIDE: i32 = 0;
+
+fn bump(f: fn(i32) -> i32) -> fn(i32) -> i32 {
+    SIDE = SIDE + 1;
+    return f;
+}
+
+export fn run() with Stdout {
+    let k = 10;
+    let c = |x: i32| x + k;
+    let y = bump(c)(5);
+    println(`${y} ${SIDE}`);
+}
+
+__DATA__
+{
+    "stdout": "15 1\n",
+    "wir_expect:O2": [
+        "call_ref"
+    ]
+}
