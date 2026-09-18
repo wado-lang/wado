@@ -2813,11 +2813,12 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
     let value_17: u64;
     let value_18: u64;
     let high: u64;
-    let other_26: ref "core:prelude/int128.wado//u128";
     let lo_27: i64;
     let hi_28: i64;
     let p0_lo: i64;
     let p0_hi: i64;
+    let p1_low: u64;
+    let p2_low: u64;
     let lo_42: i64;
     let hi_43: i64;
     let $av_45: u64;
@@ -2881,8 +2882,9 @@ fn "core:prelude/int128.wado/core:prelude/int128.wado/u128::div_rem"(self, divis
         }
         q = q - 1_i64;
         multivalue_bind [p0_lo, p0_hi] = i64.mul_wide_u(q, divisor.low);
-        other_26 = struct.new "core:prelude/int128.wado//u128" { low: p0_lo, high: (p0_hi + (q * divisor.high)) + (0_i64 * divisor.low) };
-        multivalue_bind [lo_27, hi_28] = i64.sub128(self.low, self.high, p0_lo, other_26.high);
+        p1_low = q * divisor.high;
+        p2_low = 0_i64 * divisor.low;
+        multivalue_bind [lo_27, hi_28] = i64.sub128(self.low, self.high, p0_lo, (p0_hi + p1_low) + p2_low);
         rem = struct.new "core:prelude/int128.wado//u128" { low: lo_27, high: hi_28 };
         if $inline_core_prelude_int128_wado_u128_core_prelude_traits_wado_Ord__cmp_10: block -> "core:prelude/traits.wado//enum:Ordering" {
             if rem.high <u divisor.high {

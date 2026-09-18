@@ -389,8 +389,7 @@ global global:serde_json_int_types.wado::$const_obj_20: ref null Array<u8> = arr
 global global:serde_json_int_types.wado::$const_obj_23: ref null Array<u8> = array.new_fixed<u8>(54, 53, 53, 51, 53);
 global global:serde_json_int_types.wado::$const_obj_26: ref null Array<u8> = array.new_fixed<u8>(57, 48, 48, 55, 49, 57, 57, 50, 53, 52, 55, 52, 48, 57, 57, 49);
 global global:serde_json_int_types.wado::$const_obj_29: ref null Array<u8> = array.new_fixed<u8>(34, 57, 48, 48, 55, 49, 57, 57, 50, 53, 52, 55, 52, 48, 57, 57, 50, 34);
-global mut global:serde_json_int_types.wado::$const_obj_36: ref null "core:prelude/string.wado//StrSlice" = ref.null none;
-global global:serde_json_int_types.wado::$const_obj_39: ref null Array<u8> = array.new_fixed<u8>(34, 49, 56, 52, 52, 54, 55, 52, 52, 48, 55, 51, 55, 48, 57, 53, 53, 49, 54, 49, 53, 34);
+global global:serde_json_int_types.wado::$const_obj_36: ref null Array<u8> = array.new_fixed<u8>(34, 49, 56, 52, 52, 54, 55, 52, 52, 48, 55, 51, 55, 48, 57, 53, 53, 49, 54, 49, 53, 34);
 global global:core:prelude/format.wado::$const_obj_40: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::$const_obj_41: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
 global global:core:json::$const_obj_42: ref null Array<u8> = array.new_fixed<u8>(10);
@@ -840,8 +839,7 @@ fn "serde_json_int_types.wado/$test_8_u64_max_as_string"() {
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    let repr_35: ref Array<u8>;
-    let $sroa_input_repr: ref Array<u8>;
+    let repr_31: ref Array<u8>;
     let r_mv_0: i32;
     let r_mv_1: ref null "core:prelude/string.wado//String";
     let r_mv_2: ref null "core:serde//SerializeError";
@@ -851,7 +849,7 @@ fn "serde_json_int_types.wado/$test_8_u64_max_as_string"() {
         $cond_4 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             a = s.repr;
             a_end = s.used;
-            b = global:serde_json_int_types.wado::$const_obj_39;
+            b = global:serde_json_int_types.wado::$const_obj_36;
             if a_end != 22 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
@@ -883,7 +881,7 @@ condition: s == `\"18446744073709551615\"`
     let d_mv_0: i32;
     let d_mv_1: u64;
     let d_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [d_mv_0, d_mv_1, d_mv_2] = "core:json/core/json/from_bytes<u64,core:prelude/bytes.wado/ByteSlice>"(global:serde_json_int_types.wado::$const_obj_36 = $sroa_input_repr = array.new_fixed<u8>(34, 49, 56, 52, 52, 54, 55, 52, 52, 48, 55, 51, 55, 48, 57, 53, 53, 49, 54, 49, 53, 34); struct.new "core:prelude/string.wado//StrSlice" { repr: $sroa_input_repr, start: 0, end: 22 }; repr_35 = global:serde_json_int_types.wado::$const_obj_36.repr; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_35, start: 0, end: 22 });
+    multivalue_bind [d_mv_0, d_mv_1, d_mv_2] = "core:json/core/json/from_bytes<u64,core:prelude/bytes.wado/ByteSlice>"(repr_31 = global:serde_json_int_types.wado::$const_obj_36; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_31, start: 0, end: 22 });
     if @likely(d_mv_0 == 0) {
         if @unlikely(d_mv_1 != -1_i64) {
             cold_path;
@@ -970,8 +968,6 @@ fn "serde_json_int_types.wado/$cm_export__$test_5_i64_above_safe_limit_as_string
 }
 
 fn "serde_json_int_types.wado/$cm_export__$test_6_i64_deserialize_from_string"() {
-    let self_12: ref "core:prelude/string.wado//StrSlice";
-    let repr_13: ref Array<u8>;
     let $sroa_input_repr: ref Array<u8>;
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:serde_json_int_types.wado::$modules_initialized);
@@ -984,7 +980,7 @@ fn "serde_json_int_types.wado/$cm_export__$test_6_i64_deserialize_from_string"()
     let r_mv_0: i32;
     let r_mv_1: i64;
     let r_mv_2: ref null "core:serde//DeserializeError";
-    multivalue_bind [r_mv_0, r_mv_1, r_mv_2] = "core:json/core/json/from_bytes<i64,core:prelude/bytes.wado/ByteSlice>"(self_12 = struct.new "core:prelude/string.wado//StrSlice" { repr: $sroa_input_repr, start: 0, end: 18 }; repr_13 = self_12.repr; struct.new "core:prelude/slice.wado//Slice<u8>" { repr: repr_13, start: 0, end: 18 });
+    multivalue_bind [r_mv_0, r_mv_1, r_mv_2] = "core:json/core/json/from_bytes<i64,core:prelude/bytes.wado/ByteSlice>"(struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_input_repr, start: 0, end: 18 });
     if @likely(r_mv_0 == 0) {
         if @unlikely(r_mv_1 != 9007199254740992_i64) {
             cold_path;
@@ -1868,7 +1864,6 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let truncated: bool;
     let self_11: i32;
     let self_12: ref "core:prelude/string.wado//String";
-    let self_15: ref "core:prelude/string.wado//StrCharIter";
     let b0: u32;
     let b1_24: u32;
     let b1_25: u32;
@@ -1892,7 +1887,6 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let $sroa_slot_134: u32;
     let $sroa_slot_135: i32;
     let $fused_slot_136: char;
-    let $sroa_$iter_0_repr: ref Array<u8>;
     let $sroa_$iter_0_byte_index: i32;
     let $licm_arith_140: bool;
     let $licm_buf_141: ref "core:prelude/string.wado//String";
@@ -1900,7 +1894,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let new_used_149: i32;
     let start_150: i32;
     let repr_159: ref Array<u8>;
-    let self_162: ref "core:prelude/string.wado//StrSlice";
+    let end: i32;
     let new_used_168: i32;
     let start_169: i32;
     let new_used_182: i32;
@@ -1925,8 +1919,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     let start_309: i32;
     let new_used_322: i32;
     let start_323: i32;
-    let $licm_buf_344: ref "core:prelude/string.wado//String";
-    let $av_345: i32;
+    let $licm_buf_347: ref "core:prelude/string.wado//String";
     limit = $inline_core_prelude_format_wado_Formatter__resolved_seq_limit_scalar_0: block -> i32 {
         self_11 = f.precision;
         if self_11 == -2 {
@@ -1945,44 +1938,41 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     builtin::array_set_u8(self_12.repr, start_150, 34);
     count = 0;
     truncated = 0;
-    $av_345 = text.used;
     repr_159 = text.repr;
-    self_162 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_159, start: 0, end: $av_345 };
-    self_15 = struct.new "core:prelude/string.wado//StrCharIter" { repr: self_162.repr, used: $av_345, byte_index: 0 };
-    $sroa_$iter_0_repr = self_15.repr;
+    end = text.used;
     $sroa_$iter_0_byte_index = 0;
     $licm_arith_140 = limit >= 0;
     $licm_buf_141 = f.buf;
     $tmpl_buf_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    $licm_buf_344 = f.buf;
+    $licm_buf_347 = f.buf;
     b200: block {
         l201: loop {
-            break_if b200 $sroa_$iter_0_byte_index >= $av_345;
+            break_if b200 $sroa_$iter_0_byte_index >= end;
             $sroa_slot_134 = 0;
             $sroa_slot_135 = 0;
             $inline_decode_char_at_6: block {
-                b0 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index);
+                b0 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index);
                 if b0 <u 128 {
                     $sroa_slot_134 = b0;
                     $sroa_slot_135 = 1;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 224 {
-                    b1_24 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 1);
+                    b1_24 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 1);
                     $sroa_slot_134 = ((b0 & 31) << 6) | (b1_24 & 63);
                     $sroa_slot_135 = 2;
                     break $inline_decode_char_at_6;
                 }
                 if b0 <u 240 {
-                    b1_25 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 1);
-                    b2_26 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 2);
+                    b1_25 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 1);
+                    b2_26 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 2);
                     $sroa_slot_134 = (((b0 & 15) << 12) | ((b1_25 & 63) << 6)) | (b2_26 & 63);
                     $sroa_slot_135 = 3;
                     break $inline_decode_char_at_6;
                 }
-                b1_27 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 1);
-                b2_28 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 2);
-                b3 = builtin::array_get_value<u8>($sroa_$iter_0_repr, $sroa_$iter_0_byte_index + 3);
+                b1_27 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 1);
+                b2_28 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 2);
+                b3 = builtin::array_get_value<u8>(repr_159, $sroa_$iter_0_byte_index + 3);
                 $sroa_slot_134 = ((((b0 & 7) << 18) | ((b1_27 & 63) << 12)) | ((b2_28 & 63) << 6)) | (b3 & 63);
                 $sroa_slot_135 = 4;
                 break $inline_decode_char_at_6;
@@ -2097,7 +2087,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                     break $inline_count_digits_u64_base_36: (((64 - builtin::i32_wrap_i64(builtin::i64_clz(val_i64_91))) - 1) / 4) + 1;
                 };
                 offset = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"($tmpl_buf_142, 0, digit_count);
-                $licm_buf_141 = $licm_buf_344;
+                $licm_buf_141 = $licm_buf_347;
                 "core:prelude/primitive.wado/write_u64_base_digits"($tmpl_buf_142.repr, offset, val_i64_91, digit_count, 4, 15, 0);
                 $inline_core_prelude_string_wado_String__internal_push_string_41: block {
                     n_106 = $tmpl_buf_142.used;
