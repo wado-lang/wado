@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789690417044,
+  "lastUpdate": 1789693557750,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56641,6 +56641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1beaec34577833312bb2ffe5dca6e696a5048054"
         },
         "date": 1789690416033,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 286862,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "55ef0595dbef66c2cf1f9bd8051e5fda723d3e85",
+          "message": "Merge pull request #2077 from wado-lang/claude/modref-frame-local\n\nperf(value-copy): key a callee's writes by the handle each is reached through, 467x on json_catalog_v2",
+          "timestamp": "2026-09-18T09:50:18+09:00",
+          "tree_id": "d5bc4a7cc3ca8d943b5841ccb8168fe8953767c0",
+          "url": "https://github.com/wado-lang/wado/commit/55ef0595dbef66c2cf1f9bd8051e5fda723d3e85"
+        },
+        "date": 1789693557051,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
