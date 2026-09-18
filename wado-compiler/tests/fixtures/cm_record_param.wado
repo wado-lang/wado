@@ -1,0 +1,35 @@
+// A user-declared `#[cm]` record passed to an imported method. The binding asks
+// for the record's guest type, and the resolution chain reached the entry
+// module's own declarations by no step at all, so the record the compiler had
+// just registered was reported as having no type.
+
+#[cm("wasi:demo/gfx@0.1.0#options")]
+struct Options {
+    #[cm("label")]
+    label: Option<String>,
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.configure")]
+    #[cm_params("self", "options")]
+    fn configure(&self, options: Options) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+export fn run() with (Gfx, Device) {
+    let device = Gfx::get_device();
+    let _ = device.configure(Options { label: null });
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"options\"", "(type (eq"], "count": 1 }
+  ]
+}

@@ -290,6 +290,29 @@ struct TestSpec {
     /// A short pattern is otherwise answerable by any function in the dump.
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
+
+    /// Lines the emitted component's WAT must carry.
+    #[serde(default)]
+    wat_lines: Vec<WatLineSpec>,
+
+    /// Compile and stop. For a program whose subject is the component the
+    /// compiler emits, and whose imports the runner hosts nothing for.
+    #[serde(default)]
+    compile_only: bool,
+}
+
+/// A line of the emitted component's WAT: the substrings it holds, and how many
+/// such lines there must be. A CM import's shape — which names an instance type
+/// exports, which functions are aliased out of it — is visible here and nowhere
+/// a run reaches.
+#[derive(Debug, serde::Deserialize)]
+struct WatLineSpec {
+    /// Substrings that must all appear on one trimmed line.
+    contains: Vec<String>,
+
+    /// How many lines must match. Omitted means at least one.
+    #[serde(default)]
+    count: Option<usize>,
 }
 
 impl TestSpec {
@@ -897,6 +920,12 @@ fn run_normal_test(
         keep_wasm_artifacts(&dir, &fixture_name, opt_name, &wasm, test_id);
     }
 
+    assert_wat_lines(&wasm, &spec.wat_lines, test_id);
+
+    if spec.compile_only {
+        return;
+    }
+
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
         match run_http_request(
@@ -1073,6 +1102,34 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// Write the compiled wasm (and a wat decoded from it) under `dir` so it can
 /// be inspected and diffed against `wado compile`. Activated by setting the
+/// Check each `wat_lines` entry against the emitted component's WAT.
+fn assert_wat_lines(wasm: &[u8], specs: &[WatLineSpec], test_id: &str) {
+    if specs.is_empty() {
+        return;
+    }
+    let wat = wasmprinter::print_bytes(wasm)
+        .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
+    for spec in specs {
+        let matched: Vec<&str> = wat
+            .lines()
+            .map(str::trim)
+            .filter(|line| spec.contains.iter().all(|needle| line.contains(needle)))
+            .collect();
+        let wanted = spec.count.unwrap_or(1);
+        let ok = match spec.count {
+            Some(exact) => matched.len() == exact,
+            None => !matched.is_empty(),
+        };
+        assert!(
+            ok,
+            "[{test_id}] expected {wanted}{} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
+            if spec.count.is_some() { "" } else { " or more" },
+            spec.contains,
+            matched.len(),
+        );
+    }
+}
+
 /// `WADO_KEEP_WASM_DIR` environment variable. Failures are reported via
 /// `eprintln!` and never block the test.
 fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8], test_id: &str) {

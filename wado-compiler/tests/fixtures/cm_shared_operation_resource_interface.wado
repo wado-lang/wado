@@ -1,0 +1,46 @@
+// The same rule for a resource-defining interface, which a second emitter
+// builds. It kept its own function lists, so the deduplication the first
+// emitter applied left this one exporting the CM name twice.
+
+#[cm("wasi:demo/gfx@0.1.0#adapter")]
+resource Adapter {
+    #[cm("wasi:demo/gfx@0.1.0#[method]adapter.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.adapter")]
+    #[cm_params("self")]
+    fn adapter(&self) -> Option<Adapter>;
+
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+interface GfxAgain {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn device_again() -> Device;
+}
+
+export fn run() with (Gfx, GfxAgain, Device) {
+    let a = Gfx::get_device();
+    let b = GfxAgain::device_again();
+    let _ = a.id() + b.id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"get-device\""], "count": 1 },
+    { "contains": ["(alias export $wasi:demo/gfx", "\"get-device\""], "count": 2 }
+  ]
+}

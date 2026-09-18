@@ -184,10 +184,14 @@ pub fn resolve_import_plan(
         let Some((resource_wado_name, _)) = &interface_info.resource_type else {
             continue;
         };
+        // This interface's own used operations, not merely some operation of a
+        // Wado name it shares: a user module may name a resource what a bundled
+        // interface names one, and gating on the name alone imported that
+        // bundled interface into a program that never mentions it.
         let needed = interface_info
             .functions
-            .first()
-            .is_some_and(|f| project.has_interface(&f.interface_name));
+            .iter()
+            .any(|f| project.used_wasi_functions.contains(&f.used_key()));
         if !needed {
             continue;
         }

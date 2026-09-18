@@ -1,0 +1,19 @@
+// A `[method]T.m` CM name applies to the Component Model resource `T`. An
+// unrestricted resource crosses the boundary as a plain handle and declares no
+// resource type, so the name names nothing — which the component validator
+// rejected as an internal error instead of the compiler reporting it.
+
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+resource Subject {
+    #[cm("wasi:demo/events@0.1.0#[method]event-target.tag")]
+    #[cm_params("self")]
+    fn tag(&self) -> String;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "unrestricted",
+  "compile_errors_contains": ["[method]event-target.tag", "unrestricted"]
+}

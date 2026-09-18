@@ -1,0 +1,29 @@
+// A user module's `#[cm]` interface is found by the interface it names, not by
+// its namespace. Codegen tested `source.starts_with("wasi:")`, so a resource in
+// any other namespace was invisible and its handle had no type to lower to.
+
+#[cm("acme:demo/gfx@0.1.0#thing")]
+resource Thing {
+    #[cm("acme:demo/gfx@0.1.0#[method]thing.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("acme:demo/gfx@0.1.0#get-thing")]
+    fn get_thing() -> Thing;
+}
+
+export fn run() with (Api, Thing) {
+    let t = Api::get_thing();
+    let _ = t.id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"acme:demo/gfx@0.1.0\""], "count": 1 },
+    { "contains": ["(alias export", "\"get-thing\""], "count": 1 }
+  ]
+}

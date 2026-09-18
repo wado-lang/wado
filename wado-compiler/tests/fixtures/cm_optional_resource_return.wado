@@ -1,0 +1,43 @@
+// A resource method returning `Option<Resource>` reaches the handle through the
+// shared type walk, which asks for own-handles by CM name. The instance-type
+// builder keys its map by Wado name, so the handle was looked up under a name
+// the map never held.
+//
+// The binding then lifts the option as `Option<i32>`, since a restricted
+// resource is an `i32` at the CM boundary, and the call site retypes it to
+// `Option<Adapter>`. That retyping walks the body statement by statement, and
+// the `None` an option lift seeds its accumulator with was the one starting
+// shape it did not recognize, so the two arms of one option landed in different
+// GC type families.
+
+#[cm("wasi:demo/gfx@0.1.0#adapter")]
+resource Adapter {
+    #[cm("wasi:demo/gfx@0.1.0#[method]adapter.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.adapter")]
+    #[cm_params("self")]
+    fn adapter(&self) -> Option<Adapter>;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+export fn run() with (Gfx, Device) {
+    let device = Gfx::get_device();
+    let _ = device.adapter();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"adapter\"", "(sub resource)"], "count": 1 }
+  ]
+}

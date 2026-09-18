@@ -1,0 +1,25 @@
+// Two Wado names binding one CM operation. The instance type describes the
+// imported interface, so it exports the CM name once; the core module imports
+// one alias per used Wado name.
+use { println, Stdout } from "core:cli";
+use { Random } from "wasi:random";
+
+interface Entropy {
+    #[cm("wasi:random/random@0.3.0#get-random-u64")]
+    fn next() -> u64;
+}
+
+export fn run() with (Stdout, Entropy, Random) {
+    let _ = Entropy::next();
+    let _ = Random::get_random_u64();
+    println("both drawn");
+}
+
+__DATA__
+{
+  "stdout": "both drawn\n",
+  "wat_lines": [
+    { "contains": ["(export", "\"get-random-u64\""], "count": 1 },
+    { "contains": ["(alias export $wasi:random/random"], "count": 2 }
+  ]
+}

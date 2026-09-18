@@ -1,0 +1,33 @@
+// The same record behind an `Option`, which reaches it through a different
+// type walk.
+
+#[cm("wasi:demo/gfx@0.1.0#options")]
+struct Options {
+    #[cm("label")]
+    label: Option<String>,
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.configure")]
+    #[cm_params("self", "options")]
+    fn configure(&self, options: Option<Options>) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+export fn run() with (Gfx, Device) {
+    let device = Gfx::get_device();
+    let _ = device.configure(null);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"options\"", "(type (eq"], "count": 1 }
+  ]
+}
