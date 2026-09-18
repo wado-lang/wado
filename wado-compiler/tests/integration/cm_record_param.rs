@@ -1,7 +1,7 @@
 //! A user-declared `#[cm]` record passed to an imported method. The binding
 //! asks `cm_type_to_type_id` for the record's guest type, and its resolution
 //! chain reached the entry module's own declarations by no step at all, so the
-//! record it had just registered was reported as having no TypeId.
+//! record it had just registered was reported as having no `TypeId`.
 
 use crate::common::compile_source;
 
