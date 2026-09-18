@@ -288,12 +288,17 @@ something real and may be worth it.
   against its own scalar form, which catches a transcription error but not a
   wrong constant shared by both. Closing it means a fixture per algorithm
   against the reference implementation's published output.
-- `VectorRng` cannot be written against generically. Projecting the batch
-  through an associated type resolves (`R: VectorRng<Batch = [..V]>`
-  type-checks and `for let v of` unrolls), but bounding what the members admit
-  does not: a bound takes only `Name = Type`, and `BitXor`'s `Rhs` is a type
-  parameter no bound can name. The fixed sixteen-word batch is what stands in
-  for that until it can.
+- An operator does not resolve through a type pack's bound. The bound itself is
+  written and enforced — `..V: Fold` reports a violation naming `V` — and a
+  pack member answers a trait method, so a generic consumer over
+  `R: VectorRng<Batch = [..V]>, ..V: Fold` compiles and runs. But `v ^ acc`
+  under `..V: BitXor<u64x2, Output = u64x2>` fails with `operator ^ cannot be
+  applied to types ..V and u64x2`, naming the pack where the member belongs,
+  at either operand order, while the same bound on a scalar type parameter
+  resolves. Closing it means teaching operator resolution to reach a pack
+  member's bounds. Until then a generic consumer calls a method instead of
+  writing the operator, which is why the fixed sixteen-word batch costs nothing
+  in generality it would otherwise have.
 - SHISHUA has no jump and no proven stream separation, so its lanes rest on
   seeding alone. Closing it is not possible within the algorithm; the honest
   answer is that a consumer needing proven disjointness uses xoshiro.

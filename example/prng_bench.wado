@@ -651,12 +651,11 @@ fn drain_shishua_bulk(rng: &mut Shishua, n: i32) -> u64 {
 // destructures, so nothing is allocated and the eight vectors stay in
 // registers — the same WIR the boundary-free version compiles to.
 //
-// The width is fixed at eight here because a generic consumer cannot yet be
-// written. Projecting the round through an associated type works
-// (`R: RoundRng<Round = [..V]>` type-checks and `for let v of` unrolls), but
-// saying what the members admit does not: a bound takes only `Name = Type`, so
-// `..V: BitXor<u64x2, Output = u64x2>` will not parse. `BitXor`'s `Rhs` is a
-// type parameter rather than an associated type, and nothing can name it.
+// The width is fixed at eight here so the trait costs what the round costs. A
+// generic consumer over `R: VectorRng<Batch = [..V]>, ..V: Fold` does compile
+// and run, but only by calling a trait method on each member: an operator does
+// not resolve through a pack's bound, and `acc ^ v` reports `..V` where the
+// member belongs.
 trait VectorRound with () {
     fn round_of(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
 }
