@@ -343,10 +343,8 @@ impl<'a> Resolver<'a> {
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
                 match self.builtins.part_of(func).and_then(|p| args.get(p)) {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
-                    // A builtin naming no component of a parameter may still
-                    // hand one back rather than a copy — `builtin::select`
-                    // returns an operand — so a storage-carrying result is no
-                    // value of its own.
+                    // `builtin::select` names no component and still hands one
+                    // back, so a storage-carrying result is no value of its own.
                     None if carries_storage(expr.type_id, self.type_table) => Names::Unknown,
                     None => Names::Value,
                 }

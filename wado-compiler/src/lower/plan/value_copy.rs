@@ -221,13 +221,7 @@ pub fn plan(
             &conventions.returns_self_projection,
             &builtins,
         );
-        modref::compute_mod_ref(
-            flat,
-            &return_paths,
-            &conventions.returns_owned,
-            &oracle,
-            &builtins,
-        )
+        modref::compute_mod_ref(flat, &return_paths, &oracle, &builtins)
     };
     ValueCopyPlan {
         helpers,

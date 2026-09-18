@@ -191,7 +191,6 @@ struct PendingProjection {
 pub fn compute_mod_ref(
     flat: &FlatPackage,
     return_paths: &ReturnPaths,
-    returns_owned: &FuncKeySet,
     oracle: &OwnedCalls,
     builtins: &BuiltinDeclarations,
 ) -> ModRef {
@@ -215,15 +214,8 @@ pub fn compute_mod_ref(
     )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees, pending) = scan(
-            &func,
-            &type_table,
-            &defined,
-            return_paths,
-            returns_owned,
-            oracle,
-            builtins,
-        );
+        let (writes, callees, pending) =
+            scan(&func, &type_table, &defined, return_paths, oracle, builtins);
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
@@ -278,7 +270,6 @@ fn scan(
     type_table: &TypeTable,
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
-    returns_owned: &FuncKeySet,
     oracle: &OwnedCalls,
     builtins: &BuiltinDeclarations,
 ) -> (Writes, Vec<CallSite>, Vec<PendingProjection>) {
@@ -292,7 +283,13 @@ fn scan(
             Vec::new(),
         );
     };
-    let resolver = Resolver::new(func, type_table, return_paths, returns_owned, builtins);
+    let resolver = Resolver::new(
+        func,
+        type_table,
+        return_paths,
+        oracle.returns_owned(),
+        builtins,
+    );
     let mut walker = Walker {
         type_table,
         defined,
@@ -347,8 +344,8 @@ impl Walker<'_> {
                 None => Handed::Unobservable,
             },
             // A value names storage of its own, so a write into it reaches no
-            // caller of this frame. One that may alias an operand instead is
-            // `Names::Unknown`, which `names` is what decides.
+            // caller of this frame. One that may alias an operand is
+            // `Names::Unknown` instead, which is `names`'s line to draw.
             Names::Value => Handed::Unobservable,
             Names::Unknown => Handed::Caller(Origin::Unknown),
         }
