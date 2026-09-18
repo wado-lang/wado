@@ -197,11 +197,16 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
-- [ ] Folding a constant `${x:spec}` to its rendered literal. The text now
-      narrows at compile time, but `Formatter::pad` still runs, because the
-      frame has no value for the `&mut String` its `buf` field names. Closing it
-      means valuing a writable reference field by the place it names, so the
-      writes a handler makes through it land there.
+- [ ] Folding an interpolation that reaches a `Formatter` to its rendered
+      literal — `${x:spec}` and `${x:?}` alike. The text narrows at compile
+      time, but `Formatter::pad` and `Inspect::inspect` still run, because the
+      frame has no value for the `&mut String` the `buf` field names. A
+      fully-constant `assert x.show() == "…"` therefore keeps the whole format
+      and `Inspect` machinery instead of folding to nothing, which is what the
+      `trait_local_struct_receiver_blanket` and
+      `impl_mixed_target_method_generic` goldens carry. Closing it means valuing
+      a writable reference field by the place it names, so the writes made
+      through it land there.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
       writes them. Together they retire a scratch aggregate at its allocation
