@@ -915,7 +915,7 @@ fn squares64(ctr: u64, key: u64) -> u64 {
     x = x >> 32 | x << 32;
     let t = x * x + z;
     x = t >> 32 | t << 32;
-    return t ^ (x * x + y) >> 32;
+    return t ^ x * x + y >> 32;
 }
 
 // Swapping the halves of each 64-bit lane is one shuffle, where the scalar form
@@ -956,7 +956,7 @@ fn squares64x2(ctr: u64x2, key: u64x2) -> u64x2 {
     x = swap32x2(x);
     let t = x * x + z;
     x = swap32x2(t);
-    return t ^ (x * x + y) >> 32;
+    return t ^ x * x + y >> 32;
 }
 
 global THREEFRY_PARITY: u64 = 0x1BD11BDAA9FC1A22;
