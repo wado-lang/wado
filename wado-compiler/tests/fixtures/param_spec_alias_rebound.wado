@@ -1,0 +1,58 @@
+// Regression: a borrow that stops naming one object is no root.
+//
+// `param_spec` treats `let r = &cfg;` as a second name for `cfg`, which means
+// the read under the `&` is a use it accounts for rather than one that makes
+// `cfg` opaque. A local bound to two different bases, or assigned something
+// that is not a borrow at all, names neither — and the reads it left behind
+// used to stay accounted for with no edge to carry the writes back, so `cfg`
+// kept a `level` that a write through `r` had already replaced.
+//
+// `rebound` takes the first shape and `escaped` the second. Both print 63:
+// `describe` must see `level == 9`, not the 3 it was built with.
+
+use { println, Stdout } from "core:cli";
+
+struct Config { verbose: bool, level: i32 }
+
+#[inline(never)]
+fn describe(cfg: &Config, n: i32) -> i32 {
+    if cfg.verbose {
+        return n * cfg.level;
+    }
+    return n;
+}
+
+#[inline(never)]
+fn pick(a: &mut Config) -> &mut Config {
+    return a;
+}
+
+fn rebound(n: i32) -> i32 {
+    let mut cfg = Config { verbose: true, level: 3 };
+    let mut other = Config { verbose: true, level: 3 };
+    let mut r = &mut cfg;
+    r.level = 9;
+    r = &mut other;
+    r.level = 3;
+    return describe(&cfg, n);
+}
+
+fn escaped(n: i32) -> i32 {
+    let mut cfg = Config { verbose: true, level: 3 };
+    let mut other = Config { verbose: true, level: 3 };
+    let mut r = &mut cfg;
+    r.level = 9;
+    r = pick(&mut other);
+    r.level = 3;
+    return describe(&cfg, n);
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    println(`${rebound(n)} ${escaped(n)}`);
+}
+
+__DATA__
+{
+    "stdout": "63 63\n"
+}

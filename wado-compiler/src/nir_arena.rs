@@ -562,6 +562,75 @@ impl Body {
         }
     }
 
+    /// The local a bare skeleton `Local` operand reads, with its node. `None` for
+    /// a promoted value or anything else.
+    pub fn local_read(&self, op: Operand) -> Option<(u32, ExprId)> {
+        let expr = op.as_expr()?;
+        match &self.exprs[expr].kind {
+            ExprKind::Local { index, .. } => Some((*index, expr)),
+            _ => None,
+        }
+    }
+
+    /// The local `&x` / `&mut x` borrows, with the node reading it. `None` for
+    /// anything else.
+    pub fn borrowed_local(&self, op: Operand) -> Option<(u32, ExprId)> {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+            expr: inner,
+        } = &self.exprs[op.as_expr()?].kind
+        else {
+            return None;
+        };
+        self.local_read(*inner)
+    }
+
+    /// The storage a shared borrow names, where that is storage a `&` alone
+    /// reaches: a literal, or a global. `&G.repr` answers the `G` as much as
+    /// `&G` does. Whether *that* global holds one value is the caller's
+    /// question, and only the caller knows the program.
+    pub fn shared_ref_root(&self, op: Operand) -> Option<ExprId> {
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } = &self.exprs[self.strip_casts(op.as_expr()?)].kind
+        else {
+            return None;
+        };
+        self.borrow_root(*inner)
+    }
+
+    fn borrow_root(&self, op: Operand) -> Option<ExprId> {
+        let e = op.as_expr()?;
+        match &self.exprs[e].kind {
+            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => Some(e),
+            ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::Deref,
+                expr: inner,
+            } => self.borrow_root(*inner),
+            // The `{ G = v; G }` a globalized constant is read through.
+            ExprKind::LabeledBlock { .. } => {
+                self.block_yield(e).and_then(|tail| self.borrow_root(tail))
+            }
+            _ => None,
+        }
+    }
+
+    /// What a cast chain names, a cast naming the same storage as its operand.
+    pub fn strip_casts(&self, e: ExprId) -> ExprId {
+        let mut e = e;
+        while let ExprKind::Cast { expr: inner, .. } = &self.exprs[e].kind {
+            let Some(inner) = inner.as_expr() else {
+                return e;
+            };
+            e = inner;
+        }
+        e
+    }
+
     /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
     /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
     /// filter): callers that only need the value (capacities, zero-tests) avoid

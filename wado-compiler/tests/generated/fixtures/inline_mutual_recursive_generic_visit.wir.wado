@@ -657,17 +657,15 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<in
 }
 
 fn "core:prelude/array.wado/core/prelude/array.wado/seq_eq<inline_mutual_recursive_generic_visit.wado/Node>"(a, a_end, b, b_end) {
-    let len: i32;
     let i: i32;
-    len = a_end - 0;
-    if len != (b_end - 0) {
+    if a_end != b_end {
         return 0;
     }
     i = 0;
     b52: block {
         l53: loop {
-            break_if b52 i >= len;
-            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq$scalar"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, 0 + i) }, builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, 0 + i)) == 0 {
+            break_if b52 i >= a_end;
+            if "inline_mutual_recursive_generic_visit.wado/inline_mutual_recursive_generic_visit.wado/Node^core:prelude/traits.wado/Eq::eq$scalar"(struct.new "core:prelude/types.wado//Box<inline_mutual_recursive_generic_visit.wado/Node>" { value: builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(a, i) }, builtin::array_get_value<ref "inline_mutual_recursive_generic_visit.wado//Node">(b, i)) == 0 {
                 return 0;
             }
             i = i + 1;
@@ -1641,7 +1639,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
     $av_308 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    prefix_len = select i32(self.alternate, $av_310, 0);
     content_len = (sign_len + prefix_len) + digit_count;
     $av_309 = self.width;
     if select i32($av_309 <= 0, 1, content_len >= $av_309) {

@@ -31,10 +31,12 @@ fn drive(n: i32) -> i32 {
     return -1;
 }
 
+// `black_box` keeps the arguments off the constant path: specializing `drive`
+// on them renames the callees the expectations below pin.
 export fn run() {
-    assert drive(3) == 100;
-    assert drive(2) == 0;
-    assert drive(-1) == -1;
+    assert drive(builtin::black_box(3)) == 100;
+    assert drive(builtin::black_box(2)) == 0;
+    assert drive(builtin::black_box(-1)) == -1;
 }
 
 __DATA__

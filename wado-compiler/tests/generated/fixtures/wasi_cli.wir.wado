@@ -226,8 +226,8 @@ fn "wasi_cli.wado/$cm_binding__Environment_get_environment"() with Environment {
     b2: block {
         l3: loop {
             break_if b2 $i >= $count;
-            ptr_9 = builtin::load_i32(local.tee $elem_addr($base + ($i * 16)) + 0);
-            len_10 = builtin::load_i32(($elem_addr + 0) + 4);
+            ptr_9 = builtin::load_i32(local.tee $elem_addr($base + ($i * 16)));
+            len_10 = builtin::load_i32($elem_addr + 4);
             arr_14 = builtin::array_new<u8>(len_10);
             i_15 = 0;
             b4: block {
@@ -260,7 +260,7 @@ fn "wasi_cli.wado/$cm_binding__Environment_get_environment"() with Environment {
             }
             builtin::array_set<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">($result.repr, used, value_28);
             $result.used = used + 1;
-            drop("mem/realloc"(builtin::load_i32($elem_addr + 0), builtin::load_i32(($elem_addr + 0) + 4), 1, 0));
+            drop("mem/realloc"(builtin::load_i32($elem_addr), builtin::load_i32($elem_addr + 4), 1, 0));
             drop("mem/realloc"(builtin::load_i32($elem_addr + 8), builtin::load_i32(($elem_addr + 8) + 4), 1, 0));
             $i = $i + 1;
             continue l3;

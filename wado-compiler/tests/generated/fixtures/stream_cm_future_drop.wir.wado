@@ -261,7 +261,7 @@ fn "stream_cm_future_drop.wado/$cm_binding__Response_new"(headers, contents, tra
     }
     $outptr = "mem/realloc"(0, 0, 4, 8);
     "wasi/wasi:http/Response::new"(headers, $contents_disc, $contents_inner0, trailers, $outptr);
-    $lifted_result_8 = builtin::load_i32($outptr + 0);
+    $lifted_result_8 = builtin::load_i32($outptr);
     $lifted_result_9 = builtin::load_i32($outptr + 4);
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]" { 0: $lifted_result_8, 1: $lifted_result_9 };

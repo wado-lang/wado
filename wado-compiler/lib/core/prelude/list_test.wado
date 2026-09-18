@@ -670,3 +670,18 @@ test "an out-of-range Slice subscript reports both bounds" {
     assert s[0] == 1;
     assert s[2] == 3;
 }
+
+test "contains_str takes any text" {
+    let names: List<String> = ["alpha", "beta"];
+    let haystack = "xx-beta-xx".as_str_slice();
+
+    assert names.contains_str(haystack.sub(3, 7));
+    assert !names.contains_str(haystack.sub(0, 2));
+    assert names.contains_str("alpha");
+    assert !names.contains_str("");
+}
+
+test "contains_str on an empty list" {
+    let names: List<String> = [];
+    assert !names.contains_str("alpha");
+}

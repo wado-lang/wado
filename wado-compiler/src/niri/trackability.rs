@@ -8,7 +8,9 @@
 
 use crate::hashmap::IndexSet;
 use crate::nir::NirUnaryOp;
-use crate::nir_arena::{Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    Body, ExprId, ExprKind, LocalSet, NodeRef, Operand, PatKind, StmtId, StmtKind,
+};
 
 use super::place::{
     borrowed_place_operand, lvalue_root_local, peel_wrappers, place_of, write_root_local,
@@ -250,6 +252,7 @@ pub(super) fn aggregate_safe_locals(
     body: &Body,
     reached: &Reached,
     type_table: &TypeTable,
+    const_views: &LocalSet,
 ) -> LocalSet {
     fn disqualify_root(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
@@ -261,7 +264,7 @@ pub(super) fn aggregate_safe_locals(
         }
     }
     let share_root = |body: &Body, op: Operand, set: &mut LocalSet| {
-        if let Some(index) = shared_reference_root(body, op, type_table) {
+        if let Some(index) = shared_reference_root(body, op, type_table, const_views) {
             compiler_trace!(
                 "region_seed",
                 "not aggregate-safe: local {index} shared via {op:?}"
@@ -376,7 +379,12 @@ pub(super) fn aggregate_safe_locals(
 ///
 /// Reachable body only, as in [`aggregate_safe_locals`]. The arena keeps every
 /// node an in-place rewrite displaced, and one nothing refers to cannot run.
-pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &TypeTable) -> LocalSet {
+pub(super) fn clobbered_locals(
+    body: &Body,
+    reached: &Reached,
+    type_table: &TypeTable,
+    const_views: &LocalSet,
+) -> LocalSet {
     fn disqualify(body: &Body, op: Operand, set: &mut LocalSet) {
         if let Some(index) = lvalue_root_local(body, op) {
             compiler_trace!("region_seed", "clobbered: local {index} via {op:?}");
@@ -419,14 +427,18 @@ pub(super) fn clobbered_locals(body: &Body, reached: &Reached, type_table: &Type
             }
             ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
                 for element in elements {
-                    if let Some(index) = shared_reference_root(body, *element, type_table) {
+                    if let Some(index) =
+                        shared_reference_root(body, *element, type_table, const_views)
+                    {
                         set.insert(index);
                     }
                 }
             }
             ExprKind::StructLiteral { fields, .. } => {
                 for field in fields {
-                    if let Some(index) = shared_reference_root(body, field.value, type_table) {
+                    if let Some(index) =
+                        shared_reference_root(body, field.value, type_table, const_views)
+                    {
                         set.insert(index);
                     }
                 }
@@ -451,23 +463,75 @@ fn reassigned_locals(body: &Body) -> LocalSet {
     set
 }
 
+/// Locals that name settled storage: every binding of one is a shared borrow
+/// rooted at a literal or at a global the program holds one value for, and
+/// nothing rebinds it. Nothing can write what such a local names, so a value
+/// read off it stands as long as the body does.
+pub(super) fn const_view_locals(
+    body: &Body,
+    facts: ProgramFacts<'_>,
+    reassigned: &LocalSet,
+) -> LocalSet {
+    let settled = |op: Operand| {
+        body.shared_ref_root(op)
+            .is_some_and(|root| match &body.exprs[root].kind {
+                ExprKind::PackedArray(_) => true,
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => facts.global_is_const(&(module_source.clone(), name.clone())),
+                _ => false,
+            })
+    };
+    let mut set = LocalSet::default();
+    let mut rebound = LocalSet::default();
+    body.for_each_reachable_node(|node| match node {
+        NodeRef::Stmt(s) => {
+            if let StmtKind::Let {
+                local_index, value, ..
+            } = &body.stmts[s].kind
+            {
+                if settled(*value) {
+                    set.insert(*local_index);
+                } else {
+                    rebound.insert(*local_index);
+                }
+            }
+        }
+        NodeRef::Pat(p) => {
+            if let PatKind::Binding { local_index, .. } = &body.pats[p].kind {
+                rebound.insert(*local_index);
+            }
+        }
+        NodeRef::Expr(_) | NodeRef::Block(_) => {}
+    });
+    let mut out = LocalSet::default();
+    for index in set.iter() {
+        if !rebound.contains(index) && !reassigned.contains(index) {
+            out.insert(index);
+        }
+    }
+    out
+}
+
 /// The local a stored reference names. An aggregate holding one is a second
 /// holder of its object — a closure environment over a boxed local is the shape
-/// this reaches. A value element copies, so only a reference shape answers.
-fn shared_reference_root(body: &Body, op: Operand, type_table: &TypeTable) -> Option<u32> {
+/// this reaches. A value element copies, so only a reference shape answers, and
+/// a [`const_view_locals`] one answers nothing: nothing writes what it names.
+fn shared_reference_root(
+    body: &Body,
+    op: Operand,
+    type_table: &TypeTable,
+    const_views: &LocalSet,
+) -> Option<u32> {
     let e = op.as_expr()?;
     if !type_table.is_reference_shaped(body.exprs[e].type_id) {
         return None;
     }
-    let mut e = e;
-    // A cast names the same storage as its operand, so it hides no holder.
-    while let ExprKind::Cast { expr: inner, .. } = &body.exprs[e].kind {
-        e = inner.as_expr()?;
-    }
-    let ExprKind::Local { index, .. } = &body.exprs[e].kind else {
+    let ExprKind::Local { index, .. } = &body.exprs[body.strip_casts(e)].kind else {
         return None;
     };
-    Some(*index)
+    (!const_views.contains(*index)).then_some(*index)
 }
 
 /// Locals whose object no second expression reaches: read exactly once, and
@@ -519,6 +583,8 @@ pub(super) struct Trackability {
     /// carries can be displaced, so it cannot stand for a place; one nothing
     /// reassigns can, whether or not it was spelled `let mut`.
     pub(super) reassigned: LocalSet,
+    /// See [`const_view_locals`].
+    pub(super) const_views: LocalSet,
 }
 
 impl Trackability {
@@ -526,11 +592,13 @@ impl Trackability {
     pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
         let reassigned = reassigned_locals(body);
         let reached = Reached::in_frame(body, facts, &reassigned);
+        let const_views = const_view_locals(body, facts, &reassigned);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),
             unshared: unshared_locals(body),
-            clobbered: clobbered_locals(body, &reached, type_table),
+            clobbered: clobbered_locals(body, &reached, type_table, &const_views),
             reassigned,
+            const_views,
         }
     }
 
@@ -542,11 +610,14 @@ impl Trackability {
         type_table: &TypeTable,
     ) -> Self {
         let reached = Reached::outside_frame(body, facts);
+        let reassigned = reassigned_locals(body);
+        let const_views = const_view_locals(body, facts, &reassigned);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached, type_table),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),
             unshared: unshared_locals(body),
             clobbered: LocalSet::default(),
-            reassigned: reassigned_locals(body),
+            reassigned,
+            const_views,
         }
     }
 }

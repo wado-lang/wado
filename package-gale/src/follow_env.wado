@@ -91,7 +91,7 @@ impl FollowEnv {
     /// for unknown rules, which is the safe choice: an unknown rule
     /// cannot collide with any caller's follow.
     pub fn tail_greedy<S: AsStrSlice>(&self, rule_name: S) -> List<String> {
-        if let Some(s) = self.tail_greedy.get(rule_name.to_string()) {
+        if let Some(s) = self.tail_greedy.get_str(rule_name) {
             return s;
         }
         return [];
@@ -100,7 +100,7 @@ impl FollowEnv {
     /// FOLLOW set for `rule_name`. Returns the empty/closed=false set
     /// for unknown rules.
     pub fn rule_follow<S: AsStrSlice>(&self, rule_name: S) -> FollowSet {
-        if let Some(s) = self.rule_follow.get(rule_name.to_string()) {
+        if let Some(s) = self.rule_follow.get_str(rule_name) {
             return s;
         }
         return FollowSet::empty();

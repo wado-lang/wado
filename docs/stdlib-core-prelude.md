@@ -2838,6 +2838,11 @@ Create a Formatter with the default spec, writing into the given buffer.
 
 Write any `AsStrSlice` text to the output buffer.
 
+#### `pub fn write_display<T: Display>(&mut self, value: &T)`
+
+Write a `Display` value with the default spec, as `write_str` writes
+text as it stands: the spec belongs to the value, not to its parts.
+
 #### `pub fn write_char(&mut self, c: char)`
 
 Write a single character to the output buffer.
@@ -4342,6 +4347,11 @@ Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
 run-length expansion (where src < dst). Forward order is correct in both cases.
 
 #### `pub fn contains(&self, value: &T) -> bool`
+
+#### `pub fn contains_str<S: AsStrSlice>(&self, value: S) -> bool`
+
+Membership by text, so a view is looked up without a `to_string` copy.
+Walks by reference: an element yielded by value is copied out.
 
 #### `pub fn iter_ref_mut(&mut self) -> SliceRefMutIter<T>`
 

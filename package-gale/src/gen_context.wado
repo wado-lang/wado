@@ -407,20 +407,20 @@ impl GenContext {
     }
 
     pub fn rule_captures<S: AsStrSlice>(&self, rule_name: S) -> &RuleCaptures {
-        if !self.rule_captures.contains_key(rule_name.to_string()) {
-            return &NO_CAPTURES;
+        if let Some(captures) = self.rule_captures.get_ref_str(rule_name) {
+            return captures;
         }
-        return &self.rule_captures[rule_name.to_string()];
+        return &NO_CAPTURES;
     }
 
     /// Whether the rule being emitted captures `field`'s token range / builder
     /// row — the gate on emitting the capture and on resolving a reference.
     pub fn captures_span<S: AsStrSlice>(&self, field: S) -> bool {
-        return self.current_captures().spans.contains(&field.to_string());
+        return self.current_captures().spans.contains_str(field);
     }
 
     pub fn captures_node<S: AsStrSlice>(&self, field: S) -> bool {
-        return self.current_captures().nodes.contains(&field.to_string());
+        return self.current_captures().nodes.contains_str(field);
     }
 
     fn current_captures(&self) -> &RuleCaptures {
@@ -449,21 +449,23 @@ impl GenContext {
     /// every call site), so conjoining it can only move a verdict from
     /// "exit" to "iterate": a token it excludes cannot continue any caller.
     pub fn rule_follow_for_probe<S: AsStrSlice>(&self, rule_name: S) -> List<String> {
-        if !self.rule_follow_exact || !self.rule_follow_kinds.contains_key(rule_name.to_string()) {
+        if !self.rule_follow_exact {
             return [];
         }
-        return self.rule_follow_kinds[rule_name.to_string()];
+        let Some(follow) = self.rule_follow_kinds.get_str(rule_name) else {
+            return [];
+        };
+        return follow;
     }
 
     pub fn at_end_conflict_routes<S: AsStrSlice>(&self, rule_name: S, branch_tokens: &List<String>) -> bool {
         if !self.rule_follow_exact {
             return true;
         }
-        if !self.rule_follow_kinds.contains_key(rule_name.to_string()) {
+        let Some(follow) = self.rule_follow_kinds.get_ref_str(rule_name) else {
             return true;
-        }
-        let follow = self.rule_follow_kinds[rule_name.to_string()];
-        return sets_overlap(branch_tokens, &follow);
+        };
+        return sets_overlap(branch_tokens, follow);
     }
 
     pub fn emits_at_end_conflict_via_atn<S: AsStrSlice>(
@@ -558,7 +560,7 @@ impl GenContext {
     /// `target`, so it reads the slots exactly when `target` declares them.
     pub fn mark_rule_forwards_follow<S: AsStrSlice>(&mut self, target: S) {
         let idx = self.current_rule_index;
-        if idx >= 0 && !self.follow_forward_edges[idx].contains(&target.to_string()) {
+        if idx >= 0 && !self.follow_forward_edges[idx].contains_str(target) {
             self.follow_forward_edges[idx].push(target.to_string());
         }
     }
@@ -902,14 +904,14 @@ impl GenContext {
     /// Matches `atn.wado::build_atn`'s rule indexing, so the generated
     /// parser can push this onto `atn_stack` for full-context prediction.
     pub fn rule_index_of<S: AsStrSlice>(&self, name: S) -> i32 {
-        if let Some(i) = self.rule_index.get(name.to_string()) {
+        if let Some(i) = self.rule_index.get_str(name) {
             return i;
         }
         return -1;
     }
 
     pub fn find_rule<S: AsStrSlice>(&self, name: S) -> Option<&ParserRule> {
-        let idx = self.rule_index.get(name.to_string());
+        let idx = self.rule_index.get_str(name);
         if let Some(i) = idx {
             return Option::Some(&self.parser_rules[i]);
         }
@@ -1971,7 +1973,7 @@ impl GenContext {
         single_alt_type_name: S,
         fallback: S1,
     ) -> String {
-        if let Some(owner) = self.single_alt_owner.get(single_alt_type_name.to_string()) {
+        if let Some(owner) = self.single_alt_owner.get_str(single_alt_type_name) {
             return owner;
         }
         return fallback.to_string();

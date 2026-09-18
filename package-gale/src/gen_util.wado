@@ -534,9 +534,9 @@ pub fn case_names_for_rule(alts: &List<Alternative>) -> List<String> {
     return build_case_names(alts, all_labeled);
 }
 
-/// Return `true` when `first` contains `token` (linear scan).
+/// Return `true` when `first` contains `token`.
 pub fn first_contains<S: AsStrSlice>(first: &List<String>, token: S) -> bool {
-    return first.iter_ref().any(|item| *item == token.as_str_slice());
+    return first.contains_str(token);
 }
 
 /// Append every token in `source` to `arr`, skipping duplicates already in `arr`.
@@ -569,8 +569,7 @@ fn get_count<S: AsStrSlice>(counts: &List<[String, i32]>, name: S) -> i32 {
 fn increment_count<S: AsStrSlice>(counts: &mut List<[String, i32]>, name: S) {
     for let mut i = 0; i < counts.len(); i += 1 {
         if counts[i].0 == name.as_str_slice() {
-            let prev = counts[i].1;
-            counts[i] = [name.to_string(), prev + 1];
+            counts[i].1 += 1;
             return;
         }
     }

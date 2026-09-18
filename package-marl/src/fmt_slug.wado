@@ -35,7 +35,7 @@ impl Slugger {
     internal fn slug<S: AsStrSlice>(&mut self, base: S) -> String {
         let mut result = base.to_string();
         while self.counts.contains_key(result) {
-            let current = match self.counts.get(base.to_string()) {
+            let current = match self.counts.get_str(base) {
                 Some(n) => n,
                 None => 0,
             };

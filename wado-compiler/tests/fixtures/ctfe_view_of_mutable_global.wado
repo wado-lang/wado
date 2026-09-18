@@ -1,0 +1,26 @@
+// Test: a shared borrow of a mutable global is not settled storage.
+//
+// `&G.items` reaches the global read-only, so the borrow itself is no write
+// path — but `G` is written elsewhere, and the value the borrow names moves
+// with it. A frame holding a snapshot would answer the first read twice.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf { items: List<i32> }
+
+global mut G: Buf = Buf { items: [1, 2, 3] };
+
+export fn run() with Stdout {
+    let r = &G.items;
+    let before = r[0];
+    G.items[0] = 9;
+    let after = r[0];
+    let len_before = r.len();
+    G.items.push(4);
+    println(`${before} ${after} ${len_before} ${r.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "1 9 3 4\n"
+}

@@ -1175,7 +1175,7 @@ fn classify_callee(
 /// is indexed directly by position: a node is a function, its edges are the
 /// `func_id.index()` of each callee — no name-keyed identity table, and no
 /// dedup that could collapse two distinct functions onto one node.
-fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<FuncId> {
+pub(super) fn find_recursive_functions(functions: &[Rc<RefCell<NirFunction>>]) -> IndexSet<FuncId> {
     let n = functions.len();
     let mut call_graph: Vec<Vec<usize>> = vec![Vec::new(); n];
 

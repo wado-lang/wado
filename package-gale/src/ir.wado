@@ -501,7 +501,7 @@ fn lexer_nullable_table(rules: &List<LexerRule>) -> TreeMap<String, bool> {
 }
 
 fn lexer_rule_nullable<S: AsStrSlice>(name: S, nullable: &TreeMap<String, bool>) -> bool {
-    return match nullable.get(name.to_string()) {
+    return match nullable.get_str(name) {
         Some(n) => n,
         None => false,
     };
@@ -1405,11 +1405,11 @@ fn visit_delegate<S: AsStrSlice>(
     order: &mut List<i32>,
     visited: &mut List<String>,
 ) -> Result<(), ParseError> {
-    if visited.contains(&name.to_string()) {
+    if visited.contains_str(name) {
         return Result::Ok(());
     }
     visited.push(name.to_string());
-    let Some(found) = by_name.get(name.to_string()) else {
+    let Some(found) = by_name.get_str(name) else {
         return Result::Err(
             ParseError::new(
                 `imported grammar "${name}" is not among the supplied inputs`,

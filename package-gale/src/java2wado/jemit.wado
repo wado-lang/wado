@@ -377,7 +377,7 @@ fn emit_print(
 /// Java primitive / `String` type text to its Wado type, or `None` if outside
 /// the subset (a loud error — the subset grows on demand).
 pub fn map_java_type<S: AsStrSlice>(ty: S) -> Option<String> {
-    return match ty.trim().to_string() {
+    return match ty.trim() {
         "int" => Option::Some("i32"),
         "short" => Option::Some("i16"),
         "byte" => Option::Some("i8"),
@@ -682,10 +682,10 @@ enum NameTarget {
 }
 
 fn resolve_name<S: AsStrSlice>(env: &JEnv, name: S) -> NameTarget {
-    if env.locals.contains(&name.to_string()) {
+    if env.locals.contains_str(name) {
         return NameTarget::Local;
     }
-    if env.args.contains(&name.to_string()) {
+    if env.args.contains_str(name) {
         return NameTarget::RuleArg;
     }
     if env.fields.contains(&to_snake_case(name)) {

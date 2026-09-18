@@ -66,8 +66,8 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(98, 111, 111, 109);
-global mut global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_13: ref null "core:prelude/string.wado//String" = ref.null none;
+global global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(98, 111, 111, 109);
+global mut global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = ref.null none;
 
 fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     let e_3: ref "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
@@ -77,7 +77,6 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
     let a_112: ref Array<u8>;
     let a_end_114: i32;
     let b_115: ref Array<u8>;
-    let len_118: i32;
     let i_119: i32;
     let $match_scrut_1: ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError";
     $match_scrut_1 = $inline_guarded_3: block -> ref null "pattern_match_non_exhaustive_keeps_fallback.wado//AppError" {
@@ -101,16 +100,15 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0"() {
         $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             a_112 = e_3.message.repr;
             a_end_114 = e_3.message.used;
-            b_115 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_5;
-            len_118 = a_end_114 - 0;
-            if len_118 != 4 {
+            b_115 = global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_2;
+            if a_end_114 != 4 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
             i_119 = 0;
             b5: block {
                 l6: loop {
-                    break_if b5 i_119 >= len_118;
-                    if builtin::array_get_value<u8>(a_112, 0 + i_119) != builtin::array_get_value<u8>(b_115, 0 + i_119) {
+                    break_if b5 i_119 >= a_end_114;
+                    if builtin::array_get_value<u8>(a_112, i_119) != builtin::array_get_value<u8>(b_115, i_119) {
                         break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
                     }
                     i_119 = i_119 + 1;
@@ -135,11 +133,11 @@ fn "pattern_match_non_exhaustive_keeps_fallback.wado/$cm_export__$test_0"() {
 }
 
 fn "pattern_match_non_exhaustive_keeps_fallback.wado/$test_0$cold0"() {
-    "core:rt/panic"(if ref.is_null(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_13) {
-        global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_13 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pattern_match_non_exhaustive_keeps_fallback.wado:55
+    "core:rt/panic"(if ref.is_null(global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_12) {
+        global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_12 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Assertion failed in $test_0 at pattern_match_non_exhaustive_keeps_fallback.wado:55
 condition: guarded(200) matches { Err(e) && e.message == \"boom\" }
 "), used: 149 };
-    }; global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_13);
+    }; global:pattern_match_non_exhaustive_keeps_fallback.wado::$const_obj_12);
     unreachable;
 }
 

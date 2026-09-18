@@ -57,20 +57,22 @@ fn use_err_branch(x: i32) -> String {
     return "ok";
 }
 
+// `black_box` keeps each argument off the constant path: specializing a callee
+// on one folds the call away, leaving no call site to check a discriminant at.
 export fn run() {
     // Case 1: value/ref Result
-    assert try_divide(10, 2) == 5;
-    assert try_divide(10, 0) == -1;
-    assert try_divide(100, 10) == 10;
+    assert try_divide(builtin::black_box(10), builtin::black_box(2)) == 5;
+    assert try_divide(builtin::black_box(10), builtin::black_box(0)) == -1;
+    assert try_divide(builtin::black_box(100), builtin::black_box(10)) == 10;
 
     // Case 2: ref/ref Result — Ok branch
-    assert use_payload(5) == 10;
-    assert use_payload(0) == 0;
-    assert use_payload(-1) == -1;
+    assert use_payload(builtin::black_box(5)) == 10;
+    assert use_payload(builtin::black_box(0)) == 0;
+    assert use_payload(builtin::black_box(-1)) == -1;
 
     // Case 3: Err branch access
-    assert use_err_branch(-1) == "negative";
-    assert use_err_branch(5) == "ok";
+    assert use_err_branch(builtin::black_box(-1)) == "negative";
+    assert use_err_branch(builtin::black_box(5)) == "ok";
 }
 
 __DATA__

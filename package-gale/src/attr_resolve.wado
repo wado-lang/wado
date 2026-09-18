@@ -115,7 +115,7 @@ fn resolve_one(
         check_member(r, &target, &lab.ref_name, rules)?;
         return ok_attr(r, target, &lab.ref_name);
     }
-    if contains(&env.attrs, &r.name) {
+    if env.attrs.contains_str(&r.name) {
         check_member(r, &AttrTarget::RuleAttr, "", rules)?;
         return ok_attr(r, AttrTarget::RuleAttr, "");
     }
@@ -123,11 +123,11 @@ fn resolve_one(
         check_member(r, &AttrTarget::ParserSpecial, "", rules)?;
         return ok_attr(r, AttrTarget::ParserSpecial, "");
     }
-    if contains(&env.token_refs, &r.name) {
+    if env.token_refs.contains_str(&r.name) {
         check_member(r, &AttrTarget::TokenRef, "", rules)?;
         return ok_attr(r, AttrTarget::TokenRef, "");
     }
-    if contains(&env.rule_refs, &r.name) {
+    if env.rule_refs.contains_str(&r.name) {
         check_member(r, &AttrTarget::RuleRef, &r.name, rules)?;
         return ok_attr(r, AttrTarget::RuleRef, &r.name);
     }
@@ -295,10 +295,6 @@ fn is_parser_special<S: AsStrSlice>(name: S) -> bool {
     return is_rule_pseudo_member(name) || name == "_p";
 }
 
-fn contains<S: AsStrSlice>(names: &List<String>, name: S) -> bool {
-    return names.iter_ref().any(|n| *n == name.as_str_slice());
-}
-
 /// Build a rule's attribute environment by collecting its declared
 /// attributes and walking its alternatives for labels and unlabeled refs.
 pub fn build_attr_env(rule: &ParserRule) -> AttrEnv {
@@ -342,7 +338,7 @@ fn build_label_aliases(
             continue;
         }
         let refs = if lab.is_token { token_refs } else { rule_refs };
-        if count_labeled_ref(labels, &lab.ref_name, lab.is_token) != 1 || contains(refs, &lab.ref_name) {
+        if count_labeled_ref(labels, &lab.ref_name, lab.is_token) != 1 || refs.contains_str(&lab.ref_name) {
             continue;
         }
         aliases.push([lab.ref_name, lab.name]);
