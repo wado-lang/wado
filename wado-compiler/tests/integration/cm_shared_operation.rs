@@ -35,6 +35,45 @@ export fn run() with (Stdout, Entropy) {
 }
 "#;
 
+/// Two names binding one operation of a *resource-defining* interface, which a
+/// second emitter builds. It kept its own function lists, so the dedup one
+/// emitter applied left this one exporting the CM name twice.
+const SHARED_ON_A_RESOURCE_INTERFACE: &str = r#"
+#[cm("wasi:demo/gfx@0.1.0#adapter")]
+resource Adapter {
+    #[cm("wasi:demo/gfx@0.1.0#[method]adapter.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.adapter")]
+    #[cm_params("self")]
+    fn adapter(&self) -> Option<Adapter>;
+
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+interface GfxAgain {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn device_again() -> Device;
+}
+
+export fn run() with (Gfx, GfxAgain, Device) {
+    let a = Gfx::get_device();
+    let b = GfxAgain::device_again();
+    let _ = a.id() + b.id();
+}
+"#;
+
 fn lines_matching(wasm: &[u8], needle: &str) -> Vec<String> {
     let wat = wasmprinter::print_bytes(wasm).expect("disassemble the component to WAT");
     wat.lines()
@@ -64,6 +103,23 @@ fn one_cm_operation_is_exported_once_however_many_names_bind_it() {
         aliases.len(),
         2,
         "each used Wado name needs its own alias, got {aliases:#?}"
+    );
+}
+
+#[test]
+fn a_resource_defining_interface_exports_a_shared_operation_once() {
+    let result = compile_source(SHARED_ON_A_RESOURCE_INTERFACE).unwrap_or_else(|e| {
+        panic!("two names binding one operation of a resource interface must compile: {e}")
+    });
+
+    let exports: Vec<String> = lines_matching(&result.wasm, "\"get-device\"")
+        .into_iter()
+        .filter(|line| line.starts_with("(export "))
+        .collect();
+    assert_eq!(
+        exports.len(),
+        1,
+        "the instance type must export the CM name once, got {exports:#?}"
     );
 }
 

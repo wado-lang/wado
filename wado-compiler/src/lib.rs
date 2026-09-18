@@ -221,6 +221,49 @@ fn bail_with<H: compiler_host::CompilerHost>(
     Bail
 }
 
+/// The program's own modules that bind a CM import. The stdlib's bindings are
+/// in the shared registry and a component dependency's are folded in by
+/// `fold_component_interfaces`, so only these are left to register.
+fn user_cm_modules(sem: &semantics::Semantics) -> Vec<(ModuleSource, ast::Module)> {
+    sem.modules
+        .iter()
+        .filter(|(source, module)| {
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_binding(module)
+        })
+        .map(|(source, module)| (source.clone(), module.clone()))
+        .collect()
+}
+
+/// Register what [`user_cm_modules`] found, so a call to one of those bindings
+/// lowers to its import. Every entry into the back end runs this: a phase that
+/// never saw these declarations reports the call unresolved instead.
+fn register_user_cm_modules<H: compiler_host::CompilerHost>(
+    registry: &mut std::sync::Arc<component_model::CmInterfaceRegistry>,
+    modules: &[(ModuleSource, ast::Module)],
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    if modules.is_empty() {
+        return Ok(());
+    }
+    let registry = std::sync::Arc::make_mut(registry);
+    for (source, module) in modules {
+        registry
+            .register_user_cm_decls(module, source)
+            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+    }
+    // Only once every module is registered: an `interface` naming a resource's
+    // operations may sit in a module other than the one declaring it.
+    for (_, module) in modules {
+        registry
+            .validate_cm_function_names(module)
+            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
+    }
+    Ok(())
+}
+
 /// Compilation failure with metadata from the successfully-parsed AST.
 ///
 /// Internal `Bail` carries no data (errors are already emitted to the host).
@@ -1485,21 +1528,7 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
-    // User modules that bind a CM import themselves. The stdlib's bindings are
-    // in the shared registry and a component dependency's are folded in by
-    // `fold_component_interfaces`, so both are already registered; a module
-    // that declares none is skipped, so the usual program clones nothing.
-    let user_cm_modules: Vec<(ModuleSource, ast::Module)> = sem
-        .modules
-        .iter()
-        .filter(|(source, module)| {
-            !source.is_core()
-                && !source.is_binding()
-                && !source.is_wasm_asset()
-                && declares_cm_binding(module)
-        })
-        .map(|(source, module)| (source.clone(), module.clone()))
-        .collect();
+    let user_cm_modules = user_cm_modules(&sem);
 
     let semantics::Semantics {
         entry_module_source,
@@ -1553,21 +1582,7 @@ fn compile_after_load<H: CompilerHost>(
         }
     }
 
-    if !user_cm_modules.is_empty() {
-        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
-        for (source, module) in &user_cm_modules {
-            if let Err(msg) = registry.register_user_cm_decls(module, source) {
-                return Err(bail_with(logger, Code::DuplicateDefinition, msg));
-            }
-        }
-        // Once every module is registered: an `interface` naming a resource's
-        // operations may sit in a module other than the one declaring it.
-        for (_, module) in &user_cm_modules {
-            if let Err(msg) = registry.validate_cm_function_names(module) {
-                return Err(bail_with(logger, Code::UnknownType, msg));
-            }
-        }
-    }
+    register_user_cm_modules(&mut tysys.cm_interface_registry, &user_cm_modules, logger)?;
 
     debug_assert_eq!(
         std::sync::Arc::strong_count(&tysys.trait_env),
@@ -2059,6 +2074,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
     let sem = semantics::semantics_with_logger(load_result, &logger, true);
+    let user_cm_modules = user_cm_modules(&sem);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
@@ -2087,7 +2103,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 .state
                 .expect("elaborator state present when is_complete");
             let world_registry = state.world_registry;
-            let tysys = state.tysys;
+            let mut tysys = state.tysys;
+            register_user_cm_modules(
+                &mut tysys.cm_interface_registry,
+                &user_cm_modules,
+                &logger,
+            )?;
             let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
                 .unwrap_or_else(|rc| (*rc).clone());
 

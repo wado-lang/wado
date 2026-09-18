@@ -1073,6 +1073,19 @@ fn register_unique<V>(
     map.insert(key, value);
 }
 
+/// `emitting` itself, where it declares `wado_name` in a
+/// `(source_interface, wado_name)`-keyed map. Borrowed from the map rather than
+/// from the argument, so a caller may pass a short-lived interface name.
+fn declaring_source<'a, V>(
+    map: &'a IndexMap<(String, String), V>,
+    emitting: Option<&str>,
+    wado_name: &str,
+) -> Option<&'a str> {
+    let iface = emitting?;
+    map.get_key_value(&(iface.to_string(), wado_name.to_string()))
+        .map(|((source, _), _)| source.as_str())
+}
+
 /// The Wado name a `(source_interface, wado_name)`-keyed map of CM names holds
 /// under `iface_fq` for `cm_name`.
 fn wado_name_under_cm_name<'a>(
@@ -2824,6 +2837,22 @@ impl CmInterfaceRegistry {
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_flags_source(&self, name: &str) -> Option<&str> {
         find_unique_source_in_binding(&self.flags, name)
+    }
+
+    /// The interface declaring the resource `wado_name`, asking `emitting`
+    /// first. A user module is free to name a resource what a bundled interface
+    /// also names one, and the bundled index then has no unique answer, so an
+    /// emitter that knows which interface it is describing must say so.
+    pub fn resource_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
+        declaring_source(&self.resources, emitting, wado_name)
+            .or_else(|| self.find_binding_resource_source(wado_name))
+    }
+
+    /// The interface declaring the flags `wado_name`, asking `emitting` first.
+    /// See [`Self::resource_source_in`].
+    pub fn flags_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
+        declaring_source(&self.flags, emitting, wado_name)
+            .or_else(|| self.find_binding_flags_source(wado_name))
     }
 
     /// The owning interface FQ of a component-imported named type, when exactly
