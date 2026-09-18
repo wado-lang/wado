@@ -1,0 +1,26 @@
+// An impl head written through a namespace states the argument it writes, so
+// `conv::Convert<String>` does not answer the bound `Convert`, which asks at the
+// trait's declared default.
+use conv from "./sub/ns_trait_arg_lib.wado";
+use { Convert } from "./sub/ns_trait_arg_lib.wado";
+
+struct S {
+    v: i32,
+}
+
+impl conv::Convert<String> for S {
+    fn convert(&self, a: String) -> i32 {
+        return a.len();
+    }
+}
+
+fn at_default<T: Convert>(t: T, a: i32) -> i32 {
+    return t.convert(a);
+}
+
+test "a namespaced impl head keeps the argument it writes" {
+    assert at_default(S { v: 1 }, 3) == 3;
+}
+
+__DATA__
+{"compile_error": "type 'S' does not implement trait 'Convert' required by bound on 'T'"}

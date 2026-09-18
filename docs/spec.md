@@ -3191,11 +3191,9 @@ impl<T: Eq> Eq for Pair<T> {
   [WEP: Overload Resolution](./wep-2026-07-31-overload-resolution.md)); an
   associated function with no `self` has no receiver argument to bind `Self`
   from and stays unspellable
-- Positional trait arguments in bound position (`T: Take<i32>`) — bounds
-  accept associated-type constraints (`T: Collect<Item = i32>`) but not a
-  trait's own type arguments, so the bound-path counterpart of
-  [argument-directed selection](#one-trait-at-two-argument-lists) does not
-  arise yet
+- A namespaced trait in bound position (`T: conv::Convert`). An impl head takes
+  one (`impl conv::Convert<String> for S`), and a bound names the trait it
+  imported by name
 
 ### Coherence and Orphan Rules
 
@@ -3728,9 +3726,16 @@ A bound that writes one asks for that argument. `T: Eq<String>` reaches
 `impl Eq<String> for StrSlice`. On a `String` receiver it reaches
 `impl Eq for String`, whose `Rhs` is the restated `Self`.
 
+An impl writing `Self` as a trait argument says its own target, so
+`impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
+
 The rule is the same wherever a bound is written: on a type parameter, on a
 supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
-(`type Item: Eq<String>`).
+(`type Item: Eq<String>`). A bound's arguments are spelled where it is written,
+so a supertrait clause naming its own trait's parameter — `trait Gauge<X>:
+Measure<X>` — supplies `Measure<i32>` under `T: Gauge<i32>`. A position the
+clause leaves out takes the declared default there too, so `trait A<T>: B<T>`
+over `trait B<X, Y = i32>: C<Y>` supplies `C<i32>`.
 
 `T::Output` under two bounds that both declare `Output` is ambiguous unless
 they bind it to the same type.

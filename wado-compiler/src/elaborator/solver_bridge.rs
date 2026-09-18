@@ -6,7 +6,7 @@ use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName, is_builtin_shape_name};
+use crate::name::{FqTraitName, FqTypeName, RefKind, TypeHead, is_builtin_shape_name};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::trait_solver::{
     ArgDefault, AssocId, Candidate, Declaration, Env, Fact, ImplDef, ImplId, ImplOrigin, MethodId,
@@ -14,7 +14,7 @@ use crate::trait_solver::{
     TraitDeclId, TypeDeclId, TypeDef, candidates, derive, holds_with_args, rank,
 };
 
-use super::trait_env::{BlanketReceiver, ImplHeader};
+use super::trait_env::{BlanketReceiver, ImplHeader, written_arg_nodes};
 use super::trait_query::{OnBoundTrait, primitive_has_operator};
 use super::tysys::TypeSystem;
 use crate::defs::DefKind;
@@ -146,6 +146,32 @@ impl Lowering {
 
     fn known_type(&self, key: &DeclKey) -> Option<TypeDeclId> {
         self.decls.get(key).map(|&i| TypeDeclId(i))
+    }
+
+    /// A written trait argument as the solver spells it; `None` for a name the
+    /// lowering states nothing about.
+    fn named_arg(&self, name: &FqTypeName) -> Option<SolverType> {
+        let args = name
+            .args()
+            .iter()
+            .map(|arg| self.named_arg(arg))
+            .collect::<Option<Vec<_>>>()?;
+        let pointee = match name.head() {
+            TypeHead::Tuple => SolverType::Tuple(args),
+            TypeHead::Builtin(builtin) => {
+                SolverType::Decl(self.known_type(&DeclKey::Builtin(builtin.clone()))?, args)
+            }
+            head => SolverType::Decl(self.known_type(&DeclKey::Def(head.def()?))?, args),
+        };
+        Some(
+            name.references()
+                .iter()
+                .rev()
+                .fold(pointee, |inner, kind| SolverType::Ref {
+                    is_mut: *kind == RefKind::Mut,
+                    inner: Box::new(inner),
+                }),
+        )
     }
 
     /// The declaration a trait id was given for. Every trait id is minted from
@@ -424,19 +450,15 @@ pub(super) fn lower_impls<'a>(
         let Some(target) = lowering.ast_type(&header.ty, &param, resolutions, None) else {
             continue;
         };
-        let mut trait_args = Vec::new();
-        if let Some(Type::Generic(generic)) = header.trait_type.as_ref() {
-            let lowered: Option<Vec<SolverType>> = generic
-                .args
-                .iter()
-                .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
-                .collect();
-            let Some(lowered) = lowered else {
-                continue;
-            };
-            trait_args = lowered;
-        }
-        let implemented = header.trait_ref.map(|t| lowering.trait_decl(t));
+        let written = header.trait_ty().map_or(&[][..], written_arg_nodes);
+        let Some(trait_args) = written
+            .iter()
+            .map(|arg| lowering.ast_type(arg, &param, resolutions, Some(&target)))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+        let implemented = header.trait_def().map(|t| lowering.trait_decl(t));
         let params = header
             .type_params
             .iter()
@@ -673,7 +695,7 @@ impl SolverBridge {
                 .trait_env
                 .impl_headers
                 .get(&def)
-                .and_then(|header| header.trait_ref)
+                .and_then(ImplHeader::trait_def)
             {
                 let trait_ = lowering.trait_decl(trait_);
                 lowering.derivation_source.insert((trait_, kind), def);
@@ -844,11 +866,25 @@ impl SolverBridge {
     /// Each trait's supertraits, argument defaults and reference rule;
     /// `Inspect` holds for all.
     fn state_traits(tysys: &TypeSystem, lowering: &mut Lowering, program: &mut Program) {
-        for (trait_, closure) in tysys.trait_env.supertrait_closures() {
+        for (trait_, closure) in tysys.trait_env.supertrait_closures_in_own_space() {
             let id = lowering.trait_decl(*trait_);
+            // An edge whose arguments the lowering cannot say states none,
+            // which answers at the supertrait's declared defaults.
             program.traits.entry(id).or_default().supertraits = closure
                 .iter()
-                .map(|b| lowering.trait_decl(b.decl))
+                .map(|b| ParamBound {
+                    trait_: lowering.trait_decl(b.decl),
+                    args: tysys
+                        .bound_written(&b.bound)
+                        .and_then(|written| {
+                            written
+                                .args()
+                                .iter()
+                                .map(|arg| lowering.named_arg(arg))
+                                .collect::<Option<Vec<_>>>()
+                        })
+                        .unwrap_or_default(),
+                })
                 .collect();
         }
         if let Some(inspect) = tysys.compiler_trait_def(CompilerItem::Inspect) {
@@ -1254,7 +1290,7 @@ impl SolverBridge {
                     .bound_written(bound)?
                     .args()
                     .iter()
-                    .map(|arg| self.wanted_arg(arg))
+                    .map(|arg| self.lowering.named_arg(arg))
                     .collect::<Option<Vec<_>>>()?;
                 ids.push(ParamBound {
                     trait_: self.lowering.known_trait(def)?,
@@ -1295,7 +1331,7 @@ impl SolverBridge {
         let args = asked
             .args()
             .iter()
-            .map(|name| self.wanted_arg(name))
+            .map(|name| self.lowering.named_arg(name))
             .collect::<Option<Vec<_>>>()?;
         Some(Question {
             env,
@@ -1304,20 +1340,6 @@ impl SolverBridge {
             module,
             args,
         })
-    }
-
-    /// One argument a bound writes, as the solver reads it. Its own arguments
-    /// come with it, so `Eq<List<i32>>` does not lower as `Eq<List>`.
-    fn wanted_arg(&self, name: &FqTypeName) -> Option<SolverType> {
-        let head = self
-            .lowering
-            .known_type(&DeclKey::Def(name.head().def()?))?;
-        let args = name
-            .args()
-            .iter()
-            .map(|arg| self.wanted_arg(arg))
-            .collect::<Option<Vec<_>>>()?;
-        Some(SolverType::Decl(head, args))
     }
 
     /// The solver's answer to the question `type_implements_trait` just

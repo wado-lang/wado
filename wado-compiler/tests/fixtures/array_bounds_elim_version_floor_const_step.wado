@@ -1,0 +1,31 @@
+// A constant step of two or more still needs the no-wrap term, since the
+// guard's `i <= limit` leaves only one step of headroom. The residual folds it
+// to `limit <= i32::MAX - 2`, which holds here, so the fast arm runs.
+
+use { println, Stdout } from "core:cli";
+
+fn mark_evens(xs: &mut List<i32>, limit: i32, start: i32) -> i32 {
+    let mut sum = 0;
+    for let mut r = 0; r < 2; r += 1 {
+        for let mut i = start; i <= limit; i += 2 {
+            xs[i] = 9;
+        }
+        for let mut n = 0; n <= limit; n += 1 {
+            sum += xs[n];
+        }
+    }
+    return sum;
+}
+
+export fn run() with Stdout {
+    let mut xs = List::<i32>::filled(11, 0);
+    println(`${mark_evens(&mut xs, builtin::black_box(10), builtin::black_box(4))}`);
+}
+
+__DATA__
+{
+    "stdout": "72\n",
+    "wir_expect:O2": [
+        "i >= 0, 0), limit <= 2147483645, 0)"
+    ]
+}

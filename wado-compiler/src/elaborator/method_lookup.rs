@@ -40,7 +40,7 @@ use crate::elaborator::scope::param_decl;
 use crate::elaborator::sem::types::{DesugarKind, OperatorDispatch};
 use crate::elaborator::sig::ImplSig;
 use crate::elaborator::solver_bridge::Ordered;
-use crate::elaborator::trait_env::{written_type_arg, written_type_args};
+use crate::elaborator::trait_env::written_type_arg;
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait, TraitMethodMatch};
 use crate::elaborator::tysys::{operator_compiler_item, operator_trait_method};
 use crate::elaborator::{scope, sig};
@@ -369,7 +369,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .trait_env
                     .impl_headers
                     .get(entry)
-                    .is_some_and(|h| h.trait_name.is_some())
+                    .is_some_and(ImplHeader::is_trait_impl)
                 {
                     refs.push(ImplBlockRef(*entry));
                 }
@@ -389,7 +389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .trait_env
                         .impl_headers
                         .get(entry)
-                        .is_some_and(|h| h.trait_name.is_some())
+                        .is_some_and(ImplHeader::is_trait_impl)
                     {
                         refs.push(ImplBlockRef(*entry));
                     }
@@ -424,8 +424,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let impl_refs = self.collect_trait_impl_refs(target);
         for impl_ref in &impl_refs {
             let header = impl_header(&trait_env, impl_ref);
-            let trait_name = self.get_type_name(header.trait_type.as_ref().unwrap());
-            if !trait_matches(&trait_name, header.trait_ref) {
+            let trait_name = self.get_type_name(header.trait_ty().unwrap());
+            if !trait_matches(&trait_name, header.trait_def()) {
                 continue;
             }
             let impl_sig = signatures
@@ -1137,9 +1137,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 continue;
             };
             if header.methods.iter().any(|m| m.name == method_name)
-                && let Some(trait_name) = &header.trait_name
+                && let Some(trait_name) = header.trait_head_name()
             {
-                return Some(trait_name.clone());
+                return Some(trait_name.to_string());
             }
         }
         None
@@ -2128,18 +2128,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .clone();
                 (sig, m.type_params.clone())
             });
-        let trait_type_for_name = header.trait_type.as_ref().unwrap().clone();
-        let target_for_name = header.ty.clone();
-        // The trait's identity, resolved in the impl's own frame: the decl key
-        // from the impl module's imports (so an alias resolves to the declaring
-        // module), the arguments with the impl's bound type params substituted
-        // (so `impl<T> Take<T> for Wrapper<T>` on `Wrapper<i32>` reads as
-        // `Take<i32>`). Spellings never carry identity (WEP 2026-07-31).
-        // `check_impl_trait_resolves` has already rejected a header whose trait
-        // reaches no declaration, and such a block implements no trait — so it
-        // contributes no trait method here. The index still holds it, keyed on
-        // the spelling it wrote, which is how an erroneous block reaches a
-        // lookup at all; a candidate built without an identity keys on nothing.
+        // A header whose trait reaches no declaration implements none, so it
+        // contributes no trait method. The index still holds it under the
+        // spelling it wrote, which is how an erroneous block reaches a lookup.
         let Some(trait_decl) = signatures
             .impl_sig(impl_ref.0)
             .expect("the decl pass records every impl block's declaration facts")
@@ -2147,8 +2138,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return found_traits;
         };
-        let defs = scope.tysys.resolutions.defs().clone();
         let trait_args = impl_sig.trait_type_args;
+        let trait_name_of_impl = scope
+            .tysys
+            .trait_env
+            .fq_trait_of_impl(header, &scope.tysys.resolutions)
+            .expect("a header carrying a trait declaration names it");
 
         let mut method_found = false;
         if let Some((method_sig, method_type_params)) = method_data {
@@ -2224,15 +2219,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let param_names = Param::names(&method_sig.params);
             let param_defaults = Param::defaults(&method_sig.params);
             found_traits.push(TraitMethodMatch {
-                trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                    FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
-                        &trait_type_for_name,
-                        &scope.tysys.resolutions,
-                    )),
-                    &trait_type_for_name,
-                    &target_for_name,
-                    &scope.tysys.resolutions,
-                ),
+                trait_name: trait_name_of_impl.clone(),
                 trait_decl,
                 trait_args: trait_args.clone(),
                 method_info: MethodInfo {
@@ -2291,15 +2278,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let self_kind = default_method.sig.self_kind;
                 let first_value_param = default_method.sig.first_value_param();
                 found_traits.push(TraitMethodMatch {
-                    trait_name: scope.tysys.trait_env.fq_trait_named_by_impl(
-                        FqTraitName::declared(&defs, trait_decl).with_args(written_type_args(
-                            &trait_type_for_name,
-                            &scope.tysys.resolutions,
-                        )),
-                        &trait_type_for_name,
-                        &target_for_name,
-                        &scope.tysys.resolutions,
-                    ),
+                    trait_name: trait_name_of_impl,
                     trait_decl,
                     trait_args: trait_args.clone(),
                     method_info: MethodInfo {

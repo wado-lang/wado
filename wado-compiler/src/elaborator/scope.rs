@@ -416,9 +416,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         bound: &ast::TraitBound,
         known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<InheritedBound> {
-        self.bound_decl(bound, known)
-            .map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
-            .unwrap_or_default()
+        let Some(decl) = self.bound_decl(bound, known) else {
+            return Vec::new();
+        };
+        self.tysys
+            .trait_env
+            .supertrait_closure_at(&decl, &bound.type_args)
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

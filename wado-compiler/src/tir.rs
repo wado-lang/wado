@@ -333,6 +333,23 @@ impl PrimitiveType {
         }
     }
 
+    /// The largest value a scalar integer holds; `None` for every other
+    /// primitive.
+    #[must_use]
+    pub fn int_max(self) -> Option<u128> {
+        Some(match self {
+            Self::I8 => i8::MAX as u128,
+            Self::I16 => i16::MAX as u128,
+            Self::I32 => i32::MAX as u128,
+            Self::I64 => i64::MAX as u128,
+            Self::U8 => u128::from(u8::MAX),
+            Self::U16 => u128::from(u16::MAX),
+            Self::U32 => u128::from(u32::MAX),
+            Self::U64 => u128::from(u64::MAX),
+            Self::F32 | Self::F64 | Self::Bool | Self::Char | Self::V128 => return None,
+        })
+    }
+
     /// Check if a name is a primitive type name.
     #[must_use]
     pub fn is_primitive_name(name: &str) -> bool {
@@ -1333,6 +1350,41 @@ impl TypeTable {
             ty
         } else {
             self.make_ref(ty)
+        }
+    }
+
+    /// Whether `ty` is an instance of the compiler struct `item`, as a generic
+    /// instance or as the monomorphized struct its declaration heads.
+    #[must_use]
+    pub fn is_compiler_struct_instance(&self, ty: TypeId, item: CompilerItem) -> bool {
+        let Some(head) = self.compiler_item_def(item) else {
+            return false;
+        };
+        match self.get(ty) {
+            ResolvedType::GenericInstance { def, .. } => *def == head,
+            ResolvedType::Struct { def, type_args } => {
+                !type_args.is_empty() && def.decl() == Some(head)
+            }
+            ResolvedType::Primitive(_)
+            | ResolvedType::Unit
+            | ResolvedType::Never
+            | ResolvedType::Ref(_)
+            | ResolvedType::MutRef(_)
+            | ResolvedType::Enum { .. }
+            | ResolvedType::Resource { .. }
+            | ResolvedType::Variant { .. }
+            | ResolvedType::GenericResource { .. }
+            | ResolvedType::Function { .. }
+            | ResolvedType::Reactive(_)
+            | ResolvedType::TypeParam { .. }
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::AssocTypeProjection { .. }
+            | ResolvedType::BuiltinArray(_)
+            | ResolvedType::Newtype { .. }
+            | ResolvedType::Flags { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::Unknown
+            | ResolvedType::Error => false,
         }
     }
 
