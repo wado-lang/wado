@@ -158,7 +158,7 @@ fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origi
 }
 
 /// One call this body makes to a callee this scan reads, and what it put in
-/// each of the callee's parameter positions it could classify.
+/// each of the callee's parameter positions.
 struct CallSite {
     callee: (ModuleSource, String),
     handed: IndexMap<u32, Handed>,
@@ -323,13 +323,9 @@ impl Walker<'_> {
         place.through_borrow.then_some(Origin::Unknown)
     }
 
-    /// What this call puts in one parameter position. Total, so every position
-    /// is classified and none is left for [`re_tag`] to guess at.
+    /// What this call puts in one parameter position.
     fn handed_at(&self, arg: &TirExpr) -> Handed {
-        // A value carrying no storage hands the callee nothing to write
-        // through. Whether the rest aliases is `names`'s answer alone:
-        // freshness calls every `part_of`-less builtin owned, which is the
-        // `builtin::select` hole rather than a second opinion on it.
+        // A value carrying no storage hands the callee nothing to write into.
         if !carries_storage(arg.type_id, self.type_table) {
             return Handed::Unobservable;
         }
@@ -339,8 +335,7 @@ impl Walker<'_> {
                 None => Handed::Unobservable,
             },
             // A value names storage of its own, so a write into it reaches no
-            // caller of this frame. One that may alias an operand is
-            // `Names::Unknown` instead, which is `names`'s line to draw.
+            // caller of this frame; one that may alias is `Names::Unknown`.
             Names::Value => Handed::Unobservable,
             Names::Unknown => Handed::Caller(Origin::Unknown),
         }
