@@ -72,11 +72,15 @@ a round-at-a-time trait: 1.39 against 1.42 G u64/s.
 
 xoshiro256++ with its state hand-scalarized into four locals computes the
 identical stream (same checksum) 3.2× faster than the same engine as a struct
-local: 548 against 173. NIR confirms why — `sroa` decomposes RomuTrio's
-three-word state (`$sroa_rng_x/y/z`, 2.4× faster) and SplitMix64's one word
-(1.5×), and leaves `Xoshiro256pp::draw` out of line with `self.s0 = …` field
-stores. The engines are therefore proposed on merit, with the gap filed
-against the optimizer rather than designed around.
+local: 548 against 173. The chain behind it is visible in NIR and in
+`WADO_TRACE=sroa`. RomuTrio's `next_u64` is inlined, so nothing holds its
+state and `sroa` decomposes it into `$sroa_rng_x/y/z` (2.4× faster);
+SplitMix64's one word goes the same way (1.5×). `Xoshiro256pp::draw` stays out
+of line, so the `&mut self` it takes escapes the local, and `sroa` declines it
+— the trace says `escaped, not soft`. So it is the inline decision that
+decides whether an engine's state lives in locals or in struct fields, and the
+ranking above is an artifact of where that decision fell. The engines are
+therefore proposed on merit, with the gap filed rather than designed around.
 
 ## Decision
 
@@ -268,17 +272,21 @@ list starts once the design above is adopted.
    and `prng_bench` draw through `core:prng` and their outputs are unchanged.
 6. Track the numbers: done when `prng_bench` lives under `benchmark/prng/` and
    `mise run benchmark-all` reports it.
-7. File what the measurements exposed: done when the `sroa` gap on a
-   four-field engine state (3.2×) and the ~870 ns host call are issues with
-   the reproductions attached.
+7. File what the measurements exposed: done when the un-inlined draw that
+   costs an engine its scalarized state (3.2×) and the ~870 ns host call are
+   issues with the reproductions attached. Raising the inline budget is not
+   the reproduction — at `--optimize-inline-threshold 400
+   --optimize-inline-growth 500` the spike did not finish compiling in 15
+   minutes, which is a second thing to look at.
 
 ## Known gaps
 
 The calls this WEP does not make:
 
 - The recommended engine. `Xoshiro256pp` is proposed for its jump functions,
-  and it is half the speed of `RomuTrio` until the `sroa` gap closes. Choosing
-  speed now would mean a stream that changes name later.
+  and it is half the speed of `RomuTrio` until its draw is inlined and its
+  state scalarized. Choosing speed now would mean a stream that changes name
+  later.
 - Whether `BufferedRandom` goes at once or lives beside the expander through a
   deprecation. Its only users are its own tests and one doc line.
 - Whether `core:distribution` (normal, exponential, weighted choice) waits for
