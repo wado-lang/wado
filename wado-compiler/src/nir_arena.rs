@@ -606,6 +606,7 @@ impl Body {
             ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => Some(e),
             ExprKind::FieldAccess { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. }
+            | ExprKind::Cast { expr: inner, .. }
             | ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
