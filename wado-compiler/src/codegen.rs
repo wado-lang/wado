@@ -156,15 +156,64 @@ fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
     ))
 }
 
+/// The outer component's instances in declaration order, so a validator message
+/// naming `instance N` names something a reader can find.
+fn describe_component_instances(wasm: &[u8]) -> Option<String> {
+    use wasmparser::{ComponentTypeRef, Parser, Payload};
+    let mut depth = 0usize;
+    let mut instances: Vec<String> = Vec::new();
+    for payload in Parser::new(0).parse_all(wasm) {
+        match payload.ok()? {
+            Payload::ModuleSection { .. } | Payload::ComponentSection { .. } => depth += 1,
+            Payload::End(_) => depth = depth.saturating_sub(1),
+            Payload::ComponentImportSection(reader) if depth == 0 => {
+                for import in reader.into_iter().flatten() {
+                    if matches!(import.ty, ComponentTypeRef::Instance(_)) {
+                        instances.push(format!("imported `{}`", import.name.name));
+                    }
+                }
+            }
+            Payload::ComponentInstanceSection(reader) if depth == 0 => {
+                for _ in reader.into_iter().flatten() {
+                    instances.push("instantiated in this component".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    if instances.is_empty() {
+        return None;
+    }
+    let mut out = String::from("Component instances, in declaration order:\n");
+    for (idx, what) in instances.iter().enumerate() {
+        out.push_str(&format!("    instance {idx}  {what}\n"));
+    }
+    Some(out)
+}
+
 /// Validate generated Wasm binary using wasmparser.
 fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
-    if let Err(e) = validator.validate_all(wasm) {
-        panic!(
-            "Internal compiler error: WIR pipeline generated invalid Wasm\n\
-             Entry module: {entry_module}\n\
-             This is a bug in the Wado compiler. Please report it.\n\
-             Validation error: {e}"
-        );
-    }
+    let Err(e) = validator.validate_all(wasm) else {
+        return;
+    };
+    let _ = std::fs::write("/tmp/invalid_component.wasm", wasm);
+    let text = wasmprinter::print_bytes(wasm).ok();
+    let printed = match &text {
+        Some(text) => {
+            let _ = std::fs::write("/tmp/invalid_component.wat", text);
+            " and printed to /tmp/invalid_component.wat"
+        }
+        None => "",
+    };
+    let instances = describe_component_instances(wasm)
+        .unwrap_or_else(|| "  (could not read the component's instances)\n".to_string());
+    panic!(
+        "Internal compiler error: WIR pipeline generated invalid Wasm\n\
+         Entry module: {entry_module}\n\
+         Validation error: {e}\n\
+         {instances}\
+         The full invalid component was written to /tmp/invalid_component.wasm{printed}.\n\
+         This is a bug in the Wado compiler. Please report it."
+    );
 }
