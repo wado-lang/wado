@@ -188,4 +188,3 @@ omission goes in Decision.
 - [Declared Absence](./wep-2026-09-13-declared-absence.md)
 - [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
 - [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)
-- [Randomness (`core:prng`)](./wep-2026-09-18-random.md)
