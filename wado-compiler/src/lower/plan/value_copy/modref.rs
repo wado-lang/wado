@@ -3,7 +3,9 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::ownership::BuiltinDeclarations;
-use super::place::{Names, Resolver, ReturnPaths, Selector, could_write_through, field_owner};
+use super::place::{
+    Names, Resolver, ReturnPaths, Selector, carries_storage, could_write_through, field_owner,
+};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::is_reference;
@@ -36,8 +38,9 @@ impl Origin {
 enum Handed {
     /// Storage this frame's own caller can observe, through that handle.
     Caller(Origin),
-    /// Storage this frame owns. A write to it reaches no caller of this one.
-    FrameLocal,
+    /// Nothing a caller of this frame reaches: storage this frame owns, or a
+    /// value carrying no storage for the callee to write through.
+    Unobservable,
 }
 
 /// The fields one function writes, by the handle each is reached through and
@@ -149,15 +152,13 @@ fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origi
     };
     match handed.get(&position) {
         Some(Handed::Caller(origin)) => Some(*origin),
-        Some(Handed::FrameLocal) => None,
-        // Absent is not empty: it is a position this walk could not classify,
-        // and dropping its writes would hide one the caller can see.
-        None => Some(Origin::Unknown),
+        Some(Handed::Unobservable) => None,
+        None => unreachable!("handed_at classifies every argument position"),
     }
 }
 
 /// One call this body makes to a callee this scan reads, and what it put in
-/// each of the callee's parameter positions it could classify.
+/// each of the callee's parameter positions.
 struct CallSite {
     callee: (ModuleSource, String),
     handed: IndexMap<u32, Handed>,
@@ -322,20 +323,22 @@ impl Walker<'_> {
         place.through_borrow.then_some(Origin::Unknown)
     }
 
-    /// What this call puts in one parameter position, or `None` where this
-    /// walk cannot tell.
-    fn handed_at(&self, arg: &TirExpr) -> Option<Handed> {
-        let names = self.resolver.names(arg);
-        // A value naming no place still aliases its argument where
-        // `builtin::select` returned it: neither this frame's storage nor a
-        // handle that can be named.
-        let Names::Place(_) = names else {
-            return None;
-        };
-        Some(match self.origin_of(&names) {
-            Some(origin) => Handed::Caller(origin),
-            None => Handed::FrameLocal,
-        })
+    /// What this call puts in one parameter position.
+    fn handed_at(&self, arg: &TirExpr) -> Handed {
+        // A value carrying no storage hands the callee nothing to write into.
+        if !carries_storage(arg.type_id, self.type_table) {
+            return Handed::Unobservable;
+        }
+        match self.resolver.names(arg) {
+            names @ Names::Place(_) => match self.origin_of(&names) {
+                Some(origin) => Handed::Caller(origin),
+                None => Handed::Unobservable,
+            },
+            // A value names storage of its own, so a write into it reaches no
+            // caller of this frame; one that may alias is `Names::Unknown`.
+            Names::Value => Handed::Unobservable,
+            Names::Unknown => Handed::Caller(Origin::Unknown),
+        }
     }
 
     /// Record a write to what `names` stands for: every field the path names,
@@ -478,9 +481,7 @@ impl TirRefVisitor for Walker<'_> {
                     let handed = args
                         .iter()
                         .enumerate()
-                        .filter_map(|(position, a)| {
-                            Some((position as u32, self.handed_at(&a.expr)?))
-                        })
+                        .map(|(position, a)| (position as u32, self.handed_at(&a.expr)))
                         .collect();
                     self.callees.push(CallSite {
                         callee: (func.module_source.clone(), func.name.clone()),
