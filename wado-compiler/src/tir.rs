@@ -1100,8 +1100,8 @@ impl TypeTable {
             .unwrap_or(resolved)
     }
 
-    /// Whether two ids name the same type, however each was spelled. The way to
-    /// ask type identity: [`Self::canonical`] says why `a == b` is not.
+    /// Whether two ids name the same type, however each was spelled. Ask this
+    /// rather than `a == b`; [`Self::canonical`] says why.
     #[must_use]
     pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
         a == b || self.canonical(a) == self.canonical(b)
@@ -1878,7 +1878,14 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            self.intern_map.insert(ty.clone(), id);
+            // A borrow `redefine_to` redirected keeps its spelling for
+            // `get_unerased` alone. Re-interning it would hand a later
+            // `intern(&T)` an id that no longer resolves as a borrow.
+            let retired = self.redirects.get(id).is_some()
+                && matches!(ty, ResolvedType::Ref(_) | ResolvedType::MutRef(_));
+            if !retired {
+                self.intern_map.insert(ty.clone(), id);
+            }
             if let Some(def) = Self::nominal_key(ty) {
                 let key = (self.def_name(def).to_string(), self.def_module(def).clone());
                 self.decl_name_index.insert(key, id);
@@ -2611,6 +2618,13 @@ impl TypeTable {
         assert!(
             self.redirects.get(target).is_none(),
             "a redirect target is never itself redirected: `get` takes one hop"
+        );
+        assert!(
+            matches!(
+                self.types.get(id),
+                Some(ResolvedType::Ref(_) | ResolvedType::MutRef(_))
+            ),
+            "only a borrow is redefined: `retain` tells a retired spelling by that shape"
         );
         if let Some(ty) = self.types.get(id).cloned()
             && self.intern_map.get(&ty) == Some(&id)
@@ -6972,6 +6986,22 @@ mod tests {
         let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
         assert_ne!(minted, redefined);
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
+    }
+
+    /// `retain` rebuilds the intern map from the surviving slots, and a
+    /// retired borrow is still spelled as one there.
+    #[test]
+    fn retain_leaves_a_retired_spelling_retired() {
+        let mut table = TypeTable::new();
+        let redefined = table.intern(ResolvedType::Ref(TypeTable::I32));
+        table.redefine_to(redefined, TypeTable::I32);
+        let mut keep = IndexSet::default();
+        keep.insert(redefined);
+        keep.insert(TypeTable::I32);
+        table.retain(&keep);
+
+        assert_eq!(table.canonical(redefined), TypeTable::I32);
+        assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
     }
 
     #[test]

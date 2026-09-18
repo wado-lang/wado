@@ -31,10 +31,8 @@ use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_t
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 
-/// A set of pointee types, keyed by [`TypeTable::canonical`].
-///
-/// One struct resolves under more than one `TypeId`, so an analysis that keys
-/// on the id it was handed misses the same type arriving by another name.
+/// A set of pointee types, keyed by [`TypeTable::canonical`] so the same type
+/// arriving under another id is still a hit.
 #[derive(Default)]
 struct PointeeSet(IndexSet<TypeId>);
 

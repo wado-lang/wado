@@ -315,12 +315,10 @@ impl TypeBuilder {
         }
     }
 
-    /// Rewrite type table entries: Ref(primitive) → Box struct, MutRef(primitive) → Box struct.
+    /// Redefine every `&T` / `&mut T` `TypeId` onto its `Box<T>` struct.
     ///
-    /// Note: Option(primitive) is NOT rewritten here. The type table keeps `Option(primitive)`
-    /// so that codegen and pattern matching can still see the original inner type. The lower
-    /// pass transforms variant expressions (`VariantConstruct`) to wrap/unwrap Box structs,
-    /// while codegen handles the type mapping from `Option(primitive)` to a nullable Box reference.
+    /// `Option<T>` keeps its own spelling: pattern matching still reads the
+    /// inner type here, and the nullable-box mapping is codegen's.
     fn rewrite_types(&mut self, type_table: &mut TypeTable) {
         let mut replacements: Vec<BoxRewrite> = Vec::new();
 
