@@ -173,7 +173,10 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 
 - [ ] Sparse Conditional Constant Propagation (SCCP) and interprocedural SCCP.
 - [ ] Global Value Numbering across effectful nodes (pure-value hash-consing already exists in the value graph).
-- [ ] Instruction combining — algebraic simplification (`x + 0 → x`, `x * 2 → x << 1`).
+- [ ] Instruction combining. `const_folding`'s integer identities need one
+      operand to be the constant neutral element, so what is left are the
+      rewrites that read operand identity instead: `x - x`, `x & x`, `x | x`,
+      `~(~x)`. Hash-consing already answers that identity.
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
@@ -197,16 +200,22 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
-- [ ] Folding an interpolation that reaches a `Formatter` to its rendered
-      literal — `${x:spec}` and `${x:?}` alike. The text narrows at compile
-      time, but `Formatter::pad` and `Inspect::inspect` still run, because the
-      frame has no value for the `&mut String` the `buf` field names. A
-      fully-constant `assert x.show() == "…"` therefore keeps the whole format
+- [ ] Valuing a writable reference field by the place it names, so the writes
+      made through it land there. A `&mut` in a struct-literal field is a write
+      the frame does not perform, so the region abandons at the first append —
+      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3.
+      Every interpolation reaching a `Formatter` stops there: the text narrows
+      at compile time, but `Formatter::pad` and `Inspect::inspect` still run,
+      because the frame has no value for the `&mut String` the `buf` field
+      names. So a fully-constant `assert x.show() == "…"` keeps the whole format
       and `Inspect` machinery instead of folding to nothing, which is what the
       `trait_local_struct_receiver_blanket` and
-      `impl_mixed_target_method_generic` goldens carry. Closing it means valuing
-      a writable reference field by the place it names, so the writes made
-      through it land there.
+      `impl_mixed_target_method_generic` goldens carry, and `` `${'x'}` ``
+      reaches WIR as a `Formatter` over a fresh buffer that `char::fmt` reads
+      back out of `buf` and appends through, where `` `${true}` `` folds to a
+      globalized literal. `WADO_TRACE=vg_field` reports what a field read
+      forwarded to, what a literal seeded, and which local a `&mut` field
+      borrows.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
       writes them. Together they retire a scratch aggregate at its allocation
@@ -227,21 +236,13 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] The `char` template's `&mut` field. `` `${'x'}` `` reaches WIR as a
-      `Formatter` over a fresh buffer, which `char::fmt` reads back out of the
-      `buf` field and appends through, where `` `${true}` `` folds to a
-      globalized literal. The capacity guard those appends used to carry is
-      gone, so the field is what is left, and it is
-      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3:
-      a `&mut` in a struct-literal field is a write the frame does not perform,
-      so the region abandons at the first append.
-
-      `sroa` declines the same struct for its own reason — `&mut candidate` is a
-      hard escape, exempting only a shared `&` argument to a non-storing callee
-      — which is worth revisiting now that nothing else keeps the `Formatter`
-      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to, what
-      a literal seeded, and which local a `&mut` field borrows;
-      `WADO_TRACE=sroa` and `copy_prop` report a declined candidate.
+- [ ] Scalarizing a struct a `&mut` borrows. `sroa` treats `&mut candidate` as a
+      hard escape, exempting only a shared `&` argument to a non-storing callee,
+      which is what declines the template `Formatter`. Nothing else keeps that
+      struct alive, so the escape rule is the whole obstacle, and admitting a
+      borrow whose writes the pass can follow retires it without the frame
+      valuing the field at all. `WADO_TRACE=sroa` and `copy_prop` report a
+      declined candidate.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known
