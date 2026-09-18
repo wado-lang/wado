@@ -443,7 +443,7 @@ pub fn build_component(
     // Emit the per-interface CM instance exports (`wasi:cli/run`,
     // `wasi:http/handler`) for the lifted funcs `emit_world_exports` created;
     // freestanding world functions stay bare. See the function doc.
-    append_interface_instance_exports(&mut component_bytes, &ctx, component_plan);
+    append_interface_instance_exports(&mut component_bytes, &ctx, project, component_plan);
 
     // Compose in imported CM component dependencies so the result is standalone.
     compose_dependency_components(
@@ -4534,6 +4534,7 @@ fn lower_wasi_functions(
 fn append_interface_instance_exports(
     component_bytes: &mut Vec<u8>,
     ctx: &ComponentModelContext,
+    project: &NirPackage,
     component_plan: &ComponentPlan,
 ) {
     use wasm_encoder::{ComponentExportSection, ComponentInstanceSection, ComponentSection};
@@ -4542,6 +4543,7 @@ fn append_interface_instance_exports(
     fn collect_type_items(
         ty: &CmExportType,
         ctx: &ComponentModelContext,
+        project: &NirPackage,
         out: &mut Vec<(String, String, u32)>,
     ) {
         match ty {
@@ -4567,13 +4569,17 @@ fn append_interface_instance_exports(
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
-                    ctx.type_idx(&format!("{pkg}-{cm_name}"))
+                    // An enum or variant the outer scope aliased is keyed by its
+                    // declaration; the package key holds one type per package.
+                    cm_decl_def(project, interface_fq, &kebab_to_pascal(cm_name))
+                        .and_then(|def| ctx.decl_type_idx(def))
+                        .unwrap_or_else(|| ctx.type_idx(&format!("{pkg}-{cm_name}")))
                 };
                 out.push((interface_fq.clone(), cm_name.clone(), idx));
             }
             CmExportType::HandlerResult { ok, err } => {
-                collect_type_items(ok, ctx, out);
-                collect_type_items(err, ctx, out);
+                collect_type_items(ok, ctx, project, out);
+                collect_type_items(err, ctx, project, out);
             }
         }
     }
@@ -4605,9 +4611,9 @@ fn append_interface_instance_exports(
             let mut named: Vec<(String, String, u32)> = Vec::new();
             for export in group {
                 for (_, cm_ty) in &export.cm_params {
-                    collect_type_items(cm_ty, ctx, &mut named);
+                    collect_type_items(cm_ty, ctx, project, &mut named);
                 }
-                collect_type_items(&export.cm_result, ctx, &mut named);
+                collect_type_items(&export.cm_result, ctx, project, &mut named);
             }
             type_items.extend(
                 named
