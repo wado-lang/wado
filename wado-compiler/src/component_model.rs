@@ -2003,22 +2003,13 @@ impl CmInterfaceRegistry {
     /// a call to one lowers to that import instead of reaching WIR unresolved.
     /// An operation without `#[cm(…)]` stays out: it is the module's own
     /// effect, not a binding.
-    pub fn register_user_cm_decls(&mut self, module: &ast::Module, module_source: &ModuleSource) {
+    pub fn register_user_cm_decls(&mut self, module: &ast::Module) {
         // The resolver keys cross-module `use` by path, and a user binding
         // module resolves its own declarations, so one placeholder key serves.
         const SELF_PATH: &str = "";
-        let definitions = collect_cm_definitions(module);
-        // Every interface this module binds maps back to it, as a component
-        // dependency's and a lib entry's do. The type-id lookup starts from the
-        // interface a type names and asks which module declares it, so without
-        // this a record the module has just registered answers "no TypeId".
-        for source in definitions.values() {
-            self.cm_interface_module_sources
-                .insert(source.clone(), module_source.clone());
-        }
         let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
             IndexMap::default();
-        defs_by_module.insert(SELF_PATH, definitions);
+        defs_by_module.insert(SELF_PATH, collect_cm_definitions(module));
         let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
         self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
         self.register_module_decls(module, &CmDeclScope::CmAttributed);

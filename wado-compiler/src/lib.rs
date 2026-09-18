@@ -1508,7 +1508,7 @@ fn compile_after_load<H: CompilerHost>(
     // in the shared registry and a component dependency's are folded in by
     // `fold_component_interfaces`, so both are already registered; a module
     // that declares none is skipped, so the usual program clones nothing.
-    let user_cm_modules: Vec<(ModuleSource, ast::Module)> = sem
+    let user_cm_modules: Vec<ast::Module> = sem
         .modules
         .iter()
         .filter(|(source, module)| {
@@ -1517,7 +1517,7 @@ fn compile_after_load<H: CompilerHost>(
                 && !source.is_wasm_asset()
                 && declares_cm_import(module)
         })
-        .map(|(source, module)| (source.clone(), module.clone()))
+        .map(|(_, module)| module.clone())
         .collect();
 
     let semantics::Semantics {
@@ -1580,8 +1580,8 @@ fn compile_after_load<H: CompilerHost>(
 
     if !user_cm_modules.is_empty() {
         let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
-        for (source, module) in &user_cm_modules {
-            registry.register_user_cm_decls(module, source);
+        for module in &user_cm_modules {
+            registry.register_user_cm_decls(module);
         }
     }
 
