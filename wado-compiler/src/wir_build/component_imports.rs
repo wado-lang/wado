@@ -6,7 +6,7 @@
 
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, ERROR_CODE_WADO_NAME};
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
@@ -282,7 +282,7 @@ fn references_cli_error_code(ty: &Type, registry: &CmInterfaceRegistry) -> bool 
     let any = |tys: &[Type]| tys.iter().any(|ty| references_cli_error_code(ty, registry));
     match ty {
         Type::Named(named) => {
-            named.name == "ErrorCode"
+            named.name == ERROR_CODE_WADO_NAME
                 && registry
                     .source_interface(named)
                     .is_some_and(|s| s.starts_with("wasi:cli/types"))

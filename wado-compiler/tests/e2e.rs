@@ -1100,8 +1100,6 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can
-/// be inspected and diffed against `wado compile`. Activated by setting the
 /// Check each `wat_lines` entry against the emitted component's WAT.
 fn assert_wat_lines(wasm: &[u8], specs: &[WatLineSpec], test_id: &str) {
     if specs.is_empty() {
@@ -1130,6 +1128,8 @@ fn assert_wat_lines(wasm: &[u8], specs: &[WatLineSpec], test_id: &str) {
     }
 }
 
+/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can be
+/// inspected and diffed against `wado compile`. Activated by setting the
 /// `WADO_KEEP_WASM_DIR` environment variable. Failures are reported via
 /// `eprintln!` and never block the test.
 fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8], test_id: &str) {

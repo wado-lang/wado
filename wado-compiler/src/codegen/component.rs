@@ -12,7 +12,7 @@ use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeSink,
-    CmVariantCase, InstanceSink, ResKind, classify_future_payload_from_ast,
+    CmVariantCase, ERROR_CODE_WADO_NAME, InstanceSink, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_instance_key, cm_return_needs_outptr, emit_cm_defined,
     parse_resource_func, wado_primitive_name_to_cm,
 };
@@ -713,8 +713,8 @@ fn resolve_error_code_idx(
 ) -> u32 {
     if let Some(idx) = error_code_idx {
         idx
-    } else if has_local_error_code && enum_export_indices.contains_key("ErrorCode") {
-        enum_export_indices["ErrorCode"]
+    } else if has_local_error_code && enum_export_indices.contains_key(ERROR_CODE_WADO_NAME) {
+        enum_export_indices[ERROR_CODE_WADO_NAME]
     } else {
         let outer_ec = ctx.type_idx("error-code");
         instance_type.alias(Alias::Outer {
@@ -1945,18 +1945,11 @@ fn cm_export_type_to_idx(
             // lookup — unlike the re-export in `collect_type_items`.
             is_resource: _,
         } => {
-            let pkg = fq_name_package(interface_fq);
             assert!(
-                !pkg.is_empty(),
+                !fq_name_package(interface_fq).is_empty(),
                 "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
             );
-            decl_or_package_type_idx(
-                ctx,
-                project,
-                interface_fq,
-                &kebab_to_pascal(cm_name),
-                &format!("{pkg}-{cm_name}"),
-            )
+            exported_cm_type_idx(ctx, project, interface_fq, cm_name)
         }
         CmExportType::HandlerResult { ok, err } => {
             let arm = |a: &CmExportType| match a {
@@ -2261,11 +2254,11 @@ fn generate_cm_imports(
         let cli_types_interface = format!("wasi:cli/types@{cli_version}");
         let error_code_cm_name = project
             .cm_interface_registry
-            .get_enum_cm_name_by_source(&cli_types_interface, "ErrorCode")
+            .get_enum_cm_name_by_source(&cli_types_interface, ERROR_CODE_WADO_NAME)
             .expect("ErrorCode CM name not found in wasi:cli/types");
         let error_code_variants = project
             .cm_interface_registry
-            .get_enum_variants_by_source(&cli_types_interface, "ErrorCode")
+            .get_enum_variants_by_source(&cli_types_interface, ERROR_CODE_WADO_NAME)
             .expect("ErrorCode enum not found in wasi:cli/types");
         let types_instance_type = ctx.register_type("types-instance-type");
         {
@@ -2442,7 +2435,7 @@ fn generate_cm_imports(
                         .cm_interface_registry
                         .get_variant_cases_by_source(iface, name)
                         .is_some()
-                        && (name.as_str() != "ErrorCode" || has_local_error_code)
+                        && (name.as_str() != ERROR_CODE_WADO_NAME || has_local_error_code)
                 })
                 .cloned()
                 .collect();
@@ -2456,7 +2449,7 @@ fn generate_cm_imports(
                         .get_enum_variants_by_source(iface, name)
                         .is_some()
                         && !needed_variants.contains(name)
-                        && (name.as_str() != "ErrorCode" || has_local_error_code)
+                        && (name.as_str() != ERROR_CODE_WADO_NAME || has_local_error_code)
                 })
                 .cloned()
                 .collect();
@@ -2474,12 +2467,11 @@ fn generate_cm_imports(
 
             let mut enum_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut enum_export_indices: IndexMap<String, u32> = IndexMap::default();
-            let interface_path = &interface_info.path;
 
             for enum_name in &needed_enums {
                 if let Some(variants) = project
                     .cm_interface_registry
-                    .get_enum_variants_by_interface(interface_path, enum_name)
+                    .get_enum_variants_by_source(iface, enum_name)
                 {
                     instance_type
                         .ty()
@@ -2491,7 +2483,7 @@ fn generate_cm_imports(
 
                     if let Some(cm_name) = project
                         .cm_interface_registry
-                        .get_enum_cm_name_by_interface(interface_path, enum_name)
+                        .get_enum_cm_name_by_source(iface, enum_name)
                     {
                         instance_type.export(
                             cm_name,
@@ -2774,7 +2766,7 @@ fn generate_cm_imports(
                 .cm_interface_registry
                 .own_error_code_cm_name(&interface_info.path)
                 .filter(|cm_name| {
-                    enum_export_indices.contains_key("ErrorCode")
+                    enum_export_indices.contains_key(ERROR_CODE_WADO_NAME)
                         || shared_type_gen.exported(cm_name)
                 })
                 .map(str::to_string);
@@ -2843,10 +2835,6 @@ fn resource_type_key(cm_name: &str) -> String {
     format!("resource:{cm_name}")
 }
 
-/// The Wado name every CM `error-code` is declared under. The registry is keyed
-/// by it, so it is what reaches the declaration.
-const ERROR_CODE_WADO_NAME: &str = "ErrorCode";
-
 /// The declaration identity of the type `interface_fq` declares as `wado_name`,
 /// or `None` where it declares none.
 ///
@@ -2889,6 +2877,24 @@ fn decl_or_package_type_idx(
     cm_decl_def(project, interface_fq, wado_name)
         .and_then(|def| ctx.decl_type_idx(def))
         .unwrap_or_else(|| ctx.type_idx(package_key))
+}
+
+/// The outer type index for the CM type `interface_fq` exports as `cm_name`,
+/// whose Wado name is that name in `PascalCase`.
+fn exported_cm_type_idx(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    interface_fq: &str,
+    cm_name: &str,
+) -> u32 {
+    let pkg = fq_name_package(interface_fq);
+    decl_or_package_type_idx(
+        ctx,
+        project,
+        interface_fq,
+        &kebab_to_pascal(cm_name),
+        &format!("{pkg}-{cm_name}"),
+    )
 }
 
 /// The `error-code` a package's transmission futures carry, as an identity.
@@ -3124,9 +3130,9 @@ fn import_resource_defining_interface(
 
         let mut exported_func_names: IndexSet<String> = IndexSet::default();
 
-        // Emit constructor/static functions from registry metadata.
-        // Processing their parameter and return types triggers on-demand emission of
-        // all dependent types (error-code variant and its payload record types).
+        // A constructor or static first, since emitting its signature emits the
+        // types the methods then reference (the error-code variant and its
+        // payload records).
         let is_constructor_or_static = |f: &CmFunctionInfo| {
             resource_names.contains(f.interface_name.as_str())
                 && matches!(
@@ -3134,52 +3140,24 @@ fn import_resource_defining_interface(
                     Some((ResKind::Constructor | ResKind::Static, _, _))
                 )
         };
-        for func in all_funcs.iter().filter(|f| is_constructor_or_static(f)) {
-            export_func_in_instance_type(
-                &mut instance_type,
-                &mut type_idx,
-                &mut type_gen,
-                project,
-                &resource_exports,
-                &mut exported_func_names,
-                func,
-            );
-        }
-
-        for func in &plain_funcs {
-            export_func_in_instance_type(
-                &mut instance_type,
-                &mut type_idx,
-                &mut type_gen,
-                project,
-                &resource_exports,
-                &mut exported_func_names,
-                func,
-            );
-        }
-
-        let resource_methods: Vec<CmFunctionInfo> = all_funcs
-            .iter()
-            .filter(|f| {
-                if is_constructor_or_static(f)
-                    || !resource_names.contains(f.interface_name.as_str())
-                {
-                    return false;
-                }
-                if !matches!(
+        let is_used_method = |f: &CmFunctionInfo| {
+            resource_names.contains(f.interface_name.as_str())
+                && !is_constructor_or_static(f)
+                && matches!(
                     parse_resource_func(&f.wasi_func_name),
                     Some((ResKind::Method | ResKind::Static, _, _))
-                ) {
-                    return false;
-                }
+                )
                 // An unused one would reference a resource type the instance
                 // never emits, such as `RequestOptions`.
-                project.used_wasi_functions.contains(&f.used_key())
-            })
-            .cloned()
-            .collect();
+                && project.used_wasi_functions.contains(&f.used_key())
+        };
 
-        for func in &resource_methods {
+        let exported = all_funcs
+            .iter()
+            .filter(|f| is_constructor_or_static(f))
+            .chain(plain_funcs.iter())
+            .chain(all_funcs.iter().filter(|f| is_used_method(f)));
+        for func in exported {
             export_func_in_instance_type(
                 &mut instance_type,
                 &mut type_idx,
@@ -3668,7 +3646,7 @@ fn emit_error_code_export(
 ) {
     let registry = &project.cm_interface_registry;
     if let Some(cases) = registry
-        .get_variant_cases_by_source(source_path, "ErrorCode")
+        .get_variant_cases_by_source(source_path, ERROR_CODE_WADO_NAME)
         .map(<[CmVariantCase]>::to_vec)
     {
         let mut type_gen = CmTypeGen::with_interface_hint(source_path);
@@ -3687,7 +3665,9 @@ fn emit_error_code_export(
             })
             .collect();
         instance_type.ty().defined_type().variant(cm_cases);
-    } else if let Some(members) = registry.get_enum_variants_by_source(source_path, "ErrorCode") {
+    } else if let Some(members) =
+        registry.get_enum_variants_by_source(source_path, ERROR_CODE_WADO_NAME)
+    {
         instance_type
             .ty()
             .defined_type()
@@ -4464,13 +4444,7 @@ fn append_interface_instance_exports(
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
-                    decl_or_package_type_idx(
-                        ctx,
-                        project,
-                        interface_fq,
-                        &kebab_to_pascal(cm_name),
-                        &format!("{pkg}-{cm_name}"),
-                    )
+                    exported_cm_type_idx(ctx, project, interface_fq, cm_name)
                 };
                 out.push((interface_fq.clone(), cm_name.clone(), idx));
             }

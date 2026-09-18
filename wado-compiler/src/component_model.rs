@@ -1116,30 +1116,6 @@ fn first_name_in_interface<'a, V>(
         .map(|(_, name)| name.as_str())
 }
 
-/// Return the value for `name` in a `(source_interface, name)`-keyed map when
-/// exactly one interface whose source starts with `prefix` defines it. Returns
-/// `None` for zero or multiple matches under the prefix. No fallback to the
-/// bare-name scan: a caller that passes a prefix is explicitly requesting
-/// prefix-scoped resolution and must not be silently redirected to a type
-/// defined in a different namespace.
-fn find_unique_with_prefix<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
-    prefix: &str,
-    name: &str,
-) -> Option<&'a V> {
-    let mut found: Option<&V> = None;
-    for ((src, n), v) in map {
-        if n != name || !src.starts_with(prefix) {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        found = Some(v);
-    }
-    found
-}
-
 /// Return the `source_interface` when `name` has exactly one registrant under
 /// `prefix`.
 fn find_unique_source_with_prefix<'a, V>(
@@ -3130,33 +3106,6 @@ impl CmInterfaceRegistry {
             .map(|((src, _), _)| src.as_str())
     }
 
-    /// Get the CM enum variant names scoped to a specific source interface
-    /// (e.g. `"wasi:cli/types@0.3.0"`). Disambiguates enums
-    /// sharing a Wado name across interfaces. Falls back to the unique WASI
-    /// cross-package registrant when the scoped interface does not define the
-    /// name. The fallback is limited to the `wasi:` namespace.
-    pub fn get_enum_variants_by_interface(
-        &self,
-        interface_path: &str,
-        name: &str,
-    ) -> Option<&[String]> {
-        self.enums
-            .get(&(interface_path.to_string(), name.to_string()))
-            .or_else(|| find_unique_with_prefix(&self.enums, "wasi:", name))
-            .map(|(_, variants)| variants.as_slice())
-    }
-
-    /// Get the CM enum name scoped to a specific source interface, falling back
-    /// to the unique WASI cross-package registrant. The fallback makes this a
-    /// name lookup and not a membership test — ask
-    /// [`Self::get_enum_cm_name_by_source`] which interface declares the name.
-    pub fn get_enum_cm_name_by_interface(&self, interface_path: &str, name: &str) -> Option<&str> {
-        self.enums
-            .get(&(interface_path.to_string(), name.to_string()))
-            .or_else(|| find_unique_with_prefix(&self.enums, "wasi:", name))
-            .map(|(cm_name, _)| cm_name.as_str())
-    }
-
     /// The CM interface a named type belongs to: its recorded source, else the
     /// emitting interface when that one declares the name, else the bundled
     /// binding that declares it, else a component dependency's re-export. The
@@ -3194,41 +3143,14 @@ impl CmInterfaceRegistry {
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
     /// answers `None` rather than borrowing another package's.
     pub fn own_error_code_cm_name(&self, interface_path: &str) -> Option<&str> {
-        self.get_variant_cm_name_by_source(interface_path, "ErrorCode")
-            .or_else(|| self.get_enum_cm_name_by_source(interface_path, "ErrorCode"))
+        self.get_variant_cm_name_by_source(interface_path, ERROR_CODE_WADO_NAME)
+            .or_else(|| self.get_enum_cm_name_by_source(interface_path, ERROR_CODE_WADO_NAME))
     }
 
     /// Whether `interface_path` declares its own `ErrorCode`. Codegen picks the
     /// interface-local error type over an alias to the shared CLI one on this.
     pub fn declares_own_error_code(&self, interface_path: &str) -> bool {
         self.own_error_code_cm_name(interface_path).is_some()
-    }
-
-    /// Get the variant cases scoped to a specific source interface. Falls back
-    /// to the unique WASI cross-package registrant (scoped to `wasi:`) when
-    /// the given interface does not define the name.
-    pub fn get_variant_cases_by_interface(
-        &self,
-        interface_path: &str,
-        name: &str,
-    ) -> Option<&[CmVariantCase]> {
-        self.variants
-            .get(&(interface_path.to_string(), name.to_string()))
-            .or_else(|| find_unique_with_prefix(&self.variants, "wasi:", name))
-            .map(|(_, cases)| cases.as_slice())
-    }
-
-    /// Get the CM variant name scoped to a specific source interface. Falls
-    /// back to the unique WASI cross-package registrant (scoped to `wasi:`).
-    pub fn get_variant_cm_name_by_interface(
-        &self,
-        interface_path: &str,
-        name: &str,
-    ) -> Option<&str> {
-        self.variants
-            .get(&(interface_path.to_string(), name.to_string()))
-            .or_else(|| find_unique_with_prefix(&self.variants, "wasi:", name))
-            .map(|(cm_name, _)| cm_name.as_str())
     }
 
     /// Keying on the declaration's own module source keeps a user type from
@@ -4476,7 +4398,7 @@ impl CmTypeGen {
                             .interface_hint
                             .as_deref()
                             .and_then(|h| {
-                                cm_interface_registry.get_variant_cases_by_interface(h, name)
+                                cm_interface_registry.get_variant_cases_by_source(h, name)
                             })
                             .or_else(|| {
                                 cm_interface_registry.get_variant_cases_by_source(source, name)
@@ -4487,7 +4409,7 @@ impl CmTypeGen {
                             .interface_hint
                             .as_deref()
                             .and_then(|h| {
-                                cm_interface_registry.get_variant_cm_name_by_interface(h, name)
+                                cm_interface_registry.get_variant_cm_name_by_source(h, name)
                             })
                             .or_else(|| {
                                 cm_interface_registry.get_variant_cm_name_by_source(source, name)
@@ -4964,6 +4886,10 @@ pub fn is_cm_function_supported(func: &CmFunctionInfo) -> bool {
 
 /// Canonical ABI maximum flat results before a return must use an outptr.
 pub const MAX_FLAT_RESULTS: usize = 1;
+
+/// The Wado name every CM `error-code` is declared under. The registry is keyed
+/// by it, so it is what reaches the declaration.
+pub const ERROR_CODE_WADO_NAME: &str = "ErrorCode";
 
 /// What every boundary path says when it meets the empty tuple, which none of
 /// them does.
