@@ -15,7 +15,9 @@ use std::sync::Arc;
 
 use crate::ast;
 use crate::ast::NamedType;
-use crate::component_model::{CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry};
+use crate::component_model::{
+    CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, ResKind, parse_resource_func,
+};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
 use crate::name::to_kebab;
@@ -1126,32 +1128,6 @@ fn describe_type(ty: &ResolvedType) -> String {
         ResolvedType::Unit => "unit `()`".to_string(),
         ResolvedType::Never => "never `!`".to_string(),
         other => format!("{other:?}"),
-    }
-}
-
-/// The kind of resource-associated function, encoded by the `#[cm]` fragment
-/// prefix (`[method]` / `[static]` / `[constructor]`).
-#[derive(Clone, Copy)]
-enum ResKind {
-    Method,
-    Static,
-    Constructor,
-}
-
-/// Classify a CM function name as a resource method/static/constructor,
-/// returning `(kind, resource_cm_name, member_name)`. Free functions yield
-/// `None`.
-fn parse_resource_func(wasi_func_name: &str) -> Option<(ResKind, &str, &str)> {
-    if let Some(resource) = wasi_func_name.strip_prefix("[constructor]") {
-        Some((ResKind::Constructor, resource, ""))
-    } else if let Some(rest) = wasi_func_name.strip_prefix("[method]") {
-        let (resource, member) = rest.split_once('.')?;
-        Some((ResKind::Method, resource, member))
-    } else if let Some(rest) = wasi_func_name.strip_prefix("[static]") {
-        let (resource, member) = rest.split_once('.')?;
-        Some((ResKind::Static, resource, member))
-    } else {
-        None
     }
 }
 

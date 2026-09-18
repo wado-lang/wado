@@ -854,7 +854,8 @@ pub struct CmInterfaceRegistry {
 
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`, registered as
     /// `u32` newtypes rather than in [`Self::resources`].
-    unrestricted_resources: IndexSet<(String, String)>,
+    /// Key: `(source_interface, wado_name)`. Value: CM kebab-case name.
+    unrestricted_resources: IndexMap<(String, String), String>,
 
     /// Flags types collected from WASI modules (e.g., `PathFlags`, `OpenFlags`).
     /// Key: `(source_interface, wado_name)`. Value:
@@ -928,35 +929,96 @@ struct ModuleSourceIndex {
     flags: IndexMap<(String, String), String>,
 }
 
-/// Whether `module` declares anything a [`CmDeclScope::CmAttributed`] scope
-/// would admit. What decides the scan must read `#[cm(…)]` off exactly the item
-/// kinds the scope admits, or a module is skipped and its declarations are
-/// missing where nothing looks.
-pub fn declares_cm_binding(module: &ast::Module) -> bool {
+/// What a `#[cm(…)]` binds.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CmBindingKind {
+    Type,
+    Function,
+}
+
+/// Every `#[cm(…)]` in `module`, paired with what it binds. One walk answers
+/// both who has bindings at all and which of them are functions: two walks drift,
+/// and a module an incomplete one skips loses declarations where nothing looks.
+fn cm_imports(module: &ast::Module) -> Vec<(CmBindingKind, &CmImport)> {
     use crate::ast::Item;
 
-    let attributed = |attrs: &[Attribute]| attrs.iter().any(|a| a.as_cm_import().is_some());
-    module.items.iter().any(|item| match item {
-        Item::Newtype(decl) => attributed(&decl.attrs),
-        Item::Struct(decl) => attributed(&decl.attrs),
-        Item::Enum(decl) => attributed(&decl.attrs),
-        Item::Variant(decl) => attributed(&decl.attrs),
-        Item::Flags(decl) => decl.attributes.as_deref().is_some_and(attributed),
-        Item::Resource(decl) => {
-            attributed(&decl.attrs) || decl.methods.iter().any(|m| attributed(&m.attrs))
+    fn binds(
+        kind: CmBindingKind,
+        attrs: &[Attribute],
+    ) -> impl Iterator<Item = (CmBindingKind, &CmImport)> {
+        attrs
+            .iter()
+            .filter_map(Attribute::as_cm_import)
+            .map(move |import| (kind, import))
+    }
+    fn operations(methods: &[ast::Function]) -> impl Iterator<Item = (CmBindingKind, &CmImport)> {
+        methods
+            .iter()
+            .flat_map(|m| binds(CmBindingKind::Function, &m.attrs))
+    }
+
+    let mut found = Vec::new();
+    for item in &module.items {
+        match item {
+            Item::Newtype(decl) => found.extend(binds(CmBindingKind::Type, &decl.attrs)),
+            Item::Struct(decl) => found.extend(binds(CmBindingKind::Type, &decl.attrs)),
+            Item::Enum(decl) => found.extend(binds(CmBindingKind::Type, &decl.attrs)),
+            Item::Variant(decl) => found.extend(binds(CmBindingKind::Type, &decl.attrs)),
+            Item::Flags(decl) => {
+                if let Some(attrs) = decl.attributes.as_deref() {
+                    found.extend(binds(CmBindingKind::Type, attrs));
+                }
+            }
+            Item::Resource(decl) => {
+                found.extend(binds(CmBindingKind::Type, &decl.attrs));
+                found.extend(operations(&decl.methods));
+            }
+            Item::Interface(decl) => found.extend(operations(&decl.methods)),
+            Item::Function(decl) => found.extend(binds(CmBindingKind::Function, &decl.attrs)),
+            Item::Use(_)
+            | Item::TupleTypeDecl(_)
+            | Item::BuiltinTypeDecl(_)
+            | Item::Impl(_)
+            | Item::Trait(_)
+            | Item::World(_)
+            | Item::Test(_)
+            | Item::Global(_)
+            | Item::Error(_) => {}
         }
-        Item::Interface(decl) => decl.methods.iter().any(|m| attributed(&m.attrs)),
-        Item::Function(decl) => attributed(&decl.attrs),
-        Item::Use(_)
-        | Item::TupleTypeDecl(_)
-        | Item::BuiltinTypeDecl(_)
-        | Item::Impl(_)
-        | Item::Trait(_)
-        | Item::World(_)
-        | Item::Test(_)
-        | Item::Global(_)
-        | Item::Error(_) => false,
-    })
+    }
+    found
+}
+
+/// Whether `module` declares anything a [`CmDeclScope::CmAttributed`] scope
+/// would admit.
+pub fn declares_cm_binding(module: &ast::Module) -> bool {
+    !cm_imports(module).is_empty()
+}
+
+/// The kind of resource-associated function, encoded by the `#[cm]` fragment
+/// prefix (`[method]` / `[static]` / `[constructor]`).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ResKind {
+    Method,
+    Static,
+    Constructor,
+}
+
+/// Classify a CM function name as a resource method/static/constructor,
+/// returning `(kind, resource_cm_name, member_name)`. Free functions yield
+/// `None`.
+pub fn parse_resource_func(cm_func_name: &str) -> Option<(ResKind, &str, &str)> {
+    if let Some(resource) = cm_func_name.strip_prefix("[constructor]") {
+        Some((ResKind::Constructor, resource, ""))
+    } else if let Some(rest) = cm_func_name.strip_prefix("[method]") {
+        let (resource, member) = rest.split_once('.')?;
+        Some((ResKind::Method, resource, member))
+    } else if let Some(rest) = cm_func_name.strip_prefix("[static]") {
+        let (resource, member) = rest.split_once('.')?;
+        Some((ResKind::Static, resource, member))
+    } else {
+        None
+    }
 }
 
 /// Which declarations of a module enter the registry.
@@ -1009,6 +1071,18 @@ fn register_unique<V>(
         key.0,
     );
     map.insert(key, value);
+}
+
+/// The Wado name a `(source_interface, wado_name)`-keyed map of CM names holds
+/// under `iface_fq` for `cm_name`.
+fn wado_name_under_cm_name<'a>(
+    map: &'a IndexMap<(String, String), String>,
+    iface_fq: &str,
+    cm_name: &str,
+) -> Option<&'a str> {
+    map.iter()
+        .find(|((source, _), name)| source == iface_fq && name.as_str() == cm_name)
+        .map(|((_, wado_name), _)| wado_name.as_str())
 }
 
 /// The first name a `(source_interface, name)`-keyed map holds under
@@ -1603,7 +1677,7 @@ impl CmInterfaceRegistry {
     #[must_use]
     pub fn is_unrestricted_resource(&self, source: &str, name: &str) -> bool {
         self.unrestricted_resources
-            .contains(&(source.to_string(), name.to_string()))
+            .contains_key(&(source.to_string(), name.to_string()))
     }
 
     /// The CM type of a declared parameter: an extern-handle loses its
@@ -1837,7 +1911,7 @@ impl CmInterfaceRegistry {
                 // newtype and every `own`/`borrow` path passes it by.
                 if declares_unrestricted(&resource.attrs) {
                     self.unrestricted_resources
-                        .insert((source_interface.clone(), resource.name.clone()));
+                        .insert((source_interface.clone(), resource.name.clone()), cm_name);
                     register_unique(
                         &mut self.newtypes,
                         "newtype",
@@ -2112,6 +2186,46 @@ impl CmInterfaceRegistry {
         let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
         self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
         self.register_module_decls(module, &CmDeclScope::CmAttributed);
+        Ok(())
+    }
+
+    /// Check that every `#[cm(…)]` function name `module` binds is one the
+    /// interface it names can export. It runs once every module is registered,
+    /// since the `interface` naming a resource's operations need not be the
+    /// module declaring that resource.
+    ///
+    /// `Err` describes the first name that names nothing. Left unchecked, the
+    /// component validator rejects the emitted binary, which reaches the user
+    /// as an internal compiler error.
+    pub fn validate_cm_function_names(&self, module: &ast::Module) -> Result<(), String> {
+        for (kind, import) in cm_imports(module) {
+            if kind != CmBindingKind::Function {
+                continue;
+            }
+            let Some(cm_func) = import.function.as_deref() else {
+                continue;
+            };
+            let Some((_, receiver, _)) = parse_resource_func(cm_func) else {
+                continue;
+            };
+            let iface = import.interface_path();
+            if wado_name_under_cm_name(&self.resources, &iface, receiver).is_some() {
+                continue;
+            }
+            let head = format!(
+                "`{cm_func}` binds an operation of the Component Model resource `{receiver}`"
+            );
+            let unrestricted =
+                wado_name_under_cm_name(&self.unrestricted_resources, &iface, receiver);
+            return Err(match unrestricted {
+                Some(wado_name) => format!(
+                    "{head}, but `{wado_name}` is declared unrestricted, so it crosses the \
+                     boundary as a plain handle and declares no resource to carry \
+                     operations. Bind a plain function taking the handle as a parameter."
+                ),
+                None => format!("{head}, which interface `{iface}` does not declare."),
+            });
+        }
         Ok(())
     }
 

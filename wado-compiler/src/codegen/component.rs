@@ -12,9 +12,9 @@ use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
     CmDefined, CmFunctionInfo, CmInterfaceInfo, CmInterfaceRegistry, CmTypeGen, CmTypeSink,
-    CmVariantCase, InstanceSink, classify_future_payload_from_ast,
+    CmVariantCase, InstanceSink, ResKind, classify_future_payload_from_ast,
     classify_stream_payload_from_ast, cm_instance_key, cm_return_needs_outptr, emit_cm_defined,
-    wado_primitive_name_to_cm,
+    parse_resource_func, wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -3181,8 +3181,10 @@ fn import_resource_defining_interface(
         // all dependent types (error-code variant and its payload record types).
         let is_constructor_or_static = |f: &CmFunctionInfo| {
             resource_names.contains(f.interface_name.as_str())
-                && (f.wasi_func_name.starts_with("[constructor]")
-                    || f.wasi_func_name.starts_with("[static]"))
+                && matches!(
+                    parse_resource_func(&f.wasi_func_name),
+                    Some((ResKind::Constructor | ResKind::Static, _, _))
+                )
         };
         for func in all_funcs.iter().filter(|f| is_constructor_or_static(f)) {
             export_func_in_instance_type(
@@ -3209,22 +3211,19 @@ fn import_resource_defining_interface(
         let resource_methods: Vec<CmFunctionInfo> = all_funcs
             .iter()
             .filter(|f| {
-                // Skip functions already emitted in the constructor/static block
-                if is_constructor_or_static(f) {
+                if is_constructor_or_static(f)
+                    || !resource_names.contains(f.interface_name.as_str())
+                {
                     return false;
                 }
-                // Only include methods for known HTTP resources
-                if !resource_names.contains(f.interface_name.as_str()) {
+                if !matches!(
+                    parse_resource_func(&f.wasi_func_name),
+                    Some((ResKind::Method | ResKind::Static, _, _))
+                ) {
                     return false;
                 }
-                // Only include method/static functions
-                let is_method_or_static = f.wasi_func_name.starts_with("[method]")
-                    || f.wasi_func_name.starts_with("[static]");
-                if !is_method_or_static {
-                    return false;
-                }
-                // Only include functions that are actually used to avoid
-                // referencing unsupported resource types (e.g. RequestOptions).
+                // An unused one would reference a resource type the instance
+                // never emits, such as `RequestOptions`.
                 project.used_wasi_functions.contains(&f.used_key())
             })
             .cloned()
@@ -3283,10 +3282,7 @@ fn import_resource_defining_interface(
                 if !resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
-                let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
-                    || f.wasi_func_name.starts_with("[method]")
-                    || f.wasi_func_name.starts_with("[static]");
-                is_resource_func && emits_function(project, f)
+                parse_resource_func(&f.wasi_func_name).is_some() && emits_function(project, f)
             })
             .chain(plain_funcs.iter())
             .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))

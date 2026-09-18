@@ -25,6 +25,7 @@ mod cm_provider_compose;
 mod cm_qualified_inherited_method;
 mod cm_record_param;
 mod cm_reexport_type;
+mod cm_resource_qualified_name;
 mod cm_resource_unbound;
 mod cm_shared_operation;
 mod cm_world_func_import;
