@@ -3,13 +3,12 @@
 //! instance-type builder keys its map by Wado name, so the handle was looked
 //! up under a name the map never held.
 //!
-//! The CM surface is right now; the binding body is not. A *user-declared*
-//! `#[cm]` resource also has a guest type, while `cm_type_to_type_id` maps a
-//! restricted resource to `i32`, so the lift builds `Option<i32>` where the
-//! adapter's signature says `Option<Resource>` and the two arms of the lifted
-//! option land in different GC type families. The stdlib shape
-//! (`Request::get_options`) escapes this only because its resource has no
-//! guest type and both sides agree on `Option<i32>`.
+//! The binding then lifts the option as `Option<i32>`, since a restricted
+//! resource is an `i32` at the CM boundary, and the call site retypes it to
+//! `Option<Adapter>`. That retyping walks the body statement by statement, and
+//! the `None` an option lift seeds its accumulator with was the one starting
+//! shape it did not recognize, so the two arms of one option landed in
+//! different GC type families.
 
 use crate::common::compile_source;
 
@@ -40,7 +39,6 @@ export fn run() with (Gfx, Device) {
 "#;
 
 #[test]
-#[ignore = "known defect: the lift builds Option<i32> under an Option<Resource> signature"]
 fn an_optional_resource_return_finds_its_own_handle() {
     compile_source(OPTIONAL_RESOURCE_RETURN)
         .unwrap_or_else(|e| panic!("an optional resource return must compile: {e}"));
