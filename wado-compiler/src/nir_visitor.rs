@@ -29,8 +29,8 @@ pub(crate) fn reachable_exprs(body: &Body) -> Vec<ExprId> {
     exprs_under(body, NodeRef::Block(body.root))
 }
 
-/// Every expression id reachable from `node`, in walk order. For a pass whose
-/// question is answered by one region, so it walks that and not the body.
+/// Every expression id reachable from `node`, in walk order — the region a
+/// pass walks when one region answers its question.
 pub(crate) fn exprs_under(body: &Body, node: NodeRef) -> Vec<ExprId> {
     struct Collect(Vec<ExprId>);
     impl NirRefVisitor for Collect {

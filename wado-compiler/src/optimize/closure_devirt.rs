@@ -63,9 +63,8 @@ pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
 
 /// The expression the operand denotes, past the references around it and the
 /// blocks that only yield it, and the budget left for resolving that further.
-///
-/// Charges a step for the expression itself as well as for each block hop, so
-/// the budget a caller passes on is one an exhausted walk has already refused.
+// A step is charged for the landing expression as well as each block hop, so
+// the budget handed back is one an exhausted walk has already refused.
 fn past_transparent(engine: &Engine, op: Operand, depth: u32) -> Option<(ExprId, u32)> {
     let mut left = depth.checked_sub(1)?;
     let mut expr = strip_refs(engine.body, op.as_expr()?);
