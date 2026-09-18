@@ -1845,7 +1845,7 @@ impl Deserializer for CborDeserializer {
             }
             if major != want_major {
                 builtin::cold_path();
-                return Result::Err(DeserializeError::unexpected_type(expected.to_string(), self.pos as i64));
+                return Result::Err(DeserializeError::unexpected_type(expected, self.pos as i64));
             }
             let depth = self.inner_depth()?;
             let remaining: i64 = if indef { -1 } else { arg as i64 };

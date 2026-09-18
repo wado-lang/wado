@@ -687,7 +687,10 @@ impl<'a> Builder<'a> {
         // Reassigning `local` invalidates references that pointed at it.
         self.ref_targets.retain(|_, &mut pointee| pointee != local);
         let target = match &self.body.exprs[value].kind {
-            ExprKind::Unary { .. } => self.borrowed_local(Operand::Expr(value)),
+            ExprKind::Unary { .. } => self
+                .body
+                .borrowed_local(Operand::Expr(value))
+                .map(|(l, _)| l),
             // `let r = obj.f` where the literal built `f` from `&x` reaches `x`
             // exactly as `let r = &x` does.
             ExprKind::FieldAccess {
@@ -766,21 +769,6 @@ impl<'a> Builder<'a> {
                 return None;
             };
             array = *operand;
-        }
-    }
-
-    /// The local `&x` / `&mut x` borrows, or `None` for anything else.
-    fn borrowed_local(&self, op: Operand) -> Option<u32> {
-        let ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } = &self.body.exprs[op.as_expr()?].kind
-        else {
-            return None;
-        };
-        match &self.body.exprs[inner.as_expr()?].kind {
-            ExprKind::Local { index, .. } => Some(*index),
-            _ => None,
         }
     }
 
@@ -1468,7 +1456,7 @@ impl<'a> Builder<'a> {
         let attempted = pairs.len();
         let mut seeded = 0;
         for (field_index, field_value) in pairs {
-            if let Some(pointee) = self.borrowed_local(field_value)
+            if let Some((pointee, _)) = self.body.borrowed_local(field_value)
                 && !self.assigned_fields.contains(&field_index)
             {
                 // `assigned_fields` sees this body only, so a callee could

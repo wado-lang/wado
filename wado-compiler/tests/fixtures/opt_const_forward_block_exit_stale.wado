@@ -22,8 +22,10 @@ fn f(c: bool) -> i32 {
     return a.len();
 }
 
+// `black_box` keeps `c` off the constant path: specializing `f` on it folds the
+// break away, and the fall-through this test is about is gone with it.
 export fn run() with Stdout {
-    println(`${f(true)} ${f(false)}`);
+    println(`${f(builtin::black_box(true))} ${f(builtin::black_box(false))}`);
 }
 
 __DATA__

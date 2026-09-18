@@ -102,23 +102,25 @@ fn both_branches(n: i32) -> String {
     }
 }
 
+// `black_box` keeps each argument off the constant path: specializing a callee
+// on one folds its payload to a literal, leaving no multi-field read to place.
 export fn run() {
     // Case 1: multi-field
-    assert point_sum(5) == 15;
-    assert point_sum(-1) == -8;
+    assert point_sum(builtin::black_box(5)) == 15;
+    assert point_sum(builtin::black_box(-1)) == -8;
 
     // Case 2: 3+ fields
-    assert config_summary(3) == 34;
-    assert config_summary(-2) == -20;
-    assert config_summary(0) == -1;
+    assert config_summary(builtin::black_box(3)) == 34;
+    assert config_summary(builtin::black_box(-2)) == -20;
+    assert config_summary(builtin::black_box(0)) == -1;
 
     // Case 3: value position
-    assert pass_payload(5) == 11;
-    assert pass_payload(-1) == -1;
+    assert pass_payload(builtin::black_box(5)) == 11;
+    assert pass_payload(builtin::black_box(-1)) == -1;
 
     // Case 4: both branches
-    assert both_branches(1) == "test";
-    assert both_branches(0) == "zero";
+    assert both_branches(builtin::black_box(1)) == "test";
+    assert both_branches(builtin::black_box(0)) == "zero";
 }
 
 __DATA__

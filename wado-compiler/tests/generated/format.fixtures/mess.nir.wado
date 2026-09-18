@@ -111,9 +111,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
                 size = (size + prev_size);
             }
         }
-        let tag: i32 = (size + 0);
-        core::builtin::i32_store(block, tag);
-        core::builtin::i32_store(((block + size) - 8), tag);
+        core::builtin::i32_store(block, size);
+        core::builtin::i32_store(((block + size) - 8), size);
         let k: i32 = ((size - 32) >> 4);
         let k: i32 = core::builtin::select::<i32>((k < 32), k, 32);
         let head: i32 = core::builtin::i32_load((8 + (k * 4)));
@@ -143,9 +142,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
                 core::builtin::i32_store(b, $licm_arith_101);
                 core::builtin::i32_store(((b + size) - 8), $licm_arith_101);
                 let rest: i32 = (b + size);
-                let tag: i32 = (remainder + 0);
-                core::builtin::i32_store(rest, tag);
-                core::builtin::i32_store(((rest + remainder) - 8), tag);
+                core::builtin::i32_store(rest, remainder);
+                core::builtin::i32_store(((rest + remainder) - 8), remainder);
                 let k: i32 = ((remainder - 32) >> 4);
                 let k: i32 = core::builtin::select::<i32>((k < 32), k, 32);
                 let head: i32 = core::builtin::i32_load((8 + (k * 4)));
@@ -179,9 +177,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
                 core::builtin::i32_store(curr, $licm_arith_102);
                 core::builtin::i32_store(((curr + size) - 8), $licm_arith_102);
                 let rest: i32 = (curr + size);
-                let tag: i32 = (remainder + 0);
-                core::builtin::i32_store(rest, tag);
-                core::builtin::i32_store(((rest + remainder) - 8), tag);
+                core::builtin::i32_store(rest, remainder);
+                core::builtin::i32_store(((rest + remainder) - 8), remainder);
                 let k: i32 = ((remainder - 32) >> 4);
                 let k: i32 = core::builtin::select::<i32>((k < 32), k, 32);
                 let head: i32 = core::builtin::i32_load((8 + (k * 4)));

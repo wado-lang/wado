@@ -401,7 +401,7 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     mutates: bool,
 ) -> Result<String, String> {
     let recv = if mutates { "&mut self" } else { "&self" };
-    let mut sig = `fn ${name.to_string()}(${recv}`;
+    let mut sig = `fn ${name}(${recv}`;
     for let p of params {
         sig.push_str(`, ${escape_ident(&p.0)}: ${p.1}`);
     }
@@ -410,12 +410,12 @@ fn build_method<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
         let rty = match map_java_type(ret_java) {
             Some(t) => t,
             None => {
-                return Result::Err(`java2wado: @members: unsupported return type '${ret_java.to_string()}'`);
+                return Result::Err(`java2wado: @members: unsupported return type '${ret_java}'`);
             },
         };
         sig.push_str(` -> ${rty}`);
     }
-    return Result::Ok(`${sig} { ${body_wado.to_string()} }`);
+    return Result::Ok(`${sig} { ${body_wado} }`);
 }
 
 /// Parse a Java parameter list `( Type name (, Type name)* )`; `pos` at `(`,

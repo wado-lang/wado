@@ -65,7 +65,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_binding__Stdin_read_via_stream"() with Stdin {
     let $lifted_result_1: i32;
     let $lifted_result_2: i32;
     "wasi/wasi:cli/Stdin::read_via_stream"(local.tee $outptr("mem/realloc"(0, 0, 4, 8)));
-    $lifted_result_1 = builtin::load_i32($outptr + 0);
+    $lifted_result_1 = builtin::load_i32($outptr);
     $lifted_result_2 = builtin::load_i32($outptr + 4);
     drop("mem/realloc"($outptr, 8, 4, 0));
     return struct.new "tuple//[core:prelude/types.wado/Stream<u8>, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:cli/types.wado/ErrorCode>>]" { 0: $lifted_result_1, 1: $lifted_result_2 };

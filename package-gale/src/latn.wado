@@ -571,7 +571,7 @@ fn ranges_segment(b: &mut LatnBuilder, ranges: &List<[i32, i32]>) -> [i32, i32] 
 fn rule_segment<S: AsStrSlice>(b: &mut LatnBuilder, name: S) -> [i32, i32] {
     let from = b.new_state(ATN_BASIC);
     let to = b.new_state(ATN_BASIC);
-    let ri = if let Some(idx) = b.name_to_idx.get(name.to_string()) {
+    let ri = if let Some(idx) = b.name_to_idx.get_str(name) {
         idx;
     } else {
         -1;

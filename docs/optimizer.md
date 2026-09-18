@@ -91,14 +91,14 @@ Variant and reference:
 Scalar and dataflow:
 
 - `copy_prop` — propagate trivial copies (`let x = y`) and drop the binding. A value-type copy propagates however many times each side is read when neither binding is ever written, since the sharing is then unobservable.
-- `param_spec` — propagate scalar arguments agreed on by every caller without cloning; compiler items and cached clones retain their contracts for calls synthesized later. For constant fields of a by-reference struct, clone the callee and substitute those reads.
+- `param_spec` — propagate scalar arguments agreed on by every caller without cloning; compiler items and cached clones retain their contracts for calls synthesized later. Where the callers disagree, clone the callee per binding set and substitute the reads — of a scalar argument, and of the constant fields of a struct passed by reference. A borrow and its referent are one root, so a `let r = &mut cfg;` that inlining leaves behind still specializes; what either name narrows away is narrowed away from both. A scalar stays where it is for a callee that writes through a reference — a compile-time frame runs such a callee for those writes, and cannot see a constant the callee no longer receives — and for one on a call cycle, whose recursion the constant decides nothing about.
 - `dae` — drop parameters never read by the callee, and the pure argument at every call site. Run to its own fixed point, since dropping one parameter can leave a caller's dead; the outer loop's iteration count would otherwise track the depth of a forwarding chain.
 - `drve` — make a function void-returning when every caller drops its result and its return operands are pure and nontrapping. Includes scalar results and returns inside loops.
 - `store_load_forward` — forward a stored literal to a later unmodified load.
 - `elide_local` — drop a binding that is never read (keeping its value if impure).
 - `let_block_flatten` — hoist the leading statements out of an unbroken block-tailed binding (`let x = { stmts…; tail }` → `stmts…; let x = tail`), a reference around one (`let x = &mut { … }`) included, since it applies to the tail either way. Include branches and loops when the tail exposes a struct or tuple literal to `sroa`; preserve other control-flow regions for CTFE.
 - `scalar_forward` — fold the inliner's leftover single-use pure-scalar value-parameter temps into their one use, so the backend emits the operand instead of a `local.set` / `local.get` round-trip.
-- `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), and constant struct / tuple / variant values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple / variant / enum patterns over a constant scrutinee, with the arm's bindings and guard — except a binding that names storage rather than a value). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to — as does a container literal still computing contents the engine already knows, which is what a value copy of a constant leaves behind. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes. A mutable local carries its scalar value between writes. What bounds that is the construct whose children run only sometimes: the locals it may write are dropped before each of its alternatives, so no arm folds against what the arm beside it assigned, and again after it, so nothing past it does either. An `if` whose condition the env decides is not such a construct — exactly one arm runs, so the walk enters it with the env intact and keeps what it writes, which is what folds a chain of decided branches each writing the next one's condition in a single walk rather than one link per iteration.
+- `const_folding` — partial evaluation: constant arithmetic (an `enum` case counts as one — it interns as the discriminant it lowers to), compile-time execution, immutable-global reads, constant-branch collapse, short-circuit simplification (a neutral operand keeps the other, an absorbing one becomes the result when the deleted operand can neither trap nor be observed), integer identities (`x + 0`, `x - 0`, `x * 1`, `x / 1`, `x | 0`, `x ^ 0`, `x << 0`, `x >> 0` and the commutative mirrors keep the other operand; floats are excluded, since `x + 0.0` is `+0.0` for `-0.0`), and constant struct / tuple / variant values (field projection, aggregate arguments and results of a compile-time call, and struct / tuple / variant / enum patterns over a constant scrutinee, with the arm's bindings and guard — except a binding that names storage rather than a value). A constant sequence's length and elements read out of it too, whether it is a local literal or a global. An immutable global's value is read from the assignment that fills its slot as well as from its initializer, since a non-trivial initializer is extracted into module init; a global something writes through, or hands a part of to a local, is not read at all — except through a shared borrow, which is no write path, so `let repr = &G.repr` leaves the global readable and the local holding the bytes it names. A borrow of a literal is settled the same way, which is what lets a string view fold its bytes where the view itself is a reference field. A compile-time call runs the callee's statements — `let` sequences, decided branches, early returns, loops, and the expression-position blocks inlining leaves — bounded by a work budget rather than by a constant trip count, and abandons the call rather than stepping past a statement it cannot perform. It also writes: a store, an element write, an allocation and a copy all land in the value the frame itself built, and a call writing through a `&mut` parameter runs and writes back into the caller's place. So a container filled at compile time — `push` and the growth it triggers included — is a compile-time value, and one whose elements are bytes leaves the engine as the literal a source string lowers to — as does a container literal still computing contents the engine already knows, which is what a value copy of a constant leaves behind. A closed block — one that builds its value in locals of its own, writes only to those, and yields the result — runs as a frame of its own, which is what folds a fully-constant string template to the literal it denotes. Only a frame may step past a write, since only a frame performs one; an ordinary walk keeps no value across a call that writes. A mutable local carries its scalar value between writes. What bounds that is the construct whose children run only sometimes: the locals it may write are dropped before each of its alternatives, so no arm folds against what the arm beside it assigned, and again after it, so nothing past it does either. An `if` whose condition the env decides is not such a construct — exactly one arm runs, so the walk enters it with the env intact and keeps what it writes, which is what folds a chain of decided branches each writing the next one's condition in a single walk rather than one link per iteration.
 - `const_branch_prune` — simplify trivial blocks and fold a constant-condition `if` to its taken arm.
 
 Loop and field:
@@ -174,7 +174,10 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 
 - [ ] Sparse Conditional Constant Propagation (SCCP) and interprocedural SCCP.
 - [ ] Global Value Numbering across effectful nodes (pure-value hash-consing already exists in the value graph).
-- [ ] Instruction combining — algebraic simplification (`x + 0 → x`, `x * 2 → x << 1`).
+- [ ] Instruction combining. `const_folding`'s integer identities need one
+      operand to be the constant neutral element, so what is left are the
+      rewrites that read operand identity instead: `x - x`, `x & x`, `x | x`,
+      `~(~x)`. Hash-consing already answers that identity.
 - [ ] Dead store elimination.
 - [ ] Strength reduction; reassociation; jump threading; SimplifyCFG.
 - [ ] Cross-block copy propagation.
@@ -198,6 +201,22 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
+- [ ] Valuing a writable reference field by the place it names, so the writes
+      made through it land there. A `&mut` in a struct-literal field is a write
+      the frame does not perform, so the region abandons at the first append —
+      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3.
+      Every interpolation reaching a `Formatter` stops there: the text narrows
+      at compile time, but `Formatter::pad` and `Inspect::inspect` still run,
+      because the frame has no value for the `&mut String` the `buf` field
+      names. So a fully-constant `assert x.show() == "…"` keeps the whole format
+      and `Inspect` machinery instead of folding to nothing, which is what the
+      `trait_local_struct_receiver_blanket` and
+      `impl_mixed_target_method_generic` goldens carry, and `` `${'x'}` ``
+      reaches WIR as a `Formatter` over a fresh buffer that `char::fmt` reads
+      back out of `buf` and appends through, where `` `${true}` `` folds to a
+      globalized literal. `WADO_TRACE=vg_field` reports what a field read
+      forwarded to, what a literal seeded, and which local a `&mut` field
+      borrows.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
       writes them. Together they retire a scratch aggregate at its allocation
@@ -218,21 +237,13 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       best, then nested. That reaches the hand-written dispatchers the
       synthesised `FieldSchema::lookup` tree does not. An atom that guards
       another's operand range has to be tested first, or a miss becomes a trap.
-- [ ] The `char` template's `&mut` field. `` `${'x'}` `` reaches WIR as a
-      `Formatter` over a fresh buffer, which `char::fmt` reads back out of the
-      `buf` field and appends through, where `` `${true}` `` folds to a
-      globalized literal. The capacity guard those appends used to carry is
-      gone, so the field is what is left, and it is
-      [the NIR interpreter WEP](./wep-2026-04-27-nir-interpreter.md)'s stage 3:
-      a `&mut` in a struct-literal field is a write the frame does not perform,
-      so the region abandons at the first append.
-
-      `sroa` declines the same struct for its own reason — `&mut candidate` is a
-      hard escape, exempting only a shared `&` argument to a non-storing callee
-      — which is worth revisiting now that nothing else keeps the `Formatter`
-      alive. `WADO_TRACE=vg_field` reports what a field read forwarded to, what
-      a literal seeded, and which local a `&mut` field borrows;
-      `WADO_TRACE=sroa` and `copy_prop` report a declined candidate.
+- [ ] Scalarizing a struct a `&mut` borrows. `sroa` treats `&mut candidate` as a
+      hard escape, exempting only a shared `&` argument to a non-storing callee,
+      which is what declines the template `Formatter`. Nothing else keeps that
+      struct alive, so the escape rule is the whole obstacle, and admitting a
+      borrow whose writes the pass can follow retires it without the frame
+      valuing the field at all. `WADO_TRACE=sroa` and `copy_prop` report a
+      declined candidate.
 - [ ] Tail call optimization (`return_call`).
 - [ ] Bounds-check elimination for chained sequential access (`arr[0]; arr[1]; arr[2]`).
 - [ ] Folding a `match` whose scrutinee is a syntactically known

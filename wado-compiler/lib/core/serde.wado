@@ -187,7 +187,7 @@ pub fn report_duplicate_key<S: AsStrSlice>(policy: DuplicateKeyPolicy, name: S) 
     match policy {
         DuplicateKeyPolicy::Error => {
             builtin::cold_path();
-            return Result::Err(DeserializeError::duplicate_field(name.to_string()));
+            return Result::Err(DeserializeError::duplicate_field(name));
         },
         DuplicateKeyPolicy::Warn => {
             builtin::cold_path();

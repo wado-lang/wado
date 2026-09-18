@@ -9,7 +9,8 @@
 //
 // `black_box` keeps the arguments off the constant path: with constant ones
 // the whole call is evaluated at compile time, and a folded-away function has
-// no `local.set` / `local.get` pair to fuse.
+// no `local.set` / `local.get` pair to fuse. Both arguments need it — a
+// constant one `param_spec` clones the callee on is gone from the body too.
 
 #[inline(never)]
 fn square_of(a: i32, b: i32) -> i32 {
@@ -18,9 +19,9 @@ fn square_of(a: i32, b: i32) -> i32 {
 }
 
 test {
-    assert square_of(builtin::black_box(3), 4) == 169;
-    assert square_of(builtin::black_box(0), 0) == 1;
-    assert square_of(builtin::black_box(-2), 5) == 81;
+    assert square_of(builtin::black_box(3), builtin::black_box(4)) == 169;
+    assert square_of(builtin::black_box(0), builtin::black_box(0)) == 1;
+    assert square_of(builtin::black_box(-2), builtin::black_box(5)) == 81;
 }
 
 __DATA__

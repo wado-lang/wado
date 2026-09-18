@@ -1,0 +1,37 @@
+// Test: an arithmetic identity folds away even when the other operand is opaque.
+//
+// `black_box` keeps the value off the constant-folding path, so the identity is
+// the only thing that can remove the operation. A `StrSlice` over a whole
+// string is the shape that produces these: `sub_unchecked` is `self.start + x`
+// with `self.start` constant 0.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let n = builtin::black_box(5);
+    println(`${n + 0}`);
+    println(`${0 + n}`);
+    println(`${n - 0}`);
+    println(`${n * 1}`);
+    println(`${1 * n}`);
+    println(`${n | 0}`);
+    println(`${n ^ 0}`);
+    println(`${n << 0}`);
+    println(`${n >> 0}`);
+}
+
+__DATA__
+{
+    "stdout": "5\n5\n5\n5\n5\n5\n5\n5\n5\n",
+    "wir_not_expect:O2": [
+        "n + 0",
+        "0 + n",
+        "n - 0",
+        "n * 1",
+        "1 * n",
+        "n | 0",
+        "n ^ 0",
+        "n << 0",
+        "n >> 0"
+    ]
+}

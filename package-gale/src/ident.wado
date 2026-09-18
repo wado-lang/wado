@@ -11,32 +11,33 @@
 /// the generated module. Over-inclusion is harmless (a spurious `_`);
 /// under-inclusion emits code that fails to compile — when in doubt, escape.
 fn is_wado_reserved<S: AsStrSlice>(name: S) -> bool {
+    let name = name.as_str_slice();
     return match name.len() {
-        2 => match name.to_string() {
+        2 => match name {
             "Fn" | "as" | "fn" | "i8" | "if" | "in" | "of" | "u8" => true,
             _ => false,
         },
-        3 => match name.to_string() {
+        3 => match name {
             "f32" | "f64" | "for" | "i16" | "i32" | "i64" | "let" | "mut" | "pub" | "u16" | "u32" | "u64" | "use" => true,
             _ => false,
         },
-        4 => match name.to_string() {
+        4 => match name {
             "bool" | "char" | "else" | "enum" | "from" | "impl" | "loop" | "move" | "null" | "self" | "task" | "test" | "true" | "type" | "with" => true,
             _ => false,
         },
-        5 => match name.to_string() {
+        5 => match name {
             "List" | "async" | "break" | "const" | "false" | "flags" | "match" | "panic" | "scope" | "trait" | "while" | "world" => true,
             _ => false,
         },
-        6 => match name.to_string() {
+        6 => match name {
             "Option" | "Result" | "String" | "assert" | "effect" | "export" | "global" | "import" | "return" | "stores" | "struct" | "unique" => true,
             _ => false,
         },
-        7 => match name.to_string() {
+        7 => match name {
             "handler" | "matches" | "variant" => true,
             _ => false,
         },
-        8 => match name.to_string() {
+        8 => match name {
             "continue" | "reactive" | "resource" => true,
             _ => false,
         },
@@ -80,7 +81,7 @@ global GENERATED_LOCALS: List<String> = [
 /// Escape an identifier that would collide with a Wado reserved word or a
 /// generated local by appending '_'.
 pub fn escape_ident<S: AsStrSlice>(name: S) -> String {
-    if is_wado_reserved(name) || GENERATED_LOCALS.contains(&name.to_string()) {
+    if is_wado_reserved(name) || GENERATED_LOCALS.contains_str(name) {
         return `${name}_`;
     }
     return name.to_string();

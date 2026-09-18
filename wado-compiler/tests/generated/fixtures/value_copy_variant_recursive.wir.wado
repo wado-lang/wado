@@ -150,13 +150,17 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(53)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(54)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(54)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(55)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(55)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(56)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(56)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(57)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(57)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(59)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -359,19 +363,17 @@ fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep$cold
     let offset_43: i32;
     let self_46: ref Array<u8>;
     let offset_47: i32;
-    let f_52: ref "core:prelude/format.wado//Formatter";
     let new_used_57: i32;
     let start_58: i32;
     let self_60: ref Array<u8>;
     let self_64: ref Array<u8>;
     let offset_65: i32;
-    let f_70: ref "core:prelude/format.wado//Formatter";
     let new_used_83: i32;
     let start_84: i32;
-    "core:rt/panic"($local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }; $local_19.used = 95; self_30 = $local_19.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_19.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_19.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_19.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_19.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 }; f_52 = $local_20; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(24, f_52); new_used_57 = $local_19.used + 35; if @unlikely(new_used_57 > builtin::array_len($local_19.repr)) {
+    "core:rt/panic"($local_19 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }; $local_19.used = 95; self_30 = $local_19.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_19.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_19.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_19.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_19.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(24, $local_20.buf); new_used_57 = $local_19.used + 35; if @unlikely(new_used_57 > builtin::array_len($local_19.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_57);
-    }; start_58 = $local_19.used; $local_19.used = new_used_57; self_60 = $local_19.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_39, 0, 26); self_64 = $local_19.repr; offset_65 = start_58 + 26; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_38, 0, 9); $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 }; f_70 = $local_20; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"($v0, f_70); new_used_83 = $local_19.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_19.repr)) {
+    }; start_58 = $local_19.used; $local_19.used = new_used_57; self_60 = $local_19.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_39, 0, 26); self_64 = $local_19.repr; offset_65 = start_58 + 26; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_38, 0, 9); $local_20 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_19 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $local_20.buf); new_used_83 = $local_19.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_19.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_19, new_used_83);
     }; start_84 = $local_19.used; $local_19.used = new_used_83; builtin::array_copy<u8>($local_19.repr, start_84, global:value_copy_variant_recursive.wado::$const_obj_37, 0, 1); $local_19);
@@ -390,19 +392,17 @@ fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep$cold
     let offset_43: i32;
     let self_46: ref Array<u8>;
     let offset_47: i32;
-    let f_52: ref "core:prelude/format.wado//Formatter";
     let new_used_57: i32;
     let start_58: i32;
     let self_60: ref Array<u8>;
     let self_64: ref Array<u8>;
     let offset_65: i32;
-    let f_70: ref "core:prelude/format.wado//Formatter";
     let new_used_83: i32;
     let start_84: i32;
-    "core:rt/panic"($local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }; $local_17.used = 95; self_30 = $local_17.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_17.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_17.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_17.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_17.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 }; f_52 = $local_18; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(22, f_52); new_used_57 = $local_17.used + 35; if @unlikely(new_used_57 > builtin::array_len($local_17.repr)) {
+    "core:rt/panic"($local_17 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(125), used: 0 }; $local_17.used = 95; self_30 = $local_17.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_17.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_17.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_17.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_17.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(22, $local_18.buf); new_used_57 = $local_17.used + 35; if @unlikely(new_used_57 > builtin::array_len($local_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_57);
-    }; start_58 = $local_17.used; $local_17.used = new_used_57; self_60 = $local_17.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_47, 0, 26); self_64 = $local_17.repr; offset_65 = start_58 + 26; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_46, 0, 9); $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 }; f_70 = $local_18; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"($v0, f_70); new_used_83 = $local_17.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_17.repr)) {
+    }; start_58 = $local_17.used; $local_17.used = new_used_57; self_60 = $local_17.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_47, 0, 26); self_64 = $local_17.repr; offset_65 = start_58 + 26; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_46, 0, 9); $local_18 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_17 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $local_18.buf); new_used_83 = $local_17.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_17.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_17, new_used_83);
     }; start_84 = $local_17.used; $local_17.used = new_used_83; builtin::array_copy<u8>($local_17.repr, start_84, global:value_copy_variant_recursive.wado::$const_obj_37, 0, 1); $local_17);
@@ -421,19 +421,17 @@ fn "value_copy_variant_recursive.wado/$test_0_recursive_struct_copy_is_deep$cold
     let offset_43: i32;
     let self_46: ref Array<u8>;
     let offset_47: i32;
-    let f_52: ref "core:prelude/format.wado//Formatter";
     let new_used_57: i32;
     let start_58: i32;
     let self_60: ref Array<u8>;
     let self_64: ref Array<u8>;
     let offset_65: i32;
-    let f_70: ref "core:prelude/format.wado//Formatter";
     let new_used_83: i32;
     let start_84: i32;
-    "core:rt/panic"($local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }; $local_15.used = 95; self_30 = $local_15.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_15.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_15.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_15.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_15.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 }; f_52 = $local_16; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(20, f_52); new_used_57 = $local_15.used + 34; if @unlikely(new_used_57 > builtin::array_len($local_15.repr)) {
+    "core:rt/panic"($local_15 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(124), used: 0 }; $local_15.used = 95; self_30 = $local_15.repr; builtin::array_copy<u8>(self_30, 0, global:value_copy_variant_recursive.wado::$const_obj_44, 0, 20); self_34 = $local_15.repr; offset_35 = 0 + 20; builtin::array_copy<u8>(self_34, offset_35, global:value_copy_variant_recursive.wado::$const_obj_43, 0, 37); self_38 = $local_15.repr; offset_39 = 0 + 57; builtin::array_copy<u8>(self_38, offset_39, global:value_copy_variant_recursive.wado::$const_obj_42, 0, 4); self_42 = $local_15.repr; offset_43 = 0 + 61; builtin::array_copy<u8>(self_42, offset_43, global:value_copy_variant_recursive.wado::$const_obj_41, 0, 33); self_46 = $local_15.repr; offset_47 = 0 + 94; builtin::array_copy<u8>(self_46, offset_47, global:value_copy_variant_recursive.wado::$const_obj_40, 0, 1); $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(20, $local_16.buf); new_used_57 = $local_15.used + 34; if @unlikely(new_used_57 > builtin::array_len($local_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_57);
-    }; start_58 = $local_15.used; $local_15.used = new_used_57; self_60 = $local_15.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_55, 0, 25); self_64 = $local_15.repr; offset_65 = start_58 + 25; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_38, 0, 9); $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 }; f_70 = $local_16; "core:prelude/primitive.wado/i32::fmt_decimal$scalar"($v0, f_70); new_used_83 = $local_15.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_15.repr)) {
+    }; start_58 = $local_15.used; $local_15.used = new_used_57; self_60 = $local_15.repr; builtin::array_copy<u8>(self_60, start_58, global:value_copy_variant_recursive.wado::$const_obj_55, 0, 25); self_64 = $local_15.repr; offset_65 = start_58 + 25; builtin::array_copy<u8>(self_64, offset_65, global:value_copy_variant_recursive.wado::$const_obj_38, 0, 9); $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 }; "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($v0, $local_16.buf); new_used_83 = $local_15.used + 1; if @unlikely(new_used_83 > builtin::array_len($local_15.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, new_used_83);
     }; start_84 = $local_15.used; $local_15.used = new_used_83; builtin::array_copy<u8>($local_15.repr, start_84, global:value_copy_variant_recursive.wado::$const_obj_37, 0, 1); $local_15);
@@ -1376,7 +1374,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
     $av_308 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    prefix_len = select i32(self.alternate, $av_310, 0);
     content_len = (sign_len + prefix_len) + digit_count;
     $av_309 = self.width;
     if select i32($av_309 <= 0, 1, content_len >= $av_309) {
@@ -1833,6 +1831,58 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
     builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
+fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(self, is_negative, digit_count) {
+    let new_used_25: i32;
+    let start_26: i32;
+    let new_used_66: i32;
+    let start_67: i32;
+    if is_negative {
+        new_used_25 = self.used + 1;
+        if @unlikely(new_used_25 > builtin::array_len(self.repr)) {
+            cold_path;
+            "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_25);
+        }
+        start_26 = self.used;
+        self.used = new_used_25;
+        builtin::array_set_u8(self.repr, start_26, 45);
+    } else {
+    }
+    return new_used_66 = self.used + digit_count, if @unlikely(new_used_66 > builtin::array_len(self.repr)) {
+        cold_path;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, new_used_66);
+    }, start_67 = self.used, self.used = new_used_66, start_67;
+}
+
+fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
+    let is_negative: bool;
+    let abs_val: u64;
+    let digit_count_4: i32;
+    let offset_5: i32;
+    let val_6: i64;
+    let arr: ref Array<u8>;
+    let pos: i32;
+    let t: u64;
+    let i: i32;
+    is_negative = self < 0;
+    val_6 = builtin::i64_extend_i32_s(self);
+    digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar"(f, is_negative, digit_count_4);
+    arr = f.repr;
+    pos = offset_5 + digit_count_4;
+    t = abs_val;
+    i = 0;
+    b186: block {
+        l187: loop {
+            break_if b186 i >= digit_count_4;
+            pos = pos - 1;
+            builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
+            t = t /u 10_i64;
+            i = i + 1;
+            continue l187;
+        };
+    };
 }
 
 export fn "value_copy_variant_recursive.wado/$cm_export__$test_0_recursive_struct_copy_is_deep" as "$test_0_recursive_struct_copy_is_deep"

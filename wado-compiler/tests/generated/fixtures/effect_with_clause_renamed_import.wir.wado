@@ -184,7 +184,7 @@ fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"
     b2: block {
         l3: loop {
             break_if b2 $i >= $count;
-            value_9 = builtin::load_u8(local.tee $elem_addr($base + ($i * 1)));
+            value_9 = builtin::load_u8(local.tee $elem_addr($base + $i));
             used = $result.used;
             if @unlikely(used >= builtin::array_len($result.repr)) {
                 cold_path;
@@ -197,7 +197,7 @@ fn "effect_with_clause_renamed_import.wado/$cm_binding__Random_get_random_bytes"
         };
     };
     if $count > 0 {
-        drop("mem/realloc"($base, $count * 1, 1, 0));
+        drop("mem/realloc"($base, $count, 1, 0));
     }
     drop("mem/realloc"($outptr, 8, 4, 0));
     return $result;

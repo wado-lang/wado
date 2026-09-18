@@ -94,6 +94,21 @@ fn char_start_backward(repr: &Array<u8>, pos: i32) -> i32 {
     return p;
 }
 
+/// Byte end, counted from `start`, of the leading `char_count` characters of
+/// `repr[start..start + len)`, or `len` when it holds fewer.
+fn utf8_prefix_end(repr: &Array<u8>, start: i32, len: i32, char_count: i32) -> i32 {
+    let mut end = 0;
+    let mut seen = 0;
+    while end < len && seen < char_count {
+        end += utf8_seq_len(repr[start + end]);
+        seen += 1;
+    }
+    if end > len {
+        return len;
+    }
+    return end;
+}
+
 /// True when `index`, counted from `start`, is 0, `len`, or the start of a
 /// UTF-8 character.
 fn boundary_at(repr: &Array<u8>, start: i32, len: i32, index: i32) -> bool {
@@ -713,13 +728,7 @@ impl String {
     /// Truncate the string to the given number of characters.
     /// If `char_count` >= number of characters, the string is unchanged.
     pub fn truncate_chars(&mut self, char_count: i32) {
-        let mut byte_pos = 0;
-        let mut chars_seen = 0;
-        while byte_pos < self.used && chars_seen < char_count {
-            byte_pos += utf8_seq_len(self.repr[byte_pos]);
-            chars_seen += 1;
-        }
-        self.used = byte_pos;
+        self.used = utf8_prefix_end(&self.repr as &Array<u8>, 0, self.used, char_count);
     }
 
     /// Returns true if `byte_index` is 0, `self.len()`, or the start of a
@@ -1222,6 +1231,12 @@ impl StrSlice {
     /// or the start of a character.
     pub fn is_char_boundary(&self, index: i32) -> bool {
         return boundary_at(self.repr, self.start, self.len(), index);
+    }
+
+    /// Byte end of the leading `char_count` characters, or `len()` when the
+    /// view holds fewer.
+    internal fn char_prefix_end(&self, char_count: i32) -> i32 {
+        return utf8_prefix_end(self.repr, self.start, self.len(), char_count);
     }
 
     /// A sub-view over `[start, end)`, counted from this view's start.

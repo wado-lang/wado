@@ -1,0 +1,32 @@
+// Test: a callee reached through a borrow of a constant struct still
+// specializes on that struct's fields.
+//
+// `let r = &cfg;` is the binding inlining leaves behind wherever a function
+// passes its reference parameter on, and it used to end the chain.
+
+use { println, Stdout } from "core:cli";
+
+struct Config { verbose: bool, level: i32 }
+
+#[inline(never)]
+fn describe(cfg: &Config, n: i32) -> i32 {
+    if cfg.verbose {
+        return n * cfg.level;
+    }
+    return n;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    let cfg = Config { verbose: true, level: 3 };
+    let r = &cfg;
+    println(`${describe(r, n)}`);
+}
+
+__DATA__
+{
+    "stdout": "21\n",
+    "wir_expect:O2": [
+        "describe$spec"
+    ]
+}

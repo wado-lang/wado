@@ -445,21 +445,6 @@ fn build_global_view(project: &NirPackage, type_table: &TypeTable, maps: &FoldMa
     view
 }
 
-/// Whether `e` is `&GLOBAL` — a shared borrow of a whole global, not of a part
-/// of one.
-fn is_whole_global_ref(body: &Body, e: ExprId) -> bool {
-    let ExprKind::Unary {
-        op: NirUnaryOp::Ref,
-        expr: inner,
-    } = &body.exprs[e].kind
-    else {
-        return false;
-    };
-    inner
-        .as_expr()
-        .is_some_and(|i| matches!(body.exprs[i].kind, ExprKind::GlobalVarGet { .. }))
-}
-
 fn record_seq_len(env: &mut GlobalFieldEnv, key: GlobalKey, n: i32) {
     env.entry(key).or_default().insert(
         SeqField::Len.field_name().to_string(),
@@ -535,8 +520,9 @@ impl GlobalStoreCollector<'_> {
     /// reach: writes then root at the local, not at the global — LICM hoisting
     /// `G.repr` out of a loop that writes through it is the shape that bites.
     ///
-    /// Only a binding that can alias: a scalar is copied into its local, and a
-    /// shared borrow of the whole global is what a method call on it lowers to.
+    /// Only a binding that can alias a write path: a scalar is copied into its
+    /// local, and a shared borrow reaches the global read-only, whether it names
+    /// the whole of one or a part.
     /// A non-scalar `let x = G` is a deep copy by value semantics yet counts
     /// here, because `value_copy_demote` elides that copy once it proves the
     /// binding read-only — which is how the local comes to alias after all.
@@ -548,7 +534,8 @@ impl GlobalStoreCollector<'_> {
         let Some(e) = value.as_expr() else {
             return;
         };
-        if is_whole_global_ref(body, e) || prim_of(body.exprs[e].type_id, self.type_table).is_some()
+        if body.shared_ref_root(value).is_some()
+            || prim_of(body.exprs[e].type_id, self.type_table).is_some()
         {
             return;
         }
@@ -997,16 +984,10 @@ impl ConstFoldVisitor<'_> {
 
     /// What a `let r = &place` binding borrows into.
     fn borrowed_root(body: &Body, op: Operand) -> BorrowRoot {
-        let Some(mut e) = op.as_expr() else {
+        let Some(e) = op.as_expr() else {
             return BorrowRoot::NotABorrow;
         };
-        // A cast keeps the referent it converts.
-        while let ExprKind::Cast { expr: inner, .. } = &body.exprs[e].kind {
-            let Some(inner) = inner.as_expr() else {
-                return BorrowRoot::NotABorrow;
-            };
-            e = inner;
-        }
+        let e = body.strip_casts(e);
         match &body.exprs[e].kind {
             ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::MutRef,

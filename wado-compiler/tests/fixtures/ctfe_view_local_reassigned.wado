@@ -1,0 +1,27 @@
+// Test: a reference local reassigned away from a constant stops being a view
+// of it.
+//
+// The first binding names a global nothing writes; the second names a local
+// that grows. A walk that classified the local by its first binding alone would
+// answer the second read out of the first.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf { items: List<i32> }
+
+global C: Buf = Buf { items: [1, 2, 3] };
+
+export fn run() with Stdout {
+    let mut local = Buf { items: [7] };
+    let mut r = &C.items;
+    let from_global = r.len();
+    r = &local.items;
+    let from_local = r.len();
+    local.items.push(8);
+    println(`${from_global} ${from_local} ${r.len()} ${r[0]}`);
+}
+
+__DATA__
+{
+    "stdout": "3 1 2 7\n"
+}

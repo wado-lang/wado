@@ -726,6 +726,18 @@ pub struct "IterFilter<core:prelude/string.wado/StrUtf8ByteIter>" {
     pub pred: fn mut(u8) -> bool,
 }
 
+pub struct "SliceRefIter<core:prelude/string.wado/String>" {
+    repr: &Array<String>,
+    index: i32,
+    end: i32,
+}
+
+pub struct "Slice<core:prelude/string.wado/String>" {
+    repr: &Array<String>,
+    start: i32,
+    end: i32,
+}
+
 pub struct "SliceValueIter<u8>" {
     repr: &Array<u8>,
     index: i32,
@@ -819,6 +831,44 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "SliceValueIter<core:prelude/string.wado/String>" {
+    repr: &Array<String>,
+    index: i32,
+    end: i32,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1283,6 +1333,22 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,core:prelude/string.wado/StrCharIter>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,i32>" {
+    index: i32,
+    field_name: String,
+    wire_override: Option<String>,
+    has_default: bool,
+    is_secret: bool,
+}
+
+pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
     index: i32,
     field_name: String,
     wire_override: Option<String>,
@@ -1774,6 +1840,10 @@ pub struct "Box<core:prelude/types.wado/Option<core:prelude/string.wado/StrUtf8B
 
 pub struct "Box<core:prelude/types.wado/Option<fn mut(u8)->bool>>" {
     value: Option<fn mut(u8) -> bool>,
+}
+
+pub struct "Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>" {
+    value: Option<&Array<String>>,
 }
 
 pub struct "Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>" {
@@ -3354,88 +3424,19 @@ pub fn "core:prelude/format.wado/Formatter::write_newline_indent"(self: &mut For
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(self: &String, f: &mut Formatter) {
-    if (f.precision >= 0) {
-        let mut capped: String = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(*self);
-        capped."core:prelude/string.wado/String::truncate_chars"(f.precision);
-        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(capped);
-    } else {
-        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"("ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(*self));
-    }
+    "core::prelude/format.wado::core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"(f, "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/String"(*self));
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: &String, f: &mut Formatter) {
-    let limit: i32 = f."core:prelude/format.wado/Formatter::resolved_seq_limit"();
-    f."core:prelude/format.wado/Formatter::write_char"('"');
-    let mut count: i32 = 0;
-    let mut truncated: bool = false;
-    $for_of_0: {
-        let mut $iter_0: StrCharIter = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(*self."core:prelude/string.wado/String::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
-        loop {
-            let $match_10: Option<char> = $iter_0."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
-            match $match_10 {
-                Some(c) => $block_14: {
-                    if ((limit >= 0) && (count >= limit)) {
-                        truncated = true;
-                        break;
-                    }
-                    if (c == '"') {
-                        f."core:prelude/format.wado/Formatter::write_char"('\\');
-                        f."core:prelude/format.wado/Formatter::write_char"('"');
-                    } else {
-                        if (c == '\\') {
-                            f."core:prelude/format.wado/Formatter::write_char"('\\');
-                            f."core:prelude/format.wado/Formatter::write_char"('\\');
-                        } else {
-                            if (c == '\n') {
-                                f."core:prelude/format.wado/Formatter::write_char"('\\');
-                                f."core:prelude/format.wado/Formatter::write_char"('n');
-                            } else {
-                                if (c == '\r') {
-                                    f."core:prelude/format.wado/Formatter::write_char"('\\');
-                                    f."core:prelude/format.wado/Formatter::write_char"('r');
-                                } else {
-                                    if (c == '\t') {
-                                        f."core:prelude/format.wado/Formatter::write_char"('\\');
-                                        f."core:prelude/format.wado/Formatter::write_char"('t');
-                                    } else {
-                                        let code: i32 = c as i32;
-                                        if ((code < 32) || (code == 127)) {
-                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"\\u{", used: 3 });
-                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
-                                                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
-                                                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                                                Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
-                                                break $tmpl: $r;
-                                            });
-                                            f."core:prelude/format.wado/Formatter::write_char"('}');
-                                        } else {
-                                            f."core:prelude/format.wado/Formatter::write_char"(c);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    count = (count + 1);
-                },
-                _ => $block_15: {
-                    break;
-                },
-            };
-        }
-    }
-    f."core:prelude/format.wado/Formatter::write_char"('"');
-    if truncated {
-        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"...", used: 3 });
-    }
+    "core::prelude/format.wado::core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f, *self);
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Display::fmt"(self: &StrSlice, f: &mut Formatter) {
-    self."core:prelude/string.wado/StrSlice::to_string"()."core:prelude/string.wado/String^core:prelude/traits.wado/Display::fmt"(f);
+    "core::prelude/format.wado::core/prelude/format.wado/pad_text<core:prelude/string.wado/StrSlice>"(f, "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(*self));
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Inspect::inspect"(self: &StrSlice, f: &mut Formatter) {
-    self."core:prelude/string.wado/StrSlice::to_string"()."core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(f);
+    "core::prelude/format.wado::core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f, *self);
 }
 
 pub fn "!^core:prelude/traits.wado/Inspect::inspect"(self: &!, f: &mut Formatter) {
@@ -5140,15 +5141,15 @@ fn round_off_digits_u128(val: u128, drop: i32) -> u128 {
 fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, upper: bool) {
     let precision: i32 = f.precision;
     let mut value: u128 = abs_value;
-    let mut exponent: i32 = ("core::prelude/int128.wado::count_digits_u128"(value) - 1);
+    let mut exponent: Box<i32> = Box<i32> { value: ("core::prelude/int128.wado::count_digits_u128"(value) - 1) };
     if (precision >= 0) {
         let total: i32 = (precision + 1);
-        let drop: i32 = ((exponent + 1) - total);
+        let drop: i32 = ((exponent.value + 1) - total);
         if (drop > 0) {
             value = "core::prelude/int128.wado::round_off_digits_u128"(value, drop);
             if ("core::prelude/int128.wado::count_digits_u128"(value) > total) {
                 value = value."core:prelude/int128.wado/u128^core:prelude/traits.wado/Div::div"(&"core::prelude/int128.wado::core:prelude/int128.wado/u128::from_u64"(10));
-                exponent = (exponent + 1);
+                exponent.value = (exponent.value + 1);
             }
         }
     } else {
@@ -5189,7 +5190,7 @@ fn write_int_exp_128(f: &mut Formatter, is_negative: bool, abs_value: u128, uppe
     } else {
         'e';
     });
-    f."core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(&Box<i32> { value: exponent }.i32::to_string());
+    f."core:prelude/format.wado/Formatter::write_display<i32>"(exponent);
     f."core:prelude/format.wado/Formatter::apply_padding"(mark);
 }
 
@@ -5855,15 +5856,15 @@ fn round_off_digits_u64(val: u64, drop: i32) -> u64 {
 fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bool) {
     let precision: i32 = f.precision;
     let mut value: u64 = abs_value;
-    let mut exponent: i32 = ("core::prelude/primitive.wado::count_digits_u64"(value) - 1);
+    let mut exponent: Box<i32> = Box<i32> { value: ("core::prelude/primitive.wado::count_digits_u64"(value) - 1) };
     if (precision >= 0) {
         let total: i32 = (precision + 1);
-        let drop: i32 = ((exponent + 1) - total);
+        let drop: i32 = ((exponent.value + 1) - total);
         if (drop > 0) {
             value = "core::prelude/primitive.wado::round_off_digits_u64"(value, drop);
             if ("core::prelude/primitive.wado::count_digits_u64"(value) > total) {
                 value = (value / 10);
-                exponent = (exponent + 1);
+                exponent.value = (exponent.value + 1);
             }
         }
     } else {
@@ -5904,7 +5905,7 @@ fn write_int_exp(f: &mut Formatter, is_negative: bool, abs_value: u64, upper: bo
     } else {
         'e';
     });
-    f."core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(&Box<i32> { value: exponent }.i32::to_string());
+    f."core:prelude/format.wado/Formatter::write_display<i32>"(exponent);
     f."core:prelude/format.wado/Formatter::apply_padding"(mark);
 }
 
@@ -6064,13 +6065,6 @@ fn i32::fmt_decimal(self: Box<i32>, f: &mut Formatter) {
 
 fn i32::fmt_into(self: Box<i32>, f: &mut Formatter) {
     self.i32::fmt_decimal(f);
-}
-
-pub fn i32::to_string(self: Box<i32>) -> String {
-    let mut buf: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(12);
-    let mut f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut buf);
-    self.i32::fmt_into(&mut f);
-    return buf;
 }
 
 fn u32::fmt_decimal(self: Box<u32>, f: &mut Formatter) {
@@ -7230,6 +7224,22 @@ fn is_char_start(b: u8) -> bool {
     return ((b & 192) != 128);
 }
 
+fn utf8_prefix_end(repr: &Array<u8>, start: i32, len: i32, char_count: i32) -> i32 {
+    let mut end: i32 = 0;
+    let mut seen: i32 = 0;
+    loop {
+        if !((end < len) && (seen < char_count)) {
+            break;
+        }
+        end = (end + "core::prelude/string.wado::utf8_seq_len"(repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((start + end))));
+        seen = (seen + 1);
+    }
+    if (end > len) {
+        return len;
+    }
+    return end;
+}
+
 #[inline]
 fn bytes_match_at(haystack: &Array<u8>, pos: i32, needle: &Array<u8>, needle_at: i32, needle_len: i32) -> bool {
     let mut j: i32 = 0;
@@ -7599,11 +7609,6 @@ fn "core:prelude/string.wado/String::internal_push_view"(self: &mut String, view
     "core::builtin::core/builtin/array_copy<u8>"(&mut self.repr as &mut Array<u8>, start, view.repr, view.start, n);
 }
 
-#[retain(self)]
-pub fn "core:prelude/string.wado/String::chars"(self: &String) -> StrCharIter {
-    return StrCharIter { repr: &self.repr as &Array<u8>, used: self.used, byte_index: 0 };
-}
-
 pub fn "core:prelude/string.wado/String::char_at_byte_unchecked"(self: &String, byte_index: i32) -> char {
     return self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::char_at_byte_unchecked"(byte_index);
 }
@@ -7624,19 +7629,6 @@ pub fn "core:prelude/string.wado/String::push"(self: &mut String, c: char) {
 pub fn "core:prelude/string.wado/String::push_ascii_unchecked"(self: &mut String, byte: u8) {
     let start: i32 = self."core:prelude/string.wado/String::internal_reserve_uninit"(1);
     self."core:prelude/string.wado/String::set_byte_unchecked"(start, byte);
-}
-
-pub fn "core:prelude/string.wado/String::truncate_chars"(self: &mut String, char_count: i32) {
-    let mut byte_pos: i32 = 0;
-    let mut chars_seen: i32 = 0;
-    loop {
-        if !((byte_pos < self.used) && (chars_seen < char_count)) {
-            break;
-        }
-        byte_pos = (byte_pos + "core::prelude/string.wado::utf8_seq_len"(self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(byte_pos)));
-        chars_seen = (chars_seen + 1);
-    }
-    self.used = byte_pos;
 }
 
 pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: Slice<u8>) -> Result<String, String> {
@@ -7767,6 +7759,10 @@ pub fn "core:prelude/string.wado/StrSlice::get_byte_unchecked"(self: &StrSlice, 
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"((self.start + index));
 }
 
+fn "core:prelude/string.wado/StrSlice::char_prefix_end"(self: &StrSlice, char_count: i32) -> i32 {
+    return "core::prelude/string.wado::utf8_prefix_end"(self.repr, self.start, self."core:prelude/string.wado/StrSlice::len"(), char_count);
+}
+
 #[inline]
 #[retain(self)]
 pub fn "core:prelude/string.wado/StrSlice::sub_unchecked"(self: &StrSlice, start: i32, end: i32) -> StrSlice {
@@ -7776,10 +7772,6 @@ pub fn "core:prelude/string.wado/StrSlice::sub_unchecked"(self: &StrSlice, start
 #[retain(self)]
 pub fn "core:prelude/string.wado/StrSlice::chars"(self: &StrSlice) -> StrCharIter {
     return StrCharIter { repr: self.repr, used: self.end, byte_index: self.start };
-}
-
-pub fn "core:prelude/string.wado/StrSlice::to_string"(self: &StrSlice) -> String {
-    return "core::prelude/string.wado::substring"(self.repr, self.start, self."core:prelude/string.wado/StrSlice::len"());
 }
 
 pub fn "core:prelude/string.wado/StrSlice::char_at_byte_unchecked"(self: &StrSlice, byte_index: i32) -> char {
@@ -7803,6 +7795,10 @@ fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::get_byt
     return self.repr."Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(index);
 }
 
+pub fn "core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::chars"(self: &String) -> StrCharIter {
+    return self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::chars"();
+}
+
 #[retain(self)]
 fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"(self: &StrSlice) -> StrSlice {
     return *self;
@@ -7811,6 +7807,10 @@ fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_st
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self: &StrSlice, out: &mut String) {
     let view: StrSlice = self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"();
     out."core:prelude/string.wado/String::internal_push_view"(&view);
+}
+
+pub fn "core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"(self: &StrSlice) -> StrCharIter {
+    return self."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::chars"();
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Eq::eq"(self: &StrSlice, other: &StrSlice) -> bool {
@@ -10007,6 +10007,10 @@ pub fn "core:prelude/format.wado/Formatter::close_brace<core:prelude/string.wado
     self."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(close);
 }
 
+pub fn "core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(self: &mut Formatter, s: &String) {
+    self.buf."core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s);
+}
+
 pub fn "core:prelude/format.wado/Formatter::open_brace<core:prelude/string.wado/String>"(self: &mut Formatter, open: String) {
     self."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(open);
     self.indent = (self.indent + 1);
@@ -10121,8 +10125,51 @@ fn "Array<u8>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Arra
 
 pub fn "core/builtin/select<i32>"(cond: bool, if_true: i32, if_false: i32) -> i32;
 
-pub fn "core:prelude/format.wado/Formatter::write_str<&core:prelude/string.wado/String>"(self: &mut Formatter, s: &String) {
-    self.buf."core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(s);
+pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self: &mut Formatter, content: String) {
+    if (self.width <= 0) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let view: StrSlice = content."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    let content_len: i32 = view."core:prelude/string.wado/StrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
+    if (content_len >= self.width) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        return;
+    }
+    let padding: i32 = (self.width - content_len);
+    if self.zero_pad {
+        let sign_len: i32 = "core::prelude/format.wado::core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(view, 0, view."core:prelude/string.wado/StrSlice::len"());
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(0, sign_len));
+        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(sign_len, view."core:prelude/string.wado/StrSlice::len"()));
+        return;
+    }
+    let align: Alignment = self.align;
+    if match align {
+        Left => true,
+        _ => false,
+    } {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+    } else {
+        if match align {
+            Center => true,
+            _ => false,
+        } {
+            let left_pad: i32 = (padding / 2);
+            let right_pad: i32 = (padding - left_pad);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, right_pad);
+        } else {
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+        }
+    }
+}
+
+pub fn "core:prelude/format.wado/Formatter::write_display<i32>"(self: &mut Formatter, value: Box<i32>) {
+    self.buf."core:prelude/string.wado/String^core:prelude/format.wado/PushDisplay::push_display<i32>"(value);
 }
 
 pub fn "core:prelude/string.wado/String::push_str_range_unchecked<&core:prelude/string.wado/String>"(self: &mut String, s: &String, start: i32, end: i32) {
@@ -10250,52 +10297,156 @@ pub fn "core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/S
     self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(s);
 }
 
-#[retain(self)]
-fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
-    return *self;
-}
-
-pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(self: &mut Formatter, content: String) {
-    if (self.width <= 0) {
-        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
-        return;
-    }
-    let view: StrSlice = content."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
-    let content_len: i32 = view."core:prelude/string.wado/StrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
-    if (content_len >= self.width) {
-        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
-        return;
-    }
-    let padding: i32 = (self.width - content_len);
-    if self.zero_pad {
-        let sign_len: i32 = "core::prelude/format.wado::core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(view, 0, view."core:prelude/string.wado/StrSlice::len"());
-        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(0, sign_len));
-        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
-        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(sign_len, view."core:prelude/string.wado/StrSlice::len"()));
-        return;
-    }
-    let align: Alignment = self.align;
-    if match align {
-        Left => true,
-        _ => false,
-    } {
-        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
-        self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
-    } else {
-        if match align {
-            Center => true,
-            _ => false,
-        } {
-            let left_pad: i32 = (padding / 2);
-            let right_pad: i32 = (padding - left_pad);
-            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
-            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
-            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, right_pad);
-        } else {
-            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
-            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(content);
+fn "core/prelude/format.wado/inspect_text<core:prelude/string.wado/StrSlice>"(f: &mut Formatter, text: StrSlice) {
+    let limit: i32 = f."core:prelude/format.wado/Formatter::resolved_seq_limit"();
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    $for_of_0: {
+        let mut $iter_0: StrCharIter = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(text."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
+        loop {
+            let $match_10: Option<char> = $iter_0."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+            match $match_10 {
+                Some(c) => $block_14: {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
+                    if (c == '"') {
+                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        f."core:prelude/format.wado/Formatter::write_char"('"');
+                    } else {
+                        if (c == '\\') {
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        } else {
+                            if (c == '\n') {
+                                f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                f."core:prelude/format.wado/Formatter::write_char"('n');
+                            } else {
+                                if (c == '\r') {
+                                    f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                    f."core:prelude/format.wado/Formatter::write_char"('r');
+                                } else {
+                                    if (c == '\t') {
+                                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                        f."core:prelude/format.wado/Formatter::write_char"('t');
+                                    } else {
+                                        let code: i32 = c as i32;
+                                        if ((code < 32) || (code == 127)) {
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"\\u{", used: 3 });
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
+                                                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
+                                                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                                                Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
+                                                break $tmpl: $r;
+                                            });
+                                            f."core:prelude/format.wado/Formatter::write_char"('}');
+                                        } else {
+                                            f."core:prelude/format.wado/Formatter::write_char"(c);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    count = (count + 1);
+                },
+                _ => $block_15: {
+                    break;
+                },
+            };
         }
     }
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    if truncated {
+        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"...", used: 3 });
+    }
+}
+
+fn "core/prelude/format.wado/pad_text<core:prelude/string.wado/StrSlice>"(f: &mut Formatter, text: StrSlice) {
+    if (f.precision < 0) {
+        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(text);
+        return;
+    }
+    let view: StrSlice = text."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(0, view."core:prelude/string.wado/StrSlice::char_prefix_end"(f.precision)));
+}
+
+fn "core/prelude/format.wado/inspect_text<core:prelude/string.wado/String>"(f: &mut Formatter, text: String) {
+    let limit: i32 = f."core:prelude/format.wado/Formatter::resolved_seq_limit"();
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    let mut count: i32 = 0;
+    let mut truncated: bool = false;
+    $for_of_0: {
+        let mut $iter_0: StrCharIter = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrCharIter"(text."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"());
+        loop {
+            let $match_10: Option<char> = $iter_0."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::next"();
+            match $match_10 {
+                Some(c) => $block_14: {
+                    if ((limit >= 0) && (count >= limit)) {
+                        truncated = true;
+                        break;
+                    }
+                    if (c == '"') {
+                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        f."core:prelude/format.wado/Formatter::write_char"('"');
+                    } else {
+                        if (c == '\\') {
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                            f."core:prelude/format.wado/Formatter::write_char"('\\');
+                        } else {
+                            if (c == '\n') {
+                                f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                f."core:prelude/format.wado/Formatter::write_char"('n');
+                            } else {
+                                if (c == '\r') {
+                                    f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                    f."core:prelude/format.wado/Formatter::write_char"('r');
+                                } else {
+                                    if (c == '\t') {
+                                        f."core:prelude/format.wado/Formatter::write_char"('\\');
+                                        f."core:prelude/format.wado/Formatter::write_char"('t');
+                                    } else {
+                                        let code: i32 = c as i32;
+                                        if ((code < 32) || (code == 127)) {
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"\\u{", used: 3 });
+                                            f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"($tmpl: {
+                                                let mut $r: String = "core::prelude/string.wado::core:prelude/string.wado/String::with_capacity"(16);
+                                                let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
+                                                Box<i32> { value: code }."i32^core:prelude/traits.wado/LowerHex::fmt_lower_hex"(&mut $f);
+                                                break $tmpl: $r;
+                                            });
+                                            f."core:prelude/format.wado/Formatter::write_char"('}');
+                                        } else {
+                                            f."core:prelude/format.wado/Formatter::write_char"(c);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    count = (count + 1);
+                },
+                _ => $block_15: {
+                    break;
+                },
+            };
+        }
+    }
+    f."core:prelude/format.wado/Formatter::write_char"('"');
+    if truncated {
+        f."core:prelude/format.wado/Formatter::write_str<core:prelude/string.wado/String>"(String { repr: packed"...", used: 3 });
+    }
+}
+
+fn "core/prelude/format.wado/pad_text<core:prelude/string.wado/String>"(f: &mut Formatter, text: String) {
+    if (f.precision < 0) {
+        f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>"(text);
+        return;
+    }
+    let view: StrSlice = text."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::as_str_slice"();
+    f."core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(0, view."core:prelude/string.wado/StrSlice::char_prefix_end"(f.precision)));
 }
 
 fn "core/prelude/format.wado/leading_sign_byte_len<&mut core:prelude/string.wado/String>"(s: &mut String, at: i32, len: i32) -> i32 {
@@ -10466,15 +10617,52 @@ pub fn "core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prel
     return [VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 0, case_name: String { repr: packed"Ok", used: 2 }, wire_override: Option<String>::None, is_unit: false }, VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/String>,core:prelude/string.wado/String> { index: 1, case_name: String { repr: packed"Err", used: 3 }, wire_override: Option<String>::None, is_unit: false }];
 }
 
-fn "core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(s: StrSlice, at: i32, len: i32) -> i32 {
-    if (len == 0) {
-        return 0;
+pub fn "core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/StrSlice>"(self: &mut Formatter, content: StrSlice) {
+    if (self.width <= 0) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(content);
+        return;
     }
-    let first: u8 = s."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::get_byte_unchecked"(at);
-    if ((first == 45) || (first == 43)) {
-        return 1;
+    let view: StrSlice = "ops.all_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(content."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"());
+    let content_len: i32 = view."core:prelude/string.wado/StrSlice::chars"()."core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Iterator::count"();
+    if (content_len >= self.width) {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(content);
+        return;
     }
-    return 0;
+    let padding: i32 = (self.width - content_len);
+    if self.zero_pad {
+        let sign_len: i32 = "core::prelude/format.wado::core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(view, 0, view."core:prelude/string.wado/StrSlice::len"());
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(0, sign_len));
+        self."core:prelude/format.wado/Formatter::write_char_n"('0', padding);
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(view."core:prelude/string.wado/StrSlice::sub_unchecked"(sign_len, view."core:prelude/string.wado/StrSlice::len"()));
+        return;
+    }
+    let align: Alignment = self.align;
+    if match align {
+        Left => true,
+        _ => false,
+    } {
+        self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(content);
+        self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+    } else {
+        if match align {
+            Center => true,
+            _ => false,
+        } {
+            let left_pad: i32 = (padding / 2);
+            let right_pad: i32 = (padding - left_pad);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, left_pad);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(content);
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, right_pad);
+        } else {
+            self."core:prelude/format.wado/Formatter::write_char_n"(self.fill, padding);
+            self.buf."core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(content);
+        }
+    }
+}
+
+#[retain(self)]
+fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/IntoIterator::into_iter"(self: &StrCharIter) -> StrCharIter {
+    return *self;
 }
 
 fn "Array<u64>^core:prelude/traits.wado/IndexValue<i32>::index_value"(self: &Array<u64>, index: i32) -> u64 {
@@ -10485,8 +10673,24 @@ fn "&core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::intern
     *self."core:prelude/string.wado/String^core:prelude/string.wado/AsStrSlice::internal_append_to"(out);
 }
 
+fn "core:prelude/string.wado/String^core:prelude/format.wado/PushDisplay::push_display<i32>"(self: &mut String, value: Box<i32>) {
+    let mut f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(self);
+    value."i32^core:prelude/traits.wado/Display::fmt"(&mut f);
+}
+
 pub fn "core:prelude/string.wado/String::push_str<core:prelude/string.wado/StrSlice>"(self: &mut String, other: StrSlice) {
     other."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::internal_append_to"(self);
+}
+
+fn "core/prelude/format.wado/leading_sign_byte_len<core:prelude/string.wado/StrSlice>"(s: StrSlice, at: i32, len: i32) -> i32 {
+    if (len == 0) {
+        return 0;
+    }
+    let first: u8 = s."core:prelude/string.wado/StrSlice^core:prelude/string.wado/AsStrSlice::as_str_slice"()."core:prelude/string.wado/StrSlice::get_byte_unchecked"(at);
+    if ((first == 45) || (first == 43)) {
+        return 1;
+    }
+    return 0;
 }
 
 #[retain(self)]
@@ -11027,6 +11231,38 @@ pub fn "$field_get$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/
 }
 
 #[retain(v)]
+pub fn "$field_get$core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>$&Array<core:prelude/string.wado/String>"(v: &SliceRefIter<core:prelude/string.wado/String>, index: i32) -> &Array<String> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>$i32"(v: &SliceRefIter<core:prelude/string.wado/String>, index: i32) -> i32 {
+    return match index {
+        1 => v.index,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(v)]
+pub fn "$field_get$core:prelude/slice.wado/Slice<core:prelude/string.wado/String>$&Array<core:prelude/string.wado/String>"(v: &Slice<core:prelude/string.wado/String>, index: i32) -> &Array<String> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/Slice<core:prelude/string.wado/String>$i32"(v: &Slice<core:prelude/string.wado/String>, index: i32) -> i32 {
+    return match index {
+        1 => v.start,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(v)]
 pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<u8>$&Array<u8>"(v: &SliceValueIter<u8>, index: i32) -> &Array<u8> {
     return match index {
         0 => v.repr,
@@ -11090,6 +11326,22 @@ pub fn "$field_get$core:prelude/slice.wado/Slice<u8>$&Array<u8>"(v: &Slice<u8>, 
 pub fn "$field_get$core:prelude/slice.wado/Slice<u8>$i32"(v: &Slice<u8>, index: i32) -> i32 {
     return match index {
         1 => v.start,
+        2 => v.end,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(v)]
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>$&Array<core:prelude/string.wado/String>"(v: &SliceValueIter<core:prelude/string.wado/String>, index: i32) -> &Array<String> {
+    return match index {
+        0 => v.repr,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$field_get$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>$i32"(v: &SliceValueIter<core:prelude/string.wado/String>, index: i32) -> i32 {
+    return match index {
+        1 => v.index,
         2 => v.end,
         _ => core::builtin::unreachable(),
     };
@@ -14682,6 +14934,46 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<fn mut(u8)->bool>"(self: Box
     return $variant_tag(self.value);
 }
 
+#[retain(v)]
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) -> &Array<String> {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+#[retain(payload)]
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$&Array<core:prelude/string.wado/String>"(payload: &Array<String>, index: i32) -> Option<&Array<String>> {
+    return match index {
+        0 => Option<&Array<String>>::Some(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(v: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>, index: i32) {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>$()"(payload: (), index: i32) -> Option<&Array<String>> {
+    return match index {
+        1 => Option<&Array<String>>::None,
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>"(self: Box<core:prelude/types.wado/Option<&Array<core:prelude/string.wado/String>>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>$core:prelude/list.wado/List<u8>"(v: Box<core:prelude/types.wado/Option<core:prelude/list.wado/List<u8>>>, index: i32) -> List<u8> {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -15162,12 +15454,31 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,cor
     };
 }
 
+#[retain(v)]
+fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>"(v: SliceValueIter<core:prelude/string.wado/String>) -> SliceValueIter<core:prelude/string.wado/String> {
+    return SliceValueIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
+}
+
 fn "$value_copy$core:prelude/range.wado/RangeExclusive<i32>"(v: RangeExclusive<i32>) -> RangeExclusive<i32> {
     return RangeExclusive<i32> { start: v.start, end: v.end };
 }
 
 fn "$value_copy$core:prelude/range.wado/RangeInclusive<i32>"(v: RangeInclusive<i32>) -> RangeInclusive<i32> {
     return RangeInclusive<i32> { start: v.start, end: v.end, exhausted: v.exhausted };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/slice.wado/Slice<core:prelude/string.wado/String>"(v: Slice<core:prelude/string.wado/String>) -> Slice<core:prelude/string.wado/String> {
+    return Slice<core:prelude/string.wado/String> { repr: v.repr, start: v.start, end: v.end };
+}
+
+fn "$value_copy$Array<core:prelude/string.wado/String>"(v: Array<String>) -> Array<String> {
+    return core::builtin::array_clone::<String>(&v);
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>"(v: SliceRefIter<core:prelude/string.wado/String>) -> SliceRefIter<core:prelude/string.wado/String> {
+    return SliceRefIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
 
 fn "$value_copy$core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>"(v: IterFilter<core:prelude/string.wado/StrUtf8ByteIter>) -> IterFilter<core:prelude/string.wado/StrUtf8ByteIter> {
@@ -15692,6 +16003,11 @@ fn "$value_copy$core:prelude/string.wado/StrCharIndicesIter"(v: StrCharIndicesIt
 }
 
 #[retain(v)]
+fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
+    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
+}
+
+#[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrUtf8ByteIter"(v: StrUtf8ByteIter) -> StrUtf8ByteIter {
     return StrUtf8ByteIter { repr: v.repr, used: v.used, index: v.index };
 }
@@ -15947,11 +16263,6 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/format.wado/F
 #[retain(v)]
 fn "$value_copy$core:prelude/string.wado/StrSlice"(v: StrSlice) -> StrSlice {
     return StrSlice { repr: v.repr, start: v.start, end: v.end };
-}
-
-#[retain(v)]
-fn "$value_copy$core:prelude/string.wado/StrCharIter"(v: StrCharIter) -> StrCharIter {
-    return StrCharIter { repr: v.repr, used: v.used, byte_index: v.byte_index };
 }
 
 fn "$value_copy$Array<u8>"(v: Array<u8>) -> Array<u8> {

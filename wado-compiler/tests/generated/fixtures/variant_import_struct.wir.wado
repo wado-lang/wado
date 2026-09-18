@@ -226,7 +226,6 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
     let result_69: ref "core:prelude/string.wado//String";
     let result_72: ref "core:prelude/string.wado//String";
     let n_84: i32;
-    let new_used_88: i32;
     let start_89: i32;
     let n_99: i32;
     let new_used_103: i32;
@@ -315,13 +314,12 @@ fn "./variant_import_struct_module.wado/format_with_opts"(s, opts) {
         $inline_core_prelude_string_wado_String__internal_push_string_33: block {
             n_84 = result_72.used;
             break_if $inline_core_prelude_string_wado_String__internal_push_string_33 n_84 == 0;
-            new_used_88 = 0 + n_84;
-            if @unlikely(new_used_88 > builtin::array_len(result_69.repr)) {
+            if @unlikely(n_84 > builtin::array_len(result_69.repr)) {
                 cold_path;
-                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result_69, new_used_88);
+                "core:prelude/string.wado/core:prelude/string.wado/String::grow"(result_69, n_84);
             }
             start_89 = result_69.used;
-            result_69.used = new_used_88;
+            result_69.used = n_84;
             builtin::array_copy<u8>(result_69.repr, start_89, result_72.repr, 0, n_84);
         };
         $inline_core_prelude_string_wado_String__internal_push_string_39: block {
