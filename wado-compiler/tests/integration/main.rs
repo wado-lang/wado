@@ -22,6 +22,7 @@ mod cm_interface_plain_func;
 mod cm_newtype_boundary;
 mod cm_optional_resource_return;
 mod cm_provider_compose;
+mod cm_qualified_inherited_method;
 mod cm_record_param;
 mod cm_reexport_type;
 mod cm_resource_unbound;

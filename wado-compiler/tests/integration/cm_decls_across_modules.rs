@@ -82,8 +82,7 @@ fn one_interfaces_types_may_not_be_split_across_modules() {
     std::fs::write(&entry, SPLIT_TYPES_ENTRY).expect("write main.wado");
 
     let err = compile_file(Path::new(&entry))
-        .err()
-        .expect("a second declaring module for one interface must be a diagnostic");
+        .expect_err("a second declaring module for one interface must be a diagnostic");
     let message = err.to_string();
     assert!(
         message.contains("wasi:demo/gfx@0.1.0") && message.contains("already declares"),

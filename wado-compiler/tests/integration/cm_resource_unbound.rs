@@ -41,8 +41,7 @@ fn a_user_declared_member_of_its_own_interface_lowers_to_that_import() {
 #[test]
 fn declaring_into_a_stdlib_owned_interface_is_rejected() {
     let err = compile_source(STDLIB_INTERFACE)
-        .err()
-        .expect("declaring into a stdlib-owned interface must be a diagnostic");
+        .expect_err("declaring into a stdlib-owned interface must be a diagnostic");
     let message = err.to_string();
     assert!(
         message.contains("wasi:http/types@0.3.0") && message.contains("already declares"),
