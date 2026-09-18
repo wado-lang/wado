@@ -901,6 +901,37 @@ struct ModuleSourceIndex {
 /// registration. Two registrations of the same `(interface, name)` pair
 /// indicate a stdlib bug (the same declaration emitted twice) — we want a
 /// loud failure instead of a silent overwrite.
+/// Which declarations of a module enter the registry.
+enum CmDeclScope {
+    /// Everything the module declares: a bundled binding module is all CM, and
+    /// it declares every `#[cm_params]`, so a gap there is a generator defect.
+    Module,
+    /// Only what carries `#[cm(…)]`. A user module's own declarations are not
+    /// bindings, and a hand-written one may leave `#[cm_params]` out.
+    CmAttributed,
+}
+
+impl CmDeclScope {
+    /// Whether a declaration whose `#[cm(…)]` resolved to `source_interface`
+    /// (empty when it carries none) enters the registry.
+    fn admits(&self, source_interface: &str) -> bool {
+        match self {
+            Self::Module => true,
+            Self::CmAttributed => !source_interface.is_empty(),
+        }
+    }
+
+    /// The CM name for a parameter `#[cm_params]` did not name.
+    fn param_fallback(&self, param: &str, interface: &str, method: &str) -> String {
+        match self {
+            Self::Module => {
+                panic!("missing #[cm_params] for param '{param}' in {interface}.{method}")
+            }
+            Self::CmAttributed => to_kebab(param),
+        }
+    }
+}
+
 fn register_unique<V>(
     map: &mut IndexMap<(String, String), V>,
     kind: &str,
@@ -1679,7 +1710,7 @@ impl CmInterfaceRegistry {
             let local_names = build_local_name_resolver(path, &module, &defs_by_module);
             let sources = collect_named_type_sources(&module, &local_names);
             registry.extend_source_interfaces(sources);
-            registry.register_module_decls(&module);
+            registry.register_module_decls(&module, &CmDeclScope::Module);
             resolved_modules.push((path, module));
         }
 
@@ -1700,13 +1731,16 @@ impl CmInterfaceRegistry {
     /// declarations are handled separately by [`Self::register_module_worlds`]
     /// so that interface exports can be expanded against the full set of
     /// interface declarations across modules.
-    fn register_module_decls(&mut self, module: &ast::Module) {
+    fn register_module_decls(&mut self, module: &ast::Module, scope: &CmDeclScope) {
         use crate::ast::Item;
 
         // First, collect newtypes from this module
         for item in &module.items {
             if let Item::Newtype(alias) = item {
                 let source_interface = Self::cm_source_interface(&alias.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 register_unique(
                     &mut self.newtypes,
                     "newtype",
@@ -1723,6 +1757,9 @@ impl CmInterfaceRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing like DNS, TLS)
                 let cm_name = cm_attr_cm_name(&resource.attrs, &resource.name);
                 let source_interface = Self::cm_source_interface(&resource.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 // An unrestricted resource is erased at the boundary, which sees
                 // the universal handle, a copyable `u32`, so it registers as a
                 // newtype and every `own`/`borrow` path passes it by.
@@ -1754,6 +1791,9 @@ impl CmInterfaceRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&struct_def.attrs, &struct_def.name);
                 let source_interface = Self::cm_source_interface(&struct_def.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 let fields: Vec<(String, Type)> = struct_def
                     .fields
                     .iter()
@@ -1787,6 +1827,9 @@ impl CmInterfaceRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(attrs, &flags_def.name);
                 let source_interface = Self::cm_source_interface(attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 // Use per-member #[cm] attr for CM name
                 let member_names: Vec<String> = flags_def
                     .flags
@@ -1818,6 +1861,9 @@ impl CmInterfaceRegistry {
                 // Extract interface path from #[cm] attribute if present
                 // Format: #[cm("wasi:sockets/types@0.3.0-rc-2025-09-16#error-code")]
                 let source_interface = Self::cm_source_interface(&enum_def.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 register_unique(
                     &mut self.enums,
                     "enum",
@@ -1834,6 +1880,9 @@ impl CmInterfaceRegistry {
                 // Use the #[cm] fragment as the CM name (preserves acronym casing)
                 let cm_name = cm_attr_cm_name(&variant_def.attrs, &variant_def.name);
                 let source_interface = Self::cm_source_interface(&variant_def.attrs);
+                if !scope.admits(&source_interface) {
+                    continue;
+                }
                 // Store both CM and Wado names for each case
                 let cases: Vec<CmVariantCase> = variant_def
                     .cases
@@ -1855,51 +1904,7 @@ impl CmInterfaceRegistry {
             }
         }
 
-        // Register interface methods with resolved types for params but NOT for return type
-        // Return type must keep original names (e.g., Mark not u64) for newtype semantics
-        for item in &module.items {
-            if let Item::Interface(effect) = item {
-                for method in &effect.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
-                        // Extract CM param names from #[cm_params] attribute
-                        let cm_param_names = extract_cm_params_attr(&method.attrs);
-                        let params: Vec<(String, String, Type)> = method
-                            .params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, p)| {
-                                let cm_name = cm_param_names
-                                    .get(i)
-                                    .unwrap_or_else(|| {
-                                        panic!(
-                                            "missing #[cm_params] for param '{}' in {}.{}",
-                                            p.name, effect.name, method.name
-                                        )
-                                    })
-                                    .clone();
-                                (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
-                            })
-                            .collect();
-
-                        // Store the CM-ABI return type: an async import's
-                        // `AsyncCall<T>` wrapper is stripped here, and both the
-                        // elaborator and the binding synthesiser re-wrap it so
-                        // user code still sees `AsyncCall<T>`.
-                        let return_type =
-                            unwrap_async_call_if_async(method.is_async, &method.return_type);
-
-                        self.register(
-                            &effect.name,
-                            &method.name,
-                            wasi,
-                            method.is_async,
-                            params,
-                            return_type,
-                        );
-                    }
-                }
-            }
-        }
+        self.register_interface_cm_methods(module, scope);
 
         // World-level function imports (Phase 9): a bodyless free function
         // carrying a `#[cm]` world-import boundary.
@@ -1945,6 +1950,9 @@ impl CmInterfaceRegistry {
         for item in &module.items {
             if let Item::Resource(resource) = item {
                 let resource_source = Self::cm_source_interface(&resource.attrs);
+                if !scope.admits(&resource_source) {
+                    continue;
+                }
                 for method in &resource.methods {
                     if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
                         // Extract CM param names from #[cm_params] attribute
@@ -1954,15 +1962,14 @@ impl CmInterfaceRegistry {
                             .iter()
                             .enumerate()
                             .map(|(i, p)| {
-                                let cm_name = cm_param_names
-                                    .get(i)
-                                    .unwrap_or_else(|| {
-                                        panic!(
-                                            "missing #[cm_params] for param '{}' in {}.{}",
-                                            p.name, resource.name, method.name
-                                        )
-                                    })
-                                    .clone();
+                                let cm_name = match cm_param_names.get(i) {
+                                    Some(declared) => declared.clone(),
+                                    None => scope.param_fallback(
+                                        &p.name,
+                                        &resource.name,
+                                        &method.name,
+                                    ),
+                                };
                                 let ty = substitute_self_in_type(
                                     &self.source_interfaces,
                                     &p.ty,
@@ -1994,6 +2001,64 @@ impl CmInterfaceRegistry {
         }
     }
 
+    /// Register the `#[cm(…)]` interface operations a user module declares, so
+    /// a call to one lowers to that import instead of reaching WIR unresolved.
+    /// An operation without `#[cm(…)]` stays out: it is the module's own
+    /// effect, not a binding.
+    pub fn register_user_cm_decls(&mut self, module: &ast::Module) {
+        // The resolver keys cross-module `use` by path, and a user binding
+        // module resolves its own declarations, so one placeholder key serves.
+        const SELF_PATH: &str = "";
+        let mut defs_by_module: IndexMap<&'static str, IndexMap<String, String>> =
+            IndexMap::default();
+        defs_by_module.insert(SELF_PATH, collect_cm_definitions(module));
+        let local_names = build_local_name_resolver(SELF_PATH, module, &defs_by_module);
+        self.extend_source_interfaces(collect_named_type_sources(module, &local_names));
+        self.register_module_decls(module, &CmDeclScope::CmAttributed);
+    }
+
+    /// Register every `#[cm(…)]` operation an `interface` in `module` declares.
+    /// A param keeps its resolved type while the return type keeps the names as
+    /// written, so a newtype survives the round trip.
+    fn register_interface_cm_methods(&mut self, module: &ast::Module, scope: &CmDeclScope) {
+        for item in &module.items {
+            let Item::Interface(effect) = item else {
+                continue;
+            };
+            for method in &effect.methods {
+                let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) else {
+                    continue;
+                };
+                let cm_param_names = extract_cm_params_attr(&method.attrs);
+                let params: Vec<(String, String, Type)> = method
+                    .params
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        let cm_name = match cm_param_names.get(i) {
+                            Some(declared) => declared.clone(),
+                            None => scope.param_fallback(&p.name, &effect.name, &method.name),
+                        };
+                        (p.name.clone(), cm_name, self.cm_param_type(&p.ty))
+                    })
+                    .collect();
+                // Store the CM-ABI return type: an async import's `AsyncCall<T>`
+                // wrapper is stripped here, and both the elaborator and the
+                // binding synthesiser re-wrap it so user code still sees it.
+                let return_type =
+                    unwrap_async_call_if_async(method.is_async, &method.return_type);
+                self.register(
+                    &effect.name,
+                    &method.name,
+                    wasi,
+                    method.is_async,
+                    params,
+                    return_type,
+                );
+            }
+        }
+    }
+
     /// Register a component dependency's binding module via the stdlib's
     /// `Self::register_module_decls` path, recording each interface FQ as a
     /// component import for [`crate::wir::ImportKind::Component`] classification.
@@ -2005,7 +2070,7 @@ impl CmInterfaceRegistry {
         host_leaf_imports: &[String],
         module_source: &ModuleSource,
     ) {
-        self.register_module_decls(module);
+        self.register_module_decls(module, &CmDeclScope::Module);
         for fq in interface_fqs {
             self.component_interfaces.insert(fq.clone());
             self.cm_interface_module_sources
@@ -3340,9 +3405,22 @@ impl CmInterfaceRegistry {
 
     /// Get the local name for a function in an interface
     pub fn get_local_name(&self, interface_path: &str, wasi_func_name: &str) -> Option<&String> {
+        self.local_names_for(interface_path, wasi_func_name).next()
+    }
+
+    /// Every local name bound to one CM function. More than one when a user
+    /// module binds an operation the stdlib already binds: each Wado name mints
+    /// its own alias, and all of them must reach the same import.
+    pub fn local_names_for(
+        &self,
+        interface_path: &str,
+        wasi_func_name: &str,
+    ) -> impl Iterator<Item = &String> {
+        let interface_path = interface_path.to_string();
+        let wasi_func_name = wasi_func_name.to_string();
         self.local_aliases
             .iter()
-            .find(|(_, (path, func))| path == interface_path && func == wasi_func_name)
+            .filter(move |(_, (path, func))| *path == interface_path && *func == wasi_func_name)
             .map(|(local_name, _)| local_name)
     }
 
@@ -4827,7 +4905,7 @@ mod tests {
         let local_names = build_local_name_resolver(module_path, &module, &defs_by_module);
         let mut registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(collect_named_type_sources(&module, &local_names));
-        registry.register_module_decls(&module);
+        registry.register_module_decls(&module, &CmDeclScope::Module);
         registry
     }
 

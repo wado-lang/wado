@@ -1,0 +1,19 @@
+// A user module binds a CM import itself: `#[cm]` on an interface operation
+// names the target, and the call lowers to that import rather than reaching
+// WIR unresolved. Only the stdlib could do this before.
+use { println, Stdout } from "core:cli";
+
+interface Entropy {
+    #[cm("wasi:random/random@0.3.0#get-random-u64")]
+    fn next() -> u64;
+}
+
+export fn run() with (Stdout, Entropy) {
+    let seed = Entropy::next();
+    println(`${seed == seed}`);
+}
+
+__DATA__
+{
+    "stdout_contains": ["true"]
+}

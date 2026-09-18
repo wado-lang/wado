@@ -2826,18 +2826,7 @@ fn generate_cm_imports(
         }
 
         for func in &supported_functions {
-            let local_name = project
-                .cm_interface_registry
-                .get_local_name(&interface_info.path, &func.wasi_func_name)
-                .cloned()
-                .unwrap_or_else(|| format!("{}-{}", interface_info.interface, func.wasi_func_name));
-
-            ctx.register_comp_func(&local_name);
-            builder.alias_export(
-                ctx.instance_idx(&interface_info.instance_key()),
-                &func.wasi_func_name,
-                ComponentExportKind::Func,
-            );
+            alias_interface_func(builder, ctx, project, &interface_info, func);
         }
     }
 
@@ -4005,18 +3994,7 @@ fn import_resource_using_interfaces(
         expose_self_owned_resources(builder, ctx, project, &interface_info, &needed_resources);
 
         for func in &supported_functions {
-            let local_name = project
-                .cm_interface_registry
-                .get_local_name(&interface_info.path, &func.wasi_func_name)
-                .cloned()
-                .unwrap_or_else(|| format!("{}-{}", interface_info.interface, func.wasi_func_name));
-
-            ctx.register_comp_func(&local_name);
-            builder.alias_export(
-                ctx.instance_idx(&interface_info.instance_key()),
-                &func.wasi_func_name,
-                ComponentExportKind::Func,
-            );
+            alias_interface_func(builder, ctx, project, &interface_info, func);
         }
     }
 }
@@ -4259,6 +4237,38 @@ fn generate_cm_world_func_imports(
         builder.import(
             &func.wasi_func_name,
             wasm_encoder::ComponentTypeRef::Func(func_type),
+        );
+    }
+}
+
+/// Alias `func` out of its interface instance once per local name bound to it.
+/// One CM function carries several when a user module binds an operation the
+/// stdlib already binds: each Wado name mints its own alias, and the core
+/// module imports whichever one its call site named.
+fn alias_interface_func(
+    builder: &mut ComponentBuilder,
+    ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    interface_info: &CmInterfaceInfo,
+    func: &CmFunctionInfo,
+) {
+    let mut local_names: Vec<String> = project
+        .cm_interface_registry
+        .local_names_for(&interface_info.path, &func.wasi_func_name)
+        .cloned()
+        .collect();
+    if local_names.is_empty() {
+        local_names.push(format!(
+            "{}-{}",
+            interface_info.interface, func.wasi_func_name
+        ));
+    }
+    for local_name in &local_names {
+        ctx.register_comp_func(local_name);
+        builder.alias_export(
+            ctx.instance_idx(&interface_info.instance_key()),
+            &func.wasi_func_name,
+            ComponentExportKind::Func,
         );
     }
 }

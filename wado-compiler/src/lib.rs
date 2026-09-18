@@ -1111,6 +1111,18 @@ async fn resolve_inline_providers<H: CompilerHost>(
     Ok(providers)
 }
 
+/// Whether `module` declares an interface operation bound to a CM import.
+fn declares_cm_import(module: &ast::Module) -> bool {
+    module.items.iter().any(|item| {
+        let ast::Item::Interface(decl) = item else {
+            return false;
+        };
+        decl.methods
+            .iter()
+            .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
+    })
+}
+
 /// Internal: run compilation phases after module loading.
 fn compile_after_load<H: CompilerHost>(
     load_result: loader::LoadResult,
@@ -1492,6 +1504,18 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
+    // User modules that bind a CM import themselves. The stdlib's bindings are
+    // already in the shared registry; a module that declares none is skipped,
+    // so the usual program clones nothing.
+    let user_cm_modules: Vec<ast::Module> = sem
+        .modules
+        .iter()
+        .filter(|(source, module)| {
+            !source.is_core() && !source.is_binding() && declares_cm_import(module)
+        })
+        .map(|(_, module)| module.clone())
+        .collect();
+
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -1547,6 +1571,13 @@ fn compile_after_load<H: CompilerHost>(
                 span: None,
             });
             return Err(Bail);
+        }
+    }
+
+    if !user_cm_modules.is_empty() {
+        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
+        for module in &user_cm_modules {
+            registry.register_user_cm_decls(module);
         }
     }
 
