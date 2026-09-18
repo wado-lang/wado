@@ -1082,11 +1082,7 @@ impl TypeTable {
     /// apart: only a borrow is ever redefined.
     fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
         let target = self.redirects.get(id).copied()?;
-        matches!(
-            self.types.get(id)?,
-            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
-        )
-        .then_some(target)
+        self.spelled_borrow(id).map(|_| target)
     }
 
     /// [`Self::get`] before the newtype / flags erasure, which runs once
