@@ -46,3 +46,47 @@ fn cm_declarations_may_live_in_a_module_of_their_own() {
     compile_file(Path::new(&entry))
         .unwrap_or_else(|e| panic!("CM declarations split across modules must compile: {e}"));
 }
+
+const OTHER_TYPES_MODULE: &str = r#"
+#[cm("wasi:demo/gfx@0.1.0#adapter")]
+pub resource Adapter {
+    #[cm("wasi:demo/gfx@0.1.0#[method]adapter.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+"#;
+
+const SPLIT_TYPES_ENTRY: &str = r#"
+use { Options } from "./gfx.wado";
+use { Adapter } from "./more.wado";
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-adapter")]
+    fn get_adapter() -> Adapter;
+}
+
+export fn run() with (Gfx, Adapter) {
+    let a = Gfx::get_adapter();
+    let _ = a.id();
+}
+"#;
+
+/// A CM interface has one declaring module, so its types live in that module.
+/// The `interface` naming them may sit elsewhere, as the test above relies on.
+#[test]
+fn one_interfaces_types_may_not_be_split_across_modules() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(dir.path().join("gfx.wado"), TYPES_MODULE).expect("write gfx.wado");
+    std::fs::write(dir.path().join("more.wado"), OTHER_TYPES_MODULE).expect("write more.wado");
+    let entry = dir.path().join("main.wado");
+    std::fs::write(&entry, SPLIT_TYPES_ENTRY).expect("write main.wado");
+
+    let err = compile_file(Path::new(&entry))
+        .err()
+        .expect("a second declaring module for one interface must be a diagnostic");
+    let message = err.to_string();
+    assert!(
+        message.contains("wasi:demo/gfx@0.1.0") && message.contains("already declares"),
+        "expected the single-declaring-module error, got {message}"
+    );
+}
