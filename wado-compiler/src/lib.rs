@@ -1505,13 +1505,17 @@ fn compile_after_load<H: CompilerHost>(
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
     // User modules that bind a CM import themselves. The stdlib's bindings are
-    // already in the shared registry; a module that declares none is skipped,
-    // so the usual program clones nothing.
+    // in the shared registry and a component dependency's are folded in by
+    // `fold_component_interfaces`, so both are already registered; a module
+    // that declares none is skipped, so the usual program clones nothing.
     let user_cm_modules: Vec<ast::Module> = sem
         .modules
         .iter()
         .filter(|(source, module)| {
-            !source.is_core() && !source.is_binding() && declares_cm_import(module)
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_import(module)
         })
         .map(|(_, module)| module.clone())
         .collect();
