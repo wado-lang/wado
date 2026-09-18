@@ -12,6 +12,10 @@
 // it changes the stream and not one instruction of the round being timed.
 // Nothing here is a reference implementation — `core:prng` is where a checked
 // one would go.
+//
+// The last section measures the other question a consumer can ask: not "the
+// next value" but "the value at this key", which is what terrain regenerated
+// on a revisit and an entity keyed by its id need.
 
 use { Stdout } from "core:cli";
 use { Benchmark } from "core:benchmark";
@@ -767,7 +771,123 @@ fn drain_by_batch<R: VectorBatch>(rng: &mut R, n: i32) -> u64 {
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
 }
 
+// A stream answers "the next value". A keyed function answers "the value at
+// this key", so the draw order belongs to the consumer and there is no state
+// to carry: a chunk regenerates identically on a revisit, and no two consumers
+// have to agree on who draws first.
+//
+// Two ends of one trade. `mix64` is SplitMix64's finalizer cut loose from its
+// state, which is what a noise library hashes a coordinate with. Philox4x32 is
+// a counter-based PRF (Random123; JAX's default Threefry is its cousin), ten
+// rounds for the statistical claims. The Philox constants are the reference's
+// and nothing here checks a known-answer vector — as with SHISHUA's seeding,
+// that changes the stream and not one instruction of the timing.
+global MIX_C1: u64 = 0xBF58476D1CE4E5B9;
+
+global MIX_C2: u64 = 0x94D049BB133111EB;
+
+fn mix64(key: u64) -> u64 {
+    let mut z = key;
+    z = (z ^ z >> 30) * MIX_C1;
+    z = (z ^ z >> 27) * MIX_C2;
+    return z ^ z >> 31;
+}
+
+fn mix64x2(key: u64x2) -> u64x2 {
+    let c1: u64x2 = [MIX_C1 as i64, MIX_C1 as i64];
+    let c2: u64x2 = [MIX_C2 as i64, MIX_C2 as i64];
+    let mut z = key;
+    z = (z ^ z >> 30) * c1;
+    z = (z ^ z >> 27) * c2;
+    return z ^ z >> 31;
+}
+
+global COORD_X: u64 = 0x9E3779B97F4A7C15;
+
+global COORD_Y: u64 = 0xC2B2AE3D27D4EB4F;
+
+fn value_at(seed: u64, x: i32, y: i32) -> u64 {
+    return mix64(seed ^ x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y);
+}
+
+global PHILOX_M0: u64 = 0xD2511F53;
+
+global PHILOX_M1: u64 = 0xCD9E8D57;
+
+global PHILOX_W0: u32 = 0x9E3779B9;
+
+global PHILOX_W1: u32 = 0xBB67AE85;
+
+global PHILOX_ROUNDS: i32 = 10;
+
+fn philox4x32(key0: u32, key1: u32, counter: u32) -> [u32, u32, u32, u32] {
+    let mut x0 = counter;
+    let mut x1: u32 = 0;
+    let mut x2: u32 = 0;
+    let mut x3: u32 = 0;
+    let mut k0 = key0;
+    let mut k1 = key1;
+    for let mut round = 0; round < PHILOX_ROUNDS; round += 1 {
+        let p0 = PHILOX_M0 * x0 as u64;
+        let p1 = PHILOX_M1 * x2 as u64;
+        x0 = (p1 >> 32) as u32 ^ x1 ^ k0;
+        x1 = p1 as u32;
+        x2 = (p0 >> 32) as u32 ^ x3 ^ k1;
+        x3 = p0 as u32;
+        k0 = k0 + PHILOX_W0;
+        k1 = k1 + PHILOX_W1;
+    }
+    return [x0, x1, x2, x3];
+}
+
+fn drain_mix(n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 1 {
+        acc = acc ^ mix64(i as i64 as u64);
+    }
+    return acc;
+}
+
+// The key vector is carried and advanced, rather than built from the loop
+// counter each step: a `u64x2` literal over dynamic elements lowers to a GC
+// `array.new_fixed` plus a bounds-checked read per lane, which costs more than
+// the mixer it feeds.
+fn drain_mix_simd(n: i32) -> u64 {
+    let step: u64x2 = [2, 2];
+    let mut key: u64x2 = [0, 1];
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += 2 {
+        acc = acc ^ mix64x2(key);
+        key = key + step;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+// The shape the terrain case actually has: two coordinates mixed into a key,
+// walked in the consumer's order.
+fn drain_value_at(side: i32) -> u64 {
+    assert side * side == DRAW_COUNT, "the grid must hold one iteration's work";
+    let mut acc: u64 = 0;
+    for let mut y = 0; y < side; y += 1 {
+        for let mut x = 0; x < side; x += 1 {
+            acc = acc ^ value_at(0x5EED, x, y);
+        }
+    }
+    return acc;
+}
+
+fn drain_philox(n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 2 {
+        let [a, b, c, d] = philox4x32(0x5EED, 0, i as u32);
+        acc = acc ^ (b as u64 << 32 | a as u64) ^ (d as u64 << 32 | c as u64);
+    }
+    return acc;
+}
+
 global DRAW_COUNT: i32 = 1 << 16;
+
+global GRID_SIDE: i32 = 1 << 8;
 
 test "the trait boundary hands back the same stream" {
     let mut direct = Shishua::new(5);
@@ -777,6 +897,62 @@ test "the trait boundary hands back the same stream" {
     let expected = drain_shishua_bulk(&mut direct, 1024);
     assert drain_through_trait(&mut through, 1024) == expected;
     assert drain_by_vector(&mut by_vector, 1024) == expected;
+}
+
+test "a keyed draw depends on its key and nothing else" {
+    assert value_at(1, 3, 7) == value_at(1, 3, 7);
+    assert value_at(1, 3, 7) != value_at(1, 7, 3);
+    assert value_at(1, 3, 7) != value_at(2, 3, 7);
+
+    // Between the two reads above, other keys were drawn; a stream would have
+    // moved on.
+    let mut seen: List<u64> = [];
+    for let mut i = 0; i < 1000; i += 1 {
+        seen.push(mix64(i as i64 as u64));
+    }
+    assert value_at(1, 3, 7) == value_at(1, 3, 7);
+    for let mut i = 0; i < seen.len(); i += 1 {
+        assert seen[i] == mix64(i as i64 as u64);
+    }
+}
+
+test "the traversal order does not change a cell's value" {
+    let mut row_major: List<u64> = [];
+    for let mut y = 0; y < 8; y += 1 {
+        for let mut x = 0; x < 8; x += 1 {
+            row_major.push(value_at(9, x, y));
+        }
+    }
+    for let mut x = 0; x < 8; x += 1 {
+        for let mut y = 0; y < 8; y += 1 {
+            assert row_major[y * 8 + x] == value_at(9, x, y);
+        }
+    }
+}
+
+test "the vector mixer hands back what the scalar one does" {
+    for let mut i = 0; i < 64; i += 2 {
+        let v = mix64x2([i as i64, (i + 1) as i64]);
+        assert v.extract_lane(0) as u64 == mix64(i as i64 as u64);
+        assert v.extract_lane(1) as u64 == mix64((i + 1) as i64 as u64);
+    }
+}
+
+test "philox moves with its counter and its key" {
+    let [a0, a1, a2, a3] = philox4x32(5, 0, 1);
+    let [b0, b1, b2, b3] = philox4x32(5, 0, 1);
+    assert a0 == b0 && a1 == b1 && a2 == b2 && a3 == b3;
+
+    let [c0, c1, c2, c3] = philox4x32(5, 0, 2);
+    assert a0 != c0 || a1 != c1 || a2 != c2 || a3 != c3;
+
+    let [d0, d1, d2, d3] = philox4x32(6, 0, 1);
+    assert a0 != d0 || a1 != d1 || a2 != d2 || a3 != d3;
+
+    let drawn: List<u32> = [a0, a1, a2, a3];
+    for let mut i = 0; i < drawn.len(); i += 1 {
+        assert drawn[i] != 0;
+    }
 }
 
 test "a fixed batch hands back what each engine's own path does" {
@@ -961,6 +1137,21 @@ export fn run() with (Stdout, MonotonicClock) {
     );
     bench.println(
         `batch checksums: ${shishua_batch_acc} ${simd_batch_acc}`,
+    );
+
+    let mix_acc = bench.run("mix64, keyed by an index", || drain_mix(DRAW_COUNT));
+    let mix_simd_acc = bench.run("mix64 x2, keyed by an index", || {
+        return drain_mix_simd(DRAW_COUNT);
+    });
+    let grid_acc = bench.run("mix64, keyed by two coordinates", || {
+        return drain_value_at(GRID_SIDE);
+    });
+    let philox_acc = bench.run("Philox4x32-10, keyed by a counter", || {
+        return drain_philox(DRAW_COUNT);
+    });
+
+    bench.println(
+        `keyed checksums: ${mix_acc} ${mix_simd_acc} ${grid_acc} ${philox_acc}`,
     );
     bench.println(
         `fill checksums: ${romu_fill_acc} ${simd_fill_acc} ${fill_acc}`,
