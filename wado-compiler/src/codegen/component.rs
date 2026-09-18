@@ -559,10 +559,10 @@ fn emit_cm_val_type(
                     ))
                 } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
                     // Complex ok types (records, options, variants, etc.) use shared type gen
-                    let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                        .iter()
-                        .map(|(k, &v)| (k.as_str(), v))
-                        .collect();
+                    let resource_exports = cm_keyed_resource_exports(
+                        own_resource_type_indices,
+                        &proj.cm_interface_registry,
+                    );
                     let mut sink = InstanceSink {
                         it: instance_type,
                         next_idx: local_type_idx,
@@ -661,10 +661,10 @@ fn emit_cm_val_type(
             }
             // Complex types (e.g. WASI records like Instant) use shared type gen
             if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
-                let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                    .iter()
-                    .map(|(k, &v)| (k.as_str(), v))
-                    .collect();
+                let resource_exports = cm_keyed_resource_exports(
+                    own_resource_type_indices,
+                    &proj.cm_interface_registry,
+                );
                 let mut sink = InstanceSink {
                     it: instance_type,
                     next_idx: local_type_idx,
@@ -734,6 +734,24 @@ fn build_cm_tuple_types(
                 project,
                 ctx,
             )
+        })
+        .collect()
+}
+
+/// The own-handle type indices under the CM resource names, which is how
+/// [`CmTypeGen::ast_type_to_cm`] asks for them. The instance-type builders key
+/// theirs by Wado name, the name the direct emitters index with, so a handle
+/// reached through the shared walk found nothing until it was rekeyed here.
+fn cm_keyed_resource_exports<'a>(
+    own_resource_type_indices: &IndexMap<String, u32>,
+    registry: &'a CmInterfaceRegistry,
+) -> IndexMap<&'a str, u32> {
+    own_resource_type_indices
+        .iter()
+        .filter_map(|(wado_name, &idx)| {
+            let source = registry.find_binding_resource_source(wado_name)?;
+            let cm_name = registry.get_resource_cm_name_by_source(source, wado_name)?;
+            Some((cm_name, idx))
         })
         .collect()
 }
@@ -2630,10 +2648,10 @@ fn generate_cm_imports(
 
             // Every own-resource index is registered by here, so the borrowed
             // view each signature hands `ast_type_to_cm` is built once.
-            let resource_exports: IndexMap<&str, u32> = own_resource_type_indices
-                .iter()
-                .map(|(k, &v)| (k.as_str(), v))
-                .collect();
+            let resource_exports = cm_keyed_resource_exports(
+                &own_resource_type_indices,
+                &project.cm_interface_registry,
+            );
 
             for func in &supported_functions {
                 // Pre-define param-only types (stream for params, result for params)
@@ -2903,6 +2921,63 @@ fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
     }
 }
 
+/// Export one function into an interface's instance type, emitting on the way
+/// whatever types its signature reaches.
+fn export_func_in_instance_type(
+    instance_type: &mut InstanceType,
+    type_idx: &mut u32,
+    type_gen: &mut CmTypeGen,
+    project: &NirPackage,
+    resource_exports: &IndexMap<&str, u32>,
+    func: &CmFunctionInfo,
+) {
+    let registry = &project.cm_interface_registry;
+    let resolved_return = func
+        .return_type
+        .as_ref()
+        .map(|ty| registry.resolve_type(ty));
+
+    let cm_params: Vec<(String, ComponentValType)> = func
+        .params
+        .iter()
+        .map(|(_, cm_name, ty)| {
+            let mut sink = InstanceSink {
+                it: instance_type,
+                next_idx: type_idx,
+            };
+            let cm_type = type_gen.ast_type_to_cm(&mut sink, ty, registry, resource_exports);
+            (cm_name.clone(), cm_type)
+        })
+        .collect();
+
+    let cm_result = resolved_return.as_ref().map(|ty| {
+        let mut sink = InstanceSink {
+            it: instance_type,
+            next_idx: type_idx,
+        };
+        type_gen.ast_type_to_cm(&mut sink, ty, registry, resource_exports)
+    });
+
+    let param_refs: Vec<(&str, ComponentValType)> =
+        cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
+    let mut func_encoder = instance_type.ty().function();
+    if func.is_async {
+        func_encoder
+            .async_(true)
+            .params(param_refs)
+            .result(cm_result);
+    } else {
+        func_encoder.params(param_refs).result(cm_result);
+    }
+    let func_type_idx = *type_idx;
+    *type_idx += 1;
+
+    instance_type.export(
+        &func.wasi_func_name,
+        wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+    );
+}
+
 fn import_resource_defining_interface(
     project: &NirPackage,
     builder: &mut ComponentBuilder,
@@ -2928,6 +3003,24 @@ fn import_resource_defining_interface(
             panic!("CM types interface `{types_fq}` from the import plan not found in registry")
         })
         .functions;
+
+    // The interface's own functions, which belong to no resource. WASI's
+    // `types` interfaces have none; an interface that both defines a resource
+    // and hands one out (`wasi:webgpu/webgpu#get-gpu`) does, and they are
+    // imported exactly like any other interface function.
+    let plain_funcs: Vec<CmFunctionInfo> = {
+        let resource_names: IndexSet<&str> = http_resources
+            .iter()
+            .map(|(wado, _)| wado.as_str())
+            .collect();
+        all_funcs
+            .iter()
+            .filter(|f| {
+                !resource_names.contains(f.interface_name.as_str()) && emits_function(project, f)
+            })
+            .cloned()
+            .collect()
+    };
 
     let instance_type_name = format!("{pkg}-types-instance-type");
     let http_types_instance_type = ctx.register_type(&instance_type_name);
@@ -2972,59 +3065,24 @@ fn import_resource_defining_interface(
                     || f.wasi_func_name.starts_with("[static]"))
         };
         for func in all_funcs.iter().filter(|f| is_constructor_or_static(f)) {
-            let resolved_return = func
-                .return_type
-                .as_ref()
-                .map(|ty| project.cm_interface_registry.resolve_type(ty));
+            export_func_in_instance_type(
+                &mut instance_type,
+                &mut type_idx,
+                &mut type_gen,
+                project,
+                &resource_exports,
+                func,
+            );
+        }
 
-            let cm_params: Vec<(String, ComponentValType)> = func
-                .params
-                .iter()
-                .map(|(_, cm_name, ty)| {
-                    let mut sink = InstanceSink {
-                        it: &mut instance_type,
-                        next_idx: &mut type_idx,
-                    };
-                    let cm_type = type_gen.ast_type_to_cm(
-                        &mut sink,
-                        ty,
-                        &project.cm_interface_registry,
-                        &resource_exports,
-                    );
-                    (cm_name.clone(), cm_type)
-                })
-                .collect();
-
-            let cm_result = resolved_return.as_ref().map(|ty| {
-                let mut sink = InstanceSink {
-                    it: &mut instance_type,
-                    next_idx: &mut type_idx,
-                };
-                type_gen.ast_type_to_cm(
-                    &mut sink,
-                    ty,
-                    &project.cm_interface_registry,
-                    &resource_exports,
-                )
-            });
-
-            let param_refs: Vec<(&str, ComponentValType)> =
-                cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
-            let mut func_encoder = instance_type.ty().function();
-            if func.is_async {
-                func_encoder
-                    .async_(true)
-                    .params(param_refs)
-                    .result(cm_result);
-            } else {
-                func_encoder.params(param_refs).result(cm_result);
-            }
-            let func_type_idx = type_idx;
-            type_idx += 1;
-
-            instance_type.export(
-                &func.wasi_func_name,
-                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+        for func in &plain_funcs {
+            export_func_in_instance_type(
+                &mut instance_type,
+                &mut type_idx,
+                &mut type_gen,
+                project,
+                &resource_exports,
+                func,
             );
         }
 
@@ -3053,59 +3111,13 @@ fn import_resource_defining_interface(
             .collect();
 
         for func in &resource_methods {
-            let resolved_return = func
-                .return_type
-                .as_ref()
-                .map(|ty| project.cm_interface_registry.resolve_type(ty));
-
-            let cm_params: Vec<(String, ComponentValType)> = func
-                .params
-                .iter()
-                .map(|(_, cm_name, ty)| {
-                    let mut sink = InstanceSink {
-                        it: &mut instance_type,
-                        next_idx: &mut type_idx,
-                    };
-                    let cm_type = type_gen.ast_type_to_cm(
-                        &mut sink,
-                        ty,
-                        &project.cm_interface_registry,
-                        &resource_exports,
-                    );
-                    (cm_name.clone(), cm_type)
-                })
-                .collect();
-
-            let cm_result = resolved_return.as_ref().map(|ty| {
-                let mut sink = InstanceSink {
-                    it: &mut instance_type,
-                    next_idx: &mut type_idx,
-                };
-                type_gen.ast_type_to_cm(
-                    &mut sink,
-                    ty,
-                    &project.cm_interface_registry,
-                    &resource_exports,
-                )
-            });
-
-            let param_refs: Vec<(&str, ComponentValType)> =
-                cm_params.iter().map(|(n, t)| (n.as_str(), *t)).collect();
-            let mut func_encoder = instance_type.ty().function();
-            if func.is_async {
-                func_encoder
-                    .async_(true)
-                    .params(param_refs)
-                    .result(cm_result);
-            } else {
-                func_encoder.params(param_refs).result(cm_result);
-            }
-            let func_type_idx = type_idx;
-            type_idx += 1;
-
-            instance_type.export(
-                &func.wasi_func_name,
-                wasm_encoder::ComponentTypeRef::Func(func_type_idx),
+            export_func_in_instance_type(
+                &mut instance_type,
+                &mut type_idx,
+                &mut type_gen,
+                project,
+                &resource_exports,
+                func,
             );
         }
 
@@ -3141,14 +3153,15 @@ fn import_resource_defining_interface(
     }
     alias_package_error_code(builder, ctx, &pkg, &types_instance);
 
-    // Used constructors/methods/statics, aliased under their local names and
-    // lowered generically by `lower_wasi_functions` — no per-constructor case.
+    // Used constructors/methods/statics and the interface's own functions,
+    // aliased under their local names and lowered generically by
+    // `lower_wasi_functions` — no per-constructor case.
     {
         let http_resource_names: IndexSet<&str> = http_resources
             .iter()
             .map(|(wado, _)| wado.as_str())
             .collect();
-        let resource_funcs: Vec<(String, String)> = all_funcs
+        let used_funcs: Vec<(String, String)> = all_funcs
             .iter()
             .filter(|f| {
                 if !http_resource_names.contains(f.interface_name.as_str()) {
@@ -3159,9 +3172,10 @@ fn import_resource_defining_interface(
                     || f.wasi_func_name.starts_with("[static]");
                 is_resource_func && emits_function(project, f)
             })
+            .chain(plain_funcs.iter())
             .map(|f| (f.wasi_func_name.clone(), f.local_alias_name()))
             .collect();
-        for (cm_name, local_name) in &resource_funcs {
+        for (cm_name, local_name) in &used_funcs {
             ctx.register_comp_func(local_name);
             builder.alias_export(
                 ctx.instance_idx(&types_instance),
