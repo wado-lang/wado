@@ -288,17 +288,12 @@ something real and may be worth it.
   against its own scalar form, which catches a transcription error but not a
   wrong constant shared by both. Closing it means a fixture per algorithm
   against the reference implementation's published output.
-- An operator does not resolve through a type pack's bound. The bound itself is
-  written and enforced — `..V: Fold` reports a violation naming `V` — and a
-  pack member answers a trait method, so a generic consumer over
-  `R: VectorRng<Batch = [..V]>, ..V: Fold` compiles and runs. But `v ^ acc`
-  under `..V: BitXor<u64x2, Output = u64x2>` fails with `operator ^ cannot be
-  applied to types ..V and u64x2`, naming the pack where the member belongs,
-  at either operand order, while the same bound on a scalar type parameter
-  resolves. Closing it means teaching operator resolution to reach a pack
-  member's bounds. Until then a generic consumer calls a method instead of
-  writing the operator, which is why the fixed sixteen-word batch costs nothing
-  in generality it would otherwise have.
+- A generic consumer over `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2,
+  Output = u64x2>` compiles and runs, so the fixed sixteen-word batch is a
+  choice rather than a workaround: what it costs is a width the library names
+  instead of the engine, and the measurements above are why it is named.
+  Reaching a member of the batch still puts the pack on the left of the
+  operator (`v ^ acc`, never `acc ^ v`), as it would in Rust.
 - SHISHUA has no jump and no proven stream separation, so its lanes rest on
   seeding alone. Closing it is not possible within the algorithm; the honest
   answer is that a consumer needing proven disjointness uses xoshiro.

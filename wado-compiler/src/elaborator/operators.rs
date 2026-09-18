@@ -1937,7 +1937,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return operand_type_id;
         }
-        let param_name = bound_param_name(self.tysys.type_table.borrow().get(operand_type_id)).cloned();
+        let param_name =
+            bound_param_name(self.tysys.type_table.borrow().get(operand_type_id)).cloned();
         let Some(name) = param_name else {
             return operand_type_id;
         };

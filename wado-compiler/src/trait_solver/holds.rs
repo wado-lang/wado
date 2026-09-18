@@ -203,8 +203,10 @@ impl Query<'_> {
                 // put in for the base throughout, so a bound naming the
                 // newtype — every `Rhs = Self` and `Output = Self` does —
                 // names the base on this side of the peel.
-                let args: Vec<SolverType> =
-                    args.iter().map(|arg| substituting(arg, ty, &base)).collect();
+                let args: Vec<SolverType> = args
+                    .iter()
+                    .map(|arg| substituting(arg, ty, &base))
+                    .collect();
                 self.holds(&base, trait_, &args)
             })
             .or_else(|| {
