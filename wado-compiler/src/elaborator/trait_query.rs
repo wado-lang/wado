@@ -651,6 +651,17 @@ impl TypeSystem {
             return false;
         };
         let wanted = trait_.args();
+        // A bound writing arguments is the solver's question: it answers at the
+        // arguments where this path answers at the trait, so the two differ
+        // exactly where a written argument decides. One answer, the solver's
+        // (WEP 2026-09-01); this path still answers where the lowering states
+        // nothing about the question.
+        if !wanted.is_empty()
+            && let Some(bridge) = self.solver.as_ref()
+            && let Some(answer) = bridge.answer(self, ctx, scope, type_id, trait_)
+        {
+            return answer;
+        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         let result = Self::asking(ctx, type_id, decl, wanted, || {
             self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_)
@@ -2681,7 +2692,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let _ = self.emit(TypeError::TraitBoundNotSatisfied {
             type_name,
-            trait_name: trait_name.to_string(),
+            trait_name: bound_as_written(trait_name, trait_),
             param_name: param_name.to_string(),
             reason,
             span,
@@ -3305,6 +3316,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ref_impl_target: None,
         })
     }
+}
+
+/// The bound as the source writes it, so a failure over an argument names the
+/// argument: `Add<i32>` and not the `Add` the type does implement.
+fn bound_as_written(name: &str, trait_: &FqTraitName) -> String {
+    if trait_.args().is_empty() {
+        return name.to_string();
+    }
+    let args: Vec<String> = trait_.args().iter().map(FqTypeName::to_display).collect();
+    format!("{name}<{}>", args.join(", "))
 }
 
 /// Whether the compiler supplies `trait_name`'s operator for the primitive
