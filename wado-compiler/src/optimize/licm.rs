@@ -31,20 +31,20 @@ use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_t
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 
-/// A set of pointee types, compared by what a `TypeId` resolves to.
+/// A set of pointee types, keyed by [`TypeTable::canonical`].
 ///
-/// One struct is interned under more than one `TypeId`, so an analysis that
-/// keys on the id alone misses the same type arriving by another name.
+/// One struct resolves under more than one `TypeId`, so an analysis that keys
+/// on the id it was handed misses the same type arriving by another name.
 #[derive(Default)]
-struct PointeeSet(IndexSet<ResolvedType>);
+struct PointeeSet(IndexSet<TypeId>);
 
 impl PointeeSet {
     fn insert(&mut self, pointee: TypeId, type_table: &TypeTable) {
-        self.0.insert(type_table.get(pointee).clone());
+        self.0.insert(type_table.canonical(pointee));
     }
 
     fn contains(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
-        self.0.contains(type_table.get(pointee))
+        self.0.contains(&type_table.canonical(pointee))
     }
 
     fn is_empty(&self) -> bool {
@@ -54,18 +54,15 @@ impl PointeeSet {
 
 /// The same set, for a type's individual field.
 #[derive(Default)]
-struct PointeeFieldSet(IndexSet<(ResolvedType, u32)>);
+struct PointeeFieldSet(IndexSet<(TypeId, u32)>);
 
 impl PointeeFieldSet {
     fn insert(&mut self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) {
-        self.0.insert((type_table.get(pointee).clone(), field_idx));
+        self.0.insert((type_table.canonical(pointee), field_idx));
     }
 
     fn contains(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
-        let resolved = type_table.get(pointee);
-        self.0
-            .iter()
-            .any(|(ty, idx)| *idx == field_idx && ty == resolved)
+        self.0.contains(&(type_table.canonical(pointee), field_idx))
     }
 }
 

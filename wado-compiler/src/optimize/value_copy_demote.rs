@@ -254,7 +254,7 @@ fn helpers_reaching_variant_copies(
         let (Some(copy_type), Some(id)) = (f.value_copy_type(), f.id) else {
             continue;
         };
-        helper_by_type.insert(copy_type, id);
+        helper_by_type.insert(type_table.canonical(copy_type), id);
         if is_variant_type(copy_type, type_table) {
             seeds.insert(id);
         }
@@ -272,7 +272,7 @@ fn helpers_reaching_variant_copies(
                     callees.insert(*func_id);
                 } else if is_array_clone(*func_id, descriptors)
                     && let Some(elem) = array_clone_element_type(body, e)
-                    && let Some(elem_helper) = helper_by_type.get(&elem)
+                    && let Some(elem_helper) = helper_by_type.get(&type_table.canonical(elem))
                 {
                     callees.insert(*elem_helper);
                 }
