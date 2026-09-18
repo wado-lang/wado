@@ -728,6 +728,45 @@ fn drain_by_vector<R: VectorSource>(rng: &mut R, n: i32) -> u64 {
     return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
 }
 
+// A width the library fixes rather than the engine: eight vectors, sixteen
+// u64. Both engines reach it in a whole number of their own steps — two of
+// xoshiro's four-vector step, one of SHISHUA's eight-vector round — so neither
+// keeps a cursor, and the tuple return stays in registers as the round does.
+global BATCH_WORDS: i32 = 16;
+
+trait VectorBatch with () {
+    fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
+}
+
+impl VectorBatch for Shishua {
+    fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
+        self.round();
+        return [self.o0, self.o1, self.o2, self.o3, self.o4, self.o5, self.o6, self.o7];
+    }
+}
+
+impl VectorBatch for XoshiroSimd {
+    fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
+        self.step();
+        let a = self.o0;
+        let b = self.o1;
+        let c = self.o2;
+        let d = self.o3;
+        self.step();
+        return [a, b, c, d, self.o0, self.o1, self.o2, self.o3];
+    }
+}
+
+fn drain_by_batch<R: VectorBatch>(rng: &mut R, n: i32) -> u64 {
+    let mut acc: u64x2 = [0, 0];
+    for let mut i = 0; i < n; i += BATCH_WORDS {
+        let [a, b, c, d, e, f, g, h] = rng.next_batch();
+        acc = acc ^ a ^ b ^ c ^ d;
+        acc = acc ^ e ^ f ^ g ^ h;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
 global DRAW_COUNT: i32 = 1 << 16;
 
 test "the trait boundary hands back the same stream" {
@@ -738,6 +777,16 @@ test "the trait boundary hands back the same stream" {
     let expected = drain_shishua_bulk(&mut direct, 1024);
     assert drain_through_trait(&mut through, 1024) == expected;
     assert drain_by_vector(&mut by_vector, 1024) == expected;
+}
+
+test "a fixed batch hands back what each engine's own path does" {
+    let mut shishua_batched = Shishua::new(11);
+    let mut shishua_bulk = Shishua::new(11);
+    assert drain_by_batch(&mut shishua_batched, 1024) == drain_shishua_bulk(&mut shishua_bulk, 1024);
+
+    let mut simd_batched = XoshiroSimd::new(11);
+    let mut simd_direct = XoshiroSimd::new(11);
+    assert drain_by_batch(&mut simd_batched, 1024) == drain_xoshiro_simd(&mut simd_direct, 1024);
 }
 
 test "each generator moves, and no two agree" {
@@ -894,11 +943,24 @@ export fn run() with (Stdout, MonotonicClock) {
         return drain_by_vector(&mut simd_by_vector, DRAW_COUNT);
     });
 
+    let mut shishua_batched = Shishua::new(12345);
+    let shishua_batch_acc = bench.run("SHISHUA, a fixed batch through a trait", || {
+        return drain_by_batch(&mut shishua_batched, DRAW_COUNT);
+    });
+
+    let mut simd_batched = XoshiroSimd::new(12345);
+    let simd_batch_acc = bench.run("xoshiro256++ x8, a fixed batch through a trait", || {
+        return drain_by_batch(&mut simd_batched, DRAW_COUNT);
+    });
+
     bench.println(
         `checksums: ${romu_acc} ${xoshiro_acc} ${simd_acc} ${shishua_acc} ${bulk_acc}`,
     );
     bench.println(
         `trait checksums: ${trait_acc} ${vector_acc} ${simd_vector_acc}`,
+    );
+    bench.println(
+        `batch checksums: ${shishua_batch_acc} ${simd_batch_acc}`,
     );
     bench.println(
         `fill checksums: ${romu_fill_acc} ${simd_fill_acc} ${fill_acc}`,
