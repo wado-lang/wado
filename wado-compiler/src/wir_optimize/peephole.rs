@@ -379,6 +379,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         changed |= rewrite_everywhere(instrs, &mut try_fold_branchless_increment);
         changed |= rewrite_everywhere(instrs, &mut try_drop_mask);
         changed |= rewrite_everywhere(instrs, &mut try_fold_rotate);
+        changed |= rewrite_everywhere(instrs, &mut try_fold_vector_const);
         changed |= rewrite_everywhere(instrs, &mut try_fold_sign_extension);
         changed |= rewrite_everywhere(instrs, &mut |instr| try_simplify_ref_op(instr, null));
         changed |= rewrite_everywhere(instrs, &mut try_relax_gc_operands);
@@ -920,6 +921,96 @@ fn const_int(instr: &WirInstr) -> Option<i64> {
         WirInstr::I64Const(v) => Some(*v),
         _ => None,
     }
+}
+
+/// The bit pattern a constant lane value holds, kept to `width` bits. A narrow
+/// integer lane takes its constant as `i32` and keeps the low bits, as Wasm
+/// does.
+fn const_lane_bits(width: u32, value: &WirInstr) -> Option<u128> {
+    debug_assert!(matches!(width, 8 | 16 | 32 | 64), "a v128 lane width");
+    let mask = (1u128 << width) - 1;
+    let bits = match value {
+        WirInstr::I32Const(v) => u128::from(*v as u32),
+        WirInstr::I64Const(v) => u128::from(*v as u64),
+        WirInstr::F32Const(v) => u128::from(v.to_bits()),
+        WirInstr::F64Const(v) => u128::from(v.to_bits()),
+        _ => return None,
+    };
+    Some(bits & mask)
+}
+
+/// `(lane width, lane value)` of a splat, or `(lane width, lane index, vector,
+/// lane value)` of a lane replacement — the two steps a vector literal lowers
+/// to.
+enum LaneBuild<'a> {
+    Splat(u32, &'a WirInstr),
+    Replace(u32, u8, &'a WirInstr, &'a WirInstr),
+}
+
+fn lane_build(instr: &WirInstr) -> Option<LaneBuild<'_>> {
+    Some(match instr {
+        WirInstr::I8x16Splat(v) => LaneBuild::Splat(8, v),
+        WirInstr::I16x8Splat(v) => LaneBuild::Splat(16, v),
+        WirInstr::I32x4Splat(v) | WirInstr::F32x4Splat(v) => LaneBuild::Splat(32, v),
+        WirInstr::I64x2Splat(v) | WirInstr::F64x2Splat(v) => LaneBuild::Splat(64, v),
+        WirInstr::I8x16ReplaceLane(lane, vec, v) => LaneBuild::Replace(8, *lane, vec, v),
+        WirInstr::I16x8ReplaceLane(lane, vec, v) => LaneBuild::Replace(16, *lane, vec, v),
+        WirInstr::I32x4ReplaceLane(lane, vec, v) | WirInstr::F32x4ReplaceLane(lane, vec, v) => {
+            LaneBuild::Replace(32, *lane, vec, v)
+        }
+        WirInstr::I64x2ReplaceLane(lane, vec, v) | WirInstr::F64x2ReplaceLane(lane, vec, v) => {
+            LaneBuild::Replace(64, *lane, vec, v)
+        }
+        _ => return None,
+    })
+}
+
+/// The constant a lane-by-lane build evaluates to, or `None` where any lane is
+/// not a constant. `written` is the local the enclosing `local.set` /
+/// `local.tee` assigns, if any: a step of the chain writing that same local is
+/// a dead store — the enclosing write replaces it, and only the chain itself
+/// reads it in between — so the fold may drop it.
+fn const_vector(instr: &WirInstr, written: Option<&str>) -> Option<u128> {
+    if let WirInstr::V128Const(bits) = instr {
+        return Some(*bits as u128);
+    }
+    if let WirInstr::LocalTee { name, value } = instr {
+        if Some(name.as_str()) != written {
+            return None;
+        }
+        return const_vector(value, written);
+    }
+    match lane_build(instr)? {
+        LaneBuild::Splat(width, value) => {
+            let lane = const_lane_bits(width, value)?;
+            Some((0..128 / width).fold(0u128, |bits, slot| bits | lane << (slot * width)))
+        }
+        LaneBuild::Replace(width, lane, vec, value) => {
+            let bits = const_vector(vec, written)?;
+            let shift = u32::from(lane) * width;
+            let mask = ((1u128 << width) - 1) << shift;
+            Some((bits & !mask) | const_lane_bits(width, value)? << shift)
+        }
+    }
+}
+
+/// Fold a vector built lane by lane out of constants — what a vector literal
+/// lowers to — into one `v128.const`.
+fn try_fold_vector_const(instr: &mut WirInstr) -> bool {
+    let (written, value) = match instr {
+        WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
+            (Some(name.clone()), &mut **value)
+        }
+        other => (None, other),
+    };
+    if matches!(value, WirInstr::V128Const(_)) {
+        return false;
+    }
+    let Some(folded) = const_vector(value, written.as_deref()) else {
+        return false;
+    };
+    *value = WirInstr::V128Const(folded as i128);
+    true
 }
 
 /// Remove a redundant `x & ((1 << n) - 1)` mask when `x` is already known to

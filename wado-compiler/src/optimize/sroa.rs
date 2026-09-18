@@ -1,7 +1,10 @@
-//! Scalar Replacement of Aggregates: a struct or tuple used only for field
-//! access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed into
-//! per-field `$sroa_s_x` locals, and copy propagation then removes the trivial
-//! copies. A local found `&local`-aliased by a decomposed field flows back into
+//! Scalar Replacement of Aggregates: a struct, tuple or array used only for
+//! element access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed
+//! into per-field `$sroa_s_x` locals, and copy propagation then removes the
+//! trivial copies. An array's accesses are the sequence builtins
+//! (`array_get_value(&a, 1)`, `array_len(&a)`) rather than field reads, so it
+//! decomposes only where every index is a constant in range. A local found
+//! `&local`-aliased by a decomposed field flows back into
 //! `func.stores_aliased_locals` through a `RefCell` the driver merges after.
 
 use std::cell::{Cell, RefCell};
@@ -18,24 +21,42 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::TypeId;
+use crate::nir_value_graph::ValueKind;
+use crate::niri::{CtfeBuiltin, CtfeBuiltinMap, build_ctfe_builtin_map};
+use crate::tir::{TypeId, TypeTable};
 use crate::token::Span;
 
 /// Maps a callee → the set of its parameter indices it retains.
 type StoresLookup = IndexMap<FuncId, IndexSet<usize>>;
 
-/// Information about a struct/tuple local that may be decomposable.
+/// How a candidate's elements are read back: a struct or tuple projects them
+/// with a field access, an array asks a sequence builtin for one.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum AggKind {
+    Projected,
+    Array,
+}
+
+/// Information about a struct/tuple/array local that may be decomposable.
 struct SroaCandidate {
     local_index: u32,
     local_name: String,
-    /// The `StructLiteral` / `TupleLiteral` the `Let` binds.
+    /// The `StructLiteral` / `TupleLiteral` / `ArrayLiteral` the `Let` binds.
     literal: ExprId,
     /// Per-field info: (`field_name`, `field_type_id`).
     fields: Vec<(String, TypeId)>,
     is_mut: bool,
     aggregate_type_id: TypeId,
-    /// The struct name (empty for tuples).
+    /// The struct name (empty for tuples and arrays).
     struct_name: String,
+    kind: AggKind,
+}
+
+/// A read of a decomposed array: its length, or one element at a constant index.
+#[derive(Clone, Copy)]
+enum ArrayRead {
+    Len,
+    Index(u32),
 }
 
 fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
@@ -64,6 +85,7 @@ fn build_stores_lookup(project: &NirPackage) -> StoresLookup {
 pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let stores_lookup = build_stores_lookup(project);
     let value_copy_ids = project.value_copy_func_ids();
+    let builtins = build_ctfe_builtin_map(project);
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
     gate.run_gated(GatedPass::Sroa, len, |fid| {
@@ -75,6 +97,7 @@ pub fn scalar_replace_aggregates(project: &mut NirPackage, gate: &mut FunctionGa
         let rule = SroaRule {
             stores_lookup: &stores_lookup,
             value_copy_ids: &value_copy_ids,
+            builtins: &builtins,
             stores_aliased: stores_aliased_snapshot,
             newly_aliased: RefCell::new(IndexSet::default()),
             applied: Cell::new(false),
@@ -106,6 +129,8 @@ pub(super) struct SroaRule<'a> {
     /// soft-escape walk peels the wrapper and treats the inner bare local as a
     /// soft position.
     value_copy_ids: &'a IndexSet<FuncId>,
+    /// Which sequence builtin each callee is, for an array candidate's reads.
+    builtins: &'a CtfeBuiltinMap,
     /// Snapshot of `func.stores_aliased_locals` at session start. Used as a
     /// blacklist when picking candidates so a local that the existing alias
     /// analysis already flagged is never decomposed.
@@ -140,7 +165,13 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     }
 
     // Step 2: escape analysis.
-    let uses = scan_candidate_uses(engine.body, &candidates);
+    let arrays: IndexSet<u32> = candidates
+        .iter()
+        .filter(|c| c.kind == AggKind::Array)
+        .map(|c| c.local_index)
+        .collect();
+    let aliases = collect_array_aliases(engine.body, &arrays);
+    let uses = scan_candidate_uses(engine.body, &candidates, &arrays, &aliases, rule.builtins);
     let soft_escaped = find_soft_escaped_locals(
         engine.body,
         &candidates,
@@ -156,9 +187,15 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
             compiler_trace!("sroa", "{}: stores-aliased", c.local_name);
             continue;
         }
+        if uses.out_of_range.contains(&c.local_index) {
+            compiler_trace!("sroa", "{}: read past its length", c.local_name);
+            continue;
+        }
         if !uses.escaped.contains(&c.local_index) {
             decomposed.insert(c.local_index);
-        } else if soft_escaped.contains(&c.local_index) {
+        } else if soft_escaped.contains(&c.local_index) && c.kind != AggKind::Array {
+            // An array's reads are not the shape `reconstruct_aggregate` rebuilds,
+            // so an escape it cannot see through leaves it whole.
             decomposed.insert(c.local_index);
             reconstruct_set.insert(c.local_index);
         } else {
@@ -172,9 +209,25 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
     // Step 3: allocate scalar locals for each field of each SROA'd candidate,
     // through the engine so the locals list grows coherently.
     let mut field_map: IndexMap<(u32, u32), FieldSlot> = IndexMap::default();
+    let mut len_map: IndexMap<u32, FieldSlot> = IndexMap::default();
     for candidate in &candidates {
         if !decomposed.contains(&candidate.local_index) {
             continue;
+        }
+        // An `array_len` read becomes a local bound to the literal's element
+        // count: a `let` always stands where the literal did, while folding the
+        // read into a constant operand in place needs a parent slot to hold one.
+        if uses.len_read.contains(&candidate.local_index) {
+            let name = format!("$sroa_{}_len", candidate.local_name);
+            let local_index = engine.alloc_local(name.clone(), TypeTable::I32, false);
+            len_map.insert(
+                candidate.local_index,
+                FieldSlot {
+                    local_index,
+                    name,
+                    type_id: TypeTable::I32,
+                },
+            );
         }
         // `candidate.fields` is field-index-ordered (0..N, asserted at
         // collection), so the positional index `i` *is* the `field_index` every
@@ -227,6 +280,10 @@ fn sroa_at_root(engine: &mut Engine, rule: &SroaRule) -> bool {
         field_map: &field_map,
         candidate_mut: &candidate_mut,
         reconstruct_info: &reconstruct_info,
+        arrays: &arrays,
+        aliases: &aliases,
+        len_map: &len_map,
+        builtins: rule.builtins,
     };
     let root = engine.body.root;
     rewrite_block(engine, root, &ctx);
@@ -258,7 +315,7 @@ fn collect_ref_locals_in_fields(body: &Body, expr: ExprId, stores_aliased: &mut 
                 extract_ref_local(body, v, stores_aliased);
             }
         }
-        ExprKind::TupleLiteral { elements, .. } => {
+        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => {
             for e in elements.iter().filter_map(|e| e.as_expr()) {
                 extract_ref_local(body, e, stores_aliased);
             }
@@ -351,9 +408,14 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 is_mut,
                 aggregate_type_id,
                 struct_name: struct_name.clone(),
+                kind: AggKind::Projected,
             });
         }
-        ExprKind::TupleLiteral { elements, .. } => {
+        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => {
+            let kind = match &body.exprs[value_e].kind {
+                ExprKind::ArrayLiteral { .. } => AggKind::Array,
+                _ => AggKind::Projected,
+            };
             let field_info: Vec<(String, TypeId)> = elements
                 .iter()
                 .enumerate()
@@ -367,6 +429,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
                 is_mut,
                 aggregate_type_id,
                 struct_name: String::new(),
+                kind,
             });
         }
         _ => {}
@@ -376,6 +439,14 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
 // -----------------------------------------------------------------------
 // Escape analysis
 // -----------------------------------------------------------------------
+
+/// The local `expr` reads bare, whether or not it is a candidate.
+fn alias_local(body: &Body, expr: ExprId) -> Option<u32> {
+    match &body.exprs[expr].kind {
+        ExprKind::Local { index, .. } => Some(*index),
+        _ => None,
+    }
+}
 
 fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> Option<u32> {
     if let ExprKind::Local { index, .. } = &body.exprs[expr].kind
@@ -442,6 +513,72 @@ fn ref_to_candidate_local(
     candidates.contains(index).then_some((*index, is_mut))
 }
 
+/// `let r = &array_candidate` — the borrow an inlined sequence read binds its
+/// parameter to (`core:simd`'s `lane(&lanes, k)`), mapped to the candidate it
+/// names. A local this binds more than once, or binds to anything else too,
+/// names more than one thing and is no alias.
+fn collect_array_aliases(body: &Body, arrays: &IndexSet<u32>) -> IndexMap<u32, u32> {
+    let mut aliases: IndexMap<u32, u32> = IndexMap::default();
+    let mut ambiguous: IndexSet<u32> = IndexSet::default();
+    body.for_each_reachable_node(|node| {
+        let NodeRef::Stmt(s) = node else { return };
+        let StmtKind::Let {
+            local_index, value, ..
+        } = &body.stmts[s].kind
+        else {
+            return;
+        };
+        let target = value
+            .as_expr()
+            .and_then(|ve| ref_to_candidate_local(body, ve, arrays))
+            .map(|(idx, _)| idx);
+        match target {
+            Some(candidate) if !aliases.contains_key(local_index) => {
+                aliases.insert(*local_index, candidate);
+            }
+            _ => {
+                ambiguous.insert(*local_index);
+            }
+        }
+    });
+    aliases.retain(|local, _| !ambiguous.contains(local));
+    aliases
+}
+
+/// The array candidate one sequence read names and what it reads, or `None` for
+/// anything else. The array operand is the candidate itself, a borrow of it, or
+/// an alias bound to one.
+fn array_read_of_candidate(
+    body: &Body,
+    expr: ExprId,
+    arrays: &IndexSet<u32>,
+    aliases: &IndexMap<u32, u32>,
+    builtins: &CtfeBuiltinMap,
+) -> Option<(u32, ArrayRead)> {
+    let ExprKind::Call { func_id, args, .. } = &body.exprs[expr].kind else {
+        return None;
+    };
+    let builtin = *builtins.get(func_id)?;
+    let seq = args.first()?.expr.as_expr()?;
+    let local = is_candidate_local(body, seq, arrays)
+        .or_else(|| ref_to_candidate_local(body, seq, arrays).map(|(idx, _)| idx))
+        .or_else(|| alias_local(body, seq).and_then(|a| aliases.get(&a).copied()))?;
+    match builtin {
+        CtfeBuiltin::ArrayLen => Some((local, ArrayRead::Len)),
+        CtfeBuiltin::ArrayGet => {
+            let index = body.operand_const_int(args.get(1)?.expr)?;
+            Some((local, ArrayRead::Index(u32::try_from(index).ok()?)))
+        }
+        CtfeBuiltin::ArrayNew
+        | CtfeBuiltin::ArraySet
+        | CtfeBuiltin::ArrayCopy
+        | CtfeBuiltin::ArrayClonePrefix
+        | CtfeBuiltin::ColdPath
+        | CtfeBuiltin::Select
+        | CtfeBuiltin::I32AsChar => None,
+    }
+}
+
 /// What one read-only walk records about each candidate.
 #[derive(Default)]
 struct CandidateUses {
@@ -451,13 +588,34 @@ struct CandidateUses {
     /// Appeared as the base of a field access, read or written. A reconstructed
     /// candidate is worth decomposing only when some access projects it.
     field_accessed: IndexSet<u32>,
+    /// An array candidate an `array_len` reads.
+    len_read: IndexSet<u32>,
+    /// An array candidate read at a constant index past its last element. The
+    /// read is dead — a bounds check ahead of it is what made the index
+    /// constant — but no slot answers it, so the candidate stays whole.
+    out_of_range: IndexSet<u32>,
 }
 
-fn scan_candidate_uses(body: &Body, candidates: &[SroaCandidate]) -> CandidateUses {
+fn scan_candidate_uses(
+    body: &Body,
+    candidates: &[SroaCandidate],
+    arrays: &IndexSet<u32>,
+    aliases: &IndexMap<u32, u32>,
+    builtins: &CtfeBuiltinMap,
+) -> CandidateUses {
     let candidate_set: IndexSet<u32> = candidates.iter().map(|c| c.local_index).collect();
+    let lengths: IndexMap<u32, u32> = candidates
+        .iter()
+        .filter(|c| c.kind == AggKind::Array)
+        .map(|c| (c.local_index, c.fields.len() as u32))
+        .collect();
     let mut uses = CandidateUses::default();
     UseWalk {
         candidates: &candidate_set,
+        arrays,
+        aliases,
+        lengths: &lengths,
+        builtins,
     }
     .node(body, NodeRef::Block(body.root), &mut uses);
     uses
@@ -468,10 +626,23 @@ fn scan_candidate_uses(body: &Body, candidates: &[SroaCandidate]) -> CandidateUs
 /// this one has no use for.
 struct UseWalk<'a> {
     candidates: &'a IndexSet<u32>,
+    arrays: &'a IndexSet<u32>,
+    aliases: &'a IndexMap<u32, u32>,
+    /// Element count per array candidate, for the in-range check.
+    lengths: &'a IndexMap<u32, u32>,
+    builtins: &'a CtfeBuiltinMap,
 }
 
 impl UseWalk<'_> {
     fn node(&self, body: &Body, node: NodeRef, out: &mut CandidateUses) {
+        // An alias binds `&candidate`, the borrow the read it stands for needs.
+        // That borrow is the read's, not an escape.
+        if let NodeRef::Stmt(s) = node
+            && let StmtKind::Let { local_index, .. } = &body.stmts[s].kind
+            && self.aliases.contains_key(local_index)
+        {
+            return;
+        }
         if let NodeRef::Expr(id) = node {
             self.expr(body, id, out);
         } else {
@@ -486,6 +657,24 @@ impl UseWalk<'_> {
     }
 
     fn expr(&self, body: &Body, id: ExprId, out: &mut CandidateUses) {
+        // A sequence read of an array candidate: the shape the rewrite answers,
+        // so neither the array operand nor the constant index is a use.
+        if let Some((local, read)) =
+            array_read_of_candidate(body, id, self.arrays, self.aliases, self.builtins)
+        {
+            match read {
+                ArrayRead::Len => {
+                    out.len_read.insert(local);
+                }
+                ArrayRead::Index(index) => {
+                    if index >= self.lengths.get(&local).copied().unwrap_or(0) {
+                        out.out_of_range.insert(local);
+                    }
+                    out.field_accessed.insert(local);
+                }
+            }
+            return;
+        }
         match &body.exprs[id].kind {
             ExprKind::FieldAccess { expr: inner, .. } => {
                 let inner = *inner;
@@ -507,6 +696,11 @@ impl UseWalk<'_> {
             ExprKind::Local { index, .. } => {
                 if self.candidates.contains(index) {
                     out.escaped.insert(*index);
+                }
+                // A use of the alias that is not one of the reads takes the
+                // array itself somewhere the slots cannot follow.
+                if let Some(&candidate) = self.aliases.get(index) {
+                    out.escaped.insert(candidate);
                 }
             }
             ExprKind::Unary { expr: inner, .. } => {
@@ -671,6 +865,12 @@ struct Rewrite<'a> {
     field_map: &'a IndexMap<(u32, u32), FieldSlot>,
     candidate_mut: &'a IndexMap<u32, bool>,
     reconstruct_info: &'a IndexMap<u32, ReconstructInfo>,
+    /// The array candidates, their borrow aliases, and the length slot each
+    /// `array_len` read becomes.
+    arrays: &'a IndexSet<u32>,
+    aliases: &'a IndexMap<u32, u32>,
+    len_map: &'a IndexMap<u32, FieldSlot>,
+    builtins: &'a CtfeBuiltinMap,
 }
 
 impl Rewrite<'_> {
@@ -682,12 +882,31 @@ impl Rewrite<'_> {
             name: slot.name.clone(),
         }
     }
+
+    /// A `Local` node reading `local`'s length slot.
+    fn len_local(&self, local: u32) -> ExprKind {
+        let slot = &self.len_map[&local];
+        ExprKind::Local {
+            index: slot.local_index,
+            name: slot.name.clone(),
+        }
+    }
 }
 
 fn rewrite_block(engine: &mut Engine, block: BlockId, ctx: &Rewrite) {
     let old_stmts = engine.body.blocks[block].stmts.clone();
     let mut new_stmts: Vec<StmtId> = Vec::with_capacity(old_stmts.len());
     for stmt in old_stmts {
+        // The borrow a decomposed array's reads went through: they read slots
+        // now, so the binding goes with the literal.
+        if let StmtKind::Let { local_index, .. } = &engine.body.stmts[stmt].kind
+            && ctx
+                .aliases
+                .get(local_index)
+                .is_some_and(|c| ctx.decomposed.contains(c))
+        {
+            continue;
+        }
         let candidate = match &engine.body.stmts[stmt].kind {
             StmtKind::Let { local_index, .. } if ctx.decomposed.contains(local_index) => {
                 Some(*local_index)
@@ -737,6 +956,19 @@ fn rewrite_node(engine: &mut Engine, node: NodeRef, ctx: &Rewrite) {
 }
 
 fn rewrite_expr(engine: &mut Engine, id: ExprId, ctx: &Rewrite) {
+    // Sequence read of a decomposed array -> its element or length slot.
+    if let Some((local, read)) =
+        array_read_of_candidate(engine.body, id, ctx.arrays, ctx.aliases, ctx.builtins)
+        && ctx.decomposed.contains(&local)
+    {
+        let kind = match read {
+            ArrayRead::Len => ctx.len_local(local),
+            ArrayRead::Index(index) => ctx.field_local((local, index)),
+        };
+        engine.replace_expr_kind(id, kind);
+        return;
+    }
+
     // Field read: candidate.field -> scalar local.
     if let Some(key) = field_access_of_candidate(engine.body, id, ctx.decomposed)
         && ctx.field_map.contains_key(&key)
@@ -793,14 +1025,31 @@ fn expand_struct_let(
         ExprKind::StructLiteral { fields, .. } => {
             fields.iter().map(|f| (f.field_index, f.value)).collect()
         }
-        ExprKind::TupleLiteral { elements, .. } => elements
+        ExprKind::TupleLiteral { elements, .. } | ExprKind::ArrayLiteral { elements } => elements
             .iter()
             .enumerate()
             .map(|(i, e)| (i as u32, *e))
             .collect(),
-        _ => unreachable!("candidate must be struct or tuple literal"),
+        _ => unreachable!("candidate must be struct, tuple or array literal"),
     };
     pairs.sort_by_key(|(fi, _)| *fi);
+    if let Some(slot) = ctx.len_map.get(&local_idx) {
+        let len = pairs.len() as u64;
+        let value = engine.const_operand(ValueKind::Int(len, slot.type_id), slot.type_id);
+        let stmt = engine.alloc_stmt(
+            StmtKind::Let {
+                name: slot.name.clone(),
+                local_index: slot.local_index,
+                is_mut: false,
+                is_reactive: false,
+                type_id: slot.type_id,
+                value,
+                skip_value_copy: true,
+            },
+            span,
+        );
+        new_stmts.push(stmt);
+    }
     for (field_index, field_op) in pairs {
         // A promoted-constant field flows straight into the scalar's `let` slot;
         // a skeleton field is rewritten in place to propagate nested decompositions.

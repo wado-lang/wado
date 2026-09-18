@@ -8,6 +8,7 @@
 #[path = "../common.rs"]
 mod common;
 
+mod array_literal_sroa;
 mod assert_capture_plan;
 mod box_local_unwrap;
 mod closure_confinement;
@@ -59,6 +60,7 @@ mod test_name_filter;
 mod trait_query;
 mod unrestricted_resource;
 mod unused_diagnostics;
+mod vector_const_fold;
 mod wasm_import_dce;
 mod wasm_module_optimize;
 mod wat;
