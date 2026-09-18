@@ -1077,8 +1077,21 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// redefined. Erasure's redirect is not one, and the spelling tells them
+    /// apart: only a borrow is ever redefined.
+    fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
+        let target = self.redirects.get(id).copied()?;
+        matches!(
+            self.types.get(id)?,
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        )
+        .then_some(target)
+    }
+
     /// [`Self::get`] before the newtype / flags erasure, which runs once
-    /// monomorphize is done.
+    /// monomorphize is done. A boxing redefinition is no part of that, so a
+    /// redefined borrow reads as the `Box<T>` here too.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -1086,6 +1099,7 @@ impl TypeTable {
     /// cares how the value is stored should read [`Self::get`].
     #[must_use]
     pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
+        let id = self.box_redefinition(id).unwrap_or(id);
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
@@ -1882,12 +1896,10 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            // A borrow `redefine_to` redirected keeps its spelling for
-            // `get_unerased` alone. Re-interning it would hand a later
-            // `intern(&T)` an id that no longer resolves as a borrow.
-            let retired = self.redirects.get(id).is_some()
-                && matches!(ty, ResolvedType::Ref(_) | ResolvedType::MutRef(_));
-            if !retired {
+            // A redefined borrow keeps its spelling in the slot alone.
+            // Re-interning it would hand a later `intern(&T)` an id that no
+            // longer resolves as a borrow.
+            if self.box_redefinition(id).is_none() {
                 self.intern_map.insert(ty.clone(), id);
             }
             if let Some(def) = Self::nominal_key(ty) {
@@ -2616,8 +2628,8 @@ impl TypeTable {
     /// Redefine `id` to resolve as `target`, retiring its own spelling so a
     /// later [`Self::intern`] of that spelling mints a fresh id instead.
     ///
-    /// The boxing pass's `&T` → `Box<T>`. [`Self::get_unerased`] still reads
-    /// the reference, which is how the spelling outlives its retirement.
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
     pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
         assert!(
             self.redirects.get(target).is_none(),
@@ -2630,7 +2642,7 @@ impl TypeTable {
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
             matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
-            "only a borrow is redefined: `retain` tells a retired spelling by that shape"
+            "only a borrow is redefined: `box_redefinition` tells one by that shape"
         );
         if self.intern_map.get(&spelling) == Some(&id) {
             self.intern_map.shift_remove(&spelling);
@@ -2723,10 +2735,10 @@ impl TypeTable {
             && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
     }
 
-    /// How `id`'s own slot spells a borrow, or `None` when it is not one.
-    /// [`Self::get`] answers for the `Box<T>` a redefinition points it at.
+    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
+    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
     fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
-        match *self.get_unerased(id) {
+        match *self.types.get(id)? {
             ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
             ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
             _ => None,
@@ -4528,7 +4540,10 @@ impl TypeTable {
         // stored as, whose impls are a different set.
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                RefKind::from_resolved(self.get(id)).map_or_else(|| builtin(""), Receiver::Ref)
+                Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
+                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                     box redefinition, the one rewrite that makes the two views differ",
+                ))
             }
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // The head is the declaration, arguments never spelled into it — an
@@ -6974,23 +6989,40 @@ mod tests {
         assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
     }
 
-    /// A redefined slot keeps its own spelling for `get_unerased`, and loses it
-    /// for `intern`: a later ask for that spelling wants a live one.
+    /// A redefinition reaches every view of the type: only `is_mut_box` reads
+    /// the borrow left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live borrow.
     #[test]
-    fn a_redefined_spelling_survives_only_unerased() {
+    fn a_redefinition_reaches_every_view_of_the_type() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
         table.redefine_to(redefined, shared);
 
+        assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
         assert_matches!(
             table.get_unerased(redefined),
-            ResolvedType::MutRef(TypeTable::I32)
+            ResolvedType::Ref(TypeTable::I32)
         );
-        assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
         let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
         assert_ne!(minted, redefined);
         assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
+    }
+
+    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
+    /// the only thing that still tells a writable box from a shared one.
+    #[test]
+    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        for wrapper in [shared, mutable] {
+            table.redefine_to(wrapper, TypeTable::I32);
+            table.register_box_payload(wrapper, TypeTable::I32);
+        }
+
+        assert!(!table.is_mut_box(shared));
+        assert!(table.is_mut_box(mutable));
     }
 
     /// `retain` rebuilds the intern map from the surviving slots, and a
