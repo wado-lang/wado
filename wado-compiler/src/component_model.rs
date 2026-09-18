@@ -1964,11 +1964,9 @@ impl CmInterfaceRegistry {
                             .map(|(i, p)| {
                                 let cm_name = match cm_param_names.get(i) {
                                     Some(declared) => declared.clone(),
-                                    None => scope.param_fallback(
-                                        &p.name,
-                                        &resource.name,
-                                        &method.name,
-                                    ),
+                                    None => {
+                                        scope.param_fallback(&p.name, &resource.name, &method.name)
+                                    }
                                 };
                                 let ty = substitute_self_in_type(
                                     &self.source_interfaces,
@@ -2045,8 +2043,7 @@ impl CmInterfaceRegistry {
                 // Store the CM-ABI return type: an async import's `AsyncCall<T>`
                 // wrapper is stripped here, and both the elaborator and the
                 // binding synthesiser re-wrap it so user code still sees it.
-                let return_type =
-                    unwrap_async_call_if_async(method.is_async, &method.return_type);
+                let return_type = unwrap_async_call_if_async(method.is_async, &method.return_type);
                 self.register(
                     &effect.name,
                     &method.name,
@@ -2830,7 +2827,10 @@ impl CmInterfaceRegistry {
             .map(|(_, variants)| variants.as_slice())
     }
 
-    /// Get the CM enum name scoped to a specific source interface.
+    /// Get the CM enum name scoped to a specific source interface, falling back
+    /// to the unique WASI cross-package registrant. The fallback makes this a
+    /// name lookup and not a membership test — ask
+    /// [`Self::get_enum_cm_name_by_source`] which interface declares the name.
     pub fn get_enum_cm_name_by_interface(&self, interface_path: &str, name: &str) -> Option<&str> {
         self.enums
             .get(&(interface_path.to_string(), name.to_string()))
@@ -2838,21 +2838,19 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
-    /// Check if a specific interface defines its own enum type (exact match, no fallback).
-    pub fn has_enum_in_interface(&self, interface_path: &str, name: &str) -> bool {
-        self.enums
-            .contains_key(&(interface_path.to_string(), name.to_string()))
+    /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
+    /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
+    /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
+    /// answers `None` rather than borrowing another package's.
+    pub fn own_error_code_cm_name(&self, interface_path: &str) -> Option<&str> {
+        self.get_variant_cm_name_by_source(interface_path, "ErrorCode")
+            .or_else(|| self.get_enum_cm_name_by_source(interface_path, "ErrorCode"))
     }
 
-    /// Whether `interface_path` declares its own `ErrorCode`, in either shape:
-    /// an enum (`wasi:cli/types`) or a variant (`wasi:filesystem/types`,
-    /// `wasi:sockets/types`). Codegen picks the interface-local error type over
-    /// an alias to the shared CLI one on this, so both shapes count.
+    /// Whether `interface_path` declares its own `ErrorCode`. Codegen picks the
+    /// interface-local error type over an alias to the shared CLI one on this.
     pub fn declares_own_error_code(&self, interface_path: &str) -> bool {
-        self.has_enum_in_interface(interface_path, "ErrorCode")
-            || self
-                .variants_for_interface(interface_path)
-                .any(|(name, _, _)| name == "ErrorCode")
+        self.own_error_code_cm_name(interface_path).is_some()
     }
 
     /// Get the variant cases scoped to a specific source interface. Falls back
@@ -3759,6 +3757,9 @@ pub struct CmTypeGen {
     /// across different WASI interfaces (e.g., "wasi:http/types@..." to select
     /// HTTP's `ErrorCode` over filesystem's `ErrorCode`).
     interface_hint: Option<String>,
+    /// The CM names this engine has exported into its sink, so a caller can ask
+    /// what the walk put into the interface's namespace instead of predicting it.
+    named_exports: IndexSet<String>,
 }
 
 impl Default for CmTypeGen {
@@ -3772,6 +3773,7 @@ impl CmTypeGen {
         Self {
             cache: IndexMap::default(),
             interface_hint: None,
+            named_exports: IndexSet::default(),
         }
     }
 
@@ -3780,11 +3782,25 @@ impl CmTypeGen {
         Self {
             cache: IndexMap::default(),
             interface_hint: Some(interface_hint.to_string()),
+            named_exports: IndexSet::default(),
         }
     }
 
     pub fn interface_hint(&self) -> Option<&str> {
         self.interface_hint.as_deref()
+    }
+
+    /// Whether this engine exported `cm_name` into its sink's namespace. An
+    /// alias out of the built instance asks this rather than re-deriving from
+    /// the registry what the walk decided to emit.
+    pub fn exported(&self, cm_name: &str) -> bool {
+        self.named_exports.contains(cm_name)
+    }
+
+    /// Export `idx` under `cm_name`, recording the name for [`Self::exported`].
+    fn export_named(&mut self, sink: &mut dyn CmTypeSink, cm_name: &str, idx: u32) -> u32 {
+        self.named_exports.insert(cm_name.to_string());
+        sink.name(cm_name, idx)
     }
 
     /// Register a pre-existing type index for cache lookups
@@ -3844,7 +3860,7 @@ impl CmTypeGen {
             .collect();
         let variant_idx = sink.define(CmDefined::Variant(&variant_cases));
         // Export to make it "named" (required by CM spec for records/variants)
-        let export_idx = sink.name(cm_name, variant_idx);
+        let export_idx = self.export_named(sink, cm_name, variant_idx);
 
         self.cache.insert(cache_key, export_idx);
         export_idx
@@ -3882,7 +3898,7 @@ impl CmTypeGen {
             .collect();
         let record_idx = sink.define(CmDefined::Record(&field_refs));
         // Export the record type (required by CM spec)
-        let export_idx = sink.name(cm_name, record_idx);
+        let export_idx = self.export_named(sink, cm_name, record_idx);
 
         self.cache.insert(cache_key, export_idx);
         export_idx
@@ -4063,7 +4079,7 @@ impl CmTypeGen {
                             }
                             ComponentValType::Type(idx) => idx,
                         };
-                        let named_idx = sink.name(&to_kebab(name), base_idx);
+                        let named_idx = self.export_named(sink, &to_kebab(name), base_idx);
                         self.cache.insert(cache_key, named_idx);
                         return ComponentValType::Type(named_idx);
                     }
@@ -4127,7 +4143,17 @@ impl CmTypeGen {
                         if let Some(&idx) = self.cache.get(&cache_key) {
                             return ComponentValType::Type(idx);
                         }
-                        let export_idx = resource_exports[cm_name];
+                        let export_idx = *resource_exports.get(cm_name).unwrap_or_else(|| {
+                            panic!(
+                                "resource `{cm_name}` from `{source}` is not among the resources \
+                                 this instance declares ({}), so a handle to it has no type here",
+                                resource_exports
+                                    .keys()
+                                    .copied()
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        });
                         let idx = sink.define(CmDefined::Own(export_idx));
                         self.cache.insert(cache_key, idx);
                         ComponentValType::Type(idx)
@@ -4200,7 +4226,7 @@ impl CmTypeGen {
                         if let Some(cm_name) =
                             cm_interface_registry.get_enum_cm_name_by_source(source, name)
                         {
-                            let export_idx = sink.name(cm_name, idx);
+                            let export_idx = self.export_named(sink, cm_name, idx);
                             self.cache.insert(cache_key, export_idx);
                             return ComponentValType::Type(export_idx);
                         }
@@ -4223,7 +4249,7 @@ impl CmTypeGen {
                         if let Some(cm_name) =
                             cm_interface_registry.get_flags_cm_name_by_source(source, name)
                         {
-                            let export_idx = sink.name(cm_name, idx);
+                            let export_idx = self.export_named(sink, cm_name, idx);
                             self.cache.insert(cache_key, export_idx);
                             return ComponentValType::Type(export_idx);
                         }
@@ -4954,6 +4980,39 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Codegen aliases an interface's `error-code` out of that interface's own
+    /// imported instance, so the question must be answered by that interface
+    /// alone: borrowing another one's answer emits an alias of an export the
+    /// instance never declared, and the component only fails in the validator.
+    #[test]
+    fn an_error_code_is_read_from_the_declaring_interface_alone() {
+        let registry = registry_from(
+            "wasi:demo",
+            r#"
+            #[cm("wasi:demo/types@0.1.0#error-code")]
+            pub variant ErrorCode {
+                #[cm("other")]
+                Other(String),
+            }
+
+            #[cm("wasi:demo/plain@0.1.0")]
+            pub interface Plain {
+                #[cm("wasi:demo/plain@0.1.0#tick")]
+                fn tick() -> i32;
+            }
+            "#,
+        );
+        assert_eq!(
+            registry.own_error_code_cm_name("wasi:demo/types@0.1.0"),
+            Some("error-code")
+        );
+        assert_eq!(
+            registry.own_error_code_cm_name("wasi:demo/plain@0.1.0"),
+            None
+        );
+        assert!(!registry.declares_own_error_code("wasi:demo/plain@0.1.0"));
     }
 
     /// The bare-name fallbacks search every bundled namespace, and a

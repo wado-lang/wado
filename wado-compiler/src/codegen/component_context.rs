@@ -43,6 +43,13 @@ pub struct ComponentModelContext {
     instance_names: IndexMap<String, u32>,
     next_instance_idx: u32,
 
+    /// The CM name of the `error-code` each imported instance actually exports,
+    /// recorded where the instance type is built. An alias asks this instead of
+    /// re-deriving from the registry what the builder decided to emit — the two
+    /// answers drifted apart, and an alias of a missing export only fails in the
+    /// validator, as `instance N has no export named error-code`.
+    instance_error_codes: IndexMap<String, String>,
+
     // Core function indices (at component level - aliased/lowered functions)
     core_func_names: IndexMap<String, u32>,
     next_core_func_idx: u32,
@@ -79,6 +86,7 @@ impl ComponentModelContext {
             cm_type_interner: IndexMap::default(),
             instance_names: IndexMap::default(),
             next_instance_idx: 0,
+            instance_error_codes: IndexMap::default(),
             core_func_names: IndexMap::default(),
             next_core_func_idx: 0,
             core_memory_idx: None,
@@ -165,6 +173,18 @@ impl ComponentModelContext {
     /// Check whether a component instance is registered under `name`.
     pub fn has_instance(&self, name: &str) -> bool {
         self.instance_names.contains_key(name)
+    }
+
+    /// Record that instance `name`'s type exports `error-code` under `cm_name`.
+    /// Called where the export is emitted, never predicted from elsewhere.
+    pub fn record_instance_error_code(&mut self, name: &str, cm_name: &str) {
+        self.instance_error_codes
+            .insert(name.to_string(), cm_name.to_string());
+    }
+
+    /// The CM name instance `name` exports its `error-code` under, if it does.
+    pub fn instance_error_code(&self, name: &str) -> Option<&str> {
+        self.instance_error_codes.get(name).map(String::as_str)
     }
 
     /// Get the current component instance count
