@@ -48,32 +48,39 @@ lanes reaches 646 M u64/s, and SHISHUA consumed a round at a time reaches
 
 Four things follow.
 
-**A host call is all cost.** `insecure` is not measurably faster than `random`
-(1.3 against 1.2), because the algorithm behind the boundary is noise next to
-the crossing. Any guest engine beats both by two orders of magnitude. 870 ns
-for one `u64` is also worth a look on its own; it is not the price the
-Component Model should charge for a call returning a scalar.
+### A host call is all cost
 
-**Secure randomness belongs in the guest too.** A scalar ChaCha8 keyed once
-from the host is 44× faster than asking the host per draw, and Go made exactly
-this trade for `math/rand/v2`'s global source.
+`insecure` is not measurably faster than `random` (1.3 against 1.2), because
+the algorithm behind the boundary is noise next to the crossing. Any guest
+engine beats both by two orders of magnitude. 870 ns for one `u64` is also
+worth a look on its own; it is not the price the Component Model should charge
+for a call returning a scalar.
 
-**The trait costs nothing.** The same loop through a `R: Rng` bound and through
-a concrete method measures 170 and 177 M u64/s; `next_below(6)` and
-`next_f64()` through default methods measure 184 and 158. All inside the noise.
-`prng_bench` measures the same for a round-at-a-time trait: 1.39 against
-1.42 G u64/s.
+### Secure randomness belongs in the guest too
 
-**The engine ranking is an optimizer artifact, not an algorithm fact.**
+A scalar ChaCha8 keyed once from the host is 44× faster than asking the host
+per draw, and Go made exactly this trade for `math/rand/v2`'s global source.
+
+### The trait costs nothing
+
+The same loop through a `R: Rng` bound and through a concrete method measures
+170 and 177 M u64/s; `next_below(6)` and `next_f64()` through default methods
+measure 184 and 158. All inside the noise. `prng_bench` measures the same for
+a round-at-a-time trait: 1.39 against 1.42 G u64/s.
+
+### The engine ranking is an optimizer artifact, not an algorithm fact
+
 xoshiro256++ with its state hand-scalarized into four locals computes the
 identical stream (same checksum) 3.2× faster than the same engine as a struct
 local: 548 against 173. NIR confirms why — `sroa` decomposes RomuTrio's
 three-word state (`$sroa_rng_x/y/z`, 2.4× faster) and SplitMix64's one word
 (1.5×), and leaves `Xoshiro256pp::draw` out of line with `self.s0 = …` field
-stores. So the library should pick its engines on merit and the gap should be
-filed against the optimizer.
+stores. The engines are therefore proposed on merit, with the gap filed
+against the optimizer rather than designed around.
 
 ## Decision
+
+Proposed, not settled: the calls this leaves open are listed under Known gaps.
 
 ### The seam is reproducibility, not security
 
@@ -107,8 +114,8 @@ generator's state is the point of it — held, copied, forked, snapshotted,
 compared in a test, carried in a struct field. Two independent streams in one
 function is ordinary code with values and impossible with a handler.
 
-That is the rule for the rest of the library too: **an ambient singleton is an
-effect; a plural thing is a value.** Host entropy is one shared, unforgeable
+That is the rule for the rest of the library too: an ambient singleton is an
+effect; a plural thing is a value. Host entropy is one shared, unforgeable
 tap, so `Random` is rightly an effect. Streams are plural, so engines are
 values.
 
@@ -243,34 +250,56 @@ under a name that says so.
 
 ## Roadmap
 
-1. `core:prng`: `Rng`, `Seedable`, `SplitMix64`, `Xoshiro256pp` with
-   `jump`/`long_jump`, the derived draws, `shuffle`, `choose`, `fork`.
-2. `ChaCha8` with rekeying, checked against RFC 8439 vectors for the block
-   function.
-3. `core:secure_random`: `secure_rng()`, `SecureRandom`, `BufferedRandom` out.
-4. `SeededRandom`, and `core:uuid` gaining `Uuid::v4_from(&mut R)`.
-5. Deduplicate the three SplitMix64 copies: `microgpt`, `arbitrary`,
-   `prng_bench`.
-6. Move `prng_bench` under `benchmark/prng/` so the numbers above are tracked.
-7. File the `sroa` gap on a four-field engine state (3.2× measured) and the
-   ~870 ns host call.
+Ordered, and each entry finishes when what it names exists with tests. The
+list starts once the design above is adopted.
 
-Out of scope for a first cut: `core:distribution` (normal, exponential,
-weighted choice — `microgpt`'s `gauss` is the only consumer today), bulk
-vector engines, and `Rng` in the prelude.
+1. `core:prng` with `Rng`, `Seedable`, `SplitMix64` and `Xoshiro256pp`
+   (`jump` / `long_jump`): done when the derived draws, `shuffle`, `choose`
+   and `fork` are there, and the jump matches the reference's polynomials
+   under the commute test `prng_bench` already carries.
+2. `ChaCha8` with rekeying: done when the block function passes the RFC 8439
+   vectors and the rekeying interval is asserted.
+3. `core:secure_random` reduced to a door: done when `secure_rng()` and
+   `SecureRandom` exist, `BufferedRandom` is gone, and `core:uuid`'s doc line
+   points at the expander.
+4. `SeededRandom` plus `Uuid::v4_from(&mut R)`: done when a `Uuid::v4` under a
+   seeded handler is asserted equal to a fixed value.
+5. Deduplicate the three SplitMix64 copies: done when `microgpt`, `arbitrary`
+   and `prng_bench` draw through `core:prng` and their outputs are unchanged.
+6. Track the numbers: done when `prng_bench` lives under `benchmark/prng/` and
+   `mise run benchmark-all` reports it.
+7. File what the measurements exposed: done when the `sroa` gap on a
+   four-field engine state (3.2×) and the ~870 ns host call are issues with
+   the reproductions attached.
 
 ## Known gaps
 
-- `choose` returns `Option<T>` by copy; a view would want `Option<&T>`.
+The calls this WEP does not make:
+
+- The recommended engine. `Xoshiro256pp` is proposed for its jump functions,
+  and it is half the speed of `RomuTrio` until the `sroa` gap closes. Choosing
+  speed now would mean a stream that changes name later.
+- Whether `BufferedRandom` goes at once or lives beside the expander through a
+  deprecation. Its only users are its own tests and one doc line.
+- Whether `core:distribution` (normal, exponential, weighted choice) waits for
+  a second consumer. `microgpt`'s `gauss` is the only one today.
+
+What is missing either way:
+
+- `choose` returns `Option<T>` by copy; a view would want `Option<&T>`, which
+  needs the iterator reference model to reach a `List` element.
 - `next_in` covers `i32` only. A range generic over the integer types wants a
   `Sample` trait whose bound the compiler can express; `f64` and `char` ranges
   follow it.
-- `fork` gives no tree-structured guarantee. NumPy's `SeedSequence.spawn` is
-  the design if that is ever needed.
-- A global auto-seeded generator is deliberately absent. Go auto-seeds because
-  it inherited a global; offering none keeps the misuse from arising, and
-  `global mut` plus a pure initializer cannot seed from entropy anyway (an
-  initializer may declare no effect).
+- `fork` gives no tree-structured guarantee, so independence across many forks
+  rests on 64 bits. Closing it means NumPy's `SeedSequence.spawn`.
+- Bulk vector engines (SHISHUA, eight-lane xoshiro) cannot be written
+  generically: a bound takes only `Name = Type`, so nothing constrains the
+  members of a type pack. `prng_bench` records what does not parse.
+- A global auto-seeded generator is deliberately absent — offering none keeps
+  the misuse Go inherited from arising. A `global mut` engine cannot seed from
+  entropy either, since an initializer may declare no effect, so a program
+  wanting one holds it in a parameter or reseeds inside `run`.
 
 ## References
 
