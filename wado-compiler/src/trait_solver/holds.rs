@@ -199,7 +199,13 @@ impl Query<'_> {
                     return None;
                 }
                 let base = newtype_base(program, ty)?;
-                self.holds(&base, trait_, args)
+                // The impl a newtype inherits is the base's with the newtype
+                // put in for the base throughout, so a bound naming the
+                // newtype — every `Rhs = Self` and `Output = Self` does —
+                // names the base on this side of the peel.
+                let args: Vec<SolverType> =
+                    args.iter().map(|arg| substituting(arg, ty, &base)).collect();
+                self.holds(&base, trait_, &args)
             })
             .or_else(|| {
                 let SolverType::Ref { inner, .. } = ty else {
@@ -381,6 +387,34 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
         base.map_params(&|i| args.get(i as usize).cloned())
             .unwrap_or_else(|| panic!("{base:?} mentions a parameter {ty:?} has no argument for")),
     )
+}
+
+/// `ty` with every occurrence of `from` replaced by `to`.
+fn substituting(ty: &SolverType, from: &SolverType, to: &SolverType) -> SolverType {
+    if ty == from {
+        return to.clone();
+    }
+    let each = |inner: &[SolverType]| -> Vec<SolverType> {
+        inner.iter().map(|t| substituting(t, from, to)).collect()
+    };
+    match ty {
+        SolverType::Decl(head, inner) => SolverType::Decl(*head, each(inner)),
+        SolverType::Tuple(inner) => SolverType::Tuple(each(inner)),
+        SolverType::Ref { is_mut, inner } => SolverType::Ref {
+            is_mut: *is_mut,
+            inner: Box::new(substituting(inner, from, to)),
+        },
+        SolverType::Projection {
+            base,
+            trait_,
+            assoc,
+        } => SolverType::Projection {
+            base: Box::new(substituting(base, from, to)),
+            trait_: *trait_,
+            assoc: *assoc,
+        },
+        SolverType::Param(_) | SolverType::Pack(_) => ty.clone(),
+    }
 }
 
 /// Whether the impl answers a bound writing `args`: at every position each side

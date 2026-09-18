@@ -52,6 +52,16 @@ impl AssignValue<'_> {
     }
 }
 
+/// The name a type carries its operator bounds under, where it carries any.
+/// A pack answers with its own name: a pack's bound holds of each member
+/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way.
+fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
+    match resolved {
+        ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
+        _ => None,
+    }
+}
+
 impl<H: CompilerHost> Elaborator<'_, H> {
     pub(super) fn resolve_binary(
         &mut self,
@@ -706,7 +716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
             }
 
-            if let ResolvedType::TypeParam { name, .. } = &left_type
+            if let Some(name) = bound_param_name(&left_type)
                 && let Some((item, method_name)) = operator_trait_method(&op)
             {
                 let bounds = self
@@ -771,7 +781,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A type parameter dispatches through its bounds, as the arithmetic
             // operators do; the name-keyed lookup below reaches no impl for one.
             let rhs_arg = self.tysys.type_table.borrow_mut().make_ref(right);
-            if let ResolvedType::TypeParam { name, .. } = &left_type
+            if let Some(name) = bound_param_name(&left_type)
                 && let Some(bounds) = self
                     .annotate_ctx
                     .trait_ctx
@@ -809,7 +819,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     origin,
                 );
             }
-            if let ResolvedType::TypeParam { name, .. } = &left_type {
+            if let Some(name) = bound_param_name(&left_type) {
                 let trait_name = self
                     .tysys
                     .type_table
@@ -1140,7 +1150,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .compiler_trait_name(item)
                 .to_string();
             let operand_resolved = self.tysys.type_table.borrow().get(expr_type).clone();
-            if let ResolvedType::TypeParam { name, .. } = &operand_resolved
+            if let Some(name) = bound_param_name(&operand_resolved)
                 && let Some(bounds) = self
                     .annotate_ctx
                     .trait_ctx
@@ -1178,7 +1188,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     Some(unary.id),
                 );
             }
-            if let ResolvedType::TypeParam { name, .. } = &operand_resolved {
+            if let Some(name) = bound_param_name(&operand_resolved) {
                 let param = name.clone();
                 self.report_operator_bound_missing(&param, &trait_name, unary.span);
                 return TypeTable::ERROR;
@@ -1927,10 +1937,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return operand_type_id;
         }
-        let param_name = match self.tysys.type_table.borrow().get(operand_type_id) {
-            ResolvedType::TypeParam { name, .. } => Some(name.clone()),
-            _ => None,
-        };
+        let param_name = bound_param_name(self.tysys.type_table.borrow().get(operand_type_id)).cloned();
         let Some(name) = param_name else {
             return operand_type_id;
         };
