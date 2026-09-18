@@ -14,7 +14,7 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, Rule};
 use crate::nir_package::NirPackage;
-use crate::nir_visitor::reachable_exprs;
+use crate::nir_visitor::exprs_under;
 
 use super::arena_query::{is_addressed, is_pure_nontrapping_operand_typed, strip_refs};
 
@@ -62,18 +62,18 @@ pub(super) fn build_closure_devirt(project: &NirPackage) -> ClosureDevirtRule {
 }
 
 /// The expression the operand denotes, past the references around it and the
-/// blocks that only yield it, with the walk budget those hops left.
-fn past_transparent(engine: &Engine, op: Operand, mut depth: u32) -> Option<(ExprId, u32)> {
-    let mut expr = strip_refs(engine.body, op.as_expr().filter(|_| depth > 0)?);
+/// blocks that only yield it, and the budget left for resolving that further.
+///
+/// Charges a step for the expression itself as well as for each block hop, so
+/// the budget a caller passes on is one an exhausted walk has already refused.
+fn past_transparent(engine: &Engine, op: Operand, depth: u32) -> Option<(ExprId, u32)> {
+    let mut left = depth.checked_sub(1)?;
+    let mut expr = strip_refs(engine.body, op.as_expr()?);
     while let Some(yielded) = engine.body.block_yield(expr) {
-        depth -= 1;
-        expr = strip_refs(engine.body, yielded.as_expr().filter(|_| depth > 0)?);
+        left = left.checked_sub(1)?;
+        expr = strip_refs(engine.body, yielded.as_expr()?);
     }
-    assert!(
-        depth > 0,
-        "every caller spends a step on what it resolves past"
-    );
-    Some((expr, depth))
+    Some((expr, left))
 }
 
 /// The `ClosureToCanonical` the operand's value was built by, following the
@@ -84,12 +84,12 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
         ExprKind::ClosureToCanonical { .. } => Some(expr),
         ExprKind::Cast { expr: inner, .. } => {
             let inner = *inner;
-            resolve_canonical(engine, inner, depth - 1)
+            resolve_canonical(engine, inner, depth)
         }
         ExprKind::Local { index, .. } => {
             let index = *index;
             let value = binding_value(engine, index)?;
-            resolve_canonical(engine, value, depth - 1)
+            resolve_canonical(engine, value, depth)
         }
         ExprKind::FieldAccess {
             expr: base,
@@ -97,8 +97,8 @@ fn resolve_canonical(engine: &mut Engine, op: Operand, depth: u32) -> Option<Exp
             ..
         } => {
             let (base, field_index) = (*base, *field_index);
-            let field = struct_literal_field(engine, base, field_index, depth - 1)?;
-            resolve_canonical(engine, field, depth - 1)
+            let field = struct_literal_field(engine, base, field_index, depth)?;
+            resolve_canonical(engine, field, depth)
         }
         _ => None,
     }
@@ -116,7 +116,7 @@ fn resolve_struct_literal(engine: &mut Engine, op: Operand, depth: u32) -> Optio
                 return None;
             }
             let value = binding_value(engine, index)?;
-            resolve_struct_literal(engine, value, depth - 1)
+            resolve_struct_literal(engine, value, depth)
         }
         _ => None,
     }
@@ -279,10 +279,13 @@ impl ClosureDevirtRule {
         devirtualizable.then_some(canonical)
     }
 
-    /// Every wrapper in the body some `IndirectCall` dispatches through.
+    /// Every wrapper declared in `block` some `IndirectCall` dispatches through.
     /// Parking a functor nothing devirtualizes would only add a binding.
-    fn dispatched_wrappers(&self, engine: &mut Engine) -> IndexSet<ExprId> {
-        reachable_exprs(engine.body)
+    ///
+    /// Walks that block alone: `runs_before` only admits a call sharing the
+    /// wrapper's block, so no call outside the region can reach one inside it.
+    fn dispatched_wrappers(&self, engine: &mut Engine, block: BlockId) -> IndexSet<ExprId> {
+        exprs_under(engine.body, NodeRef::Block(block))
             .into_iter()
             .filter_map(|call| self.dispatched_wrapper(engine, call))
             .collect()
@@ -327,7 +330,7 @@ impl Rule for ClosureDevirtRule {
         if candidates.is_empty() {
             return false;
         }
-        let dispatched = self.dispatched_wrappers(engine);
+        let dispatched = self.dispatched_wrappers(engine, id);
         let Some((at, canonical, functor)) = candidates
             .into_iter()
             .find(|&(_, canonical, _)| dispatched.contains(&canonical))

@@ -97,8 +97,10 @@ impl ModifiedVars {
     }
 
     fn written_field(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
+        let resolved = type_table.get(pointee);
         self.written_field_types
-            .contains(&(type_table.get(pointee).clone(), field_idx))
+            .iter()
+            .any(|(ty, idx)| *idx == field_idx && ty == resolved)
     }
 
     fn clobbered_pointee(&self, pointee: TypeId, type_table: &TypeTable) -> bool {

@@ -43,9 +43,9 @@ Infer — 24 samples of the forward path alone, no gradients:
 | JavaScript     | 3.52 k tokens/s | 109.002 ms | 1.20x   |
 | **Wado**       | 2.05 k tokens/s | 187.720 ms | 2.07x   |
 
-Wado passes JavaScript on inference and stays behind it on training. Training
-spends most of its time in the backward pass, which sorts the whole graph
-topologically and then walks every edge again. That is pointer chasing over GC
+Wado trails both reference arms, and the gap to Rust is wider on training than
+on inference. Training spends most of its time in the backward pass, which
+sorts the whole graph topologically and then walks every edge again. That is pointer chasing over GC
 objects, where Rust's flat `Vec` of indices is at its strongest. Inference
 never builds that traversal.
 
@@ -200,7 +200,7 @@ JSON deserialize:
 
 The PoC row (`json_catalog_v2.wado`) is a hand-written parser for this one
 schema, not a general decoder. It was the mark `core:json` had to reach, and
-`core:json` comes within 15% of it while decoding any schema at all.
+the row above shows how close `core:json` comes while decoding any schema.
 
 CBOR serialize:
 
