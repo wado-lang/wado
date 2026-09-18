@@ -1709,9 +1709,9 @@ struct Rebind<'t> {
     type_table: &'t TypeTable,
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
-    /// Each declared local type with its `&` / `&mut` layers stripped: `&T` is
-    /// `T` at WIR level (`wir_build::context`), what needs a cell arriving as
-    /// `Box<T>` instead.
+    /// Each declared local type keyed with its `&` / `&mut` layers stripped:
+    /// `&T` is `T` at WIR level (`wir_build::context`), what needs a cell
+    /// arriving as `Box<T>` instead.
     peeled_keys: Vec<TypeKey>,
     /// Declared `Box<T>` local type → (`T`'s key, the struct's rendered name).
     boxes: IndexMap<TypeId, (TypeKey, String)>,
@@ -1743,7 +1743,7 @@ impl<'t> Rebind<'t> {
             .collect();
         let peeled_keys = local_types
             .iter()
-            .map(|&t| type_table.type_key(peel_refs(t, type_table)))
+            .map(|&t| type_table.type_key(type_table.peel_refs(t)))
             .collect();
         Self {
             type_table,
@@ -1774,13 +1774,6 @@ impl<'t> Rebind<'t> {
             _ => None,
         }
     }
-}
-
-fn peel_refs(mut ty: TypeId, type_table: &TypeTable) -> TypeId {
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = type_table.get(ty) {
-        ty = *inner;
-    }
-    ty
 }
 
 fn arms_are_one_level(body: &Body, arms: &[ArmData], rebind: &Rebind, layout: &Layout) -> bool {

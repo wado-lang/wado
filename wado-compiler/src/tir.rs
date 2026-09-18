@@ -2626,17 +2626,17 @@ impl TypeTable {
             self.redirects.get(target).is_none(),
             "a redirect target is never itself redirected: `get` takes one hop"
         );
+        let spelling = self
+            .types
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
         assert!(
-            matches!(
-                self.types.get(id),
-                Some(ResolvedType::Ref(_) | ResolvedType::MutRef(_))
-            ),
+            matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
             "only a borrow is redefined: `retain` tells a retired spelling by that shape"
         );
-        if let Some(ty) = self.types.get(id).cloned()
-            && self.intern_map.get(&ty) == Some(&id)
-        {
-            self.intern_map.shift_remove(&ty);
+        if self.intern_map.get(&spelling) == Some(&id) {
+            self.intern_map.shift_remove(&spelling);
         }
         self.redirects.set_growing(id, target);
     }
@@ -2723,7 +2723,17 @@ impl TypeTable {
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some()
-            && !matches!(self.get_unerased(wrapper), ResolvedType::Ref(_))
+            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+    }
+
+    /// How `id`'s own slot spells a borrow, or `None` when it is not one.
+    /// [`Self::get`] answers for the `Box<T>` a redefinition points it at.
+    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+        match *self.get_unerased(id) {
+            ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
+            ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
+            _ => None,
+        }
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -4642,20 +4652,13 @@ impl TypeTable {
 
     fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
         use crate::name::FqTypeName;
-        // Only the borrow is read off the slot's own type. Every other shape
+        // Only a borrow is read off the slot's own type. Every other shape
         // keeps the erased view below, where ids that erase together must
         // answer one name.
-        if unboxed {
-            let spelled = match *self.get_unerased(id) {
-                ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
-                ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
-                _ => None,
-            };
-            if let Some((payload, kind)) = spelled {
-                return self
-                    .fq_type_name_spelled(payload, unboxed)
-                    .with_reference(kind);
-            }
+        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
+            return self
+                .fq_type_name_spelled(payload, unboxed)
+                .with_reference(kind);
         }
         let args_of = |type_args: &[TypeId]| -> Vec<FqTypeName> {
             type_args
