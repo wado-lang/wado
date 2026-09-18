@@ -18,7 +18,7 @@ use crate::nir::{FunctionKind, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 
 use super::arena_query::storage_root;
 use super::arena_query::{expr_mentions_local, is_local, reachable_blocks, strip_refs};
@@ -247,14 +247,14 @@ fn helpers_reaching_variant_copies(
     type_table: &TypeTable,
 ) -> IndexSet<FuncKey> {
     let value_copy_ids = project.value_copy_func_ids();
-    let mut helper_by_type: IndexMap<TypeId, FuncKey> = IndexMap::default();
+    let mut helper_by_type: IndexMap<TypeKey, FuncKey> = IndexMap::default();
     let mut seeds: IndexSet<FuncKey> = IndexSet::default();
     for f in &project.functions {
         let f = f.borrow();
         let (Some(copy_type), Some(id)) = (f.value_copy_type(), f.id) else {
             continue;
         };
-        helper_by_type.insert(type_table.canonical(copy_type), id);
+        helper_by_type.insert(type_table.type_key(copy_type), id);
         if is_variant_type(copy_type, type_table) {
             seeds.insert(id);
         }
@@ -272,7 +272,7 @@ fn helpers_reaching_variant_copies(
                     callees.insert(*func_id);
                 } else if is_array_clone(*func_id, descriptors)
                     && let Some(elem) = array_clone_element_type(body, e)
-                    && let Some(elem_helper) = helper_by_type.get(&type_table.canonical(elem))
+                    && let Some(elem_helper) = helper_by_type.get(&type_table.type_key(elem))
                 {
                     callees.insert(*elem_helper);
                 }

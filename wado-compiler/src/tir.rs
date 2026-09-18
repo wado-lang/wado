@@ -281,6 +281,11 @@ impl std::fmt::Display for TypeId {
     }
 }
 
+/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
+/// An id addresses a slot; this answers identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeKey(TypeId);
+
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
 ///
 /// Minted per module by the elaborator, so two uses of the same polymorphic
@@ -1087,24 +1092,26 @@ impl TypeTable {
         self.types.get(id)
     }
 
-    /// The one `TypeId` standing for what `id` resolves to.
+    /// The [`TypeKey`] for `id`.
     ///
     /// Newtype erasure and the boxing rewrite both leave many ids resolving to
     /// one type, so an id is a slot and not a type identity.
     #[must_use]
-    pub fn canonical(&self, id: TypeId) -> TypeId {
+    pub fn type_key(&self, id: TypeId) -> TypeKey {
         let resolved = self.redirects.get(id).copied().unwrap_or(id);
-        self.types
-            .get(resolved)
-            .and_then(|ty| self.intern_map.get(ty).copied())
-            .unwrap_or(resolved)
+        TypeKey(
+            self.types
+                .get(resolved)
+                .and_then(|ty| self.intern_map.get(ty).copied())
+                .unwrap_or(resolved),
+        )
     }
 
     /// Whether two ids name the same type, however each was spelled. Ask this
-    /// rather than `a == b`; [`Self::canonical`] says why.
+    /// rather than `a == b`; [`Self::type_key`] says why.
     #[must_use]
     pub fn same_type(&self, a: TypeId, b: TypeId) -> bool {
-        a == b || self.canonical(a) == self.canonical(b)
+        a == b || self.type_key(a) == self.type_key(b)
     }
 
     /// True when `id` resolves to the never type `!`. An expression of this type
@@ -6956,7 +6963,7 @@ mod tests {
     /// The boxing rewrite redefines many slots onto one type, so two ids that
     /// resolve alike are the normal case and `==` is not the question to ask.
     #[test]
-    fn canonical_unifies_ids_a_redefinition_left_resolving_alike() {
+    fn a_key_unifies_ids_a_redefinition_left_resolving_alike() {
         let mut table = TypeTable::new();
         let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
         let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
@@ -6964,8 +6971,7 @@ mod tests {
 
         assert_ne!(shared, redefined);
         assert!(table.same_type(shared, redefined));
-        assert_eq!(table.canonical(redefined), shared);
-        assert_eq!(table.canonical(shared), shared);
+        assert_eq!(table.type_key(redefined), table.type_key(shared));
         assert!(!table.same_type(shared, TypeTable::I32));
     }
 
@@ -7000,7 +7006,7 @@ mod tests {
         keep.insert(TypeTable::I32);
         table.retain(&keep);
 
-        assert_eq!(table.canonical(redefined), TypeTable::I32);
+        assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
         assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
     }
 
