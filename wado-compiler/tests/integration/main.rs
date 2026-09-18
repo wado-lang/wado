@@ -15,6 +15,7 @@ mod closure_frame_moves;
 mod cm_async_value_import;
 mod cm_catalog;
 mod cm_donut_canary;
+mod cm_error_code_identity;
 mod cm_interface_export_decodes;
 mod cm_interface_plain_func;
 mod cm_newtype_boundary;

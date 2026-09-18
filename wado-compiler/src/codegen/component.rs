@@ -16,10 +16,13 @@ use crate::component_model::{
     classify_stream_payload_from_ast, cm_instance_key, cm_return_needs_outptr, emit_cm_defined,
     wado_primitive_name_to_cm,
 };
+use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::WasmAsset;
 use crate::nir_package::NirPackage;
+use crate::synthesis::cm_binding::types::{cm_interface_module, kebab_to_pascal};
 use crate::test_names::{SECTION_NAME, encode};
+use crate::tir::ResolvedType;
 use crate::token::Span;
 use crate::wir::{ImportEntry, ImportKind, WirPackage};
 use crate::wir_build::component_plan::{CmExportType, ComponentPlan, WorldExportPlan};
@@ -243,14 +246,28 @@ pub fn build_component(
             .find(|e| e.kind == ImportKind::ResourceDefiningInterface)
             .map(|e| fq_name_package(&e.fq).to_string())
             .expect("trailers future needs a resource-defining interface in the plan");
-        let (t, defining_ft) =
-            build_future_intrinsic_types(&mut builder, &mut ctx, stream_u8_type, &pkg);
+        let defining_error_code = transmission_error_code_def(&ctx, project, wir_package, &pkg);
+        let (t, defining_ft) = build_future_intrinsic_types(
+            &mut builder,
+            &mut ctx,
+            project,
+            stream_u8_type,
+            &pkg,
+            defining_error_code,
+        );
         let mut map: IndexMap<String, u32> = IndexMap::default();
         map.insert(pkg.clone(), defining_ft);
         // Build additional transmission types for other error-code sources
         for source in &transmission_sources {
             if *source != pkg && !map.contains_key(source.as_str()) {
-                let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
+                let def = transmission_error_code_def(&ctx, project, wir_package, source);
+                let ft = build_transmission_future_type_for(
+                    &mut builder,
+                    &mut ctx,
+                    project,
+                    def,
+                    source,
+                );
                 map.insert(source.clone(), ft);
             }
         }
@@ -258,7 +275,9 @@ pub fn build_component(
     } else if !transmission_sources.is_empty() {
         let mut map: IndexMap<String, u32> = IndexMap::default();
         for source in &transmission_sources {
-            let ft = build_transmission_future_type_for(&mut builder, &mut ctx, source);
+            let def = transmission_error_code_def(&ctx, project, wir_package, source);
+            let ft =
+                build_transmission_future_type_for(&mut builder, &mut ctx, project, def, source);
             map.insert(source.clone(), ft);
         }
         (0, map)
@@ -975,21 +994,11 @@ fn embed_imported_wasm_modules(
 fn build_transmission_future_type_for(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &NirPackage,
+    error_code: DefId,
     source: &str,
 ) -> u32 {
-    // `cli` is the shared `wasi:cli/types` error-code, aliased under the bare
-    // key by `generate_cm_imports`; every other source aliases its own.
-    let key = if source == "cli" {
-        "error-code".to_string()
-    } else {
-        error_code_key(source)
-    };
-    assert!(
-        ctx.has_type(&key),
-        "transmission future for `{source}` needs its error-code type `{key}`, \
-         which no imported interface aliased"
-    );
-    let error_code_idx = ctx.type_idx(&key);
+    let error_code_idx = error_code_type_idx(ctx, project, error_code);
 
     let result = intern_cm_type(
         builder,
@@ -1302,11 +1311,13 @@ enum ResolvedCmType {
 fn build_future_intrinsic_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &NirPackage,
     stream_u8_type: u32,
     pkg: &str,
+    error_code_decl: DefId,
 ) -> (u32, u32) {
     let fields_resource_idx = ctx.type_idx(&format!("{pkg}-fields-resource"));
-    let error_code = CmTypeKey::Leaf(ctx.type_idx(&error_code_key(pkg)));
+    let error_code = CmTypeKey::Leaf(error_code_type_idx(ctx, project, error_code_decl));
 
     let fields = intern_cm_type(
         builder,
@@ -1921,7 +1932,7 @@ fn resolve_task_return_valtype(
             }
         }
     }
-    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type)
+    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type)
 }
 
 /// Resolve the component-level type index for a future canonical intrinsic.
@@ -1960,6 +1971,7 @@ fn resolve_future_type(
 /// per-world name.
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
+    project: &NirPackage,
     ty: &CmExportType,
     result_unit_type: u32,
 ) -> u32 {
@@ -1982,6 +1994,14 @@ fn cm_export_type_to_idx(
                 !pkg.is_empty(),
                 "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
             );
+            // An enum or variant the outer scope aliased is keyed by its
+            // declaration; the package key names one type per package and
+            // cannot tell two interfaces' same-named types apart.
+            if let Some(def) = cm_decl_def(project, interface_fq, &kebab_to_pascal(cm_name))
+                && let Some(idx) = ctx.decl_type_idx(def)
+            {
+                return idx;
+            }
             let key = format!("{pkg}-{cm_name}");
             ctx.type_idx(&key)
         }
@@ -1990,6 +2010,7 @@ fn cm_export_type_to_idx(
                 CmExportType::Unit => None,
                 _ => Some(Box::new(CmTypeKey::Leaf(cm_export_type_to_idx(
                     ctx,
+                    project,
                     a,
                     result_unit_type,
                 )))),
@@ -2010,12 +2031,15 @@ fn cm_export_type_to_idx(
 /// index.
 fn cm_export_type_to_valtype(
     ctx: &ComponentModelContext,
+    project: &NirPackage,
     ty: &CmExportType,
     result_unit_type: u32,
 ) -> ComponentValType {
     match ty {
         CmExportType::Primitive(name) => cm_primitive_name_to_valtype(name),
-        other => ComponentValType::Type(cm_export_type_to_idx(ctx, other, result_unit_type)),
+        other => {
+            ComponentValType::Type(cm_export_type_to_idx(ctx, project, other, result_unit_type))
+        }
     }
 }
 
@@ -2152,7 +2176,7 @@ fn emit_world_exports(
                     .map(|(name, cm_ty)| {
                         (
                             name.clone(),
-                            cm_export_type_to_valtype(ctx, cm_ty, result_unit_type),
+                            cm_export_type_to_valtype(ctx, project, cm_ty, result_unit_type),
                         )
                     })
                     .collect();
@@ -2161,7 +2185,7 @@ fn emit_world_exports(
                     .map(|(n, val)| (n.as_str(), *val))
                     .collect();
                 let result_val =
-                    cm_export_type_to_valtype(ctx, &export.cm_result, result_unit_type);
+                    cm_export_type_to_valtype(ctx, project, &export.cm_result, result_unit_type);
                 enc.function()
                     .async_(export.is_async)
                     .params(param_refs)
@@ -2313,7 +2337,11 @@ fn generate_cm_imports(
             wasm_encoder::ComponentTypeRef::Instance(types_instance_type),
         );
 
-        ctx.register_type("error-code");
+        let error_code_idx = ctx.register_type("error-code");
+        if let Some(def) = error_code_def(project, &cli_types_interface) {
+            ctx.bind_decl_type(def, error_code_idx);
+            ctx.record_package_error_code("cli", def);
+        }
         builder.alias_export(
             ctx.instance_idx("cli-types"),
             error_code_cm_name,
@@ -2847,10 +2875,11 @@ fn generate_cm_imports(
         // Expose ErrorCode from this interface at outer component scope.
         // Different interfaces (cli, filesystem, sockets) define different error-code types.
         // We register them with source-qualified keys (e.g., "filesystem-error-code").
-        alias_package_error_code(
+        alias_own_error_code(
             builder,
             ctx,
-            &interface_info.package,
+            project,
+            &interface_info.path,
             &interface_info.instance_key(),
         );
 
@@ -2878,31 +2907,101 @@ fn resource_type_key(cm_name: &str) -> String {
     format!("resource:{cm_name}")
 }
 
-/// Outer-scope type key for a package's own `error-code`. `wasi:cli`'s uses the
-/// bare `"error-code"` instead, being the shared one others resolve to.
-fn error_code_key(package: &str) -> String {
-    format!("{package}-error-code")
+/// The Wado name every CM `error-code` is declared under. The registry is keyed
+/// by it, so it is what reaches the declaration.
+const ERROR_CODE_WADO_NAME: &str = "ErrorCode";
+
+/// The declaration identity of the type `interface_fq` declares as `wado_name`,
+/// or `None` where it declares none.
+///
+/// The one name-to-identity step at the Component Model boundary, which the
+/// declaration-identity WEP §9 reserves for exactly this. Everything downstream
+/// keys by the identity: a key built from the package cannot tell
+/// `wasi:sockets/types`'s `error-code` from `wasi:sockets/ip-name-lookup`'s.
+fn cm_decl_def(project: &NirPackage, interface_fq: &str, wado_name: &str) -> Option<DefId> {
+    let registry = &project.cm_interface_registry;
+    let type_table = project.type_table.borrow();
+    let type_id = registry
+        .cm_interface_module_source_of(interface_fq)
+        .and_then(|source| type_table.find_named_type_by_source(wado_name, source))
+        .or_else(|| {
+            let (namespace, module) = cm_interface_module(interface_fq)?;
+            type_table.find_named_type_by_module_name(wado_name, &module, namespace)
+        })?;
+    match type_table.get(type_id) {
+        ResolvedType::Enum { def } | ResolvedType::Variant { def } => Some(*def),
+        _ => None,
+    }
+}
+
+/// The declaration identity of the `error-code` `interface_fq` declares.
+fn error_code_def(project: &NirPackage, interface_fq: &str) -> Option<DefId> {
+    cm_decl_def(project, interface_fq, ERROR_CODE_WADO_NAME)
+}
+
+/// The `error-code` a package's transmission futures carry, as an identity.
+///
+/// A package may declare several — `wasi:sockets/types` and
+/// `wasi:sockets/ip-name-lookup` each do — so the one a transmission future
+/// means is the interface that defines the resources being streamed, read off
+/// the plan's shape. Where the plan names none for this package (`wasi:cli`,
+/// whose `types` interface defines no resource), the single interface of the
+/// package that aliased an error-code is unambiguous; two would not be.
+fn transmission_error_code_def(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    wir_package: &WirPackage,
+    package: &str,
+) -> DefId {
+    let defining = wir_package
+        .import_plan
+        .iter()
+        .find(|entry| {
+            entry.kind == ImportKind::ResourceDefiningInterface
+                && fq_name_package(&entry.fq) == package
+        })
+        .and_then(|entry| error_code_def(project, &entry.fq));
+    if let Some(def) = defining {
+        return def;
+    }
+    match ctx.package_error_codes(package) {
+        [def] => *def,
+        [] => panic!(
+            "transmission future for `{package}` needs its error-code, \
+             which no imported interface aliased"
+        ),
+        several => panic!(
+            "`{package}` aliased {} error-codes and its plan names no \
+             resource-defining interface, so which one a transmission future \
+             carries is undecided",
+            several.len()
+        ),
+    }
 }
 
 /// Alias an interface's own `error-code` into the outer component scope, where
-/// transmission futures and composite results look it up. Idempotent: two
-/// interfaces of one package share the single alias. A no-op unless the
-/// instance's type exported one — what the instance declares is the only thing
-/// an alias may name.
-fn alias_package_error_code(
+/// transmission futures and composite results look it up. Idempotent per
+/// declaration. A no-op unless the instance's type exported one — what the
+/// instance declares is the only thing an alias may name.
+fn alias_own_error_code(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
-    package: &str,
+    project: &NirPackage,
+    interface_fq: &str,
     instance_key: &str,
 ) {
     let Some(cm_name) = ctx.instance_error_code(instance_key).map(str::to_string) else {
         return;
     };
-    let key = error_code_key(package);
-    if ctx.has_type(&key) {
+    let Some(def) = error_code_def(project, interface_fq) else {
+        return;
+    };
+    if ctx.has_decl_type(def) {
         return;
     }
-    ctx.register_type(&key);
+    let idx = ctx.register_anon_type();
+    ctx.bind_decl_type(def, idx);
+    ctx.record_package_error_code(fq_name_package(interface_fq), def);
     builder.alias_export(
         ctx.instance_idx(instance_key),
         &cm_name,
@@ -2910,14 +3009,33 @@ fn alias_package_error_code(
     );
 }
 
-fn handler_result_key(ctx: &ComponentModelContext, pkg: &str) -> CmTypeKey {
+/// The outer type index standing for `def`, which an alias must already have
+/// bound. A missing one means a signature reaches an `error-code` no imported
+/// interface aliased, which only the validator would otherwise report.
+fn error_code_type_idx(ctx: &ComponentModelContext, project: &NirPackage, def: DefId) -> u32 {
+    ctx.decl_type_idx(def).unwrap_or_else(|| {
+        let type_table = project.type_table.borrow();
+        panic!(
+            "`error-code` declared in `{}` is reached by a signature, but no imported \
+             interface aliased it into outer scope",
+            type_table.defs().module(def)
+        )
+    })
+}
+
+fn handler_result_key(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    pkg: &str,
+    def: DefId,
+) -> CmTypeKey {
     CmTypeKey::Result {
         ok: Some(Box::new(CmTypeKey::Leaf(
             ctx.type_idx(&format!("{pkg}-response")),
         ))),
-        err: Some(Box::new(CmTypeKey::Leaf(
-            ctx.type_idx(&error_code_key(pkg)),
-        ))),
+        err: Some(Box::new(CmTypeKey::Leaf(error_code_type_idx(
+            ctx, project, def,
+        )))),
     }
 }
 
@@ -3151,7 +3269,7 @@ fn import_resource_defining_interface(
             ComponentExportKind::Type,
         );
     }
-    alias_package_error_code(builder, ctx, &pkg, &types_instance);
+    alias_own_error_code(builder, ctx, project, types_fq, &types_instance);
 
     // Used constructors/methods/statics and the interface's own functions,
     // aliased under their local names and lowered generically by
@@ -3198,15 +3316,19 @@ fn import_resource_defining_interface(
     // Intern the `result<own<response>, error-code>` handler composite when this
     // interface provides both arms (the handler/world-export shape). The export
     // lift and any client interface resolve it by structure.
-    if ctx.has_type(&format!("{pkg}-response")) && ctx.has_type(&error_code_key(&pkg)) {
-        let key = handler_result_key(ctx, &pkg);
+    if let Some(def) = error_code_def(project, types_fq)
+        && ctx.has_type(&format!("{pkg}-response"))
+        && ctx.has_decl_type(def)
+    {
+        let key = handler_result_key(ctx, project, &pkg, def);
         intern_cm_type(builder, ctx, &key, None);
     }
 }
 
 /// Resolve a function signature type to a component-level type index, reusing
 /// the resource own-handles and composites a resource-defining interface already
-/// emitted (`{pkg}-{cm}`, `{pkg}-error-code`, and the interned `result<...>`).
+/// emitted (`{pkg}-{cm}`, the error-code its declaration keys, and the interned
+/// `result<...>`).
 /// Used by composite resource-using interfaces (e.g. the HTTP client) whose
 /// signatures reference another interface's resources and error composite.
 fn component_type_idx_for_signature_type(
@@ -3265,6 +3387,15 @@ fn component_type_idx_for_signature_type(
                 .unwrap_or_else(|| {
                     panic!("composite signature type `{}` has no CM name", named.name)
                 });
+            // An enum or variant the outer scope aliased is keyed by its
+            // declaration, so a package holding two of one CM name resolves to
+            // the one this signature reaches rather than to whichever aliased
+            // first. Everything else still answers to the package key.
+            if let Some(def) = cm_decl_def(project, &source, &named.name)
+                && let Some(idx) = ctx.decl_type_idx(def)
+            {
+                return idx;
+            }
             ctx.type_idx(&format!("{pkg}-{cm}"))
         }
         other => panic!("unsupported composite signature type: {other:?}"),
@@ -3584,7 +3715,7 @@ fn import_resource_source(
         }
     }
 
-    alias_package_error_code(builder, ctx, &cm_import.package, &instance_name);
+    alias_own_error_code(builder, ctx, project, source_path, &instance_name);
 }
 
 /// Emit `source_path`'s own `ErrorCode` into an instance type under `cm_name`,
@@ -3690,8 +3821,8 @@ fn import_interfaces_with_resources(
         import_interface_with_resource(builder, ctx, interface_info);
     }
 
-    // Register per-package error-code aliases for resource-defining interfaces.
-    // These are needed by Transmission future types (future<result<_, error-code>>).
+    // Alias each resource-defining interface's own error-code, which the
+    // transmission future types (`future<result<_, error-code>>`) look up.
     for interface_info in &interfaces_with_resources {
         let instance_key = interface_info.instance_key();
         // Skip interfaces with no instance from the generic phases above — one
@@ -3700,7 +3831,7 @@ fn import_interfaces_with_resources(
         if !ctx.has_instance(&instance_key) {
             continue;
         }
-        alias_package_error_code(builder, ctx, &interface_info.package, &instance_key);
+        alias_own_error_code(builder, ctx, project, &interface_info.path, &instance_key);
     }
 
     // Phase 3: Import interfaces that reference resources from other interfaces
