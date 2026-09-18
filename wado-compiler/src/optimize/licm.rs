@@ -58,11 +58,12 @@ struct ModifiedVars {
     /// `(pointee_type, field_index)` for every field written in the loop. Wado
     /// references alias, so a write through one `&T` is seen through any other;
     /// the `(local, field)` tracking above misses writes via a different alias.
-    /// Used by `is_reference_field_aliasing_written`.
-    written_field_types: IndexSet<(TypeId, u32)>,
+    /// Used by `is_field_aliasing_written`. Keyed by the resolved type, since
+    /// one struct is interned under more than one `TypeId`.
+    written_field_types: IndexSet<(ResolvedType, u32)>,
     /// Pointee struct types passed by `&mut` to a call/method in the loop: the
     /// callee may write *any* field, so no field of that type is invariant.
-    clobbered_pointee_types: IndexSet<TypeId>,
+    clobbered_pointee_types: IndexSet<ResolvedType>,
     /// Whether the loop calls anything at all.
     calls: bool,
 }
@@ -80,35 +81,54 @@ impl ModifiedVars {
         self.fields.insert((local_idx, field_idx));
     }
 
-    fn insert_written_field_type(&mut self, pointee: TypeId, field_idx: u32) {
-        self.written_field_types.insert((pointee, field_idx));
+    fn insert_written_field_type(
+        &mut self,
+        pointee: TypeId,
+        field_idx: u32,
+        type_table: &TypeTable,
+    ) {
+        self.written_field_types
+            .insert((type_table.get(pointee).clone(), field_idx));
     }
 
-    fn insert_clobbered_pointee_type(&mut self, pointee: TypeId) {
-        self.clobbered_pointee_types.insert(pointee);
+    fn insert_clobbered_pointee_type(&mut self, pointee: TypeId, type_table: &TypeTable) {
+        self.clobbered_pointee_types
+            .insert(type_table.get(pointee).clone());
     }
 
-    /// True when hoisting `x.field_idx` is unsound: `x` is a reference whose
-    /// pointee's field is written in the loop, directly or through a `&mut`
-    /// call. The opaque-call case is type-keyed and limited to plain structs;
-    /// keying `List` / `String` would block an unrelated read-only `&List`
-    /// whenever any same-typed list is mutated. Those go through `licm_loop`.
-    fn is_reference_field_aliasing_written(
+    fn written_field(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
+        self.written_field_types
+            .contains(&(type_table.get(pointee).clone(), field_idx))
+    }
+
+    fn clobbered_pointee(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
+        self.clobbered_pointee_types
+            .contains(type_table.get(pointee))
+    }
+
+    /// True when hoisting `x.field_idx` is unsound: another handle on `x`'s
+    /// object writes that field in the loop, directly or through a `&mut` call.
+    fn is_field_aliasing_written(
         &self,
         root_type: TypeId,
         field_idx: u32,
         type_table: &TypeTable,
     ) -> bool {
-        match type_table.get(root_type) {
-            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                let pointee = strip_references(*inner, type_table);
-                let struct_clobbered =
-                    matches!(type_table.get(pointee), ResolvedType::Struct { .. })
-                        && self.clobbered_pointee_types.contains(&pointee);
-                struct_clobbered || self.written_field_types.contains(&(pointee, field_idx))
-            }
-            _ => false,
+        // A GC struct is such a handle whether or not a `&` is written around
+        // it, so a written field type blocks a by-value root too.
+        let pointee = strip_references(root_type, type_table);
+        if self.written_field(pointee, field_idx, type_table) {
+            return true;
         }
+        // The opaque-call half stays on an explicit reference and a plain
+        // struct: keying `List` / `String` by type would block an unrelated
+        // read-only `&List` whenever any same-typed list is mutated. Those go
+        // through `licm_loop`.
+        matches!(
+            type_table.get(root_type),
+            ResolvedType::Ref(_) | ResolvedType::MutRef(_)
+        ) && matches!(type_table.get(pointee), ResolvedType::Struct { .. })
+            && self.clobbered_pointee(pointee, type_table)
     }
 
     /// True when `value_type`'s pointee is a GC heap object `&mut`-clobbered by an
@@ -121,7 +141,7 @@ impl ModifiedVars {
     /// pattern is unaffected.
     fn is_clobbered_gc_value(&self, value_type: TypeId, type_table: &TypeTable) -> bool {
         let pointee = strip_references(value_type, type_table);
-        is_gc_heap_type(pointee, type_table) && self.clobbered_pointee_types.contains(&pointee)
+        is_gc_heap_type(pointee, type_table) && self.clobbered_pointee(pointee, type_table)
     }
 
     /// True when a call in the loop may write `local`'s `Box<T>` cell. A
@@ -450,7 +470,7 @@ fn licm_loop(
         );
 
         // Step 3.5: Drop `x.f` candidates that would be unsound to hoist:
-        // (a) `x` is a struct reference whose pointee field is aliasing-written;
+        // (a) another handle on `x`'s object writes that field in the loop;
         // (b) `x` is a LICM hoist local (an aliasing handle from a prior
         //     iteration) whose GC-heap object is `&mut`-clobbered in the loop, so
         //     its sub-fields change opaquely (#1472 cascade). Pre-existing roots
@@ -463,16 +483,14 @@ fn licm_loop(
             } else {
                 c.type_id
             };
-            if modified_vars.is_reference_field_aliasing_written(
-                root_ty,
-                c.field_index,
-                ctx.type_table,
-            ) || modified_vars.is_call_reachable_cell(
-                c.local_index,
-                root_ty,
-                engine.mut_escaped(),
-                ctx.type_table,
-            ) {
+            if modified_vars.is_field_aliasing_written(root_ty, c.field_index, ctx.type_table)
+                || modified_vars.is_call_reachable_cell(
+                    c.local_index,
+                    root_ty,
+                    engine.mut_escaped(),
+                    ctx.type_table,
+                )
+            {
                 return false;
             }
             let is_hoist_local = ctx.hoist_locals.contains(&c.local_index);
@@ -638,13 +656,10 @@ fn hoist_reloadable_field_loads(
         let Some(pointee) = reloadable_pointee(root_ty, ctx.type_table) else {
             return false;
         };
-        if !modified_vars.clobbered_pointee_types.contains(&pointee) {
+        if !modified_vars.clobbered_pointee(pointee, ctx.type_table) {
             return false;
         }
-        if modified_vars
-            .written_field_types
-            .contains(&(pointee, c.field_index))
-        {
+        if modified_vars.written_field(pointee, c.field_index, ctx.type_table) {
             return false;
         }
         count_genuine_field_reads(
@@ -1360,7 +1375,7 @@ fn record_mut_ref_clobber(
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. }
         )
     {
-        modified.insert_clobbered_pointee_type(ty);
+        modified.insert_clobbered_pointee_type(ty, type_table);
     }
 }
 
@@ -1381,7 +1396,7 @@ fn record_written_field_type(
         && let Some(inner_e) = inner.as_expr()
     {
         let pointee = strip_references(body.exprs[inner_e].type_id, type_table);
-        modified.insert_written_field_type(pointee, *field_index);
+        modified.insert_written_field_type(pointee, *field_index, type_table);
     }
 }
 
