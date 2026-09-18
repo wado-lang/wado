@@ -153,9 +153,7 @@ fn re_tag(callee_origin: Origin, handed: &IndexMap<u32, Handed>) -> Option<Origi
     match handed.get(&position) {
         Some(Handed::Caller(origin)) => Some(*origin),
         Some(Handed::Unobservable) => None,
-        // `handed_at` classifies every argument, so this is a position no
-        // argument reached at all.
-        None => Some(Origin::Unknown),
+        None => unreachable!("handed_at classifies every argument position"),
     }
 }
 
