@@ -1,9 +1,8 @@
 //! What a call writes through a `&mut` it is handed, by the handle each write
 //! is reached through. A callee this analysis cannot read writes everything.
 
-use super::analyze::is_fresh_value;
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::ownership::{BuiltinDeclarations, OwnedCalls};
+use super::ownership::BuiltinDeclarations;
 use super::place::{
     Names, Resolver, ReturnPaths, Selector, carries_storage, could_write_through, field_owner,
 };
@@ -191,7 +190,7 @@ struct PendingProjection {
 pub fn compute_mod_ref(
     flat: &FlatPackage,
     return_paths: &ReturnPaths,
-    oracle: &OwnedCalls,
+    returns_owned: &FuncKeySet,
     builtins: &BuiltinDeclarations,
 ) -> ModRef {
     let type_table = flat.type_table.borrow();
@@ -214,8 +213,14 @@ pub fn compute_mod_ref(
     )> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
-        let (writes, callees, pending) =
-            scan(&func, &type_table, &defined, return_paths, oracle, builtins);
+        let (writes, callees, pending) = scan(
+            &func,
+            &type_table,
+            &defined,
+            return_paths,
+            returns_owned,
+            builtins,
+        );
         direct.push((
             func.module_source.clone(),
             func.name.clone(),
@@ -270,7 +275,7 @@ fn scan(
     type_table: &TypeTable,
     defined: &FuncKeySet,
     return_paths: &ReturnPaths,
-    oracle: &OwnedCalls,
+    returns_owned: &FuncKeySet,
     builtins: &BuiltinDeclarations,
 ) -> (Writes, Vec<CallSite>, Vec<PendingProjection>) {
     let Some(body) = &func.body else {
@@ -283,18 +288,11 @@ fn scan(
             Vec::new(),
         );
     };
-    let resolver = Resolver::new(
-        func,
-        type_table,
-        return_paths,
-        oracle.returns_owned(),
-        builtins,
-    );
+    let resolver = Resolver::new(func, type_table, return_paths, returns_owned, builtins);
     let mut walker = Walker {
         type_table,
         defined,
         builtins,
-        oracle,
         resolver: &resolver,
         writes: Writes::default(),
         callees: Vec::new(),
@@ -308,7 +306,6 @@ struct Walker<'a> {
     type_table: &'a TypeTable,
     defined: &'a FuncKeySet,
     builtins: &'a BuiltinDeclarations,
-    oracle: &'a OwnedCalls<'a>,
     resolver: &'a Resolver<'a>,
     writes: Writes,
     callees: Vec<CallSite>,
@@ -332,10 +329,10 @@ impl Walker<'_> {
     /// is classified and none is left for [`re_tag`] to guess at.
     fn handed_at(&self, arg: &TirExpr) -> Handed {
         // A value carrying no storage hands the callee nothing to write
-        // through, and a fresh one aliases nothing this frame was handed.
-        if !carries_storage(arg.type_id, self.type_table)
-            || is_fresh_value(arg, self.oracle, self.type_table)
-        {
+        // through. Whether the rest aliases is `names`'s answer alone:
+        // freshness calls every `part_of`-less builtin owned, which is the
+        // `builtin::select` hole rather than a second opinion on it.
+        if !carries_storage(arg.type_id, self.type_table) {
             return Handed::Unobservable;
         }
         match self.resolver.names(arg) {

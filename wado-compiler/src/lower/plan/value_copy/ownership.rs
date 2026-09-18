@@ -136,13 +136,6 @@ impl<'a> OwnedCalls<'a> {
         }
     }
 
-    /// The calls returning storage of their own, for a reader that asks by
-    /// key rather than by expression.
-    #[must_use]
-    pub fn returns_owned(&self) -> &FuncKeySet {
-        self.returns_owned
-    }
-
     /// Attach the indirect-call verdict (see [`compute_indirect_owned_returns`]).
     /// Left off during the return-convention fixpoint, whose own result it is
     /// derived from; the fold attaches it.
