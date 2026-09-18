@@ -19,7 +19,7 @@
 
 use { Stdout } from "core:cli";
 use { Benchmark } from "core:benchmark";
-use { u64x2 } from "core:simd";
+use { i64x2, u32x4, u64x2 } from "core:simd";
 use { MonotonicClock } from "wasi:clocks";
 
 global SPLITMIX_GAMMA: u64 = 0x9E3779B97F4A7C15;
@@ -820,6 +820,7 @@ global PHILOX_W1: u32 = 0xBB67AE85;
 
 global PHILOX_ROUNDS: i32 = 10;
 
+#[inline(always)]
 fn philox4x32(key0: u32, key1: u32, counter: u32) -> [u32, u32, u32, u32] {
     let mut x0 = counter;
     let mut x1: u32 = 0;
@@ -885,9 +886,383 @@ fn drain_philox(n: i32) -> u64 {
     return acc;
 }
 
+// The three keyed candidates, each in the shape `core:prng` would expose: a
+// scalar function of (key, counter), and a vector one answering several
+// counters at once. Squares is the fastest published counter-based generator
+// (Widynski, arXiv:2004.06278); Threefry and Philox are Random123's (Salmon et
+// al., SC11), at the round counts that pass BigCrush — 13 and 10. Constants are
+// the references' and no known-answer vector is checked, as with SHISHUA's
+// seeding: a wrong constant changes the stream and not one instruction of what
+// is timed. What is checked below is that each vector form answers what its
+// scalar form does.
+//
+// The layouts are each algorithm's natural one, because that is what decides
+// the comparison. Squares wants a 64x64 multiply, which Wasm spells
+// `i64x2.mul` and x86 has no instruction for below AVX512DQ. Philox wants
+// 32x32->64, which is `i64x2.extmul_*_i32x4_u` and native everywhere. Threefry
+// wants no multiply at all.
+global SQUARES_KEY: u64 = 0x548C9DECBCE65297;
+
+#[inline(always)]
+fn squares64(ctr: u64, key: u64) -> u64 {
+    let y = ctr * key;
+    let z = y + key;
+    let mut x = y * y + y;
+    x = x >> 32 | x << 32;
+    x = x * x + z;
+    x = x >> 32 | x << 32;
+    x = x * x + y;
+    x = x >> 32 | x << 32;
+    let t = x * x + z;
+    x = t >> 32 | t << 32;
+    return t ^ (x * x + y) >> 32;
+}
+
+// Swapping the halves of each 64-bit lane is one shuffle, where the scalar form
+// needs a shift pair and an or.
+#[inline(always)]
+fn swap32x2(x: u64x2) -> u64x2 {
+    return builtin::i8x16_shuffle(
+        4,
+        5,
+        6,
+        7,
+        0,
+        1,
+        2,
+        3,
+        12,
+        13,
+        14,
+        15,
+        8,
+        9,
+        10,
+        11,
+        x as v128,
+        x as v128,
+    ) as u64x2;
+}
+
+#[inline(always)]
+fn squares64x2(ctr: u64x2, key: u64x2) -> u64x2 {
+    let y = ctr * key;
+    let z = y + key;
+    let mut x = y * y + y;
+    x = swap32x2(x);
+    x = x * x + z;
+    x = swap32x2(x);
+    x = x * x + y;
+    x = swap32x2(x);
+    let t = x * x + z;
+    x = swap32x2(t);
+    return t ^ (x * x + y) >> 32;
+}
+
+global THREEFRY_PARITY: u64 = 0x1BD11BDAA9FC1A22;
+
+// Thirteen rounds, unrolled so each rotation is an immediate. The rotation
+// table is Threefish-256's for the 2x64 word size, and a key is injected after
+// every fourth round.
+#[inline(always)]
+fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
+    let ks2 = key0 ^ key1 ^ THREEFRY_PARITY;
+    let mut x0 = ctr0 + key0;
+    let mut x1 = ctr1 + key1;
+
+    x0 = x0 + x1;
+    x1 = rotl(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 42) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 12) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 31) ^ x0;
+    x0 = x0 + key1;
+    x1 = x1 + ks2 + 1;
+
+    x0 = x0 + x1;
+    x1 = rotl(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 32) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 24) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 21) ^ x0;
+    x0 = x0 + ks2;
+    x1 = x1 + key0 + 2;
+
+    x0 = x0 + x1;
+    x1 = rotl(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 42) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 12) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotl(x1, 31) ^ x0;
+    x0 = x0 + key0;
+    x1 = x1 + key1 + 3;
+
+    x0 = x0 + x1;
+    x1 = rotl(x1, 16) ^ x0;
+    return [x0, x1];
+}
+
+#[inline(always)]
+fn rotlx2(x: u64x2, n: u32) -> u64x2 {
+    return x << n | x >> 64 - n;
+}
+
+// Two counters at once: every word of the scalar form becomes a lane, so the
+// instruction count per call is the scalar one and the output is twice as wide.
+#[inline(always)]
+fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2, u64x2] {
+    let parity = u64x2::splat(THREEFRY_PARITY as i64);
+    let one = u64x2::splat(1);
+    let two = u64x2::splat(2);
+    let three = u64x2::splat(3);
+    let ks2 = key0 ^ key1 ^ parity;
+    let mut x0 = ctr0 + key0;
+    let mut x1 = ctr1 + key1;
+
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 42) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 12) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 31) ^ x0;
+    x0 = x0 + key1;
+    x1 = x1 + ks2 + one;
+
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 32) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 24) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 21) ^ x0;
+    x0 = x0 + ks2;
+    x1 = x1 + key0 + two;
+
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 16) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 42) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 12) ^ x0;
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 31) ^ x0;
+    x0 = x0 + key0;
+    x1 = x1 + key1 + three;
+
+    x0 = x0 + x1;
+    x1 = rotlx2(x1, 16) ^ x0;
+    return [x0, x1];
+}
+
+// The high half of four 32x32 products, which is the only part of Philox's
+// round Wasm cannot spell directly: two widening multiplies and one shuffle
+// that takes the upper four bytes of each 64-bit product.
+#[inline(always)]
+fn mulhi_u32x4(a: u32x4, b: u32x4) -> u32x4 {
+    let av = a as v128 as i64x2;
+    let bv = b as v128 as i64x2;
+    let lo = av.extmul_low_i32x4_u(&bv);
+    let hi = av.extmul_high_i32x4_u(&bv);
+    return builtin::i8x16_shuffle(
+        4,
+        5,
+        6,
+        7,
+        12,
+        13,
+        14,
+        15,
+        20,
+        21,
+        22,
+        23,
+        28,
+        29,
+        30,
+        31,
+        lo as v128,
+        hi as v128,
+    ) as u32x4;
+}
+
+// Four counters at once, one per 32-bit lane.
+#[inline(always)]
+fn philox4x32x4(key0: u32, key1: u32, counter: u32x4) -> [u32x4, u32x4, u32x4, u32x4] {
+    let m0 = u32x4::splat(PHILOX_M0 as i32);
+    let m1 = u32x4::splat(PHILOX_M1 as i32);
+    let w0 = u32x4::splat(PHILOX_W0 as i32);
+    let w1 = u32x4::splat(PHILOX_W1 as i32);
+    let zero = u32x4::splat(0);
+    let mut x0 = counter;
+    let mut x1 = zero;
+    let mut x2 = zero;
+    let mut x3 = zero;
+    let mut k0 = u32x4::splat(key0 as i32);
+    let mut k1 = u32x4::splat(key1 as i32);
+    for let mut round = 0; round < PHILOX_ROUNDS; round += 1 {
+        let hi0 = mulhi_u32x4(x0, m0);
+        let lo0 = x0 * m0;
+        let hi1 = mulhi_u32x4(x2, m1);
+        let lo1 = x2 * m1;
+        x0 = hi1 ^ x1 ^ k0;
+        x1 = lo1;
+        x2 = hi0 ^ x3 ^ k1;
+        x3 = lo0;
+        k0 = k0 + w0;
+        k1 = k1 + w1;
+    }
+    return [x0, x1, x2, x3];
+}
+
+fn drain_squares(n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 1 {
+        acc = acc ^ squares64(i as i64 as u64, SQUARES_KEY);
+    }
+    return acc;
+}
+
+fn drain_squares_simd(n: i32) -> u64 {
+    let key = u64x2::splat(SQUARES_KEY as i64);
+    let step = u64x2::splat(2);
+    let mut ctr: u64x2 = [0, 1];
+    let mut acc = u64x2::splat(0);
+    for let mut i = 0; i < n; i += 2 {
+        acc = acc ^ squares64x2(ctr, key);
+        ctr = ctr + step;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+fn drain_threefry(n: i32) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < n; i += 2 {
+        let [a, b] = threefry2x64(0x5EED, 0, i as i64 as u64, 0);
+        acc = acc ^ a ^ b;
+    }
+    return acc;
+}
+
+fn drain_threefry_simd(n: i32) -> u64 {
+    let key0 = u64x2::splat(0x5EED);
+    let key1 = u64x2::splat(0);
+    let step = u64x2::splat(2);
+    let zero = u64x2::splat(0);
+    let mut ctr: u64x2 = [0, 1];
+    let mut acc = u64x2::splat(0);
+    for let mut i = 0; i < n; i += 4 {
+        let [a, b] = threefry2x64x2(key0, key1, ctr, zero);
+        acc = acc ^ a ^ b;
+        ctr = ctr + step;
+    }
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+fn drain_philox_simd(n: i32) -> u64 {
+    let step = u32x4::splat(4);
+    let mut ctr: u32x4 = [0, 1, 2, 3];
+    let mut acc = u32x4::splat(0);
+    for let mut i = 0; i < n; i += 8 {
+        let [a, b, c, d] = philox4x32x4(0x5EED, 0, ctr);
+        acc = acc ^ a ^ b ^ c ^ d;
+        ctr = ctr + step;
+    }
+    let mut out: u64 = 0;
+    for let mut lane = 0; lane < 4; lane += 1 {
+        out = out ^ acc.extract_lane(lane) as i64 as u64;
+    }
+    return out;
+}
+
+// The terrain shape: the counter is two coordinates folded into one word, and
+// the key is the world seed. Identical for all three, so the gap between these
+// and the counter drains above is the coordinate fold and nothing else.
+#[inline(always)]
+fn coord_key(x: i32, y: i32) -> u64 {
+    return x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y;
+}
+
+fn drain_squares_grid(side: i32) -> u64 {
+    assert side * side == DRAW_COUNT, "the grid must hold one iteration's work";
+    let mut acc: u64 = 0;
+    for let mut y = 0; y < side; y += 1 {
+        for let mut x = 0; x < side; x += 1 {
+            acc = acc ^ squares64(coord_key(x, y), SQUARES_KEY);
+        }
+    }
+    return acc;
+}
+
+fn drain_threefry_grid(side: i32) -> u64 {
+    assert side * side == DRAW_COUNT, "the grid must hold one iteration's work";
+    let mut acc: u64 = 0;
+    for let mut y = 0; y < side; y += 1 {
+        for let mut x = 0; x < side; x += 1 {
+            let [a, _] = threefry2x64(0x5EED, 0, coord_key(x, y), 0);
+            acc = acc ^ a;
+        }
+    }
+    return acc;
+}
+
+fn drain_philox_grid(side: i32) -> u64 {
+    assert side * side == DRAW_COUNT, "the grid must hold one iteration's work";
+    let mut acc: u64 = 0;
+    for let mut y = 0; y < side; y += 1 {
+        for let mut x = 0; x < side; x += 1 {
+            let [a, b, _, _] = philox4x32(0x5EED, 0, coord_key(x, y) as u32);
+            acc = acc ^ (b as u64 << 32 | a as u64);
+        }
+    }
+    return acc;
+}
+
 global DRAW_COUNT: i32 = 1 << 16;
 
 global GRID_SIDE: i32 = 1 << 8;
+
+test "each keyed vector form answers what its scalar form does" {
+    for let mut i = 0; i < 8; i += 2 {
+        let a = squares64(i as i64 as u64, SQUARES_KEY);
+        let b = squares64(i as i64 as u64 + 1, SQUARES_KEY);
+        let pair: u64x2 = [i as i64, i as i64 + 1];
+        let got = squares64x2(pair, u64x2::splat(SQUARES_KEY as i64));
+        assert got.extract_lane(0) as u64 == a;
+        assert got.extract_lane(1) as u64 == b;
+
+        let [sa0, sa1] = threefry2x64(0x5EED, 0, i as i64 as u64, 0);
+        let [sb0, sb1] = threefry2x64(0x5EED, 0, i as i64 as u64 + 1, 0);
+        let [v0, v1] = threefry2x64x2(
+            u64x2::splat(0x5EED),
+            u64x2::splat(0),
+            pair,
+            u64x2::splat(0),
+        );
+        assert v0.extract_lane(0) as u64 == sa0;
+        assert v1.extract_lane(0) as u64 == sa1;
+        assert v0.extract_lane(1) as u64 == sb0;
+        assert v1.extract_lane(1) as u64 == sb1;
+    }
+
+    let ctr: u32x4 = [0, 1, 2, 3];
+    let [p0, p1, p2, p3] = philox4x32x4(0x5EED, 0, ctr);
+    for let mut lane = 0; lane < 4; lane += 1 {
+        let [s0, s1, s2, s3] = philox4x32(0x5EED, 0, lane as u32);
+        assert p0.extract_lane(lane) as u32 == s0;
+        assert p1.extract_lane(lane) as u32 == s1;
+        assert p2.extract_lane(lane) as u32 == s2;
+        assert p3.extract_lane(lane) as u32 == s3;
+    }
+}
 
 test "the trait boundary hands back the same stream" {
     let mut direct = Shishua::new(5);
@@ -1152,6 +1527,39 @@ export fn run() with (Stdout, MonotonicClock) {
 
     bench.println(
         `keyed checksums: ${mix_acc} ${mix_simd_acc} ${grid_acc} ${philox_acc}`,
+    );
+
+    let squares_acc = bench.run("Squares64, keyed by a counter", || {
+        return drain_squares(DRAW_COUNT);
+    });
+    let squares_simd_acc = bench.run("Squares64 x2, keyed by a counter", || {
+        return drain_squares_simd(DRAW_COUNT);
+    });
+    let threefry_acc = bench.run("Threefry-2x64-13, keyed by a counter", || {
+        return drain_threefry(DRAW_COUNT);
+    });
+    let threefry_simd_acc = bench.run("Threefry-2x64-13 x2, keyed by a counter", || {
+        return drain_threefry_simd(DRAW_COUNT);
+    });
+    let philox_simd_acc = bench.run("Philox4x32-10 x4, keyed by a counter", || {
+        return drain_philox_simd(DRAW_COUNT);
+    });
+
+    let squares_grid_acc = bench.run("Squares64, keyed by two coordinates", || {
+        return drain_squares_grid(GRID_SIDE);
+    });
+    let threefry_grid_acc = bench.run("Threefry-2x64-13, keyed by two coordinates", || {
+        return drain_threefry_grid(GRID_SIDE);
+    });
+    let philox_grid_acc = bench.run("Philox4x32-10, keyed by two coordinates", || {
+        return drain_philox_grid(GRID_SIDE);
+    });
+
+    bench.println(
+        `candidate checksums: ${squares_acc} ${squares_simd_acc} ${threefry_acc} ${threefry_simd_acc} ${philox_simd_acc}`,
+    );
+    bench.println(
+        `grid checksums: ${squares_grid_acc} ${threefry_grid_acc} ${philox_grid_acc}`,
     );
     bench.println(
         `fill checksums: ${romu_fill_acc} ${simd_fill_acc} ${fill_acc}`,
