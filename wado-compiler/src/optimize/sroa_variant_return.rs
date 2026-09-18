@@ -12,7 +12,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
 use cranelift_entity::EntityRef;
@@ -1187,7 +1187,8 @@ fn collect_and_validate(
                 let caller_ok = func
                     .id
                     .is_some_and(|id| candidates.contains_key(&id) || already.contains_key(&id));
-                let rebind = Rebind::new(&func, &project.type_table.borrow());
+                let type_table = project.type_table.borrow();
+                let rebind = Rebind::new(&func, &type_table);
                 invalidate_bad_call_sites(
                     body,
                     &func,
@@ -1702,19 +1703,22 @@ enum Rebound<'a> {
 /// Neither can one whose declared type is neither the payload nor a `Box` of it
 /// — local indices are pooled, so a declaration matching neither belongs to
 /// another binding.
-struct Rebind {
+struct Rebind<'t> {
+    /// The table the keys below were taken from, so a payload arriving at
+    /// [`Self::rebound`] is keyed the same way.
+    type_table: &'t TypeTable,
     aliased: IndexSet<u32>,
     local_types: Vec<TypeId>,
     /// Each declared local type with its `&` / `&mut` layers stripped: `&T` is
     /// `T` at WIR level (`wir_build::context`), what needs a cell arriving as
     /// `Box<T>` instead.
-    peeled_types: Vec<TypeId>,
-    /// Declared `Box<T>` local type → (`T`, the struct's rendered name).
-    boxes: IndexMap<TypeId, (TypeId, String)>,
+    peeled_keys: Vec<TypeKey>,
+    /// Declared `Box<T>` local type → (`T`'s key, the struct's rendered name).
+    boxes: IndexMap<TypeId, (TypeKey, String)>,
 }
 
-impl Rebind {
-    fn new(func: &NirFunction, type_table: &TypeTable) -> Self {
+impl<'t> Rebind<'t> {
+    fn new(func: &NirFunction, type_table: &'t TypeTable) -> Self {
         let box_name = type_table
             .compiler_items()
             .struct_name(CompilerItem::Box)
@@ -1729,7 +1733,7 @@ impl Rebind {
                     Some((
                         declared,
                         (
-                            type_args[0],
+                            type_table.type_key(type_args[0]),
                             type_table.struct_rendered_name(*def, type_args),
                         ),
                     ))
@@ -1737,14 +1741,15 @@ impl Rebind {
                 _ => None,
             })
             .collect();
-        let peeled_types = local_types
+        let peeled_keys = local_types
             .iter()
-            .map(|&t| peel_refs(t, type_table))
+            .map(|&t| type_table.type_key(peel_refs(t, type_table)))
             .collect();
         Self {
+            type_table,
             aliased: func.stores_aliased_locals.clone(),
             local_types,
-            peeled_types,
+            peeled_keys,
             boxes,
         }
     }
@@ -1756,12 +1761,13 @@ impl Rebind {
         if self.aliased.contains(&local) {
             return None;
         }
+        let payload = self.type_table.type_key(payload_type);
         let declared = self.local_types[local as usize];
-        if self.peeled_types[local as usize] == payload_type {
+        if self.peeled_keys[local as usize] == payload {
             return Some(Rebound::Direct { let_type: declared });
         }
         match self.boxes.get(&declared) {
-            Some((inner, name)) if *inner == payload_type => Some(Rebound::Boxed {
+            Some((inner, name)) if *inner == payload => Some(Rebound::Boxed {
                 box_type: declared,
                 name,
             }),
@@ -2106,7 +2112,8 @@ fn rewrite_call_sites(
         let mut changed = retype_candidate_calls(&mut body, candidates);
         // Hoisting appends the tuple temps; it never renumbers an existing
         // local, so a `Rebind` taken here still describes every payload binding.
-        let rebind = Rebind::new(&func, &project.type_table.borrow());
+        let type_table = project.type_table.borrow();
+        let rebind = Rebind::new(&func, &type_table);
         changed |= hoist_call_scrutinees(&mut body, &mut func, candidates, &rebind, span);
         let mut bound = bound_temps(&body, candidates, func.return_type);
         // Re-check every temp: a site inherited from an earlier round never
@@ -2202,7 +2209,7 @@ struct SiteCx<'a> {
     /// Local names, so a rebuilt `Local` node keeps the binding's own name.
     names: &'a [String],
     /// How each payload binding is re-minted — directly or boxed.
-    rebind: &'a Rebind,
+    rebind: &'a Rebind<'a>,
     span: Span,
 }
 
