@@ -91,5 +91,46 @@ test "both at once: a pack of newtypes under a bound naming the newtype" {
     assert sum_newtype_pack([a, b]) as i32 == 3;
 }
 
+// The base's impl may write the newtype as a trait argument of its own, which
+// the peel answers as written.
+
+trait Scale<By> with () {
+    fn scale(&self, by: By) -> By;
+}
+
+impl Scale<Meters> for i32 {
+    fn scale(&self, by: Meters) -> Meters {
+        return (*self * by as i32) as Meters;
+    }
+}
+
+fn scaled<T: Scale<Meters>>(v: T, by: Meters) -> Meters {
+    return v.scale(by);
+}
+
+test "a base impl writing the newtype as a trait argument" {
+    let m: Meters = 3;
+    assert scaled(m, 4) as i32 == 12;
+}
+
+// A chain of newtypes answers at the type asked about and at the base, and not
+// at a link in between: `Deep` inherits `Add<Deep>`, never `Add<Meters>`.
+
+type Deep = Meters;
+
+fn add_deep<T: Add<Deep, Output = Deep>>(v: T, acc: Deep) -> Deep {
+    return v + acc;
+}
+
+test "a chain under a bound naming the type asked about" {
+    let d: Deep = 1;
+    assert add_deep(d, 2) as i32 == 3;
+}
+
+test "and under one naming the base at the far end of the chain" {
+    let d: Deep = 1;
+    assert add_base(d, 2) == 3;
+}
+
 __DATA__
 {"test": {}}

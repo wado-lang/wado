@@ -512,12 +512,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // TypeParam/TypePack with trait bounds: emit trait method calls for comparison operators.
             // Monomorphization substitutes T with the concrete type and either resolves
             // the method call normally, or converts back to a binary op for primitives.
-            let type_param_name = match &left_type {
-                ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => {
-                    Some(name.clone())
-                }
-                _ => None,
-            };
+            let type_param_name = bound_param_name(&left_type).cloned();
             if let Some(name) = type_param_name
                 && let Some(bounds) = self
                     .annotate_ctx

@@ -652,9 +652,9 @@ fn drain_shishua_bulk(rng: &mut Shishua, n: i32) -> u64 {
 // registers — the same WIR the boundary-free version compiles to.
 //
 // The width is fixed at eight here so the trait costs what the round costs, and
-// not because a generic consumer cannot be written: one over
-// `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2, Output = u64x2>` compiles and
-// runs, with the pack member on the left of the operator.
+// not because a generic consumer cannot be written: a trait whose batch is an
+// associated type, consumed under `..V: BitXor<u64x2, Output = u64x2>`, compiles
+// and runs with the pack member on the left of the operator.
 trait VectorRound with () {
     fn round_of(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
 }
@@ -847,10 +847,6 @@ fn drain_mix(n: i32) -> u64 {
     return acc;
 }
 
-// The key vector is carried and advanced, rather than built from the loop
-// counter each step: a `u64x2` literal over dynamic elements lowers to a GC
-// `array.new_fixed` plus a bounds-checked read per lane, which costs more than
-// the mixer it feeds.
 fn drain_mix_simd(n: i32) -> u64 {
     let step: u64x2 = [2, 2];
     let mut key: u64x2 = [0, 1];

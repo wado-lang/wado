@@ -103,6 +103,21 @@ impl Query<'_> {
         trait_: TraitDeclId,
         args: &[SolverType],
     ) -> Option<Holds> {
+        self.holds_at(ty, trait_, args, None)
+    }
+
+    /// [`Self::holds`] where the question already peeled a newtype away,
+    /// carrying the type it was first asked at: the impl the newtype inherits
+    /// is the base's with the newtype put in for `Self`, so a `Self` default is
+    /// answered at either spelling. Only the first subject travels, so an
+    /// intermediate link of a chain does not answer for the last.
+    fn holds_at(
+        &mut self,
+        ty: &SolverType,
+        trait_: TraitDeclId,
+        args: &[SolverType],
+        subject: Option<&SolverType>,
+    ) -> Option<Holds> {
         // Keyed by the arguments too: the same trait asked at two
         // instantiations is two questions, and only one of them may hold.
         if self
@@ -188,7 +203,7 @@ impl Query<'_> {
                 );
                 if !reached
                     .iter()
-                    .any(|written| answers_args(program, def, ty, written, args))
+                    .any(|written| answers_args(program, def, ty, subject, written, args))
                 {
                     return None;
                 }
@@ -199,15 +214,7 @@ impl Query<'_> {
                     return None;
                 }
                 let base = newtype_base(program, ty)?;
-                // The impl a newtype inherits is the base's with the newtype
-                // put in for the base throughout, so a bound naming the
-                // newtype — every `Rhs = Self` and `Output = Self` does —
-                // names the base on this side of the peel.
-                let args: Vec<SolverType> = args
-                    .iter()
-                    .map(|arg| substituting(arg, ty, &base))
-                    .collect();
-                self.holds(&base, trait_, &args)
+                self.holds_at(&base, trait_, args, subject.or(Some(ty)))
             })
             .or_else(|| {
                 let SolverType::Ref { inner, .. } = ty else {
@@ -391,61 +398,33 @@ pub(super) fn newtype_base(program: &Program, ty: &SolverType) -> Option<SolverT
     )
 }
 
-/// `ty` with every occurrence of `from` replaced by `to`.
-fn substituting(ty: &SolverType, from: &SolverType, to: &SolverType) -> SolverType {
-    if ty == from {
-        return to.clone();
-    }
-    let each = |inner: &[SolverType]| -> Vec<SolverType> {
-        inner.iter().map(|t| substituting(t, from, to)).collect()
-    };
-    match ty {
-        SolverType::Decl(head, inner) => SolverType::Decl(*head, each(inner)),
-        SolverType::Tuple(inner) => SolverType::Tuple(each(inner)),
-        SolverType::Ref { is_mut, inner } => SolverType::Ref {
-            is_mut: *is_mut,
-            inner: Box::new(substituting(inner, from, to)),
-        },
-        SolverType::Projection {
-            base,
-            trait_,
-            assoc,
-        } => SolverType::Projection {
-            base: Box::new(substituting(base, from, to)),
-            trait_: *trait_,
-            assoc: *assoc,
-        },
-        SolverType::Param(_) | SolverType::Pack(_) => ty.clone(),
-    }
-}
-
 /// Whether the impl answers a bound writing `args`: at every position each side
 /// says its written argument, or the trait's default at `ty` where it wrote none.
 fn answers_args(
     program: &Program,
     def: &ImplDef,
     ty: &SolverType,
+    subject: Option<&SolverType>,
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
     // A `Self` default lowers to the impl's target, and the match bound that
-    // target to `ty`.
-    let default_at = |i: usize| {
-        program.default_arg(def, i).map(|default| {
-            if default == def.target {
-                ty.clone()
-            } else {
-                default
-            }
-        })
+    // target to `ty`. A peeled question answers at the newtype it was asked at
+    // too, since the inherited impl spells that as `Self`.
+    let selves: Vec<SolverType> = [Some(ty), subject].into_iter().flatten().cloned().collect();
+    let said = |i: usize, given: Option<&SolverType>| match given {
+        Some(given) => vec![given.clone()],
+        None => match program.default_arg(def, i) {
+            Some(default) if default == def.target => selves.clone(),
+            Some(default) => vec![default],
+            None => Vec::new(),
+        },
     };
     (0..written.len().max(args.len())).all(|i| {
+        let asks = said(i, args.get(i));
         // A position the bound leaves open and the trait gives no default is
         // one no bound can name, so every impl answers there.
-        let Some(asks) = args.get(i).cloned().or_else(|| default_at(i)) else {
-            return true;
-        };
-        written.get(i).cloned().or_else(|| default_at(i)) == Some(asks)
+        asks.is_empty() || asks.iter().any(|ask| said(i, written.get(i)).contains(ask))
     })
 }
 
