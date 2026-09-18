@@ -249,7 +249,7 @@ fn "wasi_random.wado/$cm_binding__InsecureSeed_get_insecure_seed"() with Insecur
     let $lifted_result_1: i64;
     let $lifted_result_2: i64;
     "wasi/wasi:random/InsecureSeed::get_insecure_seed"(local.tee $outptr("mem/realloc"(0, 0, 8, 16)));
-    $lifted_result_1 = builtin::load_i64($outptr + 0);
+    $lifted_result_1 = builtin::load_i64($outptr);
     $lifted_result_2 = builtin::load_i64($outptr + 8);
     drop("mem/realloc"($outptr, 16, 8, 0));
     return struct.new "tuple//[u64, u64]" { 0: $lifted_result_1, 1: $lifted_result_2 };

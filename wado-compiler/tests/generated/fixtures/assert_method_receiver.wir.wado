@@ -119,11 +119,11 @@ global global:core:prelude/traits.wado::$const_obj_6: ref null Array<u8> = array
 global global:core:prelude/traits.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
 global global:core:prelude/traits.wado::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110), used: 1 };
 global global:core:prelude/traits.wado::$const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67, 111, 117, 110, 116, 101, 114), used: 7 };
-global global:core:prelude/traits.wado::$const_obj_18: ref null Array<u8> = array.new_fixed<u8>(125);
-global global:core:prelude/traits.wado::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(32, 32);
-global global:core:prelude/traits.wado::$const_obj_20: ref null Array<u8> = array.new_fixed<u8>(44);
-global global:core:prelude/traits.wado::$const_obj_23: ref null Array<u8> = array.new_fixed<u8>(32, 123);
-global global:core:prelude/primitive.wado::$const_obj_26: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(125);
+global global:core:prelude/traits.wado::$const_obj_20: ref null Array<u8> = array.new_fixed<u8>(32, 32);
+global global:core:prelude/traits.wado::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(44);
+global global:core:prelude/traits.wado::$const_obj_24: ref null Array<u8> = array.new_fixed<u8>(32, 123);
 
 fn "assert_method_receiver.wado/$cm_export__run"() {
     let $local_3: ref "core:prelude/string.wado//String";
@@ -275,7 +275,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
     }
     start_40 = self_27.used;
     self_27.used = new_used_39;
-    builtin::array_copy<u8>(self_27.repr, start_40, global:core:prelude/traits.wado::$const_obj_23, 0, 2);
+    builtin::array_copy<u8>(self_27.repr, start_40, global:core:prelude/traits.wado::$const_obj_24, 0, 2);
     f.indent = f.indent + 1;
     self_43 = f.buf;
     new_used_245 = self_43.used + 1;
@@ -299,7 +299,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
             }
             start_60 = $licm_buf_237.used;
             $licm_buf_237.used = new_used_59;
-            builtin::array_copy<u8>($licm_buf_237.repr, start_60, global:core:prelude/traits.wado::$const_obj_19, 0, 2);
+            builtin::array_copy<u8>($licm_buf_237.repr, start_60, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
             i_46 = i_46 + 1;
             continue l23;
         };
@@ -332,7 +332,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
     }
     start_114 = self_101.used;
     self_101.used = new_used_113;
-    builtin::array_copy<u8>(self_101.repr, start_114, global:core:prelude/traits.wado::$const_obj_20, 0, 1);
+    builtin::array_copy<u8>(self_101.repr, start_114, global:core:prelude/traits.wado::$const_obj_21, 0, 1);
     f.indent = f.indent - 1;
     self_154 = f.buf;
     new_used_261 = self_154.used + 1;
@@ -356,7 +356,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
             }
             start_171 = $licm_buf_239.used;
             $licm_buf_239.used = new_used_170;
-            builtin::array_copy<u8>($licm_buf_239.repr, start_171, global:core:prelude/traits.wado::$const_obj_19, 0, 2);
+            builtin::array_copy<u8>($licm_buf_239.repr, start_171, global:core:prelude/traits.wado::$const_obj_20, 0, 2);
             i_157 = i_157 + 1;
             continue l30;
         };
@@ -369,7 +369,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<a
     }
     start_186 = self_173.used;
     self_173.used = new_used_185;
-    builtin::array_copy<u8>(self_173.repr, start_186, global:core:prelude/traits.wado::$const_obj_18, 0, 1);
+    builtin::array_copy<u8>(self_173.repr, start_186, global:core:prelude/traits.wado::$const_obj_19, 0, 1);
     return;
 }
 
@@ -641,7 +641,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
     $av_308 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    prefix_len = select i32(self.alternate, $av_310, 0);
     content_len = (sign_len + prefix_len) + digit_count;
     $av_309 = self.width;
     if select i32($av_309 <= 0, 1, content_len >= $av_309) {
@@ -1033,7 +1033,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_26, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_18, digit_count_4);
     self_14 = f.buf;
     arr = self_14.repr;
     pos = offset_5 + digit_count_4;

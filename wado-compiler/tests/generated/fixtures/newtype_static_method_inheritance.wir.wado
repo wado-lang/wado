@@ -100,9 +100,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String", ref "core:prelude/string.wado//String");  // TypeId(34)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(35)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(35)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(36)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(36)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
 
@@ -903,7 +903,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
     $av_308 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    prefix_len = select i32(self.alternate, $av_310, 0);
     content_len = (sign_len + prefix_len) + digit_count;
     $av_309 = self.width;
     if select i32($av_309 <= 0, 1, content_len >= $av_309) {
@@ -1209,6 +1209,10 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
     };
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -1239,10 +1243,6 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l130;
         };
     };
-}
-
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 export fn "newtype_static_method_inheritance.wado/$cm_export__run" as "run"

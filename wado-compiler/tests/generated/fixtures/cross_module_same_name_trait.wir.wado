@@ -4,21 +4,15 @@
 
 type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(0)
 
-type "functype//cross_module_same_name_trait.wado/$test_0_cross_module_same_name_traits" = fn();  // TypeId(1)
+type "functype//cross_module_same_name_trait.wado/$cm_export__$test_0_cross_module_same_name_traits" = fn();  // TypeId(1)
 
-type "functype//cross_module_same_name_trait.wado/$cm_export__$test_0_cross_module_same_name_traits" = fn();  // TypeId(2)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(3)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(2)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 
-fn "cross_module_same_name_trait.wado/$test_0_cross_module_same_name_traits"() {
-}
-
 fn "cross_module_same_name_trait.wado/$cm_export__$test_0_cross_module_same_name_traits"() {
-    "cross_module_same_name_trait.wado/$test_0_cross_module_same_name_traits"();
     "wasi/task-return"(0);
 }
 
