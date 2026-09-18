@@ -58,7 +58,9 @@ pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 use crate::ast::UseDecl;
-use crate::component_model::{declares_cm_binding, wado_primitive_name_to_cm};
+use std::sync::Arc;
+
+use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_primitive_name_to_cm};
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -241,14 +243,14 @@ fn user_cm_modules(sem: &semantics::Semantics) -> Vec<(ModuleSource, ast::Module
 /// lowers to its import. Every entry into the back end runs this: a phase that
 /// never saw these declarations reports the call unresolved instead.
 fn register_user_cm_modules<H: compiler_host::CompilerHost>(
-    registry: &mut std::sync::Arc<component_model::CmInterfaceRegistry>,
+    registry: &mut Arc<CmInterfaceRegistry>,
     modules: &[(ModuleSource, ast::Module)],
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     if modules.is_empty() {
         return Ok(());
     }
-    let registry = std::sync::Arc::make_mut(registry);
+    let registry = Arc::make_mut(registry);
     for (source, module) in modules {
         registry
             .register_user_cm_decls(module, source)
@@ -1561,7 +1563,7 @@ fn compile_after_load<H: CompilerHost>(
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
     if let (Some(fq), Some(entry)) = (synth_world_fq.as_ref(), lib_entry_module.as_ref()) {
-        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
+        let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
@@ -1585,7 +1587,7 @@ fn compile_after_load<H: CompilerHost>(
     register_user_cm_modules(&mut tysys.cm_interface_registry, &user_cm_modules, logger)?;
 
     debug_assert_eq!(
-        std::sync::Arc::strong_count(&tysys.trait_env),
+        Arc::strong_count(&tysys.trait_env),
         1,
         "Package::new must be the unique `Arc<TraitEnv>` owner; a leftover \
          per-module clone would panic in extend_with_synthesised"

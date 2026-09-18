@@ -1596,6 +1596,14 @@ impl Attribute {
     }
 }
 
+/// The CM import among `attrs`, wherever it sits. Reading only the first
+/// attribute loses the binding on a declaration that carries an `#[allow(…)]`
+/// ahead of it, and the phases then disagree about what is a CM import.
+#[must_use]
+pub fn cm_import_of(attrs: &[Attribute]) -> Option<&CmImport> {
+    attrs.iter().find_map(Attribute::as_cm_import)
+}
+
 /// Which Component Model boundary a `#[cm(…)]` / `#[canonical(…)]` declaration
 /// crosses: `Canonical` lowers to a CM canonical built-in such as
 /// `canon.task.return`, `Import` resolves to a real import from

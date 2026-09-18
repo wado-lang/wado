@@ -40,23 +40,43 @@ pub fn emit_wasm(
     wasm
 }
 
+/// Validate `wasm`, and on failure save it beside a panic carrying whatever
+/// `describe` can say about where the failure landed.
+fn validate_or_panic(
+    wasm: &[u8],
+    entry_module: &ModuleSource,
+    subject: &str,
+    artifact_path: &str,
+    describe: impl FnOnce(&[u8], usize) -> Option<String>,
+    undescribed: &str,
+) {
+    let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
+    let Err(e) = validator.validate_all(wasm) else {
+        return;
+    };
+    let _ = std::fs::write(artifact_path, wasm);
+    let context = describe(wasm, e.offset()).unwrap_or_else(|| undescribed.to_string());
+    let context = context.trim_end();
+    panic!(
+        "Internal compiler error: WIR pipeline generated an invalid {subject}\n\
+         Entry module: {entry_module}\n\
+         Validation error: {e}\n\
+         {context}\n\
+         The full invalid {subject} was written to {artifact_path} \
+         (inspect with `wasm-tools print`)."
+    );
+}
+
 /// Validate core Wasm module (before component wrapping).
 fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
-    let features = wasmparser::WasmFeatures::all();
-    let mut validator = wasmparser::Validator::new_with_features(features);
-    if let Err(e) = validator.validate_all(wasm) {
-        let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
-        let location = describe_offending_location(wasm, e.offset())
-            .unwrap_or_else(|| "  (could not locate the offending function)".to_string());
-        panic!(
-            "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
-             Entry module: {entry_module}\n\
-             Validation error: {e}\n\
-             {location}\n\
-             The full invalid module was written to /tmp/invalid_core.wasm \
-             (inspect with `wasm-tools print`)."
-        );
-    }
+    validate_or_panic(
+        wasm,
+        entry_module,
+        "core Wasm module",
+        "/tmp/invalid_core.wasm",
+        describe_offending_location,
+        "  (could not locate the offending function)",
+    );
 }
 
 /// Describe where a core-Wasm validation error landed: the containing function
@@ -192,19 +212,12 @@ fn describe_component_instances(wasm: &[u8]) -> Option<String> {
 
 /// Validate the wrapped component (after `validate_core_module`).
 fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
-    let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
-    let Err(e) = validator.validate_all(wasm) else {
-        return;
-    };
-    let _ = std::fs::write("/tmp/invalid_component.wasm", wasm);
-    let instances = describe_component_instances(wasm)
-        .unwrap_or_else(|| "  (could not read the component's instances)\n".to_string());
-    panic!(
-        "Internal compiler error: WIR pipeline generated invalid Wasm\n\
-         Entry module: {entry_module}\n\
-         Validation error: {e}\n\
-         {instances}\
-         The full invalid component was written to /tmp/invalid_component.wasm \
-         (inspect with `wasm-tools print`)."
+    validate_or_panic(
+        wasm,
+        entry_module,
+        "component",
+        "/tmp/invalid_component.wasm",
+        |wasm, _| describe_component_instances(wasm),
+        "  (could not read the component's instances)",
     );
 }

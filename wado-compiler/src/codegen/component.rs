@@ -777,45 +777,6 @@ fn cm_keyed_resource_exports<'a>(
         .collect()
 }
 
-/// Collect resource type names referenced anywhere in a type tree, for the
-/// `needed_resources` list of the interface `emitting`.
-fn collect_resources_in_type(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    emitting: Option<&str>,
-    out: &mut Vec<String>,
-) {
-    match ty {
-        Type::Named(named)
-            if cm_interface_registry
-                .cm_source_of_named_type(named, emitting)
-                .is_some_and(|source| {
-                    cm_interface_registry
-                        .get_resource_cm_name_by_source(&source, &named.name)
-                        .is_some()
-                }) =>
-        {
-            if !out.contains(&named.name) {
-                out.push(named.name.clone());
-            }
-        }
-        Type::Generic(g) => {
-            for arg in &g.args {
-                collect_resources_in_type(arg, cm_interface_registry, emitting, out);
-            }
-        }
-        Type::Tuple(elems) => {
-            for elem in elems {
-                collect_resources_in_type(elem, cm_interface_registry, emitting, out);
-            }
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            collect_resources_in_type(inner, cm_interface_registry, emitting, out);
-        }
-        _ => {}
-    }
-}
-
 /// A named type the shared generator spells as a declared CM type: a record,
 /// or a local newtype kept as its alias so the boundary matches `wado wit`.
 fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
@@ -1025,9 +986,9 @@ fn expose_self_owned_resources(
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
     interface_info: &CmInterfaceInfo,
-    needed_resources: &[String],
+    needed_resources: &IndexSet<(String, String)>,
 ) {
-    for resource_name in needed_resources {
+    for (_, resource_name) in needed_resources {
         let registry = &project.cm_interface_registry;
         let Some(cm_name) = registry
             .get_resource_cm_name_by_source(&interface_info.path, resource_name)
@@ -2390,25 +2351,9 @@ fn generate_cm_imports(
         // guarantees these resolve to resources this interface defines itself
         // (a signature touching an externally-defined resource would have been
         // categorized `ResourceUsingInterface` and handled by Phase 3 instead).
-        let mut needed_resources: Vec<String> = Vec::new();
-        for func in &cm_functions {
-            if let Some(ret_ty) = &func.return_type {
-                collect_resources_in_type(
-                    ret_ty,
-                    &project.cm_interface_registry,
-                    Some(interface_info.path.as_str()),
-                    &mut needed_resources,
-                );
-            }
-            for (_, _, ty) in &func.params {
-                collect_resources_in_type(
-                    ty,
-                    &project.cm_interface_registry,
-                    Some(interface_info.path.as_str()),
-                    &mut needed_resources,
-                );
-            }
-        }
+        let needed_resources = project
+            .cm_interface_registry
+            .resources_in_signatures(&cm_functions, Some(interface_info.path.as_str()));
 
         let instance_type_name = format!("{}-instance-type", interface_info.interface);
         let instance_type_idx = ctx.register_type(&instance_type_name);
@@ -2421,13 +2366,10 @@ fn generate_cm_imports(
             let mut resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
-            for resource_name in &needed_resources {
-                if let Some(source) = project
+            for (source, resource_name) in &needed_resources {
+                if let Some(cm_name) = project
                     .cm_interface_registry
-                    .resource_source_in(Some(&interface_info.path), resource_name)
-                    && let Some(cm_name) = project
-                        .cm_interface_registry
-                        .get_resource_cm_name_by_source(source, resource_name)
+                    .get_resource_cm_name_by_source(source, resource_name)
                 {
                     instance_type.export(
                         cm_name,
@@ -2852,13 +2794,10 @@ fn generate_cm_imports(
         // Expose any resources defined in this interface at the outer component scope.
         // This allows other interfaces (e.g., wasi:filesystem/preopens which uses
         // wasi:filesystem/types::descriptor) to alias them via `alias outer`.
-        for resource_name in &needed_resources {
-            if let Some(source) = project
+        for (source, resource_name) in &needed_resources {
+            if let Some(cm_name) = project
                 .cm_interface_registry
-                .resource_source_in(Some(&interface_info.path), resource_name)
-                && let Some(cm_name) = project
-                    .cm_interface_registry
-                    .get_resource_cm_name_by_source(source, resource_name)
+                .get_resource_cm_name_by_source(source, resource_name)
             {
                 let resource_type_name = resource_type_key(cm_name);
                 if !ctx.has_type(&resource_type_name) {
@@ -3341,16 +3280,19 @@ fn component_type_idx_for_signature_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
     project: &NirPackage,
+    emitting: &str,
     ty: &Type,
 ) -> u32 {
     let registry = &project.cm_interface_registry;
     match ty {
         Type::Generic(g) if g.name == "AsyncCall" && g.args.len() == 1 => {
-            component_type_idx_for_signature_type(builder, ctx, project, &g.args[0])
+            component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0])
         }
         Type::Generic(g) if g.name == "Result" && g.args.len() == 2 => {
-            let ok = component_type_idx_for_signature_type(builder, ctx, project, &g.args[0]);
-            let err = component_type_idx_for_signature_type(builder, ctx, project, &g.args[1]);
+            let ok =
+                component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[0]);
+            let err =
+                component_type_idx_for_signature_type(builder, ctx, project, emitting, &g.args[1]);
             intern_cm_type(
                 builder,
                 ctx,
@@ -3362,10 +3304,10 @@ fn component_type_idx_for_signature_type(
             )
         }
         Type::Reference(inner) | Type::MutReference(inner) => {
-            component_type_idx_for_signature_type(builder, ctx, project, inner)
+            component_type_idx_for_signature_type(builder, ctx, project, emitting, inner)
         }
         Type::Named(named) => {
-            if let Some(source) = registry.get_resource_source_interface(&named.name)
+            if let Some(source) = registry.resource_source_in(Some(emitting), &named.name)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(source, &named.name)
             {
                 let pkg = fq_name_package(source);
@@ -3438,13 +3380,15 @@ fn import_resource_using_composite_interface(
                     let resolved = project.cm_interface_registry.resolve_type(ty);
                     (
                         cm_name.clone(),
-                        component_type_idx_for_signature_type(builder, ctx, project, &resolved),
+                        component_type_idx_for_signature_type(
+                            builder, ctx, project, iface_fq, &resolved,
+                        ),
                     )
                 })
                 .collect();
             let result = f.return_type.as_ref().map(|ty| {
                 let resolved = project.cm_interface_registry.resolve_type(ty);
-                component_type_idx_for_signature_type(builder, ctx, project, &resolved)
+                component_type_idx_for_signature_type(builder, ctx, project, iface_fq, &resolved)
             });
             ResolvedSig {
                 wasi_name: f.wasi_func_name.clone(),
@@ -3779,14 +3723,14 @@ fn import_interfaces_with_resources(
     // referenced source via the shared `import_resource_source` helper, which is
     // idempotent and also handles the outer resource / error-code aliases.
     // Membership is the plan's: a source is imported iff listed as
-    // `ResourceSource` (the plan decides that from `has_interface`).
+    // `ResourceSource`.
     for interface_info in &interfaces_with_resources {
         let Some((resource_wado_name, _resource_cm_name)) = &interface_info.resource_type else {
             continue;
         };
         let Some(source_path) = project
             .cm_interface_registry
-            .get_resource_source_interface(resource_wado_name)
+            .resource_source_in(Some(&interface_info.path), resource_wado_name)
         else {
             continue;
         };
@@ -3848,27 +3792,19 @@ fn resource_using_references_defining_interface(
     let Some(iface) = registry.interfaces().find(|i| i.path == iface_fq) else {
         return false;
     };
-    let mut resources: Vec<String> = Vec::new();
-    for func in &iface.functions {
-        if !emits_function(project, func) {
-            continue;
-        }
-        if let Some(ret) = &func.return_type {
-            collect_resources_in_type(ret, registry, Some(iface_fq), &mut resources);
-        }
-        for (_, _, ty) in &func.params {
-            collect_resources_in_type(ty, registry, Some(iface_fq), &mut resources);
-        }
-    }
-    resources.iter().any(|r| {
-        registry
-            .get_resource_source_interface(r)
-            .is_some_and(|src| {
-                import_plan
-                    .iter()
-                    .any(|e| e.fq == src && e.kind == ImportKind::ResourceDefiningInterface)
-            })
-    })
+    let emitted: Vec<&CmFunctionInfo> = iface
+        .functions
+        .iter()
+        .filter(|func| emits_function(project, func))
+        .collect();
+    registry
+        .resources_in_signatures(&emitted, Some(iface_fq))
+        .iter()
+        .any(|(source, _)| {
+            import_plan
+                .iter()
+                .any(|e| &e.fq == source && e.kind == ImportKind::ResourceDefiningInterface)
+        })
 }
 
 /// Import interfaces that reference resources from other interfaces but don't define resources
@@ -3919,25 +3855,9 @@ fn import_resource_using_interfaces(
         let cm_functions = one_per_cm_name(&supported_functions);
 
         // Collect resources used in function signatures
-        let mut needed_resources: Vec<String> = Vec::new();
-        for func in &cm_functions {
-            if let Some(ret_ty) = &func.return_type {
-                collect_resources_in_type(
-                    ret_ty,
-                    &project.cm_interface_registry,
-                    Some(interface_info.path.as_str()),
-                    &mut needed_resources,
-                );
-            }
-            for (_, _, ty) in &func.params {
-                collect_resources_in_type(
-                    ty,
-                    &project.cm_interface_registry,
-                    Some(interface_info.path.as_str()),
-                    &mut needed_resources,
-                );
-            }
-        }
+        let needed_resources = project
+            .cm_interface_registry
+            .resources_in_signatures(&cm_functions, Some(interface_info.path.as_str()));
 
         // Only handle interfaces that reference resources from other interfaces.
         // Interfaces with no resources are already handled in generate_cm_imports.
@@ -3959,13 +3879,7 @@ fn import_resource_using_interfaces(
         // no method call to make the earlier phases import its interface. A
         // resource whose source path *is* this interface is skipped — the CM
         // spec requires `[method]X.foo` to sit in the instance exporting `X`.
-        for resource_name in &needed_resources {
-            let Some(source) = project
-                .cm_interface_registry
-                .resource_source_in(Some(&interface_info.path), resource_name)
-            else {
-                continue;
-            };
+        for (source, resource_name) in &needed_resources {
             let Some(cm_name) = project
                 .cm_interface_registry
                 .get_resource_cm_name_by_source(source, resource_name)
@@ -3975,20 +3889,14 @@ fn import_resource_using_interfaces(
             if ctx.has_type(&resource_type_key(cm_name)) {
                 continue; // already imported (by the main loop or the source phase)
             }
-            let Some(source_path) = project
-                .cm_interface_registry
-                .get_resource_source_interface(resource_name)
-            else {
-                continue;
-            };
-            if source_path == interface_info.path.as_str() {
+            if source == &interface_info.path {
                 // Self-owned resource — declared inline in the instance type
                 // below to satisfy the constructor/method spec.
                 continue;
             }
             // Pre-import the resource-defining source through the shared helper so
             // its resource type is outer-aliased before we build this instance.
-            import_resource_source(builder, ctx, project, source_path);
+            import_resource_source(builder, ctx, project, source);
         }
 
         // Build a map: resource_wado_name -> local_type_idx_in_instance_type
@@ -4005,20 +3913,13 @@ fn import_resource_using_interfaces(
             let mut own_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
             let mut borrow_resource_type_indices: IndexMap<String, u32> = IndexMap::default();
 
-            for resource_name in &needed_resources {
-                if let Some(source) = project
+            for (source, resource_name) in &needed_resources {
+                if let Some(cm_name) = project
                     .cm_interface_registry
-                    .resource_source_in(Some(&interface_info.path), resource_name)
-                    && let Some(cm_name) = project
-                        .cm_interface_registry
-                        .get_resource_cm_name_by_source(source, resource_name)
+                    .get_resource_cm_name_by_source(source, resource_name)
                 {
                     let outer_resource_type_name = resource_type_key(cm_name);
-                    let source_is_self = project
-                        .cm_interface_registry
-                        .get_resource_cm_name_by_source(&interface_info.path, resource_name)
-                        .is_some();
-                    if source_is_self {
+                    if source == &interface_info.path {
                         // Declare the resource inline so [constructor]X /
                         // [method]X.foo / [static]X.foo are valid in this
                         // instance.

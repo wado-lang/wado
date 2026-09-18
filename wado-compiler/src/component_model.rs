@@ -13,7 +13,7 @@ use wasm_encoder::ValType;
 use crate::ast;
 use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
-    NamedType, NamespacedGenericType, Type, declares_unrestricted,
+    NamedType, NamespacedGenericType, Type, cm_import_of, declares_unrestricted,
 };
 use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
@@ -588,7 +588,7 @@ impl CmFunctionInfo {
     /// `"Stdout::write_via_stream"`).
     #[must_use]
     pub fn used_key(&self) -> String {
-        format!("{}::{}", self.interface_name, self.method_name)
+        used_wasi_key(&self.interface_name, &self.method_name)
     }
 
     /// Whether `canon lower` requires the Memory canonical option.
@@ -1073,6 +1073,13 @@ fn register_unique<V>(
     map.insert(key, value);
 }
 
+/// The key an interface operation takes in `NirPackage::used_wasi_functions`
+/// (e.g. `"Stdout::write_via_stream"`).
+#[must_use]
+pub fn used_wasi_key(interface: &str, operation: &str) -> String {
+    format!("{interface}::{operation}")
+}
+
 /// `emitting` itself, where it declares `wado_name` in a
 /// `(source_interface, wado_name)`-keyed map. Borrowed from the map rather than
 /// from the argument, so a caller may pass a short-lived interface name.
@@ -1259,7 +1266,8 @@ fn resolve_type(
 /// but the CM registry stores concrete types, so `&self` on `resource
 /// Descriptor` must register as `&Descriptor` carrying `Descriptor`'s source
 /// interface — the type the old `self: &Descriptor` spelling produced. Losing
-/// the source interface would make `collect_resources_in_type` miss the borrow.
+/// the source interface would make [`CmInterfaceRegistry::resources_in_type`]
+/// miss the borrow.
 fn substitute_self_in_type(
     sources: &SourceInterfaces,
     ty: &Type,
@@ -1789,9 +1797,8 @@ impl CmInterfaceRegistry {
     /// empty string if no attribute is present (user-authored items
     /// don't carry this).
     fn cm_source_interface(attrs: &[Attribute]) -> String {
-        attrs
-            .iter()
-            .find_map(|a| a.as_cm_import().map(CmImport::interface_path))
+        cm_import_of(attrs)
+            .map(CmImport::interface_path)
             .unwrap_or_default()
     }
 
@@ -2113,7 +2120,7 @@ impl CmInterfaceRegistry {
                     continue;
                 }
                 for method in &resource.methods {
-                    if let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) {
+                    if let Some(wasi) = cm_import_of(&method.attrs) {
                         // Extract CM param names from #[cm_params] attribute
                         let cm_param_names = extract_cm_params_attr(&method.attrs);
                         let params: Vec<(String, String, Type)> = method
@@ -2251,7 +2258,7 @@ impl CmInterfaceRegistry {
                 continue;
             };
             for method in &effect.methods {
-                let Some(wasi) = method.attrs.first().and_then(|a| a.as_cm_import()) else {
+                let Some(wasi) = cm_import_of(&method.attrs) else {
                     continue;
                 };
                 let cm_param_names = extract_cm_params_attr(&method.attrs);
@@ -2845,7 +2852,69 @@ impl CmInterfaceRegistry {
     /// emitter that knows which interface it is describing must say so.
     pub fn resource_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
         declaring_source(&self.resources, emitting, wado_name)
+            .or_else(|| find_unique_source_in(&self.resources, wado_name))
             .or_else(|| self.find_binding_resource_source(wado_name))
+    }
+
+    /// The CM resources `ty` references at any depth, as
+    /// `(declaring_interface, wado_name)`, asking `emitting` first. One walker:
+    /// a second one drifts, and the shape it forgets loses an import where
+    /// nothing looks.
+    pub fn resources_in_type(
+        &self,
+        ty: &Type,
+        emitting: Option<&str>,
+        out: &mut IndexSet<(String, String)>,
+    ) {
+        match ty {
+            Type::Named(named) => {
+                if let Some(source) = self.cm_source_of_named_type(named, emitting)
+                    && self
+                        .get_resource_cm_name_by_source(&source, &named.name)
+                        .is_some()
+                {
+                    out.insert((source, named.name.clone()));
+                }
+            }
+            Type::Generic(g) => {
+                for arg in &g.args {
+                    self.resources_in_type(arg, emitting, out);
+                }
+            }
+            Type::NamespacedGeneric(g) => {
+                for arg in &g.args {
+                    self.resources_in_type(arg, emitting, out);
+                }
+            }
+            Type::Tuple(elems) => {
+                for elem in elems {
+                    self.resources_in_type(elem, emitting, out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                self.resources_in_type(inner, emitting, out);
+            }
+            Type::Function(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => {}
+        }
+    }
+
+    /// The CM resources every signature of `funcs` references, as
+    /// `(declaring_interface, wado_name)`, for the interface `emitting`.
+    pub fn resources_in_signatures(
+        &self,
+        funcs: &[&CmFunctionInfo],
+        emitting: Option<&str>,
+    ) -> IndexSet<(String, String)> {
+        let mut out = IndexSet::default();
+        for func in funcs {
+            if let Some(ret) = &func.return_type {
+                self.resources_in_type(ret, emitting, &mut out);
+            }
+            for (_, _, ty) in &func.params {
+                self.resources_in_type(ty, emitting, &mut out);
+            }
+        }
+        out
     }
 
     /// The interface declaring the flags `wado_name`, asking `emitting` first.
@@ -3051,12 +3120,6 @@ impl CmInterfaceRegistry {
     /// Iterate all newtypes as `((source_interface, name), type)`.
     pub fn newtypes(&self) -> &IndexMap<(String, String), Type> {
         &self.newtypes
-    }
-
-    /// Get the source interface path for a resource, when unambiguous.
-    /// e.g., `TerminalInput` -> `"wasi:cli/terminal-input@0.3.0-rc-2026-01-06"`.
-    pub fn get_resource_source_interface(&self, name: &str) -> Option<&str> {
-        find_unique_source_in(&self.resources, name)
     }
 
     /// Source interface of the resource whose CM (kebab) name is `cm_name`.
