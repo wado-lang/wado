@@ -1,0 +1,28 @@
+// Test: a constant string view folds like the String it views.
+//
+// A view reaches its bytes through a reference field, and the compile-time
+// frame refused to hold a value for a local naming one. So `internal_push_view`
+// stopped folding where `internal_push_string` folded, and `${x:.N}`, which
+// narrows its text to a view, scanned for the character boundary at run time.
+// A shared borrow of a global or a literal is settled storage: nothing writes
+// through a `&`, so the value it names stands.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut built = String::with_capacity(8);
+    built.push_str("abcdef".as_str_slice().sub_unchecked(0, 3));
+    println(`[${built}]`);
+    println(`[${"abcdef":.3}]`);
+}
+
+__DATA__
+{
+    "stdout": "[abc]\n[abc]\n",
+    "wir_scope": "ctfe_fold_view_append_wir.wado/run",
+    "wir_expect:O2": ["built.used = 3"],
+    "wir_not_expect:O2": [
+        "utf8_prefix_end",
+        "internal_push_view"
+    ]
+}

@@ -585,6 +585,55 @@ impl Body {
         self.local_read(*inner)
     }
 
+    /// Whether `op` is a shared borrow of settled storage — a global or a
+    /// literal, whole or a part of one, `&G.repr` as much as `&G`. A `&` is no
+    /// write path, so what one names holds the value it was given.
+    pub fn shared_const_ref(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        let ExprKind::Unary {
+            op: NirUnaryOp::Ref,
+            expr: inner,
+        } = &self.exprs[self.strip_casts(e)].kind
+        else {
+            return false;
+        };
+        self.settled_storage(*inner)
+    }
+
+    fn settled_storage(&self, op: Operand) -> bool {
+        let Some(e) = op.as_expr() else {
+            return false;
+        };
+        match &self.exprs[e].kind {
+            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => true,
+            ExprKind::FieldAccess { expr: inner, .. }
+            | ExprKind::Index { expr: inner, .. }
+            | ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::Deref,
+                expr: inner,
+            } => self.settled_storage(*inner),
+            // The `{ G = v; G }` a globalized constant is read through.
+            ExprKind::LabeledBlock { .. } => self
+                .block_yield(e)
+                .is_some_and(|tail| self.settled_storage(tail)),
+            _ => false,
+        }
+    }
+
+    /// What a cast chain names, a cast naming the same storage as its operand.
+    pub fn strip_casts(&self, e: ExprId) -> ExprId {
+        let mut e = e;
+        while let ExprKind::Cast { expr: inner, .. } = &self.exprs[e].kind {
+            let Some(inner) = inner.as_expr() else {
+                return e;
+            };
+            e = inner;
+        }
+        e
+    }
+
     /// The raw integer bit pattern of a constant-int `Operand::Value`. `None` for
     /// an `Operand::Expr` or any non-int-constant operand. Width-agnostic (no type
     /// filter): callers that only need the value (capacities, zero-tests) avoid

@@ -29,6 +29,14 @@ impl FrameState {
             || self.place_aliases.values().any(|(root, _)| *root == index)
     }
 
+    /// Whether a value snapshot of `index` can outlive every write to it: no
+    /// write beyond this walk's own reaches the local, and no live alias names
+    /// it. What [`clobbered_locals`] already answers, read for the one question
+    /// a snapshot asks.
+    fn place_is_settled(&self, index: u32) -> bool {
+        !self.ctfe_clobbered.contains(index) && !self.alias_involves(index)
+    }
+
     /// The state a call's body runs under: what `body` lets a frame track, with
     /// the parameters already bound. A parameter the body can reach through
     /// another handle binds nothing, so a stale constant cannot outlive the
@@ -751,8 +759,14 @@ impl Interpreter<'_> {
         let mut bound: Vec<(u32, Value)> = Vec::with_capacity(args.len());
         let mut targets: Vec<(u32, u32, Vec<u32>)> = Vec::new();
         let mut places: Vec<(u32, Vec<u32>)> = Vec::new();
+        let mut retains_unsettled_storage = false;
         for (arg, param) in args.iter().zip(&callee.params) {
             let place = self.frame_place_of(body, *arg);
+            retains_unsettled_storage |= callee.retains.contains(&param.name)
+                && self.type_table.is_reference_shaped(param.type_id)
+                && !place
+                    .as_ref()
+                    .is_some_and(|(root, _)| self.frame.place_is_settled(*root));
             let value = if param.is_mut_ref {
                 let Some((root, path)) = place.clone() else {
                     return self.decline(&key, "a &mut argument names no frame place");
@@ -778,11 +792,9 @@ impl Interpreter<'_> {
         // returns a `Formatter` holding that borrow, and a retained shared one
         // does the same. The engine has no reference values, so it would stand
         // as a snapshot the next write to that storage leaves stale. A scalar
-        // embeds nothing.
-        let retains_a_reference = callee.params.iter().any(|p| {
-            callee.retains.contains(&p.name) && self.type_table.is_reference_shaped(p.type_id)
-        });
-        let may_embed_caller_storage = !targets.is_empty() || retains_a_reference;
+        // embeds nothing, and so does a retained borrow of a place this frame
+        // settles: `"abc".as_str_slice()` views a literal no write reaches.
+        let may_embed_caller_storage = !targets.is_empty() || retains_unsettled_storage;
 
         // Below here is the expensive half: a whole-body copy and a
         // trackability walk over it.

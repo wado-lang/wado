@@ -476,8 +476,8 @@ struct FrameState {
     /// The body's unshared locals — the ones whose single read may be written
     /// over with a literal, nothing else reaching the object it yields.
     unshared_locals: LocalSet,
-    /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
-    /// Empty outside a frame.
+    /// Locals something other than this walk's own writes can reach — see
+    /// [`clobbered_locals`].
     ctfe_clobbered: LocalSet,
     alias_classes: AliasClasses,
     /// What this frame folded a node to, read back by
@@ -745,6 +745,7 @@ impl<'a> Interpreter<'a> {
         let track = Trackability::outside_frame(body, self.facts, self.type_table);
         self.frame.aggregate_locals = track.aggregate_locals;
         self.frame.unshared_locals = track.unshared;
+        self.frame.ctfe_clobbered = track.clobbered;
     }
 
     /// Record which locals a `let` bound to `&GLOBAL`.
