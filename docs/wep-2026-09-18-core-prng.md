@@ -98,16 +98,15 @@ knowingly.
 
 ### The derived layer is uniform only
 
-On `Rng`, as defaulted methods:
+On `Rng`, as defaulted methods, five of them:
 
 |                       |                                                  |
 | --------------------- | ------------------------------------------------ |
-| `next_u32()`          | the high half of a draw                          |
-| `random_range(0..<n)` | Lemire's multiply-shift, with the rare rejection |
-| `random_f64()`        | 53 bits, one shift and one multiply              |
-| `random_bool()`       | one bit                                          |
-| `shuffle(&mut list)`  | Fisher–Yates over `random_range`                 |
-| `choose(&list)`       | `Option<&T>`, empty list gives `None`            |
+| an integer in a range | Lemire's multiply-shift, with the rare rejection |
+| an f64 in `[0,1)`     | 53 bits, one shift and one multiply              |
+| a bool                | one bit                                          |
+| shuffle a `List`      | Fisher–Yates over the bounded integer            |
+| choose from a `List`  | `Option<&T>`, empty list gives `None`            |
 
 Every one of these is arithmetic on a draw, with no table and no state of its
 own. That is the line, and it is drawn at **uniform**: a shape other than
@@ -130,8 +129,6 @@ pub struct Squares64 { /* one u64 key, private */ }
 impl Squares64 {
     pub fn from_seed(seed: Seed) -> Squares64;
     pub fn at(&self, counter: u64) -> u64;
-    pub fn at_xy(&self, x: i64, y: i64) -> u64;
-    pub fn at_xyz(&self, x: i64, y: i64, z: i64) -> u64;
 }
 ```
 
@@ -162,11 +159,9 @@ drain and loses by 1.8× on the terrain shape, because it emits two words per
 call and a consumer asking for the value at one coordinate throws one away.
 Squares emits exactly one. Philox is 3.5× behind on every axis and is out.
 
-`at_xy` and `at_xyz` fold their coordinates with odd constants before the
-transform. They exist because the fold is the part a caller gets wrong — `x * 31
-
-- y` collides along a diagonal — and because the measurement above is of the
-  folded form, so nothing is claimed that was not timed.
+The third column folds two coordinates into the counter with odd constants
+before the transform, so what it times is the terrain shape and not a bare
+counter walk.
 
 Squares' output quality depends on its key in a way a block cipher's does not:
 the key 0 yields all zeros, and a small integer key yields roughly 2^16/k zeros
@@ -272,6 +267,19 @@ something real and may be worth it.
 
 ## Known gaps
 
+- Every name above is a placeholder. The traits, the five derived operations,
+  and `Squares64::at` are named here so the document can refer to them, and
+  nothing has chosen between Rust's spelling (`random_range`, `random_bool`)
+  and Go's (`IntN`, `Float64`). Closing it means picking one house and
+  following it, since a mixture is worse than either.
+- The derived layer's exact roster is the five operations and no more. Whether
+  `next_u32` joins them — the high half of a draw, free to provide and one more
+  name to keep — is open.
+- A caller folding coordinates into the counter does it by hand. The fold is
+  the part that goes wrong (`x * 31 + y` collides along a diagonal) and the
+  measurement above is of a folded form, so the operation is real; whether it
+  is a method on `Squares64`, a free function, or left to the caller is not
+  decided.
 - The exact key predicate `Squares64::from_seed` establishes is not settled.
   Widynski's `keys.h` generator draws hexadecimal digits under constraints that
   a bit-level test approximates rather than reproduces. Closing it means
