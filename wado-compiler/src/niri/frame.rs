@@ -29,12 +29,10 @@ impl FrameState {
             || self.place_aliases.values().any(|(root, _)| *root == index)
     }
 
-    /// Whether a value snapshot of `index` can outlive every write to it: no
-    /// write beyond this walk's own reaches the local, and no live alias names
-    /// it. What [`clobbered_locals`] already answers, read for the one question
-    /// a snapshot asks.
+    /// Whether a value snapshot of `index` can outlive every write to it:
+    /// nothing writes the storage it names, and no alias renames it here.
     fn place_is_settled(&self, index: u32) -> bool {
-        !self.ctfe_clobbered.contains(index) && !self.alias_involves(index)
+        self.const_views.contains(index) && !self.alias_involves(index)
     }
 
     /// The state a call's body runs under: what `body` lets a frame track, with
@@ -47,6 +45,7 @@ impl FrameState {
             aggregate_locals: track.aggregate_locals,
             unshared_locals: track.unshared,
             reassigned: track.reassigned,
+            const_views: track.const_views,
             ..Self::default()
         };
         for (index, value) in params {

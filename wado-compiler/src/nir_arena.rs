@@ -585,40 +585,36 @@ impl Body {
         self.local_read(*inner)
     }
 
-    /// Whether `op` is a shared borrow of settled storage — a global or a
-    /// literal, whole or a part of one, `&G.repr` as much as `&G`. A `&` is no
-    /// write path, so what one names holds the value it was given.
-    pub fn shared_const_ref(&self, op: Operand) -> bool {
-        let Some(e) = op.as_expr() else {
-            return false;
-        };
+    /// The storage a shared borrow names, where that is storage a `&` alone
+    /// reaches: a literal, or a global. `&G.repr` answers the `G` as much as
+    /// `&G` does. Whether *that* global holds one value is the caller's
+    /// question, and only the caller knows the program.
+    pub fn shared_ref_root(&self, op: Operand) -> Option<ExprId> {
         let ExprKind::Unary {
             op: NirUnaryOp::Ref,
             expr: inner,
-        } = &self.exprs[self.strip_casts(e)].kind
+        } = &self.exprs[self.strip_casts(op.as_expr()?)].kind
         else {
-            return false;
+            return None;
         };
-        self.settled_storage(*inner)
+        self.borrow_root(*inner)
     }
 
-    fn settled_storage(&self, op: Operand) -> bool {
-        let Some(e) = op.as_expr() else {
-            return false;
-        };
+    fn borrow_root(&self, op: Operand) -> Option<ExprId> {
+        let e = op.as_expr()?;
         match &self.exprs[e].kind {
-            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => true,
+            ExprKind::GlobalVarGet { .. } | ExprKind::PackedArray(_) => Some(e),
             ExprKind::FieldAccess { expr: inner, .. }
             | ExprKind::Index { expr: inner, .. }
             | ExprKind::Unary {
                 op: NirUnaryOp::Ref | NirUnaryOp::Deref,
                 expr: inner,
-            } => self.settled_storage(*inner),
+            } => self.borrow_root(*inner),
             // The `{ G = v; G }` a globalized constant is read through.
-            ExprKind::LabeledBlock { .. } => self
-                .block_yield(e)
-                .is_some_and(|tail| self.settled_storage(tail)),
-            _ => false,
+            ExprKind::LabeledBlock { .. } => {
+                self.block_yield(e).and_then(|tail| self.borrow_root(tail))
+            }
+            _ => None,
         }
     }
 

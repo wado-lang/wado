@@ -463,10 +463,26 @@ fn reassigned_locals(body: &Body) -> LocalSet {
     set
 }
 
-/// Locals every `let` of which binds a shared borrow of settled storage — a
-/// global or a literal. Such a local names what no `&` can write, so a value
-/// read off it stands as long as the storage does.
-fn const_view_locals(body: &Body) -> LocalSet {
+/// Locals that name settled storage: every binding of one is a shared borrow
+/// rooted at a literal or at a global the program holds one value for, and
+/// nothing rebinds it. Nothing can write what such a local names, so a value
+/// read off it stands as long as the body does.
+pub(super) fn const_view_locals(
+    body: &Body,
+    facts: ProgramFacts<'_>,
+    reassigned: &LocalSet,
+) -> LocalSet {
+    let settled = |op: Operand| {
+        body.shared_ref_root(op)
+            .is_some_and(|root| match &body.exprs[root].kind {
+                ExprKind::PackedArray(_) => true,
+                ExprKind::GlobalVarGet {
+                    module_source,
+                    name,
+                } => facts.global_is_const(&(module_source.clone(), name.clone())),
+                _ => false,
+            })
+    };
     let mut set = LocalSet::default();
     let mut rebound = LocalSet::default();
     body.for_each_reachable_node(|node| match node {
@@ -475,7 +491,7 @@ fn const_view_locals(body: &Body) -> LocalSet {
                 local_index, value, ..
             } = &body.stmts[s].kind
             {
-                if body.shared_const_ref(*value) {
+                if settled(*value) {
                     set.insert(*local_index);
                 } else {
                     rebound.insert(*local_index);
@@ -491,7 +507,7 @@ fn const_view_locals(body: &Body) -> LocalSet {
     });
     let mut out = LocalSet::default();
     for index in set.iter() {
-        if !rebound.contains(index) {
+        if !rebound.contains(index) && !reassigned.contains(index) {
             out.insert(index);
         }
     }
@@ -567,6 +583,8 @@ pub(super) struct Trackability {
     /// carries can be displaced, so it cannot stand for a place; one nothing
     /// reassigns can, whether or not it was spelled `let mut`.
     pub(super) reassigned: LocalSet,
+    /// See [`const_view_locals`].
+    pub(super) const_views: LocalSet,
 }
 
 impl Trackability {
@@ -574,30 +592,32 @@ impl Trackability {
     pub(super) fn in_frame(body: &Body, facts: ProgramFacts<'_>, type_table: &TypeTable) -> Self {
         let reassigned = reassigned_locals(body);
         let reached = Reached::in_frame(body, facts, &reassigned);
-        let views = const_view_locals(body);
+        let const_views = const_view_locals(body, facts, &reassigned);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &views),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),
             unshared: unshared_locals(body),
-            clobbered: clobbered_locals(body, &reached, type_table, &views),
+            clobbered: clobbered_locals(body, &reached, type_table, &const_views),
             reassigned,
+            const_views,
         }
     }
 
-    /// For an ordinary walk, which performs nothing — so every write it reaches
-    /// is one something else carries out, and `clobbered` comes out larger than
-    /// the same body's in a frame.
+    /// For an ordinary walk, which performs nothing, so no write it reaches is
+    /// one it carries out.
     pub(super) fn outside_frame(
         body: &Body,
         facts: ProgramFacts<'_>,
         type_table: &TypeTable,
     ) -> Self {
         let reached = Reached::outside_frame(body, facts);
-        let views = const_view_locals(body);
+        let reassigned = reassigned_locals(body);
+        let const_views = const_view_locals(body, facts, &reassigned);
         Self {
-            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &views),
+            aggregate_locals: aggregate_safe_locals(body, &reached, type_table, &const_views),
             unshared: unshared_locals(body),
-            clobbered: clobbered_locals(body, &reached, type_table, &views),
-            reassigned: reassigned_locals(body),
+            clobbered: LocalSet::default(),
+            reassigned,
+            const_views,
         }
     }
 }

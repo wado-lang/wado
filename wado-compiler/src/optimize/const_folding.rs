@@ -534,7 +534,8 @@ impl GlobalStoreCollector<'_> {
         let Some(e) = value.as_expr() else {
             return;
         };
-        if body.shared_const_ref(value) || prim_of(body.exprs[e].type_id, self.type_table).is_some()
+        if body.shared_ref_root(value).is_some()
+            || prim_of(body.exprs[e].type_id, self.type_table).is_some()
         {
             return;
         }

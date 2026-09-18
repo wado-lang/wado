@@ -476,9 +476,12 @@ struct FrameState {
     /// The body's unshared locals — the ones whose single read may be written
     /// over with a literal, nothing else reaching the object it yields.
     unshared_locals: LocalSet,
-    /// Locals something other than this walk's own writes can reach — see
-    /// [`clobbered_locals`].
+    /// Locals a compile-time frame cannot track — see [`clobbered_locals`].
+    /// Empty outside a frame.
     ctfe_clobbered: LocalSet,
+    /// The body's [`const_view_locals`] — the locals naming storage nothing
+    /// writes, so a value read off one can outlive the read.
+    const_views: LocalSet,
     alias_classes: AliasClasses,
     /// What this frame folded a node to, read back by
     /// [`Interpreter::expr_to_lattice`]. Load-bearing on both backends: the
@@ -527,6 +530,14 @@ impl ProgramFacts<'_> {
     /// correctness.
     pub(crate) fn materializes(&self, key: &GlobalKey) -> bool {
         self.materializing.is_some_and(|m| m.contains(key))
+    }
+
+    /// Whether this global holds one value the whole program through — declared
+    /// immutable, and neither written nor handed to a writer. Without the fact
+    /// installed, none does.
+    pub(crate) fn global_is_const(&self, key: &GlobalKey) -> bool {
+        self.globals
+            .is_some_and(|g| matches!(g.get(key), Some(Lattice::Const(_))))
     }
 }
 
@@ -745,7 +756,7 @@ impl<'a> Interpreter<'a> {
         let track = Trackability::outside_frame(body, self.facts, self.type_table);
         self.frame.aggregate_locals = track.aggregate_locals;
         self.frame.unshared_locals = track.unshared;
-        self.frame.ctfe_clobbered = track.clobbered;
+        self.frame.const_views = track.const_views;
     }
 
     /// Record which locals a `let` bound to `&GLOBAL`.
