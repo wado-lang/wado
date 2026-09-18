@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789668028538,
+  "lastUpdate": 1789690417044,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56597,6 +56597,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/df124f7604fe096a2de1016832980b0280169029"
         },
         "date": 1789668027954,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 286862,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1beaec34577833312bb2ffe5dca6e696a5048054",
+          "message": "Merge pull request #2076 from wado-lang/claude/benchmark-sieve-optimization-0ort8c\n\nperf(optimizer): version a loop whose entry is no constant, and fix a licm miscompile through a closure capture",
+          "timestamp": "2026-09-18T08:54:55+09:00",
+          "tree_id": "fc9d700b2596f9b9703e1a1034e60b55159c36dc",
+          "url": "https://github.com/wado-lang/wado/commit/1beaec34577833312bb2ffe5dca6e696a5048054"
+        },
+        "date": 1789690416033,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
