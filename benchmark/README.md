@@ -298,7 +298,7 @@ mishandled are written another way at the same token count.
 Generate a Rust parser from an ANTLR4 `.g4` grammar. Gale is an
 ANTLR4-compatible generator, so the head-to-head comparison is against
 [ANTLR4](https://www.antlr.org/) itself over the **identical grammar** —
-`RustLexer.g4` + `RustParser.g4` (34390 bytes), same input, same ALL(\*)
+`RustLexer.g4` + `RustParser.g4` (41870 bytes), same input, same ALL(\*)
 algorithm family, both emitting a parser. Throughput is grammar bytes processed
 per second (higher is better).
 

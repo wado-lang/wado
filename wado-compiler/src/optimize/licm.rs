@@ -40,6 +40,27 @@ use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_id
 /// Also tracks GC reference aliases: when `let a = b` copies a GC struct reference,
 /// `a` and `b` point to the same heap object. Modifications through one alias must
 /// prevent hoisting field accesses on the other.
+/// A set of pointee types, compared by what a `TypeId` resolves to.
+///
+/// One struct is interned under more than one `TypeId`, so an analysis that
+/// keys on the id alone misses the same type arriving by another name.
+#[derive(Default)]
+struct PointeeSet(IndexSet<ResolvedType>);
+
+impl PointeeSet {
+    fn insert(&mut self, pointee: TypeId, type_table: &TypeTable) {
+        self.0.insert(type_table.get(pointee).clone());
+    }
+
+    fn contains(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
+        self.0.contains(type_table.get(pointee))
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Default)]
 struct ModifiedVars {
     /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
@@ -63,7 +84,7 @@ struct ModifiedVars {
     written_field_types: IndexSet<(ResolvedType, u32)>,
     /// Pointee struct types passed by `&mut` to a call/method in the loop: the
     /// callee may write *any* field, so no field of that type is invariant.
-    clobbered_pointee_types: IndexSet<ResolvedType>,
+    clobbered_pointee_types: PointeeSet,
     /// Whether the loop calls anything at all.
     calls: bool,
 }
@@ -92,8 +113,7 @@ impl ModifiedVars {
     }
 
     fn insert_clobbered_pointee_type(&mut self, pointee: TypeId, type_table: &TypeTable) {
-        self.clobbered_pointee_types
-            .insert(type_table.get(pointee).clone());
+        self.clobbered_pointee_types.insert(pointee, type_table);
     }
 
     fn written_field(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
@@ -104,8 +124,7 @@ impl ModifiedVars {
     }
 
     fn clobbered_pointee(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
-        self.clobbered_pointee_types
-            .contains(type_table.get(pointee))
+        self.clobbered_pointee_types.contains(pointee, type_table)
     }
 
     /// True when hoisting `x.field_idx` is unsound: another handle on `x`'s
@@ -678,11 +697,11 @@ fn hoist_reloadable_field_loads(
     }
 
     // The pointee types whose clobbers force a reload.
-    let mut clobber_types: IndexSet<TypeId> = IndexSet::default();
+    let mut clobber_types = PointeeSet::default();
     for c in &candidates {
         let root_ty = candidate_root_ty(engine, c.local_index, c.type_id);
         if let Some(p) = reloadable_pointee(root_ty, ctx.type_table) {
-            clobber_types.insert(p);
+            clobber_types.insert(p, ctx.type_table);
         }
     }
 
@@ -839,7 +858,7 @@ fn insert_reloads(
     engine: &mut Engine,
     block: BlockId,
     specs: &[ReloadSpec],
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) {
     let stmts = engine.body.blocks[block].stmts.clone();
@@ -859,7 +878,10 @@ fn insert_reloads(
         // those types can have gone stale, so reload just their specs.
         let hit = node_clobbered_types(engine.body, NodeRef::Stmt(s), clobber_types, type_table);
         if !hit.is_empty() {
-            for spec in specs.iter().filter(|sp| hit.contains(&sp.pointee)) {
+            for spec in specs
+                .iter()
+                .filter(|sp| hit.contains(sp.pointee, type_table))
+            {
                 let value = build_field_access(
                     engine,
                     spec.source_local,
@@ -926,7 +948,7 @@ fn reloadable_pointee(root_type: TypeId, type_table: &TypeTable) -> Option<TypeI
 fn expr_clobbers_types(
     body: &Body,
     e: ExprId,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> bool {
     let args: &[ArenaCallArg] = match &body.exprs[e].kind {
@@ -950,7 +972,7 @@ fn expr_clobbers_types(
 fn has_nonunit_clobber_value_tail(
     body: &Body,
     node: NodeRef,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> bool {
     if let NodeRef::Expr(_) = node {
@@ -988,10 +1010,10 @@ fn has_nonunit_clobber_value_tail(
 fn node_clobbered_types(
     body: &Body,
     node: NodeRef,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
-) -> IndexSet<TypeId> {
-    let mut hit = IndexSet::default();
+) -> PointeeSet {
+    let mut hit = PointeeSet::default();
     collect_clobbered_types(body, node, clobber_types, type_table, &mut hit);
     hit
 }
@@ -999,9 +1021,9 @@ fn node_clobbered_types(
 fn collect_clobbered_types(
     body: &Body,
     node: NodeRef,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
-    hit: &mut IndexSet<TypeId>,
+    hit: &mut PointeeSet,
 ) {
     if let NodeRef::Expr(e) = node {
         let operands: &[ArenaCallArg] = match &body.exprs[e].kind {
@@ -1012,7 +1034,7 @@ fn collect_clobbered_types(
             if let Some(ae) = a.expr.as_expr()
                 && let Some(t) = mut_ref_pointee(body, ae, clobber_types, type_table)
             {
-                hit.insert(t);
+                hit.insert(t, type_table);
             }
         }
     }
@@ -1027,7 +1049,7 @@ fn collect_clobbered_types(
 fn mut_ref_pointee(
     body: &Body,
     e: ExprId,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> Option<TypeId> {
     let mut ty = body.exprs[e].type_id;
@@ -1042,13 +1064,13 @@ fn mut_ref_pointee(
             _ => break,
         }
     }
-    (saw_mut && clobber_types.contains(&ty)).then_some(ty)
+    (saw_mut && clobber_types.contains(ty, type_table)).then_some(ty)
 }
 
 fn expr_type_clobbers(
     body: &Body,
     e: ExprId,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> bool {
     mut_ref_pointee(body, e, clobber_types, type_table).is_some()
@@ -1061,7 +1083,7 @@ fn expr_type_clobbers(
 fn node_contains_clobber(
     body: &Body,
     node: NodeRef,
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> bool {
     if let NodeRef::Expr(e) = node
@@ -1110,7 +1132,7 @@ fn reload_gate_ok(
     body: &Body,
     block: BlockId,
     specs: &[(u32, u32)],
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> bool {
     !gate_eval_block(body, block, false, specs, clobber_types, type_table).0
@@ -1124,7 +1146,7 @@ fn gate_eval_block(
     block: BlockId,
     mut poison: bool,
     specs: &[(u32, u32)],
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> (bool, bool) {
     for &s in &body.blocks[block].stmts {
@@ -1156,7 +1178,7 @@ fn gate_eval_node(
     node: NodeRef,
     mut poison: bool,
     specs: &[(u32, u32)],
-    clobber_types: &IndexSet<TypeId>,
+    clobber_types: &PointeeSet,
     type_table: &TypeTable,
 ) -> (bool, bool) {
     if let NodeRef::Block(b) = node {
