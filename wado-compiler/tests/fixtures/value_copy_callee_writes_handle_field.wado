@@ -1,0 +1,36 @@
+// The control for `value_copy_callee_frame_local_write`: here the callee
+// writes the very field the caller read before the call, so the read must
+// keep the old bytes. Whatever narrows what a callee is reported to write
+// must still copy here.
+
+use { println, Stdout } from "core:cli";
+
+struct P {
+    repr: Array<u8>,
+    pos: i32,
+}
+
+impl P {
+    fn clobber(&mut self) {
+        builtin::array_set::<u8>(&mut self.repr, 0, 99);
+    }
+
+    fn scan(&mut self) -> i64 {
+        let raw = self.repr;
+        self.clobber();
+        return builtin::array_get_value_u8(&raw, 0) as i64;
+    }
+}
+
+export fn run() with Stdout {
+    let mut bytes = builtin::array_new::<u8>(4);
+    builtin::array_set::<u8>(&mut bytes, 0, 1);
+    let mut p = P { repr: bytes, pos: 0 };
+    let before = p.scan();
+    println(`${before} ${builtin::array_get_value_u8(&p.repr, 0) as i64}`);
+}
+
+__DATA__
+{
+    "stdout": "1 99\n"
+}

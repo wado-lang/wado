@@ -1,0 +1,45 @@
+// A callee writing only through its second parameter writes nothing the
+// first one reaches, so the field the caller projected into that first
+// position is no write of the caller's either. `step` hands `bump` a scratch
+// of its own in the position that is written, so `run` may read `p.left.repr`
+// across the call without a defensive copy.
+
+use { println, Stdout } from "core:cli";
+
+struct Buf {
+    repr: Array<u8>,
+}
+
+struct Pair {
+    left: Buf,
+    right: Buf,
+}
+
+fn bump(left: &mut Buf, right: &mut Buf) {
+    builtin::array_set::<u8>(&mut right.repr, 0, builtin::array_get_value_u8(&left.repr, 0));
+}
+
+impl Pair {
+    fn step(&mut self) -> i64 {
+        let mut scratch = Buf { repr: builtin::array_new::<u8>(4) };
+        bump(&mut self.left, &mut scratch);
+        return builtin::array_get_value_u8(&scratch.repr, 0) as i64;
+    }
+}
+
+export fn run() with Stdout {
+    let mut bytes = builtin::array_new::<u8>(4);
+    builtin::array_set::<u8>(&mut bytes, 0, 7);
+    let mut p = Pair { left: Buf { repr: bytes }, right: Buf { repr: builtin::array_new::<u8>(4) } };
+    let snapshot = p.left.repr;
+    let moved = p.step();
+    println(`${builtin::array_get_value_u8(&snapshot, 0) as i64} ${moved}`);
+}
+
+__DATA__
+{
+    "stdout": "7 7\n",
+    "wir_not_expect:O2": [
+        "$array_clone_dst"
+    ]
+}
