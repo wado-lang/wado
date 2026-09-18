@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789720363992,
+  "lastUpdate": 1789730563061,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56793,6 +56793,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 301048,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "21c9fa572d5df432d138c9c72f263af9f2f3d2e6",
+          "message": "Merge pull request #2080 from wado-lang/claude/closure-devirt\n\nperf(optimizer): devirtualize iterator-adaptor closures — CBOR serialize +46%, microgpt inference +10%",
+          "timestamp": "2026-09-18T20:03:50+09:00",
+          "tree_id": "08f82306456acd69ccfa56d5ba7b71c26b1db577",
+          "url": "https://github.com/wado-lang/wado/commit/21c9fa572d5df432d138c9c72f263af9f2f3d2e6"
+        },
+        "date": 1789730562446,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19589,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300930,
             "unit": "bytes"
           }
         ]
