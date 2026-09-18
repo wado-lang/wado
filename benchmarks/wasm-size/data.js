@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789705726567,
+  "lastUpdate": 1789720363992,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56749,6 +56749,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 286862,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7e4f8fb6081633ffc21440caf1b8f9f9e47d1295",
+          "message": "Merge pull request #2079 from wado-lang/claude/reduce-tostring-allocations-r1cgfg\n\nperf: render text where it lies, and fold a constant view — 40% less generated WIR",
+          "timestamp": "2026-09-18T17:15:14+09:00",
+          "tree_id": "e853f563ec531d6a7f720197123f6c9a4eb9a89a",
+          "url": "https://github.com/wado-lang/wado/commit/7e4f8fb6081633ffc21440caf1b8f9f9e47d1295"
+        },
+        "date": 1789720363483,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19084,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 301048,
             "unit": "bytes"
           }
         ]
