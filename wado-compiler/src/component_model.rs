@@ -595,7 +595,7 @@ impl CmFunctionInfo {
     ///
     /// True when any parameter or return type involves linear memory
     /// (strings, lists, streams, options, results, tuples), or when async.
-    pub fn needs_memory(&self) -> bool {
+    fn needs_memory(&self) -> bool {
         if self.is_async {
             return true;
         }
@@ -611,17 +611,9 @@ impl CmFunctionInfo {
             .is_some_and(Self::return_type_requires_memory)
     }
 
-    /// Whether `canon lower` requires the Realloc canonical option.
-    ///
-    /// Same conditions as `needs_memory` — they are always needed together.
-    pub fn needs_realloc(&self) -> bool {
-        self.needs_memory()
-    }
-
-    /// Like `needs_memory`, but also checks WASI variant return types.
-    ///
-    /// WASI variant types (e.g., `Method` with `Other(String)`) have string
-    /// payloads that require memory for `canon lower`.
+    /// Whether `canon lower` requires the Memory canonical option, counting the
+    /// CM records and variants the registry knows. Realloc is required under
+    /// exactly the same conditions.
     pub fn needs_memory_with_registry(&self, registry: &CmInterfaceRegistry) -> bool {
         if self.needs_memory() {
             return true;
@@ -936,10 +928,6 @@ struct ModuleSourceIndex {
     flags: IndexMap<(String, String), String>,
 }
 
-/// Insert into a `(source_interface, name)`-keyed map, panicking on duplicate
-/// registration. Two registrations of the same `(interface, name)` pair
-/// indicate a stdlib bug (the same declaration emitted twice) — we want a
-/// loud failure instead of a silent overwrite.
 /// Which declarations of a module enter the registry.
 enum CmDeclScope {
     /// Everything the module declares: a bundled binding module is all CM, and
@@ -971,6 +959,9 @@ impl CmDeclScope {
     }
 }
 
+/// Insert into a `(source_interface, name)`-keyed map, panicking on a duplicate
+/// registration. The same declaration registered twice is a stdlib bug, and a
+/// loud failure beats a silent overwrite.
 fn register_unique<V>(
     map: &mut IndexMap<(String, String), V>,
     kind: &str,
@@ -2888,11 +2879,8 @@ impl CmInterfaceRegistry {
 
     /// The CM interface a named type belongs to: its recorded source, else the
     /// emitting interface when that one declares the name, else the bundled
-    /// binding that declares it, else a component dependency's re-export.
-    ///
-    /// The one chain codegen resolves a reference by. A shorter chain elsewhere
-    /// answered `None` for a type this one finds, and the instance built from
-    /// that answer declared fewer types than its signatures reach.
+    /// binding that declares it, else a component dependency's re-export. The
+    /// one chain codegen resolves a reference by.
     pub fn cm_source_of_named_type(
         &self,
         named: &NamedType,
@@ -3484,11 +3472,6 @@ impl CmInterfaceRegistry {
         }
     }
 
-    /// Get the local name for a function in an interface
-    pub fn get_local_name(&self, interface_path: &str, wasi_func_name: &str) -> Option<&String> {
-        self.local_names_for(interface_path, wasi_func_name).next()
-    }
-
     /// Every local name bound to one CM function. More than one when a user
     /// module binds an operation the stdlib already binds: each Wado name mints
     /// its own alias, and all of them must reach the same import.
@@ -3497,11 +3480,9 @@ impl CmInterfaceRegistry {
         interface_path: &str,
         wasi_func_name: &str,
     ) -> impl Iterator<Item = &String> {
-        let interface_path = interface_path.to_string();
-        let wasi_func_name = wasi_func_name.to_string();
         self.local_aliases
             .iter()
-            .filter(move |(_, (path, func))| *path == interface_path && *func == wasi_func_name)
+            .filter(move |(_, (path, func))| path == interface_path && func == wasi_func_name)
             .map(|(local_name, _)| local_name)
     }
 

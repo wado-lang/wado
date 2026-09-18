@@ -45,7 +45,6 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
     let features = wasmparser::WasmFeatures::all();
     let mut validator = wasmparser::Validator::new_with_features(features);
     if let Err(e) = validator.validate_all(wasm) {
-        // Save invalid Wasm for debugging
         let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
         let location = describe_offending_location(wasm, e.offset())
             .unwrap_or_else(|| "  (could not locate the offending function)".to_string());
@@ -191,21 +190,13 @@ fn describe_component_instances(wasm: &[u8]) -> Option<String> {
     Some(out)
 }
 
-/// Validate generated Wasm binary using wasmparser.
+/// Validate the wrapped component (after `validate_core_module`).
 fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
     let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
     let Err(e) = validator.validate_all(wasm) else {
         return;
     };
     let _ = std::fs::write("/tmp/invalid_component.wasm", wasm);
-    let text = wasmprinter::print_bytes(wasm).ok();
-    let printed = match &text {
-        Some(text) => {
-            let _ = std::fs::write("/tmp/invalid_component.wat", text);
-            " and printed to /tmp/invalid_component.wat"
-        }
-        None => "",
-    };
     let instances = describe_component_instances(wasm)
         .unwrap_or_else(|| "  (could not read the component's instances)\n".to_string());
     panic!(
@@ -213,7 +204,7 @@ fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
          Entry module: {entry_module}\n\
          Validation error: {e}\n\
          {instances}\
-         The full invalid component was written to /tmp/invalid_component.wasm{printed}.\n\
-         This is a bug in the Wado compiler. Please report it."
+         The full invalid component was written to /tmp/invalid_component.wasm \
+         (inspect with `wasm-tools print`)."
     );
 }

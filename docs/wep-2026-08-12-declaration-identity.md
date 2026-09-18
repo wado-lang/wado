@@ -413,14 +413,14 @@ Three things, none of them comparable:
   `DefId`. The one direction that runs the other way is a WIT type name, which
   `TypeTable::cm_decl_in` resolves against the module that declares it. A module
   declares each WIT name once, so the `(name, module)` pair names a single
-  declaration, and what comes back is an identity — the step happens once, per
-  interface, and every key past it is a `DefId`.
+  declaration. What comes back is a `DefId`. The step runs once per interface,
+  and every key past it is that identity.
 
   A generated `wasi:*` / `core:kiln/*` module has no alternative: no Wado
   resolver walked that namespace, so there is no reference site, and
   `CmInterfaceRegistry` parses its own copy of those modules once per process,
   so there is no declaring node this program's `DefTable` saw either. A user
-  module that writes its own `#[cm(…)]` bindings is not in that position — it is
+  module that writes its own `#[cm(…)]` bindings is not in that position. It is
   an ordinary module of the program, its declarations are in the `DefTable`, and
   `cm_decl_in` reaches them through the same call.
 
@@ -498,7 +498,12 @@ Renderings still compared against a declaration's own name:
 
 The Component Model boundary, permanent for the reason §9 gives:
 
-- `cm_decl_in`, `cm_decl`
+- `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
+- `find_named_type_by_source` and `find_named_type_by_module_name`, the
+  `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
+  named module.
+- `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
+  `TypeId` those two return.
 
 ## The frame derivation
 
@@ -668,21 +673,21 @@ Nothing is spelled, so nothing can be spelled two ways.
 ## Known gap: component codegen keys most CM types by name
 
 `ComponentModelContext` holds outer-scope component types in one string-keyed
-map. Two kinds of key live in it: a structural one, which names no declaration
-(`"types-instance-type"`, an interned `result<…>`), and one standing for a
-declaration, which a name cannot carry — `{package}-{cm-name}` puts every
+map. Two kinds of key live in it. A structural key names no declaration, such as
+`"types-instance-type"` or an interned `result<…>`. The other kind stands for a
+declaration, which a name cannot carry: `{package}-{cm-name}` puts every
 interface of a package in one namespace, and the CM name alone puts every
 package in one.
 
-`error-code` is out: it is keyed by `DefId`, resolved once per interface through
+`error-code` is keyed by `DefId`, resolved once per interface through
 `cm_decl_in`. The resource own-handles and the per-package composites
-(`{pkg}-response`, `{pkg}-fields-resource`) are not, and each carries the same
-collision, unreached so far only because no two interfaces of one package
-declare a resource of the same name.
+(`{pkg}-response`, `{pkg}-fields-resource`) still take the package key, and each
+carries the same collision. Nothing has hit it yet only because no two
+interfaces of one package declare a resource of the same name.
 
-Closing this means splitting the map in two — identities on one side, structural
-keys on the other — and giving each declaration-backed producer the interface it
-is emitting for, which all of them already hold.
+Closing this means splitting the map in two, identities on one side and
+structural keys on the other. Each declaration-backed producer then needs the
+interface it is emitting for, which all of them already hold.
 
 ## Known gap: a transmission future names a package, not an interface
 
@@ -691,12 +696,12 @@ is emitting for, which all of them already hold.
 declaring module sits in, so the identity is discarded at the one point that
 has it.
 
-Codegen recovers the interface from the plan — the package's resource-defining
-interface is the one whose resources a transmission future streams — and falls
-back to the package's single aliased `error-code` where the plan names none
-(`wasi:cli`, whose `types` interface defines no resource). A package that
-aliased two and has no resource-defining interface is refused rather than
-guessed at.
+Codegen recovers the interface from the plan. A transmission future streams a
+resource-defining interface's resources, so that interface is the one it means.
+Where the plan names none for the package, the package's single aliased
+`error-code` serves; `wasi:cli` is the case, its `types` interface defining no
+resource. A package that aliased two and has no resource-defining interface is
+refused rather than guessed at.
 
 Closing this means `Transmission` carrying the declaration, which the classifier
 already holds. What stands in the way is §8: the payload is rendered into a

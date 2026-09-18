@@ -758,9 +758,8 @@ fn build_cm_tuple_types(
 }
 
 /// The own-handle type indices under the CM resource names, which is how
-/// [`CmTypeGen::ast_type_to_cm`] asks for them. The instance-type builders key
-/// theirs by Wado name, the name the direct emitters index with, so a handle
-/// reached through the shared walk found nothing until it was rekeyed here.
+/// [`CmTypeGen::ast_type_to_cm`] asks for them; the instance-type builders key
+/// theirs by Wado name instead.
 fn cm_keyed_resource_exports<'a>(
     own_resource_type_indices: &IndexMap<String, u32>,
     registry: &'a CmInterfaceRegistry,
@@ -1994,16 +1993,13 @@ fn cm_export_type_to_idx(
                 !pkg.is_empty(),
                 "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
             );
-            // An enum or variant the outer scope aliased is keyed by its
-            // declaration; the package key names one type per package and
-            // cannot tell two interfaces' same-named types apart.
-            if let Some(def) = cm_decl_def(project, interface_fq, &kebab_to_pascal(cm_name))
-                && let Some(idx) = ctx.decl_type_idx(def)
-            {
-                return idx;
-            }
-            let key = format!("{pkg}-{cm_name}");
-            ctx.type_idx(&key)
+            decl_or_package_type_idx(
+                ctx,
+                project,
+                interface_fq,
+                &kebab_to_pascal(cm_name),
+                &format!("{pkg}-{cm_name}"),
+            )
         }
         CmExportType::HandlerResult { ok, err } => {
             let arm = |a: &CmExportType| match a {
@@ -2939,14 +2935,25 @@ fn error_code_def(project: &NirPackage, interface_fq: &str) -> Option<DefId> {
     cm_decl_def(project, interface_fq, ERROR_CODE_WADO_NAME)
 }
 
+/// The outer type index for a CM type an interface exports: its declaration's
+/// where an alias bound one, else `package_key`. An enum or variant must go by
+/// declaration, since the package key holds one type per package and two
+/// interfaces of a package can declare the same CM name.
+fn decl_or_package_type_idx(
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+    interface_fq: &str,
+    wado_name: &str,
+    package_key: &str,
+) -> u32 {
+    cm_decl_def(project, interface_fq, wado_name)
+        .and_then(|def| ctx.decl_type_idx(def))
+        .unwrap_or_else(|| ctx.type_idx(package_key))
+}
+
 /// The `error-code` a package's transmission futures carry, as an identity.
-///
-/// A package may declare several — `wasi:sockets/types` and
-/// `wasi:sockets/ip-name-lookup` each do — so the one a transmission future
-/// means is the interface that defines the resources being streamed, read off
-/// the plan's shape. Where the plan names none for this package (`wasi:cli`,
-/// whose `types` interface defines no resource), the single interface of the
-/// package that aliased an error-code is unambiguous; two would not be.
+/// A package may declare several, so this recovers the one meant from the plan.
+/// See the declaration-identity WEP's gap on `CmFuturePayload::Transmission`.
 fn transmission_error_code_def(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -2981,8 +2988,7 @@ fn transmission_error_code_def(
 
 /// Alias an interface's own `error-code` into the outer component scope, where
 /// transmission futures and composite results look it up. Idempotent per
-/// declaration. A no-op unless the instance's type exported one — what the
-/// instance declares is the only thing an alias may name.
+/// declaration, and a no-op unless the instance's type exported one.
 fn alias_own_error_code(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -3122,23 +3128,22 @@ fn import_resource_defining_interface(
         })
         .functions;
 
+    let resource_names: IndexSet<&str> = http_resources
+        .iter()
+        .map(|(wado, _)| wado.as_str())
+        .collect();
+
     // The interface's own functions, which belong to no resource. WASI's
     // `types` interfaces have none; an interface that both defines a resource
     // and hands one out (`wasi:webgpu/webgpu#get-gpu`) does, and they are
     // imported exactly like any other interface function.
-    let plain_funcs: Vec<CmFunctionInfo> = {
-        let resource_names: IndexSet<&str> = http_resources
-            .iter()
-            .map(|(wado, _)| wado.as_str())
-            .collect();
-        all_funcs
-            .iter()
-            .filter(|f| {
-                !resource_names.contains(f.interface_name.as_str()) && emits_function(project, f)
-            })
-            .cloned()
-            .collect()
-    };
+    let plain_funcs: Vec<CmFunctionInfo> = all_funcs
+        .iter()
+        .filter(|f| {
+            !resource_names.contains(f.interface_name.as_str()) && emits_function(project, f)
+        })
+        .cloned()
+        .collect();
 
     let instance_type_name = format!("{pkg}-types-instance-type");
     let http_types_instance_type = ctx.register_type(&instance_type_name);
@@ -3169,16 +3174,11 @@ fn import_resource_defining_interface(
             .map(|(i, (_, cm_name))| (cm_name.as_str(), i as u32))
             .collect();
 
-        let http_resource_names: IndexSet<&str> = http_resources
-            .iter()
-            .map(|(wado, _)| wado.as_str())
-            .collect();
-
         // Emit constructor/static functions from registry metadata.
         // Processing their parameter and return types triggers on-demand emission of
         // all dependent types (error-code variant and its payload record types).
         let is_constructor_or_static = |f: &CmFunctionInfo| {
-            http_resource_names.contains(f.interface_name.as_str())
+            resource_names.contains(f.interface_name.as_str())
                 && (f.wasi_func_name.starts_with("[constructor]")
                     || f.wasi_func_name.starts_with("[static]"))
         };
@@ -3212,7 +3212,7 @@ fn import_resource_defining_interface(
                     return false;
                 }
                 // Only include methods for known HTTP resources
-                if !http_resource_names.contains(f.interface_name.as_str()) {
+                if !resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
                 // Only include method/static functions
@@ -3275,14 +3275,10 @@ fn import_resource_defining_interface(
     // aliased under their local names and lowered generically by
     // `lower_wasi_functions` — no per-constructor case.
     {
-        let http_resource_names: IndexSet<&str> = http_resources
-            .iter()
-            .map(|(wado, _)| wado.as_str())
-            .collect();
         let used_funcs: Vec<(String, String)> = all_funcs
             .iter()
             .filter(|f| {
-                if !http_resource_names.contains(f.interface_name.as_str()) {
+                if !resource_names.contains(f.interface_name.as_str()) {
                     return false;
                 }
                 let is_resource_func = f.wasi_func_name.starts_with("[constructor]")
@@ -3366,18 +3362,15 @@ fn component_type_idx_for_signature_type(
                 return ctx.type_idx(&format!("{pkg}-{cm}"));
             }
             // A non-resource named type (e.g. the error composite's `error-code`
-            // variant) resolves to the `{pkg}-{cm}` component type the
-            // resource-defining pass aliased to the outer scope. `type_idx`
-            // fails loudly if the type was not exposed there.
-            let source = project
-                .cm_interface_registry
-                .source_interface(named)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "composite signature type `{}` has no source interface",
-                        named.name
-                    )
-                });
+            // variant) resolves to the component type the resource-defining pass
+            // aliased to the outer scope, which fails loudly if it was not
+            // exposed there.
+            let source = registry.source_interface(named).unwrap_or_else(|| {
+                panic!(
+                    "composite signature type `{}` has no source interface",
+                    named.name
+                )
+            });
             let pkg = fq_name_package(&source);
             let cm = registry
                 .get_variant_cm_name_by_source(&source, &named.name)
@@ -3387,16 +3380,7 @@ fn component_type_idx_for_signature_type(
                 .unwrap_or_else(|| {
                     panic!("composite signature type `{}` has no CM name", named.name)
                 });
-            // An enum or variant the outer scope aliased is keyed by its
-            // declaration, so a package holding two of one CM name resolves to
-            // the one this signature reaches rather than to whichever aliased
-            // first. Everything else still answers to the package key.
-            if let Some(def) = cm_decl_def(project, &source, &named.name)
-                && let Some(idx) = ctx.decl_type_idx(def)
-            {
-                return idx;
-            }
-            ctx.type_idx(&format!("{pkg}-{cm}"))
+            decl_or_package_type_idx(ctx, project, &source, &named.name, &format!("{pkg}-{cm}"))
         }
         other => panic!("unsupported composite signature type: {other:?}"),
     }
@@ -3720,8 +3704,7 @@ fn import_resource_source(
 
 /// Emit `source_path`'s own `ErrorCode` into an instance type under `cm_name`,
 /// in whichever shape it declares: a variant (`wasi:filesystem/types`) or an
-/// enum (`wasi:cli/types`). One emitter for both, so the shape a source uses
-/// cannot decide whether its error-code reaches the instance at all.
+/// enum (`wasi:cli/types`).
 fn emit_error_code_export(
     instance_type: &mut InstanceType,
     local_type_idx: &mut u32,
@@ -3759,12 +3742,13 @@ fn emit_error_code_export(
         panic!("`{source_path}` has no ErrorCode to export as `{cm_name}`");
     }
     let defined_idx = *local_type_idx;
-    *local_type_idx += 1;
     instance_type.export(
         cm_name,
         wasm_encoder::ComponentTypeRef::Type(TypeBounds::Eq(defined_idx)),
     );
-    *local_type_idx += 1;
+    // The definition above and this export each take an index in the instance
+    // type's own space, so the caller's counter advances by two.
+    *local_type_idx += 2;
 }
 
 fn import_interfaces_with_resources(
@@ -4569,11 +4553,13 @@ fn append_interface_instance_exports(
                 let idx = if *is_resource {
                     ctx.type_idx(&format!("{pkg}-{cm_name}-resource"))
                 } else {
-                    // An enum or variant the outer scope aliased is keyed by its
-                    // declaration; the package key holds one type per package.
-                    cm_decl_def(project, interface_fq, &kebab_to_pascal(cm_name))
-                        .and_then(|def| ctx.decl_type_idx(def))
-                        .unwrap_or_else(|| ctx.type_idx(&format!("{pkg}-{cm_name}")))
+                    decl_or_package_type_idx(
+                        ctx,
+                        project,
+                        interface_fq,
+                        &kebab_to_pascal(cm_name),
+                        &format!("{pkg}-{cm_name}"),
+                    )
                 };
                 out.push((interface_fq.clone(), cm_name.clone(), idx));
             }
