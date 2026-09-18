@@ -1,0 +1,28 @@
+// `Self` written as a trait argument is the impl's own target, so this names
+// the same impl as `impl Add<Feet> for Feet` and answers the same bounds.
+
+struct Feet {
+    v: i32,
+}
+
+impl Add<Self> for Feet {
+    type Output = Feet;
+
+    fn add(&self, rhs: &Feet) -> Feet {
+        return Feet { v: self.v + rhs.v };
+    }
+}
+
+fn twice<T: Add<T, Output = T>>(t: T, o: T) -> T {
+    return t + o;
+}
+
+fn bare<T: Add<Output = T>>(t: T, o: T) -> T {
+    return t + o;
+}
+
+test "an impl writing Self as its trait argument" {
+    assert twice(Feet { v: 3 }, Feet { v: 4 }).v == 7;
+    assert bare(Feet { v: 5 }, Feet { v: 6 }).v == 11;
+    assert (Feet { v: 1 } + Feet { v: 2 }).v == 3;
+}

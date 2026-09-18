@@ -348,8 +348,6 @@ fn build_mut_escaped(
 pub(super) struct CallImmutability<'a> {
     type_table: &'a TypeTable,
     struct_fields: IndexMap<(String, ModuleSource), Vec<TypeId>>,
-    box_name: String,
-    list_name: String,
     memo: std::cell::RefCell<IndexMap<TypeId, bool>>,
     /// Per-[`FuncId`]: the function's body provably writes through its receiver
     /// (param 0). Boxing erases the `&self` / `&mut self` distinction — both
@@ -378,17 +376,12 @@ impl<'a> CallImmutability<'a> {
                 )
             })
             .collect();
-        let items = type_table.compiler_items();
-        let box_name = items.struct_name(CompilerItem::Box).to_string();
-        let list_name = items.struct_name(CompilerItem::List).to_string();
         let first_param_types = first_param_types(project);
         let (receiver_mutating, has_body) =
             compute_receiver_mutating(project, type_table, &first_param_types);
         Self {
             type_table,
             struct_fields,
-            box_name,
-            list_name,
             memo: std::cell::RefCell::default(),
             receiver_mutating,
             has_body,
@@ -433,11 +426,8 @@ impl<'a> CallImmutability<'a> {
                 self.walk(base, stack)
             }
             ResolvedType::Struct { def, type_args } => {
-                let name = &self.type_table.struct_head_name(*def);
                 let module_source = &self.type_table.struct_head_module(*def).clone();
-                let is_box_or_list = (!type_args.is_empty() && *name == self.box_name)
-                    || (!type_args.is_empty() && *name == self.list_name);
-                if is_box_or_list {
+                if is_box_or_list(type_id, self.type_table) {
                     false
                 } else {
                     // `struct_fields` is keyed by the NIR struct's rendered
@@ -1103,33 +1093,26 @@ fn alias_groups_from_edges(edges: Vec<(u32, u32)>) -> AliasGroups {
     }
 }
 
+/// The two compiler structs whose value is a shared handle rather than a copy.
+fn is_box_or_list(type_id: TypeId, type_table: &TypeTable) -> bool {
+    type_table.is_compiler_struct_instance(type_id, CompilerItem::Box)
+        || type_table.is_compiler_struct_instance(type_id, CompilerItem::List)
+}
+
 /// True when copying a `type_id` value between locals aliases them onto one heap
-/// object — the reference types. A value-semantic type gets a `$value_copy$T`
-/// wrapper post-loop, so treating its `let dst = src` as an edge during the loop
-/// would over-merge groups. `Box<T>` / `List<T>` surface as `GenericInstance` or
-/// as monomorphized `Struct` records carrying the generic name in `base_name`.
+/// object. A value-semantic type gets a `$value_copy$T` wrapper post-loop, so
+/// treating its `let dst = src` as an edge during the loop would over-merge
+/// groups.
 fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
-    let items = type_table.compiler_items();
-    let box_name = items.struct_name(CompilerItem::Box);
-    let list_name = items.struct_name(CompilerItem::List);
-    let is_box_or_list_name = |n: &str| n == box_name || n == list_name;
     match type_table.get(type_id) {
         ResolvedType::Ref(_) => true,
-        ResolvedType::GenericInstance { def, .. }
-            if is_box_or_list_name(type_table.def_name(*def)) =>
-        {
-            true
-        }
-        ResolvedType::Struct { def, type_args }
-            if !type_args.is_empty() && is_box_or_list_name(&type_table.struct_head_name(*def)) =>
-        {
-            true
+        ResolvedType::GenericInstance { .. } | ResolvedType::Struct { .. } => {
+            is_box_or_list(type_id, type_table)
         }
         ResolvedType::Primitive(_)
         | ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::MutRef(_)
-        | ResolvedType::Struct { .. }
         | ResolvedType::Enum { .. }
         | ResolvedType::Resource { .. }
         | ResolvedType::Variant { .. }
@@ -1138,7 +1121,6 @@ fn type_creates_alias(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Reactive(_)
         | ResolvedType::TypeParam { .. }
         | ResolvedType::TypePack { .. }
-        | ResolvedType::GenericInstance { .. }
         | ResolvedType::AssocTypeProjection { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Newtype { .. }

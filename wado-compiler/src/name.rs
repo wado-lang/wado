@@ -2751,6 +2751,14 @@ impl FqTypeName {
         &self.reference
     }
 
+    /// Whether this name or any argument of it is a type-parameter binder: a
+    /// name in some template's own parameter space rather than a type.
+    #[must_use]
+    pub fn mentions_binder(&self) -> bool {
+        matches!(self.head, TypeHead::Binder { .. })
+            || self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
     /// The mangled spelling embedded in a mangled method name.
     #[must_use]
     pub fn to_mangled(&self) -> String {
@@ -3054,6 +3062,23 @@ impl FqTraitName {
     #[must_use]
     pub fn args(&self) -> &[FqTypeName] {
         &self.args
+    }
+
+    /// Whether any type argument still names a binder, which makes this a
+    /// question in a template's parameter space that no concrete impl answers.
+    #[must_use]
+    pub fn args_mention_binder(&self) -> bool {
+        self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
+    /// This trait with every occurrence of the type `old` in its arguments
+    /// replaced by `new`. The head is a declaration and never substitutes.
+    #[must_use]
+    pub fn substitute(&self, old: &FqTypeName, new: &FqTypeName) -> Self {
+        Self {
+            head: self.head.clone(),
+            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+        }
     }
 
     /// The same trait with its type arguments dropped.

@@ -1085,7 +1085,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if !is_user_local(&header.module) {
                     continue;
                 }
-                if header.trait_key.as_ref() == Some(&sealed_key) {
+                if header.trait_key() == Some(&sealed_key) {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::SealedTraitImpl {
@@ -1111,8 +1111,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             }
             let Some(decl) = header
-                .trait_key
-                .as_ref()
+                .trait_key()
                 .and_then(|key| trait_env.trait_decl_header(key))
             else {
                 continue;
@@ -3757,7 +3756,7 @@ fn compiler_named_entities(tysys: &TypeSystem) -> CompilerNamed {
         .collect();
     for (impl_def, header) in &tysys.trait_env.impl_headers {
         if header
-            .trait_ref
+            .trait_def()
             .is_some_and(|trait_| synthesis_traits.contains(&trait_))
         {
             named
@@ -3781,7 +3780,7 @@ fn trait_method_impls(tysys: &TypeSystem) -> IndexMap<ast::AstId, IndexSet<ast::
     };
     let mut by_head: IndexMap<(DefId, &ImplTargetKey), Vec<&ImplHeader>> = IndexMap::default();
     for header in tysys.trait_env.impl_headers.values() {
-        let Some(trait_) = header.trait_ref else {
+        let Some(trait_) = header.trait_def() else {
             continue;
         };
         // A call through a generic bound has its block picked by

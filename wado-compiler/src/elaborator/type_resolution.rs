@@ -155,8 +155,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .or_else(|| {
                 bounds
                     .iter()
-                    .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
-                    .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl))
+                    .filter_map(|bound| Some((self.trait_decl_at(bound.id, &bound.name)?, bound)))
+                    .flat_map(|(decl, bound)| {
+                        self.tysys
+                            .trait_env
+                            .supertrait_closure_at(&decl, &bound.type_args)
+                    })
                     .find(|inherited| {
                         self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
                             .is_some()
@@ -257,7 +261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         self.tysys
             .trait_env
-            .supertrait_closure(&self_trait)
+            .supertrait_closure_at(&self_trait, &[])
             .iter()
             .find(|inherited| {
                 self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
@@ -1084,8 +1088,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .clone();
         let inherited: Vec<FrameBound> = bounds
             .iter()
-            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
-            .flat_map(|decl| self.tysys.trait_env.supertrait_closure(&decl).to_vec())
+            .filter_map(|bound| Some((self.trait_decl_at(bound.id, &bound.name)?, bound)))
+            .flat_map(|(decl, bound)| {
+                self.tysys
+                    .trait_env
+                    .supertrait_closure_at(&decl, &bound.type_args)
+            })
             .map(|i| (i.bound, Some(i.writer)))
             .collect();
         Some(
