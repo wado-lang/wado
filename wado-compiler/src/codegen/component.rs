@@ -767,11 +767,11 @@ fn collect_resources_in_type(
     match ty {
         Type::Named(named)
             if cm_interface_registry
-                .source_interface(named)
-                .is_some_and(|s| {
-                    s.starts_with("wasi:")
+                .cm_source_of_named_type(named, None)
+                .is_some_and(|source| {
+                    source.starts_with("wasi:")
                         && cm_interface_registry
-                            .get_resource_cm_name_by_source(&s, &named.name)
+                            .get_resource_cm_name_by_source(&source, &named.name)
                             .is_some()
                 }) =>
         {

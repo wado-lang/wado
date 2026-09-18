@@ -2838,6 +2838,41 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _)| cm_name.as_str())
     }
 
+    /// The CM interface a named type belongs to: its recorded source, else the
+    /// emitting interface when that one declares the name, else the bundled
+    /// binding that declares it, else a component dependency's re-export.
+    ///
+    /// The one chain codegen resolves a reference by. A shorter chain elsewhere
+    /// answered `None` for a type this one finds, and the instance built from
+    /// that answer declared fewer types than its signatures reach.
+    pub fn cm_source_of_named_type(
+        &self,
+        named: &NamedType,
+        interface_hint: Option<&str>,
+    ) -> Option<String> {
+        let name = &named.name;
+        let declared_at_hint = interface_hint.and_then(|hint| {
+            let declared = self.get_resource_cm_name_by_source(hint, name).is_some()
+                || self.get_variant_cases_by_source(hint, name).is_some()
+                || self.get_struct_fields_by_source(hint, name).is_some()
+                || self.get_enum_variants_by_source(hint, name).is_some()
+                || self.get_flags_members_by_source(hint, name).is_some();
+            declared.then(|| hint.to_string())
+        });
+        self.source_interface(named)
+            .filter(|source| self.is_cm_source(source))
+            .or(declared_at_hint)
+            .or_else(|| {
+                self.find_binding_resource_source(name)
+                    .or_else(|| self.find_binding_variant_source(name))
+                    .or_else(|| self.find_binding_struct_source(name))
+                    .or_else(|| self.find_binding_enum_source(name))
+                    .or_else(|| self.find_binding_flags_source(name))
+                    .map(str::to_string)
+            })
+            .or_else(|| self.find_component_type_source(name).map(str::to_string))
+    }
+
     /// The CM name of the `ErrorCode` that `interface_path` declares itself, in
     /// either shape: a variant (`wasi:filesystem/types`, `wasi:sockets/types`)
     /// or an enum (`wasi:cli/types`). Exact: an interface that declares none
@@ -4091,45 +4126,8 @@ impl CmTypeGen {
                     // `wasi:*` registrant as a last resort. If none match
                     // we panic — that would mean the caller handed us an
                     // unresolved reference to a type no interface declares.
-                    let interface_hint_match: Option<String> =
-                        self.interface_hint.as_deref().and_then(|h| {
-                            let hit = cm_interface_registry
-                                .get_resource_cm_name_by_source(h, name)
-                                .is_some()
-                                || cm_interface_registry
-                                    .get_variant_cases_by_source(h, name)
-                                    .is_some()
-                                || cm_interface_registry
-                                    .get_struct_fields_by_source(h, name)
-                                    .is_some()
-                                || cm_interface_registry
-                                    .get_enum_variants_by_source(h, name)
-                                    .is_some()
-                                || cm_interface_registry
-                                    .get_flags_members_by_source(h, name)
-                                    .is_some();
-                            hit.then(|| h.to_string())
-                        });
                     let source_owned: String = cm_interface_registry
-                        .source_interface(named)
-                        .filter(|s| cm_interface_registry.is_cm_source(s))
-                        .or(interface_hint_match)
-                        .or_else(|| {
-                            cm_interface_registry
-                                .find_binding_resource_source(name)
-                                .or_else(|| cm_interface_registry.find_binding_variant_source(name))
-                                .or_else(|| cm_interface_registry.find_binding_struct_source(name))
-                                .or_else(|| cm_interface_registry.find_binding_enum_source(name))
-                                .or_else(|| cm_interface_registry.find_binding_flags_source(name))
-                                .map(str::to_string)
-                        })
-                        .or_else(|| {
-                            // A type re-exported from a CM component dependency,
-                            // owned by that component's interface.
-                            cm_interface_registry
-                                .find_component_type_source(name)
-                                .map(str::to_string)
-                        })
+                        .cm_source_of_named_type(named, self.interface_hint.as_deref())
                         .unwrap_or_else(|| {
                             panic!(
                                 "unresolved CM named type reference `{name}` while emitting CM instance"
