@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789693557750,
+  "lastUpdate": 1789705726567,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56685,6 +56685,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/55ef0595dbef66c2cf1f9bd8051e5fda723d3e85"
         },
         "date": 1789693557051,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6426,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19114,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 286862,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5098edd42492cf195d80350e4ae8563d54e58b62",
+          "message": "Merge pull request #2078 from wado-lang/claude/modref-precision\n\nperf(value-copy): a value argument names storage of its own, restoring json_catalog_v2 to 44 clones",
+          "timestamp": "2026-09-18T13:11:20+09:00",
+          "tree_id": "60c101914c1f507c4f8ba862491eae8278b66b75",
+          "url": "https://github.com/wado-lang/wado/commit/5098edd42492cf195d80350e4ae8563d54e58b62"
+        },
+        "date": 1789705725748,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
