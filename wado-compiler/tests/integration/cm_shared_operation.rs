@@ -49,7 +49,10 @@ fn one_cm_operation_is_exported_once_however_many_names_bind_it() {
     let result = compile_source(BOTH_NAMES_USED)
         .unwrap_or_else(|e| panic!("two names binding one CM operation must compile: {e}"));
 
-    let exports = lines_matching(&result.wasm, "(export \"get-random-u64\"");
+    let exports: Vec<String> = lines_matching(&result.wasm, "\"get-random-u64\"")
+        .into_iter()
+        .filter(|line| line.starts_with("(export "))
+        .collect();
     assert_eq!(
         exports.len(),
         1,

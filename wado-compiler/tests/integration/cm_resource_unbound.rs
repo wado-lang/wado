@@ -1,8 +1,12 @@
-//! A call to a `#[cm(...)]` member a user module declares has no import behind
-//! it. Reported as a diagnostic; it used to panic the WIR build.
+//! A `#[cm(...)]` member a user module declares. The interface it names decides
+//! what happens: one the stdlib does not bundle is the module's own binding and
+//! lowers to that import, while one the stdlib already declares into is refused,
+//! since a CM interface has a single declaring module.
 
 use crate::common::compile_source;
-const UNKNOWN_INTERFACE: &str = r#"
+
+/// `wasi:demo/types` is nobody else's, so this module declares it.
+const OWN_INTERFACE: &str = r#"
 #[cm("wasi:demo/types@0.1.0#handle")]
 resource Handle {
     #[cm("wasi:demo/types@0.1.0#[constructor]handle")]
@@ -14,9 +18,9 @@ export fn run() with Handle {
 }
 "#;
 
-/// The registry knows the interface but not this resource, so the constructor
-/// still resolves to no import.
-const KNOWN_INTERFACE: &str = r#"
+/// `wasi:http/types` is the stdlib's, and `MyFields` would collide with what it
+/// declares there.
+const STDLIB_INTERFACE: &str = r#"
 #[cm("wasi:http/types@0.3.0#fields")]
 resource MyFields {
     #[cm("wasi:http/types@0.3.0#[constructor]fields")]
@@ -29,17 +33,21 @@ export fn run() with MyFields {
 "#;
 
 #[test]
-fn calling_a_user_declared_cm_member_is_rejected() {
-    for source in [UNKNOWN_INTERFACE, KNOWN_INTERFACE] {
-        let err = compile_source(source)
-            .err()
-            .unwrap_or_else(|| panic!("expected a diagnostic for {source}"));
-        let message = err.to_string();
-        assert!(
-            message.contains("no bundled interface declares"),
-            "expected the unbound-binding error, got {message}"
-        );
-    }
+fn a_user_declared_member_of_its_own_interface_lowers_to_that_import() {
+    compile_source(OWN_INTERFACE)
+        .unwrap_or_else(|e| panic!("a module's own CM interface must compile: {e}"));
+}
+
+#[test]
+fn declaring_into_a_stdlib_owned_interface_is_rejected() {
+    let err = compile_source(STDLIB_INTERFACE)
+        .err()
+        .expect("declaring into a stdlib-owned interface must be a diagnostic");
+    let message = err.to_string();
+    assert!(
+        message.contains("wasi:http/types@0.3.0") && message.contains("already declares"),
+        "expected the single-declaring-module error, got {message}"
+    );
 }
 
 /// The declaration alone lowers nothing, so it stays accepted — that is the
