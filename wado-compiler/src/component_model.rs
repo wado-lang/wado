@@ -626,47 +626,86 @@ impl CmFunctionInfo {
         if self.needs_memory() {
             return true;
         }
-        // Check if return type is a WASI variant whose payload contains a string
+        let mut seen = IndexSet::default();
         if let Some(rt) = &self.return_type
-            && Self::named_type_payload_requires_memory(rt, registry)
+            && Self::cm_type_requires_memory(rt, registry, &mut seen)
         {
             return true;
         }
-        // Check if any param is a WASI variant whose payload contains a string
         self.params
             .iter()
-            .any(|(_, _, ty)| Self::named_type_payload_requires_memory(ty, registry))
+            .any(|(_, _, ty)| Self::cm_type_requires_memory(ty, registry, &mut seen))
     }
 
-    /// Check if a named type is a WASI variant/struct whose payload requires memory.
-    /// Uses the reference's own `source_interface` when present (stdlib-
-    /// populated), otherwise falls back to the unique `wasi:*` source.
-    fn named_type_payload_requires_memory(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
-        if let Type::Named(named) = ty {
-            let source = registry.source_interface(named).or_else(|| {
-                registry
-                    .find_binding_variant_source(&named.name)
-                    .map(str::to_string)
-            });
-            if let Some(src) = &source {
-                if let Some(cases) = registry.get_variant_cases_by_source(src, &named.name) {
-                    return cases.iter().any(|case| {
-                        case.payload
-                            .as_ref()
-                            .is_some_and(Self::type_requires_memory)
-                    });
-                }
-                // WASI struct (record) types always need memory since they have
-                // multiple fields and exceed MAX_FLAT_RESULTS (1) in canon lower.
-                if registry
-                    .get_struct_fields_by_source(src, &named.name)
-                    .is_some()
-                {
-                    return true;
-                }
+    /// Whether lowering `ty` needs the `memory` canonical option, counting the
+    /// CM records and variants the registry knows — at any depth. One walker
+    /// answers for every shape: a record reached only through an `Option` needs
+    /// memory exactly as it does at the top, and a walker that stopped at the
+    /// top left the lowering without the option the validator demands.
+    fn cm_type_requires_memory(
+        ty: &Type,
+        registry: &CmInterfaceRegistry,
+        seen: &mut IndexSet<String>,
+    ) -> bool {
+        match ty {
+            Type::Named(named) => {
+                named.name == "String" || Self::cm_named_requires_memory(named, registry, seen)
             }
+            Type::Generic(g) => {
+                matches!(g.name.as_str(), "Stream" | "List")
+                    || g.args
+                        .iter()
+                        .any(|arg| Self::cm_type_requires_memory(arg, registry, seen))
+            }
+            Type::Tuple(elems) => elems
+                .iter()
+                .any(|elem| Self::cm_type_requires_memory(elem, registry, seen)),
+            Type::Reference(inner) | Type::MutReference(inner) => {
+                Self::cm_type_requires_memory(inner, registry, seen)
+            }
+            Type::NamespacedGeneric(_)
+            | Type::Function(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => false,
         }
-        false
+    }
+
+    /// Whether the CM record or variant `named` refers to needs memory. Uses
+    /// the reference's own `source_interface` when present (stdlib-populated),
+    /// otherwise falls back to the unique `wasi:*` source. `seen` stops a
+    /// variant that reaches itself through a payload.
+    fn cm_named_requires_memory(
+        named: &NamedType,
+        registry: &CmInterfaceRegistry,
+        seen: &mut IndexSet<String>,
+    ) -> bool {
+        let Some(source) = registry.source_interface(named).or_else(|| {
+            registry
+                .find_binding_variant_source(&named.name)
+                .map(str::to_string)
+        }) else {
+            return false;
+        };
+        // A record has several fields and exceeds MAX_FLAT_RESULTS (1) in canon
+        // lower, so it always goes through memory.
+        if registry
+            .get_struct_fields_by_source(&source, &named.name)
+            .is_some()
+        {
+            return true;
+        }
+        let Some(cases) = registry.get_variant_cases_by_source(&source, &named.name) else {
+            return false;
+        };
+        if !seen.insert(format!("{source}#{}", named.name)) {
+            return false;
+        }
+        cases.iter().any(|case| {
+            case.payload
+                .as_ref()
+                .is_some_and(|payload| Self::cm_type_requires_memory(payload, registry, seen))
+        })
     }
 
     /// Whether a parameter type requires Memory + Realloc in canon lower: a
