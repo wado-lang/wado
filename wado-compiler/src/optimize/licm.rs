@@ -31,15 +31,6 @@ use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_t
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 
-/// Tracks which variables and fields are modified within a loop.
-///
-/// Distinguishes between full-object modification (e.g., `buf = new_string`, `&mut buf`)
-/// and field-level modification (e.g., `buf.len = buf.len + 1`), enabling LICM to
-/// hoist field accesses like `buf.repr` even when `buf.len` is modified.
-///
-/// Also tracks GC reference aliases: when `let a = b` copies a GC struct reference,
-/// `a` and `b` point to the same heap object. Modifications through one alias must
-/// prevent hoisting field accesses on the other.
 /// A set of pointee types, compared by what a `TypeId` resolves to.
 ///
 /// One struct is interned under more than one `TypeId`, so an analysis that
@@ -61,6 +52,32 @@ impl PointeeSet {
     }
 }
 
+/// The same set, for a type's individual field.
+#[derive(Default)]
+struct PointeeFieldSet(IndexSet<(ResolvedType, u32)>);
+
+impl PointeeFieldSet {
+    fn insert(&mut self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) {
+        self.0.insert((type_table.get(pointee).clone(), field_idx));
+    }
+
+    fn contains(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
+        let resolved = type_table.get(pointee);
+        self.0
+            .iter()
+            .any(|(ty, idx)| *idx == field_idx && ty == resolved)
+    }
+}
+
+/// Tracks which variables and fields are modified within a loop.
+///
+/// Distinguishes between full-object modification (e.g., `buf = new_string`, `&mut buf`)
+/// and field-level modification (e.g., `buf.len = buf.len + 1`), enabling LICM to
+/// hoist field accesses like `buf.repr` even when `buf.len` is modified.
+///
+/// Also tracks GC reference aliases: when `let a = b` copies a GC struct reference,
+/// `a` and `b` point to the same heap object. Modifications through one alias must
+/// prevent hoisting field accesses on the other.
 #[derive(Default)]
 struct ModifiedVars {
     /// Locals that are fully modified (assigned as a whole, passed as &mut, etc.).
@@ -79,9 +96,8 @@ struct ModifiedVars {
     /// `(pointee_type, field_index)` for every field written in the loop. Wado
     /// references alias, so a write through one `&T` is seen through any other;
     /// the `(local, field)` tracking above misses writes via a different alias.
-    /// Used by `is_field_aliasing_written`. Keyed by the resolved type, since
-    /// one struct is interned under more than one `TypeId`.
-    written_field_types: IndexSet<(ResolvedType, u32)>,
+    /// Used by `is_field_aliasing_written`.
+    written_field_types: PointeeFieldSet,
     /// Pointee struct types passed by `&mut` to a call/method in the loop: the
     /// callee may write *any* field, so no field of that type is invariant.
     clobbered_pointee_types: PointeeSet,
@@ -109,7 +125,7 @@ impl ModifiedVars {
         type_table: &TypeTable,
     ) {
         self.written_field_types
-            .insert((type_table.get(pointee).clone(), field_idx));
+            .insert(pointee, field_idx, type_table);
     }
 
     fn insert_clobbered_pointee_type(&mut self, pointee: TypeId, type_table: &TypeTable) {
@@ -117,10 +133,8 @@ impl ModifiedVars {
     }
 
     fn written_field(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
-        let resolved = type_table.get(pointee);
         self.written_field_types
-            .iter()
-            .any(|(ty, idx)| *idx == field_idx && ty == resolved)
+            .contains(pointee, field_idx, type_table)
     }
 
     fn clobbered_pointee(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
