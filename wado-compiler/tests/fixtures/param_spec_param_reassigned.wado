@@ -1,0 +1,53 @@
+// Regression: a parameter arrives defined, by the argument.
+//
+// `param_spec` roots a struct local from the literal it is assigned, and used
+// to seed its "already defined" set from the specialized parameters alone. A
+// parameter the caller passes an ordinary value to was therefore invisible to
+// that walk, so an assignment later in the body read as the local's only
+// definition — and its constants were applied to every use, including the ones
+// ahead of it. `reassigned` returned 63063 at -O2 against 21063 at -O0.
+//
+// The alias path had the same gap: a reference parameter rebound to a borrow of
+// a local read as a second name for that local, and the pass left behind a
+// reference to a parameter DAE had dropped (`dead local referenced after DAE
+// rewrite`). `rebound` covers that shape.
+//
+// Both print 21063: the first `describe` must see the incoming `level`, 3.
+
+use { println, Stdout } from "core:cli";
+
+struct Config { verbose: bool, level: i32 }
+
+#[inline(never)]
+fn describe(cfg: &Config, n: i32) -> i32 {
+    if cfg.verbose {
+        return n * cfg.level;
+    }
+    return n;
+}
+
+#[inline(never)]
+fn reassigned(mut cfg: Config, n: i32) -> i32 {
+    let before = describe(&cfg, n);
+    cfg = Config { verbose: true, level: 9 };
+    return before * 1000 + describe(&cfg, n);
+}
+
+#[inline(never)]
+fn rebound(mut p: &Config, n: i32) -> i32 {
+    let before = describe(p, n);
+    let other = Config { verbose: true, level: 9 };
+    p = &other;
+    return before * 1000 + describe(p, n);
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    let cfg = Config { verbose: true, level: 3 };
+    println(`${reassigned(cfg, n)} ${rebound(&cfg, n)}`);
+}
+
+__DATA__
+{
+    "stdout": "21063 21063\n"
+}

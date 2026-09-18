@@ -197,6 +197,12 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       dispatch field precisely retires the `ref.cast` on its own.
 - [ ] `param_spec` profitability — specialize only when the constants can decide
       a branch, so a chain that never folds stops duplicating code.
+- [ ] Folding an append from a string view. `exec_run_write` needs its source
+      operand to be a constant, and a `StrSlice` reaches its bytes through a
+      reference field, which the frame does not value. So
+      `String::internal_push_string` folds where `internal_push_view` does not,
+      and a fully constant `${x:.N}` stops collapsing to its rendered literal.
+      Closing it means valuing a reference field by its referent.
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
       writes them. Together they retire a scratch aggregate at its allocation

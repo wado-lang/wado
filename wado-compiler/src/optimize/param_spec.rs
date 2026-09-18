@@ -614,7 +614,10 @@ fn collect_roots(
         }
     }
 
-    let mut defined: IndexSet<u32> = roots.keys().copied().collect();
+    // A parameter arrives defined, by the argument. A later assignment is a
+    // second definition to narrow against, never the local's only one, and a
+    // borrow assigned to it does not make it a second name for the referent.
+    let mut defined: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut invalid: IndexSet<u32> = IndexSet::default();
     let mut note_def = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
         let expected = locals.get(local as usize).map(|l| l.type_id);
@@ -748,13 +751,12 @@ fn settle_aliases(
     let mut alias_of: IndexMap<u32, u32> = IndexMap::default();
     let mut rebound: IndexSet<u32> = IndexSet::default();
     for def in defs {
-        if defined.contains(&def.local) || invalid.contains(&def.local) {
+        let defined_otherwise = defined.contains(&def.local) || invalid.contains(&def.local);
+        let names_another_base = alias_of.get(&def.local).is_some_and(|b| *b != def.base);
+        if defined_otherwise || names_another_base {
             rebound.insert(def.local);
-        } else if alias_of
-            .insert(def.local, def.base)
-            .is_some_and(|b| b != def.base)
-        {
-            rebound.insert(def.local);
+        } else {
+            alias_of.insert(def.local, def.base);
         }
     }
     alias_of.retain(|alias, _| !rebound.contains(alias));
