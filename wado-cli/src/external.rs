@@ -63,7 +63,11 @@ pub fn find(name: &str) -> Option<PathBuf> {
 ///
 /// On Unix this replaces the process, so the exit status and every signal
 /// belong to the child. Elsewhere it waits and exits with the child's status.
-pub fn run(path: &Path, args: &[&str]) -> Result<(), CliExit> {
+pub fn run<I, S>(path: &Path, args: I) -> Result<(), CliExit>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let mut command = Command::new(path);
     command.args(args);
     if let Ok(wado) = std::env::current_exe() {

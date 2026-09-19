@@ -74,12 +74,12 @@ unknown command does.
 
 ## Roadmap
 
-- [ ] Resolve an unknown subcommand through `PATH` and run it, with the
+- [x] Resolve an unknown subcommand through `PATH` and run it, with the
       skipping and the absolute-path rules above, and say in the
       unknown-command error where it looked.
 - [x] `wado --list`, covering builtins, externals, and shadowed externals.
 - [x] `wado help <name>`, for a builtin and an external alike.
-- [ ] A `docs/cli.md` section on writing one, including `WADO`.
+- [x] An `External Commands` section in the `wado-cli` skill, including `WADO`.
 
 ## Known gaps
 

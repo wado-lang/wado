@@ -246,16 +246,21 @@ async fn dispatch() -> Result<(), CliExit> {
             Ok(())
         }
         Value(cmd_val) => {
-            let cmd_str = cmd_val.to_string_lossy();
-            let Some(cmd) = Cmd::from_name(&cmd_str) else {
+            let name = cmd_val.to_string_lossy().into_owned();
+            // The builtin table answers first, so `wado-<name>` on `PATH` only
+            // ever adds a name and can never change what a builtin does.
+            if let Some(cmd) = Cmd::from_name(&name) {
+                return run_cmd(cmd, parser).await;
+            }
+            let Some(path) = wado_cli::external::find(&name) else {
                 let mut usage = String::new();
                 write_usage(&mut usage);
                 return Err(CliExit::error_with_usage(
-                    format!("unknown command '{cmd_str}'"),
+                    format!("unknown command '{name}' (no 'wado-{name}' on PATH)"),
                     &usage,
                 ));
             };
-            run_cmd(cmd, parser).await
+            wado_cli::external::run(&path, parser.raw_args().map_err(CliExit::error)?)
         }
         _ => {
             let mut usage = String::new();
@@ -283,7 +288,7 @@ async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
         return Box::pin(run_cmd(cmd, lexopt::Parser::from_args(["--help"]))).await;
     }
     if let Some(path) = wado_cli::external::find(&name) {
-        return wado_cli::external::run(&path, &["--help"]);
+        return wado_cli::external::run(&path, ["--help"]);
     }
     Err(CliExit::error_with_usage(
         format!("unknown command '{name}'"),

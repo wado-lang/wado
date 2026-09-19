@@ -35,15 +35,27 @@ Commands:
   lsp [options]                       Start the language server (LSP over stdio)
   query <kind> [options] <file.wado>  Query language service information
   publish [options]                   Check whether the package can be published
+  help [command]                      Show a command's help, builtin or external
 
 Global options:
   --help     Show this help message
+  --list     List every command, builtin and external
   --version  Show version information
 ```
 
 `build` works from a `wado.toml` and writes `build/<world>.wasm`. `compile`
 takes exactly one source file; `dump`, `doc`, and `format` take several.
 `check`, `run`, `serve`, and `wit` fall back to the manifest when given no path.
+
+## External Commands
+
+A name the list above does not hold is looked up as `wado-<name>` on `PATH`, so
+`wado run-with-webgpu app.wado` runs `wado-run-with-webgpu app.wado`. The child
+receives the rest of the command line unparsed and owns the exit status, and
+`$WADO` names the `wado` that invoked it. `wado --list` names every one it finds.
+
+Only `PATH` is searched, and never an entry that is empty or relative. A builtin
+always wins, so a `wado-run` on `PATH` is never run; `--list` marks it.
 
 ## Target World
 
