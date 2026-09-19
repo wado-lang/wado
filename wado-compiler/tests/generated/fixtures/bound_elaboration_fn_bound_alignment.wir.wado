@@ -116,7 +116,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(41)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(42)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(44)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -129,7 +135,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:bound_elaboration_fn_bound_alignment.wado::$const_obj_18: ref null Array<u8> = array.new_fixed<u8>(124, 105, 51, 50, 124, 32, 45, 62, 32, 105, 51, 50);
 global global:bound_elaboration_fn_bound_alignment.wado::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(124, 120, 58, 32, 105, 51, 50, 124, 32, 40, 120, 32, 43, 32, 49, 41);
@@ -273,7 +279,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

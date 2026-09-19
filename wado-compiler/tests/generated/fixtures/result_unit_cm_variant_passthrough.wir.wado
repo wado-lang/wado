@@ -210,13 +210,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(57)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(58)
+type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code" = fn(i32);  // TypeId(58)
 
-type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(59)
+type "functype//wasi/resource-drop:wasi/filesystem/types.wado#descriptor" = fn(i32);  // TypeId(59)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(60)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(61)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(61)
 
 type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(62)
 
@@ -233,10 +233,10 @@ import fn wasi/wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/De
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
-import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
+import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code";
+import fn wasi/resource-drop:wasi/filesystem/types.wado#descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#descriptor";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 global global:core:prelude/primitive.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(10);
@@ -317,8 +317,8 @@ fn "result_unit_cm_variant_passthrough.wado/write_helper"(dir, path, content) {
         sub = "result_unit_cm_variant_passthrough.wado/$cm_binding__Descriptor_write_via_stream"(file, rx_22, 0_i64);
         drop("core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_all"(tx_23, result));
         "wasi/stream-drop-writable"(tx_23);
-        "wasi/future-drop-readable:transmission-filesystem"(sub);
-        "wasi/resource-drop:descriptor"(file);
+        "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(sub);
+        "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(file);
         return ref.null none;
     }
 }
@@ -713,7 +713,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

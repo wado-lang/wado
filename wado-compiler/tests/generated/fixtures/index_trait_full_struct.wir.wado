@@ -76,7 +76,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -89,7 +95,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -292,8 +298,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_96 = builtin::i32_wrap_i64(local.tee packed_95("wasi/stream-new"()));
     tx_97 = builtin::i32_wrap_i64(packed_95 >> 32_i64);
     handle_30 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_96);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_97, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_97, $local_3);
+    "wasi/future-drop-readable:transmission-cli"(handle_30);
+=======
+    "core:rt/write_string_to_stream"(tx_97, $local_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_30);
+>>>>>>> origin/main
     v_105 = $sroa_c_v1.tag;
     let $array_clone_src_9: ref Array<u8>;
     $array_clone_src_9 = v_105.repr;
@@ -345,18 +359,34 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_175 = builtin::i32_wrap_i64(local.tee packed_174("wasi/stream-new"()));
     tx_176 = builtin::i32_wrap_i64(packed_174 >> 32_i64);
     handle_109 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_175);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_176, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_109);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_176, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_109);
+=======
+    "core:rt/write_string_to_stream"(tx_176, $local_4_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_109);
+>>>>>>> origin/main
     $sroa_c_v0.n = 10 + 1;
     $sroa_c_v1.n = 20 + 100;
     $sroa_c_v2.n = 30 + 200;
     rx_198 = builtin::i32_wrap_i64(local.tee packed_197("wasi/stream-new"()));
     tx_199 = builtin::i32_wrap_i64(packed_197 >> 32_i64);
     handle_195 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_198);
+<<<<<<< HEAD
     let $mv_arg_18: ref "core:prelude/string.wado//String";
     $mv_arg_18 = global:index_trait_full_struct.wado::$const_obj_16;
     "core:rt/write_string_to_stream"(tx_199, $mv_arg_18.repr, $mv_arg_18.used);
     "wasi/future-drop-readable:transmission-cli"(handle_195);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_199, global:index_trait_full_struct.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-cli"(handle_195);
+=======
+    "core:rt/write_string_to_stream"(tx_199, global:index_trait_full_struct.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_195);
+>>>>>>> origin/main
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     $local_5.used = 4;
     builtin::array_copy<u8>($local_5.repr, 0, global:index_trait_full_struct.wado::$const_obj_15, 0, 4);
@@ -405,8 +435,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_273 = builtin::i32_wrap_i64(local.tee packed_272("wasi/stream-new"()));
     tx_274 = builtin::i32_wrap_i64(packed_272 >> 32_i64);
     handle_207 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_273);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_274, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-cli"(handle_207);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_274, $local_5);
+    "wasi/future-drop-readable:transmission-cli"(handle_207);
+=======
+    "core:rt/write_string_to_stream"(tx_274, $local_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_207);
+>>>>>>> origin/main
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     $local_6.used = 4;
     builtin::array_copy<u8>($local_6.repr, 0, global:index_trait_full_struct.wado::$const_obj_13, 0, 4);
@@ -455,8 +493,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_348 = builtin::i32_wrap_i64(local.tee packed_347("wasi/stream-new"()));
     tx_349 = builtin::i32_wrap_i64(packed_347 >> 32_i64);
     handle_282 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_348);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_349, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_282);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_349, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_282);
+=======
+    "core:rt/write_string_to_stream"(tx_349, $local_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_282);
+>>>>>>> origin/main
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(20), used: 0 };
     $local_7.used = 4;
     builtin::array_copy<u8>($local_7.repr, 0, global:index_trait_full_struct.wado::$const_obj_11, 0, 4);
@@ -505,8 +551,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_423 = builtin::i32_wrap_i64(local.tee packed_422("wasi/stream-new"()));
     tx_424 = builtin::i32_wrap_i64(packed_422 >> 32_i64);
     handle_357 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_423);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_424, $local_7.repr, $local_7.used);
     "wasi/future-drop-readable:transmission-cli"(handle_357);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_424, $local_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_357);
+=======
+    "core:rt/write_string_to_stream"(tx_424, $local_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_357);
+>>>>>>> origin/main
     $sroa_c_v2 = struct.new "index_trait_full_struct.wado//Value" { n: 999, tag: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("replaced"), used: 8 } };
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
     $local_8.used = 15;
@@ -556,8 +610,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_503 = builtin::i32_wrap_i64(local.tee packed_502("wasi/stream-new"()));
     tx_504 = builtin::i32_wrap_i64(packed_502 >> 32_i64);
     handle_437 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_503);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_504, $local_8.repr, $local_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_437);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_504, $local_8);
+    "wasi/future-drop-readable:transmission-cli"(handle_437);
+=======
+    "core:rt/write_string_to_stream"(tx_504, $local_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_437);
+>>>>>>> origin/main
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     new_used_525 = 0 + 7;
     if @unlikely(new_used_525 > builtin::array_len($local_9.repr)) {
@@ -571,8 +633,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_535 = builtin::i32_wrap_i64(local.tee packed_534("wasi/stream-new"()));
     tx_536 = builtin::i32_wrap_i64(packed_534 >> 32_i64);
     handle_512 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_535);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_536, $local_9.repr, $local_9.used);
     "wasi/future-drop-readable:transmission-cli"(handle_512);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_536, $local_9);
+    "wasi/future-drop-readable:transmission-cli"(handle_512);
+=======
+    "core:rt/write_string_to_stream"(tx_536, $local_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_512);
+>>>>>>> origin/main
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     $local_11.used = 7;
     builtin::array_copy<u8>($local_11.repr, 0, global:index_trait_full_struct.wado::$const_obj_6, 0, 7);
@@ -592,8 +662,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_574 = builtin::i32_wrap_i64(local.tee packed_573("wasi/stream-new"()));
     tx_575 = builtin::i32_wrap_i64(packed_573 >> 32_i64);
     handle_544 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_574);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_575, $local_11.repr, $local_11.used);
     "wasi/future-drop-readable:transmission-cli"(handle_544);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_575, $local_11);
+    "wasi/future-drop-readable:transmission-cli"(handle_544);
+=======
+    "core:rt/write_string_to_stream"(tx_575, $local_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_544);
+>>>>>>> origin/main
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
     $local_12.used = 13;
     builtin::array_copy<u8>($local_12.repr, 0, global:index_trait_full_struct.wado::$const_obj_5, 0, 13);
@@ -613,8 +691,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_614 = builtin::i32_wrap_i64(local.tee packed_613("wasi/stream-new"()));
     tx_615 = builtin::i32_wrap_i64(packed_613 >> 32_i64);
     handle_584 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_614);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_615, $local_12.repr, $local_12.used);
     "wasi/future-drop-readable:transmission-cli"(handle_584);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_615, $local_12);
+    "wasi/future-drop-readable:transmission-cli"(handle_584);
+=======
+    "core:rt/write_string_to_stream"(tx_615, $local_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_584);
+>>>>>>> origin/main
     $sroa_c_v0.n = $sroa_c_v0.n + 1;
     $sroa_c_v1.n = $sroa_c_v1.n + 1;
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
@@ -636,8 +722,16 @@ fn "index_trait_full_struct.wado/run"() with Stdout {
     rx_659 = builtin::i32_wrap_i64(local.tee packed_658("wasi/stream-new"()));
     tx_660 = builtin::i32_wrap_i64(packed_658 >> 32_i64);
     handle_629 = "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_659);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_660, $local_13.repr, $local_13.used);
     "wasi/future-drop-readable:transmission-cli"(handle_629);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_660, $local_13);
+    "wasi/future-drop-readable:transmission-cli"(handle_629);
+=======
+    "core:rt/write_string_to_stream"(tx_660, $local_13);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_629);
+>>>>>>> origin/main
 }
 
 fn "index_trait_full_struct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -103,7 +103,17 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(44)
+||||||| f144ca275
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
+
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(45)
+=======
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(44)
+
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(45)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -116,7 +126,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:opt_multi_value_user_struct_match.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:opt_multi_value_user_struct_match.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(117, 115, 101, 95, 105, 102, 40, 98, 117, 105, 108, 116, 105, 110, 58, 58, 98, 108, 97, 99, 107, 95, 98, 111, 120, 40, 102, 97, 108, 115, 101, 41, 41, 58, 32);
@@ -1230,7 +1240,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

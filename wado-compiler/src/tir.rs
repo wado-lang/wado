@@ -766,6 +766,28 @@ impl AssocAnswers {
     }
 }
 
+/// The Component Model coordinate `module` is addressed by, or `None` where it
+/// declares nothing at that boundary. A `core:` module carries no namespace.
+fn cm_module_key(
+    name: &str,
+    module: &ModuleSource,
+) -> Option<(String, Option<CmNamespace>, String)> {
+    match module {
+        ModuleSource::Binding {
+            namespace,
+            interface,
+        } => Some((
+            name.to_string(),
+            Some(*namespace),
+            interface.as_str().to_string(),
+        )),
+        ModuleSource::Core { name: cm_name } => {
+            Some((name.to_string(), None, cm_name.as_str().to_string()))
+        }
+        _ => None,
+    }
+}
+
 /// The one answer among `candidates`, preferring those a bare bound names when
 /// any is registered: a bound writes no trait arguments, so an impl that does
 /// is consulted only when nothing else answers. `None` when they disagree.
@@ -874,6 +896,10 @@ pub struct TypeTable {
     /// any point in the pipeline rather than only after a declaration's type is
     /// interned.
     decl_index: IndexMap<(String, ModuleSource), DefId>,
+    /// [`Self::decl_index`] addressed by the module's CM coordinate instead, for
+    /// [`Self::cm_decl_in_module_named`]: a caller holding an interface FQ can
+    /// spell that without an interner.
+    cm_decl_index: IndexMap<(String, Option<CmNamespace>, String), DefId>,
     /// Resources declared `#[cm(..., linearity = "unrestricted")]`: a copyable
     /// handle to a host object, outside the affine resource discipline.
     unrestricted_resources: IndexSet<DefId>,
@@ -1003,6 +1029,7 @@ impl TypeTable {
             anon_struct_index: IndexMap::default(),
             anon_struct_mangles: IndexSet::default(),
             decl_index: IndexMap::default(),
+            cm_decl_index: IndexMap::default(),
             unrestricted_resources: IndexSet::default(),
             resource_parents: IndexMap::default(),
             defs: std::sync::Arc::default(),
@@ -1254,13 +1281,17 @@ impl TypeTable {
         // function-local item shares its module, and a spelling that reaches
         // both means the module-level one everywhere this index is consulted.
         self.decl_index = IndexMap::default();
+        self.cm_decl_index = IndexMap::default();
         for def in defs.iter() {
             if !defs.kind(def).is_type() {
                 continue;
             }
-            self.decl_index
-                .entry((defs.name(def).to_string(), defs.module(def).clone()))
-                .or_insert(def);
+            let name = defs.name(def).to_string();
+            let module = defs.module(def);
+            if let Some(key) = cm_module_key(&name, module) {
+                self.cm_decl_index.entry(key).or_insert(def);
+            }
+            self.decl_index.entry((name, module.clone())).or_insert(def);
         }
         self.defs = defs;
     }
@@ -2476,19 +2507,16 @@ impl TypeTable {
 
     /// The declaration `module` declares under the WIT name `name`.
     ///
-    /// The one place a name still reaches an identity, and it is the Component
-    /// Model boundary. Two things make it unavoidable rather than unfinished:
-    /// a WIT name is written in a namespace no Wado resolver walked, so there
-    /// is no reference site to ask; and `CmInterfaceRegistry` parses its own
-    /// copy of the WASI modules once per process, independent of any
-    /// compilation, so the declaring node it could record is not a node this
-    /// program's `DefTable` ever saw.
+    /// The one place a name still reaches an identity. §9 of the
+    /// declaration-identity WEP says why that is unavoidable here alone.
     ///
-    /// It cannot mis-identify: `wado-from-idl` generates exactly one module per
+    /// It cannot mis-identify: `wado-from-idl` generates one module per
     /// interface and each declares a WIT name once, so `module` picks the
-    /// generated module and `name` the single declaration in it. It cannot
-    /// invent one either — a name that declares nothing answers `None`.
-    /// Nothing outside `synthesis::cm_binding` may call it; a Wado name
+    /// generated module and `name` the single declaration in it. A name that
+    /// declares nothing answers `None`.
+    ///
+    /// Only the Component Model boundary may ask it: `synthesis::cm_binding`
+    /// and [`crate::component_model::cm_decl_in_interface`]. A Wado name
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].
     #[must_use]
@@ -2511,6 +2539,21 @@ impl TypeTable {
             .or_else(|| self.find_enum_type(def))
             .or_else(|| self.find_flags_type(def))
             .or_else(|| self.find_resource_type(def))
+    }
+
+    /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
+    /// `ModuleSource` value, for a caller holding an interface FQ and no
+    /// interner. Answers for a declaration whose type was never interned.
+    #[must_use]
+    pub fn cm_decl_in_module_named(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<DefId> {
+        self.cm_decl_index
+            .get(&(name.to_string(), namespace, module_name.to_string()))
+            .copied()
     }
 
     /// Find any decl-backed named type scoped to a single CM *interface*,

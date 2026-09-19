@@ -1380,6 +1380,17 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
+/// The interface `module` registers `name` under, as an owned FQ.
+fn declaring_interface(
+    registry: &CmInterfaceRegistry,
+    module: &ModuleSource,
+    name: &str,
+) -> Option<String> {
+    registry
+        .interface_declaring(module, name)
+        .map(str::to_string)
+}
+
 /// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
 /// to re-enter the AST-shaped match arms. Only the top-level name and immediate
 /// type args are filled in; deeper structure is looked up lazily. A named type
@@ -1392,33 +1403,22 @@ pub(super) fn type_id_to_ast_type(
 ) -> Type {
     let span = synth_span();
     let resolved = type_table.get(type_id);
-    // Only populate `source_interface` when the TIR type's `module_source`
-    // proves the type came from a CM namespace (`wasi:*` or
-    // `core:kiln/*`). User-local structs may share names with WASI / kiln
-    // records (`Span`, `Error`, `Token` …) but must not pick up the CM
-    // source — otherwise downstream lift/lower paths look up the wrong
-    // record layout and the WIR ends up with mismatched struct refs.
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    // The declaring module answers first, so no by-name search can offer
+    // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        // Derive the owning WASI package from the type's own `module_source`
-        // so a name shared across packages (e.g. `ErrorCode` in `wasi:cli`,
-        // `wasi:filesystem`, `wasi:http`, `wasi:sockets`) resolves to *this*
-        // type's package — not whichever unique-by-name match the registry
-        // happens to find first. Without the hint, the three variant
-        // `ErrorCode`s are non-unique and resolution falls through to the
-        // lone `wasi:cli` enum, mis-lifting a filesystem variant as an i32.
-        let (cm_namespace, pkg_hint) = match ms {
-            ModuleSource::Binding { interface, .. } => (true, interface.split('/').next()),
-            ModuleSource::Core { name } if name == "kiln" || name.starts_with("kiln/") => {
-                (true, None)
+        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {
+            ModuleSource::Binding { interface, .. } => {
+                cm_interface_registry.resolve_cm_source_for(&nt, interface.split('/').next())
             }
-            _ => (false, None),
-        };
-        if cm_namespace
-            && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, pkg_hint)
-        {
+            ModuleSource::Core { name: core } if core == "kiln" || core.starts_with("kiln/") => {
+                cm_interface_registry.resolve_cm_source_for(&nt, None)
+            }
+            _ => None,
+        });
+        if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
         }
         Type::Named(nt)

@@ -63,7 +63,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
@@ -76,7 +82,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -133,8 +139,16 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
     tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
     handle_30 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_61);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_62, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-cli"(handle_30);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_62, $local_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_30);
+=======
+    "core:rt/write_string_to_stream"(tx_62, $local_1);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_30);
+>>>>>>> origin/main
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
     $local_2.used = 1;
     builtin::array_copy<u8>($local_2.repr, 0, global:ctfe_fold_view_append_wir.wado::$const_obj_2, 0, 1);
@@ -152,8 +166,16 @@ fn "ctfe_fold_view_append_wir.wado/run"() with Stdout {
     rx_113 = builtin::i32_wrap_i64(local.tee packed_112("wasi/stream-new"()));
     tx_114 = builtin::i32_wrap_i64(packed_112 >> 32_i64);
     handle_70 = "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_113);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_114, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_70);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_114, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_70);
+=======
+    "core:rt/write_string_to_stream"(tx_114, $local_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_70);
+>>>>>>> origin/main
 }
 
 fn "ctfe_fold_view_append_wir.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

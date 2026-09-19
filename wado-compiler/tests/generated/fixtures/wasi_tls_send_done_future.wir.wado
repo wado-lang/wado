@@ -56,11 +56,33 @@ type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/future-drop-readable:val-result<_,own<error>>" = fn(i32);  // TypeId(23)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:val-result<_,own<error>>" = fn(i32);  // TypeId(24)
+=======
+type "functype//wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>" = fn(i32);  // TypeId(24)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//wasi/resource-drop:connector" = fn(i32);  // TypeId(25)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+||||||| f144ca275
+type "functype//wasi/resource-drop:connector" = fn(i32);  // TypeId(26)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
+=======
+type "functype//wasi/resource-drop:wasi/tls/client.wado#connector" = fn(i32);  // TypeId(26)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -75,9 +97,9 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:val-result<_,own<error>> from "wasi/future-drop-readable:val-result<_,own<error>>";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn wasi/resource-drop:connector from "wasi/resource-drop:connector";
+import fn wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>> from "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/resource-drop:wasi/tls/client.wado#connector from "wasi/resource-drop:wasi/tls/client.wado#connector";
 import fn wasi/task-return from "wasi/task-return";
 
 global global:wasi_tls_send_done_future.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(115, 101, 110, 100, 32, 102, 117, 116, 117, 114, 101, 32, 100, 114, 111, 112, 112, 101, 100), used: 19 };
@@ -102,15 +124,25 @@ fn "wasi_tls_send_done_future.wado/run"() with Stdout, Connector, Error {
     send_done = $pattern_temp_1.1;
     "wasi/stream-drop-writable"(tx_9);
     "wasi/stream-drop-readable"(tls_rx);
-    "wasi/future-drop-readable:val-result<_,own<error>>"(send_done);
+    "wasi/future-drop-readable:val-result<_,own<wasi/tls/types.wado#error>>"(send_done);
     rx_16 = builtin::i32_wrap_i64(local.tee packed_15("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
     handle = "wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasi_tls_send_done_future.wado::$const_obj_0;
     "core:rt/write_string_to_stream"(tx_17, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/resource-drop:connector"(conn);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_17, global:wasi_tls_send_done_future.wado::$const_obj_0);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/resource-drop:connector"(conn);
+=======
+    "core:rt/write_string_to_stream"(tx_17, global:wasi_tls_send_done_future.wado::$const_obj_0);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+    "wasi/resource-drop:wasi/tls/client.wado#connector"(conn);
+>>>>>>> origin/main
 }
 
 fn "wasi_tls_send_done_future.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

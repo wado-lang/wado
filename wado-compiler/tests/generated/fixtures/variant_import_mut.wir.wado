@@ -42,7 +42,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -55,7 +61,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -86,8 +92,16 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     rx_9 = builtin::i32_wrap_i64(local.tee packed_8("wasi/stream-new"()));
     tx_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
     handle_4 = "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_10, message_1.repr, message_1.used);
     "wasi/future-drop-readable:transmission-cli"(handle_4);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_10, message_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_4);
+=======
+    "core:rt/write_string_to_stream"(tx_10, message_1);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_4);
+>>>>>>> origin/main
     $sroa_opts_align = struct.new "./variant_in_struct_match_module.wado//Align" { 0 };
     let $match_scrut_1: ref "./variant_in_struct_match_module.wado//Align";
     $match_scrut_1 = $sroa_opts_align;
@@ -99,8 +113,16 @@ fn "variant_import_mut.wado/$cm_export__run"() {
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_18 = "variant_import_mut.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_23, message_15.repr, message_15.used);
     "wasi/future-drop-readable:transmission-cli"(handle_18);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_23, message_15);
+    "wasi/future-drop-readable:transmission-cli"(handle_18);
+=======
+    "core:rt/write_string_to_stream"(tx_23, message_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_18);
+>>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

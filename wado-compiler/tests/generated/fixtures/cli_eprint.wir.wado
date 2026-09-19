@@ -36,7 +36,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(15)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
 
@@ -50,7 +50,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cli_eprint.wado/$cm_binding__Stderr_write_via_stream"(data) with Stderr {
@@ -81,7 +81,7 @@ fn "cli_eprint.wado/$cm_export__run"() {
     $mv_arg_2 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_message_repr_84, start: 0, end: 5 };
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_7, $mv_arg_2.repr, 0, 5);
     "wasi/stream-drop-writable"(tx_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_15 = "cli_eprint.wado/$cm_binding__Stderr_write_via_stream"(rx_18);
@@ -90,7 +90,7 @@ fn "cli_eprint.wado/$cm_export__run"() {
     $mv_arg_4 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_message_repr_86, start: 0, end: 1 };
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_19, $mv_arg_4.repr, 0, 1);
     "wasi/stream-drop-writable"(tx_19);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     rx_30 = builtin::i32_wrap_i64(local.tee packed_29("wasi/stream-new"()));
     tx_31 = builtin::i32_wrap_i64(packed_29 >> 32_i64);
     handle_27 = "cli_eprint.wado/$cm_binding__Stderr_write_via_stream"(rx_30);
@@ -99,7 +99,7 @@ fn "cli_eprint.wado/$cm_export__run"() {
     $mv_arg_6 = struct.new "core:prelude/slice.wado//Slice<u8>" { repr: $sroa_message_repr_88, start: 0, end: 7 };
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_31, $mv_arg_6.repr, 0, 7);
     "wasi/stream-drop-writable"(tx_31);
-    "wasi/future-drop-readable:transmission-cli"(handle_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
     "wasi/task-return"(0);
 }
 

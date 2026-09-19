@@ -520,6 +520,9 @@ Renderings still compared against a declaration's own name:
 The Component Model boundary, permanent for the reason §9 gives:
 
 - `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
+- `cm_decl_in_interface`, the same step taking the interface rather than the
+  module: it asks the registry which module declares that interface, so a caller
+  holding an interface FQ supplies no vantage of its own.
 - `find_named_type_by_source` and `find_named_type_by_module_name`, the
   `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
   named module.
@@ -691,54 +694,84 @@ compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
-## Known gap: component codegen keys most CM types by name
+## Keys past the Component Model boundary
 
-`ComponentModelContext` holds outer-scope component types in one string-keyed
-map. Two kinds of key live in it. A structural key names no declaration, such as
-`"types-instance-type"` or an interned `result<…>`. The other kind stands for a
-declaration, which a name cannot carry: `{package}-{cm-name}` puts every
-interface of a package in one namespace, and the CM name alone puts every
-package in one.
+A component's outer scope holds two kinds of type. One stands for a shape, and is
+keyed by that shape. The other stands for a declaration, and is keyed by that
+declaration. §9's boundary step is where the second kind gets its key: it answers
+with a `DefId`, and every key past it is that identity.
 
-`error-code` is keyed by `DefId`, resolved once per interface through
-`cm_decl_in`. The resource own-handles and the per-package composites
-(`{pkg}-response`, `{pkg}-fields-resource`) still take the package key, and each
-carries the same collision. Nothing has hit it yet only because no two
-interfaces of one package declare a resource of the same name.
+A CM name cannot key the second kind, for the reason §9 gives for not carrying
+the name further. A name alone puts every package in one namespace, and its
+package puts every interface of that package in one. A key built from either
+names one of two unrelated declarations and drops the other.
 
-Closing this means splitting the map in two, identities on one side and
-structural keys on the other. Each declaration-backed producer then needs the
-interface it is emitting for, which all of them already hold.
+Every producer of such a type holds the interface it is emitting for, so it
+reaches the declaration through that one step. A producer that reaches none has a
+missing import, which is a diagnostic. Trying a second key instead is the shape
+"What a derivation may not be" forbids.
 
-## Known gap: a transmission future names a package, not an interface
+### A canonical intrinsic's payload is a declaration
 
-`CmFuturePayload::Transmission` carries a package. Its classifier reads the
-`DefId` off the error-code's own type and truncates it to the package the
-declaring module sits in, so the identity is discarded at the one point that
-has it.
+A payload is a type, so a nominal payload is its declaration. The CM name the ABI
+spells for it travels beside the identity and is never compared. That is §8 at
+this boundary.
 
-Codegen recovers the interface from the plan. A transmission future streams a
-resource-defining interface's resources, so that interface is the one it means.
-Where the plan names none for the package, the package's single aliased
-`error-code` serves; `wasi:cli` is the case, its `types` interface defining no
-resource. A package that aliased two and has no resource-defining interface is
-refused rather than guessed at.
+The name such an intrinsic imports under is one of those renderings, and nothing
+reads it back. An annotation names an operation and never a payload, so a payload
+comes from the annotated signature, read where the declaration is in hand.
 
-Closing this means `Transmission` carrying the declaration, which the classifier
-already holds. What stands in the way is §8: the payload is rendered into a
-canonical intrinsic's name and parsed back out of it, and a `DefId` has no
-public constructor, so it cannot survive that round trip. The parse is itself
-the thing §8 forbids, so the two are one piece of work.
+## Pattern qualifier arguments
 
-## Known gap: a pattern qualifier's type arguments are counted, not read
+A pattern's qualifier is a type, and by §6 a type is its declaration plus the
+arguments it was instantiated at. So `Maybe<String>::Just` does not qualify a
+`Maybe<i32>` scrutinee: the declarations agree and the instantiations do not.
 
-`Maybe<i32>::Just` and `Maybe<String>::Just` both qualify a `Maybe<i32>`
-scrutinee. The qualifier itself resolves to a declaration and compares by
-`DefId`. The arguments written beside it are only counted, so any count that
-agrees is accepted. The count still earns its keep: a qualifier whose type
-declares no parameters takes none.
+Each written argument is read at its own reference site and compared against the
+scrutinee's as a type. Counting them compares nothing, and comparing the
+spellings is §4's defect one level out.
 
-Closing this means comparing each written argument against the scrutinee's. That
-needs a rule for a generic body first. There a type parameter stands where the
-scrutinee carries a concrete type, which is ordinary code, so rejecting it would
-be wrong.
+Fixtures: `pattern_qualifier_type_args_read_error.wado`,
+`pattern_qualifier_type_param_arg.wado`.
+
+## Known gap: a CM type can reach outer scope with no identity
+
+A reader that holds only the CM export spells the Wado name by `PascalCase`-ing
+the CM name. A declaration whose own name is spelled otherwise is not that name,
+so §9's step answers nothing and the alias is keyed by the export it was made
+from. One interface spells that export name once, so the key collides with
+nothing today.
+
+Which declarations a component reaches this way is not established, nor whether
+any of them is spelled such that the step could answer.
+
+## Known gap: a CM name still reaches a declaration by search
+
+A reference the Component Model boundary synthesizes carries the interface its
+own declaring module registers, so §9's step answers it. Where one arrives
+without that interface, the registry searches for the name instead: one kind of
+declaration at a time, over every bundled interface, taking the first kind in
+which the name has exactly one registrant.
+
+That is all three shapes "What a derivation may not be" forbids at once. The
+search spans the whole program; each kind's map answers in registration order;
+and a kind that declines because two interfaces spell the name hands the
+question to the next kind, so which kind is asked first is a silent tiebreak.
+`ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
+`wasi:cli/types`, so the variants decline and the enum answers. That holds for
+any module's `ErrorCode`, including one a user wrote.
+
+Which references still arrive without their declaring interface is not
+established.
+
+## Known gap: an abstract qualifier argument is not compared
+
+Where either side of a pattern qualifier leaves a position abstract, that
+position is accepted uncompared. A generic body writes its own type parameter
+where the scrutinee carries a concrete type, which is ordinary code. A parameter
+names no instantiation, so the scrutinee's argument has nothing to disagree with.
+
+What this admits is a body whose parameter is bound, at the instantiation being
+compiled, to a type the scrutinee's argument contradicts. Closing it means
+comparing after substitution wherever that instantiation is known, rather than
+declining to compare.

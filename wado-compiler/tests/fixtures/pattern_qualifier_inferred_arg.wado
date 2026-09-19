@@ -1,0 +1,26 @@
+// A qualifier may leave a type argument to inference. `_` names no
+// instantiation, so it has nothing to disagree with the scrutinee's about.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+export fn run() {
+    let m = Maybe::<i32>::Just(1);
+    let n = match m {
+        Maybe<_>::Just(v) => v,
+        Maybe<_>::Nothing => 0,
+    };
+    assert n == 1;
+
+    let s = Maybe::<String>::Nothing;
+    let t = match s {
+        Maybe<_>::Just(v) => v,
+        Maybe<_>::Nothing => "none",
+    };
+    assert t == "none";
+}
+
+__DATA__
+{"stdout": ""}

@@ -38,9 +38,29 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wasi/resource-drop:connector" = fn(i32);  // TypeId(17)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
+>>>>>>> origin/main
 
+<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(19)
+||||||| f144ca275
+type "functype//wasi/resource-drop:connector" = fn(i32);  // TypeId(19)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+=======
+type "functype//wasi/resource-drop:wasi/tls/client.wado#connector" = fn(i32);  // TypeId(19)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(20)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(21)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -52,8 +72,8 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import fn wasi/wasi:tls/Connector::new from "wasi/wasi:tls/Connector::new";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn wasi/resource-drop:connector from "wasi/resource-drop:connector";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/resource-drop:wasi/tls/client.wado#connector from "wasi/resource-drop:wasi/tls/client.wado#connector";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -75,11 +95,21 @@ fn "wasi_tls_import.wado/$cm_export__run"() {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "wasi_tls_import.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
+<<<<<<< HEAD
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("wasi:tls types imported successfully");
     "core:rt/write_string_to_stream"(tx_8, $mv_field_2, 36);
     "wasi/future-drop-readable:transmission-cli"(handle);
     "wasi/resource-drop:connector"(_conn);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi:tls types imported successfully"), used: 36 });
+    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/resource-drop:connector"(_conn);
+=======
+    "core:rt/write_string_to_stream"(tx_8, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wasi:tls types imported successfully"), used: 36 });
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+    "wasi/resource-drop:wasi/tls/client.wado#connector"(_conn);
+>>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

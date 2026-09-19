@@ -355,7 +355,13 @@ type "functype//wasi/future-new" = fn() -> i64;  // TypeId(86)
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(87)
 
+<<<<<<< HEAD
 type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(88)
+||||||| f144ca275
+type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(89)
+=======
+type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(89)
+>>>>>>> origin/main
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(89)
 
@@ -363,7 +369,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(90)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(91)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(92)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(93)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(93)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -379,11 +391,11 @@ import fn wasi/wasi:http/Response::set_status_code from "wasi/wasi:http/Response
 import memory (1) from "mem/memory";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
-import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 import fn wasi/future-write from "wasi/future-write";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:http_response_set_status_invalid.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
 global global:core:prelude/traits.wado::$const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 116, 97, 116, 117, 115, 67, 111, 100, 101), used: 10 };
@@ -668,7 +680,7 @@ condition: response.get_status_code() == 201
     $tv_1 = local.tee $ok_val_39(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($task_ret).payload_0);
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
     "http_response_set_status_invalid.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
-    "wasi/resource-drop:request"(request);
+    "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 
 fn "http_response_set_status_invalid.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(handle, value) {
@@ -1257,7 +1269,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

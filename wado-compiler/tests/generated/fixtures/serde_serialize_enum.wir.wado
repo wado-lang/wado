@@ -43,7 +43,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(19)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(19)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
 
@@ -56,7 +62,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -83,16 +89,32 @@ fn "serde_serialize_enum.wado/run"() with Stdout {
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_23 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_28, message_20.repr, message_20.used);
     "wasi/future-drop-readable:transmission-cli"(handle_23);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_28, message_20);
+    "wasi/future-drop-readable:transmission-cli"(handle_23);
+=======
+    "core:rt/write_string_to_stream"(tx_28, message_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_23);
+>>>>>>> origin/main
     $sroa_ser_buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($sroa_ser_buf, global:serde_serialize_enum.wado::$const_obj_2);
     message_50 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_6: ref Array<u8>; $array_clone_src_6 = $sroa_ser_buf.repr; let $array_clone_len_8: i32; $array_clone_len_8 = $sroa_ser_buf.used; let $array_clone_dst_7: ref Array<u8>; $array_clone_dst_7 = builtin::array_new<u8>($array_clone_len_8); builtin::array_copy<u8>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8); $array_clone_dst_7), used: $sroa_ser_buf.used };
     rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
     tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
     handle_53 = "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(rx_57);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_58, message_50.repr, message_50.used);
     "wasi/future-drop-readable:transmission-cli"(handle_53);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_58, message_50);
+    "wasi/future-drop-readable:transmission-cli"(handle_53);
+=======
+    "core:rt/write_string_to_stream"(tx_58, message_50);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_53);
+>>>>>>> origin/main
 }
 
 fn "serde_serialize_enum.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

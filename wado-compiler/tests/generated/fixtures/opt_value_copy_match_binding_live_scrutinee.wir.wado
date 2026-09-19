@@ -81,7 +81,13 @@ type "functype//core:prelude/traits.wado/opt_value_copy_match_binding_live_scrut
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(31)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(32)
 
@@ -96,7 +102,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -187,8 +193,16 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     rx_45 = builtin::i32_wrap_i64(local.tee packed_44("wasi/stream-new"()));
     tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
     handle_27 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_46, $local_7.repr, $local_7.used);
     "wasi/future-drop-readable:transmission-cli"(handle_27);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_46, $local_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_27);
+=======
+    "core:rt/write_string_to_stream"(tx_46, $local_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
+>>>>>>> origin/main
     b = struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: ref.as_non_null(elements_51 = array.new_fixed<i32>(black_box(7)); struct.new "core:prelude//List<i32>" { repr: elements_51, used: builtin::array_len(elements_51) }) };
     xs_4 = ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"(b).payload_0;
     ys_5 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_6: ref Array<i32>; $array_clone_src_6 = xs_4.repr; let $array_clone_len_8: i32; $array_clone_len_8 = xs_4.used; let $array_clone_dst_7: ref Array<i32>; $array_clone_dst_7 = builtin::array_new<i32>($array_clone_len_8); builtin::array_copy<i32>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8); $array_clone_dst_7), used: xs_4.used };
@@ -212,8 +226,16 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     rx_81 = builtin::i32_wrap_i64(local.tee packed_80("wasi/stream-new"()));
     tx_82 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
     handle_63 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(rx_81);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_82, $local_9.repr, $local_9.used);
     "wasi/future-drop-readable:transmission-cli"(handle_63);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_82, $local_9);
+    "wasi/future-drop-readable:transmission-cli"(handle_63);
+=======
+    "core:rt/write_string_to_stream"(tx_82, $local_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_63);
+>>>>>>> origin/main
     $sroa_h_p = struct.new "opt_value_copy_match_binding_live_scrutinee.wado//P::A" { discriminant: 0, payload_0: ref.as_non_null(elements_87 = array.new_fixed<i32>(black_box(7)); struct.new "core:prelude//List<i32>" { repr: elements_87, used: builtin::array_len(elements_87) }) };
     xs_89 = ref.cast "opt_value_copy_match_binding_live_scrutinee.wado//P::A"($sroa_h_p).payload_0;
     ys_90 = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_11: ref Array<i32>; $array_clone_src_11 = xs_89.repr; let $array_clone_len_13: i32; $array_clone_len_13 = xs_89.used; let $array_clone_dst_12: ref Array<i32>; $array_clone_dst_12 = builtin::array_new<i32>($array_clone_len_13); builtin::array_copy<i32>($array_clone_dst_12, 0, $array_clone_src_11, 0, $array_clone_len_13); $array_clone_dst_12), used: xs_89.used };
@@ -246,8 +268,16 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     rx_133 = builtin::i32_wrap_i64(local.tee packed_132("wasi/stream-new"()));
     tx_134 = builtin::i32_wrap_i64(packed_132 >> 32_i64);
     handle_115 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(rx_133);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_134, $local_11.repr, $local_11.used);
     "wasi/future-drop-readable:transmission-cli"(handle_115);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_134, $local_11);
+    "wasi/future-drop-readable:transmission-cli"(handle_115);
+=======
+    "core:rt/write_string_to_stream"(tx_134, $local_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_115);
+>>>>>>> origin/main
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
     new_used_155 = 0 + 2;
     if @unlikely(new_used_155 > builtin::array_len($local_13.repr)) {
@@ -270,8 +300,16 @@ fn "opt_value_copy_match_binding_live_scrutinee.wado/run"() with Stdout {
     rx_169 = builtin::i32_wrap_i64(local.tee packed_168("wasi/stream-new"()));
     tx_170 = builtin::i32_wrap_i64(packed_168 >> 32_i64);
     handle_142 = "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(rx_169);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_170, $local_13.repr, $local_13.used);
     "wasi/future-drop-readable:transmission-cli"(handle_142);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_170, $local_13);
+    "wasi/future-drop-readable:transmission-cli"(handle_142);
+=======
+    "core:rt/write_string_to_stream"(tx_170, $local_13);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_142);
+>>>>>>> origin/main
 }
 
 fn "opt_value_copy_match_binding_live_scrutinee.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

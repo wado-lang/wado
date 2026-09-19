@@ -61,7 +61,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(24)
 
@@ -74,7 +80,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -114,17 +120,33 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
     tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
     handle_15 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:struct_name_conflict.wado::$const_obj_7;
     "core:rt/write_string_to_stream"(tx_39, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_39, global:struct_name_conflict.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_15);
+=======
+    "core:rt/write_string_to_stream"(tx_39, global:struct_name_conflict.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
+>>>>>>> origin/main
     rx_70 = builtin::i32_wrap_i64(local.tee packed_69("wasi/stream-new"()));
     tx_71 = builtin::i32_wrap_i64(packed_69 >> 32_i64);
     handle_47 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_70);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:struct_name_conflict.wado::$const_obj_6;
     "core:rt/write_string_to_stream"(tx_71, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_47);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_71, global:struct_name_conflict.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_47);
+=======
+    "core:rt/write_string_to_stream"(tx_71, global:struct_name_conflict.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_47);
+>>>>>>> origin/main
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(66), used: 0 };
     $local_6.used = 14;
     builtin::array_copy<u8>($local_6.repr, 0, global:struct_name_conflict.wado::$const_obj_5, 0, 14);
@@ -153,8 +175,16 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_137 = builtin::i32_wrap_i64(local.tee packed_136("wasi/stream-new"()));
     tx_138 = builtin::i32_wrap_i64(packed_136 >> 32_i64);
     handle_79 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_137);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_138, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_79);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_138, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_79);
+=======
+    "core:rt/write_string_to_stream"(tx_138, $local_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_79);
+>>>>>>> origin/main
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(49), used: 0 };
     $local_8.used = 15;
     builtin::array_copy<u8>($local_8.repr, 0, global:struct_name_conflict.wado::$const_obj_2, 0, 15);
@@ -173,8 +203,16 @@ fn "struct_name_conflict.wado/run"() with Stdout {
     rx_186 = builtin::i32_wrap_i64(local.tee packed_185("wasi/stream-new"()));
     tx_187 = builtin::i32_wrap_i64(packed_185 >> 32_i64);
     handle_146 = "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(rx_186);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_187, $local_8.repr, $local_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_146);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_187, $local_8);
+    "wasi/future-drop-readable:transmission-cli"(handle_146);
+=======
+    "core:rt/write_string_to_stream"(tx_187, $local_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_146);
+>>>>>>> origin/main
 }
 
 fn "struct_name_conflict.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

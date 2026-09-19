@@ -54,7 +54,13 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -69,7 +75,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -102,17 +108,33 @@ fn "newtype_generic.wado/run"() with Stdout {
     rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
     tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
     handle_15 = "newtype_generic.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:newtype_generic.wado::$const_obj_4;
     "core:rt/write_string_to_stream"(tx_39, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_39, global:newtype_generic.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_15);
+=======
+    "core:rt/write_string_to_stream"(tx_39, global:newtype_generic.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
+>>>>>>> origin/main
     rx_75 = builtin::i32_wrap_i64(local.tee packed_74("wasi/stream-new"()));
     tx_76 = builtin::i32_wrap_i64(packed_74 >> 32_i64);
     handle_47 = "newtype_generic.wado/$cm_binding__Stdout_write_via_stream"(rx_75);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:newtype_generic.wado::$const_obj_3;
     "core:rt/write_string_to_stream"(tx_76, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_47);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_76, global:newtype_generic.wado::$const_obj_3);
+    "wasi/future-drop-readable:transmission-cli"(handle_47);
+=======
+    "core:rt/write_string_to_stream"(tx_76, global:newtype_generic.wado::$const_obj_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_47);
+>>>>>>> origin/main
     arr2 = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(10, 20), used: 2 };
     if @unlikely(2 >= builtin::array_len(arr2.repr)) {
         cold_path;
@@ -133,15 +155,31 @@ fn "newtype_generic.wado/run"() with Stdout {
     rx_115 = builtin::i32_wrap_i64(local.tee packed_114("wasi/stream-new"()));
     tx_116 = builtin::i32_wrap_i64(packed_114 >> 32_i64);
     handle_92 = "newtype_generic.wado/$cm_binding__Stdout_write_via_stream"(rx_115);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_116, $local_7.repr, $local_7.used);
     "wasi/future-drop-readable:transmission-cli"(handle_92);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_116, $local_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_92);
+=======
+    "core:rt/write_string_to_stream"(tx_116, $local_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_92);
+>>>>>>> origin/main
     rx_148 = builtin::i32_wrap_i64(local.tee packed_147("wasi/stream-new"()));
     tx_149 = builtin::i32_wrap_i64(packed_147 >> 32_i64);
     handle_125 = "newtype_generic.wado/$cm_binding__Stdout_write_via_stream"(rx_148);
+<<<<<<< HEAD
     let $mv_arg_8: ref "core:prelude/string.wado//String";
     $mv_arg_8 = global:newtype_generic.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_149, $mv_arg_8.repr, $mv_arg_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_125);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_149, global:newtype_generic.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_125);
+=======
+    "core:rt/write_string_to_stream"(tx_149, global:newtype_generic.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_125);
+>>>>>>> origin/main
 }
 
 fn "newtype_generic.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

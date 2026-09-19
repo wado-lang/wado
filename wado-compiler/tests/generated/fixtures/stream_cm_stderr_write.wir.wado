@@ -103,9 +103,9 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(34)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(35)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(36)
+type "functype//wasi/future-read:transmission-wasi/cli/types.wado#error-code" = fn(i32, i32) -> i32;  // TypeId(36)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -118,8 +118,8 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-read:transmission-wasi/cli/types.wado#error-code from "wasi/future-read:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:core:prelude/primitive.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/primitive.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(104, 105, 103, 104, 58, 32);
@@ -166,7 +166,7 @@ fn "stream_cm_stderr_write.wado/$cm_future_read_core:prelude/types.wado/Result<(
     let evt_ptr: i32;
     let status_13: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status_2 = "wasi/future-read:transmission-cli"(handle, ptr);
+    status_2 = "wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr);
     if status_2 == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);
@@ -279,7 +279,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

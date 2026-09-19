@@ -31,10 +31,19 @@ pub enum CmTypeKey {
     Tuple(Vec<CmTypeKey>),
 }
 
+impl CmTypeKey {
+    /// The `own<r>` handle over an already-emitted resource type.
+    pub fn own_of(resource: u32) -> Self {
+        Self::Own(Box::new(Self::Leaf(resource)))
+    }
+}
+
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
-    // Component type indices
+    /// Component types keyed by a spelling a later phase can rebuild: a
+    /// structure, an instance or func type, an import's export coordinate.
+    /// A declaration is never one, and `decl_types` keys those by identity.
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 
@@ -44,11 +53,6 @@ pub struct ComponentModelContext {
     /// and a key built from either name collapses them into one. See the
     /// declaration-identity WEP.
     decl_types: IndexMap<DefId, u32>,
-
-    /// Which `error-code` declarations each CM package aliased. A consumer that
-    /// can only name the package reads this, and a package that aliased more
-    /// than one says so rather than handing back whichever came first.
-    package_error_codes: IndexMap<String, Vec<DefId>>,
 
     cm_type_interner: IndexMap<CmTypeKey, u32>,
 
@@ -97,7 +101,6 @@ impl ComponentModelContext {
             next_type_idx: 0,
             cm_type_interner: IndexMap::default(),
             decl_types: IndexMap::default(),
-            package_error_codes: IndexMap::default(),
             instance_names: IndexMap::default(),
             next_instance_idx: 0,
             instance_error_codes: IndexMap::default(),
@@ -146,31 +149,6 @@ impl ComponentModelContext {
     /// Whether `def` already has an outer type index.
     pub fn has_decl_type(&self, def: DefId) -> bool {
         self.decl_types.contains_key(&def)
-    }
-
-    /// Record that `package` aliased the `error-code` `def` declares.
-    pub fn record_package_error_code(&mut self, package: &str, def: DefId) {
-        let defs = self
-            .package_error_codes
-            .entry(package.to_string())
-            .or_default();
-        if !defs.contains(&def) {
-            defs.push(def);
-        }
-    }
-
-    /// The `error-code` declarations `package` aliased, in alias order.
-    pub fn package_error_codes(&self, package: &str) -> &[DefId] {
-        self.package_error_codes
-            .get(package)
-            .map_or(&[], Vec::as_slice)
-    }
-
-    /// Bind a name to an already-reserved component type index, without bumping
-    /// the type counter. Lets a type defined anonymously (e.g. via a
-    /// `CmTypeSink`) be resolved later by `type_idx`.
-    pub fn bind_type_name(&mut self, name: &str, idx: u32) {
-        self.type_names.insert(name.to_string(), idx);
     }
 
     /// Reserve a component type index without binding a name.

@@ -57,7 +57,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -71,7 +77,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -105,10 +111,18 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
     tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
     handle_22 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_50);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:value_semantics.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_51, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_22);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_51, global:value_semantics.wado::$const_obj_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_22);
+=======
+    "core:rt/write_string_to_stream"(tx_51, global:value_semantics.wado::$const_obj_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_22);
+>>>>>>> origin/main
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_72 = 0 + 5;
     if @unlikely(new_used_72 > builtin::array_len($local_4_4.repr)) {
@@ -122,8 +136,16 @@ fn "value_semantics.wado/value_semantics_array"() with Stdout {
     rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
     tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
     handle_59 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_87);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_88, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_59);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_88, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_59);
+=======
+    "core:rt/write_string_to_stream"(tx_88, $local_4_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_59);
+>>>>>>> origin/main
 }
 
 fn "value_semantics.wado/value_semantics_string"() with Stdout {
@@ -138,17 +160,33 @@ fn "value_semantics.wado/value_semantics_string"() with Stdout {
     rx_38 = builtin::i32_wrap_i64(local.tee packed_37("wasi/stream-new"()));
     tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
     handle_8 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:value_semantics.wado::$const_obj_4;
     "core:rt/write_string_to_stream"(tx_39, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_8);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_39, global:value_semantics.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_8);
+=======
+    "core:rt/write_string_to_stream"(tx_39, global:value_semantics.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
+>>>>>>> origin/main
     rx_77 = builtin::i32_wrap_i64(local.tee packed_76("wasi/stream-new"()));
     tx_78 = builtin::i32_wrap_i64(packed_76 >> 32_i64);
     handle_47 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_77);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:value_semantics.wado::$const_obj_3;
     "core:rt/write_string_to_stream"(tx_78, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_47);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_78, global:value_semantics.wado::$const_obj_3);
+    "wasi/future-drop-readable:transmission-cli"(handle_47);
+=======
+    "core:rt/write_string_to_stream"(tx_78, global:value_semantics.wado::$const_obj_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_47);
+>>>>>>> origin/main
 }
 
 fn "value_semantics.wado/value_semantics_struct"() with Stdout {
@@ -163,17 +201,33 @@ fn "value_semantics.wado/value_semantics_struct"() with Stdout {
     rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_10 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:value_semantics.wado::$const_obj_6;
     "core:rt/write_string_to_stream"(tx_33, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_33, global:value_semantics.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_10);
+=======
+    "core:rt/write_string_to_stream"(tx_33, global:value_semantics.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
+>>>>>>> origin/main
     rx_63 = builtin::i32_wrap_i64(local.tee packed_62("wasi/stream-new"()));
     tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
     handle_41 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:value_semantics.wado::$const_obj_5;
     "core:rt/write_string_to_stream"(tx_64, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_41);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_64, global:value_semantics.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-cli"(handle_41);
+=======
+    "core:rt/write_string_to_stream"(tx_64, global:value_semantics.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_41);
+>>>>>>> origin/main
 }
 
 fn "value_semantics.wado/value_semantics_tuple"() with Stdout {
@@ -188,17 +242,33 @@ fn "value_semantics.wado/value_semantics_tuple"() with Stdout {
     rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_10 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:value_semantics.wado::$const_obj_8;
     "core:rt/write_string_to_stream"(tx_33, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_33, global:value_semantics.wado::$const_obj_8);
+    "wasi/future-drop-readable:transmission-cli"(handle_10);
+=======
+    "core:rt/write_string_to_stream"(tx_33, global:value_semantics.wado::$const_obj_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
+>>>>>>> origin/main
     rx_63 = builtin::i32_wrap_i64(local.tee packed_62("wasi/stream-new"()));
     tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
     handle_41 = "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:value_semantics.wado::$const_obj_7;
     "core:rt/write_string_to_stream"(tx_64, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_41);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_64, global:value_semantics.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_41);
+=======
+    "core:rt/write_string_to_stream"(tx_64, global:value_semantics.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_41);
+>>>>>>> origin/main
 }
 
 fn "value_semantics.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

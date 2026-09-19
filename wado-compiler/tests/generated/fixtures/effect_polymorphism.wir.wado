@@ -66,7 +66,13 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
@@ -82,7 +88,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -131,31 +137,63 @@ fn "effect_polymorphism.wado/effect_poly_basic"() with Stdout {
     rx_14 = builtin::i32_wrap_i64(local.tee packed_13("wasi/stream-new"()));
     tx_15 = builtin::i32_wrap_i64(packed_13 >> 32_i64);
     handle_11 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_7;
     "core:rt/write_string_to_stream"(tx_15, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_15, global:effect_polymorphism.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-cli"(handle_11);
+=======
+    "core:rt/write_string_to_stream"(tx_15, global:effect_polymorphism.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
+>>>>>>> origin/main
     rx_45 = builtin::i32_wrap_i64(local.tee packed_44("wasi/stream-new"()));
     tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
     handle_23 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:effect_polymorphism.wado::$const_obj_6;
     "core:rt/write_string_to_stream"(tx_46, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_23);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_46, global:effect_polymorphism.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_23);
+=======
+    "core:rt/write_string_to_stream"(tx_46, global:effect_polymorphism.wado::$const_obj_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_23);
+>>>>>>> origin/main
     rx_100 = builtin::i32_wrap_i64(local.tee packed_99("wasi/stream-new"()));
     tx_101 = builtin::i32_wrap_i64(packed_99 >> 32_i64);
     handle_97 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_100);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:effect_polymorphism.wado::$const_obj_5;
     "core:rt/write_string_to_stream"(tx_101, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_97);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_101, global:effect_polymorphism.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-cli"(handle_97);
+=======
+    "core:rt/write_string_to_stream"(tx_101, global:effect_polymorphism.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_97);
+>>>>>>> origin/main
     rx_82 = builtin::i32_wrap_i64(local.tee packed_81("wasi/stream-new"()));
     tx_83 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
     handle_60 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_82);
+<<<<<<< HEAD
     let $mv_arg_8: ref "core:prelude/string.wado//String";
     $mv_arg_8 = global:effect_polymorphism.wado::$const_obj_4;
     "core:rt/write_string_to_stream"(tx_83, $mv_arg_8.repr, $mv_arg_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_60);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_83, global:effect_polymorphism.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_60);
+=======
+    "core:rt/write_string_to_stream"(tx_83, global:effect_polymorphism.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_60);
+>>>>>>> origin/main
 }
 
 fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
@@ -186,45 +224,93 @@ fn "effect_polymorphism.wado/effect_poly_multi_param"() with Stdout, Stderr {
     rx_12 = builtin::i32_wrap_i64(local.tee packed_11("wasi/stream-new"()));
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     handle_9 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_23;
     "core:rt/write_string_to_stream"(tx_13, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_13, global:effect_polymorphism.wado::$const_obj_23);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
+=======
+    "core:rt/write_string_to_stream"(tx_13, global:effect_polymorphism.wado::$const_obj_23);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
+>>>>>>> origin/main
     rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
     tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
     handle_22 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"(rx_25);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:effect_polymorphism.wado::$const_obj_22;
     "core:rt/write_string_to_stream"(tx_26, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_22);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_26, global:effect_polymorphism.wado::$const_obj_22);
+    "wasi/future-drop-readable:transmission-cli"(handle_22);
+=======
+    "core:rt/write_string_to_stream"(tx_26, global:effect_polymorphism.wado::$const_obj_22);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_22);
+>>>>>>> origin/main
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_37 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:effect_polymorphism.wado::$const_obj_21;
     "core:rt/write_string_to_stream"(tx_41, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_37);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_41, global:effect_polymorphism.wado::$const_obj_21);
+    "wasi/future-drop-readable:transmission-cli"(handle_37);
+=======
+    "core:rt/write_string_to_stream"(tx_41, global:effect_polymorphism.wado::$const_obj_21);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_37);
+>>>>>>> origin/main
     rx_84 = builtin::i32_wrap_i64(local.tee packed_83("wasi/stream-new"()));
     tx_85 = builtin::i32_wrap_i64(packed_83 >> 32_i64);
     handle_62 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_84);
+<<<<<<< HEAD
     let $mv_arg_8: ref "core:prelude/string.wado//String";
     $mv_arg_8 = global:effect_polymorphism.wado::$const_obj_20;
     "core:rt/write_string_to_stream"(tx_85, $mv_arg_8.repr, $mv_arg_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_62);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_85, global:effect_polymorphism.wado::$const_obj_20);
+    "wasi/future-drop-readable:transmission-cli"(handle_62);
+=======
+    "core:rt/write_string_to_stream"(tx_85, global:effect_polymorphism.wado::$const_obj_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_62);
+>>>>>>> origin/main
     rx_141 = builtin::i32_wrap_i64(local.tee packed_140("wasi/stream-new"()));
     tx_142 = builtin::i32_wrap_i64(packed_140 >> 32_i64);
     handle_138 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"(rx_141);
+<<<<<<< HEAD
     let $mv_arg_10: ref "core:prelude/string.wado//String";
     $mv_arg_10 = global:effect_polymorphism.wado::$const_obj_19;
     "core:rt/write_string_to_stream"(tx_142, $mv_arg_10.repr, $mv_arg_10.used);
     "wasi/future-drop-readable:transmission-cli"(handle_138);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_142, global:effect_polymorphism.wado::$const_obj_19);
+    "wasi/future-drop-readable:transmission-cli"(handle_138);
+=======
+    "core:rt/write_string_to_stream"(tx_142, global:effect_polymorphism.wado::$const_obj_19);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_138);
+>>>>>>> origin/main
     rx_119 = builtin::i32_wrap_i64(local.tee packed_118("wasi/stream-new"()));
     tx_120 = builtin::i32_wrap_i64(packed_118 >> 32_i64);
     handle_97 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_119);
+<<<<<<< HEAD
     let $mv_arg_12: ref "core:prelude/string.wado//String";
     $mv_arg_12 = global:effect_polymorphism.wado::$const_obj_18;
     "core:rt/write_string_to_stream"(tx_120, $mv_arg_12.repr, $mv_arg_12.used);
     "wasi/future-drop-readable:transmission-cli"(handle_97);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_120, global:effect_polymorphism.wado::$const_obj_18);
+    "wasi/future-drop-readable:transmission-cli"(handle_97);
+=======
+    "core:rt/write_string_to_stream"(tx_120, global:effect_polymorphism.wado::$const_obj_18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_97);
+>>>>>>> origin/main
 }
 
 fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
@@ -289,24 +375,48 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     handle_3 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_36;
     "core:rt/write_string_to_stream"(tx_7, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_3);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_7, global:effect_polymorphism.wado::$const_obj_36);
+    "wasi/future-drop-readable:transmission-cli"(handle_3);
+=======
+    "core:rt/write_string_to_stream"(tx_7, global:effect_polymorphism.wado::$const_obj_36);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
+>>>>>>> origin/main
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_15 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:effect_polymorphism.wado::$const_obj_35;
     "core:rt/write_string_to_stream"(tx_19, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_19, global:effect_polymorphism.wado::$const_obj_35);
+    "wasi/future-drop-readable:transmission-cli"(handle_15);
+=======
+    "core:rt/write_string_to_stream"(tx_19, global:effect_polymorphism.wado::$const_obj_35);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
+>>>>>>> origin/main
     rx_30 = builtin::i32_wrap_i64(local.tee packed_29("wasi/stream-new"()));
     tx_31 = builtin::i32_wrap_i64(packed_29 >> 32_i64);
     handle_27 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:effect_polymorphism.wado::$const_obj_34;
     "core:rt/write_string_to_stream"(tx_31, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_27);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_31, global:effect_polymorphism.wado::$const_obj_34);
+    "wasi/future-drop-readable:transmission-cli"(handle_27);
+=======
+    "core:rt/write_string_to_stream"(tx_31, global:effect_polymorphism.wado::$const_obj_34);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
+>>>>>>> origin/main
     $functor_138 = struct.new "effect_polymorphism.wado//$Closure_0" {  };
     f_36 = struct.new "canonical//CanonicalClosure_0" { env: $functor_138, func: ref.func "closure/effect_polymorphism.wado/$closure_wrapper_0" };
     let $indirect_call_7: ref "canonical//CanonicalClosure_0";
@@ -330,71 +440,151 @@ fn "effect_polymorphism.wado/run"() with Stdout, Stderr {
     rx_70 = builtin::i32_wrap_i64(local.tee packed_69("wasi/stream-new"()));
     tx_71 = builtin::i32_wrap_i64(packed_69 >> 32_i64);
     handle_48 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_70);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_71, $local_1_39.repr, $local_1_39.used);
     "wasi/future-drop-readable:transmission-cli"(handle_48);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_71, $local_1_39);
+    "wasi/future-drop-readable:transmission-cli"(handle_48);
+=======
+    "core:rt/write_string_to_stream"(tx_71, $local_1_39);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_48);
+>>>>>>> origin/main
     rx_86 = builtin::i32_wrap_i64(local.tee packed_85("wasi/stream-new"()));
     tx_87 = builtin::i32_wrap_i64(packed_85 >> 32_i64);
     handle_83 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_86);
+<<<<<<< HEAD
     let $mv_arg_12: ref "core:prelude/string.wado//String";
     $mv_arg_12 = global:effect_polymorphism.wado::$const_obj_32;
     "core:rt/write_string_to_stream"(tx_87, $mv_arg_12.repr, $mv_arg_12.used);
     "wasi/future-drop-readable:transmission-cli"(handle_83);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_87, global:effect_polymorphism.wado::$const_obj_32);
+    "wasi/future-drop-readable:transmission-cli"(handle_83);
+=======
+    "core:rt/write_string_to_stream"(tx_87, global:effect_polymorphism.wado::$const_obj_32);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_83);
+>>>>>>> origin/main
     rx_225 = builtin::i32_wrap_i64(local.tee packed_224("wasi/stream-new"()));
     tx_226 = builtin::i32_wrap_i64(packed_224 >> 32_i64);
     handle_222 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_225);
+<<<<<<< HEAD
     let $mv_arg_14: ref "core:prelude/string.wado//String";
     $mv_arg_14 = global:effect_polymorphism.wado::$const_obj_31;
     "core:rt/write_string_to_stream"(tx_226, $mv_arg_14.repr, $mv_arg_14.used);
     "wasi/future-drop-readable:transmission-cli"(handle_222);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_226, global:effect_polymorphism.wado::$const_obj_31);
+    "wasi/future-drop-readable:transmission-cli"(handle_222);
+=======
+    "core:rt/write_string_to_stream"(tx_226, global:effect_polymorphism.wado::$const_obj_31);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_222);
+>>>>>>> origin/main
     rx_100 = builtin::i32_wrap_i64(local.tee packed_99("wasi/stream-new"()));
     tx_101 = builtin::i32_wrap_i64(packed_99 >> 32_i64);
     handle_97 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_100);
+<<<<<<< HEAD
     let $mv_arg_16: ref "core:prelude/string.wado//String";
     $mv_arg_16 = global:effect_polymorphism.wado::$const_obj_24;
     "core:rt/write_string_to_stream"(tx_101, $mv_arg_16.repr, $mv_arg_16.used);
     "wasi/future-drop-readable:transmission-cli"(handle_97);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_101, global:effect_polymorphism.wado::$const_obj_24);
+    "wasi/future-drop-readable:transmission-cli"(handle_97);
+=======
+    "core:rt/write_string_to_stream"(tx_101, global:effect_polymorphism.wado::$const_obj_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_97);
+>>>>>>> origin/main
     rx_122 = builtin::i32_wrap_i64(local.tee packed_121("wasi/stream-new"()));
     tx_123 = builtin::i32_wrap_i64(packed_121 >> 32_i64);
     handle_119 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_122);
+<<<<<<< HEAD
     let $mv_arg_18: ref "core:prelude/string.wado//String";
     $mv_arg_18 = global:effect_polymorphism.wado::$const_obj_29;
     "core:rt/write_string_to_stream"(tx_123, $mv_arg_18.repr, $mv_arg_18.used);
     "wasi/future-drop-readable:transmission-cli"(handle_119);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_123, global:effect_polymorphism.wado::$const_obj_29);
+    "wasi/future-drop-readable:transmission-cli"(handle_119);
+=======
+    "core:rt/write_string_to_stream"(tx_123, global:effect_polymorphism.wado::$const_obj_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_119);
+>>>>>>> origin/main
     rx_136 = builtin::i32_wrap_i64(local.tee packed_135("wasi/stream-new"()));
     tx_137 = builtin::i32_wrap_i64(packed_135 >> 32_i64);
     handle_133 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_136);
+<<<<<<< HEAD
     let $mv_arg_20: ref "core:prelude/string.wado//String";
     $mv_arg_20 = global:effect_polymorphism.wado::$const_obj_28;
     "core:rt/write_string_to_stream"(tx_137, $mv_arg_20.repr, $mv_arg_20.used);
     "wasi/future-drop-readable:transmission-cli"(handle_133);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_137, global:effect_polymorphism.wado::$const_obj_28);
+    "wasi/future-drop-readable:transmission-cli"(handle_133);
+=======
+    "core:rt/write_string_to_stream"(tx_137, global:effect_polymorphism.wado::$const_obj_28);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_133);
+>>>>>>> origin/main
     rx_150 = builtin::i32_wrap_i64(local.tee packed_149("wasi/stream-new"()));
     tx_151 = builtin::i32_wrap_i64(packed_149 >> 32_i64);
     handle_147 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"(rx_150);
+<<<<<<< HEAD
     let $mv_arg_22: ref "core:prelude/string.wado//String";
     $mv_arg_22 = global:effect_polymorphism.wado::$const_obj_27;
     "core:rt/write_string_to_stream"(tx_151, $mv_arg_22.repr, $mv_arg_22.used);
     "wasi/future-drop-readable:transmission-cli"(handle_147);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_151, global:effect_polymorphism.wado::$const_obj_27);
+    "wasi/future-drop-readable:transmission-cli"(handle_147);
+=======
+    "core:rt/write_string_to_stream"(tx_151, global:effect_polymorphism.wado::$const_obj_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_147);
+>>>>>>> origin/main
     rx_164 = builtin::i32_wrap_i64(local.tee packed_163("wasi/stream-new"()));
     tx_165 = builtin::i32_wrap_i64(packed_163 >> 32_i64);
     handle_161 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_164);
+<<<<<<< HEAD
     let $mv_arg_24: ref "core:prelude/string.wado//String";
     $mv_arg_24 = global:effect_polymorphism.wado::$const_obj_26;
     "core:rt/write_string_to_stream"(tx_165, $mv_arg_24.repr, $mv_arg_24.used);
     "wasi/future-drop-readable:transmission-cli"(handle_161);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_165, global:effect_polymorphism.wado::$const_obj_26);
+    "wasi/future-drop-readable:transmission-cli"(handle_161);
+=======
+    "core:rt/write_string_to_stream"(tx_165, global:effect_polymorphism.wado::$const_obj_26);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_161);
+>>>>>>> origin/main
     rx_176 = builtin::i32_wrap_i64(local.tee packed_175("wasi/stream-new"()));
     tx_177 = builtin::i32_wrap_i64(packed_175 >> 32_i64);
     handle_173 = "effect_polymorphism.wado/$cm_binding__Stderr_write_via_stream"(rx_176);
+<<<<<<< HEAD
     let $mv_arg_26: ref "core:prelude/string.wado//String";
     $mv_arg_26 = global:effect_polymorphism.wado::$const_obj_25;
     "core:rt/write_string_to_stream"(tx_177, $mv_arg_26.repr, $mv_arg_26.used);
     "wasi/future-drop-readable:transmission-cli"(handle_173);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_177, global:effect_polymorphism.wado::$const_obj_25);
+    "wasi/future-drop-readable:transmission-cli"(handle_173);
+=======
+    "core:rt/write_string_to_stream"(tx_177, global:effect_polymorphism.wado::$const_obj_25);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_173);
+>>>>>>> origin/main
     rx_188 = builtin::i32_wrap_i64(local.tee packed_187("wasi/stream-new"()));
     tx_189 = builtin::i32_wrap_i64(packed_187 >> 32_i64);
     handle_185 = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_188);
+<<<<<<< HEAD
     let $mv_arg_28: ref "core:prelude/string.wado//String";
     $mv_arg_28 = global:effect_polymorphism.wado::$const_obj_24;
     "core:rt/write_string_to_stream"(tx_189, $mv_arg_28.repr, $mv_arg_28.used);
     "wasi/future-drop-readable:transmission-cli"(handle_185);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_189, global:effect_polymorphism.wado::$const_obj_24);
+    "wasi/future-drop-readable:transmission-cli"(handle_185);
+=======
+    "core:rt/write_string_to_stream"(tx_189, global:effect_polymorphism.wado::$const_obj_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_185);
+>>>>>>> origin/main
     "effect_polymorphism.wado/effect_poly_multi_param"();
 }
 
@@ -575,10 +765,18 @@ fn "effect_polymorphism.wado/effect_polymorphism.wado/$Closure_0::$call"() {
     rx_6 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_polymorphism.wado::$const_obj_37;
     "core:rt/write_string_to_stream"(tx_7, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_7, global:effect_polymorphism.wado::$const_obj_37);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+=======
+    "core:rt/write_string_to_stream"(tx_7, global:effect_polymorphism.wado::$const_obj_37);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+>>>>>>> origin/main
 }
 
 fn "effect_polymorphism.wado/effect_polymorphism.wado/$Closure_4::$call"(x) {
@@ -602,8 +800,16 @@ fn "effect_polymorphism.wado/effect_polymorphism.wado/$Closure_4::$call"(x) {
     rx_28 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_29 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_polymorphism.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_29, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_29, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+=======
+    "core:rt/write_string_to_stream"(tx_29, $local_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+>>>>>>> origin/main
     return x + 1;
 }
 

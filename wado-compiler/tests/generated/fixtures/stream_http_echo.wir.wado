@@ -340,7 +340,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(78)
 
-type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(79)
+type "functype//wasi/future-new:transmission-wasi/http/types.wado#error-code" = fn() -> i64;  // TypeId(79)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(80)
 
@@ -354,7 +354,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(84)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(85)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(86)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(86)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -368,14 +368,14 @@ import fn wasi/wasi:http/Fields::new from "wasi/wasi:http/Fields::new";
 import fn wasi/wasi:http/Request::consume_body from "wasi/wasi:http/Request::consume_body";
 import fn wasi/wasi:http/Response::new from "wasi/wasi:http/Response::new";
 import memory (1) from "mem/memory";
-import fn wasi/future-new:transmission-http from "wasi/future-new:transmission-http";
+import fn wasi/future-new:transmission-wasi/http/types.wado#error-code from "wasi/future-new:transmission-wasi/http/types.wado#error-code";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
 import fn wasi/future-new from "wasi/future-new";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:core:prelude/primitive.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(10);
 global global:core:prelude/primitive.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(104, 105, 103, 104, 58, 32);
@@ -454,7 +454,7 @@ fn "stream_http_echo.wado/$cm_task_entry__handle"(request) {
     let $sroa_$pattern_temp_0_0: i32;
     let $sroa_$iter_0_repr: ref "Array<core:prelude/list.wado/List<u8>>";
     let $sroa_$iter_0_index: i32;
-    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_191("wasi/future-new:transmission-http"()));
+    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed_191("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
     $pattern_temp_1 = "stream_http_echo.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0);
     body_stream = $pattern_temp_1.0;
     elements = array.new_fixed<ref "core:prelude//List<u8>">();
@@ -1036,7 +1036,7 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     $mv_field_4 = $mv$message$used + 1;
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, new_repr, 0, $mv_field_4);
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

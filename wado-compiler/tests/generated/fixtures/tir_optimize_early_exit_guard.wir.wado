@@ -50,7 +50,13 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
 
@@ -65,7 +71,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -97,16 +103,32 @@ fn "tir_optimize_early_exit_guard.wado/run"() with Stdout {
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_9 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_21, $local_1.repr, $local_1.used);
     "wasi/future-drop-readable:transmission-cli"(handle_9);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_21, $local_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_9);
+=======
+    "core:rt/write_string_to_stream"(tx_21, $local_1);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
+>>>>>>> origin/main
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     $sroa_self_value_49 = "tir_optimize_early_exit_guard.wado/safe_get"(a, black_box(10));
     "core:prelude/string.wado/core:prelude/string.wado/String::push"($local_3, $sroa_self_value_49);
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_29 = "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_41, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-cli"(handle_29);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_41, $local_3);
+    "wasi/future-drop-readable:transmission-cli"(handle_29);
+=======
+    "core:rt/write_string_to_stream"(tx_41, $local_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
+>>>>>>> origin/main
 }
 
 fn "tir_optimize_early_exit_guard.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

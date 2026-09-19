@@ -627,19 +627,19 @@ impl<'a> WirContext<'a> {
         )
     }
 
-    /// Register a CM canonical import lazily and return its `WirFuncId`.
-    ///
-    /// If the canonical has already been registered, returns the existing `WirFuncId`.
-    /// Called by WIR synthesis functions (`emit_stream_read`, `emit_waitable_set_new`, etc.)
-    /// to declare the canonical imports they need without going through TIR imports or DCE.
-    ///
-    /// The import name is derived from `CanonicalIntrinsic::import_name()`.
+    /// Register a CM canonical import lazily and return its `WirFuncId`. Its
+    /// callers are WIR synthesis, so it goes through neither TIR imports nor DCE.
     pub fn ensure_canonical(
         &mut self,
         intrinsic: CanonicalIntrinsic,
         params: Vec<WirType>,
         results: Vec<WirType>,
     ) -> WirFuncId {
+        // The intrinsic decides, not its rendering: two renderings of one
+        // declaration would otherwise register two imports for one canon.
+        if let Some(func_id) = self.needed_canonicals.get(&intrinsic) {
+            return func_id.clone();
+        }
         let name = intrinsic.import_name();
         let key = MangledName::wasi_import(&name);
         if let Some(func_id) = self.func_map.get(&key) {

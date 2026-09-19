@@ -206,7 +206,13 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(69)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(70)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(71)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(71)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(71)
 
@@ -222,7 +228,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -309,23 +315,47 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_8 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_21, message_5.repr, message_5.used);
     "wasi/future-drop-readable:transmission-cli"(handle_8);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_21, message_5);
+    "wasi/future-drop-readable:transmission-cli"(handle_8);
+=======
+    "core:rt/write_string_to_stream"(tx_21, message_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
+>>>>>>> origin/main
     writer_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     "serde_full_json_serialize.wado/serde_full_json_serialize.wado/JsonWriter::write$scalar"(writer_32, global:serde_full_json_serialize.wado::$const_obj_24);
     rx_40 = builtin::i32_wrap_i64(local.tee packed_39("wasi/stream-new"()));
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_29 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_41, writer_32.repr, writer_32.used);
     "wasi/future-drop-readable:transmission-cli"(handle_29);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_41, writer_32);
+    "wasi/future-drop-readable:transmission-cli"(handle_29);
+=======
+    "core:rt/write_string_to_stream"(tx_41, writer_32);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
+>>>>>>> origin/main
     writer_52 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/Point^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$scalar"(writer_52));
     message_46 = writer_52.buf;
     rx_55 = builtin::i32_wrap_i64(local.tee packed_54("wasi/stream-new"()));
     tx_56 = builtin::i32_wrap_i64(packed_54 >> 32_i64);
     handle_49 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_55);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_56, message_46.repr, message_46.used);
     "wasi/future-drop-readable:transmission-cli"(handle_49);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_56, message_46);
+    "wasi/future-drop-readable:transmission-cli"(handle_49);
+=======
+    "core:rt/write_string_to_stream"(tx_56, message_46);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_49);
+>>>>>>> origin/main
     user = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Alice"), used: 5 }, age: 30, active: 1, location: struct.new "serde_full_json_serialize.wado//Point" { x: 10, y: 20 }, tags: struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("admin"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(117, 115, 101, 114), used: 4 }), used: 2 } };
     writer_68 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec0$scalar"(user, writer_68));
@@ -333,8 +363,16 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     rx_71 = builtin::i32_wrap_i64(local.tee packed_70("wasi/stream-new"()));
     tx_72 = builtin::i32_wrap_i64(packed_70 >> 32_i64);
     handle_65 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_71);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_72, message_62.repr, message_62.used);
     "wasi/future-drop-readable:transmission-cli"(handle_65);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_72, message_62);
+    "wasi/future-drop-readable:transmission-cli"(handle_65);
+=======
+    "core:rt/write_string_to_stream"(tx_72, message_62);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_65);
+>>>>>>> origin/main
     user2 = struct.new "serde_full_json_serialize.wado//User" { name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 }, age: 25, active: 0, location: ref.null none, tags: ref.as_non_null(elements_77 = array.new_fixed<ref "core:prelude/string.wado//String">(); struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: elements_77, used: 0 }) };
     writer_84 = struct.new "serde_full_json_serialize.wado//JsonWriter" { buf: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
     drop("serde_full_json_serialize.wado/serde_full_json_serialize.wado/User^serde_full_json_serialize.wado/Serialize::serialize<serde_full_json_serialize.wado/JsonSerializer>$spec1$scalar"(user2, writer_84));
@@ -342,8 +380,16 @@ fn "serde_full_json_serialize.wado/run"() with Stdout {
     rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
     tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
     handle_81 = "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(rx_87);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_88, message_78.repr, message_78.used);
     "wasi/future-drop-readable:transmission-cli"(handle_81);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_88, message_78);
+    "wasi/future-drop-readable:transmission-cli"(handle_81);
+=======
+    "core:rt/write_string_to_stream"(tx_88, message_78);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_81);
+>>>>>>> origin/main
 }
 
 fn "serde_full_json_serialize.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -876,8 +922,16 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_8, message);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
+=======
+    "core:rt/write_string_to_stream"(tx_8, message);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
+>>>>>>> origin/main
     cold_path;
     unreachable;
 }

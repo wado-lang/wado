@@ -67,7 +67,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(25)
 
@@ -80,7 +86,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -166,8 +172,16 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
     tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
     handle_33 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_87);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_88, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_33);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_88, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_33);
+=======
+    "core:rt/write_string_to_stream"(tx_88, $local_4_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_33);
+>>>>>>> origin/main
     $sroa_slot_181 = ref.null none;
     $sroa_slot_181 = struct.new "wir_optimize_value_copy_multivalue_fresh.wado//Data" { x: 10, y: 20, name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("item_10"), used: 7 } };
     d = ref.as_non_null($sroa_slot_181);
@@ -215,8 +229,16 @@ fn "wir_optimize_value_copy_multivalue_fresh.wado/run"() with Stdout {
     rx_172 = builtin::i32_wrap_i64(local.tee packed_171("wasi/stream-new"()));
     tx_173 = builtin::i32_wrap_i64(packed_171 >> 32_i64);
     handle_118 = "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(rx_172);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_173, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_118);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_173, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_118);
+=======
+    "core:rt/write_string_to_stream"(tx_173, $local_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_118);
+>>>>>>> origin/main
 }
 
 fn "wir_optimize_value_copy_multivalue_fresh.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

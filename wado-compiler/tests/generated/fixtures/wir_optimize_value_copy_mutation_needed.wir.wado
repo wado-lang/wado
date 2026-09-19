@@ -39,7 +39,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -52,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -71,17 +77,33 @@ fn "wir_optimize_value_copy_mutation_needed.wado/run"() with Stdout {
     rx_19 = builtin::i32_wrap_i64(local.tee packed_18("wasi/stream-new"()));
     tx_20 = builtin::i32_wrap_i64(packed_18 >> 32_i64);
     handle_8 = "wir_optimize_value_copy_mutation_needed.wado/$cm_binding__Stdout_write_via_stream"(rx_19);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_20, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_8);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_20, global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_8);
+=======
+    "core:rt/write_string_to_stream"(tx_20, global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
+>>>>>>> origin/main
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_28 = "wir_optimize_value_copy_mutation_needed.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_38, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_28);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_38, global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-cli"(handle_28);
+=======
+    "core:rt/write_string_to_stream"(tx_38, global:wir_optimize_value_copy_mutation_needed.wado::$const_obj_1);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_28);
+>>>>>>> origin/main
 }
 
 fn "wir_optimize_value_copy_mutation_needed.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

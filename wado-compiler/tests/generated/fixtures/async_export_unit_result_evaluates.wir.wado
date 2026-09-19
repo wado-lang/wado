@@ -34,7 +34,21 @@ type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeI
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
+<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
+
+type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
+
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
+>>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -45,7 +59,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -65,17 +79,33 @@ fn "async_export_unit_result_evaluates.wado/$cm_export__run"() {
     rx_6 = builtin::i32_wrap_i64(local.tee packed_5("wasi/stream-new"()));
     tx_7 = builtin::i32_wrap_i64(packed_5 >> 32_i64);
     handle_3 = "async_export_unit_result_evaluates.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
+<<<<<<< HEAD
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("evaluated");
     "core:rt/write_string_to_stream"(tx_7, $mv_field_2, 9);
     "wasi/future-drop-readable:transmission-cli"(handle_3);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("evaluated"), used: 9 });
+    "wasi/future-drop-readable:transmission-cli"(handle_3);
+=======
+    "core:rt/write_string_to_stream"(tx_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("evaluated"), used: 9 });
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
+>>>>>>> origin/main
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_15 = "async_export_unit_result_evaluates.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
+<<<<<<< HEAD
     let $mv_field_5: ref Array<u8>;
     $mv_field_5 = array.new_fixed<u8>(100, 111, 110, 101);
     "core:rt/write_string_to_stream"(tx_19, $mv_field_5, 4);
     "wasi/future-drop-readable:transmission-cli"(handle_15);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_19, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
+    "wasi/future-drop-readable:transmission-cli"(handle_15);
+=======
+    "core:rt/write_string_to_stream"(tx_19, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(100, 111, 110, 101), used: 4 });
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
+>>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

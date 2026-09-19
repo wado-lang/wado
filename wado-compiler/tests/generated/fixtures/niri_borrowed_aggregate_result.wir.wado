@@ -57,7 +57,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(22)
 
@@ -70,7 +76,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -101,17 +107,33 @@ fn "niri_borrowed_aggregate_result.wado/run"() with Stdout {
     rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
     handle_11 = "niri_borrowed_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:niri_borrowed_aggregate_result.wado::$const_obj_5;
     "core:rt/write_string_to_stream"(tx_35, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_35, global:niri_borrowed_aggregate_result.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-cli"(handle_11);
+=======
+    "core:rt/write_string_to_stream"(tx_35, global:niri_borrowed_aggregate_result.wado::$const_obj_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
+>>>>>>> origin/main
     rx_66 = builtin::i32_wrap_i64(local.tee packed_65("wasi/stream-new"()));
     tx_67 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
     handle_43 = "niri_borrowed_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(rx_66);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:niri_borrowed_aggregate_result.wado::$const_obj_4;
     "core:rt/write_string_to_stream"(tx_67, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_43);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_67, global:niri_borrowed_aggregate_result.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_43);
+=======
+    "core:rt/write_string_to_stream"(tx_67, global:niri_borrowed_aggregate_result.wado::$const_obj_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_43);
+>>>>>>> origin/main
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(39), used: 0 };
     $local_6.used = 6;
     builtin::array_copy<u8>($local_6.repr, 0, global:niri_borrowed_aggregate_result.wado::$const_obj_3, 0, 6);
@@ -138,8 +160,16 @@ fn "niri_borrowed_aggregate_result.wado/run"() with Stdout {
     rx_117 = builtin::i32_wrap_i64(local.tee packed_116("wasi/stream-new"()));
     tx_118 = builtin::i32_wrap_i64(packed_116 >> 32_i64);
     handle_75 = "niri_borrowed_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(rx_117);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_118, $local_6.repr, $local_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_75);
+||||||| f144ca275
+    "core:rt/write_string_to_stream"(tx_118, $local_6);
+    "wasi/future-drop-readable:transmission-cli"(handle_75);
+=======
+    "core:rt/write_string_to_stream"(tx_118, $local_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_75);
+>>>>>>> origin/main
 }
 
 fn "niri_borrowed_aggregate_result.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

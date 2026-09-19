@@ -43,7 +43,7 @@ type "functype//stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wad
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
-type "functype//wasi/future-read:transmission-cli" = fn(i32, i32) -> i32;  // TypeId(16)
+type "functype//wasi/future-read:transmission-wasi/cli/types.wado#error-code" = fn(i32, i32) -> i32;  // TypeId(16)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/waitable-join from "wasi/waitable-join";
@@ -54,7 +54,7 @@ import fn wasi/wasi:cli/Stdin::read_via_stream from "wasi/wasi:cli/Stdin::read_v
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-read:transmission-cli from "wasi/future-read:transmission-cli";
+import fn wasi/future-read:transmission-wasi/cli/types.wado#error-code from "wasi/future-read:transmission-wasi/cli/types.wado#error-code";
 
 fn "stream_cm_stdin_pipe.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
@@ -92,7 +92,7 @@ fn "stream_cm_stdin_pipe.wado/$cm_future_read_core:prelude/types.wado/Result<(),
     let evt_ptr: i32;
     let status_13: i32;
     ptr = "mem/realloc"(0, 0, 1, 2);
-    status_2 = "wasi/future-read:transmission-cli"(handle, ptr);
+    status_2 = "wasi/future-read:transmission-wasi/cli/types.wado#error-code"(handle, ptr);
     if status_2 == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);

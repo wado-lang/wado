@@ -106,7 +106,13 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
+<<<<<<< HEAD
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(42)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(42)
+>>>>>>> origin/main
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
 
@@ -122,7 +128,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -186,22 +192,46 @@ fn "variant_if_let_basic.wado/run"() with Stdout {
     rx_31 = builtin::i32_wrap_i64(local.tee packed_30("wasi/stream-new"()));
     tx_32 = builtin::i32_wrap_i64(packed_30 >> 32_i64);
     handle_11 = "variant_if_let_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_31);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_32, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_11);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_32, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_11);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_32, $local_4_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
+>>>>>>> origin/main
     rx_59 = builtin::i32_wrap_i64(local.tee packed_58("wasi/stream-new"()));
     tx_60 = builtin::i32_wrap_i64(packed_58 >> 32_i64);
     handle_40 = "variant_if_let_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_59);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:variant_if_let_basic.wado::$const_obj_16;
     "core:rt/write_string_to_stream$spec0"(tx_60, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_40);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_60, global:variant_if_let_basic.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-cli"(handle_40);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_60, global:variant_if_let_basic.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_40);
+>>>>>>> origin/main
     rx_48 = builtin::i32_wrap_i64(local.tee packed_47("wasi/stream-new"()));
     tx_49 = builtin::i32_wrap_i64(packed_47 >> 32_i64);
     handle_45 = "variant_if_let_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:variant_if_let_basic.wado::$const_obj_15;
     "core:rt/write_string_to_stream$spec0"(tx_49, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_45);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_49, global:variant_if_let_basic.wado::$const_obj_15);
+    "wasi/future-drop-readable:transmission-cli"(handle_45);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_49, global:variant_if_let_basic.wado::$const_obj_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
+>>>>>>> origin/main
 }
 
 fn "variant_if_let_basic.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -723,8 +753,16 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_8, message.repr, message.used);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_8, message);
+    "wasi/future-drop-readable:transmission-cli"(future_handle);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_8, message);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
+>>>>>>> origin/main
     cold_path;
     unreachable;
 }

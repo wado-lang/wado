@@ -122,7 +122,13 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(40)
 
 type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(41)
 
+<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(42)
+||||||| f144ca275
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(42)
+=======
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(42)
+>>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(43)
 
@@ -135,7 +141,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -172,10 +178,18 @@ fn "tuple_destructuring.wado/destruct_basic"() with Stdout {
     rx_43 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_44 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_43);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:tuple_destructuring.wado::$const_obj_7;
     "core:rt/write_string_to_stream$spec0"(tx_44, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_44, global:tuple_destructuring.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_44, global:tuple_destructuring.wado::$const_obj_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
@@ -250,8 +264,16 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                 rx_76 = builtin::i32_wrap_i64(local.tee packed_75("wasi/stream-new"()));
                 tx_77 = builtin::i32_wrap_i64(packed_75 >> 32_i64);
                 handle_54 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_76);
+<<<<<<< HEAD
                 "core:rt/write_string_to_stream$spec0"(tx_77, $local_6.repr, $local_6.used);
                 "wasi/future-drop-readable:transmission-cli"(handle_54);
+||||||| f144ca275
+                "core:rt/write_string_to_stream$spec0"(tx_77, $local_6);
+                "wasi/future-drop-readable:transmission-cli"(handle_54);
+=======
+                "core:rt/write_string_to_stream$spec0"(tx_77, $local_6);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_54);
+>>>>>>> origin/main
             } else {
                 break b0;
             }
@@ -277,8 +299,16 @@ fn "tuple_destructuring.wado/destruct_for_of"() with Stdout {
                 rx_83 = builtin::i32_wrap_i64(local.tee packed_82("wasi/stream-new"()));
                 tx_84 = builtin::i32_wrap_i64(packed_82 >> 32_i64);
                 handle_67 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_83);
+<<<<<<< HEAD
                 "core:rt/write_string_to_stream$spec0"(tx_84, name_5.repr, name_5.used);
                 "wasi/future-drop-readable:transmission-cli"(handle_67);
+||||||| f144ca275
+                "core:rt/write_string_to_stream$spec0"(tx_84, name_5);
+                "wasi/future-drop-readable:transmission-cli"(handle_67);
+=======
+                "core:rt/write_string_to_stream$spec0"(tx_84, name_5);
+                "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_67);
+>>>>>>> origin/main
             } else {
                 break b6;
             }
@@ -339,8 +369,16 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
         rx_88 = builtin::i32_wrap_i64(local.tee packed_87("wasi/stream-new"()));
         tx_89 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
         handle_40 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_88);
+<<<<<<< HEAD
         "core:rt/write_string_to_stream$spec0"(tx_89, $local_7.repr, $local_7.used);
         "wasi/future-drop-readable:transmission-cli"(handle_40);
+||||||| f144ca275
+        "core:rt/write_string_to_stream$spec0"(tx_89, $local_7);
+        "wasi/future-drop-readable:transmission-cli"(handle_40);
+=======
+        "core:rt/write_string_to_stream$spec0"(tx_89, $local_7);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_40);
+>>>>>>> origin/main
     } else {
     }
     if ref.is_null(ref.null none) == 0 {
@@ -364,24 +402,48 @@ fn "tuple_destructuring.wado/destruct_if_let"() with Stdout {
         rx_95 = builtin::i32_wrap_i64(local.tee packed_94("wasi/stream-new"()));
         tx_96 = builtin::i32_wrap_i64(packed_94 >> 32_i64);
         handle_69 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_95);
+<<<<<<< HEAD
         "core:rt/write_string_to_stream$spec0"(tx_96, $local_9.repr, $local_9.used);
         "wasi/future-drop-readable:transmission-cli"(handle_69);
+||||||| f144ca275
+        "core:rt/write_string_to_stream$spec0"(tx_96, $local_9);
+        "wasi/future-drop-readable:transmission-cli"(handle_69);
+=======
+        "core:rt/write_string_to_stream$spec0"(tx_96, $local_9);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_69);
+>>>>>>> origin/main
     } else {
         rx_102 = builtin::i32_wrap_i64(local.tee packed_101("wasi/stream-new"()));
         tx_103 = builtin::i32_wrap_i64(packed_101 >> 32_i64);
         handle_74 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_102);
+<<<<<<< HEAD
         let $mv_arg_5: ref "core:prelude/string.wado//String";
         $mv_arg_5 = global:tuple_destructuring.wado::$const_obj_10;
         "core:rt/write_string_to_stream$spec0"(tx_103, $mv_arg_5.repr, $mv_arg_5.used);
         "wasi/future-drop-readable:transmission-cli"(handle_74);
+||||||| f144ca275
+        "core:rt/write_string_to_stream$spec0"(tx_103, global:tuple_destructuring.wado::$const_obj_10);
+        "wasi/future-drop-readable:transmission-cli"(handle_74);
+=======
+        "core:rt/write_string_to_stream$spec0"(tx_103, global:tuple_destructuring.wado::$const_obj_10);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_74);
+>>>>>>> origin/main
     }
     rx_109 = builtin::i32_wrap_i64(local.tee packed_108("wasi/stream-new"()));
     tx_110 = builtin::i32_wrap_i64(packed_108 >> 32_i64);
     handle_85 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_109);
+<<<<<<< HEAD
     let $mv_arg_10: ref "core:prelude/string.wado//String";
     $mv_arg_10 = global:tuple_destructuring.wado::$const_obj_9;
     "core:rt/write_string_to_stream$spec0"(tx_110, $mv_arg_10.repr, $mv_arg_10.used);
     "wasi/future-drop-readable:transmission-cli"(handle_85);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_110, global:tuple_destructuring.wado::$const_obj_9);
+    "wasi/future-drop-readable:transmission-cli"(handle_85);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_110, global:tuple_destructuring.wado::$const_obj_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_85);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_matches"() with Stdout {
@@ -404,31 +466,63 @@ fn "tuple_destructuring.wado/destruct_matches"() with Stdout {
     rx_16 = builtin::i32_wrap_i64(local.tee packed_15("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
     handle_13 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:tuple_destructuring.wado::$const_obj_16;
     "core:rt/write_string_to_stream$spec0"(tx_17, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_13);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_17, global:tuple_destructuring.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-cli"(handle_13);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_17, global:tuple_destructuring.wado::$const_obj_16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_13);
+>>>>>>> origin/main
     rx_28 = builtin::i32_wrap_i64(local.tee packed_27("wasi/stream-new"()));
     tx_29 = builtin::i32_wrap_i64(packed_27 >> 32_i64);
     handle_25 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_28);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:tuple_destructuring.wado::$const_obj_15;
     "core:rt/write_string_to_stream$spec0"(tx_29, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_25);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_29, global:tuple_destructuring.wado::$const_obj_15);
+    "wasi/future-drop-readable:transmission-cli"(handle_25);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_29, global:tuple_destructuring.wado::$const_obj_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_25);
+>>>>>>> origin/main
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     handle_49 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:tuple_destructuring.wado::$const_obj_14;
     "core:rt/write_string_to_stream$spec0"(tx_53, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_49);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_53, global:tuple_destructuring.wado::$const_obj_14);
+    "wasi/future-drop-readable:transmission-cli"(handle_49);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_53, global:tuple_destructuring.wado::$const_obj_14);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_49);
+>>>>>>> origin/main
     rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_61 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
+<<<<<<< HEAD
     let $mv_arg_8: ref "core:prelude/string.wado//String";
     $mv_arg_8 = global:tuple_destructuring.wado::$const_obj_13;
     "core:rt/write_string_to_stream$spec0"(tx_65, $mv_arg_8.repr, $mv_arg_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_61);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_65, global:tuple_destructuring.wado::$const_obj_13);
+    "wasi/future-drop-readable:transmission-cli"(handle_61);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_65, global:tuple_destructuring.wado::$const_obj_13);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_61);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
@@ -470,8 +564,16 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     rx_50 = builtin::i32_wrap_i64(local.tee packed_49("wasi/stream-new"()));
     tx_51 = builtin::i32_wrap_i64(packed_49 >> 32_i64);
     handle_10 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_50);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_51, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_10);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_51, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle_10);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_51, $local_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
+>>>>>>> origin/main
     a = 100;
     b = 200;
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 };
@@ -492,8 +594,16 @@ fn "tuple_destructuring.wado/destruct_mut"() with Stdout {
     rx_99 = builtin::i32_wrap_i64(local.tee packed_98("wasi/stream-new"()));
     tx_100 = builtin::i32_wrap_i64(packed_98 >> 32_i64);
     handle_59 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_99);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_100, $local_4_4.repr, $local_4_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_59);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_100, $local_4_4);
+    "wasi/future-drop-readable:transmission-cli"(handle_59);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_100, $local_4_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_59);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_nested"() with Stdout {
@@ -541,8 +651,16 @@ fn "tuple_destructuring.wado/destruct_nested"() with Stdout {
     rx_63 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_64 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_64, $local_3.repr, $local_3.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_64, $local_3);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_64, $local_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_wildcard"() with Stdout {
@@ -570,8 +688,16 @@ fn "tuple_destructuring.wado/destruct_wildcard"() with Stdout {
     rx_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_36 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_36, $local_2.repr, $local_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_36, $local_2);
+    "wasi/future-drop-readable:transmission-cli"(handle);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_36, $local_2);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
@@ -602,45 +728,93 @@ fn "tuple_destructuring.wado/destruct_literal"() with Stdout {
     rx_58 = builtin::i32_wrap_i64(local.tee packed_57("wasi/stream-new"()));
     tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
     handle_55 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_58);
+<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:tuple_destructuring.wado::$const_obj_30;
     "core:rt/write_string_to_stream$spec0"(tx_59, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-cli"(handle_55);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_59, global:tuple_destructuring.wado::$const_obj_30);
+    "wasi/future-drop-readable:transmission-cli"(handle_55);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_59, global:tuple_destructuring.wado::$const_obj_30);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_55);
+>>>>>>> origin/main
     rx_126 = builtin::i32_wrap_i64(local.tee packed_125("wasi/stream-new"()));
     tx_127 = builtin::i32_wrap_i64(packed_125 >> 32_i64);
     handle_123 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_126);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:tuple_destructuring.wado::$const_obj_29;
     "core:rt/write_string_to_stream$spec0"(tx_127, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_123);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_127, global:tuple_destructuring.wado::$const_obj_29);
+    "wasi/future-drop-readable:transmission-cli"(handle_123);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_127, global:tuple_destructuring.wado::$const_obj_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_123);
+>>>>>>> origin/main
     rx_157 = builtin::i32_wrap_i64(local.tee packed_156("wasi/stream-new"()));
     tx_158 = builtin::i32_wrap_i64(packed_156 >> 32_i64);
     handle_154 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_157);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:tuple_destructuring.wado::$const_obj_28;
     "core:rt/write_string_to_stream$spec0"(tx_158, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_154);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_158, global:tuple_destructuring.wado::$const_obj_28);
+    "wasi/future-drop-readable:transmission-cli"(handle_154);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_158, global:tuple_destructuring.wado::$const_obj_28);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_154);
+>>>>>>> origin/main
     rx_190 = builtin::i32_wrap_i64(local.tee packed_189("wasi/stream-new"()));
     tx_191 = builtin::i32_wrap_i64(packed_189 >> 32_i64);
     handle_187 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_190);
+<<<<<<< HEAD
     let $mv_arg_8: ref "core:prelude/string.wado//String";
     $mv_arg_8 = global:tuple_destructuring.wado::$const_obj_27;
     "core:rt/write_string_to_stream$spec0"(tx_191, $mv_arg_8.repr, $mv_arg_8.used);
     "wasi/future-drop-readable:transmission-cli"(handle_187);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_191, global:tuple_destructuring.wado::$const_obj_27);
+    "wasi/future-drop-readable:transmission-cli"(handle_187);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_191, global:tuple_destructuring.wado::$const_obj_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_187);
+>>>>>>> origin/main
     rx_243 = builtin::i32_wrap_i64(local.tee packed_242("wasi/stream-new"()));
     tx_244 = builtin::i32_wrap_i64(packed_242 >> 32_i64);
     handle_218 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_243);
+<<<<<<< HEAD
     let $mv_arg_10: ref "core:prelude/string.wado//String";
     $mv_arg_10 = global:tuple_destructuring.wado::$const_obj_26;
     "core:rt/write_string_to_stream$spec0"(tx_244, $mv_arg_10.repr, $mv_arg_10.used);
     "wasi/future-drop-readable:transmission-cli"(handle_218);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_244, global:tuple_destructuring.wado::$const_obj_26);
+    "wasi/future-drop-readable:transmission-cli"(handle_218);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_244, global:tuple_destructuring.wado::$const_obj_26);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_218);
+>>>>>>> origin/main
     rx_226 = builtin::i32_wrap_i64(local.tee packed_225("wasi/stream-new"()));
     tx_227 = builtin::i32_wrap_i64(packed_225 >> 32_i64);
     handle_223 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_226);
+<<<<<<< HEAD
     let $mv_arg_12: ref "core:prelude/string.wado//String";
     $mv_arg_12 = global:tuple_destructuring.wado::$const_obj_25;
     "core:rt/write_string_to_stream$spec0"(tx_227, $mv_arg_12.repr, $mv_arg_12.used);
     "wasi/future-drop-readable:transmission-cli"(handle_223);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_227, global:tuple_destructuring.wado::$const_obj_25);
+    "wasi/future-drop-readable:transmission-cli"(handle_223);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_227, global:tuple_destructuring.wado::$const_obj_25);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_223);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_match"() with Stdout {
@@ -684,22 +858,46 @@ fn "tuple_destructuring.wado/destruct_match"() with Stdout {
     rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
     tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
     handle_48 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_52, label.repr, label.used);
     "wasi/future-drop-readable:transmission-cli"(handle_48);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_52, label);
+    "wasi/future-drop-readable:transmission-cli"(handle_48);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_52, label);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_48);
+>>>>>>> origin/main
     rx_69 = builtin::i32_wrap_i64(local.tee packed_68("wasi/stream-new"()));
     tx_70 = builtin::i32_wrap_i64(packed_68 >> 32_i64);
     handle_60 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_69);
+<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:tuple_destructuring.wado::$const_obj_32;
     "core:rt/write_string_to_stream$spec0"(tx_70, $mv_arg_4.repr, $mv_arg_4.used);
     "wasi/future-drop-readable:transmission-cli"(handle_60);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_70, global:tuple_destructuring.wado::$const_obj_32);
+    "wasi/future-drop-readable:transmission-cli"(handle_60);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_70, global:tuple_destructuring.wado::$const_obj_32);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_60);
+>>>>>>> origin/main
     rx_87 = builtin::i32_wrap_i64(local.tee packed_86("wasi/stream-new"()));
     tx_88 = builtin::i32_wrap_i64(packed_86 >> 32_i64);
     handle_78 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_87);
+<<<<<<< HEAD
     let $mv_arg_6: ref "core:prelude/string.wado//String";
     $mv_arg_6 = global:tuple_destructuring.wado::$const_obj_31;
     "core:rt/write_string_to_stream$spec0"(tx_88, $mv_arg_6.repr, $mv_arg_6.used);
     "wasi/future-drop-readable:transmission-cli"(handle_78);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_88, global:tuple_destructuring.wado::$const_obj_31);
+    "wasi/future-drop-readable:transmission-cli"(handle_78);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_88, global:tuple_destructuring.wado::$const_obj_31);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_78);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
@@ -1036,8 +1234,16 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     rx_148 = builtin::i32_wrap_i64(local.tee packed_147("wasi/stream-new"()));
     tx_149 = builtin::i32_wrap_i64(packed_147 >> 32_i64);
     handle_3 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_148);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_149, message_0.repr, message_0.used);
     "wasi/future-drop-readable:transmission-cli"(handle_3);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_149, message_0);
+    "wasi/future-drop-readable:transmission-cli"(handle_3);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_149, message_0);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
+>>>>>>> origin/main
     let $match_scrut_1: ref "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]";
     $match_scrut_1 = struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: struct.new "tuple_destructuring.wado//TupleValue::Number" { discriminant: 2, payload_0: 1 }, 1: struct.new "tuple_destructuring.wado//TupleValue::Number" { discriminant: 2, payload_0: 2 } };
     message_154 = (if $local_13_172 = $match_scrut_1.0; $local_14_173 = $match_scrut_1.1; select i32($local_13_172.discriminant == 0, $local_14_173.discriminant == 0, 0) -> ref "core:prelude/string.wado//String" {
@@ -1166,8 +1372,16 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     rx_302 = builtin::i32_wrap_i64(local.tee packed_301("wasi/stream-new"()));
     tx_303 = builtin::i32_wrap_i64(packed_301 >> 32_i64);
     handle_157 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_302);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_303, message_154.repr, message_154.used);
     "wasi/future-drop-readable:transmission-cli"(handle_157);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_303, message_154);
+    "wasi/future-drop-readable:transmission-cli"(handle_157);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_303, message_154);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_157);
+>>>>>>> origin/main
     let $match_scrut_2: ref "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]";
     $match_scrut_2 = struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: struct.new "tuple_destructuring.wado//TupleValue" { 0 }, 1: struct.new "tuple_destructuring.wado//TupleValue" { 0 } };
     message_308 = (if $local_13_326 = $match_scrut_2.0; $local_14_327 = $match_scrut_2.1; select i32($local_13_326.discriminant == 0, $local_14_327.discriminant == 0, 0) -> ref "core:prelude/string.wado//String" {
@@ -1296,8 +1510,16 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     rx_456 = builtin::i32_wrap_i64(local.tee packed_455("wasi/stream-new"()));
     tx_457 = builtin::i32_wrap_i64(packed_455 >> 32_i64);
     handle_311 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_456);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_457, message_308.repr, message_308.used);
     "wasi/future-drop-readable:transmission-cli"(handle_311);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_457, message_308);
+    "wasi/future-drop-readable:transmission-cli"(handle_311);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_457, message_308);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_311);
+>>>>>>> origin/main
     let $match_scrut_3: ref "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]";
     $match_scrut_3 = struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: struct.new "tuple_destructuring.wado//TupleValue::Text" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 } }, 1: struct.new "tuple_destructuring.wado//TupleValue::Text" { discriminant: 3, payload_0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 121, 101), used: 3 } } };
     message_462 = (if $local_13_480 = $match_scrut_3.0; $local_14_481 = $match_scrut_3.1; select i32($local_13_480.discriminant == 0, $local_14_481.discriminant == 0, 0) -> ref "core:prelude/string.wado//String" {
@@ -1426,8 +1648,16 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     rx_610 = builtin::i32_wrap_i64(local.tee packed_609("wasi/stream-new"()));
     tx_611 = builtin::i32_wrap_i64(packed_609 >> 32_i64);
     handle_465 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_610);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_611, message_462.repr, message_462.used);
     "wasi/future-drop-readable:transmission-cli"(handle_465);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_611, message_462);
+    "wasi/future-drop-readable:transmission-cli"(handle_465);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_611, message_462);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_465);
+>>>>>>> origin/main
     let $match_scrut_4: ref "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]";
     $match_scrut_4 = struct.new "tuple//[tuple_destructuring.wado/TupleValue, tuple_destructuring.wado/TupleValue]" { 0: struct.new "tuple_destructuring.wado//TupleValue::Bool" { discriminant: 1, payload_0: 1 }, 1: struct.new "tuple_destructuring.wado//TupleValue::Number" { discriminant: 2, payload_0: 1 } };
     message_616 = (if $local_13_634 = $match_scrut_4.0; $local_14_635 = $match_scrut_4.1; select i32($local_13_634.discriminant == 0, $local_14_635.discriminant == 0, 0) -> ref "core:prelude/string.wado//String" {
@@ -1556,8 +1786,16 @@ fn "tuple_destructuring.wado/destruct_variant"() with Stdout {
     rx_764 = builtin::i32_wrap_i64(local.tee packed_763("wasi/stream-new"()));
     tx_765 = builtin::i32_wrap_i64(packed_763 >> 32_i64);
     handle_619 = "tuple_destructuring.wado/$cm_binding__Stdout_write_via_stream"(rx_764);
+<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_765, message_616.repr, message_616.used);
     "wasi/future-drop-readable:transmission-cli"(handle_619);
+||||||| f144ca275
+    "core:rt/write_string_to_stream$spec0"(tx_765, message_616);
+    "wasi/future-drop-readable:transmission-cli"(handle_619);
+=======
+    "core:rt/write_string_to_stream$spec0"(tx_765, message_616);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_619);
+>>>>>>> origin/main
 }
 
 fn "tuple_destructuring.wado/run"() with Stdout {
