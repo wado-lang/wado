@@ -128,14 +128,6 @@ pub const WORLD_SPEC: OptSpec = OptSpec {
     desc: "Target world (default: wasi:cli/command)\nUse 'test' to export test functions only",
 };
 
-/// Shared spec: `--collector <mode>`
-pub const COLLECTOR_SPEC: OptSpec = OptSpec {
-    long: Some("collector"),
-    short: None,
-    value: Some("<mode>"),
-    desc: "GC collector (default: copying):\ncopying, drc (deferred ref-counting), null (never collects)",
-};
-
 pub const DIR_SPEC: OptSpec = OptSpec {
     long: Some("dir"),
     short: None,

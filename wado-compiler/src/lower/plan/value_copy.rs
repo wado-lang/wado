@@ -20,7 +20,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::tir;
-use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable};
+use crate::tir::{
+    BuiltinDeclarations, ResolvedType, TirExpr, TirExprKind, TirFunction, TypeId, TypeTable,
+};
 use funcset::{FuncKeyMap, FuncKeySet};
 
 /// The `T` of a `builtin::copy_value::<T>` callee, which is the helper the fold
@@ -119,7 +121,7 @@ pub struct ValueCopyPlan {
     pub returns_self_projection: FuncKeyMap<usize>,
     /// What each builtin declared about storage: where its result comes from,
     /// and which arguments it keeps beyond the call.
-    pub builtins: ownership::BuiltinDeclarations,
+    pub builtins: BuiltinDeclarations,
     /// Per-callee, per-position retention: which parameter positions a callee
     /// may persist a reference to. A local whose `&`/`&mut` is passed at a
     /// *retained* position is borrow-escaped and cannot be moved; passed
@@ -163,7 +165,7 @@ pub struct ValueCopyPlan {
 
 pub fn plan(
     flat: &mut FlatPackage,
-    builtins: ownership::BuiltinDeclarations,
+    builtins: BuiltinDeclarations,
     confined_params: confine::ConfinedParams,
     ref_receiver_methods: FuncKeySet,
 ) -> ValueCopyPlan {

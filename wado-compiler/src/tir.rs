@@ -5980,6 +5980,9 @@ pub struct TirFunction {
     /// `#[retain(...)]` on a bodyless declaration — what the call keeps past
     /// its return. A function with a body declares none: the body is read.
     pub retains: Vec<RetainSpec<String>>,
+    /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
+    /// argument must still be a literal when codegen reads it.
+    pub immediates: Vec<String>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6156,6 +6159,134 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// `#[retain(...)]` — what this call keeps beyond it.
     pub retains: Vec<RetainSpec<usize>>,
+    /// Positions the declaration takes by `&mut`, the only ones it can write
+    /// the caller's storage through. Snapshot here because the bodyless
+    /// declaration keeps no parameters past lowering.
+    pub mut_params: IndexSet<usize>,
+    /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
+    /// reads the argument's literal value, so nothing may rewrite it into a
+    /// load.
+    pub immediate_params: IndexSet<usize>,
+}
+
+/// All a declaration lookup reads of a call. TIR and NIR each carry their own
+/// `FunctionRef`, so the key is spelled out rather than taken from either.
+#[derive(Clone, Copy)]
+pub struct DeclarationLookup<'a> {
+    pub module_source: &'a ModuleSource,
+    pub name: &'a str,
+    /// The generic declaration a monomorphized instance came from.
+    pub generic_name: Option<&'a str>,
+}
+
+impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
+    fn from(func: &'a FunctionRef) -> Self {
+        Self {
+            module_source: &func.module_source,
+            name: &func.name,
+            generic_name: func
+                .monomorph_info
+                .as_ref()
+                .map(|m| m.generic_name.as_str()),
+        }
+    }
+}
+
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Link snapshots these before monomorphization drops the generic declarations,
+/// and both the lowering plan and the NIR optimizer read them.
+#[derive(Debug, Clone, Default)]
+pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
+
+impl BuiltinDeclarations {
+    pub fn new(declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>) -> Self {
+        Self(declarations)
+    }
+
+    /// What `call` declared, or `None` where it declared nothing. Keyed by the
+    /// generic name a monomorphized instance came from, which is the name the
+    /// declaration was snapshot under.
+    fn get(&self, call: DeclarationLookup<'_>) -> Option<&BuiltinDeclaration> {
+        let key = |name: &str| (call.module_source.clone(), name.to_string());
+        if let Some(generic) = call.generic_name
+            && let Some(declaration) = self.0.get(&key(generic))
+        {
+            return Some(declaration);
+        }
+        self.0.get(&key(call.name))
+    }
+
+    /// Whether `call` names a body-less declaration that stated a convention or
+    /// a retention — the calls that answer from a declaration rather than from
+    /// the fixpoint.
+    pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
+    }
+
+    /// Whether the call leaves the argument *object* at `pos` where the caller
+    /// put it: it neither writes through it (`&mut`) nor keeps it past the
+    /// return (`#[retain(p)]`). It says nothing about what that object holds —
+    /// `#[retain(elements_of = p)]` re-homes the elements and still answers
+    /// `true` here, so a caller asking about reachable storage must read the
+    /// retain specs itself.
+    ///
+    /// A call with no snapshot answers `false`. Link takes one for every
+    /// bodyless free function, so the gap is a method, whose key would not be
+    /// this one — never a declaration that simply had nothing to say.
+    pub fn reads_param<'a>(&self, call: impl Into<DeclarationLookup<'a>>, pos: usize) -> bool {
+        self.get(call.into()).is_some_and(|d| {
+            !d.mut_params.contains(&pos)
+                && !d.retains.iter().any(|r| r.source == pos && !r.elements)
+        })
+    }
+
+    /// The positions the call lowers to a Wasm immediate, where codegen reads
+    /// the argument's literal. An optimizer that would replace one with
+    /// anything else — a global read, a local — must leave it alone.
+    ///
+    /// Read from the snapshot rather than from the callee's parameters, which a
+    /// bodyless declaration does not keep past lowering.
+    pub fn immediate_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> IndexSet<usize> {
+        self.get(call.into())
+            .map(|d| d.immediate_params.clone())
+            .unwrap_or_default()
+    }
+
+    /// Whether the call declared `#[result(owned)]`: the object it hands back
+    /// is freshly allocated, and so never one it was given.
+    pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
+    }
+
+    /// The parameter a declaration's result is a component of, for a call that
+    /// declared `#[result(part_of = p)]`.
+    pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
+        match self.get(call.into())?.returns? {
+            ReturnConvention::PartOf(param) => Some(param),
+            ReturnConvention::Owned => None,
+        }
+    }
+
+    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
+    pub fn retained_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = usize> + '_ {
+        self.retain_specs(call).map(|r| r.source)
+    }
+
+    /// Every `#[retain(...)]` clause a declaration carries, destinations
+    /// included.
+    pub fn retain_specs<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = &RetainSpec<usize>> + '_ {
+        self.get(call.into())
+            .into_iter()
+            .flat_map(|d| d.retains.iter())
+    }
 }
 
 /// A body's local frame. Taken and given whole, so a caller moving a body
@@ -6187,21 +6318,35 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// Where an attribute's named parameter sits. Reify drops a clause naming
+    /// no parameter, so one reaching here names a parameter of this very
+    /// declaration.
+    fn param_position(&self, name: &str) -> usize {
+        self.params
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` names `{name}`, which it takes no parameter for",
+                    self.name
+                )
+            })
+    }
+
     /// This declaration's `#[retain(...)]` clauses by parameter position.
-    /// Reify drops a clause naming no parameter, so one reaching here names a
-    /// parameter of this very declaration.
     pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
-        let position = |name: &str| {
-            self.params
-                .iter()
-                .position(|p| p.name == name)
-                .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", self.name))
-        };
         self.retains.iter().map(move |r| RetainSpec {
-            source: position(&r.source),
+            source: self.param_position(&r.source),
             elements: r.elements,
-            into: r.into.as_deref().map(position),
+            into: r.into.as_deref().map(|name| self.param_position(name)),
         })
+    }
+
+    /// This declaration's `#[immediate(...)]` parameters by position.
+    pub fn immediates_by_position(&self) -> impl Iterator<Item = usize> + '_ {
+        self.immediates
+            .iter()
+            .map(move |name| self.param_position(name))
     }
 
     /// Take the body's frame, leaving an empty one. The counterpart of
@@ -6259,6 +6404,7 @@ impl TirFunction {
             task_return_type: None,
             effects: Vec::new(),
             retains: Vec::new(),
+            immediates: Vec::new(),
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),
@@ -6378,6 +6524,9 @@ pub struct TirParam {
     /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
     /// distinction). A `&T` cannot be written through, so only a `&mut`
     /// parameter can mutate the caller's argument storage.
+    ///
+    /// `lower::plan` fills it, so anything running before that — `link` among
+    /// them — reads `false` here whatever the type says, and must ask the type.
     pub is_mut_ref: bool,
     pub span: Span,
 }

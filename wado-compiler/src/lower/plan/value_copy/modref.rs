@@ -2,7 +2,6 @@
 //! is reached through. A callee this analysis cannot read writes everything.
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
-use super::ownership::BuiltinDeclarations;
 use super::place::{
     Names, Resolver, ReturnPaths, Selector, carries_storage, could_write_through, field_owner,
 };
@@ -10,7 +9,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::place::is_reference;
 use crate::module_source::ModuleSource;
-use crate::tir::{TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable};
+use crate::tir::{
+    BuiltinDeclarations, TirExpr, TirExprKind, TirFunction, TirStmt, TypeId, TypeTable,
+};
 use crate::tir_visitor::TirRefVisitor;
 
 /// Which of a function's incoming handles a write is reached through: a
@@ -488,8 +489,8 @@ impl TirRefVisitor for Walker<'_> {
                         handed,
                     });
                 }
-                let aliases_only =
-                    func.module_source.is_core_builtin() && self.builtins.part_of(func).is_some();
+                let aliases_only = func.module_source.is_core_builtin()
+                    && self.builtins.part_of(&**func).is_some();
                 if !aliases_only {
                     for (position, arg) in args
                         .iter()

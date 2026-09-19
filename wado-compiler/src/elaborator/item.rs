@@ -84,6 +84,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         task_return_type: None,
         effects: vec![],
         retains: vec![],
+        immediates: vec![],
         body: None,
         span,
         local_count: 0,
@@ -1676,7 +1677,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
         let mut methods: hashmap::IndexMap<String, TraitMethod> = hashmap::IndexMap::default();
         for method in &trait_decl.methods {
-            scope.reject_retention_attrs_on_requirement(&trait_decl.name, method);
+            scope.reject_declaration_attrs_on_requirement(&trait_decl.name, method);
             let mut method_scope = scope.enter_inherited_type_param_scope();
             method_scope
                 .annotate_ctx
@@ -2050,14 +2051,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     span,
                 });
             }
-            self.reject_retention_attrs_on_requirement(owner, method);
+            self.reject_declaration_attrs_on_requirement(owner, method);
         }
     }
 
-    /// Reject `#[retain(...)]` and `#[result(...)]` on a method requirement, in
+    /// Reject the body-less declaration attributes on a method requirement, in
     /// a `trait` as in an `interface`. A requirement is dispatched to an impl,
-    /// and that impl's body is what answers both.
-    pub(super) fn reject_retention_attrs_on_requirement(
+    /// and that impl is what answers each of them.
+    pub(super) fn reject_declaration_attrs_on_requirement(
         &mut self,
         owner: &str,
         method: &ast::Function,
@@ -2073,6 +2074,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     "cannot declare `#[result]`: the impl it dispatches to has the body that \
                      says what its result is made of, so stating it here binds every call site \
                      to a promise no implementation makes"
+                }
+                "immediate" => {
+                    "cannot declare `#[immediate]`: it says how codegen lowers one call, and a \
+                     requirement is dispatched to an impl that is called rather than lowered"
                 }
                 _ => continue,
             };

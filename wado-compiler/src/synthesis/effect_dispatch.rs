@@ -947,6 +947,7 @@ fn build_dispatch_wrapper_function(
         // placeholder cm_binding rewrites. `$cm_binding__*` adapters likewise.
         effects: vec![],
         retains: vec![],
+        immediates: vec![],
         body: Some(body),
         span,
         local_count: next_local,

@@ -118,22 +118,20 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_break_label_cross.wado::$effect_Counter: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter" = ref.null none;
-global global:effect_handler_break_label_cross.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(44, 32, 110, 111, 114, 109, 97, 108, 61);
-global global:effect_handler_break_label_cross.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(101, 97, 114, 108, 121, 61);
-global global:effect_handler_break_label_cross.wado::$const_obj_4: ref null "effect_handler_break_label_cross.wado//Inner" = struct.new "effect_handler_break_label_cross.wado//Inner" {  };
-global global:effect_handler_break_label_cross.wado::$const_obj_6: ref null "effect_handler_break_label_cross.wado//Outer" = struct.new "effect_handler_break_label_cross.wado//Outer" {  };
+global global:effect_handler_break_label_cross.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44, 32, 110, 111, 114, 109, 97, 108, 61);
+global global:effect_handler_break_label_cross.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(101, 97, 114, 108, 121, 61);
 
 fn "effect_handler_break_label_cross.wado/run"() with Stdout {
+    let outer: ref "effect_handler_break_label_cross.wado//Outer";
     let early_1: i32;
     let normal: i32;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/format.wado//Formatter";
-    let $h_Counter: ref "effect_handler_break_label_cross.wado//Outer";
     let $save_Counter: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $d_Counter: ref "effect_handler_break_label_cross.wado//$Dispatch_Counter";
+    let inner_9: ref "effect_handler_break_label_cross.wado//Inner";
     let inside_10: i32;
     let after_11: i32;
-    let $local_4_12: ref "effect_handler_break_label_cross.wado//Inner";
     let $local_5_13: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_6_14: ref "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_0_15: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
@@ -142,9 +140,9 @@ fn "effect_handler_break_label_cross.wado/run"() with Stdout {
     let $local_0_18: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_1_19: ref "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_2_20: i32;
+    let inner_22: ref "effect_handler_break_label_cross.wado//Inner";
     let inside_23: i32;
     let after_24: i32;
-    let $local_4_25: ref "effect_handler_break_label_cross.wado//Inner";
     let $local_5_26: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_6_27: ref "effect_handler_break_label_cross.wado//$Dispatch_Counter";
     let $local_0_28: ref null "effect_handler_break_label_cross.wado//$Dispatch_Counter";
@@ -159,14 +157,14 @@ fn "effect_handler_break_label_cross.wado/run"() with Stdout {
     let packed: i64;
     let rx_77: i32;
     let tx_78: i32;
-    $h_Counter = global:effect_handler_break_label_cross.wado::$const_obj_6;
+    outer = struct.new "effect_handler_break_label_cross.wado//Outer" {  };
     $save_Counter = global:effect_handler_break_label_cross.wado::$effect_Counter;
-    $d_Counter = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_1" { $capture_0: $h_Counter }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_1" } };
+    $d_Counter = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_1" { $capture_0: outer }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_1" } };
     global:effect_handler_break_label_cross.wado::$effect_Counter = $d_Counter;
+    inner_9 = struct.new "effect_handler_break_label_cross.wado//Inner" {  };
     inside_10 = 0;
-    $local_4_12 = global:effect_handler_break_label_cross.wado::$const_obj_4;
     $local_5_13 = global:effect_handler_break_label_cross.wado::$effect_Counter;
-    $local_6_14 = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $local_5_13, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_0" { $capture_0: $local_4_12 }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_0" } };
+    $local_6_14 = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $local_5_13, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_0" { $capture_0: inner_9 }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_0" } };
     global:effect_handler_break_label_cross.wado::$effect_Counter = $local_6_14;
     inside_10 = $inline__effect_dispatch__Counter__next_2: block -> i32 {
         $local_0_15 = global:effect_handler_break_label_cross.wado::$effect_Counter;
@@ -205,10 +203,10 @@ fn "effect_handler_break_label_cross.wado/run"() with Stdout {
         }
         unreachable;
     }) * 10) + inside_10;
+    inner_22 = struct.new "effect_handler_break_label_cross.wado//Inner" {  };
     inside_23 = 0;
-    $local_4_25 = global:effect_handler_break_label_cross.wado::$const_obj_4;
     $local_5_26 = global:effect_handler_break_label_cross.wado::$effect_Counter;
-    $local_6_27 = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $local_5_26, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_0" { $capture_0: $local_4_25 }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_0" } };
+    $local_6_27 = struct.new "effect_handler_break_label_cross.wado//$Dispatch_Counter" { outer: $local_5_26, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_break_label_cross.wado//$Closure_0" { $capture_0: inner_22 }, func: ref.func "closure/effect_handler_break_label_cross.wado/$closure_wrapper_0" } };
     global:effect_handler_break_label_cross.wado::$effect_Counter = $local_6_27;
     inside_23 = $inline__effect_dispatch__Counter__next_5: block -> i32 {
         $local_0_28 = global:effect_handler_break_label_cross.wado::$effect_Counter;
@@ -249,7 +247,7 @@ fn "effect_handler_break_label_cross.wado/run"() with Stdout {
     }) * 10) + inside_23;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 };
     $local_3.used = 6;
-    builtin::array_copy<u8>($local_3.repr, 0, global:effect_handler_break_label_cross.wado::$const_obj_3, 0, 6);
+    builtin::array_copy<u8>($local_3.repr, 0, global:effect_handler_break_label_cross.wado::$const_obj_2, 0, 6);
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(early_1, $local_4_4.buf);
     new_used_68 = $local_3.used + 9;
@@ -259,7 +257,7 @@ fn "effect_handler_break_label_cross.wado/run"() with Stdout {
     }
     start_69 = $local_3.used;
     $local_3.used = new_used_68;
-    builtin::array_copy<u8>($local_3.repr, start_69, global:effect_handler_break_label_cross.wado::$const_obj_2, 0, 9);
+    builtin::array_copy<u8>($local_3.repr, start_69, global:effect_handler_break_label_cross.wado::$const_obj_1, 0, 9);
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(normal, $local_4_4.buf);
     rx_77 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

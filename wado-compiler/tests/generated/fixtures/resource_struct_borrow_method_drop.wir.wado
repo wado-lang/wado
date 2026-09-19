@@ -284,6 +284,8 @@ import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
 import fn wasi/resource-drop:request from "wasi/resource-drop:request";
 import fn wasi/future-write from "wasi/future-write";
 
+global global:resource_struct_borrow_method_drop.wado::$const_obj_0: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+
 fn "resource_struct_borrow_method_drop.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
 }
@@ -334,7 +336,7 @@ fn "resource_struct_borrow_method_drop.wado/$cm_task_entry__handle"(request) {
     $tv_1 = 0;
     $tv_1 = local.tee $ok_val_16(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($task_ret).payload_0);
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
-    "resource_struct_borrow_method_drop.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "resource_struct_borrow_method_drop.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, global:resource_struct_borrow_method_drop.wado::$const_obj_0);
     "wasi/resource-drop:fields"($sroa_h_headers);
     "wasi/resource-drop:request"(request);
 }

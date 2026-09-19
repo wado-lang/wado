@@ -176,14 +176,74 @@ mutating callee used to get a caller-side defensive copy that blocked the const
 gate first, but that copy was itself removable — nothing else stands between a
 shared global and a callee that writes it.
 
+#### Gate: whole-program sharing, where the parameter gate refuses
+
+The two gates above read one callee's body. A parameter the callee stashes away,
+into a field of a struct it builds or into a further callee, fails them however
+read-only the program as a whole is. `shared_escape` answers that case directly:
+the constant is safe to share when nothing anywhere writes through it.
+
+Taint names the shared object itself and never a container holding it, so a
+projection of a tainted value is tainted while a struct built around one is not.
+Storing a tainted value away raises an obligation on the slot it lands in — a
+field name, a callee parameter, a callee result — and that slot's own reads are
+then tainted in turn, program-wide. A write of anything tainted refuses the
+query, and so does every shape the walk does not model. A field is keyed by its
+name rather than by its receiver's type: a name is one key however the receiver
+is spelled, so no newtype or reference wrapper hides a read from the scan.
+
+A bodyless callee has no body for the walk to reach, so its parameter is
+answered from what the declaration stated: `core:builtin` leaves the argument
+where the caller put it when it takes the position by `&` rather than `&mut`,
+and no `#[retain(p)]` clause names it. `#[retain(elements_of = p)]` keeps what
+`p` holds rather than `p` itself, so it leaves the argument object alone. The
+result is a way out of the call too, and no clause follows it: a return type
+that can hold a reference refuses the argument unless `#[result(owned)]` states
+that what comes back is freshly allocated. Only
+`core:builtin` answers this way — `#[retain]` is already what the value-copy
+plan trusts there, so a missing clause is a bug rather than a silence to read as
+consent, which is what it would be on a CM import or a `.wasm` asset export.
+
+Because "no write reaches this object" is a safety property, a query that
+re-enters itself reads `true`: a cycle carrying no write of its own really does
+hold. A verdict resting on that assumption is not cached, since a later
+refutation of the cycle would leave it stale.
+
+#### Gate: legality of the operand
+
+Some builtins lower their argument to a Wasm immediate rather than to a value on
+the stack, and codegen reads its literal out. `builtin::v128_const` is the first:
+its bit pattern becomes the `v128.const` immediate. Replacing such an argument
+with a global read is not a bad trade but a broken lowering.
+
+The declaration says so, with `#[immediate(p)]` beside `#[retain]` and
+`#[result]`, and the pass reads the declaration rather than matching on a name.
+A builtin that gains an immediate operand later is covered the day it is
+declared. Nothing hoists an argument at such a position, nor a `let` that
+delivers one.
+
 #### Gate: profitability
 
 Hoisting costs a global, a guard branch, and an object that stays live for the
-whole program, so it is restricted to values that own heap storage — those that
-transitively own a GC array, as `String` and `List` do. A small aggregate of
-scalars owns nothing: `multi_value_return` already lifts such a return into Wasm
-multi-values and allocates nothing, so hoisting it would trade zero allocations
-for a global.
+whole program. What it buys depends on what would otherwise become of the
+constant, which is two different trades:
+
+- **Retained** — a callee stores the constant into the heap, which is the case
+  the sharing gate above admits. Each evaluation would add one more object to
+  the live set, and the live set is what a collection walks. Hoisting collapses
+  all of them into one, so it pays whatever the constant's shape.
+- **Transient** — nothing keeps it past the use, so its allocation dies before
+  the next collection and never costs a trace. Only the work of building it is
+  saved. That is worth a global for a value owning heap storage — one that
+  transitively owns a GC array, as `String` and `List` do, where the constructor
+  fills every element — and not for an aggregate of scalars, which is a couple
+  of field stores.
+
+So the storage test decides the transient case alone. It does not carry over to
+the retained one, where a `struct` of scalars is worth a global however cheap it
+is to rebuild. `multi_value_return` is no argument against hoisting one either:
+it hands such a value back in Wasm multi-values in return position, which says
+nothing about an argument.
 
 #### Lazy-init guard
 
@@ -251,3 +311,32 @@ loop, and a pure call building a heap value from literals.
   intra-function SROA cannot reach.
 - Cost: a marginally larger global section for constants a path may never reach,
   acceptable given no access-time overhead.
+
+## Known gaps
+
+- Two of `shared_escape`'s conservative answers have no fixture: a promoted
+  operand whose taint the walk cannot name, and a parameter position the
+  callee's body declares nothing for. Both refuse, so the gap is coverage and
+  not correctness, and neither is steerable from Wado source today.
+
+  A fixture reaches this analysis at all only when the callee survives
+  inlining, since an inlined one leaves no parameter to ask about. Making the
+  callee bulky is what does it — the three `shared_escape_stashed_*` fixtures
+  all do, and each was verified against the trace rather than assumed.
+
+- A value carried out of an `ExprKind::Switch` has no fixture either. The
+  program that would show it needs the switch arms to differ, because CSE folds
+  identical ones back to the field read the taint already follows.
+- Only `core:builtin` answers the bodyless-callee question. A Component Model
+  import and a `.wasm` asset export always refuse, however read-only they are,
+  because `#[retain]` is not complete on them the way it is on `core:builtin`.
+  Closing it means deciding what an absent clause means on those two, which is a
+  language question rather than a pass one.
+- `#[immediate(p)]` is read by `const_object_globalization` alone. Any later
+  pass that would substitute an argument has to consult it too, and nothing
+  makes it. The declarations are complete as of the SIMD lane operands and
+  `v128_const`, which are the only positions codegen reads a literal from.
+- The hoist is priced per constant, never per program. A module whose every
+  constant is retained hoists all of them, and nothing bounds what that adds to
+  the module-lifetime live set — which the WasmGC cost model says is the tax
+  paid at every collection.

@@ -2,6 +2,11 @@
 /// prelude struct built by a constructor call, so WIR translation reads the
 /// constant back out of either that call or the struct literal the inliner
 /// leaves in its place — which of the two depends on the optimization level.
+///
+/// `#[immediate(value)]` on the declaration is what keeps it a literal: the
+/// argument is a constant aggregate a callee never writes, which is otherwise
+/// exactly what `const_object_globalization` hoists into a global. Drop the
+/// attribute and this fixture fails on the `expect` in `wir_build`.
 use { println, Stdout } from "core:cli";
 
 export fn run() with Stdout {

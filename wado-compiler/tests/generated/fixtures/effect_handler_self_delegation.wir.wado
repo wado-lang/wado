@@ -124,16 +124,15 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 global mut global:effect_handler_self_delegation.wado::$effect_Counter: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter" = ref.null none;
 global global:effect_handler_self_delegation.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(102, 105, 110, 97, 108, 61);
 global global:effect_handler_self_delegation.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(44);
-global global:effect_handler_self_delegation.wado::$const_obj_3: ref null "effect_handler_self_delegation.wado//OffsetCounter" = struct.new "effect_handler_self_delegation.wado//OffsetCounter" { offset: 1000 };
 
 fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let base: ref "effect_handler_self_delegation.wado//BaseCounter";
+    let offset: ref "effect_handler_self_delegation.wado//OffsetCounter";
     let a: i32;
     let b: i32;
     let $local_4_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let $local_6: ref "core:prelude/string.wado//String";
-    let $h_Counter_8: ref "effect_handler_self_delegation.wado//OffsetCounter";
     let $save_Counter_9: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
     let $d_Counter_10: ref "effect_handler_self_delegation.wado//$Dispatch_Counter";
     let $save_Counter_12: ref null "effect_handler_self_delegation.wado//$Dispatch_Counter";
@@ -157,12 +156,12 @@ fn "effect_handler_self_delegation.wado/run"() with Stdout {
     let rx_81: i32;
     let tx_82: i32;
     base = struct.new "effect_handler_self_delegation.wado//BaseCounter" { value: 0 };
+    offset = struct.new "effect_handler_self_delegation.wado//OffsetCounter" { offset: 1000 };
     $save_Counter_12 = global:effect_handler_self_delegation.wado::$effect_Counter;
     $d_Counter_13 = struct.new "effect_handler_self_delegation.wado//$Dispatch_Counter" { outer: $save_Counter_12, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_0" { $capture_0: base }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_0" } };
     global:effect_handler_self_delegation.wado::$effect_Counter = $d_Counter_13;
-    $h_Counter_8 = global:effect_handler_self_delegation.wado::$const_obj_3;
     $save_Counter_9 = global:effect_handler_self_delegation.wado::$effect_Counter;
-    $d_Counter_10 = struct.new "effect_handler_self_delegation.wado//$Dispatch_Counter" { outer: $save_Counter_9, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: $h_Counter_8 }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } };
+    $d_Counter_10 = struct.new "effect_handler_self_delegation.wado//$Dispatch_Counter" { outer: $save_Counter_9, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_self_delegation.wado//$Closure_1" { $capture_0: offset }, func: ref.func "closure/effect_handler_self_delegation.wado/$closure_wrapper_1" } };
     global:effect_handler_self_delegation.wado::$effect_Counter = $d_Counter_10;
     a = $inline__effect_dispatch__Counter__next_1: block -> i32 {
         $local_0_14 = global:effect_handler_self_delegation.wado::$effect_Counter;

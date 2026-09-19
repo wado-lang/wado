@@ -1,6 +1,6 @@
-// A requirement is dispatched to an impl, and the impl has the body that
-// answers both attributes. Stating either on the requirement would bind every
-// call site to a promise no implementation makes.
+// A requirement is dispatched to an impl, and the impl is what answers each of
+// the attributes a body-less declaration carries. Stating one on the
+// requirement would bind every call site to a promise no implementation makes.
 
 struct Item {
     v: i32,
@@ -21,6 +21,11 @@ trait Keeper {
 interface Sink {
     #[retain(item)]
     fn take(item: &Item);
+
+    // `#[immediate]` describes how codegen lowers one call, and a requirement
+    // reaches an impl that is called rather than lowered.
+    #[immediate(lane)]
+    fn pick(lane: i32) -> i32;
 }
 
 export fn run() {}
@@ -30,6 +35,7 @@ __DATA__
     "compile_error": "`Keeper::keep` cannot declare `#[retain]`",
     "compile_errors_contains": [
         "`Keeper::fresh` cannot declare `#[result]`",
-        "`Sink::take` cannot declare `#[retain]`"
+        "`Sink::take` cannot declare `#[retain]`",
+        "`Sink::pick` cannot declare `#[immediate]`"
     ]
 }

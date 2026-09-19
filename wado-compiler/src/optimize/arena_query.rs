@@ -296,6 +296,27 @@ pub(super) fn collect_reads(body: &Body, out: &mut IndexSet<u32>) {
     body.collect_local_reads(out);
 }
 
+/// Every local a pattern binds, appended to `out` if not already there.
+pub(super) fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Vec<u32>) {
+    body.for_each_live_node_under(NodeRef::Pat(pattern), |node| {
+        if let NodeRef::Pat(p) = node
+            && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
+            && !out.contains(local_index)
+        {
+            out.push(*local_index);
+        }
+    });
+}
+
+/// Whether a value of `ty` can hold a reference into the heap. Wider than
+/// `value_copy::is_reference_type`, which answers only for `&T` / `&mut T`.
+pub(super) fn holds_reference(type_table: &TypeTable, ty: TypeId) -> bool {
+    !matches!(
+        type_table.get(ty),
+        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
+    )
+}
+
 /// Whether `id` is a bare `Local(idx)` reference.
 pub(super) fn is_local(body: &Body, id: ExprId, idx: u32) -> bool {
     matches!(&body.exprs[id].kind, ExprKind::Local { index, .. } if *index == idx)

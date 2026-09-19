@@ -1,0 +1,61 @@
+// Profitability is decided by what becomes of the constant, not by its shape.
+//
+// `Point` owns no GC array, so the storage test alone would decline it: two
+// scalar fields are cheap to rebuild. But `stash` keeps the argument in the
+// `Holder` it returns, and `run` keeps every `Holder`, so without the hoist
+// each iteration adds one more `Point` to the live set — and the live set is
+// what a collection walks. One shared global replaces all of them.
+//
+// The transient sibling is `const_object_globalization_value_arg.wado`, whose
+// callee only reads its argument: there the allocation dies with the call, so
+// a global buys nothing and the storage test still decides.
+//
+// `stash` is `#[inline(never)]` *and* bulky: the attribute alone did not keep
+// a one-expression body from being inlined, and an inlined callee leaves no
+// call for the pass to reason about.
+
+use { println, Stdout } from "core:cli";
+
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+struct Holder {
+    p: Point,
+    tag: i32,
+}
+
+#[inline(never)]
+fn stash(p: Point, seed: i32) -> Holder {
+    let mut t = seed;
+    for let i of 0..<8 {
+        t = t * 31 + i;
+        if t > 1000 {
+            t = t % 97;
+        }
+        t = t + p.x * i - p.y;
+    }
+    return Holder { p: p, tag: t };
+}
+
+export fn run() with Stdout {
+    // Opaque, so the loop survives to the pass with its literal intact.
+    let z = builtin::black_box(0);
+    let mut acc = 0;
+    let mut keep: List<Holder> = [];
+    for let _i of 0..<3 {
+        let h = stash(Point { x: 1, y: 2 }, z);
+        acc = acc + h.p.x + h.p.y + h.tag;
+        keep.push(h);
+    }
+    println(`${acc} ${keep.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "33 3\n",
+    "wir_expect:O2": [
+        "global:const_object_globalization_retained_scalar_struct.wado::$const_obj_{}: ref null \"const_object_globalization_retained_scalar_struct.wado//Point\" = struct.new"
+    ]
+}

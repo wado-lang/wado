@@ -4,7 +4,6 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::BuiltinDeclarations;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
@@ -12,8 +11,8 @@ use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value
 use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -279,6 +278,21 @@ impl<'a> Resolver<'a> {
         self.lent.get(&local).map(|(position, _)| *position)
     }
 
+    /// Whether `expr` is a call handing back the storage of an argument it was
+    /// given by value rather than one it borrowed. The result names that
+    /// argument's place either way, but only a borrowed one has a lender whose
+    /// later writes an alias analysis can refuse a share on.
+    #[must_use]
+    pub fn hands_back_by_value(&self, expr: &TirExpr) -> bool {
+        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+            return false;
+        };
+        self.builtins
+            .part_of(&**func)
+            .and_then(|p| args.get(p))
+            .is_some_and(|a| !is_reference(a.expr.type_id, self.type_table))
+    }
+
     /// What `expr` names. Total over the expression kinds: a shape with no arm
     /// of its own is [`Names::Unknown`], never silently nothing.
     #[must_use]
@@ -341,7 +355,7 @@ impl<'a> Resolver<'a> {
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
-                match self.builtins.part_of(func).and_then(|p| args.get(p)) {
+                match self.builtins.part_of(&**func).and_then(|p| args.get(p)) {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
                     // `builtin::select` names no component and still hands one
                     // back, so a storage-carrying result is no value of its own.

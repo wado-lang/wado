@@ -1,0 +1,53 @@
+// `shared_escape` clears a constant a callee stashes when nothing in the
+// program writes through where it landed.
+//
+// The green arm of `shared_escape_stashed_mut_builtin_write.wado`: the same
+// program, with the store taken out. The callee-parameter gate refuses both —
+// `stash` puts the argument in a field rather than only reading it — so the
+// hoist here is `shared_escape`'s doing and nothing else's. This is the case
+// the pass exists for, and the one microgpt's `[1.0, 1.0]` takes.
+//
+// `stash` is bulky so the inliner declines it. An inlined callee leaves no call
+// and no parameter, and the pass is then never asked anything: that is what
+// this fixture looked like before, hoisting for an unrelated reason.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<f64>,
+    tag: i32,
+}
+
+#[inline(never)]
+fn stash(xs: List<f64>, seed: i32) -> Holder {
+    let mut t = seed;
+    for let i of 0..<8 {
+        t = t * 31 + i;
+        if t > 1000 {
+            t = t % 97;
+        }
+        t = t + i;
+    }
+    return Holder { data: xs, tag: t };
+}
+
+export fn run() with Stdout {
+    // Opaque, so CTFE cannot fold the loop away and leave nothing to hoist.
+    let z = builtin::black_box(0);
+    let mut total = 0.0;
+    let mut keep: List<Holder> = [];
+    for let _i of 0..<3 {
+        let h = stash([1.0, 1.0], z);
+        total = total + h.data[z] + h.data[1];
+        keep.push(h);
+    }
+    println(`${total} ${keep.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6 3\n",
+    "wir_expect:O2": [
+        "global:shared_escape_stashed_readonly.wado::$const_obj_{}"
+    ]
+}

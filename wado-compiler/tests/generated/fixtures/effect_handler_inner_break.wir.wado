@@ -121,19 +121,17 @@ global mut global:effect_handler_inner_break.wado::$effect_Counter: ref null "ef
 global global:effect_handler_inner_break.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44, 32, 111, 117, 116, 115, 105, 100, 101, 61);
 global global:effect_handler_inner_break.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(44, 32, 98, 61);
 global global:effect_handler_inner_break.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(97, 61);
-global global:effect_handler_inner_break.wado::$const_obj_4: ref null "effect_handler_inner_break.wado//Inner" = struct.new "effect_handler_inner_break.wado//Inner" {  };
-global global:effect_handler_inner_break.wado::$const_obj_5: ref null "effect_handler_inner_break.wado//Outer" = struct.new "effect_handler_inner_break.wado//Outer" {  };
 
 fn "effect_handler_inner_break.wado/run"() with Stdout {
+    let outer: ref "effect_handler_inner_break.wado//Outer";
+    let inner: ref "effect_handler_inner_break.wado//Inner";
     let a: i32;
     let b: i32;
     let outside: i32;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
-    let $h_Counter_7: ref "effect_handler_inner_break.wado//Inner";
     let $save_Counter_8: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
     let $d_Counter_9: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
-    let $h_Counter_10: ref "effect_handler_inner_break.wado//Outer";
     let $save_Counter_11: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
     let $d_Counter_12: ref "effect_handler_inner_break.wado//$Dispatch_Counter";
     let $local_0_13: ref null "effect_handler_inner_break.wado//$Dispatch_Counter";
@@ -153,15 +151,15 @@ fn "effect_handler_inner_break.wado/run"() with Stdout {
     let packed: i64;
     let rx_83: i32;
     let tx_84: i32;
-    $h_Counter_10 = global:effect_handler_inner_break.wado::$const_obj_5;
+    outer = struct.new "effect_handler_inner_break.wado//Outer" {  };
+    inner = struct.new "effect_handler_inner_break.wado//Inner" {  };
     $save_Counter_11 = global:effect_handler_inner_break.wado::$effect_Counter;
-    $d_Counter_12 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_0" { $capture_0: $h_Counter_10 }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_0" } };
+    $d_Counter_12 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_11, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_0" { $capture_0: outer }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_0" } };
     global:effect_handler_inner_break.wado::$effect_Counter = $d_Counter_12;
     a = 0;
     b = 0;
-    $h_Counter_7 = global:effect_handler_inner_break.wado::$const_obj_4;
     $save_Counter_8 = global:effect_handler_inner_break.wado::$effect_Counter;
-    $d_Counter_9 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_8, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_1" { $capture_0: $h_Counter_7 }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_1" } };
+    $d_Counter_9 = struct.new "effect_handler_inner_break.wado//$Dispatch_Counter" { outer: $save_Counter_8, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_inner_break.wado//$Closure_1" { $capture_0: inner }, func: ref.func "closure/effect_handler_inner_break.wado/$closure_wrapper_1" } };
     global:effect_handler_inner_break.wado::$effect_Counter = $d_Counter_9;
     a = $inline__effect_dispatch__Counter__next_1: block -> i32 {
         $local_0_13 = global:effect_handler_inner_break.wado::$effect_Counter;

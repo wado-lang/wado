@@ -1,0 +1,43 @@
+// A malformed `#[immediate(...)]` is reported, never read as silence: silence
+// means the argument is an ordinary operand, which the optimizer may replace.
+//
+// Every function here has a body, and the body check comes last, so each one
+// reports what it got wrong rather than only where it sits — the last is the
+// case where nothing else is wrong.
+
+#[immediate("value")]
+fn first(value: i32) -> i32 {
+    return value;
+}
+
+#[immediate(nope)]
+fn second(value: i32) -> i32 {
+    return value;
+}
+
+#[immediate(value, lane)]
+fn third(value: i32, lane: i32) -> i32 {
+    return value + lane;
+}
+
+#[immediate(value)]
+fn fourth(value: i32) -> i32 {
+    return value;
+}
+
+export fn run() {
+    first(1);
+    second(2);
+    third(3, 4);
+    fourth(5);
+}
+
+__DATA__
+{
+    "compile_error": "#[immediate] names one parameter, unquoted",
+    "compile_errors_contains": [
+        "#[immediate] names no parameter: nope",
+        "#[immediate] names one parameter; repeat the attribute for another",
+        "#[immediate] belongs to a declaration with no body"
+    ]
+}

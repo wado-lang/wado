@@ -43,6 +43,7 @@ mod peephole;
 mod ref_elim;
 mod scalar_forward;
 mod select_lowering;
+mod shared_escape;
 mod sroa;
 mod sroa_param;
 mod sroa_variant_return;

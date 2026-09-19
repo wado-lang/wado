@@ -16,9 +16,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze::{is_owned_value, returned_value};
 use crate::lower::plan::value_copy::place::ReturnPaths;
 use crate::lower::plan::value_copy::{analyze, hands_out_payload};
-use crate::module_source::ModuleSource;
 use crate::tir::{
-    BuiltinDeclaration, FunctionKind, FunctionRef, RetainSpec, ReturnConvention, TirBlock, TirExpr,
+    BuiltinDeclarations, FunctionKind, FunctionRef, ReturnConvention, TirBlock, TirExpr,
     TirExprKind, TirFunction, TirParam, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
@@ -57,61 +56,6 @@ pub fn owes_return_convention(
 /// what it declared.
 fn declares_owned(func: &TirFunction) -> bool {
     func.body.is_none() && func.declared_return_convention == Some(ReturnConvention::Owned)
-}
-
-/// What each body-less declaration stated about storage, resolved from a call.
-/// Reads [`FlatPackage::builtin_declarations`], which link snapshots before
-/// monomorphization drops the generic declarations.
-#[derive(Default)]
-pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
-
-impl BuiltinDeclarations {
-    pub fn collect(project: &FlatPackage) -> Self {
-        Self(project.builtin_declarations.clone())
-    }
-
-    /// What `func` declared, or `None` where it declared nothing. Keyed by the
-    /// generic name a monomorphized instance came from, which is the name the
-    /// declaration was snapshot under.
-    fn get(&self, func: &FunctionRef) -> Option<&BuiltinDeclaration> {
-        let key = |name: &str| (func.module_source.clone(), name.to_string());
-        if let Some(mono) = &func.monomorph_info
-            && let Some(declaration) = self.0.get(&key(&mono.generic_name))
-        {
-            return Some(declaration);
-        }
-        self.0.get(&key(&func.name))
-    }
-
-    /// Whether `func` names a body-less declaration that stated a convention or
-    /// a retention — the calls that answer from a declaration rather than from
-    /// the fixpoint.
-    pub fn declares(&self, func: &FunctionRef) -> bool {
-        self.get(func).is_some()
-    }
-
-    /// The parameter a declaration's result is a component of, for a call that
-    /// declared `#[result(part_of = p)]`.
-    pub fn part_of(&self, func: &FunctionRef) -> Option<usize> {
-        match self.get(func)?.returns? {
-            ReturnConvention::PartOf(param) => Some(param),
-            ReturnConvention::Owned => None,
-        }
-    }
-
-    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
-    pub fn retained_params(&self, func: &FunctionRef) -> impl Iterator<Item = usize> + '_ {
-        self.retain_specs(func).map(|r| r.source)
-    }
-
-    /// Every `#[retain(...)]` clause a declaration carries, destinations
-    /// included.
-    pub fn retain_specs(
-        &self,
-        func: &FunctionRef,
-    ) -> impl Iterator<Item = &RetainSpec<usize>> + '_ {
-        self.get(func).into_iter().flat_map(|d| d.retains.iter())
-    }
 }
 
 /// Oracle the freshness checker consults for a call's return convention.
@@ -297,7 +241,7 @@ fn is_receiver_projection(
         // A builtin hands out the parameter its `#[result(part_of = p)]` names,
         // which need not be the first: `struct_field_get(v, i)` reads `v`.
         TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => builtins
-            .part_of(func)
+            .part_of(&**func)
             .and_then(|p| args.get(p))
             .is_some_and(|a| recurse(&a.expr)),
         TirExprKind::Call { func, args, .. } if set.contains(&func.module_source, &func.name) => {

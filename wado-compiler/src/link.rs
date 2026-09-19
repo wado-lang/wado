@@ -9,7 +9,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{BuiltinDeclaration, RetainSpec, TirFunction, TypeTable};
+use crate::tir::{
+    BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
+};
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
@@ -22,28 +24,47 @@ use crate::world_registry::TEST_WORLD;
 fn record_declaration(
     func: &TirFunction,
     module_source: &ModuleSource,
+    type_table: &TypeTable,
     out: &mut IndexMap<(ModuleSource, String), BuiltinDeclaration>,
 ) {
     if func.body.is_some() {
         return;
     }
     let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
-    if func.declared_return_convention.is_some() || !retains.is_empty() {
-        // A call re-homes a method's key to the impl block's module, so only a
-        // free function is found again under the module declaring it.
+    // A call re-homes a method's key to the impl block's module, so only a free
+    // function is found again under the module declaring it. A reader takes the
+    // absent method as one it knows nothing about.
+    if func.method_info.is_some() {
         assert!(
-            func.method_info.is_none(),
-            "`{}` declares storage as a method; key the snapshot by `DefId` first",
+            func.declared_return_convention.is_none()
+                && retains.is_empty()
+                && func.immediates.is_empty(),
+            "`{}` declares storage or an immediate as a method; key the snapshot by `DefId` first",
             func.name
         );
-        out.insert(
-            (module_source.clone(), declaration_key(func)),
-            BuiltinDeclaration {
-                returns: func.declared_return_convention,
-                retains,
-            },
-        );
+        return;
     }
+    // Every bodyless free function is snapshot, not only one carrying an
+    // attribute: a reader asking what this call does with an argument must be
+    // able to tell "it says it keeps nothing" from "nothing here says".
+    out.insert(
+        (module_source.clone(), declaration_key(func)),
+        BuiltinDeclaration {
+            returns: func.declared_return_convention,
+            retains,
+            // Read from the type, which is the only thing that says `&mut` here:
+            // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs
+            // after link, so every one of them is still `false`.
+            mut_params: func
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| matches!(type_table.get(p.type_id), ResolvedType::MutRef(_)))
+                .map(|(pos, _)| pos)
+                .collect(),
+            immediate_params: func.immediates_by_position().collect(),
+        },
+    );
 }
 
 /// The name a call resolves a declaration by: the generic one where the call is
@@ -104,7 +125,12 @@ pub fn link(package: Package) -> FlatPackage {
         // Functions: set module_source on each function
         for func_rc in tir_mod.functions {
             func_rc.borrow_mut().module_source = ms.clone();
-            record_declaration(&func_rc.borrow(), &ms, &mut builtin_declarations);
+            record_declaration(
+                &func_rc.borrow(),
+                &ms,
+                &type_table.borrow(),
+                &mut builtin_declarations,
+            );
             functions.push(func_rc);
         }
 
@@ -150,7 +176,7 @@ pub fn link(package: Package) -> FlatPackage {
         imports,
         tests,
         wasm_module_sources,
-        builtin_declarations,
+        builtin_declarations: BuiltinDeclarations::new(builtin_declarations),
         module_name: package.module_name,
         cm_interface_registry: package.cm_interface_registry,
         world_registry: package.world_registry,

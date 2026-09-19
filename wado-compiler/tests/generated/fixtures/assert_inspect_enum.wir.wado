@@ -127,10 +127,10 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
 
-global global:core:prelude/primitive.wado::$const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
-global global:core:prelude/traits.wado::$const_obj_12: ref null Array<u8> = array.new_fixed<u8>(58, 58);
-global global:core:prelude/traits.wado::$const_obj_13: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67, 111, 108, 111, 114), used: 5 };
-global mut global:core:prelude/traits.wado::$const_obj_18: ref null "tuple//[core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>, core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>, core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>]" = ref.null none;
+global global:core:prelude/primitive.wado::$const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_11: ref null Array<u8> = array.new_fixed<u8>(58, 58);
+global global:core:prelude/traits.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(67, 111, 108, 111, 114), used: 5 };
+global mut global:core:prelude/traits.wado::$const_obj_17: ref null "tuple//[core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>, core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>, core:prelude/traits.wado/EnumCase<assert_inspect_enum.wado/Color>]" = ref.null none;
 
 fn "assert_inspect_enum.wado/$cm_export__run"() {
     let $local_2: ref "core:prelude/string.wado//String";
@@ -815,7 +815,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     is_negative = self < 0;
     val_6 = builtin::i64_extend_i32_s(self);
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
-    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_11, digit_count_4);
+    offset_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, global:core:prelude/primitive.wado::$const_obj_10, digit_count_4);
     self_14 = f.buf;
     arr = self_14.repr;
     pos = offset_5 + digit_count_4;
@@ -861,12 +861,12 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
     let other_149: ref "core:prelude/string.wado//String";
     let new_used_160: i32;
     let start_161: i32;
-    if ref.is_null(global:core:prelude/traits.wado::$const_obj_18) {
-        global:core:prelude/traits.wado::$const_obj_18 = "assert_inspect_enum.wado/assert_inspect_enum.wado/Color^core:prelude/traits.wado/ReflectEnum::members"();
+    if ref.is_null(global:core:prelude/traits.wado::$const_obj_17) {
+        global:core:prelude/traits.wado::$const_obj_17 = "assert_inspect_enum.wado/assert_inspect_enum.wado/Color^core:prelude/traits.wado/ReflectEnum::members"();
     }
-    case_4 = global:core:prelude/traits.wado::$const_obj_18.0;
+    case_4 = global:core:prelude/traits.wado::$const_obj_17.0;
     if self.value == 0 {
-        s_10 = global:core:prelude/traits.wado::$const_obj_13;
+        s_10 = global:core:prelude/traits.wado::$const_obj_12;
         new_used_23 = f.used + 5;
         if @unlikely(new_used_23 > builtin::array_len(f.repr)) {
             cold_path;
@@ -882,7 +882,7 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
         }
         start_39 = f.used;
         f.used = new_used_38;
-        builtin::array_copy<u8>(f.repr, start_39, global:core:prelude/traits.wado::$const_obj_12, 0, 2);
+        builtin::array_copy<u8>(f.repr, start_39, global:core:prelude/traits.wado::$const_obj_11, 0, 2);
         other_45 = case_4.case_name;
         new_used_56 = f.used + 3;
         if @unlikely(new_used_56 > builtin::array_len(f.repr)) {
@@ -893,9 +893,9 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
         f.used = new_used_56;
         builtin::array_copy<u8>(f.repr, start_57, other_45.repr, 0, 3);
     }
-    case_5 = global:core:prelude/traits.wado::$const_obj_18.1;
+    case_5 = global:core:prelude/traits.wado::$const_obj_17.1;
     if self.value == 1 {
-        s_62 = global:core:prelude/traits.wado::$const_obj_13;
+        s_62 = global:core:prelude/traits.wado::$const_obj_12;
         new_used_75 = f.used + 5;
         if @unlikely(new_used_75 > builtin::array_len(f.repr)) {
             cold_path;
@@ -911,7 +911,7 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
         }
         start_91 = f.used;
         f.used = new_used_90;
-        builtin::array_copy<u8>(f.repr, start_91, global:core:prelude/traits.wado::$const_obj_12, 0, 2);
+        builtin::array_copy<u8>(f.repr, start_91, global:core:prelude/traits.wado::$const_obj_11, 0, 2);
         other_97 = case_5.case_name;
         new_used_108 = f.used + 5;
         if @unlikely(new_used_108 > builtin::array_len(f.repr)) {
@@ -922,9 +922,9 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
         f.used = new_used_108;
         builtin::array_copy<u8>(f.repr, start_109, other_97.repr, 0, 5);
     }
-    case_6 = global:core:prelude/traits.wado::$const_obj_18.2;
+    case_6 = global:core:prelude/traits.wado::$const_obj_17.2;
     if self.value == 2 {
-        s_114 = global:core:prelude/traits.wado::$const_obj_13;
+        s_114 = global:core:prelude/traits.wado::$const_obj_12;
         new_used_127 = f.used + 5;
         if @unlikely(new_used_127 > builtin::array_len(f.repr)) {
             cold_path;
@@ -940,7 +940,7 @@ fn "core:prelude/traits.wado/assert_inspect_enum.wado/Color^core:prelude/traits.
         }
         start_143 = f.used;
         f.used = new_used_142;
-        builtin::array_copy<u8>(f.repr, start_143, global:core:prelude/traits.wado::$const_obj_12, 0, 2);
+        builtin::array_copy<u8>(f.repr, start_143, global:core:prelude/traits.wado::$const_obj_11, 0, 2);
         other_149 = case_6.case_name;
         new_used_160 = f.used + 4;
         if @unlikely(new_used_160 > builtin::array_len(f.repr)) {

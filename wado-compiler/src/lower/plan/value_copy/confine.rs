@@ -11,12 +11,11 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::needs_value_copy;
-use super::ownership::BuiltinDeclarations;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::tir::{
-    FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirStmt, TirStmtKind,
-    TypeId, TypeTable, capture_source_locals,
+    BuiltinDeclarations, FunctionKind, FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind,
+    TirStmt, TirStmtKind, TypeId, TypeTable, capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 

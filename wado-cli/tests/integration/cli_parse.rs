@@ -262,6 +262,47 @@ fn run_with_dir() {
 }
 
 #[test]
+fn run_gc_heap_initial_defaults() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(
+        opts.runtime.gc_heap_initial_size,
+        wado_cli::runtime::DEFAULT_GC_HEAP_INITIAL_SIZE
+    );
+}
+
+#[test]
+fn run_gc_heap_initial_suffixes() {
+    for (spec, expected) in [
+        ("512m", 512u64 << 20),
+        ("1g", 1 << 30),
+        ("64K", 64 << 10),
+        ("1048576", 1 << 20),
+    ] {
+        let parser = Parser::from_args(&["--gc-heap-initial", spec, "input.wado"]);
+        let opts = wado_cli::run::parse_args(parser).unwrap();
+        assert_eq!(
+            opts.runtime.gc_heap_initial_size, expected,
+            "parsing {spec}"
+        );
+    }
+}
+
+#[test]
+fn run_gc_heap_initial_rejects_nonsense() {
+    let parser = Parser::from_args(&["--gc-heap-initial", "lots", "input.wado"]);
+    assert_err(wado_cli::run::parse_args(parser), "invalid GC heap size");
+}
+
+/// A suffix multiplies, so a value that fits `u64` on its own need not fit
+/// once scaled. Silently wrapping it would start the guest with no heap.
+#[test]
+fn run_gc_heap_initial_rejects_overflow() {
+    let parser = Parser::from_args(&["--gc-heap-initial", "17179869184g", "input.wado"]);
+    assert_err(wado_cli::run::parse_args(parser), "does not fit in 64 bits");
+}
+
+#[test]
 fn run_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
@@ -486,6 +527,16 @@ fn serve_rejects_no_dir() {
 }
 
 // ---- test ----
+
+/// The runtime knobs are one list, so every subcommand that hosts a guest
+/// takes all of them.
+#[test]
+fn test_takes_the_runtime_knobs() {
+    let parser = Parser::from_args(&["--collector", "null", "--gc-heap-initial", "512m", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.runtime.collector, wasmtime::Collector::Null);
+    assert_eq!(opts.runtime.gc_heap_initial_size, 512 << 20);
+}
 
 #[test]
 fn test_with_files() {
