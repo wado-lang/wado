@@ -1697,6 +1697,9 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 [WASI Standard Library Reference](./stdlib-wasi.md): `wasi:cli`, `wasi:random`,
 `wasi:clocks`, `wasi:http`, `wasi:filesystem`, `wasi:sockets`, `wasi:tls`.
 
+[`wasi:webgpu`](./stdlib-wasi-webgpu.md) has a reference of its own: GPU compute
+and offscreen rendering, and a host of its own in `wado run-webgpu`.
+
 ## See Also
 
 - [Language Specification](./spec.md) - Full language specification

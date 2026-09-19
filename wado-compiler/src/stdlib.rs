@@ -111,6 +111,7 @@ stdlib_table! {
     "wasi:sockets" => "wasi/sockets.wado",
     "wasi:tls" => "wasi/tls.wado",
     "wasi:http" => "wasi/http.wado",
+    "wasi:webgpu" => "wasi/webgpu.wado",
     "wasi:cli/environment.wado" => "wasi/cli/environment.wado",
     "wasi:cli/exit.wado" => "wasi/cli/exit.wado",
     "wasi:cli/run.wado" => "wasi/cli/run.wado",
@@ -146,6 +147,8 @@ stdlib_table! {
     "wasi:tls/types.wado" => "wasi/tls/types.wado",
     "wasi:tls/client.wado" => "wasi/tls/client.wado",
     "wasi:tls/worlds.wado" => "wasi/tls/worlds.wado",
+    "wasi:webgpu/webgpu.wado" => "wasi/webgpu/webgpu.wado",
+    "wasi:webgpu/worlds.wado" => "wasi/webgpu/worlds.wado",
     // Web platform bindings, generated from the WebIDL snapshot beside them.
     "web:dom" => "web/dom.wado",
 }
@@ -213,6 +216,8 @@ mod tests {
             ("wasi:sockets/types.wado", "TcpSocket"),
             ("wasi:tls", "Connector"),
             ("wasi:tls/client.wado", "Connector"),
+            ("wasi:webgpu", "Webgpu"),
+            ("wasi:webgpu/webgpu.wado", "pub interface Webgpu"),
         ] {
             let source = get_stdlib_module(import).unwrap_or_else(|| panic!("{import}"));
             assert!(source.contains(declaration), "{import} lacks {declaration}");

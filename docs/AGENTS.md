@@ -189,3 +189,5 @@ omission goes in Decision.
 - [Option and Result Value Methods](./wep-2026-09-13-option-result-methods.md)
 - [String Views — `StrSlice` and `AsStrSlice`](./wep-2026-09-13-string-slice.md)
 - [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
+- [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
+- [External Subcommands](./wep-2026-09-19-external-subcommands.md)

@@ -205,13 +205,43 @@ fn fixup_wasi_derived_types_in_adapter(
     }
 }
 
-/// Fix up the return expression's type in the binding body to match the caller's
-/// expected return type. The binding was created with placeholder `TypeId`s
-/// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
+/// Give the return value the caller's type, in place of the `TypeTable::I32`
+/// the binding was built with.
 fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
     if let Some(body) = &mut adapter.body {
-        fixup_types_in_block(body, old_type, new_type, &mut adapter.locals);
+        let from = raw_call_stmt_index(body);
+        fixup_types_in_stmts(
+            &mut body.stmts[from..],
+            old_type,
+            new_type,
+            &mut adapter.locals,
+        );
     }
+}
+
+/// Where the adapter's `CmRawCall` sits, or 0 where it makes none. Parameter
+/// lowering precedes it, so a statement before it holds a parameter's
+/// intermediate and never the result.
+fn raw_call_stmt_index(body: &TirBlock) -> usize {
+    struct FindRawCall {
+        found: bool,
+    }
+    impl TirRefVisitor for FindRawCall {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if matches!(expr.kind, TirExprKind::CmRawCall { .. }) {
+                self.found = true;
+            }
+            self.walk_expr(expr);
+        }
+    }
+    body.stmts
+        .iter()
+        .position(|stmt| {
+            let mut finder = FindRawCall { found: false };
+            finder.visit_stmt(stmt);
+            finder.found
+        })
+        .unwrap_or(0)
 }
 
 /// Replace ALL occurrences of `old_type` with `new_type` throughout the binding's
@@ -356,17 +386,15 @@ impl TirMutVisitor for TypeReplacer<'_> {
     }
 }
 
-/// Recursively fix types in a block — replaces `old_type` with `new_type`
-/// in return statements, let bindings, and expressions.
-/// Also replaces `TypeTable::I32` placeholders with `new_type` (for cases
-/// where the binding used I32 as a placeholder).
-fn fixup_types_in_block(
-    block: &mut TirBlock,
+/// Replace `old_type`, and the `TypeTable::I32` the binding used as its
+/// placeholder, with `new_type` across returns, lets, and expressions.
+fn fixup_types_in_stmts(
+    stmts: &mut [TirStmt],
     old_type: TypeId,
     new_type: TypeId,
     locals: &mut Vec<TirLocal>,
 ) {
-    for stmt in &mut block.stmts {
+    for stmt in stmts {
         match &mut stmt.kind {
             TirStmtKind::Return {
                 value: Some(ret_expr),
@@ -378,13 +406,13 @@ fn fixup_types_in_block(
                 else_block,
                 ..
             } => {
-                fixup_types_in_block(then_block, old_type, new_type, locals);
+                fixup_types_in_stmts(&mut then_block.stmts, old_type, new_type, locals);
                 if let Some(blk) = else_block {
-                    fixup_types_in_block(blk, old_type, new_type, locals);
+                    fixup_types_in_stmts(&mut blk.stmts, old_type, new_type, locals);
                 }
             }
             TirStmtKind::Loop { body } => {
-                fixup_types_in_block(body, old_type, new_type, locals);
+                fixup_types_in_stmts(&mut body.stmts, old_type, new_type, locals);
             }
             TirStmtKind::Let {
                 value,
