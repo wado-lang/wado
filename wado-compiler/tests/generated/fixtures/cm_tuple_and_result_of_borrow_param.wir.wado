@@ -38,7 +38,7 @@ type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle
 
 type "functype//cm_tuple_and_result_of_borrow_param.wado/$cm_export__run" = fn();  // TypeId(11)
 
-type "functype//wasi/resource-drop:item" = fn(i32);  // TypeId(12)
+type "functype//wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item" = fn(i32);  // TypeId(12)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(13)
 
@@ -47,7 +47,7 @@ import fn wasi/wasi:demo/Api::get_item from "wasi/wasi:demo/Api::get_item";
 import fn wasi/wasi:demo/Api::label from "wasi/wasi:demo/Api::label";
 import fn wasi/wasi:demo/Api::settle from "wasi/wasi:demo/Api::settle";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:item from "wasi/resource-drop:item";
+import fn wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item from "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item"() with Api {
@@ -78,7 +78,7 @@ fn "cm_tuple_and_result_of_borrow_param.wado/$cm_export__run"() {
     "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_label"(struct.new "tuple//[&cm_tuple_and_result_of_borrow_param.wado/Item, u32]" { 0: local.tee a("cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_get_item"()), 1: 7 });
     "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Ok" { discriminant: 0, payload_0: a });
     "cm_tuple_and_result_of_borrow_param.wado/$cm_binding__Api_settle"(struct.new "core:prelude/types.wado//Result<&cm_tuple_and_result_of_borrow_param.wado/Item,u32>::Err" { discriminant: 1, payload_0: 1 });
-    "wasi/resource-drop:item"(a);
+    "wasi/resource-drop:cm_tuple_and_result_of_borrow_param.wado#item"(a);
     "wasi/task-return"(0);
 }
 
