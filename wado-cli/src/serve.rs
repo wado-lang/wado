@@ -64,6 +64,7 @@ pub struct ServeOptions {
     pub knobs: CompileKnobs,
     pub addr: String,
     pub collector: wasmtime::Collector,
+    pub gc_heap_initial_size: u64,
     /// Empty by default: unlike `wado run`, services don't preopen cwd
     /// automatically — the user must pass `--dir`.
     pub preopened_dirs: Vec<(String, String)>,
@@ -83,6 +84,7 @@ enum Opt {
     Addr,
     Dir,
     Collector,
+    GcHeapInitial,
     Timeout,
     Workers,
     RecycleRequests,
@@ -131,6 +133,7 @@ impl Opt {
         Self::Addr,
         Self::Dir,
         Self::Collector,
+        Self::GcHeapInitial,
         Self::Timeout,
         Self::Workers,
         Self::RecycleRequests,
@@ -162,6 +165,7 @@ impl Opt {
             // by default, so it would have nothing to disable.
             Self::Dir => args::DIR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
+            Self::GcHeapInitial => args::GC_HEAP_INITIAL_SPEC,
             Self::Timeout => TIMEOUT_SPEC,
             Self::Workers => WORKERS_SPEC,
             Self::RecycleRequests => RECYCLE_REQUESTS_SPEC,
@@ -233,6 +237,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
     let mut input: Option<String> = None;
     let mut addr = "0.0.0.0:8080".to_string();
     let mut collector = runtime::DEFAULT_COLLECTOR;
+    let mut gc_heap_initial_size = runtime::DEFAULT_GC_HEAP_INITIAL_SIZE;
     let mut preopened_dirs: Vec<(String, String)> = Vec::new();
     let mut timeout_secs: u64 = DEFAULT_TIMEOUT_SECS;
     let mut workers: Option<usize> = None;
@@ -253,6 +258,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
                 Opt::Collector => {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
+                }
+                Opt::GcHeapInitial => {
+                    let spec = args::require_string(&mut parser)?;
+                    gc_heap_initial_size =
+                        runtime::parse_gc_heap_size(&spec).map_err(CliExit::error)?;
                 }
                 Opt::Timeout => timeout_secs = parse_count_arg("--timeout", &mut parser, false)?,
                 Opt::Workers => {
@@ -300,6 +310,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<ServeOptions, CliExit> {
         knobs,
         addr,
         collector,
+        gc_heap_initial_size,
         preopened_dirs,
         timeout_secs,
         workers,
@@ -864,6 +875,7 @@ async fn run_http_server(
     max_concurrency: usize,
     profile: ProfileMode,
     collector: wasmtime::Collector,
+    gc_heap_initial_size: u64,
 ) -> Result<()> {
     // `workers` is bounded to `u32` range in `parse_args` and
     // `max_concurrency` in `run`, so these conversions never fail.
@@ -881,7 +893,13 @@ async fn run_http_server(
     let stack_pool = max_concurrency_u32
         .saturating_mul(2)
         .saturating_add(workers_u32.saturating_mul(8));
-    let engine = runtime::create_serve_engine(cranelift_opt, max_instances, stack_pool, collector)?;
+    let engine = runtime::create_serve_engine(
+        cranelift_opt,
+        max_instances,
+        stack_pool,
+        collector,
+        gc_heap_initial_size,
+    )?;
     let component = Component::new(&engine, &wasm)?;
     let linker = runtime::create_linker(&engine)?;
     // Open preopens once at startup; they are attached to every worker
@@ -1199,6 +1217,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
         max_concurrency,
         opts.profile,
         opts.collector,
+        opts.gc_heap_initial_size,
     )
     .await
     .map_err(|e| CliExit::error(format!("Server error: {e}")))

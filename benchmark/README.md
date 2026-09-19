@@ -390,6 +390,19 @@ Prerequisites: `cc` and `cargo` (system); `node` and `bun` (managed by
 (sqlite-parse also `javac`); the jar is fetched to `~/.cache/gale`. Those rows
 are skipped if the tool is absent.
 
+### GC heap size
+
+`wado run` starts a guest with a 256 MiB GC heap, and `--gc-heap-initial`
+changes it. The copying collector halves that into two semi-spaces, so a
+program allocates through half of it between collections, and a larger heap
+trades resident memory for fewer collections.
+
+Two rows measure faster with more: microgpt holds a whole autograd graph live
+and gale_gen its grammar tables, so both pay for every collection. They run at
+512 MiB, which `gc_heap_flags` in `wado.sh` decides. Every other row is flat
+there or slower — json-catalog, zlib and sqlite-parse are all slower — so it
+takes the default. `wado serve` measures the same either way and keeps it too.
+
 ## Profiling
 
 ```sh

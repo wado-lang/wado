@@ -26,6 +26,7 @@ pub struct RunOptions {
     /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
     pub collector: wasmtime::Collector,
+    pub gc_heap_initial_size: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -33,6 +34,7 @@ enum Opt {
     Dir,
     NoDir,
     Collector,
+    GcHeapInitial,
     Profile,
     Help,
 }
@@ -42,6 +44,7 @@ impl Opt {
         Self::Dir,
         Self::NoDir,
         Self::Collector,
+        Self::GcHeapInitial,
         Self::Profile,
         Self::Help,
     ];
@@ -69,6 +72,7 @@ impl Opt {
             },
             Self::NoDir => args::NO_DIR_SPEC,
             Self::Collector => args::COLLECTOR_SPEC,
+            Self::GcHeapInitial => args::GC_HEAP_INITIAL_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -140,6 +144,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut dirs = args::DirGrants::default();
     let mut program_args: Vec<String> = Vec::new();
     let mut collector = runtime::DEFAULT_COLLECTOR;
+    let mut gc_heap_initial_size = runtime::DEFAULT_GC_HEAP_INITIAL_SIZE;
     let mut knobs = CompileKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
@@ -154,6 +159,11 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
                 Opt::Collector => {
                     let spec = args::require_string(&mut parser)?;
                     collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
+                }
+                Opt::GcHeapInitial => {
+                    let spec = args::require_string(&mut parser)?;
+                    gc_heap_initial_size =
+                        runtime::parse_gc_heap_size(&spec).map_err(CliExit::error)?;
                 }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
@@ -182,6 +192,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         preopened_dirs: dirs.finish(),
         program_args,
         collector,
+        gc_heap_initial_size,
     })
 }
 
@@ -192,8 +203,9 @@ async fn run_cli_component(
     preopened_dirs: &[(String, String)],
     program_args: &[String],
     collector: wasmtime::Collector,
+    gc_heap_initial_size: u64,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, profile, collector)?;
+    let engine = runtime::create_engine(cranelift_opt, profile, collector, gc_heap_initial_size)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
@@ -298,6 +310,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         &opts.preopened_dirs,
         &opts.program_args,
         opts.collector,
+        opts.gc_heap_initial_size,
     )
     .await
     .map_err(classify_run_error)

@@ -262,6 +262,36 @@ fn run_with_dir() {
 }
 
 #[test]
+fn run_gc_heap_initial_defaults() {
+    let parser = Parser::from_args(&["input.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(
+        opts.gc_heap_initial_size,
+        wado_cli::runtime::DEFAULT_GC_HEAP_INITIAL_SIZE
+    );
+}
+
+#[test]
+fn run_gc_heap_initial_suffixes() {
+    for (spec, expected) in [
+        ("512m", 512u64 << 20),
+        ("1g", 1 << 30),
+        ("64K", 64 << 10),
+        ("1048576", 1 << 20),
+    ] {
+        let parser = Parser::from_args(&["--gc-heap-initial", spec, "input.wado"]);
+        let opts = wado_cli::run::parse_args(parser).unwrap();
+        assert_eq!(opts.gc_heap_initial_size, expected, "parsing {spec}");
+    }
+}
+
+#[test]
+fn run_gc_heap_initial_rejects_nonsense() {
+    let parser = Parser::from_args(&["--gc-heap-initial", "lots", "input.wado"]);
+    assert_err(wado_cli::run::parse_args(parser), "invalid GC heap size");
+}
+
+#[test]
 fn run_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();

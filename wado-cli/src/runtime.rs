@@ -372,16 +372,47 @@ pub fn parse_collector(s: &str) -> Result<Collector, String> {
     }
 }
 
-/// The GC heap every guest starts with. The copying collector splits it into
-/// two semi-spaces, so a program allocates through half of this between
-/// collections. Sized from the benchmark suite, where microgpt is the row that
-/// answers to it: against this, half the size trains 1.10x slower and starting
-/// from nothing 1.56x slower. Not a peak to balance on — 768 MiB gives 30% back.
-const GC_HEAP_INITIAL_SIZE: u64 = 512 << 20;
+/// The GC heap every guest starts with, whatever its world. The copying
+/// collector splits it into two semi-spaces, so a program allocates through
+/// half of this between collections. Raise it with `--gc-heap-initial` where a
+/// program's live set earns it.
+pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
+
+/// Parse a `--gc-heap-initial` value: a byte count, or one suffixed `k`, `m`
+/// or `g` for binary multiples.
+///
+/// # Errors
+///
+/// Returns an error message if the value is not a size.
+pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
+    let lower = s.trim().to_ascii_lowercase();
+    let (digits, shift) = match lower.strip_suffix(['k', 'm', 'g']) {
+        Some(rest) => (
+            rest,
+            match lower.as_bytes()[lower.len() - 1] {
+                b'k' => 10,
+                b'm' => 20,
+                _ => 30,
+            },
+        ),
+        None => (lower.as_str(), 0),
+    };
+    let value: u64 = digits
+        .parse()
+        .map_err(|_| format!("invalid GC heap size '{s}'. Use bytes, or a k / m / g suffix"))?;
+    value
+        .checked_shl(shift)
+        .ok_or_else(|| format!("GC heap size '{s}' does not fit in 64 bits"))
+}
 
 /// Create a wasmtime Config with all required Wasm features enabled.
 #[must_use]
-pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Collector) -> Config {
+pub fn create_config(
+    opt_level: OptLevel,
+    profile: &ProfileMode,
+    collector: Collector,
+    gc_heap_initial_size: u64,
+) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
@@ -397,11 +428,10 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     // Start the GC heap at a size a program can run in, rather than at zero.
     // wasmtime collects before it grows, and grows only where the collection
     // left too little, so a heap starting empty doubles its way up to the
-    // working set with a full trace paid at every rung of the ladder:
-    // microgpt trains 1.2x faster from here and infers 1.5x faster, json-catalog
-    // serializes 1.17x faster, and nothing measures slower. The pages are
-    // reserved, not touched, so the cost is address space rather than memory.
-    config.gc_heap_initial_size(GC_HEAP_INITIAL_SIZE);
+    // working set with a full trace paid at every rung of the ladder. The 4 GiB
+    // of address space is reserved either way, so this decides what is
+    // committed, not what is mapped.
+    config.gc_heap_initial_size(gc_heap_initial_size);
 
     config.cranelift_opt_level(opt_level);
 
@@ -430,8 +460,14 @@ pub fn create_engine(
     opt_level: OptLevel,
     profile: &ProfileMode,
     collector: Collector,
+    gc_heap_initial_size: u64,
 ) -> Result<Engine> {
-    Ok(Engine::new(&create_config(opt_level, profile, collector))?)
+    Ok(Engine::new(&create_config(
+        opt_level,
+        profile,
+        collector,
+        gc_heap_initial_size,
+    ))?)
 }
 
 /// Create a wasmtime Engine tuned for Kiln generator execution.
@@ -444,7 +480,12 @@ pub fn create_engine(
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None, DEFAULT_COLLECTOR);
+    let mut config = create_config(
+        opt_level,
+        &ProfileMode::None,
+        DEFAULT_COLLECTOR,
+        DEFAULT_GC_HEAP_INITIAL_SIZE,
+    );
     config.consume_fuel(true);
     Ok(Engine::new(&config)?)
 }
@@ -456,7 +497,12 @@ pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
-    let mut config = create_config(opt_level, profile, DEFAULT_COLLECTOR);
+    let mut config = create_config(
+        opt_level,
+        profile,
+        DEFAULT_COLLECTOR,
+        DEFAULT_GC_HEAP_INITIAL_SIZE,
+    );
     config.epoch_interruption(true);
     Ok(Engine::new(&config)?)
 }
@@ -487,8 +533,14 @@ pub fn create_serve_engine(
     max_instances: u32,
     max_stacks: u32,
     collector: Collector,
+    gc_heap_initial_size: u64,
 ) -> Result<Engine> {
-    let mut config = create_config(opt_level, &ProfileMode::None, collector);
+    let mut config = create_config(
+        opt_level,
+        &ProfileMode::None,
+        collector,
+        gc_heap_initial_size,
+    );
     config.epoch_interruption(true);
 
     // Generous per-instance multipliers: a single component instantiation
