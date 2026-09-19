@@ -52,34 +52,40 @@ On Unix `wado` execs the child, replacing itself, so the exit status and every
 signal belong to the child directly. On Windows it spawns, waits, and exits
 with the child's status.
 
-### One listing covers both
+### `wado --list` covers both
 
-A listing exists and names builtin and external subcommands together, since a
-user who installed one has no other way to see that `wado` found it. It also
-marks an external that a builtin shadows, which is otherwise invisible: the
-file is on `PATH`, `wado` will never run it, and nothing says so.
+`--list` names builtin and external subcommands together, since a user who
+installed one has no other way to see that `wado` found it. It also marks an
+external that a builtin shadows, which is otherwise invisible: the file is on
+`PATH`, `wado` will never run it, and nothing else says so. A builtin shows its
+description and an external its path, which is all `wado` knows of it without
+running it.
+
+It is a flag rather than a subcommand because a builtin name is taken for good:
+a `wado commands` would remove that name from the external namespace, where
+`--list` sits beside `--help` and `--version` and removes nothing. `wado --help`
+carries a line pointing at it.
+
+### `wado help <name>` is `wado <name> --help`
+
+A builtin answers from its own usage text. An external is run with `--help`,
+since only the child knows its options. A name that is neither fails the way an
+unknown command does.
 
 ## Roadmap
 
 - [ ] Resolve an unknown subcommand through `PATH` and run it, with the
       skipping and the absolute-path rules above, and say in the
       unknown-command error where it looked.
-- [ ] The listing, covering builtins, externals, and shadowed externals.
+- [x] `wado --list`, covering builtins, externals, and shadowed externals.
+- [x] `wado help <name>`, for a builtin and an external alike.
 - [ ] A `docs/cli.md` section on writing one, including `WADO`.
 
 ## Known gaps
 
-- What the listing is called. The proposal is `wado --list`, beside `--help` and
-  `--version`: cargo spells it that way, the dispatcher already has an arm for a
-  global flag, and a flag consumes no subcommand name, where a `wado commands`
-  would take that name out of the external namespace for good. `wado --help`
-  would gain a line pointing at it. Nothing else about the listing depends on
-  the spelling.
 - An external's one-line description. A builtin carries its own, and the only
-  way to obtain an external's is to run it, so the listing can show names alone
-  or pay a process per entry. cargo shows names alone.
-- `wado help <name>` for an external, which would run `wado-<name> --help`.
-  cargo does this; whether `wado` should is untouched here.
+  way to obtain an external's is to run it, so `--list` shows its path instead.
+  cargo shows names alone.
 - Nothing distinguishes a `wado-<name>` written for this mechanism from any
   other file on `PATH` that happens to be named that way. cargo has the same
   gap, and closing it means a marker the child answers before it runs.
