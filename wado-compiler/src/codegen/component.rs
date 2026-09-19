@@ -14,13 +14,13 @@ use crate::codegen_flags::CodegenFlags;
 use crate::component_model::{
     CANONICAL_ERROR_CODE_INTERFACE, CmDefined, CmFunctionInfo, CmInterfaceInfo,
     CmInterfaceRegistry, CmTypeGen, CmTypeSink, CmVariantCase, ERROR_CODE_WADO_NAME,
-    FIELDS_WADO_NAME, InstanceSink, KILN_TYPES_INTERFACE, RESPONSE_WADO_NAME, ResKind,
-    classify_future_payload_from_ast, classify_stream_payload_from_ast, cm_decl_in_interface,
-    cm_instance_key, cm_return_needs_outptr, emit_cm_defined, parse_resource_func,
-    wado_primitive_name_to_cm,
+    FIELDS_WADO_NAME, InstanceSink, RESPONSE_WADO_NAME, ResKind, classify_future_payload_from_ast,
+    classify_stream_payload_from_ast, cm_decl_in_interface, cm_instance_key,
+    cm_return_needs_outptr, emit_cm_defined, parse_resource_func, wado_primitive_name_to_cm,
 };
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
+use crate::kiln::import_check::KILN_TYPES_INTERFACE;
 use crate::loader::WasmAsset;
 use crate::nir_package::NirPackage;
 use crate::synthesis::cm_binding::types::kebab_to_pascal;
@@ -169,7 +169,7 @@ pub fn build_component(
             // General (`Value`) element types intern structurally (primitives
             // inline, aggregates as defined types), keyed by the stream key.
             if let CmStreamPayload::Value(t) = &payload {
-                let key = CmTypeKey::Stream(Box::new(payload_type_to_cm_key(t, &ctx)));
+                let key = CmTypeKey::Stream(Box::new(payload_type_to_cm_key(t, &ctx, project)));
                 let idx = intern_cm_type(&mut builder, &mut ctx, &key, None);
                 map.insert(payload, idx);
                 continue;
@@ -181,12 +181,18 @@ pub fn build_component(
                 ),
                 CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(decl) => {
-                    // WASI imports are generated first, so the defining
-                    // interface's instance is already available to alias from.
-                    let inst_idx = ctx.instance_idx(&decl_instance_key(project, decl));
-                    builder.alias_export(inst_idx, decl.cm_name(), ComponentExportKind::Type);
-                    let aliased_idx = ctx.register_anon_type();
-                    ctx.bind_decl_type(decl.def(), aliased_idx);
+                    // An index the declaration already has, rather than a second
+                    // alias: rebinding it repoints every later reader and
+                    // orphans the index an earlier phase handed out.
+                    let aliased_idx = ctx.decl_type_idx(decl.def()).unwrap_or_else(|| {
+                        // WASI imports are generated first, so the defining
+                        // interface's instance is already available to alias from.
+                        let inst_idx = ctx.instance_idx(&decl_instance_key(project, decl));
+                        builder.alias_export(inst_idx, decl.cm_name(), ComponentExportKind::Type);
+                        let idx = ctx.register_anon_type();
+                        ctx.bind_decl_type(decl.def(), idx);
+                        idx
+                    });
                     (
                         format!("stream-{}", decl.name_suffix()),
                         ComponentValType::Type(aliased_idx),
@@ -207,17 +213,13 @@ pub fn build_component(
         .any(|i| matches!(i.future_payload(), Some(CmFuturePayload::Trailers)));
     // The error-code declarations transmission futures carry, as the classifier
     // read them off each payload.
-    let transmission_decls: Vec<CmDecl> = {
-        let mut decls: Vec<CmDecl> = Vec::new();
-        for i in &all_canonical_intrinsics {
-            if let Some(CmFuturePayload::Transmission(decl)) = i.future_payload()
-                && !decls.contains(&decl)
-            {
-                decls.push(decl);
-            }
-        }
-        decls
-    };
+    let transmission_decls: IndexMap<DefId, CmDecl> = all_canonical_intrinsics
+        .iter()
+        .filter_map(|i| match i.future_payload() {
+            Some(CmFuturePayload::Transmission(decl)) => Some((decl.def(), decl)),
+            _ => None,
+        })
+        .collect();
 
     // stream<u8> type is also needed by HTTP future types
     let stream_u8_type = stream_types
@@ -234,15 +236,18 @@ pub fn build_component(
 
     let mut transmission_future_types: IndexMap<DefId, u32> = IndexMap::default();
     let trailers_future_type = if needs_trailers_future {
-        // The trailers/transmission futures belong to the resource-defining
-        // interface that declares them (the HTTP types interface); take it from
-        // the plan rather than hardcoding it.
+        // The plan's resource-defining interface that declares the trailers
+        // type, asked of each candidate's own declarations. Taking the first
+        // entry instead names whichever interface the plan happened to order
+        // first, which need not declare it at all.
         let types_fq = wir_package
             .import_plan
             .iter()
-            .find(|e| e.kind == ImportKind::ResourceDefiningInterface)
-            .map(|e| e.fq.clone())
-            .expect("trailers future needs a resource-defining interface in the plan");
+            .filter(|e| e.kind == ImportKind::ResourceDefiningInterface)
+            .map(|e| e.fq.as_str())
+            .find(|fq| cm_decl_def(project, fq, FIELDS_WADO_NAME).is_some())
+            .map(str::to_string)
+            .expect("trailers future needs the interface declaring `Fields` in the plan");
         let defining_error_code = error_code_def(project, &types_fq).unwrap_or_else(|| {
             panic!("trailers future needs the `error-code` of `{types_fq}`, which declares none")
         });
@@ -259,12 +264,12 @@ pub fn build_component(
     } else {
         0
     };
-    for decl in &transmission_decls {
-        if transmission_future_types.contains_key(&decl.def()) {
+    for (def, decl) in &transmission_decls {
+        if transmission_future_types.contains_key(def) {
             continue;
         }
         let ft = build_transmission_future_type_for(&mut builder, &mut ctx, project, decl);
-        transmission_future_types.insert(decl.def(), ft);
+        transmission_future_types.insert(*def, ft);
     }
 
     // Build scalar future types (e.g., future<s32>) from structured metadata
@@ -273,7 +278,7 @@ pub fn build_component(
 
     // Build general future types (e.g., future<string>, future<list<u32>>).
     let value_future_types =
-        build_value_future_types(&mut builder, &mut ctx, &all_canonical_intrinsics);
+        build_value_future_types(&mut builder, &mut ctx, project, &all_canonical_intrinsics);
 
     // Canonical intrinsics
     emit_canonical_intrinsics(
@@ -481,7 +486,7 @@ fn emit_cm_val_type(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmTypeGen>,
-    project: Option<&NirPackage>,
+    project: &NirPackage,
     ctx: &mut ComponentModelContext,
 ) -> ComponentValType {
     match ty {
@@ -559,11 +564,11 @@ fn emit_cm_val_type(
                     Some(ComponentValType::Type(
                         own_resource_type_indices[&named.name],
                     ))
-                } else if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
+                } else if let Some(type_gen) = shared_type_gen {
                     // Complex ok types (records, options, variants, etc.) use shared type gen
                     let resource_exports = cm_keyed_resource_exports(
                         own_resource_type_indices,
-                        &proj.cm_interface_registry,
+                        &project.cm_interface_registry,
                         type_gen.interface_hint(),
                     );
                     let mut sink = InstanceSink {
@@ -573,7 +578,7 @@ fn emit_cm_val_type(
                     let ok_val = type_gen.ast_type_to_cm(
                         &mut sink,
                         ok,
-                        &proj.cm_interface_registry,
+                        &project.cm_interface_registry,
                         &resource_exports,
                     );
                     Some(ok_val)
@@ -663,10 +668,10 @@ fn emit_cm_val_type(
                 return ComponentValType::Type(idx);
             }
             // Complex types (e.g. WASI records like Instant) use shared type gen
-            if let (Some(type_gen), Some(proj)) = (shared_type_gen, project) {
+            if let Some(type_gen) = shared_type_gen {
                 let resource_exports = cm_keyed_resource_exports(
                     own_resource_type_indices,
-                    &proj.cm_interface_registry,
+                    &project.cm_interface_registry,
                     type_gen.interface_hint(),
                 );
                 let mut sink = InstanceSink {
@@ -676,7 +681,7 @@ fn emit_cm_val_type(
                 return type_gen.ast_type_to_cm(
                     &mut sink,
                     ty,
-                    &proj.cm_interface_registry,
+                    &project.cm_interface_registry,
                     &resource_exports,
                 );
             }
@@ -692,7 +697,7 @@ fn resolve_error_code_idx(
     error_code_idx: Option<u32>,
     has_local_error_code: bool,
     enum_export_indices: &IndexMap<String, u32>,
-    project: Option<&NirPackage>,
+    project: &NirPackage,
     ctx: &mut ComponentModelContext,
 ) -> u32 {
     if let Some(idx) = error_code_idx {
@@ -700,10 +705,6 @@ fn resolve_error_code_idx(
     } else if has_local_error_code && enum_export_indices.contains_key(ERROR_CODE_WADO_NAME) {
         enum_export_indices[ERROR_CODE_WADO_NAME]
     } else {
-        let project = project.expect(
-            "the canonical `error-code` is reached by identity, so the emitting \
-             signature must carry its project",
-        );
         let outer_ec = cm_decl_type_idx(
             ctx,
             project,
@@ -730,7 +731,7 @@ fn build_cm_tuple_types(
     enum_export_indices: &IndexMap<String, u32>,
     own_resource_type_indices: &IndexMap<String, u32>,
     mut shared_type_gen: Option<&mut CmTypeGen>,
-    project: Option<&NirPackage>,
+    project: &NirPackage,
     ctx: &mut ComponentModelContext,
 ) -> Vec<ComponentValType> {
     elems
@@ -952,7 +953,9 @@ fn build_transmission_future_type_for(
     error_code: &CmDecl,
 ) -> u32 {
     let error_code_idx = error_code_type_idx(ctx, project, error_code.def());
-    let label = error_code.cm_package().unwrap_or("cm");
+    // The declaration, not its package: two interfaces of one package each
+    // declaring an `error-code` would otherwise label two types alike.
+    let label = error_code.name_suffix();
 
     let result = intern_cm_type(
         builder,
@@ -1032,9 +1035,9 @@ fn alias_resource_type(
 /// The outer index an import phase gave the type `interface_fq` exports as
 /// `cm_name`, or `None` where none has.
 ///
-/// A resource the program never mentions has no `TypeId`, so it has no
-/// declaration to key it by, and the component aliases it anyway for the
-/// instance type's own methods. The export coordinate answers for that one case.
+/// A caller spells `wado_name` as the CM name in `PascalCase`, which a
+/// declaration need not use. The export coordinate answers where that spelling
+/// reaches no declaration.
 fn aliased_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -1042,11 +1045,14 @@ fn aliased_type_idx(
     wado_name: &str,
     cm_name: &str,
 ) -> Option<u32> {
-    if let Some(idx) =
-        cm_decl_def(project, interface_fq, wado_name).and_then(|def| ctx.decl_type_idx(def))
-    {
-        return Some(idx);
-    }
+    cm_decl_def(project, interface_fq, wado_name)
+        .and_then(|def| ctx.decl_type_idx(def))
+        .or_else(|| export_alias_idx(ctx, interface_fq, cm_name))
+}
+
+/// The alias an import phase made from `interface_fq`'s export `cm_name`, for a
+/// reader whose declaration is bound to no index.
+fn export_alias_idx(ctx: &ComponentModelContext, interface_fq: &str, cm_name: &str) -> Option<u32> {
     let key = resource_export_key(interface_fq, cm_name);
     ctx.has_type(&key).then(|| ctx.type_idx(&key))
 }
@@ -1220,10 +1226,6 @@ fn emit_kiln_world_types(
     );
 }
 
-/// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
-/// Repeated calls with an equal key return the cached index without re-emitting.
-/// `debug_name`, when given, names the emitted type and registers the name so
-/// existing `ctx.type_idx(name)` lookups still resolve.
 /// Resolve a [`CmTypeKey`] to a [`ComponentValType`], emitting any defined type
 /// inline. Primitives (and `string`) are returned as `Primitive` without a
 /// defined-type slot; everything else interns to a `Type(idx)`.
@@ -1239,6 +1241,8 @@ fn intern_cm_valtype(
     }
 }
 
+/// Intern a defined CM type by its structural [`CmTypeKey`], emitting it once.
+/// `debug_name` labels the emitted type in a dump and keys nothing.
 fn intern_cm_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1422,28 +1426,38 @@ fn build_scalar_future_types(
 /// Convert a [`CmPayloadType`] to a structural [`CmTypeKey`] for interning.
 /// Named types resolve to the component type index already registered for the
 /// world's signatures (records / variants / enums / flags).
-fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) -> CmTypeKey {
+fn payload_type_to_cm_key(
+    payload: &CmPayloadType,
+    ctx: &ComponentModelContext,
+    project: &NirPackage,
+) -> CmTypeKey {
     match payload {
         CmPayloadType::Scalar(s) => CmTypeKey::Primitive(cm_scalar_to_primitive(*s)),
         CmPayloadType::String => CmTypeKey::Primitive(PrimitiveValType::String),
-        CmPayloadType::List(t) => CmTypeKey::List(Box::new(payload_type_to_cm_key(t, ctx))),
-        CmPayloadType::Option(t) => CmTypeKey::Option(Box::new(payload_type_to_cm_key(t, ctx))),
+        CmPayloadType::List(t) => {
+            CmTypeKey::List(Box::new(payload_type_to_cm_key(t, ctx, project)))
+        }
+        CmPayloadType::Option(t) => {
+            CmTypeKey::Option(Box::new(payload_type_to_cm_key(t, ctx, project)))
+        }
         CmPayloadType::Result(ok, err) => CmTypeKey::Result {
             ok: ok
                 .as_ref()
-                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx, project))),
             err: err
                 .as_ref()
-                .map(|t| Box::new(payload_type_to_cm_key(t, ctx))),
+                .map(|t| Box::new(payload_type_to_cm_key(t, ctx, project))),
         },
         CmPayloadType::Tuple(elems) => CmTypeKey::Tuple(
             elems
                 .iter()
-                .map(|t| payload_type_to_cm_key(t, ctx))
+                .map(|t| payload_type_to_cm_key(t, ctx, project))
                 .collect(),
         ),
-        CmPayloadType::Named(decl) => CmTypeKey::Leaf(payload_decl_type_idx(ctx, decl)),
-        CmPayloadType::Resource(decl) => CmTypeKey::own_of(payload_decl_type_idx(ctx, decl)),
+        CmPayloadType::Named(decl) => CmTypeKey::Leaf(payload_decl_type_idx(ctx, project, decl)),
+        CmPayloadType::Resource(decl) => {
+            CmTypeKey::own_of(payload_decl_type_idx(ctx, project, decl))
+        }
     }
 }
 
@@ -1465,18 +1479,28 @@ fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
     cm_instance_key(&import.package, &import.interface)
 }
 
-/// The outer type index a canonical's declaration is bound to.
-fn payload_decl_type_idx(ctx: &ComponentModelContext, decl: &CmDecl) -> u32 {
+/// The outer type index a canonical's declaration is bound to, or the alias its
+/// declaring interface exports where nothing bound one.
+fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl: &CmDecl) -> u32 {
     ctx.decl_type_idx(decl.def())
+        .or_else(|| {
+            let fq = project
+                .cm_interface_registry
+                .interface_declaring_module(decl.module())?;
+            export_alias_idx(ctx, fq, decl.cm_name())
+        })
         .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
 }
 
 /// The distinct declarations the canonicals' payloads reach as `kind`.
-fn payload_decls(canonical_intrinsics: &[CanonicalIntrinsic], kind: CmDeclKind) -> Vec<CmDecl> {
-    let mut out: Vec<CmDecl> = Vec::new();
+fn payload_decls(
+    canonical_intrinsics: &[CanonicalIntrinsic],
+    kind: CmDeclKind,
+) -> IndexMap<DefId, CmDecl> {
+    let mut out: IndexMap<DefId, CmDecl> = IndexMap::default();
     let mut keep = |decl: &CmDecl, at: CmDeclKind| {
-        if at == kind && !out.contains(decl) {
-            out.push(decl.clone());
+        if at == kind {
+            out.entry(decl.def()).or_insert_with(|| decl.clone());
         }
     };
     for intrinsic in canonical_intrinsics {
@@ -1498,8 +1522,8 @@ fn prebuild_resource_payload_types(
     project: &NirPackage,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) {
-    for decl in payload_decls(canonical_intrinsics, CmDeclKind::Resource) {
-        if ctx.has_decl_type(decl.def()) {
+    for (def, decl) in payload_decls(canonical_intrinsics, CmDeclKind::Resource) {
+        if ctx.has_decl_type(def) {
             continue;
         }
         let Some(source) = project
@@ -1527,16 +1551,11 @@ fn prebuild_value_named_types(
         return;
     };
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for decl in payload_decls(canonical_intrinsics, CmDeclKind::Value) {
-        if ctx.has_decl_type(decl.def()) {
+    for (def, _) in payload_decls(canonical_intrinsics, CmDeclKind::Value) {
+        if ctx.has_decl_type(def) {
             continue;
         }
-        let wado_name = project
-            .type_table
-            .borrow()
-            .defs()
-            .name(decl.def())
-            .to_string();
+        let wado_name = project.type_table.borrow().defs().name(def).to_string();
         let named = Type::Named(NamedType::new(
             AstId::fresh(),
             wado_name,
@@ -1550,7 +1569,7 @@ fn prebuild_value_named_types(
             &no_resources,
         );
         if let ComponentValType::Type(idx) = val {
-            ctx.bind_decl_type(decl.def(), idx);
+            ctx.bind_decl_type(def, idx);
         }
     }
 }
@@ -1560,6 +1579,7 @@ fn prebuild_value_named_types(
 fn build_value_future_types(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
+    project: &NirPackage,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) -> IndexMap<CmPayloadType, u32> {
     let mut payloads: Vec<CmPayloadType> = Vec::new();
@@ -1572,7 +1592,7 @@ fn build_value_future_types(
     }
     let mut map = IndexMap::default();
     for payload in payloads {
-        let key = CmTypeKey::Future(Box::new(payload_type_to_cm_key(&payload, ctx)));
+        let key = CmTypeKey::Future(Box::new(payload_type_to_cm_key(&payload, ctx, project)));
         let idx = intern_cm_type(builder, ctx, &key, None);
         map.insert(payload, idx);
     }
@@ -1802,7 +1822,7 @@ fn emit_canonical_intrinsics(
                 builder.error_context_drop();
             }
             CanonicalIntrinsic::ResourceDrop(decl) => {
-                builder.resource_drop(payload_decl_type_idx(ctx, decl));
+                builder.resource_drop(payload_decl_type_idx(ctx, project, decl));
             }
         }
     }
@@ -2546,7 +2566,7 @@ fn generate_cm_imports(
                                     &enum_export_indices,
                                     &own_resource_type_indices,
                                     Some(&mut shared_type_gen),
-                                    Some(project),
+                                    project,
                                     ctx,
                                 )
                             });
@@ -2749,7 +2769,7 @@ fn generate_cm_imports(
                             &enum_export_indices,
                             &own_resource_type_indices,
                             Some(&mut shared_type_gen),
-                            Some(project),
+                            project,
                             ctx,
                         )
                     }
@@ -3502,15 +3522,16 @@ fn import_interface_with_resource(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // When this interface defines its own resource (not aliased from a source interface),
-    // expose the resource at the outer component scope so that other interfaces (like
-    // wasi:filesystem/preopens) can alias it using `alias outer`.
+    // Expose the resource at outer scope so another interface (say
+    // `wasi:filesystem/preopens`) can `alias outer` it. Keyed by the interface
+    // that declares it, which is what every other reader asks for: keying it by
+    // the one using it here would leave that reader aliasing the export twice.
     if outer_resource_idx.is_none() {
         alias_resource_type(
             builder,
             ctx,
             project,
-            &interface_info.path,
+            declaring.as_deref().unwrap_or(&interface_info.path),
             resource_wado_name,
             resource_cm_name,
             &interface_info.instance_key(),
@@ -3967,7 +3988,7 @@ fn import_resource_using_interfaces(
                                 &IndexMap::default(),
                                 &own_resource_type_indices,
                                 None,
-                                Some(project),
+                                project,
                                 ctx,
                             )
                         };
@@ -3986,7 +4007,7 @@ fn import_resource_using_interfaces(
                         &IndexMap::default(),
                         &own_resource_type_indices,
                         None,
-                        Some(project),
+                        project,
                         ctx,
                     )
                 });

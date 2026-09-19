@@ -614,6 +614,11 @@ impl<'a> WirContext<'a> {
         params: Vec<WirType>,
         results: Vec<WirType>,
     ) -> WirFuncId {
+        // The intrinsic decides, not its rendering: two renderings of one
+        // declaration would otherwise register two imports for one canon.
+        if let Some(func_id) = self.needed_canonicals.get(&intrinsic) {
+            return func_id.clone();
+        }
         let name = intrinsic.import_name();
         let key = MangledName::wasi_import(&name);
         if let Some(func_id) = self.func_map.get(&key) {

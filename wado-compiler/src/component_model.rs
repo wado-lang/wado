@@ -3002,7 +3002,7 @@ impl CmInterfaceRegistry {
         else {
             return None;
         };
-        let stem = interface.trim_end_matches(".wado");
+        let stem = interface.strip_suffix(".wado").unwrap_or(interface);
         let wanted = (Some(*namespace), format!("{stem}.wado"));
         self.interfaces
             .keys()
@@ -3185,15 +3185,13 @@ impl CmInterfaceRegistry {
     /// A name a bundled interface also spells resolves here to the declaring
     /// module's own interface, so no by-name search can offer the other one.
     pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
-        self.structs
-            .keys()
-            .chain(self.variants.keys())
-            .chain(self.enums.keys())
-            .chain(self.flags.keys())
-            .find(|(fq, decl_name)| {
-                decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
-            })
-            .map(|(fq, _)| fq.as_str())
+        let fq = self.interface_declaring_module(source)?;
+        let key = (fq.to_string(), name.to_string());
+        let declares = self.structs.contains_key(&key)
+            || self.variants.contains_key(&key)
+            || self.enums.contains_key(&key)
+            || self.flags.contains_key(&key);
+        declares.then_some(fq)
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).
@@ -4903,9 +4901,6 @@ pub const RESPONSE_WADO_NAME: &str = "Response";
 /// The interface declaring the canonical `error-code` that WASI WIT writes as
 /// the error arm of a bare `result<_, error-code>`.
 pub const CANONICAL_ERROR_CODE_INTERFACE: &str = "wasi:cli/types";
-
-/// The interface declaring the Kiln generator world's own surface.
-pub const KILN_TYPES_INTERFACE: &str = "core:kiln/types";
 
 /// What every boundary path says when it meets the empty tuple, which none of
 /// them does.

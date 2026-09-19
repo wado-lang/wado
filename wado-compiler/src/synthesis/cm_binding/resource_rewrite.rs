@@ -341,10 +341,11 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
     let scope = Some(elem_pkg);
     let elem_size = cm_size_with_registry_scoped(&ast_type, registry, scope) as i32;
     let elem_align = cm_align_with_registry_scoped(&ast_type, registry, scope) as i32;
+    // The same fallback the other builder of this declaration uses: one
+    // declaration renders to one CM name, whichever site reaches it first.
     let cm_record_name = registry
         .get_struct_cm_name_by_source(&source, &elem_name)
-        .unwrap_or(&elem_name)
-        .to_string();
+        .map_or_else(|| pascal_to_kebab(&elem_name), str::to_string);
     let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),

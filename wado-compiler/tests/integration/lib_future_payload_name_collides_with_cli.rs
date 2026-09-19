@@ -28,12 +28,27 @@ export fn sum_of(rx: Future<ErrorCode>) -> i64 {
 
 #[test]
 fn future_payload_is_lifted_as_its_own_record() {
-    // Compilation validates the core module, so reaching the WAT at all is the
-    // assertion; the ICE was a validation failure inside this helper.
     let wasm = compile_lib_world(SOURCE, LIB_WORLD_FQ, OptLevel::O0, None);
-    let wat = wasmprinter::print_bytes(&wasm).expect("print the component");
-    assert!(
-        wat.contains("$cm_future_read_lib.wado/ErrorCode"),
-        "the record payload's own future-read helper is what the export calls"
+    let decoded = wit_component::decode(&wasm).expect("decode the library world");
+    let resolve = decoded.resolve();
+    let record = resolve
+        .types
+        .iter()
+        .find_map(|(_, t)| match &t.kind {
+            wit_parser::TypeDefKind::Record(r) if t.name.as_deref() == Some("error-code") => {
+                Some(r)
+            }
+            _ => None,
+        })
+        .expect("`error-code` at the boundary is this library's record, not the `wasi:cli` enum");
+    let fields: Vec<(&str, wit_parser::Type)> = record
+        .fields
+        .iter()
+        .map(|f| (f.name.as_str(), f.ty))
+        .collect();
+    assert_eq!(
+        fields,
+        vec![("a", wit_parser::Type::S64), ("b", wit_parser::Type::S64)],
+        "the payload carries the fields the library declared"
     );
 }

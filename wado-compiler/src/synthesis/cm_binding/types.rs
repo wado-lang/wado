@@ -1338,11 +1338,6 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-/// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
-/// to re-enter the AST-shaped match arms. Only the top-level name and immediate
-/// type args are filled in; deeper structure is looked up lazily. A named type
-/// gets its `source_interface` where the registry knows it, since the lift /
-/// lower helpers key by `(source_interface, name)`.
 /// The interface `module` registers `name` under, as an owned FQ.
 fn declaring_interface(
     registry: &CmInterfaceRegistry,
@@ -1354,6 +1349,11 @@ fn declaring_interface(
         .map(str::to_string)
 }
 
+/// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
+/// to re-enter the AST-shaped match arms. Only the top-level name and immediate
+/// type args are filled in; deeper structure is looked up lazily. A named type
+/// gets its `source_interface` where the registry knows it, since the lift /
+/// lower helpers key by `(source_interface, name)`.
 pub(super) fn type_id_to_ast_type(
     type_id: TypeId,
     type_table: &TypeTable,
@@ -1363,22 +1363,21 @@ pub(super) fn type_id_to_ast_type(
     let resolved = type_table.get(type_id);
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
-    // A reference carries the interface its own declaring module registers, so
-    // no downstream by-name search can offer another module's same-named type.
-    // `ErrorCode` is one in `wasi:cli`, `wasi:filesystem`, `wasi:http`,
-    // `wasi:sockets` and any user module, and picking the wrong one lifts a
-    // record as the other's discriminant (issue #2090).
+    // The declaring module answers first, so no by-name search can offer another
+    // module's same-named type. `ErrorCode` is one in `wasi:cli`,
+    // `wasi:filesystem`, `wasi:http`, `wasi:sockets` and any user module, and
+    // picking the wrong one lifts a record as the other's discriminant (#2090).
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let source = match ms {
-            ModuleSource::Binding { interface, .. } => cm_interface_registry
-                .resolve_cm_source_for(&nt, interface.split('/').next())
-                .or_else(|| declaring_interface(cm_interface_registry, ms, name)),
+        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {
+            ModuleSource::Binding { interface, .. } => {
+                cm_interface_registry.resolve_cm_source_for(&nt, interface.split('/').next())
+            }
             ModuleSource::Core { name: core } if core == "kiln" || core.starts_with("kiln/") => {
                 cm_interface_registry.resolve_cm_source_for(&nt, None)
             }
-            _ => declaring_interface(cm_interface_registry, ms, name),
-        };
+            _ => None,
+        });
         if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
         }

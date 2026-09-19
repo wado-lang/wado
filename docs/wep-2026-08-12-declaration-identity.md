@@ -736,15 +736,14 @@ Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 
 ## Known gap: a CM type can reach outer scope with no identity
 
-A resource the program never mentions still reaches a component's outer scope,
-because an imported instance type's own methods reference it. No type was
-interned for it, so §9's step answers nothing. The alias is keyed by the export
-it was made from instead. One interface spells that export name once, so the key
-collides with nothing today.
+A reader asking §9's step for a CM type spells the Wado name as that type's CM
+name in `PascalCase`, because the CM export is all it holds. A declaration whose
+own name is spelled otherwise is not that name, so the step answers nothing and
+the alias is keyed by the export it was made from instead. One interface spells
+that export name once, so the key collides with nothing today.
 
-Closing this means the step answering from the declarations a module makes, not
-from the types the program interned. A declaration no Wado code mentions would
-then still have its identity.
+What is not established is which declarations a component reaches this way, and
+so whether any of them is spelled such that the step could answer.
 
 ## Known gap: a CM name still reaches a declaration by search
 

@@ -364,9 +364,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    /// Report an annotation naming a type no declaration answers here. Unlike a
-    /// bound or a signature, an annotation names no type parameter it does not
-    /// already have in scope, so the site's answer is decisive.
+    /// Report a written type position naming a type no declaration answers
+    /// here. Unlike a bound or a signature, an annotation names no type
+    /// parameter it does not already have in scope, so the site's answer is
+    /// decisive; a pattern qualifier's arguments are read the same way.
     pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
         if self.logger.has_errors() {
             return;
@@ -869,14 +870,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
             }
+            // The name answers first: reading the arguments of a qualifier that
+            // names another type records references nothing accepted.
             Type::Generic(g) => {
-                self.qualifier_args_agree(scrutinee_args.as_deref(), &g.args)
-                    && names_scrutinee(self, qualifier)
+                names_scrutinee(self, qualifier)
+                    && self.qualifier_args_agree(scrutinee_args.as_deref(), &g.args)
             }
             Type::NamespacedGeneric(ns) => {
-                (ns.args.is_empty()
-                    || self.qualifier_args_agree(scrutinee_args.as_deref(), &ns.args))
-                    && names_scrutinee(self, qualifier)
+                names_scrutinee(self, qualifier)
+                    && (ns.args.is_empty()
+                        || self.qualifier_args_agree(scrutinee_args.as_deref(), &ns.args))
             }
             Type::Function(_)
             | Type::Tuple(_)
@@ -904,17 +907,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether one written qualifier argument is the scrutinee's at that
     /// position.
     ///
-    /// A position either side leaves abstract is not compared. A generic body
-    /// writes its own parameter where the scrutinee carries a concrete type,
-    /// which is ordinary code.
+    /// A position either side leaves abstract is not compared: a generic body's
+    /// own parameter, an `_`, or a name that reached no type. Only a position
+    /// naming an instantiation can disagree with one.
     fn qualifier_arg_agrees(&mut self, written: &Type, scrutinee: TypeId) -> bool {
         let resolved = self.resolve_type(written);
+        if resolved == TypeTable::UNKNOWN && !matches!(written, Type::Infer(_)) {
+            self.reject_unresolved_annotation(written);
+        }
         let tt = self.tysys.type_table.borrow();
         let abstract_at = |id: TypeId| {
-            matches!(
-                tt.get(id),
-                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
-            )
+            matches!(tt.get(id), ResolvedType::TypeParam { .. }) || tt.contains_undecided(id)
         };
         abstract_at(resolved)
             || abstract_at(scrutinee)
@@ -1698,19 +1701,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
+                    // The scrutinee's own type, not its declaration: the
+                    // qualifier is compared against the instantiation, so a
+                    // message naming `Maybe` says nothing about `Maybe<i32>`.
+                    let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
                     let expected = match &resolved_type {
-                        ResolvedType::Enum { def } => {
-                            format!(
-                                "valid case of enum {}",
-                                self.tysys.type_table.borrow().def_name(*def)
-                            )
-                        }
-                        ResolvedType::Variant { def }
-                        | ResolvedType::GenericInstance { def, .. } => {
-                            format!(
-                                "valid case of variant {}",
-                                self.tysys.type_table.borrow().def_name(*def)
-                            )
+                        ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),
+                        ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                            format!("valid case of variant {scrutinee_name}")
                         }
                         _ => "variant or enum case".to_string(),
                     };
