@@ -37,15 +37,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -77,33 +71,17 @@ fn "wasm_name_conflict_struct.wado/run"() with Stdout {
     rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_9 = "wasm_name_conflict_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:wasm_name_conflict_struct.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_33, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_33, global:wasm_name_conflict_struct.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
-=======
-    "core:rt/write_string_to_stream"(tx_33, global:wasm_name_conflict_struct.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
->>>>>>> origin/main
     rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_41 = "wasm_name_conflict_struct.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
-<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:wasm_name_conflict_struct.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_65, $mv_arg_4.repr, $mv_arg_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_41);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_65, global:wasm_name_conflict_struct.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_41);
-=======
-    "core:rt/write_string_to_stream"(tx_65, global:wasm_name_conflict_struct.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_41);
->>>>>>> origin/main
 }
 
 fn "wasm_name_conflict_struct.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

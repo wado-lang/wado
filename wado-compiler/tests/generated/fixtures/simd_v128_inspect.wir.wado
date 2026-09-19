@@ -59,15 +59,9 @@ type "functype//core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelud
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -135,32 +129,16 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     rx_49 = builtin::i32_wrap_i64(local.tee packed_48("wasi/stream-new"()));
     tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
     handle_9 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(rx_49);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_50, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_50, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
-=======
-    "core:rt/write_string_to_stream"(tx_50, $local_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
->>>>>>> origin/main
     w = struct.new "simd_v128_inspect.wado//Wrap" { bytes: v };
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(w, $local_4_4);
     rx_63 = builtin::i32_wrap_i64(local.tee packed_62("wasi/stream-new"()));
     tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
     handle_58 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_64, $local_4_4.repr, $local_4_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_58);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_64, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_58);
-=======
-    "core:rt/write_string_to_stream"(tx_64, $local_4_4);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_58);
->>>>>>> origin/main
 }
 
 fn "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

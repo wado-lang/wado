@@ -47,15 +47,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
@@ -90,33 +84,17 @@ fn "param_spec_scalar_clone_wir.wado/run"() with Stdout {
     rx_17 = builtin::i32_wrap_i64(local.tee packed_16("wasi/stream-new"()));
     tx_18 = builtin::i32_wrap_i64(packed_16 >> 32_i64);
     handle_8 = "param_spec_scalar_clone_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_17);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:param_spec_scalar_clone_wir.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_18, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_18, global:param_spec_scalar_clone_wir.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
-=======
-    "core:rt/write_string_to_stream"(tx_18, global:param_spec_scalar_clone_wir.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
->>>>>>> origin/main
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_32("param_spec_scalar_clone_wir.wado/scaled$spec1"(n)), $local_3);
     rx_35 = builtin::i32_wrap_i64(local.tee packed_34("wasi/stream-new"()));
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_26 = "param_spec_scalar_clone_wir.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_36, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_36, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
-=======
-    "core:rt/write_string_to_stream"(tx_36, $local_3);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_26);
->>>>>>> origin/main
 }
 
 fn "param_spec_scalar_clone_wir.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

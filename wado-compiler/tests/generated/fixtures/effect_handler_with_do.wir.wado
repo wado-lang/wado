@@ -99,13 +99,7 @@ type "functype//core:prelude/primitive.wado/u64::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(35)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(36)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
->>>>>>> origin/main
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(36)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(37)
 
@@ -178,16 +172,8 @@ fn "effect_handler_with_do.wado/run"() with Stdout {
     rx_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_36 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_handler_with_do.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_36, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_36, $local_2_2);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_36, $local_2_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
     global:effect_handler_with_do.wado::$effect_MonotonicClock = $save_MonotonicClock;
 }
 

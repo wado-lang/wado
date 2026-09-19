@@ -30,25 +30,11 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(14)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(14)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -83,48 +69,24 @@ fn "enum_match_basic.wado/$cm_export__run"() {
     rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
     handle_3 = "enum_match_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
-<<<<<<< HEAD
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(114, 101, 100);
     "core:rt/write_string_to_stream"(tx_8, $mv_field_2, 3);
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 });
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
-=======
-    "core:rt/write_string_to_stream"(tx_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 100), used: 3 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
->>>>>>> origin/main
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_16 = "enum_match_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-<<<<<<< HEAD
     let $mv_field_5: ref Array<u8>;
     $mv_field_5 = array.new_data<u8>("green");
     "core:rt/write_string_to_stream"(tx_21, $mv_field_5, 5);
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 });
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
-=======
-    "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("green"), used: 5 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_16);
->>>>>>> origin/main
     rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
     tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
     handle_29 = "enum_match_basic.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
-<<<<<<< HEAD
     let $mv_field_8: ref Array<u8>;
     $mv_field_8 = array.new_fixed<u8>(98, 108, 117, 101);
     "core:rt/write_string_to_stream"(tx_34, $mv_field_8, 4);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_34, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 });
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
-=======
-    "core:rt/write_string_to_stream"(tx_34, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98, 108, 117, 101), used: 4 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

@@ -67,15 +67,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(27)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
@@ -125,18 +119,10 @@ fn "allocator_grow.wado/run"() with Stdout {
     rx_11 = builtin::i32_wrap_i64(local.tee packed_10("wasi/stream-new"()));
     tx_12 = builtin::i32_wrap_i64(packed_10 >> 32_i64);
     handle_8 = "allocator_grow.wado/$cm_binding__Stdout_write_via_stream"(rx_11);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:allocator_grow.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_12, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_12, global:allocator_grow.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
-=======
-    "core:rt/write_string_to_stream"(tx_12, global:allocator_grow.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
->>>>>>> origin/main
     i = 0;
     b1: block {
         l2: loop {
@@ -154,18 +140,10 @@ fn "allocator_grow.wado/run"() with Stdout {
     rx_29 = builtin::i32_wrap_i64(local.tee packed_28("wasi/stream-new"()));
     tx_30 = builtin::i32_wrap_i64(packed_28 >> 32_i64);
     handle_26 = "allocator_grow.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
-<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:allocator_grow.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_30, $mv_arg_4.repr, $mv_arg_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_30, global:allocator_grow.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
-=======
-    "core:rt/write_string_to_stream"(tx_30, global:allocator_grow.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_26);
->>>>>>> origin/main
 }
 
 fn "allocator_grow.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -315,16 +293,8 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-=======
-    "core:rt/write_string_to_stream"(tx_8, message);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

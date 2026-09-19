@@ -30,25 +30,11 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(13)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(14)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(14)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(16)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -79,33 +65,17 @@ fn "infer_method_type_arg_from_return_type.wado/$cm_export__run"() {
     rx_16 = builtin::i32_wrap_i64(local.tee packed_15("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
     handle_7 = "infer_method_type_arg_from_return_type.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
-<<<<<<< HEAD
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_fixed<u8>(52, 50);
     "core:rt/write_string_to_stream"(tx_17, $mv_field_2, 2);
-    "wasi/future-drop-readable:transmission-cli"(handle_7);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_17, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 });
-    "wasi/future-drop-readable:transmission-cli"(handle_7);
-=======
-    "core:rt/write_string_to_stream"(tx_17, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(52, 50), used: 2 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_7);
->>>>>>> origin/main
     rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
     handle_31 = "infer_method_type_arg_from_return_type.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
-<<<<<<< HEAD
     let $mv_field_5: ref Array<u8>;
     $mv_field_5 = array.new_fixed<u8>(55);
     "core:rt/write_string_to_stream"(tx_35, $mv_field_5, 1);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_35, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(55), used: 1 });
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-=======
-    "core:rt/write_string_to_stream"(tx_35, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(55), used: 1 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

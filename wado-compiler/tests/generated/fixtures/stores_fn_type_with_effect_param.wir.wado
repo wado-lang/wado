@@ -37,15 +37,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -77,33 +71,17 @@ fn "stores_fn_type_with_effect_param.wado/run"() with Stdout {
     rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
     tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
     handle_48 = "stores_fn_type_with_effect_param.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:stores_fn_type_with_effect_param.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_52, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_48);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_52, global:stores_fn_type_with_effect_param.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_48);
-=======
-    "core:rt/write_string_to_stream"(tx_52, global:stores_fn_type_with_effect_param.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_48);
->>>>>>> origin/main
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_15 = "stores_fn_type_with_effect_param.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
-<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:stores_fn_type_with_effect_param.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_38, $mv_arg_4.repr, $mv_arg_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_38, global:stores_fn_type_with_effect_param.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
-=======
-    "core:rt/write_string_to_stream"(tx_38, global:stores_fn_type_with_effect_param.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
->>>>>>> origin/main
 }
 
 fn "stores_fn_type_with_effect_param.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -69,13 +69,7 @@ type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(27)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(28)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(29)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
->>>>>>> origin/main
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(29)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(30)
 
@@ -158,16 +152,8 @@ fn "stream_cm_stdin_read.wado/run"() with Stdout, Stdin {
     rx_48 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_49 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_49, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_49, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_49, $local_3);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
 }
 
 fn "stream_cm_stdin_read.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

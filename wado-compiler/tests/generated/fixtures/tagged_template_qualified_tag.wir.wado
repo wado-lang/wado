@@ -35,15 +35,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(14)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(15)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(15)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(16)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(17)
 
@@ -74,18 +68,10 @@ fn "tagged_template_qualified_tag.wado/$cm_export__run"() {
     rx_8 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "tagged_template_qualified_tag.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
-<<<<<<< HEAD
     let $mv_field_2: ref Array<u8>;
     $mv_field_2 = array.new_data<u8>("id = ? AND name = ?");
     "core:rt/write_string_to_stream"(tx_9, $mv_field_2, 19);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("id = ? AND name = ?"), used: 19 });
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("id = ? AND name = ?"), used: 19 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

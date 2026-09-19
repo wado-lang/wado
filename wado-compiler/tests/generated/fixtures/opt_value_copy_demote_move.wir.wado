@@ -116,13 +116,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(47)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(47)
->>>>>>> origin/main
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
 
@@ -224,16 +218,8 @@ fn "opt_value_copy_demote_move.wado/process"(tokens) with Stdout {
     rx_47 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_48 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "opt_value_copy_demote_move.wado/$cm_binding__Stdout_write_via_stream"(rx_47);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_48, message_32.repr, $av_73);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_48, message_32);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_48, message_32);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
     $v1_55 = tokens.used;
     if @unlikely(0 >= $v1_55) {
         cold_path;
@@ -395,16 +381,8 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-=======
-    "core:rt/write_string_to_stream"(tx_8, message);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

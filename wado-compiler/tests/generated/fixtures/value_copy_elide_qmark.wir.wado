@@ -50,15 +50,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
@@ -94,16 +88,8 @@ fn "value_copy_elide_qmark.wado/run"() with Stdout {
     rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
     tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
     handle_12 = "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"(rx_21);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_22, $local_1.repr, $local_1.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
-||||||| f144ca275
-    "core:rt/write_string_to_stream$spec0"(tx_22, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
-=======
-    "core:rt/write_string_to_stream$spec0"(tx_22, $local_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
->>>>>>> origin/main
 }
 
 fn "value_copy_elide_qmark.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

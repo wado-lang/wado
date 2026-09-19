@@ -37,15 +37,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -78,18 +72,10 @@ fn "niri_const_global_element_fold.wado/run"() with Stdout {
     rx_62 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_63 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "niri_const_global_element_fold.wado/$cm_binding__Stdout_write_via_stream"(rx_62);
-<<<<<<< HEAD
     let $mv_arg_5: ref "core:prelude/string.wado//String";
     $mv_arg_5 = global:niri_const_global_element_fold.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_63, $mv_arg_5.repr, $mv_arg_5.used);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_63, global:niri_const_global_element_fold.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_63, global:niri_const_global_element_fold.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
 }
 
 fn "niri_const_global_element_fold.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

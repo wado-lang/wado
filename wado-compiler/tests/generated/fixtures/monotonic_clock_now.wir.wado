@@ -34,25 +34,11 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(20)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -93,34 +79,18 @@ fn "monotonic_clock_now.wado/$cm_export__run"() {
         rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
         tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
         handle_5 = "monotonic_clock_now.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
-<<<<<<< HEAD
         let $mv_field_2: ref Array<u8>;
         $mv_field_2 = array.new_data<u8>("monotonic: ok");
         "core:rt/write_string_to_stream"(tx_9, $mv_field_2, 13);
-        "wasi/future-drop-readable:transmission-cli"(handle_5);
-||||||| f144ca275
-        "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: ok"), used: 13 });
-        "wasi/future-drop-readable:transmission-cli"(handle_5);
-=======
-        "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: ok"), used: 13 });
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_5);
->>>>>>> origin/main
     } else {
         rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
         tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
         handle_17 = "monotonic_clock_now.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-<<<<<<< HEAD
         let $mv_field_5: ref Array<u8>;
         $mv_field_5 = array.new_data<u8>("monotonic: FAILED");
         "core:rt/write_string_to_stream"(tx_21, $mv_field_5, 17);
-        "wasi/future-drop-readable:transmission-cli"(handle_17);
-||||||| f144ca275
-        "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: FAILED"), used: 17 });
-        "wasi/future-drop-readable:transmission-cli"(handle_17);
-=======
-        "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: FAILED"), used: 17 });
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_17);
->>>>>>> origin/main
     }
     "wasi/task-return"(0);
 }

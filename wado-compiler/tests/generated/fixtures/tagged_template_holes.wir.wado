@@ -91,25 +91,11 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(32)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(33)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(33)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(34)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(35)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(39)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -190,16 +176,8 @@ fn "tagged_template_holes.wado/run"() with Stdout {
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_15 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_23, message_12.repr, message_12.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_23, message_12);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
-=======
-    "core:rt/write_string_to_stream"(tx_23, message_12);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
->>>>>>> origin/main
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     new_used_44 = 0 + 6;
     if @unlikely(new_used_44 > builtin::array_len($local_6.repr)) {
@@ -213,16 +191,8 @@ fn "tagged_template_holes.wado/run"() with Stdout {
     rx_53 = builtin::i32_wrap_i64(local.tee packed_52("wasi/stream-new"()));
     tx_54 = builtin::i32_wrap_i64(packed_52 >> 32_i64);
     handle_31 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_53);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_54, $local_6.repr, $local_6.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_54, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-=======
-    "core:rt/write_string_to_stream"(tx_54, $local_6);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
->>>>>>> origin/main
     before = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$4dd488538f222bee,[i32]>"(struct.new "tagged_template_holes.wado//$tmpl$4dd488538f222bee" { h0: m });
     m = m + 1;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(38), used: 0 };
@@ -243,74 +213,36 @@ fn "tagged_template_holes.wado/run"() with Stdout {
     rx_85 = builtin::i32_wrap_i64(local.tee packed_84("wasi/stream-new"()));
     tx_86 = builtin::i32_wrap_i64(packed_84 >> 32_i64);
     handle_62 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_85);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_86, $local_8.repr, $local_8.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_62);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_62);
     message_91 = block -> ref "core:prelude/string.wado//String" {
         "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$763c2df28fcd4494,[core:prelude/string.wado/String,i32]>"($sroa_b_label, 7);
     };
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_86, $local_8);
-    "wasi/future-drop-readable:transmission-cli"(handle_62);
-    message_91 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$763c2df28fcd4494,[core:prelude/string.wado/String,i32]>"(struct.new "tagged_template_holes.wado//$tmpl$763c2df28fcd4494" { h0: $sroa_b_label, h1: 7 });
-=======
-    "core:rt/write_string_to_stream"(tx_86, $local_8);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_62);
-    message_91 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$763c2df28fcd4494,[core:prelude/string.wado/String,i32]>"(struct.new "tagged_template_holes.wado//$tmpl$763c2df28fcd4494" { h0: $sroa_b_label, h1: 7 });
->>>>>>> origin/main
     rx_97 = builtin::i32_wrap_i64(local.tee packed_96("wasi/stream-new"()));
     tx_98 = builtin::i32_wrap_i64(packed_96 >> 32_i64);
     handle_94 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_97);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_98, message_91.repr, message_91.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_94);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_94);
     message_103 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_14: i32;
         $mv_field_14 = m;
         "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"($mv_field_14, s_0);
     };
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_98, message_91);
-    "wasi/future-drop-readable:transmission-cli"(handle_94);
-    message_103 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_holes.wado//$tmpl$5a3702ee2b5a41e7" { h0: m, h1: s_0 });
-=======
-    "core:rt/write_string_to_stream"(tx_98, message_91);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_94);
-    message_103 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_holes.wado//$tmpl$5a3702ee2b5a41e7" { h0: m, h1: s_0 });
->>>>>>> origin/main
     rx_109 = builtin::i32_wrap_i64(local.tee packed_108("wasi/stream-new"()));
     tx_110 = builtin::i32_wrap_i64(packed_108 >> 32_i64);
     handle_106 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_109);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_110, message_103.repr, message_103.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_106);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_106);
     message_115 = block -> ref "core:prelude/string.wado//String" {
         let $mv_field_18: i32;
         $mv_field_18 = m;
         "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"($mv_field_18, s_0);
     };
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_110, message_103);
-    "wasi/future-drop-readable:transmission-cli"(handle_106);
-    message_115 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_holes.wado//$tmpl$5a3702ee2b5a41e7" { h0: m, h1: s_0 });
-=======
-    "core:rt/write_string_to_stream"(tx_110, message_103);
-    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_106);
-    message_115 = "tagged_template_holes.wado/tagged_template_holes.wado/count<tagged_template_holes.wado/$tmpl$5a3702ee2b5a41e7,[i32,core:prelude/string.wado/String]>"(struct.new "tagged_template_holes.wado//$tmpl$5a3702ee2b5a41e7" { h0: m, h1: s_0 });
->>>>>>> origin/main
     rx_121 = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
     tx_122 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     handle_118 = "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(rx_121);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_122, message_115.repr, message_115.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_118);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_122, message_115);
-    "wasi/future-drop-readable:transmission-cli"(handle_118);
-=======
-    "core:rt/write_string_to_stream"(tx_122, message_115);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_118);
->>>>>>> origin/main
 }
 
 fn "tagged_template_holes.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

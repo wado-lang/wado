@@ -37,15 +37,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(18)
 
@@ -76,33 +70,17 @@ fn "trait_bound_crossmod.wado/run"() with Stdout {
     rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
     tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
     handle_14 = "trait_bound_crossmod.wado/$cm_binding__Stdout_write_via_stream"(rx_23);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:trait_bound_crossmod.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_24, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_14);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_24, global:trait_bound_crossmod.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_14);
-=======
-    "core:rt/write_string_to_stream"(tx_24, global:trait_bound_crossmod.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_14);
->>>>>>> origin/main
     rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
     tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     handle_33 = "trait_bound_crossmod.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
-<<<<<<< HEAD
     let $mv_arg_4: ref "core:prelude/string.wado//String";
     $mv_arg_4 = global:trait_bound_crossmod.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_43, $mv_arg_4.repr, $mv_arg_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_43, global:trait_bound_crossmod.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
-=======
-    "core:rt/write_string_to_stream"(tx_43, global:trait_bound_crossmod.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_33);
->>>>>>> origin/main
 }
 
 fn "trait_bound_crossmod.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

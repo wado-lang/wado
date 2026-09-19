@@ -71,15 +71,9 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(27)
 
@@ -118,31 +112,15 @@ fn "tagged_template_tag_default_arg.wado/$cm_export__run"() {
     rx_7 = builtin::i32_wrap_i64(local.tee packed_6("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
     handle_4 = "tagged_template_tag_default_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_8, message_1.repr, message_1.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_4);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, message_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_4);
-=======
-    "core:rt/write_string_to_stream"(tx_8, message_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_4);
->>>>>>> origin/main
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     handle_16 = "tagged_template_tag_default_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
-<<<<<<< HEAD
     let $mv_field_4: ref Array<u8>;
     $mv_field_4 = array.new_data<u8>("tail@");
     "core:rt/write_string_to_stream"(tx_53, $mv_field_4, 5);
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_53, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tail@"), used: 5 });
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
-=======
-    "core:rt/write_string_to_stream"(tx_53, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tail@"), used: 5 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_16);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 

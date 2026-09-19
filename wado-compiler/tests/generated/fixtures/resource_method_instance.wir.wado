@@ -77,21 +77,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
->>>>>>> origin/main
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
 
-<<<<<<< HEAD
-type "functype//wasi/resource-drop:tcp-socket" = fn(i32);  // TypeId(23)
-||||||| f144ca275
-type "functype//wasi/resource-drop:tcp-socket" = fn(i32);  // TypeId(24)
-=======
-type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(24)
->>>>>>> origin/main
+type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -204,37 +192,19 @@ fn "resource_method_instance.wado/$cm_export__run"() {
         rx_9 = builtin::i32_wrap_i64(local.tee packed_8("wasi/stream-new"()));
         tx_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
         handle_6 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
-<<<<<<< HEAD
         let $mv_field_5: ref Array<u8>;
         $mv_field_5 = array.new_data<u8>("Resource extracted from Result");
         "core:rt/write_string_to_stream$spec0"(tx_10, $mv_field_5, 30);
-        "wasi/future-drop-readable:transmission-cli"(handle_6);
-        "wasi/resource-drop:tcp-socket"(socket);
-||||||| f144ca275
-        "core:rt/write_string_to_stream$spec0"(tx_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
-        "wasi/future-drop-readable:transmission-cli"(handle_6);
-        "wasi/resource-drop:tcp-socket"(socket);
-=======
-        "core:rt/write_string_to_stream$spec0"(tx_10, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource extracted from Result"), used: 30 });
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_6);
         "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"(socket);
->>>>>>> origin/main
     } else {
         rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
         tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
         handle_18 = "resource_method_instance.wado/$cm_binding__Stdout_write_via_stream"(rx_23);
-<<<<<<< HEAD
         let $mv_field_2: ref Array<u8>;
         $mv_field_2 = array.new_data<u8>("Failed to create socket");
         "core:rt/write_string_to_stream$spec0"(tx_24, $mv_field_2, 23);
-        "wasi/future-drop-readable:transmission-cli"(handle_18);
-||||||| f144ca275
-        "core:rt/write_string_to_stream$spec0"(tx_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Failed to create socket"), used: 23 });
-        "wasi/future-drop-readable:transmission-cli"(handle_18);
-=======
-        "core:rt/write_string_to_stream$spec0"(tx_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Failed to create socket"), used: 23 });
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_18);
->>>>>>> origin/main
     }
     "wasi/task-return"(0);
 }

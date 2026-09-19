@@ -56,15 +56,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(26)
 
@@ -141,31 +135,15 @@ fn "opt_licm_inloop_ref.wado/run"() with Stdout {
     rx_16 = builtin::i32_wrap_i64(local.tee packed_15("wasi/stream-new"()));
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
     handle_7 = "opt_licm_inloop_ref.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_17, $local_0.repr, $local_0.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_7);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_17, $local_0);
-    "wasi/future-drop-readable:transmission-cli"(handle_7);
-=======
-    "core:rt/write_string_to_stream"(tx_17, $local_0);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_7);
->>>>>>> origin/main
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_31("opt_licm_inloop_ref.wado/pick"(black_box(100), black_box(1))), $local_2);
     rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
     handle_25 = "opt_licm_inloop_ref.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_35, $local_2.repr, $local_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_25);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_35, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_25);
-=======
-    "core:rt/write_string_to_stream"(tx_35, $local_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_25);
->>>>>>> origin/main
 }
 
 fn "opt_licm_inloop_ref.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

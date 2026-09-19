@@ -55,7 +55,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(24)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(25)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(25)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(26)
 
@@ -70,7 +70,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -186,7 +186,7 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
     handle_15 = "opt_multi_value_param_arg_order.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
     "core:rt/write_string_to_stream"(tx_52, $local_2_2.repr, $local_2_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     global:opt_multi_value_param_arg_order.wado::LOG = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     b = block -> i32 {
         $local_1_58 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
@@ -249,7 +249,7 @@ fn "opt_multi_value_param_arg_order.wado/run"() with Stdout {
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
     handle_69 = "opt_multi_value_param_arg_order.wado/$cm_binding__Stdout_write_via_stream"(rx_105);
     "core:rt/write_string_to_stream"(tx_106, $local_4_4.repr, $local_4_4.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_69);
 }
 
 fn "opt_multi_value_param_arg_order.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

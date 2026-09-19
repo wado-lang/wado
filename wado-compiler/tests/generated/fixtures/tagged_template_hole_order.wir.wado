@@ -111,29 +111,11 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(43)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
-<<<<<<< HEAD
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
-||||||| f144ca275
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
-
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
-=======
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
-
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(48)
->>>>>>> origin/main
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -230,16 +212,8 @@ fn "tagged_template_hole_order.wado/run"() with Stdout {
     rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
     tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
     handle_57 = "tagged_template_hole_order.wado/$cm_binding__Stdout_write_via_stream"(rx_61);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_62, message_54.repr, message_54.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_57);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_62, message_54);
-    "wasi/future-drop-readable:transmission-cli"(handle_57);
-=======
-    "core:rt/write_string_to_stream"(tx_62, message_54);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_57);
->>>>>>> origin/main
     $cond_6 = $inline_core_prelude_array_wado_seq_eq_u8__21: block -> bool {
         a_69 = tagged.repr;
         a_end_71 = tagged.used;
@@ -309,16 +283,8 @@ condition: tagged == plain
     rx_135 = builtin::i32_wrap_i64(local.tee packed_134("wasi/stream-new"()));
     tx_136 = builtin::i32_wrap_i64(packed_134 >> 32_i64);
     handle_131 = "tagged_template_hole_order.wado/$cm_binding__Stdout_write_via_stream"(rx_135);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_136, message_128.repr, message_128.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_131);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_136, message_128);
-    "wasi/future-drop-readable:transmission-cli"(handle_131);
-=======
-    "core:rt/write_string_to_stream"(tx_136, message_128);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_131);
->>>>>>> origin/main
     $cond_13 = $inline_core_prelude_array_wado_seq_eq_u8__52: block -> bool {
         a_143 = tagged_s.repr;
         a_end_145 = tagged_s.used;
@@ -465,16 +431,8 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-=======
-    "core:rt/write_string_to_stream"(tx_8, message);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

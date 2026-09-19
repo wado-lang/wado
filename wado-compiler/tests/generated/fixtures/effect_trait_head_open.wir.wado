@@ -61,15 +61,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(27)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(27)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(28)
 
@@ -118,46 +112,22 @@ fn "effect_trait_head_open.wado/run"() with Stdout, Stderr {
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_12 = "effect_trait_head_open.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_23, $local_3.repr, $local_3.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_23, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
-=======
-    "core:rt/write_string_to_stream"(tx_23, $local_3);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
->>>>>>> origin/main
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_38("effect_trait_head_open.wado/effect_trait_head_open.wado/Noisy^effect_trait_head_open.wado/Source::next"(noisy)), $local_5);
     rx_41 = builtin::i32_wrap_i64(local.tee packed_40("wasi/stream-new"()));
     tx_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
     handle_31 = "effect_trait_head_open.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_42, $local_5.repr, $local_5.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_42, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
-=======
-    "core:rt/write_string_to_stream"(tx_42, $local_5);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
->>>>>>> origin/main
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee $sroa_quiet_n(3), $local_7);
     rx_60 = builtin::i32_wrap_i64(local.tee packed_59("wasi/stream-new"()));
     tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
     handle_50 = "effect_trait_head_open.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_61, $local_7.repr, $local_7.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_50);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_61, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_50);
-=======
-    "core:rt/write_string_to_stream"(tx_61, $local_7);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_50);
->>>>>>> origin/main
 }
 
 fn "effect_trait_head_open.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -270,18 +240,10 @@ fn "effect_trait_head_open.wado/effect_trait_head_open.wado/Loud^effect_trait_he
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_trait_head_open.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_trait_head_open.wado::$const_obj_1;
     "core:rt/write_string_to_stream"(tx_8, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, global:effect_trait_head_open.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_8, global:effect_trait_head_open.wado::$const_obj_1);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
     self.n = self.n + 1;
     return self.n;
 }
@@ -294,18 +256,10 @@ fn "effect_trait_head_open.wado/effect_trait_head_open.wado/Noisy^effect_trait_h
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_trait_head_open.wado/$cm_binding__Stderr_write_via_stream"(rx_7);
-<<<<<<< HEAD
     let $mv_arg_2: ref "core:prelude/string.wado//String";
     $mv_arg_2 = global:effect_trait_head_open.wado::$const_obj_2;
     "core:rt/write_string_to_stream"(tx_8, $mv_arg_2.repr, $mv_arg_2.used);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_8, global:effect_trait_head_open.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle);
-=======
-    "core:rt/write_string_to_stream"(tx_8, global:effect_trait_head_open.wado::$const_obj_2);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
->>>>>>> origin/main
     self.n = self.n + 2;
     return self.n;
 }

@@ -125,13 +125,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(44)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(45)
 
-<<<<<<< HEAD
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(47)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(47)
->>>>>>> origin/main
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
 
@@ -207,18 +201,10 @@ fn "wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
         rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
         tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
         handle_25 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
-<<<<<<< HEAD
         let $mv_arg_4: ref "core:prelude/string.wado//String";
         $mv_arg_4 = global:wasi_tls_mock_error.wado::$const_obj_2;
         "core:rt/write_string_to_stream$spec0"(tx_65, $mv_arg_4.repr, $mv_arg_4.used);
-        "wasi/future-drop-readable:transmission-cli"(handle_25);
-||||||| f144ca275
-        "core:rt/write_string_to_stream$spec0"(tx_65, global:wasi_tls_mock_error.wado::$const_obj_2);
-        "wasi/future-drop-readable:transmission-cli"(handle_25);
-=======
-        "core:rt/write_string_to_stream$spec0"(tx_65, global:wasi_tls_mock_error.wado::$const_obj_2);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_25);
->>>>>>> origin/main
     } else {
         e = ref.cast "core:prelude/types.wado//Result<(),wasi:tls/types.wado/Error>::Err"($match_15).payload_0;
         $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 };
@@ -240,16 +226,8 @@ fn "wasi_tls_mock_error.wado/run"() with Stdout, Connector, Error {
         rx_71 = builtin::i32_wrap_i64(local.tee packed_70("wasi/stream-new"()));
         tx_72 = builtin::i32_wrap_i64(packed_70 >> 32_i64);
         handle_57 = "wasi_tls_mock_error.wado/$cm_binding__Stdout_write_via_stream"(rx_71);
-<<<<<<< HEAD
         "core:rt/write_string_to_stream$spec0"(tx_72, $local_10.repr, $local_10.used);
-        "wasi/future-drop-readable:transmission-cli"(handle_57);
-||||||| f144ca275
-        "core:rt/write_string_to_stream$spec0"(tx_72, $local_10);
-        "wasi/future-drop-readable:transmission-cli"(handle_57);
-=======
-        "core:rt/write_string_to_stream$spec0"(tx_72, $local_10);
         "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_57);
->>>>>>> origin/main
     }
 }
 
@@ -423,16 +401,8 @@ fn "core:rt/panic"(message) {
     rx_7 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream$spec0"(tx_8, message.repr, message.used);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-||||||| f144ca275
-    "core:rt/write_string_to_stream$spec0"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
-=======
-    "core:rt/write_string_to_stream$spec0"(tx_8, message);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
->>>>>>> origin/main
     cold_path;
     unreachable;
 }

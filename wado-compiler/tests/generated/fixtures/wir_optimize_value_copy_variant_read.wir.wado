@@ -57,15 +57,9 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(20)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(21)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(21)
 
-<<<<<<< HEAD
 type "functype//wasi/task-return" = fn(i32);  // TypeId(22)
-||||||| f144ca275
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
-=======
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
->>>>>>> origin/main
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(23)
 
@@ -117,31 +111,15 @@ fn "wir_optimize_value_copy_variant_read.wado/$cm_export__run"() {
     rx_8 = builtin::i32_wrap_i64(local.tee packed_7("wasi/stream-new"()));
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     handle_3 = "wir_optimize_value_copy_variant_read.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
-<<<<<<< HEAD
     "core:rt/write_string_to_stream"(tx_9, $local_4_34.repr, $local_4_34.used);
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_9, $local_4_34);
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
-=======
-    "core:rt/write_string_to_stream"(tx_9, $local_4_34);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
->>>>>>> origin/main
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_17 = "wir_optimize_value_copy_variant_read.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
-<<<<<<< HEAD
     let $mv_field_4: ref Array<u8>;
     $mv_field_4 = array.new_fixed<u8>(110, 111, 110, 101);
     "core:rt/write_string_to_stream"(tx_21, $mv_field_4, 4);
-    "wasi/future-drop-readable:transmission-cli"(handle_17);
-||||||| f144ca275
-    "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
-    "wasi/future-drop-readable:transmission-cli"(handle_17);
-=======
-    "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(110, 111, 110, 101), used: 4 });
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_17);
->>>>>>> origin/main
     "wasi/task-return"(0);
 }
 
