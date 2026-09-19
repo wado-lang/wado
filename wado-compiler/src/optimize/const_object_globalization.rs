@@ -32,6 +32,7 @@ use crate::niri::is_ctfe_eligible;
 use crate::optimize::arena_query::projected_const_field;
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::multi_value_return::aggregate_field_info;
+use crate::optimize::shared_escape::SharedEscape;
 use crate::tir::{GlobalInit, PrimitiveType};
 use crate::token::Span;
 use crate::wir_build::packed_array_is_eager;
@@ -155,7 +156,9 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             nir::FunctionRef::from_resolved(&f, f.module_source.clone()).array_element_access()
         })
         .collect();
+    let shared_escape = SharedEscape::new(project);
     let gate = Gate {
+        shared_escape: &shared_escape,
         funcs: &project.functions,
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
@@ -630,7 +633,10 @@ fn value_arg_candidates(
             gate.is_reference_type(ty)
                 && is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
                 && contains_aggregate(body, arg, gate)
-                && gate.callee_param_readonly(func_id, first_param + pos)
+                && (gate.callee_param_readonly(func_id, first_param + pos)
+                    || gate
+                        .shared_escape
+                        .param_shareable(func_id, first_param + pos))
         })
         .map(|(_, arg)| arg)
         .collect()
@@ -1375,6 +1381,10 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
 // ---------------------------------------------------------------------------
 
 struct Gate<'a> {
+    /// The program-wide answer to what [`Gate::callee_param_readonly`] refuses:
+    /// a parameter the callee stashes away, where nothing ever writes what it
+    /// lands in.
+    shared_escape: &'a SharedEscape<'a>,
     funcs: &'a [Rc<RefCell<NirFunction>>],
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`.

@@ -176,6 +176,28 @@ mutating callee used to get a caller-side defensive copy that blocked the const
 gate first, but that copy was itself removable — nothing else stands between a
 shared global and a callee that writes it.
 
+#### Gate: whole-program sharing, where the parameter gate refuses
+
+The two gates above read one callee's body, so a parameter the callee stashes
+away — into a field of a struct it builds, or into a further callee — fails them
+however read-only the program as a whole is. `shared_escape` answers that case
+directly: the constant is safe to share when nothing anywhere writes through it.
+
+Taint names the shared object itself and never a container holding it, so a
+projection of a tainted value is tainted while a struct built around one is not.
+Storing a tainted value away raises an obligation on the slot it lands in — a
+field name, a callee parameter, a callee result — and that slot's own reads are
+then tainted in turn, program-wide. A write of anything tainted refuses the
+query, and so does every shape the walk does not model, a bodyless callee
+included. A field is keyed by its name rather than by its receiver's type: a
+name is one key however the receiver is spelled, so no newtype or reference
+wrapper hides a read from the scan.
+
+Because "no write reaches this object" is a safety property, a query that
+re-enters itself reads `true`: a cycle carrying no write of its own really does
+hold. A verdict resting on that assumption is not cached, since a later
+refutation of the cycle would leave it stale.
+
 #### Gate: profitability
 
 Hoisting costs a global, a guard branch, and an object that stays live for the
