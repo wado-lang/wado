@@ -746,6 +746,26 @@ Closing this means the step answering from the declarations a module makes, not
 from the types the program interned. A declaration no Wado code mentions would
 then still have its identity.
 
+## Known gap: a CM name still reaches a declaration by search
+
+A reference the Component Model boundary synthesizes carries the interface its
+own declaring module registers, so §9's step answers it. Where one arrives
+without that interface, the registry searches for the name instead: one kind of
+declaration at a time, over every bundled interface, taking the first kind in
+which the name has exactly one registrant.
+
+That is all three shapes "What a derivation may not be" forbids at once. The
+search spans the whole program; each kind's map answers in registration order;
+and a kind that declines because two interfaces spell the name hands the
+question to the next kind, so which kind is asked first is a silent tiebreak.
+`ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
+`wasi:cli/types`, so the variants decline and the enum answers — for any
+module's `ErrorCode`, including one a user wrote.
+
+Closing this means deleting the search, which requires that every reference
+reaching the boundary carry its declaring module. What is not established is
+whether any reference still arrives without one.
+
 ## Known gap: an abstract qualifier argument is not compared
 
 Where either side of a pattern qualifier leaves a position abstract, that
