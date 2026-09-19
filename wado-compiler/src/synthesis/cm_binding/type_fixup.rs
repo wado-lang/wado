@@ -211,14 +211,17 @@ fn fixup_wasi_derived_types_in_adapter(
 fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
     if let Some(body) = &mut adapter.body {
         let from = raw_call_stmt_index(body);
-        fixup_types_in_block(body, from, old_type, new_type, &mut adapter.locals);
+        fixup_types_in_stmts(
+            &mut body.stmts[from..],
+            old_type,
+            new_type,
+            &mut adapter.locals,
+        );
     }
 }
 
-/// The index of the statement holding the adapter's `CmRawCall`. An adapter
-/// body is parameter lowering, then that call, then result lifting, so nothing
-/// before it can hold the result — and a parameter's own `i32` intermediate
-/// must not be retyped to the return type (issue: a `list` parameter's length).
+/// Where the adapter's `CmRawCall` sits. Parameter lowering precedes it, so a
+/// statement before it holds a parameter's intermediate and never the result.
 fn raw_call_stmt_index(body: &TirBlock) -> usize {
     struct FindRawCall {
         found: bool,
@@ -383,18 +386,15 @@ impl TirMutVisitor for TypeReplacer<'_> {
     }
 }
 
-/// Recursively fix types in a block — replaces `old_type` with `new_type`
-/// in return statements, let bindings, and expressions.
-/// Also replaces `TypeTable::I32` placeholders with `new_type` (for cases
-/// where the binding used I32 as a placeholder).
-fn fixup_types_in_block(
-    block: &mut TirBlock,
-    from: usize,
+/// Replace `old_type`, and the `TypeTable::I32` the binding used as its
+/// placeholder, with `new_type` across returns, lets, and expressions.
+fn fixup_types_in_stmts(
+    stmts: &mut [TirStmt],
     old_type: TypeId,
     new_type: TypeId,
     locals: &mut Vec<TirLocal>,
 ) {
-    for stmt in block.stmts.iter_mut().skip(from) {
+    for stmt in stmts {
         match &mut stmt.kind {
             TirStmtKind::Return {
                 value: Some(ret_expr),
@@ -406,13 +406,13 @@ fn fixup_types_in_block(
                 else_block,
                 ..
             } => {
-                fixup_types_in_block(then_block, 0, old_type, new_type, locals);
+                fixup_types_in_stmts(&mut then_block.stmts, old_type, new_type, locals);
                 if let Some(blk) = else_block {
-                    fixup_types_in_block(blk, 0, old_type, new_type, locals);
+                    fixup_types_in_stmts(&mut blk.stmts, old_type, new_type, locals);
                 }
             }
             TirStmtKind::Loop { body } => {
-                fixup_types_in_block(body, 0, old_type, new_type, locals);
+                fixup_types_in_stmts(&mut body.stmts, old_type, new_type, locals);
             }
             TirStmtKind::Let {
                 value,

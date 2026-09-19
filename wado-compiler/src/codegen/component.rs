@@ -759,15 +759,15 @@ fn build_cm_tuple_types(
         .collect()
 }
 
-/// The own-handle type indices under the CM resource names, which is how
-/// [`CmTypeGen::ast_type_to_cm`] asks for them; the instance-type builders key
-/// theirs by Wado name instead. `emitting` is the interface being described.
+/// Per-resource type indices under the CM resource names, which is how
+/// [`CmTypeGen`] asks for them; the instance-type builders key theirs by Wado
+/// name instead. `emitting` is the interface being described.
 fn cm_keyed_resource_exports<'a>(
-    own_resource_type_indices: &IndexMap<String, u32>,
+    resource_type_indices: &IndexMap<String, u32>,
     registry: &'a CmInterfaceRegistry,
     emitting: Option<&str>,
 ) -> IndexMap<&'a str, u32> {
-    own_resource_type_indices
+    resource_type_indices
         .iter()
         .filter_map(|(wado_name, &idx)| {
             let source = registry.resource_source_in(emitting, wado_name)?;
@@ -2615,18 +2615,15 @@ fn generate_cm_imports(
                 Some(interface_info.path.as_str()),
             );
             // `resource_exports` carries the `own` index, so a borrow the
-            // shared generator minted from it would wrap that handle instead
-            // of the resource. Hand it the borrow this pass already defined.
-            for (wado_name, &borrow_idx) in &borrow_resource_type_indices {
-                if let Some(source) = project
-                    .cm_interface_registry
-                    .resource_source_in(Some(interface_info.path.as_str()), wado_name)
-                    && let Some(cm_name) = project
-                        .cm_interface_registry
-                        .get_resource_cm_name_by_source(source, wado_name)
-                {
-                    shared_type_gen.register_existing(&format!("borrow:{cm_name}"), borrow_idx);
-                }
+            // shared generator minted from it would wrap that handle rather
+            // than the resource. Hand it the borrow this pass already defined.
+            let borrow_exports = cm_keyed_resource_exports(
+                &borrow_resource_type_indices,
+                &project.cm_interface_registry,
+                Some(interface_info.path.as_str()),
+            );
+            for (cm_name, borrow_idx) in borrow_exports {
+                shared_type_gen.register_existing(&format!("borrow:{cm_name}"), borrow_idx);
             }
 
             for func in &cm_functions {

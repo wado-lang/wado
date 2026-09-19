@@ -3,9 +3,9 @@
 ## Context
 
 Wado targets WASI P3 ([Target WASI P3 Only](./wep-2026-01-11-wasi-p3-only.md)),
-and GPU access is the one capability in that generation with no Wado surface.
-`wasi:webgpu` is the WASI proposal for it: Phase 2, portability criteria Linux,
-Windows, macOS, Android and Web, one WIT package at `0.3.0-rc.2`.
+where a program reaches files, sockets, clocks and randomness but has no way to
+reach a GPU. `wasi:webgpu` is the WASI proposal for that: Phase 2, portable to
+Linux, Windows, macOS, Android and the Web, one WIT package at `0.3.0-rc.2`.
 
 The proposal is the WebGPU spec with its JS assumptions removed, generated from
 the WebGPU IDL. One file, one interface `webgpu`, and inside it 33 resources, 62
@@ -23,12 +23,12 @@ import in any namespace, with `#[cm]` naming the target
 ### The module is generated from the proposal's WIT
 
 `wasi:*` is generated, never hand-written (`wado-from-idl/AGENTS.md`), and this
-package is WIT like the rest. wasmtime does not carry it, so the WIT comes from
-a `vendor/wasi-webgpu` submodule of its own, and `mise run update-stdlib-webgpu`
-regenerates `wado-compiler/lib/wasi/webgpu/` beside the other packages.
+package is WIT like the rest, so whatever carries the module generates it.
+wasmtime does not ship this WIT, so it comes from a `vendor/wasi-webgpu`
+submodule, and `mise run update-stdlib-webgpu` regenerates from there.
 
-Run against `0.3.0-rc.2`, the WIT frontend emits the whole interface — 2423
-lines, nothing skipped and nothing approximated.
+Run against `0.3.0-rc.2`, the WIT frontend emits the whole interface as 2423
+lines. It skips nothing and approximates nothing.
 
 ### The interface is the effect, and each resource is one too
 
@@ -55,9 +55,9 @@ export fn run() with (Webgpu, Gpu, GpuAdapter, GpuDevice, GpuBuffer) {
 
 ### An async operation returns `AsyncCall<T>`
 
-The eight `async func`s — `request-adapter`, `request-device`, `map-async`, the
-two `create-*-pipeline-async`, `pop-error-scope`, `on-submitted-work-done`,
-`get-compilation-info` — follow
+Eight operations are `async func`: `request-adapter`, `request-device`,
+`map-async`, the two `create-*-pipeline-async`, `pop-error-scope`,
+`on-submitted-work-done` and `get-compilation-info`. Each follows
 [Generic `AsyncCall<T>`](./wep-2026-04-22-subtask-generic.md), so the call site
 `.wait()`s. `gpu-device` also hands out a `future` and a `stream`: `lost()`
 answers `Future<GpuDeviceLostInfo>` and `on_uncaptured_error()` a
@@ -65,9 +65,9 @@ answers `Future<GpuDeviceLostInfo>` and `on_uncaptured_error()` a
 
 ### The handles are affine CM resources
 
-Unlike `web:dom`, whose handles collapse to one unrestricted universal handle
-([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)), every
-`wasi:webgpu` resource is a CM `resource`, so
+`web:dom` collapses its handles into one unrestricted universal handle
+([Resource Inheritance](./wep-2026-04-28-resource-inheritance.md)). Nothing of
+the sort applies here: every `wasi:webgpu` resource is a CM `resource`, so
 [Ownership Analysis](./wep-2026-05-21-resource-ownership.md) governs it and the
 boundary carries `own` and `borrow` handles as it does for any other WASI
 package. The proposal borrows in 41 places, twelve of them record fields, so a
@@ -81,8 +81,8 @@ pub struct GpuBindGroupDescriptor {
 }
 ```
 
-`gpu-queue.submit` and `gpu-render-pass-encoder.execute-bundles` go further and
-take `list<borrow<t>>`, which is a `List<&T>`: the element is a borrow at the
+`gpu-queue.submit` and `gpu-render-pass-encoder.execute-bundles` take
+`list<borrow<t>>`, which is a `List<&T>`: the element is a borrow at the
 boundary and a reference on the Wado side.
 
 ### What the boundary already carries
@@ -91,14 +91,6 @@ Compiled against the generated module, these shapes reach a valid component:
 the descriptor above, a variant payload holding a record that holds a borrow
 (`GpuBindingResource::GpuBufferBinding`), a `List<&T>` argument, an `async`
 operation through `.wait()`, and a `flags` value built with `|`.
-
-Three compiler defects stood between them and that, each fixed with its own
-fixture and none of them specific to this package: a CM import's return type,
-applied from the call site, claimed every `i32` intermediate the adapter's body
-held — a list parameter's own length among them; a `list<borrow<t>>` parameter
-read the caller's list as a `List<i32>`, which is a different GC type from the
-`List<&T>` the caller holds; and a borrow minted inside a list wrapped the
-resource's `own` handle rather than the resource.
 
 ## Roadmap
 
@@ -114,18 +106,17 @@ resource's `own` handle rather than the resource.
 
 ## Known gaps
 
-- Whether the package is bundled at all. Every other `wasi:*` is, and the
-  namespace reservation follows from bundling; against that, the module is 2423
-  lines of a proposal at Phase 2 that most programs never import, and
-  `#[cm]` in any namespace means an external package could carry it instead.
-  Unowned, and the choice decides the roadmap's first two items.
-- No host implements `wasi:webgpu`, wasmtime included, so nothing the fixtures
-  cover can be run — only compiled. Closing this means a host of our own or a
+- Whether the package is bundled at all. Every other `wasi:*` is, and bundling
+  is what reserves the namespace. Against that, the module is 2423 lines of a
+  Phase 2 proposal most programs never import, and `#[cm]` in any namespace lets
+  an external package carry it instead. The first two roadmap items assume
+  bundling and would be dropped if it were refused.
+- No host implements `wasi:webgpu`, wasmtime included, so the fixtures can only
+  be compiled and never run. Closing this means a host of our own, or a
   third-party runtime to point `wado run` at.
-- The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2423
-  lines. Regeneration handles it; a program that pinned nothing does not notice.
-  Nothing tracks which version the bundled module was cut from beyond the
-  generated header.
+- The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2423 lines.
+  Regenerating handles that. What nothing records is which version the bundled
+  module was cut from, beyond the submodule the generated header names.
 - Presenting to a screen is outside the proposal. `gpu-canvas-context` is
   declared but nothing hands one out, so a program can render to a texture and
   not to a window. The proposal points at `wasi-gfx` for the missing half.
@@ -138,7 +129,7 @@ resource's `own` handle rather than the resource.
   pipeline's constant overrides are built through handle calls.
 - A typedef becomes a newtype, so `buffer.size()` answers `GpuSize64Out` and
   needs `as u64` to meet a `u64`. 13 typedefs carry this, most of them widths.
-- An `option<descriptor>` parameter needs an explicit `Option::Some(…)`: the
-  compiler rejects a default argument on a `#[cm]` operation
-  ([WebIDL Binding Generator](./wep-2026-04-01-tide.md) records the same gap),
-  so `create_command_encoder(null)` is how a caller says "no descriptor".
+- An `option<descriptor>` parameter takes an explicit `Option::Some(…)`, since
+  the compiler rejects a default argument on a `#[cm]` operation
+  ([WebIDL Binding Generator](./wep-2026-04-01-tide.md) records the same gap).
+  WebGPU makes most descriptors optional, so this is the common call shape.

@@ -1057,10 +1057,10 @@ impl<'a> AdapterBuilder<'a> {
         let elem_size = cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
         let elem_align = cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
 
-        // The element's Wado type, not its CM one: `list<borrow<t>>` is a
-        // `List<&T>` at the call site, and `cm_type_to_type_id` would answer
-        // `i32` — a `List<i32>` the caller's list is not, so the `len` and
-        // `index_value` it monomorphizes would take the wrong GC type.
+        // The element's Wado type, not its CM one: a `list<borrow<t>>` is a
+        // `List<&T>` at the call site, and `cm_type_to_type_id` answers `i32`,
+        // whose `List` is a GC type the caller's list is not. The other two
+        // list walkers read this off the value's own list type instead.
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
             let elem_tid = match elem_type {
