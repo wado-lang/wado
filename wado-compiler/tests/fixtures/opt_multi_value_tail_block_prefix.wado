@@ -6,7 +6,7 @@
 // whole aggregate to `sink`, which must refuse `h` the multi-value ABI.
 //
 // Skipping the prefix let `h` take it anyway. The call site then split into
-// `[t_mv_0, t_mv_1]` while `sink(t)` still read `t`, which nothing assigned —
+// `[$mv$t$0, $mv$t$1]` while `sink(t)` still read `t`, which nothing assigned —
 // `-O0` ran clean and `-O2` trapped on a null reference.
 #[inline("never")]
 internal fn h(n: i32) -> [i32, i32] {

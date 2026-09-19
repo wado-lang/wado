@@ -1,0 +1,26 @@
+// Implementing `Emit` here materializes its defaulted `render`, whose signature
+// names `S::Value` for a bound on `Shape` — a trait this module never imports.
+// The re-resolved projection interned with no owning trait and compared unequal
+// to the qualified one, so the method was unimplementable outside its module.
+
+use { Emit, doubler } from "./sub/trait_default_projection_unimported_lib.wado";
+
+struct Counter {
+    n: i32,
+}
+
+impl Emit for Counter {
+    fn tag(&self) -> i32 {
+        return self.n;
+    }
+}
+
+test "a defaulted body's projection resolves without the bound's trait in scope" {
+    let c = Counter { n: 21 };
+    assert c.render(doubler(2)) == 42;
+}
+
+__DATA__
+{
+    "test": {}
+}

@@ -4291,9 +4291,18 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                owning_trait,
                 ..
             } => {
-                format!("{}::{}", type_name(*param_id), assoc_name)
+                let base = type_name(*param_id);
+                // The owning trait is part of a projection's identity, so two
+                // that differ only there render the same without it.
+                if let (true, Some(def)) = (qualified, owning_trait) {
+                    let owner = self.head_name(*def, true);
+                    format!("<{base} as {owner}>::{assoc_name}")
+                } else {
+                    format!("{base}::{assoc_name}")
+                }
             }
             ResolvedType::GenericInstance { def, type_args } => {
                 let arg_names: Vec<String> = type_args.iter().map(|t| type_name(*t)).collect();
