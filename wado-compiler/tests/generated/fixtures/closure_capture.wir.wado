@@ -624,21 +624,15 @@ fn "closure_capture.wado/$test_28_a_captured_local_handed_away_keeps_its_own_sto
 
 fn "closure_capture.wado/$test_29_a_captured_local_misses_a_later_write_to_the_copy"() {
     let $v0_5: i32;
-    let self_14: ref "core:prelude//List<i32>";
-    let used: i32;
-    let self_35: ref "core:prelude//List<i32>";
-    let $sroa_out_repr: ref "Array<closure_capture.wado/S>";
-    $sroa_out_repr = array.new_fixed<ref "closure_capture.wado//S">(struct.new "closure_capture.wado//S" { items: struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 }, tag: 0 });
-    self_14 = builtin::array_get_value<ref "closure_capture.wado//S">($sroa_out_repr, 0).items;
-    used = self_14.used;
-    if @unlikely(used >= builtin::array_len(self_14.repr)) {
+    let $sroa_$sroa_$sroa_out_repr_0_items: ref "core:prelude//List<i32>";
+    $sroa_$sroa_$sroa_out_repr_0_items = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1), used: 1 };
+    if @unlikely(1 >= builtin::array_len($sroa_$sroa_$sroa_out_repr_0_items.repr)) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self_14);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"($sroa_$sroa_$sroa_out_repr_0_items);
     }
-    builtin::array_set<i32>(self_14.repr, used, 2);
-    self_14.used = used + 1;
-    self_35 = builtin::array_get_value<ref "closure_capture.wado//S">($sroa_out_repr, 0).items;
-    $v0_5 = self_35.used;
+    builtin::array_set<i32>($sroa_$sroa_$sroa_out_repr_0_items.repr, 1, 2);
+    $sroa_$sroa_$sroa_out_repr_0_items.used = 2;
+    $v0_5 = $sroa_$sroa_$sroa_out_repr_0_items.used;
     if @unlikely($v0_5 != 2) {
         cold_path;
         "closure_capture.wado/$test_29_a_captured_local_misses_a_later_write_to_the_copy$cold0"($v0_5);
@@ -702,7 +696,7 @@ fn "closure_capture.wado/$test_32_a_closure_over_one_local_leaves_a_sibling_loop
     let $v1_62: i32;
     let $sroa_$iter_0_repr: ref "Array<closure_capture.wado/S>";
     let $sroa_$iter_0_index: i32;
-    let $av_80: i32;
+    let $av_83: i32;
     elements_20 = array.new_fixed<ref "closure_capture.wado//S">();
     out = struct.new "core:prelude//List<closure_capture.wado/S>" { repr: elements_20, used: 0 };
     $sroa_$iter_0_repr = global:closure_capture.wado::$const_obj_8;
@@ -711,10 +705,10 @@ fn "closure_capture.wado/$test_32_a_closure_over_one_local_leaves_a_sibling_loop
         l25: loop {
             break_if b24 $sroa_$iter_0_index >= 1;
             v_27 = builtin::array_get_value<ref "closure_capture.wado//S">($sroa_$iter_0_repr, $sroa_$iter_0_index);
-            $av_80 = v_27.tag;
-            item = struct.new "closure_capture.wado//S" { items: ref.as_non_null(v_28 = v_27.items; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_28.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_28.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_28.used }), tag: $av_80 };
+            $av_83 = v_27.tag;
+            item = struct.new "closure_capture.wado//S" { items: ref.as_non_null(v_28 = v_27.items; struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = v_28.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_28.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_28.used }), tag: $av_83 };
             $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
-            if $av_80 == -1 {
+            if $av_83 == -1 {
                 elements_29 = array.new_fixed<ref "closure_capture.wado//S">();
                 out = struct.new "core:prelude//List<closure_capture.wado/S>" { repr: elements_29, used: 0 };
             } else {

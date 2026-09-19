@@ -12,7 +12,7 @@ use crate::token::Span;
 
 use crate::ast::{
     self, AstId, AstVisitor, AttrArg, Attribute, CmImport, EffectHandlerBinding, Expr, Function,
-    ImplBlock, Item, Stmt, TraitDecl,
+    ImplBlock, Item, Stmt, TraitDecl, cm_import_of,
 };
 use crate::compiler_host::Diagnostic;
 use crate::defs::DefId;
@@ -612,11 +612,7 @@ impl OwnedEffectData {
                 let Item::Interface(decl) = item else {
                     continue;
                 };
-                let cm_fq = decl
-                    .attrs
-                    .iter()
-                    .find_map(|a| a.as_cm_import())
-                    .map(CmImport::interface_path);
+                let cm_fq = cm_import_of(&decl.attrs).map(CmImport::interface_path);
                 interface_cm_fq.insert((src.clone(), decl.name.clone()), cm_fq.clone());
                 let key = EffectRef::Concrete {
                     name: decl.name.clone(),

@@ -1,0 +1,22 @@
+// Two interfaces in one CM package, each declaring its own `error-code`.
+// `wasi:sockets/types` and `wasi:sockets/ip-name-lookup` declare unrelated
+// variants with different cases, so each alias must key by its declaration:
+// a key built from the package names one of them and drops the other.
+use { TcpSocket, IpAddressFamily, IpNameLookup } from "wasi:sockets";
+
+export fn run() with (TcpSocket, IpNameLookup) {
+    let socket = TcpSocket::create(IpAddressFamily::Ipv4);
+    let addresses = IpNameLookup::resolve_addresses("example.com").wait();
+    let _ = socket matches { Ok(_) } && addresses matches { Ok(_) };
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(alias export", "\"error-code\"", "$wasi:sockets/types@"] },
+    { "contains": ["(alias export", "\"error-code\"", "$wasi:sockets/ip-name-lookup@"] },
+    { "contains": ["(alias export", "\"error-code\"", "$wasi:cli/types@"] }
+  ]
+}

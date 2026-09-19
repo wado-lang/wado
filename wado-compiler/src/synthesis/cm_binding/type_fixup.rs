@@ -404,7 +404,10 @@ fn fixup_types_in_block(
 }
 
 /// Retype a Let holding an adapter intermediate: a method-call result, or the
-/// `ref.null` a lifted result starts as.
+/// starting value of a lifted result — `ref.null`, or the `None` an option lift
+/// seeds its accumulator with. The assignment in the `Some` arm and the `return`
+/// are retyped by their own arms, so a starting value left behind puts the two
+/// arms of one option in different GC type families.
 fn fixup_adapter_let(
     expr: &mut TirExpr,
     local_index: u32,
@@ -416,12 +419,13 @@ fn fixup_adapter_let(
     let should_fix = expr.type_id == TypeTable::I32 || expr.type_id == old_type;
     let holds_intermediate = match &expr.kind {
         TirExprKind::Call { func, .. } => func.method_info.is_some(),
-        TirExprKind::Null => true,
+        TirExprKind::Null | TirExprKind::VariantConstruct { .. } => true,
         _ => false,
     };
     if !(should_fix && holds_intermediate) {
         return;
     }
+    fixup_variant_construct(expr, old_type, new_type);
     expr.type_id = new_type;
     *let_type_id = new_type;
     locals[local_index as usize].type_id = new_type;

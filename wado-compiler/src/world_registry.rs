@@ -8,7 +8,9 @@
 
 use crate::hashmap::IndexMap;
 
-use crate::ast::{Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport};
+use crate::ast::{
+    Attribute, CmImport, Type, WorldDecl, WorldExport, WorldExportFn, WorldImport, cm_import_of,
+};
 use crate::module_source::ModuleSource;
 
 /// Well-known world name for the test world.
@@ -240,9 +242,7 @@ pub struct WorldRegistry {
 ///
 /// For example, `#[cm("wasi:cli/command@0.3.0-rc-2026-01-06")]` returns `"wasi:cli/command"`.
 fn fq_name_from_attrs(attrs: &[Attribute]) -> Option<String> {
-    attrs
-        .iter()
-        .find_map(|a| a.as_cm_import().map(CmImport::bare_path))
+    cm_import_of(attrs).map(CmImport::bare_path)
 }
 
 impl WorldRegistry {

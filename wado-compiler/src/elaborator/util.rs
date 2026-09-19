@@ -225,6 +225,16 @@ pub(super) fn is_float_only_literal(repr: &str) -> bool {
     false
 }
 
+/// The name a type carries its trait bounds under, where it carries any.
+/// A pack answers with its own name: a pack's bound holds of each member
+/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way.
+pub(super) fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
+    match resolved {
+        ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
+        _ => None,
+    }
+}
+
 /// Unpack i128 into (low, high) pair for codegen.
 pub(super) fn unpack_i128(value: i128) -> (u64, i64) {
     (value as u64, (value >> 64) as i64)

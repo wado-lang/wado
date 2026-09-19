@@ -1,0 +1,15 @@
+// A bound writing a trait argument the type does not answer fails as a bound,
+// rather than crashing the compiler. A primitive's built-in operator impl
+// answers at `Self`, so `i64` reaches no `Add<i32>`.
+
+fn add_i32<T: Add<i32, Output = i32>>(v: T, acc: i32) -> i32 {
+    return v + acc;
+}
+
+export fn run() {
+    let n: i64 = 1;
+    add_i32(n, 2);
+}
+
+__DATA__
+{"compile_error": "type 'i64' does not implement trait 'Add<i32>' required by bound on 'T'"}

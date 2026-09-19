@@ -258,8 +258,8 @@ fn "simd_generic_operator.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:simd_generic_operator.wado::$modules_initialized = 1;
     };
-    a_41 = i32x4.splat(1);
-    b_42 = i32x4.splat(2);
+    a_41 = v128.const(79228162532711081671548469249);
+    b_42 = v128.const(158456325065422163343096938498);
     $v1_1 = i32x4.extract_lane(0, local.tee lanes(a_41 + b_42));
     if @unlikely($v1_1 != 3) {
         cold_path;
@@ -272,15 +272,15 @@ fn "simd_generic_operator.wado/run"() with Stdout {
         "simd_generic_operator.wado/run$cold6"(lanes, $v1_3);
         unreachable;
     }
-    a_51 = f32x4.splat(1.5_f32);
-    b_52 = f32x4.splat(2_f32);
+    a_51 = v128.const(84738284751018056278322119845064212480);
+    b_52 = v128.const(85070591750041656499021422275829170176);
     $v1_6 = f32x4.extract_lane(0, local.tee floats(a_51 * b_52));
     if @unlikely(($v1_6 == 3_f32) == 0) {
         cold_path;
         "simd_generic_operator.wado/run$cold5"(floats, $v1_6);
         unreachable;
     }
-    elements_59 = array.new_fixed<v128>(i32x4.splat(1), i32x4.splat(2));
+    elements_59 = array.new_fixed<v128>(v128.const(79228162532711081671548469249), v128.const(158456325065422163343096938498));
     $sroa_vs_used = builtin::array_len(elements_59);
     let $match_scrut_0: ref "core:prelude/types.wado//Option<v128>";
     self_63 = struct.new "core:prelude/slice.wado//SliceValueIter<core:simd/i32x4>" { repr: elements_59, index: 0, end: $sroa_vs_used };

@@ -1,0 +1,43 @@
+// A CM interface that defines resources may also declare plain functions of
+// its own, and the imported instance type carries both.
+
+#[cm("wasi:demo/gfx@0.1.0#adapter")]
+resource Adapter {
+    #[cm("wasi:demo/gfx@0.1.0#[method]adapter.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+#[cm("wasi:demo/gfx@0.1.0#device")]
+resource Device {
+    // Uncalled, and there for the interface's shape alone: a method returning
+    // `Option<Resource>` is what marks the interface resource-defining.
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.adapter")]
+    #[cm_params("self")]
+    fn adapter(&self) -> Option<Adapter>;
+
+    #[cm("wasi:demo/gfx@0.1.0#[method]device.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Gfx {
+    #[cm("wasi:demo/gfx@0.1.0#get-device")]
+    fn get_device() -> Device;
+}
+
+export fn run() with (Gfx, Device) {
+    let device = Gfx::get_device();
+    let _ = device.id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wir_expect:O2": ["import fn wasi/wasi:demo/Device::id"],
+  "wir_not_expect:O2": ["Device::adapter"],
+  "wat_lines": [
+    { "contains": ["(export", "\"get-device\""], "count": 1 },
+    { "contains": ["(export", "\"[method]device.id\""], "count": 1 }
+  ]
+}

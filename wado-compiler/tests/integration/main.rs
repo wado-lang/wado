@@ -8,18 +8,20 @@
 #[path = "../common.rs"]
 mod common;
 
+mod array_literal_sroa;
 mod assert_capture_plan;
 mod box_local_unwrap;
 mod closure_confinement;
 mod closure_frame_moves;
 mod cm_async_value_import;
 mod cm_catalog;
+mod cm_decls_across_modules;
 mod cm_donut_canary;
+mod cm_dump_user_decls;
 mod cm_interface_export_decodes;
 mod cm_newtype_boundary;
 mod cm_provider_compose;
 mod cm_reexport_type;
-mod cm_resource_unbound;
 mod cm_world_func_import;
 mod codegen_flags;
 mod cold_outline;
@@ -59,6 +61,7 @@ mod test_name_filter;
 mod trait_query;
 mod unrestricted_resource;
 mod unused_diagnostics;
+mod vector_const_fold;
 mod wasm_import_dce;
 mod wasm_module_optimize;
 mod wat;

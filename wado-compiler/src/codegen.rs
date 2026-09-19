@@ -40,24 +40,43 @@ pub fn emit_wasm(
     wasm
 }
 
+/// Validate `wasm`, and on failure save it beside a panic carrying whatever
+/// `describe` can say about where the failure landed.
+fn validate_or_panic(
+    wasm: &[u8],
+    entry_module: &ModuleSource,
+    subject: &str,
+    artifact_path: &str,
+    describe: impl FnOnce(&[u8], usize) -> Option<String>,
+    undescribed: &str,
+) {
+    let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
+    let Err(e) = validator.validate_all(wasm) else {
+        return;
+    };
+    let _ = std::fs::write(artifact_path, wasm);
+    let context = describe(wasm, e.offset()).unwrap_or_else(|| undescribed.to_string());
+    let context = context.trim_end();
+    panic!(
+        "Internal compiler error: WIR pipeline generated an invalid {subject}\n\
+         Entry module: {entry_module}\n\
+         Validation error: {e}\n\
+         {context}\n\
+         The full invalid {subject} was written to {artifact_path} \
+         (inspect with `wasm-tools print`)."
+    );
+}
+
 /// Validate core Wasm module (before component wrapping).
 fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) {
-    let features = wasmparser::WasmFeatures::all();
-    let mut validator = wasmparser::Validator::new_with_features(features);
-    if let Err(e) = validator.validate_all(wasm) {
-        // Save invalid Wasm for debugging
-        let _ = std::fs::write("/tmp/invalid_core.wasm", wasm);
-        let location = describe_offending_location(wasm, e.offset())
-            .unwrap_or_else(|| "  (could not locate the offending function)".to_string());
-        panic!(
-            "Internal compiler error: WIR pipeline generated invalid core Wasm module\n\
-             Entry module: {entry_module}\n\
-             Validation error: {e}\n\
-             {location}\n\
-             The full invalid module was written to /tmp/invalid_core.wasm \
-             (inspect with `wasm-tools print`)."
-        );
-    }
+    validate_or_panic(
+        wasm,
+        entry_module,
+        "core Wasm module",
+        "/tmp/invalid_core.wasm",
+        describe_offending_location,
+        "  (could not locate the offending function)",
+    );
 }
 
 /// Describe where a core-Wasm validation error landed: the containing function
@@ -156,15 +175,49 @@ fn describe_offending_location(wasm: &[u8], offset: usize) -> Option<String> {
     ))
 }
 
-/// Validate generated Wasm binary using wasmparser.
-fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
-    let mut validator = wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all());
-    if let Err(e) = validator.validate_all(wasm) {
-        panic!(
-            "Internal compiler error: WIR pipeline generated invalid Wasm\n\
-             Entry module: {entry_module}\n\
-             This is a bug in the Wado compiler. Please report it.\n\
-             Validation error: {e}"
-        );
+/// The outer component's instances in declaration order, so a validator message
+/// naming `instance N` names something a reader can find.
+fn describe_component_instances(wasm: &[u8]) -> Option<String> {
+    use wasmparser::{ComponentTypeRef, Parser, Payload};
+    let mut depth = 0usize;
+    let mut instances: Vec<String> = Vec::new();
+    for payload in Parser::new(0).parse_all(wasm) {
+        match payload.ok()? {
+            Payload::ModuleSection { .. } | Payload::ComponentSection { .. } => depth += 1,
+            Payload::End(_) => depth = depth.saturating_sub(1),
+            Payload::ComponentImportSection(reader) if depth == 0 => {
+                for import in reader.into_iter().flatten() {
+                    if matches!(import.ty, ComponentTypeRef::Instance(_)) {
+                        instances.push(format!("imported `{}`", import.name.name));
+                    }
+                }
+            }
+            Payload::ComponentInstanceSection(reader) if depth == 0 => {
+                for _ in reader.into_iter().flatten() {
+                    instances.push("instantiated in this component".to_string());
+                }
+            }
+            _ => {}
+        }
     }
+    if instances.is_empty() {
+        return None;
+    }
+    let mut out = String::from("Component instances, in declaration order:\n");
+    for (idx, what) in instances.iter().enumerate() {
+        out.push_str(&format!("    instance {idx}  {what}\n"));
+    }
+    Some(out)
+}
+
+/// Validate the wrapped component (after `validate_core_module`).
+fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) {
+    validate_or_panic(
+        wasm,
+        entry_module,
+        "component",
+        "/tmp/invalid_component.wasm",
+        |wasm, _| describe_component_instances(wasm),
+        "  (could not read the component's instances)",
+    );
 }

@@ -9,6 +9,7 @@ use crate::canonical::CmCallTarget;
 use crate::hashmap::IndexSet;
 
 use crate::compiler_item::CompilerItem;
+use crate::component_model::used_wasi_key;
 use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -489,7 +490,7 @@ fn resolve_imports(
     for func_id in reachable {
         if let Some(effects) = effect_usage.get(func_id) {
             for (interface_name, op_name) in effects {
-                used_wasi_functions.insert(format!("{interface_name}::{op_name}"));
+                used_wasi_functions.insert(used_wasi_key(interface_name, op_name));
             }
         }
     }
@@ -512,7 +513,7 @@ fn resolve_imports(
             })
         })
     {
-        used_wasi_functions.insert("Stdout::write_via_stream".to_string());
+        used_wasi_functions.insert(used_wasi_key("Stdout", "write_via_stream"));
     }
     if project.provides_ambient_stdio_sink("Stderr")
         && reachable.iter().any(|func_id| {
@@ -522,7 +523,7 @@ fn resolve_imports(
             })
         })
     {
-        used_wasi_functions.insert("Stderr::write_via_stream".to_string());
+        used_wasi_functions.insert(used_wasi_key("Stderr", "write_via_stream"));
     }
 
     // Collect imports using registry lookup instead of hard-coded match

@@ -7,7 +7,7 @@
 
 use crate::ast::{
     AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
-    for_each_function,
+    cm_import_of, for_each_function,
 };
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
@@ -461,7 +461,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                         return_type: func.return_type.as_ref().map(|_| "unknown".to_string()),
                         effects: func.effects.clone(),
                         is_builtin,
-                        cm_import: func.attrs.first().and_then(|a| a.as_cm_import().cloned()),
+                        cm_import: cm_import_of(&func.attrs).cloned(),
                     });
 
                     self.define_unique(
@@ -476,8 +476,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
 
                 Item::Interface(effect) => {
                     // Extract effect-level CM import from attributes
-                    let effect_cm_import =
-                        effect.attrs.first().and_then(|a| a.as_cm_import().cloned());
+                    let effect_cm_import = cm_import_of(&effect.attrs).cloned();
 
                     let kind = SymbolKind::Effect(EffectSymbol {
                         methods: effect.methods.iter().map(|m| m.name.clone()).collect(),
@@ -497,8 +496,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // with the fully qualified name "{Effect}.{method}"
                     // This allows importing them via use statements
                     for method in &effect.methods {
-                        let cm_import =
-                            method.attrs.first().and_then(|a| a.as_cm_import().cloned());
+                        let cm_import = cm_import_of(&method.attrs).cloned();
 
                         let func_kind = SymbolKind::Function(FunctionSymbol {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),
@@ -604,10 +602,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                 Item::Resource(resource) => {
                     let kind = SymbolKind::Resource(ResourceSymbol {
                         methods: resource.methods.iter().map(|m| m.name.clone()).collect(),
-                        cm_import: resource
-                            .attrs
-                            .first()
-                            .and_then(|a| a.as_cm_import().cloned()),
+                        cm_import: cm_import_of(&resource.attrs).cloned(),
                     });
 
                     self.define_unique(
@@ -622,8 +617,7 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
                     // Register each resource method as a function symbol
                     // with the fully qualified name "{Resource}::{method}"
                     for method in &resource.methods {
-                        let cm_import =
-                            method.attrs.first().and_then(|a| a.as_cm_import().cloned());
+                        let cm_import = cm_import_of(&method.attrs).cloned();
 
                         let func_kind = SymbolKind::Function(FunctionSymbol {
                             params: method.params.iter().map(|p| p.name.clone()).collect(),

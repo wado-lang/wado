@@ -1,0 +1,26 @@
+// `PathFlags` is this interface's own flags, whatever `wasi:filesystem` calls
+// its. The instance type carries this declaration, and the parameter lowers to
+// it.
+
+#[cm("wasi:demo/gfx@0.1.0#opts")]
+flags PathFlags {
+    #[cm("first")]
+    First,
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#open")]
+    fn open(opts: PathFlags) -> u32;
+}
+
+export fn run() with Api {
+    let _ = Api::open(PathFlags::First);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"opts\"", "(type (eq"], "count": 1 }
+  ]
+}

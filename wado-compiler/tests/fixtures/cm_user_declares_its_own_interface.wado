@@ -1,0 +1,21 @@
+// `wasi:demo/types` is nobody else's, so this module declares it and the call
+// lowers to that import. The declaration alone lowers nothing, which is the
+// shape `extends` is checked in until the `web:*` modules are bundled.
+
+#[cm("wasi:demo/types@0.1.0#handle")]
+resource Handle {
+    #[cm("wasi:demo/types@0.1.0#[constructor]handle")]
+    fn new() -> Handle;
+}
+
+export fn run() with Handle {
+    let h = Handle::new();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(export", "\"[constructor]handle\""], "count": 1 }
+  ]
+}

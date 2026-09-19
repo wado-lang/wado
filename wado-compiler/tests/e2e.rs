@@ -290,6 +290,29 @@ struct TestSpec {
     /// A short pattern is otherwise answerable by any function in the dump.
     #[serde(rename = "wir_scope", default)]
     wir_scope: Option<String>,
+
+    /// Lines the emitted component's WAT must carry.
+    #[serde(default)]
+    wat_lines: Vec<WatLineSpec>,
+
+    /// Compile and stop. For a program whose subject is the component the
+    /// compiler emits, and whose imports the runner hosts nothing for.
+    #[serde(default)]
+    compile_only: bool,
+}
+
+/// A line of the emitted component's WAT: the substrings it holds, and how many
+/// such lines there must be. A CM import's shape — which names an instance type
+/// exports, which functions are aliased out of it — is visible here and nowhere
+/// a run reaches.
+#[derive(Debug, serde::Deserialize)]
+struct WatLineSpec {
+    /// Substrings that must all appear on one trimmed line.
+    contains: Vec<String>,
+
+    /// How many lines must match. Omitted means at least one.
+    #[serde(default)]
+    count: Option<usize>,
 }
 
 impl TestSpec {
@@ -309,6 +332,14 @@ impl TestSpec {
     fn has_wir_expectations(&self, opt_level: OptLevel) -> bool {
         let (expect, not_expect) = self.wir_expectations(opt_level);
         !expect.is_empty() || !not_expect.is_empty()
+    }
+
+    /// Whether `opt_level` runs this fixture. The runner skips on it, and the
+    /// WAT guard asks it of `-Os`, which strips the symbols a needle may name.
+    fn runs_at(&self, opt_level: OptLevel) -> bool {
+        let name = common::opt_level_name(opt_level);
+        !(self.skip_os && opt_level == OptLevel::Os)
+            && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == name))
     }
 }
 
@@ -682,25 +713,12 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         },
     };
 
-    // Skip if the spec says skip_os and we're running -Os
-    if spec.skip_os && opt_level == OptLevel::Os {
-        eprintln!("[{test_id}] skipped (skip_os)");
+    if !spec.runs_at(opt_level) {
+        eprintln!(
+            "[{test_id}] skipped ({} excluded)",
+            common::opt_level_name(opt_level)
+        );
         return;
-    }
-
-    // Skip if only_opt is set and this level is not in the list
-    if !spec.only_opt.is_empty() {
-        let level_str = match opt_level {
-            OptLevel::O0 => "O0",
-            OptLevel::O1 => "O1",
-            OptLevel::O2 => "O2",
-            OptLevel::O3 => "O3",
-            OptLevel::Os => "Os",
-        };
-        if !spec.only_opt.iter().any(|s| s == level_str) {
-            eprintln!("[{test_id}] skipped (only_opt: {:?})", spec.only_opt);
-            return;
-        }
     }
 
     // Check if source has #![TODO] to determine panic recovery strategy.
@@ -897,6 +915,15 @@ fn run_normal_test(
         keep_wasm_artifacts(&dir, &fixture_name, opt_name, &wasm, test_id);
     }
 
+    assert_wat_lines(&wasm, spec, test_id);
+    // Every check on the compiler's own output runs before the execution
+    // dispatch: one placed after it is silently skipped by `compile_only`.
+    assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
+
+    if spec.compile_only {
+        return;
+    }
+
     // Dispatch to the appropriate runner based on world
     if let Some(http_spec) = &spec.http_service {
         match run_http_request(
@@ -947,38 +974,52 @@ fn run_normal_test(
         });
         verify_result(&result, spec, test_id, opt_level);
     }
+}
 
-    if let Some(wir_text) = wir_text {
-        let (expect, not_expect) = spec.wir_expectations(opt_level);
-        let opt_name = common::opt_level_name(opt_level);
-        let wir_text = match spec.wir_scope.as_deref() {
-            None => wir_text.as_str(),
-            Some(scope) => scope_to_function(&wir_text, scope).unwrap_or_else(|| {
-                panic!(
-                    "[{test_id}] wir_scope names no function in the WIR\n\
-                     scope: {scope}\n\
-                     WIR output:\n{wir_text}"
-                )
-            }),
-        };
-
-        for pattern in expect {
-            assert!(
-                wir_contains(wir_text, pattern),
-                "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
-                 pattern: {pattern}\n\
+/// Check the fixture's `wir_expect:Ox` / `wir_not_expect:Ox` patterns against the
+/// retained WIR, narrowed to `wir_scope` where the fixture names one.
+fn assert_wir_expectations(
+    wir_text: Option<&str>,
+    spec: &TestSpec,
+    opt_level: OptLevel,
+    test_id: &str,
+) {
+    let Some(wir_text) = wir_text else {
+        assert!(
+            !spec.has_wir_expectations(opt_level),
+            "[{test_id}] the fixture states WIR expectations but no WIR was retained"
+        );
+        return;
+    };
+    let (expect, not_expect) = spec.wir_expectations(opt_level);
+    let opt_name = common::opt_level_name(opt_level);
+    let wir_text = match spec.wir_scope.as_deref() {
+        None => wir_text,
+        Some(scope) => scope_to_function(wir_text, scope).unwrap_or_else(|| {
+            panic!(
+                "[{test_id}] wir_scope names no function in the WIR\n\
+                 scope: {scope}\n\
                  WIR output:\n{wir_text}"
-            );
-        }
+            )
+        }),
+    };
 
-        for pattern in not_expect {
-            assert!(
-                !wir_contains(wir_text, pattern),
-                "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
-                 pattern: {pattern}\n\
-                 WIR output:\n{wir_text}"
-            );
-        }
+    for pattern in expect {
+        assert!(
+            wir_contains(wir_text, pattern),
+            "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
+             pattern: {pattern}\n\
+             WIR output:\n{wir_text}"
+        );
+    }
+
+    for pattern in not_expect {
+        assert!(
+            !wir_contains(wir_text, pattern),
+            "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
+             pattern: {pattern}\n\
+             WIR output:\n{wir_text}"
+        );
     }
 }
 
@@ -1071,8 +1112,51 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
     Ok(())
 }
 
-/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can
-/// be inspected and diffed against `wado compile`. Activated by setting the
+/// Check each `wat_lines` entry against the emitted component's WAT.
+fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
+    if spec.wat_lines.is_empty() {
+        return;
+    }
+    // `-Os` strips the symbol table, so a `$name` never appears there. Caught
+    // at every level, the fixture fails where it is written rather than in the
+    // one CI job that runs `-Os`.
+    assert!(
+        !spec.runs_at(OptLevel::Os)
+            || !spec
+                .wat_lines
+                .iter()
+                .any(|line| line.contains.iter().any(|needle| needle.contains('$'))),
+        "[{test_id}] a wat_lines needle names a symbol (`$…`), which `-Os` strips; \
+         set `skip_os` on this fixture, or keep `Os` out of its `only_opt`"
+    );
+    let wat = wasmprinter::print_bytes(wasm)
+        .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
+    for wanted_line in &spec.wat_lines {
+        let matched: Vec<&str> = wat
+            .lines()
+            .map(str::trim)
+            .filter(|line| {
+                wanted_line
+                    .contains
+                    .iter()
+                    .all(|needle| line.contains(needle))
+            })
+            .collect();
+        let (ok, wanted) = match wanted_line.count {
+            Some(exact) => (matched.len() == exact, exact.to_string()),
+            None => (!matched.is_empty(), "1 or more".to_string()),
+        };
+        assert!(
+            ok,
+            "[{test_id}] expected {wanted} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
+            wanted_line.contains,
+            matched.len(),
+        );
+    }
+}
+
+/// Write the compiled wasm (and a wat decoded from it) under `dir` so it can be
+/// inspected and diffed against `wado compile`. Activated by setting the
 /// `WADO_KEEP_WASM_DIR` environment variable. Failures are reported via
 /// `eprintln!` and never block the test.
 fn keep_wasm_artifacts(dir: &str, fixture_name: &str, opt_name: &str, wasm: &[u8], test_id: &str) {

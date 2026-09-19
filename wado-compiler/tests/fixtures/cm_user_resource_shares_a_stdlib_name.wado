@@ -1,0 +1,28 @@
+// `Fields` is this interface's own resource, whatever `wasi:http/types` calls
+// its. A shared name reaches neither the bundled declaration nor its import.
+
+#[cm("wasi:demo/gfx@0.1.0#thing")]
+resource Fields {
+    #[cm("wasi:demo/gfx@0.1.0#[method]thing.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#get-thing")]
+    fn get_thing() -> Fields;
+}
+
+export fn run() with (Api, Fields) {
+    let t = Api::get_thing();
+    let _ = t.id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 },
+    { "contains": ["(import \"wasi:http/types"], "count": 0 }
+  ]
+}

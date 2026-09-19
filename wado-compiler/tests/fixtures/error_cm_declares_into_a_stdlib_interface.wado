@@ -1,0 +1,18 @@
+// `wasi:http/types` is the stdlib's, and `MyFields` would collide with what it
+// declares there. A CM interface has one declaring module.
+
+#[cm("wasi:http/types@0.3.0#fields")]
+resource MyFields {
+    #[cm("wasi:http/types@0.3.0#[constructor]fields")]
+    fn new() -> MyFields;
+}
+
+export fn run() with MyFields {
+    let f = MyFields::new();
+}
+
+__DATA__
+{
+  "compile_error": "already declares",
+  "compile_errors_contains": ["wasi:http/types@0.3.0", "already declares"]
+}

@@ -42,6 +42,12 @@ The representation then follows. An affine resource crosses as a CM `own` /
 crosses as a plain integer the host interprets — the _extern handle_ the
 Lowering section names throughout.
 
+An operation of an unrestricted resource is therefore a plain CM function, and
+its handle an ordinary parameter. The `[constructor]T` / `[method]T.m` /
+`[static]T.m` spellings name operations of a CM `resource`, which an
+unrestricted one does not declare, so a `#[cm(...)]` binding that writes one is
+rejected.
+
 Reasoning:
 
 - Affinity is not Wado's invention for WIT-derived resources: `own` and `borrow` carry the CM's own drop obligation, and we cannot drop the discipline without breaking interop with `wasmtime` and the broader CM ecosystem.

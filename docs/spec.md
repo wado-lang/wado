@@ -4710,8 +4710,8 @@ test "not yet implemented" {
     panic("TODO: implement this feature");
 }
 
-// Custom timeout: override the default 1000ms limit
-#[timeout_ms(5000)]
+// Custom timeout: override the default 5000ms limit
+#[timeout_ms(30000)]
 test "slow computation" {
     let result = expensive_computation();
     assert result == 42;
@@ -4773,10 +4773,10 @@ The `#[TODO]` attribute marks a test as a placeholder for a feature not yet impl
 
 #### `#[timeout_ms(N)]` Attribute
 
-The `#[timeout_ms(N)]` attribute overrides the default test timeout (1000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and reported as failed with a message suggesting the `#[timeout_ms(N)]` attribute. This is useful for tests that involve expensive computation or I/O:
+The `#[timeout_ms(N)]` attribute overrides the default test timeout (5000ms) for a specific test. `N` is an integer literal specifying the timeout in milliseconds. If a test exceeds its timeout, it is interrupted and reported as failed with a message suggesting the `#[timeout_ms(N)]` attribute. This is useful for tests that involve expensive computation or I/O:
 
 ```wado
-#[timeout_ms(5000)]
+#[timeout_ms(30000)]
 test "large data processing" {
     let result = process_large_dataset();
     assert result.len() > 0;
@@ -5764,10 +5764,10 @@ test "not yet implemented" {
 
 #### `#[timeout_ms(N)]`
 
-Test block attribute. Overrides the default test timeout (1000ms). `N` is an integer literal specifying the timeout in milliseconds.
+Test block attribute. Overrides the default test timeout (5000ms). `N` is an integer literal specifying the timeout in milliseconds.
 
 ```wado
-#[timeout_ms(5000)]
+#[timeout_ms(30000)]
 test "slow computation" {
     let result = expensive_computation();
     assert result == 42;

@@ -410,14 +410,46 @@ Three things, none of them comparable:
   2026-06-14, and comes from the same renderer the plain one does, so the two
   cannot drift.
 - The Component Model boundary. An export name is an ABI fact derived from a
-  `DefId`. The one direction that runs the other way is a WIT type name inside
-  a generated `wasi:*` / `core:kiln/*` module, which `TypeTable::cm_decl_in`
-  resolves: no Wado resolver walked that namespace, so there is no reference
-  site, and `CmInterfaceRegistry` parses its own copy of those modules once per
-  process, so there is no declaring node this program's `DefTable` saw either.
-  `wado-from-idl` generates one module per interface and each declares a WIT
-  name once, so the `(name, module)` pair names a single declaration by
-  construction. Reachable from `synthesis::cm_binding` alone.
+  `DefId`. The one direction that runs the other way is a WIT type name, which
+  `TypeTable::cm_decl_in` resolves against the module that declares it. A module
+  declares each WIT name once, so the `(name, module)` pair names a single
+  declaration. What comes back is a `DefId`. The step runs once per interface,
+  and every key past it is that identity.
+
+  A generated `wasi:*` / `core:kiln/*` module has no alternative: no Wado
+  resolver walked that namespace, so there is no reference site, and
+  `CmInterfaceRegistry` parses its own copy of those modules once per process,
+  so there is no declaring node this program's `DefTable` saw either. A user
+  module that writes its own `#[cm(…)]` bindings is not in that position. It is
+  an ordinary module of the program, its declarations are in the `DefTable`, and
+  `cm_decl_in` reaches them through the same call.
+
+  What the boundary may not do is carry the name further. An interface is the
+  scope of a WIT type name, and a package holds several interfaces:
+  `wasi:sockets/types` and `wasi:sockets/ip-name-lookup` each declare an
+  `error-code`, and they are unrelated variants. A key built from the package,
+  or from the bare type name, names one of them and silently drops the other.
+
+### One declaring module per CM interface
+
+What makes `(name, module)` name a single declaration is that a CM interface has
+exactly one declaring module. A module that declares a `#[cm(…)]` type in an
+interface another module already declares into is rejected, and the diagnostic
+names the declaration it would have collided with.
+
+This follows from the adopted identity rule rather than adding to it. Two
+modules declaring into one interface would give `cm_decl_in` two answers for a
+WIT name and no way to choose, and the registry keys a declaration by
+`(source_interface, name)`, so the second registration would either overwrite
+the first or trip a uniqueness check written for a different failure.
+
+A module declaring an interface the standard library does not bundle is the
+ordinary case, and the one the `#[cm(…)]` bindings exist for. The rule bites
+where a module declares into `wasi:*` or `core:*`, which the standard library
+already owns. It also requires that a module's types for one interface stay in
+that module. Splitting them across files is rejected, because
+the second file is a second declaring module. The `interface` whose operations
+name those types is free to sit elsewhere, since it declares no type of its own.
 
 A name is never a map key, never an equality operand, and never a parameter that
 decides which declaration is meant.
@@ -487,7 +519,12 @@ Renderings still compared against a declaration's own name:
 
 The Component Model boundary, permanent for the reason §9 gives:
 
-- `cm_decl_in`, `cm_decl`
+- `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
+- `find_named_type_by_source` and `find_named_type_by_module_name`, the
+  `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
+  named module.
+- `cm_decl_def`, codegen's entry to the same step, reading the `DefId` off the
+  `TypeId` those two return.
 
 ## The frame derivation
 
@@ -653,6 +690,45 @@ one is named, the rendering where nothing declares the shape, so `i32` and `()`
 compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
+
+## Known gap: component codegen keys most CM types by name
+
+`ComponentModelContext` holds outer-scope component types in one string-keyed
+map. Two kinds of key live in it. A structural key names no declaration, such as
+`"types-instance-type"` or an interned `result<…>`. The other kind stands for a
+declaration, which a name cannot carry: `{package}-{cm-name}` puts every
+interface of a package in one namespace, and the CM name alone puts every
+package in one.
+
+`error-code` is keyed by `DefId`, resolved once per interface through
+`cm_decl_in`. The resource own-handles and the per-package composites
+(`{pkg}-response`, `{pkg}-fields-resource`) still take the package key, and each
+carries the same collision. Nothing has hit it yet only because no two
+interfaces of one package declare a resource of the same name.
+
+Closing this means splitting the map in two, identities on one side and
+structural keys on the other. Each declaration-backed producer then needs the
+interface it is emitting for, which all of them already hold.
+
+## Known gap: a transmission future names a package, not an interface
+
+`CmFuturePayload::Transmission` carries a package. Its classifier reads the
+`DefId` off the error-code's own type and truncates it to the package the
+declaring module sits in, so the identity is discarded at the one point that
+has it.
+
+Codegen recovers the interface from the plan. A transmission future streams a
+resource-defining interface's resources, so that interface is the one it means.
+Where the plan names none for the package, the package's single aliased
+`error-code` serves; `wasi:cli` is the case, its `types` interface defining no
+resource. A package that aliased two and has no resource-defining interface is
+refused rather than guessed at.
+
+Closing this means `Transmission` carrying the declaration, which the classifier
+already holds. What stands in the way is §8: the payload is rendered into a
+canonical intrinsic's name and parsed back out of it, and a `DefId` has no
+public constructor, so it cannot survive that round trip. The parse is itself
+the thing §8 forbids, so the two are one piece of work.
 
 ## Known gap: a pattern qualifier's type arguments are counted, not read
 
