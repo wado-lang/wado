@@ -1031,10 +1031,6 @@ fn alias_resource_type(
 
 /// The outer index an import phase gave the type `interface_fq` exports as
 /// `cm_name`, or `None` where none has.
-///
-/// A caller spells `wado_name` as the CM name in `PascalCase`, which a
-/// declaration need not use. The export coordinate answers where that spelling
-/// reaches no declaration.
 fn aliased_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -1044,6 +1040,8 @@ fn aliased_type_idx(
 ) -> Option<u32> {
     cm_decl_def(project, interface_fq, wado_name)
         .and_then(|def| ctx.decl_type_idx(def))
+        // A caller spells `wado_name` by `PascalCase`-ing the CM name, which a
+        // declaration need not use. The export coordinate answers for those.
         .or_else(|| export_alias_idx(ctx, interface_fq, cm_name))
 }
 

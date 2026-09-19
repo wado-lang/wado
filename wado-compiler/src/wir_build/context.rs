@@ -601,13 +601,8 @@ impl<'a> WirContext<'a> {
         )
     }
 
-    /// Register a CM canonical import lazily and return its `WirFuncId`.
-    ///
-    /// If the canonical has already been registered, returns the existing `WirFuncId`.
-    /// Called by WIR synthesis functions (`emit_stream_read`, `emit_waitable_set_new`, etc.)
-    /// to declare the canonical imports they need without going through TIR imports or DCE.
-    ///
-    /// The import name is derived from `CanonicalIntrinsic::import_name()`.
+    /// Register a CM canonical import lazily and return its `WirFuncId`. Its
+    /// callers are WIR synthesis, so it goes through neither TIR imports nor DCE.
     pub fn ensure_canonical(
         &mut self,
         intrinsic: CanonicalIntrinsic,

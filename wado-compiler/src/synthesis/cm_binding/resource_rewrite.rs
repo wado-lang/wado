@@ -1003,13 +1003,11 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
 }
 
 /// The CM package a future payload's named types resolve in, or `""` where the
-/// payload names no package and resolution must not be steered into one.
-///
-/// A payload that does carry one carries it as a declaration, so the scope is
-/// read off that rather than guessed. Naming a package the payload does not
-/// belong to resolves its types to that package's same-named ones.
+/// payload names none and resolution must not be steered into one.
 fn future_payload_package(payload: &CmFuturePayload) -> String {
     match payload {
+        // Read off the declaration, never guessed: naming a package the payload
+        // does not belong to resolves its types to that package's same-named ones.
         CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
         CmFuturePayload::Trailers => "http".to_string(),
         CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),

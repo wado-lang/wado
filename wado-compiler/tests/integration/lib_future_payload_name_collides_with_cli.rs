@@ -1,7 +1,7 @@
-//! A `future<T>` payload is lifted as the record its own module declares. A user
-//! record whose name a bundled `wasi:cli` type also spells used to be lifted as
-//! that type instead — an enum, so a discriminant `i32` where a struct
-//! reference belongs, and the core module failed validation.
+//! A `future<T>` payload is lifted as the record its own module declares, never
+//! as a bundled `wasi:cli` type spelling the same name. That one is an enum, so
+//! lifting it puts a discriminant `i32` where a struct reference belongs and the
+//! core module fails validation.
 
 use wado_compiler::OptLevel;
 

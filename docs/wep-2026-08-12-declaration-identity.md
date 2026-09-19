@@ -736,14 +736,14 @@ Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 
 ## Known gap: a CM type can reach outer scope with no identity
 
-A reader asking §9's step for a CM type spells the Wado name as that type's CM
-name in `PascalCase`, because the CM export is all it holds. A declaration whose
-own name is spelled otherwise is not that name, so the step answers nothing and
-the alias is keyed by the export it was made from instead. One interface spells
-that export name once, so the key collides with nothing today.
+A reader that holds only the CM export spells the Wado name by `PascalCase`-ing
+the CM name. A declaration whose own name is spelled otherwise is not that name,
+so §9's step answers nothing and the alias is keyed by the export it was made
+from. One interface spells that export name once, so the key collides with
+nothing today.
 
-What is not established is which declarations a component reaches this way, and
-so whether any of them is spelled such that the step could answer.
+Which declarations a component reaches this way is not established, nor whether
+any of them is spelled such that the step could answer.
 
 ## Known gap: a CM name still reaches a declaration by search
 
@@ -758,8 +758,8 @@ search spans the whole program; each kind's map answers in registration order;
 and a kind that declines because two interfaces spell the name hands the
 question to the next kind, so which kind is asked first is a silent tiebreak.
 `ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
-`wasi:cli/types`, so the variants decline and the enum answers — for any
-module's `ErrorCode`, including one a user wrote.
+`wasi:cli/types`, so the variants decline and the enum answers. That holds for
+any module's `ErrorCode`, including one a user wrote.
 
 Which references still arrive without their declaring interface is not
 established.
@@ -767,9 +767,9 @@ established.
 ## Known gap: an abstract qualifier argument is not compared
 
 Where either side of a pattern qualifier leaves a position abstract, that
-position is accepted uncompared. A generic body writes its own type parameter where the scrutinee
-carries a concrete type, which is ordinary code, and a parameter names no
-instantiation, so the scrutinee's argument has nothing to disagree with there.
+position is accepted uncompared. A generic body writes its own type parameter
+where the scrutinee carries a concrete type, which is ordinary code. A parameter
+names no instantiation, so the scrutinee's argument has nothing to disagree with.
 
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. Closing it means

@@ -2507,19 +2507,15 @@ impl TypeTable {
 
     /// The declaration `module` declares under the WIT name `name`.
     ///
-    /// The one place a name still reaches an identity, and it is the Component
-    /// Model boundary. Two things make it unavoidable rather than unfinished:
-    /// a WIT name is written in a namespace no Wado resolver walked, so there
-    /// is no reference site to ask; and `CmInterfaceRegistry` parses its own
-    /// copy of the WASI modules once per process, independent of any
-    /// compilation, so the declaring node it could record is not a node this
-    /// program's `DefTable` ever saw.
+    /// The one place a name still reaches an identity. §9 of the
+    /// declaration-identity WEP says why that is unavoidable here alone.
     ///
-    /// It cannot mis-identify: `wado-from-idl` generates exactly one module per
+    /// It cannot mis-identify: `wado-from-idl` generates one module per
     /// interface and each declares a WIT name once, so `module` picks the
-    /// generated module and `name` the single declaration in it. It cannot
-    /// invent one either — a name that declares nothing answers `None`.
-    /// Only the Component Model boundary may ask it — `synthesis::cm_binding`
+    /// generated module and `name` the single declaration in it. A name that
+    /// declares nothing answers `None`.
+    ///
+    /// Only the Component Model boundary may ask it: `synthesis::cm_binding`
     /// and [`crate::component_model::cm_decl_in_interface`]. A Wado name
     /// resolves through [`crate::resolve::Resolutions`] and a stdlib type
     /// through [`Self::compiler_item_def`].

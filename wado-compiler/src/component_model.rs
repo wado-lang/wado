@@ -30,11 +30,7 @@ use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
 
 /// The declaration `interface_fq` names as `wado_name`, or `None` where it
-/// declares none.
-///
-/// The one name-to-identity step at the Component Model boundary, which the
-/// declaration-identity WEP §9 reserves for exactly this. Everything downstream
-/// keys by the identity a step like this answers with.
+/// declares none. The boundary step §9 of the declaration-identity WEP reserves.
 pub fn cm_decl_in_interface(
     type_table: &TypeTable,
     registry: &CmInterfaceRegistry,
@@ -3196,11 +3192,8 @@ impl CmInterfaceRegistry {
         self.interface_declaring(source, name).is_some()
     }
 
-    /// The interface registering `name` among those the declaring module
-    /// registers, keyed by that module rather than by the name alone.
-    ///
-    /// A name a bundled interface also spells resolves here to the declaring
-    /// module's own interface, so no by-name search can offer the other one.
+    /// The interface declaring `name` among those `source` registers. Keying by
+    /// the module is what keeps a bundled interface spelling `name` out of it.
     pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
         self.module_interfaces(source).into_iter().find(|fq| {
             let key = ((*fq).to_string(), name.to_string());

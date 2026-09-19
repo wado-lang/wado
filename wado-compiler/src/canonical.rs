@@ -455,8 +455,8 @@ mod intrinsic_name_tests {
         }
     }
 
-    /// The annotation names, which state an operation and no payload. A stream
-    /// one means the default `stream<u8>`.
+    /// An annotation name states an operation and no payload. A stream one
+    /// means the default `stream<u8>`.
     #[test]
     fn annotation_names_denote_their_operation() {
         assert_eq!(

@@ -869,8 +869,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
             }
-            // The name answers first: reading the arguments of a qualifier that
-            // names another type records references nothing accepted.
+            // The name answers first, so a qualifier naming another type never
+            // has its arguments read: nothing it wrote there could be accepted.
             Type::Generic(g) => {
                 names_scrutinee(self, qualifier)
                     && self.qualifier_args_agree(scrutinee_args.as_deref(), &g.args)
@@ -905,16 +905,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether one written qualifier argument is the scrutinee's at that
     /// position.
-    ///
-    /// A position either side leaves abstract is not compared: a generic body's
-    /// own parameter, an `_`, or a name that reached no type. Only a position
-    /// naming an instantiation can disagree with one.
     fn qualifier_arg_agrees(&mut self, written: &Type, scrutinee: TypeId) -> bool {
         let resolved = self.resolve_type(written);
         if resolved == TypeTable::UNKNOWN && !matches!(written, Type::Infer(_)) {
             self.reject_unresolved_annotation(written);
         }
         let tt = self.tysys.type_table.borrow();
+        // A generic body's own parameter, an `_`, or a name that reached no
+        // type names no instantiation, so it can disagree with none.
         let abstract_at = |id: TypeId| {
             matches!(tt.get(id), ResolvedType::TypeParam { .. }) || tt.contains_undecided(id)
         };
