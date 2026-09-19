@@ -10,8 +10,8 @@ generation ahead of the workspace pin
 `wado` invocation does wants any of that.
 
 So the runner is its own binary, `wado-run-with-webgpu`, and `wado
-run-with-webgpu` reaches it. cargo and git resolve their own subcommands this
-way, so the shape is familiar before it is documented.
+run-with-webgpu` reaches it. cargo and git resolve their own subcommands the
+same way, so a user meets a familiar shape.
 
 ## Decision
 
@@ -34,8 +34,8 @@ looks in the application directory and the current directory first.
 
 The builtin table answers first, so an external subcommand only ever adds a
 name. A `wado-run` on `PATH` is inert: `wado run` is the builtin, whatever the
-`PATH` holds. This is what makes the mechanism safe to have at all — a
-directory earlier in `PATH` cannot change what `wado build` does.
+`PATH` holds. This is what makes the mechanism safe to have at all. A directory
+earlier in `PATH` cannot change what `wado build` does.
 
 A name that is neither builtin nor on `PATH` fails as it does today, and the
 message says that `wado-<name>` was looked for on `PATH`.
@@ -61,9 +61,9 @@ external that a builtin shadows, which is otherwise invisible: the file is on
 description and an external its path, which is all `wado` knows of it without
 running it.
 
-It is a flag rather than a subcommand because a builtin name is taken for good:
-a `wado commands` would remove that name from the external namespace, where
-`--list` sits beside `--help` and `--version` and removes nothing. `wado --help`
+It is a flag rather than a subcommand because a builtin name is taken for good.
+A `wado commands` would retire `commands` from the external namespace, while
+`--list` sits beside `--help` and `--version` and retires nothing. `wado --help`
 carries a line pointing at it.
 
 ### `wado help <name>` is `wado <name> --help`
@@ -84,11 +84,11 @@ unknown command does.
 ## Known gaps
 
 - An external's one-line description. A builtin carries its own, and the only
-  way to obtain an external's is to run it, so `--list` shows its path instead.
-  cargo shows names alone.
+  way to obtain an external's is to run it, which `--list` will not do to every
+  candidate it found, so it shows the path instead. cargo shows names alone.
 - Nothing distinguishes a `wado-<name>` written for this mechanism from any
   other file on `PATH` that happens to be named that way. cargo has the same
-  gap, and closing it means a marker the child answers before it runs.
+  gap, and closing it means a marker `wado` can read out of the file.
 
-Neither gap is a hole in the mechanism's safety, and what a protocol would buy
-instead is [Subcommand Plugin Forms](./wep-2026-09-19-subcommand-plugin-forms.md).
+Neither gap is a safety problem. What a defined protocol would buy instead is
+[Subcommand Plugin Forms](./wep-2026-09-19-subcommand-plugin-forms.md).
