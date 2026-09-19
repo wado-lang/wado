@@ -194,7 +194,7 @@ pub struct Seed { /* 256 bits, private */ }
 
 impl Seed {
     pub fn from_u64(n: u64) -> Seed;
-    pub fn from_bytes(bytes: &ByteList) -> Seed;
+    pub fn from_bytes<B: AsByteSlice>(bytes: &B) -> Seed;
     pub fn from_str(s: &String) -> Seed;
     pub fn split(&self, index: u64) -> Seed;
 }

@@ -255,14 +255,23 @@ fn sample_u64_inclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64 {
     return low + sample_span(rng, high - low);
 }
 
+fn sample_i64_exclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64 {
+    assert low < high, "random_range: the range is empty";
+    return sample_i64_inclusive(rng, low, high - 1);
+}
+
+fn sample_u64_exclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64 {
+    assert low < high, "random_range: the range is empty";
+    return sample_u64_inclusive(rng, low, high - 1);
+}
+
 impl SampleUniform for i8 {
     fn sample_inclusive<R: Rng>(rng: &mut R, low: i8, high: i8) -> i8 {
         return sample_i64_inclusive(rng, low as i64, high as i64) as i8;
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: i8, high: i8) -> i8 {
-        assert low < high, "random_range: the range is empty";
-        return sample_i64_inclusive(rng, low as i64, high as i64 - 1) as i8;
+        return sample_i64_exclusive(rng, low as i64, high as i64) as i8;
     }
 }
 
@@ -272,8 +281,7 @@ impl SampleUniform for i16 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: i16, high: i16) -> i16 {
-        assert low < high, "random_range: the range is empty";
-        return sample_i64_inclusive(rng, low as i64, high as i64 - 1) as i16;
+        return sample_i64_exclusive(rng, low as i64, high as i64) as i16;
     }
 }
 
@@ -283,8 +291,7 @@ impl SampleUniform for i32 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: i32, high: i32) -> i32 {
-        assert low < high, "random_range: the range is empty";
-        return sample_i64_inclusive(rng, low as i64, high as i64 - 1) as i32;
+        return sample_i64_exclusive(rng, low as i64, high as i64) as i32;
     }
 }
 
@@ -294,8 +301,7 @@ impl SampleUniform for i64 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: i64, high: i64) -> i64 {
-        assert low < high, "random_range: the range is empty";
-        return sample_i64_inclusive(rng, low, high - 1);
+        return sample_i64_exclusive(rng, low, high);
     }
 }
 
@@ -305,8 +311,7 @@ impl SampleUniform for u8 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: u8, high: u8) -> u8 {
-        assert low < high, "random_range: the range is empty";
-        return sample_u64_inclusive(rng, low as u64, high as u64 - 1) as u8;
+        return sample_u64_exclusive(rng, low as u64, high as u64) as u8;
     }
 }
 
@@ -316,8 +321,7 @@ impl SampleUniform for u16 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: u16, high: u16) -> u16 {
-        assert low < high, "random_range: the range is empty";
-        return sample_u64_inclusive(rng, low as u64, high as u64 - 1) as u16;
+        return sample_u64_exclusive(rng, low as u64, high as u64) as u16;
     }
 }
 
@@ -327,8 +331,7 @@ impl SampleUniform for u32 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: u32, high: u32) -> u32 {
-        assert low < high, "random_range: the range is empty";
-        return sample_u64_inclusive(rng, low as u64, high as u64 - 1) as u32;
+        return sample_u64_exclusive(rng, low as u64, high as u64) as u32;
     }
 }
 
@@ -338,8 +341,7 @@ impl SampleUniform for u64 {
     }
 
     fn sample_exclusive<R: Rng>(rng: &mut R, low: u64, high: u64) -> u64 {
-        assert low < high, "random_range: the range is empty";
-        return sample_u64_inclusive(rng, low, high - 1);
+        return sample_u64_exclusive(rng, low, high);
     }
 }
 
@@ -423,8 +425,7 @@ impl Xoshiro256pp {
 global SQUARES_KEY_ROUNDS_MAX: i32 = 64;
 
 /// Squares (Widynski, arXiv:2004.06278): the value at a counter, not the next
-/// value. A chunk regenerates identically on a revisit, and callers need not
-/// agree on who draws first.
+/// one. A revisit regenerates it, and no two callers need agree on draw order.
 pub struct Squares64 {
     key: u64,
 }
@@ -462,12 +463,8 @@ impl Squares64 {
     }
 }
 
-// Squares' output quality depends on its key in a way a block cipher's does
-// not: the key 0 yields all zeros, and a small key yields roughly 2^16/key
-// zeros first. Widynski's keys.h draws sixteen nonzero hexadecimal digits with
-// no two adjacent alike; a bit-level test reproducing that would reject two
-// thirds of what it is given, so this rejects the failure mode instead — a key
-// whose digits are sparse or whose low digits vanish.
+// A small or digit-sparse key makes Squares emit a run of zeros first.
+// Widynski's keys.h avoids it by construction; this rejects it by test.
 fn key_is_usable(key: u64) -> bool {
     if key & 0xF == 0 || key >> 32 == 0 {
         return false;
@@ -481,10 +478,8 @@ fn key_is_usable(key: u64) -> bool {
     return nonzero >= 12;
 }
 
-/// A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`.
-///
-/// The width is the library's and not the engine's, so a consumer keeps no
-/// cursor; the batch crosses the boundary in registers.
+/// A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`. The
+/// width is the library's, not the engine's, so a consumer keeps no cursor.
 pub trait VectorRng with () {
     fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
 }
@@ -493,9 +488,8 @@ fn vrotl(v: u64x2, n: u32) -> u64x2 {
     return v << n | v >> 64 - n;
 }
 
-/// xoshiro256++ run eight times over at once, one independent stream per lane.
-/// Each lane starts 2^128 steps past the one before it, so the eight are
-/// disjoint for 2^128 draws apiece.
+/// xoshiro256++ in eight lanes at once. Each lane starts 2^128 steps past the
+/// one before, so the eight streams are disjoint for 2^128 draws apiece.
 pub struct XoshiroSimd {
     s0a: u64x2,
     s0b: u64x2,
@@ -566,9 +560,8 @@ impl VectorRng for XoshiroSimd {
 }
 
 impl XoshiroSimd {
-    // One step per lane, all eight at once. Every operation is vertical, so
-    // there is no permute; the whole cost of SIMD here is that Wasm has no
-    // vector rotate, which makes each `vrotl` three instructions.
+    // Every operation is vertical, so there is no permute. Wasm has no vector
+    // rotate, which is the whole reason each `vrotl` is three instructions.
     fn step(&mut self) -> [u64x2, u64x2, u64x2, u64x2] {
         let o0 = vrotl(self.s0a + self.s3a, 23) + self.s0a;
         let o1 = vrotl(self.s0b + self.s3b, 23) + self.s0b;
@@ -612,9 +605,8 @@ impl XoshiroSimd {
 
 global SHISHUA_WARMUP_ROUNDS: i32 = 13;
 
-/// SHISHUA: the fastest generator here, and vector-only — its round is eight
-/// vectors wide and nothing smaller exists inside it. It has no jump, so its
-/// lanes rest on seeding alone.
+/// SHISHUA: the fastest generator here, and vector-only, since its round is
+/// eight vectors wide and nothing smaller exists inside it. It has no jump.
 pub struct Shishua {
     s0l: u64x2,
     s0h: u64x2,
@@ -629,13 +621,8 @@ pub struct Shishua {
 }
 
 impl Seedable for Shishua {
-    // The reference builds its state from a table of digits of phi; this
-    // expands the seed through SplitMix64 instead, and keeps the reference's
-    // thirteen discarded rounds. The stream therefore differs from the
-    // reference's, which this library does not promise either way.
-    //
-    // One stream per seed word, so all 256 bits reach the 1024-bit state: a
-    // single stream over their xor would give two seeds one state.
+    // SplitMix64 replaces the reference's table of phi digits, so the stream
+    // differs from it. One stream per word, or two seeds could share a state.
     fn from_seed(seed: Seed) -> Shishua {
         let mut w0 = seed.w0;
         let mut w1 = seed.w1;
@@ -661,14 +648,15 @@ impl Seedable for Shishua {
 }
 
 impl VectorRng for Shishua {
-    // One round: 128 bytes of output, and a state no input of which is read
-    // twice. The order below is the reference's, which that property depends on.
-    //
-    // The round is written here rather than in a method this forwards to:
-    // `multi_value_return` flattens a tuple return only where the call site
-    // destructures it, and a forwarding `return self.round();` does not, so the
-    // eight vectors would leave the registers and land in a heap tuple.
     fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
+        return self.round();
+    }
+}
+
+impl Shishua {
+    // 128 bytes of output, and a state no input of which is read twice. The
+    // order below is the reference's, which that property depends on.
+    fn round(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2] {
         self.s1l = self.s1l + self.counter_l;
         self.s1h = self.s1h + self.counter_h;
         self.s3l = self.s3l + self.counter_l;
@@ -718,12 +706,8 @@ fn splitmix_pair(state: &mut u64) -> u64x2 {
     return [lo as i64, hi as i64];
 }
 
-// SHISHUA's state is four 256-bit vectors. Wasm's are 128-bit, so each one is a
-// `lo`/`hi` pair: `lo` holds 64-bit words 0 and 1, `hi` words 2 and 3. The
-// permute rotates the eight 32-bit words of a 256-bit value — by five words for
-// `shu0`, by three for `shu1` — which across a pair is a byte selection from two
-// vectors at once. The sixteen indices are Wasm immediates, so they are literals
-// at the call until const generic parameters can carry them.
+// A 256-bit state vector is a `lo`/`hi` pair of Wasm's 128-bit ones, so its
+// word rotate is a byte selection across both, at indices Wasm needs literal.
 fn shu0_lo(lo: u64x2, hi: u64x2) -> u64x2 {
     return builtin::i8x16_shuffle(
         20,

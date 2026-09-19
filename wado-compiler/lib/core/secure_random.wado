@@ -13,9 +13,8 @@ global POOL_BYTES: i32 = 4096;
 
 global SEED_BYTES: i32 = 32;
 
-/// Draw a `core:prng` seed from the host's entropy. The one crossing from
-/// unpredictable randomness into a fast reproducible stream, and the only
-/// `Random` a program that seeds once has to declare.
+/// Draw a `core:prng` seed from the host's entropy: the one crossing from
+/// unpredictable randomness into a reproducible stream, and its only `Random`.
 pub fn seed() -> Seed with Random {
     let bytes = Random::get_random_bytes(SEED_BYTES as u64) as ByteList;
     assert bytes.len() == SEED_BYTES, "wasi:random returned a short read";

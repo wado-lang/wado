@@ -1,5 +1,5 @@
 use { BufferedRandom, seed } from "core:secure_random";
-use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
+use { Seedable, Rng, Xoshiro256pp } from "core:prng";
 use { Random } from "wasi:random";
 
 // Counts host calls and hands out a known stream: what the buffer served, and
@@ -161,16 +161,7 @@ test "seed draws 32 bytes and starts a stream" {
         seed();
     };
     assert other != first;
-    assert Xoshiro256pp::from_seed(first).next_u64() != Xoshiro256pp::from_seed(other).next_u64();
-}
 
-test "seed carries the only effect a seeded program declares" {
-    let mut host = CountingRandom {};
-    let drawn = with Random => &mut host do {
-        seed();
-    };
-    // Everything past the crossing is pure, including a fixed replay of it.
-    let mut rng = Xoshiro256pp::from_seed(drawn);
-    let mut fixed = Xoshiro256pp::from_seed(Seed::from_u64(0));
-    assert rng.next_u64() != fixed.next_u64();
+    // Outside the handler, so the crossing is where `Random` ends.
+    assert Xoshiro256pp::from_seed(first).next_u64() != Xoshiro256pp::from_seed(other).next_u64();
 }

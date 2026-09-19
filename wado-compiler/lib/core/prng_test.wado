@@ -91,7 +91,7 @@ test "split derives an independent stream per index" {
     assert root.split(9) == Seed::from_str(&"world").split(9);
 }
 
-test "jump lands where stepping would" {
+test "a jump parts the stream from stepping" {
     let mut stepped = xoshiro(5);
     let mut jumped = xoshiro(5);
     jumped.jump();
@@ -358,9 +358,8 @@ fn bounded<T: SampleUniform, R: Rng>(rng: &mut R, low: T, high: T) -> T {
     return T::sample_inclusive(rng, low, high);
 }
 
-// A jump advances 2^128 steps and a draw advances one, over the same linear
-// state transition, so the two commute. An implementation that got the
-// polynomial, the bit order, or the accumulation wrong would not.
+// A jump and a draw are both the same linear transition, so they commute. A
+// wrong polynomial, bit order or accumulation would not.
 test "jumping and drawing commute" {
     let start = xoshiro(99);
 

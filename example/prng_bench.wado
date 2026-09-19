@@ -298,10 +298,8 @@ fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
     return [x0, x1];
 }
 
-
 // Two counters at once: every word of the scalar form becomes a lane, so the
 // instruction count per call is the scalar one and the output is twice as wide.
-#[inline(always)]
 #[inline(always)]
 fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2, u64x2] {
     let parity = u64x2::splat(THREEFRY_PARITY as i64);
