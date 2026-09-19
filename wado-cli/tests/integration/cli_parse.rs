@@ -288,16 +288,6 @@ fn run_gc_heap_initial_suffixes() {
     }
 }
 
-/// The runtime knobs are one list, so a subcommand that hosts a guest gets
-/// every one of them. `test` was the last to have none.
-#[test]
-fn test_takes_the_runtime_knobs() {
-    let parser = Parser::from_args(&["--collector", "null", "--gc-heap-initial", "512m", "a.wado"]);
-    let opts = wado_cli::test::parse_args(parser).unwrap();
-    assert_eq!(opts.runtime.collector, wasmtime::Collector::Null);
-    assert_eq!(opts.runtime.gc_heap_initial_size, 512 << 20);
-}
-
 #[test]
 fn run_gc_heap_initial_rejects_nonsense() {
     let parser = Parser::from_args(&["--gc-heap-initial", "lots", "input.wado"]);
@@ -537,6 +527,16 @@ fn serve_rejects_no_dir() {
 }
 
 // ---- test ----
+
+/// The runtime knobs are one list, so every subcommand that hosts a guest
+/// takes all of them.
+#[test]
+fn test_takes_the_runtime_knobs() {
+    let parser = Parser::from_args(&["--collector", "null", "--gc-heap-initial", "512m", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.runtime.collector, wasmtime::Collector::Null);
+    assert_eq!(opts.runtime.gc_heap_initial_size, 512 << 20);
+}
 
 #[test]
 fn test_with_files() {

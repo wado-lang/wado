@@ -149,8 +149,8 @@ paid on a benchmark `fts` never touched.
   with the code. A change that allocated 20% less measured **49% slower**, while
   `--collector null` and a hand-written `.wat` A/B both put it ahead. If an
   allocation-bound row contradicts a strictly smaller WIR, sweep
-  `gc_heap_initial_size` before believing either arm; `wado` sets a default that
-  keeps microgpt off that cliff, and a raw `wasmtime` invocation does not.
+  `gc_heap_initial_size` before believing either arm. `wado` sets a default that
+  keeps microgpt off that cliff. A raw `wasmtime` invocation does not.
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
   `array.new_default`, so an over-sized arena pays for every slot it never uses —
   once badly enough to turn a 2× faster build into a 4× slower one. Growing from

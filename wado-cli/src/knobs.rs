@@ -1,7 +1,5 @@
 //! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
-//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with. Each
-//! subcommand declares the options it exposes as a list, which drives its parse
-//! loop and its help text alike.
+//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
@@ -220,10 +218,7 @@ impl CompileKnobs {
 }
 
 /// A knob shared by the subcommands that host a guest (`run` / `serve` /
-/// `test`). Each declares the subset it accepts as a `&[RuntimeKnobOpt]`.
-///
-/// `--profile` is deliberately not here: the modes it takes and the caveats it
-/// carries differ per subcommand, so each states its own.
+/// `test`), used for both matching and help rendering.
 #[derive(Clone, Copy)]
 pub enum RuntimeKnobOpt {
     Collector,

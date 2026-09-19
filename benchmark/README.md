@@ -403,8 +403,8 @@ They run at 512 MiB, which `gc_heap_flags` in `wado.sh` sets.
 
 Every other row takes the default. At 512 MiB json-catalog, zlib and
 sqlite-parse are all slower and the rest are flat, and `wado serve` measures
-the same at either size. Below the default nothing improves either: microgpt
-loses 2.1x at 128 MiB, where its live set no longer fits.
+the same at either size. Below the default nothing improves: microgpt loses
+2.1x at 128 MiB, where its live set no longer fits.
 
 ## Profiling
 

@@ -374,9 +374,7 @@ pub fn parse_collector(s: &str) -> Result<Collector, String> {
 }
 
 /// The GC heap every guest starts with, whatever its world. The copying
-/// collector splits it into two semi-spaces, so a program allocates through
-/// half of this between collections. Raise it with `--gc-heap-initial` where a
-/// program's live set earns it.
+/// collector splits it in two, so a program allocates through half per cycle.
 pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 
 /// Parse a `--gc-heap-initial` value: a byte count, or one suffixed `k`, `m`
@@ -387,11 +385,11 @@ pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 /// Returns an error message if the value is not a size.
 pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
     let lower = s.trim().to_ascii_lowercase();
-    let unit = |shift: u32| (&lower[..lower.len() - 1], 1u64 << shift);
+    let suffixed = |shift: u32| (&lower[..lower.len() - 1], 1u64 << shift);
     let (digits, multiple) = match lower.as_bytes().last() {
-        Some(b'k') => unit(10),
-        Some(b'm') => unit(20),
-        Some(b'g') => unit(30),
+        Some(b'k') => suffixed(10),
+        Some(b'm') => suffixed(20),
+        Some(b'g') => suffixed(30),
         _ => (lower.as_str(), 1),
     };
     let value: u64 = digits
