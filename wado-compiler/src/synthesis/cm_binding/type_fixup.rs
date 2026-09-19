@@ -210,8 +210,35 @@ fn fixup_wasi_derived_types_in_adapter(
 /// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
 fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
     if let Some(body) = &mut adapter.body {
-        fixup_types_in_block(body, old_type, new_type, &mut adapter.locals);
+        let from = raw_call_stmt_index(body);
+        fixup_types_in_block(body, from, old_type, new_type, &mut adapter.locals);
     }
+}
+
+/// The index of the statement holding the adapter's `CmRawCall`. An adapter
+/// body is parameter lowering, then that call, then result lifting, so nothing
+/// before it can hold the result — and a parameter's own `i32` intermediate
+/// must not be retyped to the return type (issue: a `list` parameter's length).
+fn raw_call_stmt_index(body: &TirBlock) -> usize {
+    struct FindRawCall {
+        found: bool,
+    }
+    impl TirRefVisitor for FindRawCall {
+        fn visit_expr(&mut self, expr: &TirExpr) {
+            if matches!(expr.kind, TirExprKind::CmRawCall { .. }) {
+                self.found = true;
+            }
+            self.walk_expr(expr);
+        }
+    }
+    body.stmts
+        .iter()
+        .position(|stmt| {
+            let mut finder = FindRawCall { found: false };
+            finder.visit_stmt(stmt);
+            finder.found
+        })
+        .unwrap_or(0)
 }
 
 /// Replace ALL occurrences of `old_type` with `new_type` throughout the binding's
@@ -362,11 +389,12 @@ impl TirMutVisitor for TypeReplacer<'_> {
 /// where the binding used I32 as a placeholder).
 fn fixup_types_in_block(
     block: &mut TirBlock,
+    from: usize,
     old_type: TypeId,
     new_type: TypeId,
     locals: &mut Vec<TirLocal>,
 ) {
-    for stmt in &mut block.stmts {
+    for stmt in block.stmts.iter_mut().skip(from) {
         match &mut stmt.kind {
             TirStmtKind::Return {
                 value: Some(ret_expr),
@@ -378,13 +406,13 @@ fn fixup_types_in_block(
                 else_block,
                 ..
             } => {
-                fixup_types_in_block(then_block, old_type, new_type, locals);
+                fixup_types_in_block(then_block, 0, old_type, new_type, locals);
                 if let Some(blk) = else_block {
-                    fixup_types_in_block(blk, old_type, new_type, locals);
+                    fixup_types_in_block(blk, 0, old_type, new_type, locals);
                 }
             }
             TirStmtKind::Loop { body } => {
-                fixup_types_in_block(body, old_type, new_type, locals);
+                fixup_types_in_block(body, 0, old_type, new_type, locals);
             }
             TirStmtKind::Let {
                 value,

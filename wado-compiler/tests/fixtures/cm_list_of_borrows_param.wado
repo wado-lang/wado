@@ -1,0 +1,33 @@
+// `list<borrow<t>>` — `wasi:webgpu`'s `gpu-queue.submit` shape. The element is
+// a `&Resource` on the Wado side and a `borrow` at the boundary: the adapter
+// must read the caller's own `List<&T>`, and the borrow must wrap the resource
+// rather than its `own` handle.
+
+#[cm("wasi:demo/gfx@0.1.0#item")]
+resource Item {
+    #[cm("wasi:demo/gfx@0.1.0#[method]item.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#get-item")]
+    fn get_item() -> Item;
+    #[cm("wasi:demo/gfx@0.1.0#submit")]
+    #[cm_params("items")]
+    fn submit(items: List<&Item>);
+}
+
+export fn run() with (Api, Item) {
+    let a = Api::get_item();
+    Api::submit([&a]);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(type (;2;) (borrow 0))"], "count": 1 },
+    { "contains": ["(type (;4;) (list 2))"], "count": 1 }
+  ]
+}

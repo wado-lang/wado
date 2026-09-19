@@ -2614,6 +2614,20 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
                 Some(interface_info.path.as_str()),
             );
+            // `resource_exports` carries the `own` index, so a borrow the
+            // shared generator minted from it would wrap that handle instead
+            // of the resource. Hand it the borrow this pass already defined.
+            for (wado_name, &borrow_idx) in &borrow_resource_type_indices {
+                if let Some(source) = project
+                    .cm_interface_registry
+                    .resource_source_in(Some(interface_info.path.as_str()), wado_name)
+                    && let Some(cm_name) = project
+                        .cm_interface_registry
+                        .get_resource_cm_name_by_source(source, wado_name)
+                {
+                    shared_type_gen.register_existing(&format!("borrow:{cm_name}"), borrow_idx);
+                }
+            }
 
             for func in &cm_functions {
                 // Pre-define param-only types (stream for params, result for params)
