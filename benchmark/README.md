@@ -397,9 +397,9 @@ changes it. The copying collector splits that into two semi-spaces, so a
 program allocates through half of it between collections. A larger heap trades
 resident memory for fewer of them.
 
-Two rows measure faster with more. microgpt holds a whole autograd graph live
-and gale_gen its grammar tables, so both pay for every collection. They run at
-512 MiB, which `gc_heap_flags` in `wado.sh` decides.
+Two rows measure faster with a larger heap. microgpt holds a whole autograd
+graph live and gale_gen its grammar tables, so both pay for every collection.
+They run at 512 MiB, which `gc_heap_flags` in `wado.sh` sets.
 
 Every other row takes the default. At 512 MiB json-catalog, zlib and
 sqlite-parse are all slower and the rest are flat, and `wado serve` measures

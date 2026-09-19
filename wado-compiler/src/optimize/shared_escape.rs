@@ -157,10 +157,22 @@ impl<'a> SharedEscape<'a> {
         {
             locals.insert(param.local_index);
         }
-        let type_table = self.project.type_table.borrow();
-        if locals.is_empty() && !has_seed(body, &type_table, seed_field, seed_call) {
-            return true;
+        if locals.is_empty() {
+            // A `Param` slot seeds its owner's body alone. Every other body is
+            // left without looking, there being no name for a seed to match.
+            if seed_field.is_none() && seed_call.is_none() {
+                return true;
+            }
+            if !has_seed(
+                body,
+                &self.project.type_table.borrow(),
+                seed_field,
+                seed_call,
+            ) {
+                return true;
+            }
         }
+        let type_table = self.project.type_table.borrow();
         let mut taint = Taint {
             body,
             type_table: &type_table,
@@ -355,7 +367,7 @@ impl Taint<'_> {
         let mut found_locals: Vec<u32> = Vec::new();
         body.for_each_reachable_node(|node| match node {
             NodeRef::Expr(e) => {
-                if !self.exprs.contains(&e) && self.taints(e) {
+                if !self.expr(e) && self.taints(e) {
                     found_exprs.push(e);
                 }
                 // A `match` arm binds from its scrutinee, so a tainted
@@ -425,7 +437,7 @@ impl Taint<'_> {
     fn subtree_tainted(&self, node: NodeRef) -> bool {
         self.body
             .walk_nodes_under::<()>(node, |c| match c {
-                NodeRef::Expr(e) if self.exprs.contains(&e) => ControlFlow::Break(()),
+                NodeRef::Expr(e) if self.expr(e) => ControlFlow::Break(()),
                 _ => ControlFlow::Continue(true),
             })
             .is_some()

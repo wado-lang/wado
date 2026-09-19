@@ -43,12 +43,12 @@ use crate::nir_arena::{
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
 use crate::tir::{
-    BuiltinDeclarations, CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit,
-    MonomorphInfo, ResolvedType, StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr,
-    TirExprKind, TirField, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport,
-    TirLiteralPattern, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp,
-    TirVariantCase, TirVariantDecl, TypeTable, receiver_value,
+    CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
+    StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
+    TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirImport, TirLiteralPattern, TirLocal,
+    TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind, TirStruct, TirStructField,
+    TirStructPatternField, TirTest, TirTypeParam, TirUnaryOp, TirVariantCase, TirVariantDecl,
+    TypeTable, receiver_value,
 };
 use crate::token::Span;
 use crate::{nir, tir};
@@ -189,7 +189,7 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         function_strings: strings.function_strings,
         function_method_info: strings.function_method_info,
         wasm_module_sources,
-        builtin_declarations: BuiltinDeclarations::new(builtin_declarations),
+        builtin_declarations,
         module_name,
         cm_interface_registry,
         world_registry,

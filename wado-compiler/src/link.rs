@@ -9,7 +9,7 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{BuiltinDeclaration, RetainSpec, TirFunction, TypeTable};
+use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, RetainSpec, TirFunction, TypeTable};
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
@@ -162,7 +162,7 @@ pub fn link(package: Package) -> FlatPackage {
         imports,
         tests,
         wasm_module_sources,
-        builtin_declarations,
+        builtin_declarations: BuiltinDeclarations::new(builtin_declarations),
         module_name: package.module_name,
         cm_interface_registry: package.cm_interface_registry,
         world_registry: package.world_registry,

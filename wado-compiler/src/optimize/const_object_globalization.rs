@@ -612,8 +612,8 @@ fn value_arg_candidates(
     gate: &Gate<'_>,
     siblings: &SiblingConsts,
 ) -> Vec<ExprId> {
-    let (func_id, args, first_param) = match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, args, .. } => (*func_id, args, 0),
+    let (func_id, args) = match &body.exprs[expr].kind {
+        ExprKind::Call { func_id, args, .. } => (*func_id, args),
         _ => return Vec::new(),
     };
     args.iter()
@@ -635,10 +635,8 @@ fn value_arg_candidates(
             gate.is_reference_type(ty)
                 && is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
                 && contains_aggregate(body, arg, gate)
-                && (gate.callee_param_readonly(func_id, first_param + pos)
-                    || gate
-                        .shared_escape
-                        .param_shareable(func_id, first_param + pos))
+                && (gate.callee_param_readonly(func_id, pos)
+                    || gate.shared_escape.param_shareable(func_id, pos))
         })
         .map(|(_, arg)| arg)
         .collect()
