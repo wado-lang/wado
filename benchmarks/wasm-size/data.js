@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789856637780,
+  "lastUpdate": 1789860290989,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57081,6 +57081,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1182b211939361cefdad6320ae98507fc92eb142"
         },
         "date": 1789856637316,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8a76434bac5bde29ad6b01893cf6f2f7e2c5f229",
+          "message": "Merge pull request #2084 from wado-lang/claude/microgpt-opt\n\nperf: beat JavaScript on both MicroGPT phases, and halve gale-gen",
+          "timestamp": "2026-09-20T08:05:31+09:00",
+          "tree_id": "2ddd1ef98b48ef6adb6c29aaf1d0d5284e2a417a",
+          "url": "https://github.com/wado-lang/wado/commit/8a76434bac5bde29ad6b01893cf6f2f7e2c5f229"
+        },
+        "date": 1789860290381,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
