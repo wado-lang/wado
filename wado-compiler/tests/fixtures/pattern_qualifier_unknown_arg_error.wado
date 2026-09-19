@@ -1,0 +1,23 @@
+// A qualifier's type arguments are a written type position, so a name that
+// reaches no declaration is named where it is written — not reported as a
+// mismatched pattern, which says nothing about why.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+test "an unresolvable qualifier argument names itself" {
+    let m = Maybe::<i32>::Just(1);
+    let n = match m {
+        Maybe<Nope>::Just(_) => 0,
+        Maybe<Nope>::Nothing => 1,
+    };
+    assert n == 0;
+}
+
+__DATA__
+{
+    "compile_error": "unknown type 'Nope'",
+    "compile_errors_not_contains": ["pattern mismatch"]
+}

@@ -41,7 +41,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
@@ -56,7 +56,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -77,12 +77,12 @@ fn "orphan_rule_allowed_local_trait.wado/$cm_export__run"() {
     tx_31 = builtin::i32_wrap_i64(packed_29 >> 32_i64);
     handle_5 = "orphan_rule_allowed_local_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
     "core:rt/write_string_to_stream"(tx_31, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("number: 42"), used: 10 });
-    "wasi/future-drop-readable:transmission-cli"(handle_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_5);
     rx_72 = builtin::i32_wrap_i64(local.tee packed_71("wasi/stream-new"()));
     tx_73 = builtin::i32_wrap_i64(packed_71 >> 32_i64);
     handle_39 = "orphan_rule_allowed_local_trait.wado/$cm_binding__Stdout_write_via_stream"(rx_72);
     "core:rt/write_string_to_stream"(tx_73, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("string: hello"), used: 13 });
-    "wasi/future-drop-readable:transmission-cli"(handle_39);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_39);
     "wasi/task-return"(0);
 }
 

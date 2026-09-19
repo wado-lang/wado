@@ -25,7 +25,7 @@ type "functype//cm_optional_record_param.wado/$cm_binding__Device_configure" = f
 
 type "functype//cm_optional_record_param.wado/$cm_export__run" = fn();  // TypeId(8)
 
-type "functype//wasi/resource-drop:device" = fn(i32);  // TypeId(9)
+type "functype//wasi/resource-drop:cm_optional_record_param.wado#device" = fn(i32);  // TypeId(9)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(10)
 
@@ -33,7 +33,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Gfx::get_device from "wasi/wasi:demo/Gfx::get_device";
 import fn wasi/wasi:demo/Device::configure from "wasi/wasi:demo/Device::configure";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:device from "wasi/resource-drop:device";
+import fn wasi/resource-drop:cm_optional_record_param.wado#device from "wasi/resource-drop:cm_optional_record_param.wado#device";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_optional_record_param.wado/$cm_binding__Gfx_get_device"() with Gfx {
@@ -90,7 +90,7 @@ fn "cm_optional_record_param.wado/$cm_binding__Device_configure"(self, options) 
 fn "cm_optional_record_param.wado/$cm_export__run"() {
     let device: i32;
     drop("cm_optional_record_param.wado/$cm_binding__Device_configure"(local.tee device("cm_optional_record_param.wado/$cm_binding__Gfx_get_device"()), ref.null none));
-    "wasi/resource-drop:device"(device);
+    "wasi/resource-drop:cm_optional_record_param.wado#device"(device);
     "wasi/task-return"(0);
 }
 

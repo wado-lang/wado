@@ -204,12 +204,12 @@ type "functype//http_error_code.wado/$cm_task_entry__handle" = fn(i32);  // Type
 
 type "functype//wasi/task-return:handle" = fn(i32, i32, i32, i64, i32, i32, i32, i32);  // TypeId(35)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(36)
+type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(36)
 
 import fn mem/realloc from "mem/realloc";
 import memory (1) from "mem/memory";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
-import fn wasi/resource-drop:request from "wasi/resource-drop:request";
+import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
 
 fn "http_error_code.wado/$cm_export__handle"(request) {
     "http_error_code.wado/$cm_task_entry__handle"(request);
@@ -804,7 +804,7 @@ fn "http_error_code.wado/$cm_task_entry__handle"(request) {
         }
     } else {
     }
-    "wasi/resource-drop:request"(request);
+    "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 
 export fn "http_error_code.wado/$cm_export__handle" as "handle"

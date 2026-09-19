@@ -108,15 +108,14 @@ pub enum CmExportType {
     /// by `interface_fq` with the given kebab-case `cm_name`.
     ///
     /// Examples: `Request` from `wasi:http/types` resolves to
-    /// `Named { interface_fq: "wasi:http/types", cm_name: "request", is_resource: true }`
-    /// and codegen looks it up as `ctx.type_idx("http-request")`.
+    /// `Named { interface_fq: "wasi:http/types", cm_name: "request", is_resource: true }`,
+    /// which codegen resolves to the declaration that interface exports.
     Named {
         interface_fq: String,
         cm_name: String,
         /// Whether this names a CM resource (vs variant / record / enum /
-        /// flags). Lets codegen re-export the resource type
-        /// (`{pkg}-{cm_name}-resource`) vs the plain `{pkg}-{cm_name}` by match,
-        /// not by probing the type registry.
+        /// flags). A param or return then reaches it as its `own<>` handle,
+        /// without probing the type registry.
         is_resource: bool,
     },
     /// `result<own<resp>, error>` synthesized for the world's handler return,

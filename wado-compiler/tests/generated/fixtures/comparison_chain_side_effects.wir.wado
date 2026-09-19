@@ -53,7 +53,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(21)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(22)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(22)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(23)
 
@@ -69,7 +69,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -97,7 +97,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     tx_30 = builtin::i32_wrap_i64(packed_28 >> 32_i64);
     handle_20 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
     "core:rt/write_string_to_stream"(tx_30, $local_10);
-    "wasi/future-drop-readable:transmission-cli"(handle_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_20);
     global:comparison_chain_side_effects.wado::CALL_COUNT = 0;
     global:comparison_chain_side_effects.wado::CALL_COUNT = global:comparison_chain_side_effects.wado::CALL_COUNT + 1;
     global:comparison_chain_side_effects.wado::CALL_COUNT = global:comparison_chain_side_effects.wado::CALL_COUNT + 1;
@@ -109,7 +109,7 @@ fn "comparison_chain_side_effects.wado/run"() with Stdout {
     tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
     handle_40 = "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(rx_49);
     "core:rt/write_string_to_stream"(tx_50, $local_14);
-    "wasi/future-drop-readable:transmission-cli"(handle_40);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_40);
 }
 
 fn "comparison_chain_side_effects.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

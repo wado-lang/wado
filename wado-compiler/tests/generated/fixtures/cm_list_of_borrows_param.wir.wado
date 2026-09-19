@@ -21,7 +21,7 @@ type "functype//cm_list_of_borrows_param.wado/$cm_binding__Api_submit" = fn(ref 
 
 type "functype//cm_list_of_borrows_param.wado/$cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wasi/resource-drop:item" = fn(i32);  // TypeId(8)
+type "functype//wasi/resource-drop:cm_list_of_borrows_param.wado#item" = fn(i32);  // TypeId(8)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
@@ -29,7 +29,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Api::get_item from "wasi/wasi:demo/Api::get_item";
 import fn wasi/wasi:demo/Api::submit from "wasi/wasi:demo/Api::submit";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:item from "wasi/resource-drop:item";
+import fn wasi/resource-drop:cm_list_of_borrows_param.wado#item from "wasi/resource-drop:cm_list_of_borrows_param.wado#item";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"() with Api {
@@ -65,7 +65,7 @@ fn "cm_list_of_borrows_param.wado/$cm_export__run"() {
     let elements: ref "Array<&cm_list_of_borrows_param.wado/Item>";
     a = "cm_list_of_borrows_param.wado/$cm_binding__Api_get_item"();
     "cm_list_of_borrows_param.wado/$cm_binding__Api_submit"(elements = array.new_fixed<i32>(a); struct.new "core:prelude//List<&cm_list_of_borrows_param.wado/Item>" { repr: elements, used: builtin::array_len(elements) });
-    "wasi/resource-drop:item"(a);
+    "wasi/resource-drop:cm_list_of_borrows_param.wado#item"(a);
     "wasi/task-return"(0);
 }
 

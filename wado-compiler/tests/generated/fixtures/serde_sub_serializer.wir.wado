@@ -119,7 +119,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(36)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(37)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(37)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(38)
 
@@ -134,7 +134,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -313,7 +313,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     tx_153 = builtin::i32_wrap_i64(packed_151 >> 32_i64);
     handle_121 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_152);
     "core:rt/write_string_to_stream"(tx_153, $local_10);
-    "wasi/future-drop-readable:transmission-cli"(handle_121);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_121);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     other_162 = global:serde_sub_serializer.wado::$const_obj_12;
     self_167 = ser.buf;
@@ -373,7 +373,7 @@ fn "serde_sub_serializer.wado/run"() with Stdout {
     tx_227 = builtin::i32_wrap_i64(packed_225 >> 32_i64);
     handle_195 = "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(rx_226);
     "core:rt/write_string_to_stream"(tx_227, $local_11);
-    "wasi/future-drop-readable:transmission-cli"(handle_195);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_195);
 }
 
 fn "serde_sub_serializer.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

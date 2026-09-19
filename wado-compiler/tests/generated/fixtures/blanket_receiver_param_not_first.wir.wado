@@ -41,7 +41,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
@@ -56,7 +56,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -73,7 +73,7 @@ fn "blanket_receiver_param_not_first.wado/$cm_export__run"() {
     tx_10 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "blanket_receiver_param_not_first.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
     "core:rt/write_string_to_stream"(tx_10, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 });
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     "wasi/task-return"(0);
 }
 

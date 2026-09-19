@@ -57,7 +57,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(23)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(24)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
@@ -72,7 +72,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -139,7 +139,7 @@ fn "global_multimod.wado/run"() with Stdout {
     tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
     handle_11 = "global_multimod.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
     "core:rt/write_string_to_stream"(tx_34, $local_0);
-    "wasi/future-drop-readable:transmission-cli"(handle_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(30), used: 0 };
     new_used_55 = 0 + 14;
     if @unlikely(new_used_55 > builtin::array_len($local_2.repr)) {
@@ -154,7 +154,7 @@ fn "global_multimod.wado/run"() with Stdout {
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_42 = "global_multimod.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
     "core:rt/write_string_to_stream"(tx_65, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_42);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_42);
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     new_used_86 = 0 + 11;
     if @unlikely(new_used_86 > builtin::array_len($local_4_4.repr)) {
@@ -169,7 +169,7 @@ fn "global_multimod.wado/run"() with Stdout {
     tx_96 = builtin::i32_wrap_i64(packed_94 >> 32_i64);
     handle_73 = "global_multimod.wado/$cm_binding__Stdout_write_via_stream"(rx_95);
     "core:rt/write_string_to_stream"(tx_96, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_73);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_73);
     global:./sub/global_multimod_helper.wado::HELPER_COUNTER = global:./sub/global_multimod_helper.wado::HELPER_COUNTER + 1;
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     new_used_117 = 0 + 16;
@@ -185,7 +185,7 @@ fn "global_multimod.wado/run"() with Stdout {
     tx_127 = builtin::i32_wrap_i64(packed_125 >> 32_i64);
     handle_104 = "global_multimod.wado/$cm_binding__Stdout_write_via_stream"(rx_126);
     "core:rt/write_string_to_stream"(tx_127, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_104);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_104);
 }
 
 fn "global_multimod.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

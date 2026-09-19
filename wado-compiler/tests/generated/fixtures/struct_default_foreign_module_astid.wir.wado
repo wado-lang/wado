@@ -157,7 +157,7 @@ type "functype//wasi/task-return" = fn(i32);  // TypeId(55)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(57)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(58)
 
@@ -173,7 +173,7 @@ import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicC
 import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:prelude/fpfmt.wado::POW10: ref null "core:prelude//List<u64>" = struct.new "core:prelude//List<u64>" { repr: array.new_fixed<u64>(1_i64, 10_i64, 100_i64, 1000_i64, 10000_i64, 100000_i64, 1000000_i64, 10000000_i64, 100000000_i64, 1000000000_i64, 10000000000_i64, 100000000000_i64, 1000000000000_i64, 10000000000000_i64, 100000000000000_i64, 1000000000000000_i64, 10000000000000000_i64, 100000000000000000_i64, 1000000000000000000_i64, -8446744073709551616_i64), used: 20 };
@@ -405,7 +405,7 @@ fn "core:benchmark/report"(label, elapsed_ns, iterations, work_per_iter, unit) w
         tx_103 = builtin::i32_wrap_i64(packed_101 >> 32_i64);
         handle_25 = "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"(rx_102);
         "core:rt/write_string_to_stream"(tx_103, $local_7);
-        "wasi/future-drop-readable:transmission-cli"(handle_25);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_25);
     } else {
         $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(70), used: 0 };
         new_used_124 = 0 + 2;
@@ -455,7 +455,7 @@ fn "core:benchmark/report"(label, elapsed_ns, iterations, work_per_iter, unit) w
         tx_175 = builtin::i32_wrap_i64(packed_173 >> 32_i64);
         handle_111 = "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"(rx_174);
         "core:rt/write_string_to_stream"(tx_175, $local_9);
-        "wasi/future-drop-readable:transmission-cli"(handle_111);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_111);
     }
 }
 
@@ -1461,7 +1461,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }
@@ -1870,7 +1870,7 @@ fn "core:benchmark/core:benchmark/Benchmark::ensure_header"(self) with Stdout {
     tx_200 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "struct_default_foreign_module_astid.wado/$cm_binding__Stdout_write_via_stream"(rx_199);
     "core:rt/write_string_to_stream"(tx_200, s_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {

@@ -113,7 +113,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(37)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(38)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(38)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(39)
 
@@ -128,7 +128,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -203,7 +203,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     handle_11 = "serde_serialize_array.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     "core:rt/write_string_to_stream"(tx_43, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     strs = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello"), used: 5 }, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("world"), used: 5 }), used: 2 };
     drop("serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^serde_serialize_array.wado/Serialize::serialize<serde_serialize_array.wado/JsonSerializer>"(strs, ser));
@@ -234,7 +234,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     tx_84 = builtin::i32_wrap_i64(packed_82 >> 32_i64);
     handle_52 = "serde_serialize_array.wado/$cm_binding__Stdout_write_via_stream"(rx_83);
     "core:rt/write_string_to_stream"(tx_84, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_52);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_52);
     ser.buf = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
     elements_89 = array.new_fixed<i32>();
     empty = struct.new "core:prelude//List<i32>" { repr: elements_89, used: 0 };
@@ -266,7 +266,7 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     tx_125 = builtin::i32_wrap_i64(packed_123 >> 32_i64);
     handle_93 = "serde_serialize_array.wado/$cm_binding__Stdout_write_via_stream"(rx_124);
     "core:rt/write_string_to_stream"(tx_125, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_93);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_93);
 }
 
 fn "serde_serialize_array.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

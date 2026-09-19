@@ -77,7 +77,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, r
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
@@ -92,7 +92,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -119,12 +119,12 @@ fn "tagged_template_tag_default_arg.wado/$cm_export__run"() {
     tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
     handle_4 = "tagged_template_tag_default_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_4);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_4);
     rx_52 = builtin::i32_wrap_i64(local.tee packed_51("wasi/stream-new"()));
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     handle_16 = "tagged_template_tag_default_arg.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     "core:rt/write_string_to_stream"(tx_53, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("tail@"), used: 5 });
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_16);
     "wasi/task-return"(0);
 }
 

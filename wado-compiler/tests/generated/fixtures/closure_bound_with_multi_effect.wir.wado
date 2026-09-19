@@ -45,7 +45,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -61,7 +61,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -94,22 +94,22 @@ fn "closure_bound_with_multi_effect.wado/$cm_export__run"() {
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     handle_5 = "closure_bound_with_multi_effect.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("single-effect bound"), used: 19 });
-    "wasi/future-drop-readable:transmission-cli"(handle_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_5);
     rx_23 = builtin::i32_wrap_i64(local.tee packed_22("wasi/stream-new"()));
     tx_24 = builtin::i32_wrap_i64(packed_22 >> 32_i64);
     handle_20 = "closure_bound_with_multi_effect.wado/$cm_binding__Stdout_write_via_stream"(rx_23);
     "core:rt/write_string_to_stream"(tx_24, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multi: stdout side"), used: 18 });
-    "wasi/future-drop-readable:transmission-cli"(handle_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_20);
     rx_35 = builtin::i32_wrap_i64(local.tee packed_34("wasi/stream-new"()));
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_32 = "closure_bound_with_multi_effect.wado/$cm_binding__Stderr_write_via_stream"(rx_35);
     "core:rt/write_string_to_stream"(tx_36, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multi: stderr side"), used: 18 });
-    "wasi/future-drop-readable:transmission-cli"(handle_32);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_32);
     rx_48 = builtin::i32_wrap_i64(local.tee packed_47("wasi/stream-new"()));
     tx_49 = builtin::i32_wrap_i64(packed_47 >> 32_i64);
     handle_45 = "closure_bound_with_multi_effect.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
     "core:rt/write_string_to_stream"(tx_49, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("other: stdout only"), used: 18 });
-    "wasi/future-drop-readable:transmission-cli"(handle_45);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
     "wasi/task-return"(0);
 }
 

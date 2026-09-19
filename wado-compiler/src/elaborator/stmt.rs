@@ -364,9 +364,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    /// Report an annotation naming a type no declaration answers here. Unlike a
-    /// bound or a signature, an annotation names no type parameter it does not
-    /// already have in scope, so the site's answer is decisive.
+    /// Report a written type position naming a type no declaration answers
+    /// here. Unlike a bound or a signature it names no type parameter it does
+    /// not already have in scope, so the site's answer is decisive.
     pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
         if self.logger.has_errors() {
             return;
@@ -844,9 +844,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee_type);
-        let scrutinee_arg_len = match self.tysys.type_table.borrow().get(base_type) {
+        let scrutinee_args = match self.tysys.type_table.borrow().get(base_type) {
             ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.len()),
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
             _ => return false,
         };
         // Every name on the chain qualifies the same cases: `C::Green`,
@@ -860,9 +860,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             elab.qualifier_def(q)
                 .is_some_and(|def| chain_defs.contains(&def))
         };
-        // A qualifier need not restate the scrutinee's type arguments, but any it
-        // writes must agree — and a type declaring none takes none.
-        let arity_agrees = |written: usize| scrutinee_arg_len == Some(written);
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
@@ -872,10 +869,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
             }
-            Type::Generic(g) => arity_agrees(g.args.len()) && names_scrutinee(self, qualifier),
+            // The name answers first, so a qualifier naming another type never
+            // has its arguments read: nothing it wrote there could be accepted.
+            Type::Generic(g) => {
+                names_scrutinee(self, qualifier)
+                    && self.qualifier_args_agree(scrutinee_args.as_deref(), &g.args)
+            }
             Type::NamespacedGeneric(ns) => {
-                (ns.args.is_empty() || arity_agrees(ns.args.len()))
-                    && names_scrutinee(self, qualifier)
+                names_scrutinee(self, qualifier)
+                    && (ns.args.is_empty()
+                        || self.qualifier_args_agree(scrutinee_args.as_deref(), &ns.args))
             }
             Type::Function(_)
             | Type::Tuple(_)
@@ -885,6 +888,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Infer(_)
             | Type::Error(_) => false,
         }
+    }
+
+    /// Whether the type arguments a qualifier writes are the ones the scrutinee
+    /// carries, each read at its own reference site rather than counted.
+    fn qualifier_args_agree(&mut self, scrutinee: Option<&[TypeId]>, written: &[Type]) -> bool {
+        let Some(scrutinee) = scrutinee else {
+            return false;
+        };
+        scrutinee.len() == written.len()
+            && written
+                .iter()
+                .zip(scrutinee)
+                .all(|(w, s)| self.qualifier_arg_agrees(w, *s))
+    }
+
+    /// Whether one written qualifier argument is the scrutinee's at that
+    /// position.
+    fn qualifier_arg_agrees(&mut self, written: &Type, scrutinee: TypeId) -> bool {
+        let resolved = self.resolve_type(written);
+        if resolved == TypeTable::UNKNOWN && !matches!(written, Type::Infer(_)) {
+            self.reject_unresolved_annotation(written);
+        }
+        let tt = self.tysys.type_table.borrow();
+        // A generic body's own parameter, an `_`, or a name that reached no
+        // type names no instantiation, so it can disagree with none.
+        let abstract_at = |id: TypeId| {
+            matches!(tt.get(id), ResolvedType::TypeParam { .. }) || tt.contains_undecided(id)
+        };
+        abstract_at(resolved)
+            || abstract_at(scrutinee)
+            || tt.type_key(resolved) == tt.type_key(scrutinee)
     }
 
     /// The declaration a written qualifier means, the resolve pass answering
@@ -1664,19 +1698,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
+                    // The scrutinee's type, not its declaration: the qualifier
+                    // is compared against the instantiation.
+                    let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
                     let expected = match &resolved_type {
-                        ResolvedType::Enum { def } => {
-                            format!(
-                                "valid case of enum {}",
-                                self.tysys.type_table.borrow().def_name(*def)
-                            )
-                        }
-                        ResolvedType::Variant { def }
-                        | ResolvedType::GenericInstance { def, .. } => {
-                            format!(
-                                "valid case of variant {}",
-                                self.tysys.type_table.borrow().def_name(*def)
-                            )
+                        ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),
+                        ResolvedType::Variant { .. } | ResolvedType::GenericInstance { .. } => {
+                            format!("valid case of variant {scrutinee_name}")
                         }
                         _ => "variant or enum case".to_string(),
                     };

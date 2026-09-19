@@ -57,7 +57,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -72,7 +72,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -99,14 +99,14 @@ fn "effect_generic_trait_bound_declared.wado/run"() with Stdout {
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_8 = "effect_generic_trait_bound_declared.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     "core:rt/write_string_to_stream"(tx_19, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_34("effect_generic_trait_bound_declared.wado/effect_generic_trait_bound_declared.wado/Loud^effect_generic_trait_bound_declared.wado/Source::next"(loud)), $local_3);
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_27 = "effect_generic_trait_bound_declared.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
 }
 
 fn "effect_generic_trait_bound_declared.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -215,7 +215,7 @@ fn "effect_generic_trait_bound_declared.wado/effect_generic_trait_bound_declared
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "effect_generic_trait_bound_declared.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, global:effect_generic_trait_bound_declared.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     self.n = self.n + 1;
     return self.n;
 }

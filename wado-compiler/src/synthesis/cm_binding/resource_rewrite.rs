@@ -21,7 +21,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
-use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
+use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
     entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
@@ -341,13 +341,15 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
     let scope = Some(elem_pkg);
     let elem_size = cm_size_with_registry_scoped(&ast_type, registry, scope) as i32;
     let elem_align = cm_align_with_registry_scoped(&ast_type, registry, scope) as i32;
+    // The same fallback the other builder of this declaration uses: one
+    // declaration renders to one CM name, whichever site reaches it first.
     let cm_record_name = registry
         .get_struct_cm_name_by_source(&source, &elem_name)
-        .unwrap_or(&elem_name)
-        .to_string();
+        .map_or_else(|| pascal_to_kebab(&elem_name), str::to_string);
+    let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),
-        CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(cm_record_name)),
+        CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
         elem_size,
         elem_align,
@@ -1000,16 +1002,15 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     )
 }
 
-/// CM package scope for lifting a future payload (biases named-type source
-/// resolution in `synthesize_lift`).
+/// The CM package a future payload's named types resolve in, or `""` where the
+/// payload names none and resolution must not be steered into one.
 fn future_payload_package(payload: &CmFuturePayload) -> String {
     match payload {
-        CmFuturePayload::Transmission(src) => src.clone(),
+        // Read off the declaration, never guessed: naming a package the payload
+        // does not belong to resolves its types to that package's same-named ones.
+        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
         CmFuturePayload::Trailers => "http".to_string(),
-        CmFuturePayload::Scalar(_) => "cli".to_string(),
-        // General value payloads carry no WASI scope; named types in the
-        // payload resolve through the registry against the entry package.
-        CmFuturePayload::Value(_) => "cli".to_string(),
+        CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
     }
 }
 
@@ -1988,11 +1989,24 @@ fn parameterize_stream_cm_name(
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
-            CmStreamPayload::Record(cm_elem)
+            CmStreamPayload::Record(stream_element_decl(tt, elem, &cm_elem))
         },
         CmStreamPayload::Value,
     );
     CanonicalIntrinsic::stream_op(cm_name, payload)
+}
+
+/// The declaration a `stream<T>` element names, under the CM name `cm_name`.
+fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
+    let def = tt
+        .nominal_def(tt.representation_head(elem))
+        .unwrap_or_else(|| {
+            panic!(
+                "`stream<{}>` element names no declaration",
+                tt.base_type_name(elem)
+            )
+        });
+    CmDecl::new(tt.defs(), def, cm_name)
 }
 
 /// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the
