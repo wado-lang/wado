@@ -23,13 +23,16 @@ proposes reading an ELF note rather than running the binary, and is open.
 
 A file named `wado-<name>` in a `PATH` directory is already an executable the
 user will run. Whatever it then tells `wado` about itself, it tells after
-winning. cargo's issue makes the same point from the other side: it refuses the
-run-the-binary handshake precisely because running an arbitrary `PATH`
-executable is the risk, so the handshake buys no safety. krew's sha256 protects
-the install step, and `wado` does not own the install step.
+winning. Closing the two gaps therefore makes the mechanism pleasanter and not
+safer, and running a candidate to ask it for a description makes it no more
+dangerous, since `wado <name>` runs that same file anyway. cargo#10662 calls
+the handshake a security risk; the risk it names was taken when the file was
+installed. What the handshake costs is time, because `--list` would spawn every
+candidate it found, which is why the issue reaches for a marker read out of the
+file instead. krew's sha256 protects the install step, and `wado` does not own
+the install step.
 
-So closing the two gaps makes the mechanism pleasanter and not safer. What
-safety the mechanism has is the two rules already decided: a builtin is never
+What safety the mechanism has is the two rules already decided: a builtin is never
 overridden, and no empty or relative `PATH` entry supplies a subcommand, so the
 directory a user stands in never decides what `wado foo` runs.
 
