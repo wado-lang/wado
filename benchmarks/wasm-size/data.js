@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789790376126,
+  "lastUpdate": 1789791297241,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56905,6 +56905,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5ee534144e56c1caa4cdcec66bd3bd7ee469536d"
         },
         "date": 1789790375496,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19589,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300930,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "19517b79a8aa6dfcb85136fa85e22b681de51139",
+          "message": "Merge pull request #2083 from wado-lang/claude/wasi-webgpu-wado-integration-r3uw6l\n\nfeat(cm): let any module bind a Component Model import, in any namespace",
+          "timestamp": "2026-09-19T12:41:20+09:00",
+          "tree_id": "c4fab8c9e3843d20b7714a3ad285ed496745c654",
+          "url": "https://github.com/wado-lang/wado/commit/19517b79a8aa6dfcb85136fa85e22b681de51139"
+        },
+        "date": 1789791296628,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
