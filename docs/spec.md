@@ -5934,6 +5934,24 @@ Both are an error on a function with a body, which states these facts itself,
 and on a `trait` or `interface` method requirement: a call to one is statically
 dispatched to an impl that has a body, so the impl states it.
 
+#### `#[immediate(...)]`
+
+Names a parameter the call lowers to a Wasm immediate, where codegen reads the
+argument's literal value out of the call itself. The optimizer must leave such
+an argument alone: hoisting it into a global, or forwarding it through a local,
+replaces the literal with a load and the lowering has nothing left to read.
+
+```wado
+#[immediate(value)]
+pub fn v128_const(value: i128) -> v128;
+```
+
+It names one parameter, unquoted, and repeats for a second. Like
+`#[retain(...)]`, it belongs to a declaration with no body: it describes how
+codegen lowers the call, and a body is called rather than lowered. A `trait` or
+`interface` method requirement is an error for the same reason — it reaches an
+impl, which is called.
+
 ### The "mem" Core Module
 
 The Component Model requires each component to provide a linear memory and a `realloc` function. The CM runtime calls `realloc` whenever it needs guest-side linear memory — for example, `stream.read` copies bytes from the host into a guest buffer, and string lifting/lowering also goes through it.

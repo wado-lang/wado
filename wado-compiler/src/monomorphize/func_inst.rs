@@ -2138,6 +2138,7 @@ impl Monomorphizer {
             task_return_type: None,
             effects: generic.effects.clone(),
             retains: generic.retains.clone(),
+            immediates: generic.immediates.clone(),
             body,
             span: generic.span,
             local_count,

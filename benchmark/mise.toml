@@ -18,6 +18,9 @@
 #
 #   WADO_BENCH_FLAGS="--optimize-inline-threshold 20" mise run all
 #   WADO_BIN="$(mise run benchmark-baseline)" mise run all
+#
+# `wado.sh`'s `gc_heap_flags` raises the guest's initial GC heap for the two
+# benchmarks whose live set earns it, measured against the 256 MiB default.
 
 [settings]
 lockfile = true
@@ -44,7 +47,7 @@ echo "=== JavaScript ==="
 node microgpt/microgpt.js
 
 echo "=== Wado ==="
-wado run -O2 $WADO_BENCH_FLAGS microgpt/microgpt.wado
+wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags microgpt) microgpt/microgpt.wado
 """
 
 [tasks.mandelbrot]
@@ -311,7 +314,7 @@ echo "=== ANTLR4 (generate, same RustLexer.g4 + RustParser.g4) ==="
 node gale_gen/antlr4_gen.mjs
 
 echo "=== Wado (Gale generator, Rust grammar) ==="
-wado run -O2 $WADO_BENCH_FLAGS gale_gen/gale_gen.wado
+wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags gale_gen) gale_gen/gale_gen.wado
 """
 
 [tasks.http-routing]
@@ -370,7 +373,7 @@ for f in $FILES; do
     name=${f##*/}
     echo "[${name%.wado}] \\$ wado run -O2 $f"
     echo "=== Wado ==="
-    wado run -O2 $WADO_BENCH_FLAGS "$f"
+    wado run -O2 $WADO_BENCH_FLAGS $(gc_heap_flags "$f") "$f"
 done
 """
 

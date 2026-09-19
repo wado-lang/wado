@@ -22,8 +22,14 @@ Filename: `docs/wep-YYYY-MM-DD-{feature-name}.md`
 - Roadmap: What will be done, in order
 - Known gaps: What is missing, whether or not it will be closed
 
-Deciding is the human's role, to adopt and to refuse alike. Propose, and record
-what is still open as a gap; never write a decision of your own into a WEP.
+Keeping a WEP current comes first. A WEP that no longer describes the code is
+worse than no WEP, so a change that lands rewrites the sections it affected in
+the same breath — write down what the code now does, and do not wait to be
+asked.
+
+Adding or changing a language feature is the human's call, to adopt and to
+refuse alike. Propose it and wait. Recording a feature that already exists is
+not that call, whoever wrote it.
 
 What an adopted decision already settles is not a second decision. Write out
 what follows from it — the mechanism it implies, the invariant it rests on, the

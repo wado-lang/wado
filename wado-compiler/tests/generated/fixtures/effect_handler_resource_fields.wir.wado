@@ -560,9 +560,11 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 global mut global:effect_handler_resource_fields.wado::new_count: i32 = 0;
 global mut global:effect_handler_resource_fields.wado::has_count: i32 = 0;
 global mut global:effect_handler_resource_fields.wado::$effect_Fields: ref null "effect_handler_resource_fields.wado//$Dispatch_Fields" = ref.null none;
-global global:effect_handler_resource_fields.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:effect_handler_resource_fields.wado::$const_obj_3: ref null "effect_handler_resource_fields.wado//CountingFields" = struct.new "effect_handler_resource_fields.wado//CountingFields" { _phantom: 0 };
-global global:core:prelude/primitive.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:effect_handler_resource_fields.wado::$const_obj_1: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
+global global:effect_handler_resource_fields.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
+global global:effect_handler_resource_fields.wado::$const_obj_3: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 53 };
+global global:effect_handler_resource_fields.wado::$const_obj_5: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 52 };
+global global:core:prelude/primitive.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "effect_handler_resource_fields.wado/$cm_binding__Response_new"(headers, contents, trailers) with Response {
     let $contents_disc: i32;
@@ -616,6 +618,7 @@ fn "effect_handler_resource_fields.wado/$cm_export__handle"(request) {
 }
 
 fn "effect_handler_resource_fields.wado/$cm_task_entry__handle"(request) {
+    let counter: ref "effect_handler_resource_fields.wado//CountingFields";
     let f: i32;
     let $cond_5: bool;
     let $cond_6: bool;
@@ -628,7 +631,6 @@ fn "effect_handler_resource_fields.wado/$cm_task_entry__handle"(request) {
     let $task_ret: ref "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>";
     let $tv_1: i32;
     let $ok_val_25: i32;
-    let $h_Fields: ref "effect_handler_resource_fields.wado//CountingFields";
     let $save_Fields: ref null "effect_handler_resource_fields.wado//$Dispatch_Fields";
     let $d_Fields: ref "effect_handler_resource_fields.wado//$Dispatch_Fields";
     let $pattern_temp_1: ref "tuple//[wasi:http/types.wado/Response, core:prelude/types.wado/Future<core:prelude/types.wado/Result<(),wasi:http/types.wado/ErrorCode>>]";
@@ -653,9 +655,9 @@ fn "effect_handler_resource_fields.wado/$cm_task_entry__handle"(request) {
     let $local_0_210: ref null "effect_handler_resource_fields.wado//$Dispatch_Fields";
     let $local_1_211: ref "effect_handler_resource_fields.wado//$Dispatch_Fields";
     let $local_2_212: i32;
-    $h_Fields = global:effect_handler_resource_fields.wado::$const_obj_3;
+    counter = struct.new "effect_handler_resource_fields.wado//CountingFields" { _phantom: 0 };
     $save_Fields = global:effect_handler_resource_fields.wado::$effect_Fields;
-    $d_Fields = struct.new "effect_handler_resource_fields.wado//$Dispatch_Fields" { outer: $save_Fields, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_fields.wado//$Closure_10" { $capture_0: $h_Fields }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_0" }, op_from_list: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_fields.wado//$Closure_11" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_1" }, op_get: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_fields.wado//$Closure_12" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_2" }, op_has: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_fields.wado//$Closure_13" { $capture_0: $h_Fields }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_3" }, op_set: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_fields.wado//$Closure_14" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_4" }, op_delete: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_fields.wado//$Closure_15" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_5" }, op_get_and_delete: struct.new "canonical//CanonicalClosure_6" { env: struct.new "effect_handler_resource_fields.wado//$Closure_16" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_6" }, op_append: struct.new "canonical//CanonicalClosure_7" { env: struct.new "effect_handler_resource_fields.wado//$Closure_17" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_7" }, op_copy_all: struct.new "canonical//CanonicalClosure_8" { env: struct.new "effect_handler_resource_fields.wado//$Closure_18" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_8" }, op_clone: struct.new "canonical//CanonicalClosure_9" { env: struct.new "effect_handler_resource_fields.wado//$Closure_19" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_9" } };
+    $d_Fields = struct.new "effect_handler_resource_fields.wado//$Dispatch_Fields" { outer: $save_Fields, op_new: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_resource_fields.wado//$Closure_10" { $capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_0" }, op_from_list: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_handler_resource_fields.wado//$Closure_11" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_1" }, op_get: struct.new "canonical//CanonicalClosure_2" { env: struct.new "effect_handler_resource_fields.wado//$Closure_12" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_2" }, op_has: struct.new "canonical//CanonicalClosure_3" { env: struct.new "effect_handler_resource_fields.wado//$Closure_13" { $capture_0: counter }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_3" }, op_set: struct.new "canonical//CanonicalClosure_4" { env: struct.new "effect_handler_resource_fields.wado//$Closure_14" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_4" }, op_delete: struct.new "canonical//CanonicalClosure_5" { env: struct.new "effect_handler_resource_fields.wado//$Closure_15" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_5" }, op_get_and_delete: struct.new "canonical//CanonicalClosure_6" { env: struct.new "effect_handler_resource_fields.wado//$Closure_16" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_6" }, op_append: struct.new "canonical//CanonicalClosure_7" { env: struct.new "effect_handler_resource_fields.wado//$Closure_17" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_7" }, op_copy_all: struct.new "canonical//CanonicalClosure_8" { env: struct.new "effect_handler_resource_fields.wado//$Closure_18" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_8" }, op_clone: struct.new "canonical//CanonicalClosure_9" { env: struct.new "effect_handler_resource_fields.wado//$Closure_19" {  }, func: ref.func "closure/effect_handler_resource_fields.wado/$closure_wrapper_9" } };
     global:effect_handler_resource_fields.wado::$effect_Fields = $d_Fields;
     f = $inline__effect_dispatch__Fields__new_0: block -> i32 {
         $local_0_194 = global:effect_handler_resource_fields.wado::$effect_Fields;
@@ -723,7 +725,7 @@ fn "effect_handler_resource_fields.wado/$cm_task_entry__handle"(request) {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_12.repr, $fuse_at_190 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_resource_fields.wado"), used: 35 }, 35);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_12.repr, $fuse_at_190 + 65, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 52 }, $local_13);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:effect_handler_resource_fields.wado::$const_obj_5, $local_13);
         $fuse_at_191 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_12, 38);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_12.repr, $fuse_at_191, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: new_count == 1
@@ -732,7 +734,7 @@ condition: new_count == 1
         $local_13 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_12);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: global:effect_handler_resource_fields.wado::new_count }, $local_13);
         let $mv_arg_6: ref "core:prelude/string.wado//String";
-        $mv_arg_6 = global:effect_handler_resource_fields.wado::$const_obj_1;
+        $mv_arg_6 = global:effect_handler_resource_fields.wado::$const_obj_2;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_12, $mv_arg_6.repr, $mv_arg_6.used);
         "core:rt/panic"($local_12.repr, $local_12.used);
         unreachable;
@@ -748,7 +750,7 @@ condition: new_count == 1
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_192 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("effect_handler_resource_fields.wado"), used: 35 }, 35);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_192 + 65, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 53 }, $local_15);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:effect_handler_resource_fields.wado::$const_obj_3, $local_15);
         $fuse_at_193 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_14, 38);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_14.repr, $fuse_at_193, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: has_count == 2
@@ -757,7 +759,7 @@ condition: has_count == 2
         $local_15 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_14);
         "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: global:effect_handler_resource_fields.wado::has_count }, $local_15);
         let $mv_arg_9: ref "core:prelude/string.wado//String";
-        $mv_arg_9 = global:effect_handler_resource_fields.wado::$const_obj_1;
+        $mv_arg_9 = global:effect_handler_resource_fields.wado::$const_obj_2;
         "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"($local_14, $mv_arg_9.repr, $mv_arg_9.used);
         "core:rt/panic"($local_14.repr, $local_14.used);
         unreachable;
@@ -786,7 +788,7 @@ condition: has_count == 2
     $tv_1 = 0;
     $tv_1 = local.tee $ok_val_25(ref.cast "core:prelude/types.wado//Result<wasi:http/types.wado/Response,wasi:http/types.wado/ErrorCode>::Ok"($task_ret).payload_0);
     "wasi/task-return:handle"(0, $tv_1, 0, 0_i64, 0, 0, 0, 0);
-    "effect_handler_resource_fields.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } });
+    "effect_handler_resource_fields.wado/$cm_future_write_core:prelude/types.wado/Result<core:prelude/types.wado/Option<wasi:http/types.wado/Trailers>,wasi:http/types.wado/ErrorCode>"(tx, global:effect_handler_resource_fields.wado::$const_obj_1);
     "wasi/resource-drop:wasi/http/types.wado#request"(request);
 }
 
@@ -1984,7 +1986,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_4;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_6;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;

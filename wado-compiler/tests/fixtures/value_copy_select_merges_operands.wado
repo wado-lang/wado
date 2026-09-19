@@ -1,0 +1,84 @@
+// `builtin::select` hands back one of its operands and `wir_build` lowers it to
+// `WirInstr::Select`: a merge wearing a call's spelling. Planned as a call it
+// copied both operands eagerly, where the `if` writing the same thing copies
+// only the result — twice the copies, for a branchless form that buys nothing
+// back on a reference-typed operand.
+//
+// `#[result(part_of = value)]` says the same of `black_box`, which emits no
+// instruction at all. Whether a copy is needed is then the analysis's answer,
+// and it lands on the result.
+
+struct P {
+    a: String,
+}
+
+#[inline(never)]
+fn merge_select(c: bool, x: P, z: P) -> String {
+    let s = builtin::select(c, x, z);
+    return `${s.a}${x.a}${z.a}`;
+}
+
+#[inline(never)]
+fn merge_if(c: bool, x: P, z: P) -> String {
+    let s = if c { x } else { z };
+    return `${s.a}${x.a}${z.a}`;
+}
+
+// A write through the result proves the merge still yields its own storage.
+#[inline(never)]
+fn select_result_is_independent(c: bool, x: P, z: P) -> String {
+    let mut s = builtin::select(c, x, z);
+    s.a = "written";
+    return `${s.a}${x.a}${z.a}`;
+}
+
+// A write through the *operand* afterwards is what the copy at the result
+// defends: sharing the operand's storage would let this reach `s`.
+#[inline(never)]
+fn select_operand_written_after(c: bool, x: P, z: P) -> String {
+    let mut y = x;
+    let s = builtin::select(c, y, z);
+    y.a = "mutated";
+    return `${s.a}${y.a}`;
+}
+
+// The same for a by-value `#[result(part_of)]` hand-back. Every other one takes
+// its parameter by `&`, so `AccessPath::through_borrow` refused the share; a
+// by-value operand has no lender and reaches that rule with nothing set.
+#[inline(never)]
+fn black_box_operand_written_after(x: P) -> String {
+    let mut y = x;
+    let s = builtin::black_box(y);
+    y.a = "mutated";
+    return `${s.a}${y.a}`;
+}
+
+test {
+    let p = P { a: "x" };
+    let q = P { a: "q" };
+
+    assert merge_select(true, p, q) == "xxq";
+    assert merge_select(false, p, q) == "qxq";
+    assert merge_select(true, p, q) == merge_if(true, p, q);
+    assert merge_select(false, p, q) == merge_if(false, p, q);
+
+    assert select_result_is_independent(true, p, q) == "writtenxq";
+    assert select_result_is_independent(false, p, q) == "writtenxq";
+
+    assert select_operand_written_after(true, p, q) == "xmutated";
+    assert select_operand_written_after(false, p, q) == "qmutated";
+
+    assert black_box_operand_written_after(p) == "xmutated";
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": [
+        "s = \"value_copy_select_merges_operands.wado/$value_copy$value_copy_select_merges_operands.wado/P\"(select ref \"value_copy_select_merges_operands.wado//P\"(c, x, z))"
+    ],
+    "wir_not_expect:O0": [
+        "select ref \"value_copy_select_merges_operands.wado//P\"(c, \"value_copy_select_merges_operands.wado/$value_copy",
+        "black_box(\"value_copy_select_merges_operands.wado/$value_copy"
+    ]
+}

@@ -1,0 +1,70 @@
+// `shared_escape` must see a write reached through a destructuring pattern.
+//
+// `bump` names the stashed field in a pattern rather than writing `h.data[at]`,
+// and a pattern carries the field name in `PatKind::Struct` — there is no
+// `ExprKind::FieldAccess` for a scan over expressions to match on. Miss it and
+// the binding is never tainted, the store through it is not seen, one array is
+// shared across all three calls, and the stores accumulate: `9 3`.
+//
+// Both callees are bulky so the inliner declines them. An inlined `stash`
+// leaves no parameter for the pass to be asked about, and an inlined `bump`
+// leaves no cross-function field read, which is the shape under test.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<f64>,
+    tag: i32,
+}
+
+#[inline(never)]
+fn stash(xs: List<f64>, seed: i32) -> Holder {
+    let mut t = seed;
+    for let i of 0..<8 {
+        t = t * 31 + i;
+        if t > 1000 {
+            t = t % 97;
+        }
+        t = t + i;
+    }
+    return Holder { data: xs, tag: t };
+}
+
+#[inline(never)]
+fn bump(h: &mut Holder, at: i32) -> f64 {
+    let mut spin = at;
+    for let k of 0..<8 {
+        spin = spin * 31 + k;
+        if spin > 1000 {
+            spin = spin % 97;
+        }
+        spin = spin + k;
+    }
+    match h {
+        Holder { data, .. } => {
+            data[at] = data[at] + 1.0;
+            // `spin` folded to nothing, so only the store decides the output.
+            return data[at] + (spin as f64) * 0.0;
+        },
+    }
+}
+
+export fn run() with Stdout {
+    // Opaque, so CTFE cannot fold the loop away and decide this by arithmetic
+    // instead of by the store.
+    let z = builtin::black_box(0);
+    let mut total = 0.0;
+    let mut keep: List<Holder> = [];
+    for let _i of 0..<3 {
+        let mut h = stash([1.0, 1.0], z);
+        total = total + bump(&mut h, z);
+        keep.push(h);
+    }
+    // Each iteration starts from a fresh [1.0, 1.0], so each contributes 2.
+    println(`${total} ${keep.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6 3\n"
+}

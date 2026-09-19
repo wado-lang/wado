@@ -10,7 +10,7 @@ use crate::compile::{
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
-use crate::knobs::{CompileKnobs, KnobOpt};
+use crate::knobs::{CompileKnobOpt, CompileKnobs};
 
 pub struct DumpOptions {
     pub inputs: Vec<String>,
@@ -64,15 +64,15 @@ impl Opt {
         Self::Help,
     ];
 
-    const KNOBS: &[KnobOpt] = &[
-        KnobOpt::OptLevel,
-        KnobOpt::InlineThreshold,
-        KnobOpt::InlineGrowth,
-        KnobOpt::OptIterations,
-        KnobOpt::LogLevel,
-        KnobOpt::Allocator,
-        KnobOpt::NoCache,
-        KnobOpt::Feature,
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::OptLevel,
+        CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineGrowth,
+        CompileKnobOpt::OptIterations,
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::Allocator,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::Feature,
     ];
 
     /// Whether this names a pipeline stage, which help lists under `Phases:`.

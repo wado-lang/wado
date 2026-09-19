@@ -625,7 +625,6 @@ global global:core:json::$const_obj_7: ref null "core:prelude/string.wado//Strin
 global global:core:json::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(105, 110, 118, 97, 108, 105, 100, 32, 101, 115, 99, 97, 112, 101, 32, 39, 92), used: 17 };
 global global:core:json::$const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99, 104, 97, 114, 58, 58, 104, 101, 120, 95, 100, 105, 103, 105, 116, 95, 118, 97, 108, 117, 101, 58, 32, 110, 111, 116, 32, 97, 32, 104, 101, 120, 32, 100, 105, 103, 105, 116), used: 38 };
 global global:core:json::$const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 99, 101, 101, 100, 101, 100, 32, 109, 97, 120, 105, 109, 117, 109, 32, 110, 101, 115, 116, 105, 110, 103, 32, 100, 101, 112, 116, 104, 32, 111, 102, 32), used: 34 };
-global global:serde_json_many_fields.wado::$const_obj_19: ref null "serde_json_many_fields.wado//Wide" = struct.new "serde_json_many_fields.wado//Wide" { f0: 0, f1: 1, f2: 2, f3: 3, f4: 4, f5: 5, f6: 6, f7: 7, f8: 8, f9: 9, f10: 10, f11: 11, f12: 12, f13: 13, f14: 14, f15: 15, f16: 16, f17: 17, f18: 18, f19: 19, f20: 20, f21: 21, f22: 22, f23: 23, f24: 24, f25: 25, f26: 26, f27: 27, f28: 28, f29: 29, f30: 30, f31: 31, f32: 320, f33: 330 };
 global global:core:prelude/traits.wado::$const_obj_23: ref null Array<u8> = array.new_fixed<u8>(58, 58);
 global global:core:prelude/traits.wado::$const_obj_24: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(82, 101, 115, 117, 108, 116), used: 6 };
 global global:core:prelude/traits.wado::$const_obj_27: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 114, 114), used: 3 };
@@ -731,6 +730,7 @@ global global:core:json::$const_obj_586: ref null Array<u8> = array.new_fixed<u8
 global global:core:json::$const_obj_588: ref null Array<u8> = array.new_fixed<u8>(44, 34);
 
 fn "serde_json_many_fields.wado/$test_0_wide_struct_roundtrip_preserves_fields_past_index_31"() {
+    let w: ref "serde_json_many_fields.wado//Wide";
     let json: ref "core:prelude/string.wado//String";
     let parsed: ref "serde_json_many_fields.wado//Wide";
     let $v0_3: i32;
@@ -742,10 +742,11 @@ fn "serde_json_many_fields.wado/$test_0_wide_struct_roundtrip_preserves_fields_p
     let v_25: ref "serde_json_many_fields.wado//Wide";
     let e_26: ref "core:serde//DeserializeError";
     let repr_31: ref Array<u8>;
+    w = struct.new "serde_json_many_fields.wado//Wide" { f0: 0, f1: 1, f2: 2, f3: 3, f4: 4, f5: 5, f6: 6, f7: 7, f8: 8, f9: 9, f10: 10, f11: 11, f12: 12, f13: 13, f14: 14, f15: 15, f16: 16, f17: 17, f18: 18, f19: 19, f20: 20, f21: 21, f22: 22, f23: 23, f24: 24, f25: 25, f26: 26, f27: 27, f28: 28, f29: 29, f30: 30, f31: 31, f32: 320, f33: 330 };
     let $mv$self_19$0: i32;
     let $mv$self_19$1: ref null "core:prelude/string.wado//String";
     let $mv$self_19$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$self_19$0, $mv$self_19$1, $mv$self_19$2] = "core:json/core/json/to_string<serde_json_many_fields.wado/Wide>$spec0"(global:serde_json_many_fields.wado::$const_obj_19, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$self_19$0, $mv$self_19$1, $mv$self_19$2] = "core:json/core/json/to_string<serde_json_many_fields.wado/Wide>$spec0"(w, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     json = (if @likely($mv$self_19$0 == 0) -> ref "core:prelude/string.wado//String" {
         v_21 = ref.as_non_null($mv$self_19$1);
         v_21;

@@ -17,14 +17,14 @@
 use super::callgraph::CallGraph;
 use super::funcset::FuncKeyMap;
 use super::is_reference_type;
-use super::ownership::BuiltinDeclarations;
 use crate::compiler_trace;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::lower::plan::value_copy::analyze;
 use crate::tir::{
-    FunctionRef, ResolvedType, RetainSpec, TirBlock, TirExpr, TirExprKind, TirFunction, TirPattern,
-    TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable, capture_source_locals,
+    BuiltinDeclarations, FunctionRef, ResolvedType, RetainSpec, TirBlock, TirExpr, TirExprKind,
+    TirFunction, TirPattern, TirStmt, TirStmtKind, TirStruct, TirUnaryOp, TypeId, TypeTable,
+    capture_source_locals,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::token::Span;

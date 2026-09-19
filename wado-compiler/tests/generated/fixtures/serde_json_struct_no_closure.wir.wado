@@ -345,8 +345,8 @@ global global:core:json::$const_obj_10: ref null "core:prelude/string.wado//Stri
 global global:serde_json_struct_no_closure.wado::$const_obj_16: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(116, 111, 95, 115, 116, 114, 105, 110, 103, 32, 102, 97, 105, 108, 101, 100), used: 16 };
 global global:serde_json_struct_no_closure.wado::$const_obj_17: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(102, 114, 111, 109, 95, 115, 116, 114, 105, 110, 103, 32, 102, 97, 105, 108, 101, 100), used: 18 };
 global global:serde_json_struct_no_closure.wado::$const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:serde_json_struct_no_closure.wado::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(123, 34, 120, 34, 58, 49, 48, 44, 34, 121, 34, 58, 50, 48, 125);
-global global:serde_json_struct_no_closure.wado::$const_obj_20: ref null "serde_json_struct_no_closure.wado//Point" = struct.new "serde_json_struct_no_closure.wado//Point" { x: 10, y: 20 };
+global global:serde_json_struct_no_closure.wado::$const_obj_19: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 21 };
+global global:serde_json_struct_no_closure.wado::$const_obj_20: ref null Array<u8> = array.new_fixed<u8>(123, 34, 120, 34, 58, 49, 48, 44, 34, 121, 34, 58, 50, 48, 125);
 global global:core:prelude/format.wado::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/format.wado::$const_obj_22: ref null Array<u8> = array.new_fixed<u8>(92, 117, 123);
 global global:core:serde::$const_obj_23: ref null Array<u8> = array.new_fixed<u8>(125);
@@ -404,13 +404,13 @@ fn "serde_json_struct_no_closure.wado/$test_0_struct_roundtrip_without_closure"(
     let $mv$json_r$0: i32;
     let $mv$json_r$1: ref null "core:prelude/string.wado//String";
     let $mv$json_r$2: ref null "core:serde//SerializeError";
-    multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_struct_no_closure.wado/Point>"(global:serde_json_struct_no_closure.wado::$const_obj_20, struct.new "core:prelude/types.wado//Option<char>" { 1 });
+    multivalue_bind [$mv$json_r$0, $mv$json_r$1, $mv$json_r$2] = "core:json/core/json/to_string<serde_json_struct_no_closure.wado/Point>"(struct.new "serde_json_struct_no_closure.wado//Point" { x: 10, y: 20 }, struct.new "core:prelude/types.wado//Option<char>" { 1 });
     if @likely($mv$json_r$0 == 0) {
         json = ref.as_non_null($mv$json_r$1);
         $cond_3 = $inline_core_prelude_array_wado_seq_eq_u8__1: block -> bool {
             a = json.repr;
             a_end = json.used;
-            b = global:serde_json_struct_no_closure.wado::$const_obj_19;
+            b = global:serde_json_struct_no_closure.wado::$const_obj_20;
             if a_end != 15 {
                 break $inline_core_prelude_array_wado_seq_eq_u8__1: 0;
             }
@@ -437,7 +437,7 @@ fn "serde_json_struct_no_closure.wado/$test_0_struct_roundtrip_without_closure"(
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_16 + 64, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("serde_json_struct_no_closure.wado"), used: 33 }, 33);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_16 + 97, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
             $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_10);
-            "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 21 }, $local_11);
+            "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:serde_json_struct_no_closure.wado::$const_obj_19, $local_11);
             $fuse_at_17 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_10, 46);
             "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_17, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: json == `\\{\"x\":10,\"y\":20\\}`

@@ -10,8 +10,8 @@ use crate::lower::plan::value_copy::last_use::RefTargets;
 use crate::lower::plan::value_copy::{array_clone_element_type_arg, copy_value_type_arg};
 use crate::tir;
 use crate::tir::{
-    ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt, TirStmtKind,
-    TirUnaryOp, TypeId, TypeTable,
+    FunctionRef, ResolvedType, TirBlock, TirExpr, TirExprKind, TirMatchArm, TirPattern, TirStmt,
+    TirStmtKind, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -97,6 +97,23 @@ fn is_copy_value_call(expr: &TirExpr) -> bool {
                 && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "copy_value")
     )
 }
+
+/// Whether the callee is `builtin::select`, which hands back one of its two
+/// operands rather than calling anything: `wir_build` lowers it to
+/// `WirInstr::Select`. It is a merge wearing a call's spelling, so it is planned
+/// as one — no copy defends an operand, and the result is owned exactly when
+/// both are, the rule `If` and `Match` follow.
+///
+/// Its two readers must agree, or the result aliases an operand undefended:
+/// [`translate`](crate::lower::translate) skips the copy at the operands, and
+/// [`is_owned_value`] is what moves it to the result.
+pub fn is_select(func: &FunctionRef) -> bool {
+    func.module_source.is_core_builtin()
+        && tir::matches_builtin(&func.name, func.monomorph_info.as_ref(), "select")
+}
+
+/// The operand positions [`is_select`] merges. Position 0 is the condition.
+pub const SELECT_OPERANDS: [usize; 2] = [1, 2];
 
 /// A fresh (owned) expression does not alias existing data, so no defensive
 /// copy is needed. `oracle` decides a call's return convention interprocedurally.
@@ -184,6 +201,15 @@ pub(crate) fn is_owned_value(
         // when that receiver is itself fresh, so `[1, 2, 3]`'s builder — a fresh
         // block-local finalized by `.build()` — is not defensively copied.
         TirExprKind::Call { func, args, .. } => {
+            if is_select(func) {
+                assert!(
+                    args.len() == 3,
+                    "`builtin::select` takes a condition and two operands"
+                );
+                return SELECT_OPERANDS
+                    .iter()
+                    .all(|&p| is_owned_value(&args[p].expr, fresh_locals, oracle, type_table));
+            }
             oracle.is_owned(func)
                 || oracle
                     .self_projection_param(func)

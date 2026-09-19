@@ -69,7 +69,7 @@ pub fn plan(flat: &mut FlatPackage, errors: &dyn ErrorSink) -> Result<LowerPlan,
     // The borrow a callee keeps is read from its body, so the fixpoint runs
     // here as well as after closure lifting: a write-back needs the answer
     // before boxing, while `&mut T` still names its referent.
-    let builtins = value_copy::ownership::BuiltinDeclarations::collect(flat);
+    let builtins = flat.builtin_declarations.clone();
     let retained = value_copy::retention::compute_retention(flat, &pre_boxing_calls, &builtins);
     mut_ref_writeback::insert_write_backs(
         flat,

@@ -114,19 +114,17 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_early_return.wado::$effect_Counter: ref null "effect_handler_early_return.wado//$Dispatch_Counter" = ref.null none;
-global global:effect_handler_early_return.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(44, 32, 97, 102, 116, 101, 114, 61);
-global global:effect_handler_early_return.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 112, 101, 114, 61);
-global global:effect_handler_early_return.wado::$const_obj_4: ref null "effect_handler_early_return.wado//Inner" = struct.new "effect_handler_early_return.wado//Inner" {  };
-global global:effect_handler_early_return.wado::$const_obj_5: ref null "effect_handler_early_return.wado//Outer" = struct.new "effect_handler_early_return.wado//Outer" {  };
+global global:effect_handler_early_return.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(44, 32, 97, 102, 116, 101, 114, 61);
+global global:effect_handler_early_return.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 112, 101, 114, 61);
 
 fn "effect_handler_early_return.wado/run"() with Stdout {
+    let outer: ref "effect_handler_early_return.wado//Outer";
     let after: i32;
     let $local_3_3: ref "core:prelude/string.wado//String";
     let $local_4_4: ref "core:prelude/format.wado//Formatter";
-    let $h_Counter: ref "effect_handler_early_return.wado//Outer";
     let $save_Counter: ref null "effect_handler_early_return.wado//$Dispatch_Counter";
     let $d_Counter: ref "effect_handler_early_return.wado//$Dispatch_Counter";
-    let $local_1_9: ref "effect_handler_early_return.wado//Inner";
+    let inner: ref "effect_handler_early_return.wado//Inner";
     let $local_2_10: ref null "effect_handler_early_return.wado//$Dispatch_Counter";
     let $local_3_11: ref "effect_handler_early_return.wado//$Dispatch_Counter";
     let $local_4_12: i32;
@@ -139,14 +137,14 @@ fn "effect_handler_early_return.wado/run"() with Stdout {
     let packed: i64;
     let rx_59: i32;
     let tx_60: i32;
-    $h_Counter = global:effect_handler_early_return.wado::$const_obj_5;
+    outer = struct.new "effect_handler_early_return.wado//Outer" {  };
     $save_Counter = global:effect_handler_early_return.wado::$effect_Counter;
-    $d_Counter = struct.new "effect_handler_early_return.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_1" { $capture_0: $h_Counter }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_1" } };
+    $d_Counter = struct.new "effect_handler_early_return.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_1" { $capture_0: outer }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_1" } };
     global:effect_handler_early_return.wado::$effect_Counter = $d_Counter;
+    inner = struct.new "effect_handler_early_return.wado//Inner" {  };
     cold_path;
-    $local_1_9 = global:effect_handler_early_return.wado::$const_obj_4;
     $local_2_10 = global:effect_handler_early_return.wado::$effect_Counter;
-    $local_3_11 = struct.new "effect_handler_early_return.wado//$Dispatch_Counter" { outer: $local_2_10, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_0" { $capture_0: $local_1_9 }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_0" } };
+    $local_3_11 = struct.new "effect_handler_early_return.wado//$Dispatch_Counter" { outer: $local_2_10, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_early_return.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/effect_handler_early_return.wado/$closure_wrapper_0" } };
     global:effect_handler_early_return.wado::$effect_Counter = $local_3_11;
     $local_4_12 = "effect_handler_early_return.wado/$effect_dispatch__Counter__next"();
     global:effect_handler_early_return.wado::$effect_Counter = $local_2_10;
@@ -170,7 +168,7 @@ fn "effect_handler_early_return.wado/run"() with Stdout {
     };
     $local_3_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(47), used: 0 };
     $local_3_3.used = 7;
-    builtin::array_copy<u8>($local_3_3.repr, 0, global:effect_handler_early_return.wado::$const_obj_3, 0, 7);
+    builtin::array_copy<u8>($local_3_3.repr, 0, global:effect_handler_early_return.wado::$const_obj_2, 0, 7);
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($local_4_12, $local_4_4.buf);
     new_used_50 = $local_3_3.used + 8;
@@ -180,7 +178,7 @@ fn "effect_handler_early_return.wado/run"() with Stdout {
     }
     start_51 = $local_3_3.used;
     $local_3_3.used = new_used_50;
-    builtin::array_copy<u8>($local_3_3.repr, start_51, global:effect_handler_early_return.wado::$const_obj_2, 0, 8);
+    builtin::array_copy<u8>($local_3_3.repr, start_51, global:effect_handler_early_return.wado::$const_obj_1, 0, 8);
     $local_4_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3_3 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(after, $local_4_4.buf);
     rx_59 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));

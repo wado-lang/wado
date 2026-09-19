@@ -1436,6 +1436,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1459,6 +1460,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
+            immediates,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1858,6 +1860,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             self.reify_return_convention_attr(&func.attrs, &params, body.is_some()),
         );
         let retains = self.reify_retain_attrs(&func.attrs, &params, body.is_some());
+        let immediates = self.reify_immediate_attrs(&func.attrs, &params, body.is_some());
 
         Some(TirFunction {
             module_source: ModuleSource::default(),
@@ -1881,6 +1884,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .cloned()
                 .expect("resolve_function/resolve_method records function_effects for every function reify emits"),
             retains,
+            immediates,
             body,
             span: func.span,
             local_count: ctx.local_count(),
@@ -1950,6 +1954,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             task_return_type: None,
             effects: vec![],
             retains: vec![],
+            immediates: vec![],
             body: Some(body),
             span: test_decl.span,
             local_count: ctx.local_count(),
@@ -2312,6 +2317,52 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             elements,
             into,
         })
+    }
+
+    /// The parameters named by `#[immediate(p)]`, each lowered to a Wasm
+    /// immediate and so required to still be a literal when codegen reads it.
+    fn reify_immediate_attrs(
+        &self,
+        attrs: &[ast::Attribute],
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Vec<String> {
+        attrs
+            .iter()
+            .filter(|a| a.name == "immediate")
+            .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
+            .collect()
+    }
+
+    fn reify_immediate_attr(
+        &self,
+        attr: &ast::Attribute,
+        params: &[tir::TirParam],
+        has_body: bool,
+    ) -> Option<String> {
+        let emit = |message: String| {
+            self.attr_error(Code::ImmediateAttr, attr, message);
+            None
+        };
+        let Some(ast::AttrArg::Ident(name)) = attr.args.first() else {
+            return emit("#[immediate] names one parameter, unquoted".to_string());
+        };
+        if !params.iter().any(|p| &p.name == name) {
+            return emit(format!("#[immediate] names no parameter: {name}"));
+        }
+        if attr.args.len() > 1 {
+            return emit(
+                "#[immediate] names one parameter; repeat the attribute for another".to_string(),
+            );
+        }
+        if has_body {
+            return emit(
+                "#[immediate] belongs to a declaration with no body: it describes how codegen \
+                 lowers the call, and a body is called rather than lowered"
+                    .to_string(),
+            );
+        }
+        Some(name.clone())
     }
 
     // ─────────────────────────────────────────────────────────────────

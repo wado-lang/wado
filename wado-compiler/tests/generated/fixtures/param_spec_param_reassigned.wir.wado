@@ -89,9 +89,7 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
-global global:param_spec_param_reassigned.wado::$const_obj_1: ref null "param_spec_param_reassigned.wado//Config" = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 9 };
-global global:param_spec_param_reassigned.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(32);
-global global:param_spec_param_reassigned.wado::$const_obj_3: ref null "param_spec_param_reassigned.wado//Config" = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 3 };
+global global:param_spec_param_reassigned.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(32);
 
 fn "param_spec_param_reassigned.wado/describe"(cfg, n) {
     if cfg.verbose {
@@ -109,13 +107,16 @@ fn "param_spec_param_reassigned.wado/reassigned"(cfg, n) {
 
 fn "param_spec_param_reassigned.wado/rebound"(p, n) {
     let before: i32;
+    let other: ref "param_spec_param_reassigned.wado//Config";
     before = "param_spec_param_reassigned.wado/describe"(p, n);
-    p = global:param_spec_param_reassigned.wado::$const_obj_1;
+    other = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 9 };
+    p = other;
     return (before * 1000) + "param_spec_param_reassigned.wado/describe"(p, n);
 }
 
 fn "param_spec_param_reassigned.wado/run"() with Stdout {
     let n_0: i32;
+    let cfg: ref "param_spec_param_reassigned.wado//Config";
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let handle: i32;
@@ -127,6 +128,7 @@ fn "param_spec_param_reassigned.wado/run"() with Stdout {
     let rx_35: i32;
     let tx_36: i32;
     n_0 = black_box(7);
+    cfg = struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 3 };
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_14("param_spec_param_reassigned.wado/reassigned"(struct.new "param_spec_param_reassigned.wado//Config" { verbose: 1, level: 3 }, n_0)), $local_3.buf);
@@ -137,9 +139,9 @@ fn "param_spec_param_reassigned.wado/run"() with Stdout {
     }
     start_27 = $local_2.used;
     $local_2.used = new_used;
-    builtin::array_copy<u8>($local_2.repr, start_27, global:param_spec_param_reassigned.wado::$const_obj_2, 0, 1);
+    builtin::array_copy<u8>($local_2.repr, start_27, global:param_spec_param_reassigned.wado::$const_obj_1, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_32("param_spec_param_reassigned.wado/rebound"(global:param_spec_param_reassigned.wado::$const_obj_3, n_0)), $local_3.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_32("param_spec_param_reassigned.wado/rebound"(cfg, n_0)), $local_3.buf);
     rx_35 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_36 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "param_spec_param_reassigned.wado/$cm_binding__Stdout_write_via_stream"(rx_35);

@@ -260,6 +260,7 @@ pub fn unreachable() -> !;
 /// survives instead of folding away. Emits no instruction. Mirrors Rust's
 /// `std::hint::black_box`; use it to keep a test or benchmark measuring the
 /// work it names.
+#[result(part_of = value)]
 pub fn black_box<T>(value: T) -> T;
 
 /// True while a lazy-initialized global still holds its `null` placeholder.
@@ -528,6 +529,9 @@ pub fn v128_load(addr: i32) -> v128;
 pub fn v128_store(addr: i32, value: v128);
 
 /// Creates a v128 constant from an i128 bit pattern.
+/// The bit pattern becomes the `v128.const` immediate, so it must reach
+/// codegen as a literal — nothing may hoist or forward it into a load.
+#[immediate(value)]
 pub fn v128_const(value: i128) -> v128;
 
 /// Bitwise NOT of a v128.
@@ -544,10 +548,13 @@ pub fn v128_bitselect(a: v128, b: v128, c: v128) -> v128;
 /// Broadcast an i32 to all 16 i8 lanes.
 pub fn i8x16_splat(a: i32) -> v128;
 /// Extract lane (signed) from i8x16.
+#[immediate(lane)]
 pub fn i8x16_extract_lane_s(lane: i32, a: v128) -> i32;
 /// Extract lane (unsigned) from i8x16.
+#[immediate(lane)]
 pub fn i8x16_extract_lane_u(lane: i32, a: v128) -> i32;
 /// Replace a lane in i8x16.
+#[immediate(lane)]
 pub fn i8x16_replace_lane(lane: i32, a: v128, value: i32) -> v128;
 /// Add i8x16 lanes.
 pub fn i8x16_add(a: v128, b: v128) -> v128;
@@ -585,6 +592,22 @@ pub fn i8x16_shr_u(a: v128, b: i32) -> v128;
 pub fn i8x16_swizzle(a: v128, indices: v128) -> v128;
 /// Select 16 bytes from the pair `a`, `b` by constant index: `0..=15` names a
 /// byte of `a` and `16..=31` a byte of `b`. Each index must be a literal.
+#[immediate(l0)]
+#[immediate(l1)]
+#[immediate(l2)]
+#[immediate(l3)]
+#[immediate(l4)]
+#[immediate(l5)]
+#[immediate(l6)]
+#[immediate(l7)]
+#[immediate(l8)]
+#[immediate(l9)]
+#[immediate(l10)]
+#[immediate(l11)]
+#[immediate(l12)]
+#[immediate(l13)]
+#[immediate(l14)]
+#[immediate(l15)]
 pub fn i8x16_shuffle(
     l0: i32,
     l1: i32,
@@ -609,10 +632,13 @@ pub fn i8x16_shuffle(
 /// Broadcast an i32 to all 8 i16 lanes.
 pub fn i16x8_splat(a: i32) -> v128;
 /// Extract lane (signed) from i16x8.
+#[immediate(lane)]
 pub fn i16x8_extract_lane_s(lane: i32, a: v128) -> i32;
 /// Extract lane (unsigned) from i16x8.
+#[immediate(lane)]
 pub fn i16x8_extract_lane_u(lane: i32, a: v128) -> i32;
 /// Replace a lane in i16x8.
+#[immediate(lane)]
 pub fn i16x8_replace_lane(lane: i32, a: v128, value: i32) -> v128;
 /// Add i16x8 lanes.
 pub fn i16x8_add(a: v128, b: v128) -> v128;
@@ -652,8 +678,10 @@ pub fn i16x8_shr_u(a: v128, b: i32) -> v128;
 /// Broadcast an i32 to all 4 i32 lanes.
 pub fn i32x4_splat(a: i32) -> v128;
 /// Extract a lane from i32x4.
+#[immediate(lane)]
 pub fn i32x4_extract_lane(lane: i32, a: v128) -> i32;
 /// Replace a lane in i32x4.
+#[immediate(lane)]
 pub fn i32x4_replace_lane(lane: i32, a: v128, value: i32) -> v128;
 /// Add i32x4 lanes.
 pub fn i32x4_add(a: v128, b: v128) -> v128;
@@ -693,8 +721,10 @@ pub fn i32x4_shr_u(a: v128, b: i32) -> v128;
 /// Broadcast an i64 to all 2 i64 lanes.
 pub fn i64x2_splat(a: i64) -> v128;
 /// Extract a lane from i64x2.
+#[immediate(lane)]
 pub fn i64x2_extract_lane(lane: i32, a: v128) -> i64;
 /// Replace a lane in i64x2.
+#[immediate(lane)]
 pub fn i64x2_replace_lane(lane: i32, a: v128, value: i64) -> v128;
 /// Add i64x2 lanes.
 pub fn i64x2_add(a: v128, b: v128) -> v128;
@@ -726,8 +756,10 @@ pub fn i64x2_shr_u(a: v128, b: i32) -> v128;
 /// Broadcast an f32 to all 4 f32 lanes.
 pub fn f32x4_splat(a: f32) -> v128;
 /// Extract a lane from f32x4.
+#[immediate(lane)]
 pub fn f32x4_extract_lane(lane: i32, a: v128) -> f32;
 /// Replace a lane in f32x4.
+#[immediate(lane)]
 pub fn f32x4_replace_lane(lane: i32, a: v128, value: f32) -> v128;
 /// Add f32x4 lanes.
 pub fn f32x4_add(a: v128, b: v128) -> v128;
@@ -763,8 +795,10 @@ pub fn f32x4_max(a: v128, b: v128) -> v128;
 /// Broadcast an f64 to both f64 lanes.
 pub fn f64x2_splat(a: f64) -> v128;
 /// Extract a lane from f64x2.
+#[immediate(lane)]
 pub fn f64x2_extract_lane(lane: i32, a: v128) -> f64;
 /// Replace a lane in f64x2.
+#[immediate(lane)]
 pub fn f64x2_replace_lane(lane: i32, a: v128, value: f64) -> v128;
 /// Add f64x2 lanes.
 pub fn f64x2_add(a: v128, b: v128) -> v128;

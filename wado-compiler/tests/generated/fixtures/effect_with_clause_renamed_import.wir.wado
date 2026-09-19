@@ -111,11 +111,10 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_with_clause_renamed_import.wado::$effect_Random: ref null "effect_with_clause_renamed_import.wado//$Dispatch_Random" = ref.null none;
-global global:effect_with_clause_renamed_import.wado::$const_obj_1: ref null "effect_with_clause_renamed_import.wado//FixedRandom" = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
 
 fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
+    let fixed: ref "effect_with_clause_renamed_import.wado//FixedRandom";
     let $local_1_1: ref "core:prelude/string.wado//String";
-    let $h_Random: ref "effect_with_clause_renamed_import.wado//FixedRandom";
     let $save_Random: ref null "effect_with_clause_renamed_import.wado//$Dispatch_Random";
     let $d_Random: ref "effect_with_clause_renamed_import.wado//$Dispatch_Random";
     let handle: i32;
@@ -126,9 +125,9 @@ fn "effect_with_clause_renamed_import.wado/run"() with Stdout {
     let $local_1_28: ref null "effect_with_clause_renamed_import.wado//$Dispatch_Random";
     let $local_2_29: ref "effect_with_clause_renamed_import.wado//$Dispatch_Random";
     let $local_3: ref "core:prelude//List<u8>";
-    $h_Random = global:effect_with_clause_renamed_import.wado::$const_obj_1;
+    fixed = struct.new "effect_with_clause_renamed_import.wado//FixedRandom" { byte: 1 };
     $save_Random = global:effect_with_clause_renamed_import.wado::$effect_Random;
-    $d_Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_Random" { outer: $save_Random, op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: $h_Random }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
+    $d_Random = struct.new "effect_with_clause_renamed_import.wado//$Dispatch_Random" { outer: $save_Random, op_get_random_bytes: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_0" { $capture_0: fixed }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_0" }, op_get_random_u64: struct.new "canonical//CanonicalClosure_1" { env: struct.new "effect_with_clause_renamed_import.wado//$Closure_1" {  }, func: ref.func "closure/effect_with_clause_renamed_import.wado/$closure_wrapper_1" } };
     global:effect_with_clause_renamed_import.wado::$effect_Random = $d_Random;
     $local_1_1 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     self_26 = $inline__effect_dispatch__Random__get_random_bytes_1: block -> ref "core:prelude//List<u8>" {

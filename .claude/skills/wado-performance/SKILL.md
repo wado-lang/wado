@@ -141,6 +141,12 @@ paid on a benchmark `fts` never touched.
   columns over nested lists, and don't build what nothing reads.** Measure the GC
   share with `--collector null` (it leaks, so drive a fixed iteration count) vs
   `--collector copying`.
+- **The GC heap's size is part of the measurement.** `wado` starts every guest
+  with 256 MiB (`--gc-heap-initial`), which the copying collector splits in two,
+  so a benchmark allocates through half a heap rather than climbing to one. A
+  raw `wasmtime` invocation starts at zero and doubles its way up to the working
+  set, paying a full trace at every rung — and there the ranking of two
+  compilers flips with the heap size rather than with the code.
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
   `array.new_default`, so an over-sized arena pays for every slot it never uses —
   once badly enough to turn a 2× faster build into a 4× slower one. Growing from

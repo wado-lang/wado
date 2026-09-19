@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags, CompileOptions};
-use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest;
 
 pub struct BuildOptions {
@@ -38,16 +38,16 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[Self::World, Self::Lib, Self::Output, Self::Help];
 
-    const KNOBS: &[KnobOpt] = &[
-        KnobOpt::OptLevel,
-        KnobOpt::InlineThreshold,
-        KnobOpt::InlineGrowth,
-        KnobOpt::OptIterations,
-        KnobOpt::LogLevel,
-        KnobOpt::NoValidate,
-        KnobOpt::NoCache,
-        KnobOpt::Allocator,
-        KnobOpt::Feature,
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::OptLevel,
+        CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineGrowth,
+        CompileKnobOpt::OptIterations,
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::NoValidate,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::Allocator,
+        CompileKnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {

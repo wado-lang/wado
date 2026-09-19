@@ -17,7 +17,7 @@ use crate::loader::WasmAsset;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::synthesis::effect_dispatch::ResourceWrapperIndex;
 use crate::tir::{
-    BuiltinDeclaration, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
+    BuiltinDeclarations, TirEnum, TirFlags, TirFunction, TirGlobal, TirImport, TirStruct, TirTest,
     TirVariantDecl, TypeTable,
 };
 use crate::token::Span;
@@ -65,10 +65,9 @@ pub struct FlatPackage {
     pub tests: Vec<TirTest>,
     /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
-    /// What each bodyless `core:builtin` declared about storage, by name.
-    /// Snapshotted here because monomorphization drops a generic bodyless
-    /// declaration, leaving the plan phase nothing to read it from.
-    pub builtin_declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>,
+    /// What each bodyless declaration stated about storage, for the lowering
+    /// plan to read after monomorphization has dropped the generic ones.
+    pub builtin_declarations: BuiltinDeclarations,
 
     /// Module name for the output (derived from filename)
     pub module_name: String,

@@ -61,6 +61,8 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global mut global:core:cli::$const_obj_0: ref null "core:prelude/types.wado//Result<(),()>" = ref.null none;
+
 fn "exit_helper_error.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
     return "wasi/wasi:cli/Stdout::write_via_stream"(data);
 }
@@ -88,7 +90,7 @@ fn "exit_helper_error.wado/$cm_export__run"() {
 }
 
 fn "core:cli/exit_error"() with Exit {
-    "exit_helper_error.wado/$cm_binding__Exit_exit"(struct.new "core:prelude/types.wado//Result<(),()>" { 1, nop });
+    "exit_helper_error.wado/$cm_binding__Exit_exit"(global:core:cli::$const_obj_0 = struct.new "core:prelude/types.wado//Result<(),()>" { 1, nop }; global:core:cli::$const_obj_0);
 }
 
 fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {

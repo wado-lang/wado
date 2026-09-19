@@ -182,6 +182,10 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
     let $cond_5: bool;
     let $cond_6: bool;
     let $cond_7: bool;
+    let v_27: ref "core:prelude//List<u8>";
+    let v_28: ref "core:prelude//List<u8>";
+    let v_29: ref "core:prelude//List<u8>";
+    let v_30: ref "core:prelude//List<u8>";
     one = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(24, 42), used: 2 };
     two = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(25, 1, 0), used: 3 };
     four = struct.new "core:prelude//List<u8>" { repr: array.new_data<u8>("   "), used: 5 };
@@ -189,7 +193,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
     let $mv$$vr_19$0: i32;
     let $mv$$vr_19$1: u64;
     let $mv$$vr_19$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_19$0, $mv$$vr_19$1, $mv$$vr_19$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(black_box(one));
+    multivalue_bind [$mv$$vr_19$0, $mv$$vr_19$1, $mv$$vr_19$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(v_27 = black_box(one); struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = v_27.repr; let $array_clone_len_3: i32; $array_clone_len_3 = v_27.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: v_27.used });
     $cond_4 = (if select i32($mv$$vr_19$0 == 0, $mv$$vr_19$1 == 42_i64, 0) -> bool {
         1;
     } else {
@@ -203,7 +207,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
     let $mv$$vr_20$0: i32;
     let $mv$$vr_20$1: u64;
     let $mv$$vr_20$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_20$0, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(black_box(two));
+    multivalue_bind [$mv$$vr_20$0, $mv$$vr_20$1, $mv$$vr_20$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(v_28 = black_box(two); struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = v_28.repr; let $array_clone_len_6: i32; $array_clone_len_6 = v_28.used; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>($array_clone_len_6); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6); $array_clone_dst_5), used: v_28.used });
     $cond_5 = (if select i32($mv$$vr_20$0 == 0, $mv$$vr_20$1 == 256_i64, 0) -> bool {
         1;
     } else {
@@ -217,7 +221,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
     let $mv$$vr_21$0: i32;
     let $mv$$vr_21$1: u64;
     let $mv$$vr_21$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_21$0, $mv$$vr_21$1, $mv$$vr_21$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(black_box(four));
+    multivalue_bind [$mv$$vr_21$0, $mv$$vr_21$1, $mv$$vr_21$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(v_29 = black_box(four); struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_7: ref Array<u8>; $array_clone_src_7 = v_29.repr; let $array_clone_len_9: i32; $array_clone_len_9 = v_29.used; let $array_clone_dst_8: ref Array<u8>; $array_clone_dst_8 = builtin::array_new<u8>($array_clone_len_9); builtin::array_copy<u8>($array_clone_dst_8, 0, $array_clone_src_7, 0, $array_clone_len_9); $array_clone_dst_8), used: v_29.used });
     $cond_6 = (if select i32($mv$$vr_21$0 == 0, $mv$$vr_21$1 == 65536_i64, 0) -> bool {
         1;
     } else {
@@ -231,7 +235,7 @@ fn "multi_value_return_match_arm_block.wado/$test_0_a_u64_read_back_through_the_
     let $mv$$vr_22$0: i32;
     let $mv$$vr_22$1: u64;
     let $mv$$vr_22$2: ref null "core:serde//DeserializeError";
-    multivalue_bind [$mv$$vr_22$0, $mv$$vr_22$1, $mv$$vr_22$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(black_box(truncated));
+    multivalue_bind [$mv$$vr_22$0, $mv$$vr_22$1, $mv$$vr_22$2] = "core:cbor/core/cbor/from_bytes<u64,core:prelude/bytes.wado/ByteList>"(v_30 = black_box(truncated); struct.new "core:prelude//List<u8>" { repr: ref.as_non_null(let $array_clone_src_10: ref Array<u8>; $array_clone_src_10 = v_30.repr; let $array_clone_len_12: i32; $array_clone_len_12 = v_30.used; let $array_clone_dst_11: ref Array<u8>; $array_clone_dst_11 = builtin::array_new<u8>($array_clone_len_12); builtin::array_copy<u8>($array_clone_dst_11, 0, $array_clone_src_10, 0, $array_clone_len_12); $array_clone_dst_11), used: v_30.used });
     $cond_7 = $mv$$vr_22$0 == 1;
     if @unlikely($cond_7 == 0) {
         cold_path;
