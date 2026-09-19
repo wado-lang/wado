@@ -114,10 +114,10 @@ impl<'a> SharedEscape<'a> {
         if owner.body.is_some() {
             return None;
         }
-        // Only a parameter has something declared about it. A result comes out
-        // of a body nothing here can see.
+        // A `Ret` slot is raised only for a body the walk has just read, so a
+        // bodyless owner leaves the parameter as the only case.
         let Slot::Param(_, pos) = slot else {
-            return Some(false);
+            unreachable!("`{slot:?}` names a result of the bodyless `{}`", owner.name)
         };
         let verdict = self.reads_arg(&owner, *pos);
         compiler_trace!(

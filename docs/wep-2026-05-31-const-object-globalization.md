@@ -308,3 +308,25 @@ loop, and a pure call building a heap value from literals.
   intra-function SROA cannot reach.
 - Cost: a marginally larger global section for constants a path may never reach,
   acceptable given no access-time overhead.
+
+## Known gaps
+
+- `shared_escape` refuses on two shapes that no fixture covers: a promoted
+  operand whose taint the walk cannot name, and a parameter position the
+  callee's body declares nothing for. Both refuse, so the gap is coverage and
+  not correctness. Closing it means reaching those shapes from Wado source, and
+  neither is steerable today — a test that merely passes would read as coverage
+  the code does not have.
+- Only `core:builtin` answers the bodyless-callee question. A Component Model
+  import and a `.wasm` asset export always refuse, however read-only they are,
+  because `#[retain]` is not complete on them the way it is on `core:builtin`.
+  Closing it means deciding what an absent clause means on those two, which is a
+  language question rather than a pass one.
+- `#[immediate(p)]` is read by `const_object_globalization` alone. Any later
+  pass that would substitute an argument has to consult it too, and nothing
+  makes it. The declarations are complete as of the SIMD lane operands and
+  `v128_const`, which are the only positions codegen reads a literal from.
+- The hoist is priced per constant, never per program. A module whose every
+  constant is retained hoists all of them, and nothing bounds what that adds to
+  the module-lifetime live set — which the WasmGC cost model says is the tax
+  paid at every collection.
