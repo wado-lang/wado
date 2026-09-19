@@ -149,11 +149,11 @@ counter walk. Two results decided it.
 
 #### No vector form is worth having
 
-The two candidates worth shipping are slower in one, and the third gains 9%
-while trailing both by 3.5× either way. A keyed round is a serial dependency
-chain, so widening it multiplies the data without shortening the chain, and the
-scalar instruction set wins every exchange that matters: x86 returns both halves
-of a 64×64 multiply in one
+The two candidates worth shipping are slower in one, and the third gains 9% and
+is still the slowest of the three in both columns. A keyed round is a serial
+dependency chain, so widening it multiplies the data without shortening the
+chain, and the scalar instruction set wins every exchange that matters: x86
+returns both halves of a 64×64 multiply in one
 `mulq` and rotates in one `rolq`, while Wasm's `i64x2.mul` has no x86
 instruction below AVX512DQ, there is no vector rotate, and the high half of a
 32×32 product takes two widening multiplies and a shuffle. The published
@@ -163,8 +163,8 @@ rankings, all of them taken on scalar or GPU hardware, invert here.
 
 Threefry leads on a counter drain and loses by 1.8× on the terrain shape,
 because it emits two words per call and a consumer asking for the value at one
-coordinate throws one away. Squares emits exactly one. Philox is 3.5× behind on
-every axis and is out.
+coordinate throws one away. Squares emits exactly one. Philox is last in every
+column, by 2.1× to 5.6×, and is out.
 
 #### The key is derived, not taken
 
@@ -195,7 +195,8 @@ pub trait Seedable with () {
 Nothing in `core:prng` declares an effect, and nothing in it can: a `Seed` is
 data, and every constructor of one is arithmetic. Two hundred and fifty-six bits
 is xoshiro's whole state and SHISHUA's own seed, which SHISHUA expands into its
-1024-bit state, and is the width Rust's `SeedableRng` and ChaCha8Rand already use.
+1024-bit state, and is the width Go's ChaCha8Rand and Rust's `ChaCha8Rng`
+already take.
 
 `from_u64` expands through SplitMix64, so `Seed::from_u64(0)` is as good a seed
 as any other — the property NumPy's `SeedSequence` exists to provide, and the
