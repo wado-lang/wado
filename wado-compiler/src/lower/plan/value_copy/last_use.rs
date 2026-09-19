@@ -639,6 +639,14 @@ impl Analyzer<'_> {
     /// The access path a binding's value projects: a direct place, or a
     /// receiver-aliasing accessor call whose receiver / first arg is a place.
     fn source_path(&self, value: &TirExpr) -> Option<AccessPath> {
+        // Sharing storage a call named rests on the argument it named being
+        // borrowed: `through_borrow` is what makes a write through the lender
+        // refuse the share. A by-value argument is lent by nobody, so its path
+        // carries no such flag and a later write would go unseen —
+        // `let s = black_box(y); y.a = …` must copy, as `let s = y` does.
+        if self.resolver.hands_back_by_value(value) {
+            return None;
+        }
         if let Names::Place(p) = self.resolver.names(value) {
             return Some(p);
         }

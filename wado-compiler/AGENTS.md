@@ -52,9 +52,11 @@ rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
 from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
-`builtin::select` returns one of its operands rather than a copy, so write the
-`if` for `i128`, `u128` and any composite: `src/optimize/select_lowering.rs`
-rewrites what qualifies and refuses the rest on that ground.
+`builtin::select` evaluates both operands and hands one back, so it is planned
+as the merge it is: the copy keeping a composite result independent lands on the
+result, as the equivalent `if` pays. Choose between them on eagerness, not on
+copies. `src/optimize/select_lowering.rs` goes the other way, rewriting an `if`
+into a branchless select only where both arms are duplicable pure leaves.
 
 ## E2E Tests
 

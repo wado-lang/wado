@@ -278,6 +278,21 @@ impl<'a> Resolver<'a> {
         self.lent.get(&local).map(|(position, _)| *position)
     }
 
+    /// Whether `expr` is a call handing back the storage of an argument it was
+    /// given by value rather than one it borrowed. The result names that
+    /// argument's place either way, but only a borrowed one has a lender whose
+    /// later writes an alias analysis can refuse a share on.
+    #[must_use]
+    pub fn hands_back_by_value(&self, expr: &TirExpr) -> bool {
+        let TirExprKind::Call { func, args, .. } = &expr.kind else {
+            return false;
+        };
+        self.builtins
+            .part_of(&**func)
+            .and_then(|p| args.get(p))
+            .is_some_and(|a| !is_reference(a.expr.type_id, self.type_table))
+    }
+
     /// What `expr` names. Total over the expression kinds: a shape with no arm
     /// of its own is [`Names::Unknown`], never silently nothing.
     #[must_use]

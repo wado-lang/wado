@@ -1942,6 +1942,11 @@ impl FunctionTranslator<'_, '_> {
                 .map(|(i, (e, is_mut))| {
                     if has_receiver && i == 0 {
                         self.convert_receiver_arg(e, *is_mut)
+                    } else if self.passes_through(func, i) {
+                        ArenaCallArg {
+                            expr: self.convert_specialized_arg_operand(e),
+                            is_mut: *is_mut,
+                        }
                     } else {
                         self.convert_call_arg_at(e, *is_mut, Some(func), i, &mut_roots)
                     }
@@ -2455,6 +2460,31 @@ impl FunctionTranslator<'_, '_> {
             _ => copied,
         };
         ArenaCallArg { expr, is_mut }
+    }
+
+    /// Whether the callee hands parameter `pos` straight back instead of keeping
+    /// it, so the copy that makes the result independent belongs at the result —
+    /// where the freshness analysis puts one only if the caller can still reach
+    /// the argument. Copying here would pay unconditionally, and for `select`
+    /// would pay for both operands where the equivalent `if` pays for one.
+    ///
+    /// `#[result(part_of = p)]` states it for one parameter. `builtin::select`
+    /// merges two, which that clause cannot name.
+    fn passes_through(&self, func: &FunctionRef, pos: usize) -> bool {
+        let declared = if value_copy::analyze::is_select(func) {
+            value_copy::analyze::SELECT_OPERANDS.contains(&pos)
+        } else {
+            self.base.value_copy.builtins.part_of(func) == Some(pos)
+        };
+        // A retained position outlives the call, so the caller's storage would be
+        // the callee's to keep and the result's copy comes too late to defend it.
+        declared
+            && !self
+                .base
+                .value_copy
+                .builtins
+                .retain_specs(func)
+                .any(|r| r.source == pos)
     }
 
     /// Convert one call argument, wrapping it in `$value_copy$T` unless
