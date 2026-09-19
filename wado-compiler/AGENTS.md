@@ -39,6 +39,9 @@ The Wado compiler crate.
   The e2e fixtures cover the language, so run
   `cargo test -p wado-compiler --test e2e` for anything the language touches. It
   runs O0 and O2, and the other levels only under `CI` or `WADO_FULL_TEST`.
+  Never set `WADO_FULL_TEST` yourself: the other levels are CI's, and the
+  `ignored` lines that announce them are the split working, not a gap to close.
+  Run it only when told to by name.
   `mise run test` and `mise run test-wado` take an hour, so they belong at the
   end and not in the loop.
 - This crate must compile for `wasm32-unknown-unknown` (checked in CI). Keep
