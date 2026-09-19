@@ -145,8 +145,9 @@ its own scalar form:
 
 Two results decided it.
 
-**No vector form is worth having.** All three are at or below their own scalar
-form. A keyed round is a serial dependency chain, so widening it multiplies the
+**No vector form is worth having.** The two candidates worth shipping are slower
+in one, and the third gains 9% while trailing both by 3.5× either way.
+A keyed round is a serial dependency chain, so widening it multiplies the
 data without shortening the chain, and the scalar instruction set wins every
 exchange that matters: x86 returns both halves of a 64×64 multiply in one
 `mulq` and rotates in one `rolq`, while Wasm's `i64x2.mul` has no x86
