@@ -18,7 +18,7 @@ use crate::dep_component::{
 use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext};
-use crate::knobs::{CompileKnobs, EmbedOpt, EmbedOptions, KnobOpt};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
 use crate::run_cache::RunCache;
@@ -176,16 +176,16 @@ impl Opt {
         Self::Help,
     ];
 
-    const KNOBS: &[KnobOpt] = &[
-        KnobOpt::OptLevel,
-        KnobOpt::InlineThreshold,
-        KnobOpt::InlineGrowth,
-        KnobOpt::OptIterations,
-        KnobOpt::LogLevel,
-        KnobOpt::NoValidate,
-        KnobOpt::NoCache,
-        KnobOpt::Allocator,
-        KnobOpt::Feature,
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::OptLevel,
+        CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineGrowth,
+        CompileKnobOpt::OptIterations,
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::NoValidate,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::Allocator,
+        CompileKnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {

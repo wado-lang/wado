@@ -1,15 +1,16 @@
-//! The build knobs shared by every subcommand that compiles.
-//!
-//! [`CompileKnobs`] is the single carrier: each subcommand declares which
-//! [`KnobOpt`]s it exposes, and the parse loop, the help text, and the compile
-//! core all read that one list. A new knob is added here once instead of once
-//! per subcommand.
+//! The knobs shared across subcommands: [`CompileKnobs`] for what the compiler
+//! is told, [`RuntimeKnobs`] for what the wasmtime engine is built with. Each
+//! subcommand declares the options it exposes as a list, which drives its parse
+//! loop and its help text alike.
 
 use lexopt::Parser;
 use wado_compiler::LogLevel;
 use wado_compiler::param_resolution::ParamInputs;
 
 use crate::args::{self, CliExit, OptSpec};
+use crate::runtime::{
+    DEFAULT_COLLECTOR, DEFAULT_GC_HEAP_INITIAL_SIZE, parse_collector, parse_gc_heap_size,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum OptLevel {
@@ -72,9 +73,9 @@ pub fn parse_opt_level_arg(parser: &mut Parser) -> Result<OptLevel, CliExit> {
 }
 
 /// A knob shared by the compiling subcommands. Each one declares the subset it
-/// accepts as a `&[KnobOpt]`, used for both matching and help rendering.
+/// accepts as a `&[CompileKnobOpt]`, used for both matching and help rendering.
 #[derive(Clone, Copy)]
-pub enum KnobOpt {
+pub enum CompileKnobOpt {
     OptLevel,
     InlineThreshold,
     InlineGrowth,
@@ -86,7 +87,7 @@ pub enum KnobOpt {
     NoValidate,
 }
 
-impl KnobOpt {
+impl CompileKnobOpt {
     #[must_use]
     pub const fn spec(self) -> OptSpec {
         match self {
@@ -191,28 +192,94 @@ impl Default for CompileKnobs {
 }
 
 impl CompileKnobs {
-    /// Apply a matched [`KnobOpt`], consuming its value from the parser.
-    pub fn apply(&mut self, opt: KnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
+    /// Apply a matched [`CompileKnobOpt`], consuming its value from the parser.
+    pub fn apply(&mut self, opt: CompileKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
         match opt {
-            KnobOpt::OptLevel => self.opt_level = parse_opt_level_arg(parser)?,
-            KnobOpt::InlineThreshold => {
+            CompileKnobOpt::OptLevel => self.opt_level = parse_opt_level_arg(parser)?,
+            CompileKnobOpt::InlineThreshold => {
                 self.opt.inline_threshold = Some(args::parse_inline_threshold_arg(
                     "--optimize-inline-threshold",
                     parser,
                 )?);
             }
-            KnobOpt::InlineGrowth => {
+            CompileKnobOpt::InlineGrowth => {
                 self.opt.inline_growth =
                     Some(args::parse_u32_arg("--optimize-inline-growth", parser)?);
             }
-            KnobOpt::OptIterations => {
+            CompileKnobOpt::OptIterations => {
                 self.opt.iterations = Some(args::parse_u32_arg("--optimize-iterations", parser)?);
             }
-            KnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
-            KnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
-            KnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
-            KnobOpt::NoCache => self.no_cache = true,
-            KnobOpt::NoValidate => self.skip_validation = true,
+            CompileKnobOpt::LogLevel => self.log_level = args::parse_log_level_arg(parser)?,
+            CompileKnobOpt::Allocator => self.allocator = Some(args::require_string(parser)?),
+            CompileKnobOpt::Feature => self.codegen_flags.push(args::require_string(parser)?),
+            CompileKnobOpt::NoCache => self.no_cache = true,
+            CompileKnobOpt::NoValidate => self.skip_validation = true,
+        }
+        Ok(())
+    }
+}
+
+/// A knob shared by the subcommands that host a guest (`run` / `serve` /
+/// `test`). Each declares the subset it accepts as a `&[RuntimeKnobOpt]`.
+///
+/// `--profile` is deliberately not here: the modes it takes and the caveats it
+/// carries differ per subcommand, so each states its own.
+#[derive(Clone, Copy)]
+pub enum RuntimeKnobOpt {
+    Collector,
+    GcHeapInitial,
+}
+
+impl RuntimeKnobOpt {
+    pub const ALL: &[Self] = &[Self::Collector, Self::GcHeapInitial];
+
+    #[must_use]
+    pub const fn spec(self) -> OptSpec {
+        match self {
+            Self::Collector => OptSpec {
+                long: Some("collector"),
+                short: None,
+                value: Some("<mode>"),
+                desc: "GC collector (default: copying):\ncopying, drc (deferred ref-counting), null (never collects)",
+            },
+            Self::GcHeapInitial => OptSpec {
+                long: Some("gc-heap-initial"),
+                short: None,
+                value: Some("<size>"),
+                desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
+            },
+        }
+    }
+}
+
+/// Every knob a guest-hosting subcommand parses and forwards to the wasmtime
+/// engine.
+#[derive(Clone, Copy, Debug)]
+pub struct RuntimeKnobs {
+    pub collector: wasmtime::Collector,
+    pub gc_heap_initial_size: u64,
+}
+
+impl Default for RuntimeKnobs {
+    fn default() -> Self {
+        Self {
+            collector: DEFAULT_COLLECTOR,
+            gc_heap_initial_size: DEFAULT_GC_HEAP_INITIAL_SIZE,
+        }
+    }
+}
+
+impl RuntimeKnobs {
+    /// Apply a matched [`RuntimeKnobOpt`], consuming its value from the parser.
+    pub fn apply(&mut self, opt: RuntimeKnobOpt, parser: &mut Parser) -> Result<(), CliExit> {
+        let spec = args::require_string(parser)?;
+        match opt {
+            RuntimeKnobOpt::Collector => {
+                self.collector = parse_collector(&spec).map_err(CliExit::error)?;
+            }
+            RuntimeKnobOpt::GcHeapInitial => {
+                self.gc_heap_initial_size = parse_gc_heap_size(&spec).map_err(CliExit::error)?;
+            }
         }
         Ok(())
     }

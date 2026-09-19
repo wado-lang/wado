@@ -266,7 +266,7 @@ fn run_gc_heap_initial_defaults() {
     let parser = Parser::from_args(&["input.wado"]);
     let opts = wado_cli::run::parse_args(parser).unwrap();
     assert_eq!(
-        opts.gc_heap_initial_size,
+        opts.runtime.gc_heap_initial_size,
         wado_cli::runtime::DEFAULT_GC_HEAP_INITIAL_SIZE
     );
 }
@@ -281,8 +281,21 @@ fn run_gc_heap_initial_suffixes() {
     ] {
         let parser = Parser::from_args(&["--gc-heap-initial", spec, "input.wado"]);
         let opts = wado_cli::run::parse_args(parser).unwrap();
-        assert_eq!(opts.gc_heap_initial_size, expected, "parsing {spec}");
+        assert_eq!(
+            opts.runtime.gc_heap_initial_size, expected,
+            "parsing {spec}"
+        );
     }
+}
+
+/// The runtime knobs are one list, so a subcommand that hosts a guest gets
+/// every one of them. `test` was the last to have none.
+#[test]
+fn test_takes_the_runtime_knobs() {
+    let parser = Parser::from_args(&["--collector", "null", "--gc-heap-initial", "512m", "a.wado"]);
+    let opts = wado_cli::test::parse_args(parser).unwrap();
+    assert_eq!(opts.runtime.collector, wasmtime::Collector::Null);
+    assert_eq!(opts.runtime.gc_heap_initial_size, 512 << 20);
 }
 
 #[test]

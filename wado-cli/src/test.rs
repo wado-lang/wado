@@ -21,7 +21,7 @@ use wasmtime::{Engine, GuestProfiler, UpdateDeadline};
 use crate::args::{self, CliExit};
 use crate::compile::{self, CompileFlags};
 use crate::discover;
-use crate::knobs::{CompileKnobs, KnobOpt, OptLevel};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, OptLevel, RuntimeKnobOpt, RuntimeKnobs};
 use crate::rss::summary_line;
 use crate::run_cache::RunCache;
 use crate::runtime::{self, ProfileMode, WasiState};
@@ -44,6 +44,7 @@ pub struct TestOptions {
     /// `knobs.allocator` stays `None` so the compiler auto-selects the debug
     /// allocator for the `test` world; `--allocator` overrides.
     pub knobs: CompileKnobs,
+    pub runtime: RuntimeKnobs,
     pub preopened_dirs: Vec<(String, String)>,
     /// `--no-run`: compile every file (which still refreshes
     /// `<primary>.kiln.json` as a side-effect) but skip wasmtime execution.
@@ -132,15 +133,15 @@ impl Opt {
         Self::Help,
     ];
 
-    const KNOBS: &[KnobOpt] = &[
-        KnobOpt::OptLevel,
-        KnobOpt::InlineThreshold,
-        KnobOpt::InlineGrowth,
-        KnobOpt::OptIterations,
-        KnobOpt::LogLevel,
-        KnobOpt::Allocator,
-        KnobOpt::NoCache,
-        KnobOpt::Feature,
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::OptLevel,
+        CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineGrowth,
+        CompileKnobOpt::OptIterations,
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::Allocator,
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -220,6 +221,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(RuntimeKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -288,6 +290,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     let mut no_run = false;
     let mut format = TestFormat::Heartbeat;
     let mut profile = ProfileMode::None;
+    let mut runtime_knobs = RuntimeKnobs::default();
     // Tests compile unoptimized by default: the compile stage dominates a run,
     // and `-O` opts back in.
     let mut knobs = CompileKnobs {
@@ -303,6 +306,8 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
+            runtime_knobs.apply(r, &mut parser)?;
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
@@ -438,6 +443,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<TestOptions, CliExit> {
         package_runs,
         jobs,
         knobs,
+        runtime: runtime_knobs,
         preopened_dirs: dirs.finish(),
         no_run,
         test_name_filters,
@@ -817,6 +823,7 @@ fn load_module(
     artifact: CompiledArtifact,
     opt_level: wasmtime::OptLevel,
     profile: &ProfileMode,
+    runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<&GuestProfilerSlot>,
     module_permit: OwnedSemaphorePermit,
     observer: Arc<StageObserver>,
@@ -824,7 +831,11 @@ fn load_module(
 ) -> LoadOutcome {
     let load_start = Instant::now();
     let panic_or_result = std::panic::catch_unwind(AssertUnwindSafe(|| -> Result<_> {
-        let engine = Arc::new(runtime::create_test_engine(opt_level, profile)?);
+        let engine = Arc::new(runtime::create_test_engine(
+            opt_level,
+            profile,
+            runtime_knobs,
+        )?);
         let component = Arc::new(Component::new(&engine, &artifact.wasm)?);
         let linker = Arc::new(runtime::create_linker(&engine)?);
         let profiler = match (profile, profiler_slot) {
@@ -1100,6 +1111,7 @@ async fn run_load_stage(
     artifact_rx: mpsc::Receiver<CompiledArtifact>,
     opt_level: wasmtime::OptLevel,
     profile: ProfileMode,
+    runtime_knobs: RuntimeKnobs,
     parallelism: usize,
     cpu_budget: Arc<Semaphore>,
     modules_budget: Arc<Semaphore>,
@@ -1147,6 +1159,7 @@ async fn run_load_stage(
                         artifact,
                         opt_level,
                         &profile_for_load,
+                        runtime_knobs,
                         slot_for_load.as_ref(),
                         module_permit,
                         observer_inner,
@@ -1412,6 +1425,7 @@ async fn run_pipeline(
     preopened_dirs: Arc<Vec<(String, String)>>,
     no_run: bool,
     profile: ProfileMode,
+    runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
@@ -1472,6 +1486,7 @@ async fn run_pipeline(
                 artifact_rx,
                 opt_level,
                 profile.clone(),
+                runtime_knobs,
                 load_jobs,
                 budget.cpu.clone(),
                 budget.modules.clone(),
@@ -2056,6 +2071,7 @@ async fn run_one_package(
     show_banner: bool,
     no_run: bool,
     profile: ProfileMode,
+    runtime_knobs: RuntimeKnobs,
     profiler_slot: Option<GuestProfilerSlot>,
     reporter: Arc<dyn TestReporter>,
     run_cache: Arc<RunCache>,
@@ -2072,6 +2088,7 @@ async fn run_one_package(
         preopened_dirs,
         no_run,
         profile,
+        runtime_knobs,
         profiler_slot,
         reporter.clone(),
         run_cache,
@@ -2250,6 +2267,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
     let jobs = opts.jobs;
     let no_run = opts.no_run;
     let profile = opts.profile;
+    let runtime_knobs = opts.runtime;
     let package_runs = opts.package_runs;
     let preopened_dirs = Arc::new(opts.preopened_dirs);
 
@@ -2299,6 +2317,7 @@ pub async fn run(opts: TestOptions) -> Result<(), CliExit> {
             multi_pkg,
             no_run,
             profile.clone(),
+            runtime_knobs,
             profiler_slot.clone(),
             reporter.clone(),
             Arc::clone(&run_cache),

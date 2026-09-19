@@ -18,7 +18,7 @@ use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, 
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
-use crate::knobs::{CompileKnobs, KnobOpt};
+use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
 #[derive(Debug)]
@@ -45,7 +45,7 @@ enum Opt {
 impl Opt {
     const ALL: &[Self] = &[Self::Warn, Self::World, Self::Help];
 
-    const KNOBS: &[KnobOpt] = &[KnobOpt::LogLevel, KnobOpt::NoCache];
+    const KNOBS: &[CompileKnobOpt] = &[CompileKnobOpt::LogLevel, CompileKnobOpt::NoCache];
 
     const fn spec(self) -> args::OptSpec {
         match self {

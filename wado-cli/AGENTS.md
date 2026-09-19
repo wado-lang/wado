@@ -10,12 +10,17 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - Argument parsing is hand-rolled on `lexopt`. Do not introduce clap or another
   parser framework. Each subcommand parses its own options and owns its usage
   and help text in its own module.
-- The knobs every compiling subcommand shares (`-O`, `--log-level`,
-  `--allocator`, `-f`, `--no-cache`, `-D`, …) are declared once in `knobs.rs` as
-  `CompileKnobs` / `KnobOpt`. A subcommand lists the subset it accepts as
-  `Opt::KNOBS` and carries one `knobs: CompileKnobs` field; it declares no
-  fields, parse arms, or specs of its own for them. Add a shared knob in
-  `knobs.rs` only.
+- Shared knobs are declared once in `knobs.rs`, in two families: `CompileKnobs`
+  / `CompileKnobOpt` for what the compiler is told (`-O`, `--log-level`,
+  `--allocator`, `-f`, `--no-cache`, …), and `RuntimeKnobs` / `RuntimeKnobOpt`
+  for what the wasmtime engine is built with (`--collector`,
+  `--gc-heap-initial`). A subcommand lists the subset it accepts as
+  `Opt::KNOBS` / `RuntimeKnobOpt::ALL` and carries one field of each carrier it
+  uses; it declares no fields, parse arms, or specs of its own for them. Add a
+  shared knob in `knobs.rs` only.
+- `--profile` is not a shared knob, though `run` / `serve` / `test` all take it:
+  each accepts different modes and carries a different caveat, so each states
+  its own spec.
 - A short flag means one thing across the subcommands that compile: `-f` is
   `--feature` there, never `--filter` or `--format`. Outside that family only
   `init -f` (`--force`) claims it.

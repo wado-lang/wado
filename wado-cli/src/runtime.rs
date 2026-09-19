@@ -19,6 +19,7 @@ use wasmtime_wasi_tls::{
 
 use crate::args::CliExit;
 use crate::http_hooks::WadoHttpHooks;
+use crate::knobs::RuntimeKnobs;
 use crate::timezone_host::add_to_linker;
 use crate::tls_trust::{build_root_cert_store, install_default_crypto_provider};
 
@@ -403,12 +404,7 @@ pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
 
 /// Create a wasmtime Config with all required Wasm features enabled.
 #[must_use]
-pub fn create_config(
-    opt_level: OptLevel,
-    profile: &ProfileMode,
-    collector: Collector,
-    gc_heap_initial_size: u64,
-) -> Config {
+pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeKnobs) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
@@ -420,14 +416,14 @@ pub fn create_config(
     // lay out hinted branches (from `builtin::cold_path()`) for the
     // predicted-taken path.
     config.wasm_branch_hinting(true);
-    config.collector(collector);
+    config.collector(knobs.collector);
     // Start the GC heap at a size a program can run in, rather than at zero.
     // wasmtime collects before it grows, and grows only where the collection
     // left too little, so a heap starting empty doubles its way up to the
     // working set with a full trace paid at every rung of the ladder. The 4 GiB
     // of address space is reserved either way, so this decides what is
     // committed, not what is mapped.
-    config.gc_heap_initial_size(gc_heap_initial_size);
+    config.gc_heap_initial_size(knobs.gc_heap_initial_size);
 
     config.cranelift_opt_level(opt_level);
 
@@ -455,15 +451,9 @@ pub fn create_config(
 pub fn create_engine(
     opt_level: OptLevel,
     profile: &ProfileMode,
-    collector: Collector,
-    gc_heap_initial_size: u64,
+    knobs: RuntimeKnobs,
 ) -> Result<Engine> {
-    Ok(Engine::new(&create_config(
-        opt_level,
-        profile,
-        collector,
-        gc_heap_initial_size,
-    ))?)
+    Ok(Engine::new(&create_config(opt_level, profile, knobs))?)
 }
 
 /// Create a wasmtime Engine tuned for Kiln generator execution.
@@ -476,12 +466,7 @@ pub fn create_engine(
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
 pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
-    let mut config = create_config(
-        opt_level,
-        &ProfileMode::None,
-        DEFAULT_COLLECTOR,
-        DEFAULT_GC_HEAP_INITIAL_SIZE,
-    );
+    let mut config = create_config(opt_level, &ProfileMode::None, RuntimeKnobs::default());
     config.consume_fuel(true);
     Ok(Engine::new(&config)?)
 }
@@ -492,13 +477,12 @@ pub fn create_kiln_engine(opt_level: OptLevel) -> Result<Engine> {
 /// # Errors
 ///
 /// Returns an error if the engine cannot be created with the given configuration.
-pub fn create_test_engine(opt_level: OptLevel, profile: &ProfileMode) -> Result<Engine> {
-    let mut config = create_config(
-        opt_level,
-        profile,
-        DEFAULT_COLLECTOR,
-        DEFAULT_GC_HEAP_INITIAL_SIZE,
-    );
+pub fn create_test_engine(
+    opt_level: OptLevel,
+    profile: &ProfileMode,
+    knobs: RuntimeKnobs,
+) -> Result<Engine> {
+    let mut config = create_config(opt_level, profile, knobs);
     config.epoch_interruption(true);
     Ok(Engine::new(&config)?)
 }
@@ -528,15 +512,9 @@ pub fn create_serve_engine(
     opt_level: OptLevel,
     max_instances: u32,
     max_stacks: u32,
-    collector: Collector,
-    gc_heap_initial_size: u64,
+    knobs: RuntimeKnobs,
 ) -> Result<Engine> {
-    let mut config = create_config(
-        opt_level,
-        &ProfileMode::None,
-        collector,
-        gc_heap_initial_size,
-    );
+    let mut config = create_config(opt_level, &ProfileMode::None, knobs);
     config.epoch_interruption(true);
 
     // Generous per-instance multipliers: a single component instantiation

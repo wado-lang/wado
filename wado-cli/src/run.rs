@@ -12,7 +12,7 @@ use wasmtime::{GuestProfiler, UpdateDeadline};
 use crate::args::{self, CliExit};
 use crate::build::build_for_driver;
 use crate::compile::CompileFlags;
-use crate::knobs::{CompileKnobs, KnobOpt};
+use crate::knobs::{CompileKnobOpt, CompileKnobs, RuntimeKnobOpt, RuntimeKnobs};
 use crate::manifest;
 use crate::runtime::{self, ProfileMode};
 use crate::sync::lock;
@@ -25,39 +25,29 @@ pub struct RunOptions {
     pub preopened_dirs: Vec<(String, String)>,
     /// Arguments forwarded to the guest via `wasi:cli/environment.get-arguments`.
     pub program_args: Vec<String>,
-    pub collector: wasmtime::Collector,
-    pub gc_heap_initial_size: u64,
+    pub runtime: RuntimeKnobs,
 }
 
 #[derive(Clone, Copy)]
 enum Opt {
     Dir,
     NoDir,
-    Collector,
-    GcHeapInitial,
     Profile,
     Help,
 }
 
 impl Opt {
-    const ALL: &[Self] = &[
-        Self::Dir,
-        Self::NoDir,
-        Self::Collector,
-        Self::GcHeapInitial,
-        Self::Profile,
-        Self::Help,
-    ];
+    const ALL: &[Self] = &[Self::Dir, Self::NoDir, Self::Profile, Self::Help];
 
-    const KNOBS: &[KnobOpt] = &[
-        KnobOpt::NoCache,
-        KnobOpt::OptLevel,
-        KnobOpt::InlineThreshold,
-        KnobOpt::InlineGrowth,
-        KnobOpt::OptIterations,
-        KnobOpt::LogLevel,
-        KnobOpt::Allocator,
-        KnobOpt::Feature,
+    const KNOBS: &[CompileKnobOpt] = &[
+        CompileKnobOpt::NoCache,
+        CompileKnobOpt::OptLevel,
+        CompileKnobOpt::InlineThreshold,
+        CompileKnobOpt::InlineGrowth,
+        CompileKnobOpt::OptIterations,
+        CompileKnobOpt::LogLevel,
+        CompileKnobOpt::Allocator,
+        CompileKnobOpt::Feature,
     ];
 
     const fn spec(self) -> args::OptSpec {
@@ -71,8 +61,6 @@ impl Opt {
                 desc: "Preopen directory for WASI filesystem access\nUse --dir host::guest to specify different guest path\nOverrides the default of preopening the current directory",
             },
             Self::NoDir => args::NO_DIR_SPEC,
-            Self::Collector => args::COLLECTOR_SPEC,
-            Self::GcHeapInitial => args::GC_HEAP_INITIAL_SPEC,
             Self::Profile => args::OptSpec {
                 long: Some("profile"),
                 short: None,
@@ -101,6 +89,7 @@ fn format_usage() -> String {
         args::OptsHelp::default()
             .add(Opt::ALL, |o| o.spec())
             .add(Opt::KNOBS, |o| o.spec())
+            .add(RuntimeKnobOpt::ALL, |o| o.spec())
             .add(args::ParamOpt::ALL, |o| o.spec())
             .render()
     )
@@ -143,28 +132,20 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
     let mut profile = ProfileMode::None;
     let mut dirs = args::DirGrants::default();
     let mut program_args: Vec<String> = Vec::new();
-    let mut collector = runtime::DEFAULT_COLLECTOR;
-    let mut gc_heap_initial_size = runtime::DEFAULT_GC_HEAP_INITIAL_SIZE;
+    let mut runtime_knobs = RuntimeKnobs::default();
     let mut knobs = CompileKnobs::default();
 
     while let Some(arg) = args::next_arg(&mut parser)? {
         if let Some(k) = args::match_opt(&arg, Opt::KNOBS, |k| k.spec()) {
             knobs.apply(k, &mut parser)?;
+        } else if let Some(r) = args::match_opt(&arg, RuntimeKnobOpt::ALL, |r| r.spec()) {
+            runtime_knobs.apply(r, &mut parser)?;
         } else if let Some(p) = args::match_opt(&arg, args::ParamOpt::ALL, |p| p.spec()) {
             args::apply_param_opt(&mut knobs.params, p, &mut parser)?;
         } else if let Some(opt) = args::match_opt(&arg, Opt::ALL, |o| o.spec()) {
             match opt {
                 Opt::Dir => dirs.add(&mut parser)?,
                 Opt::NoDir => dirs.suppress_default(),
-                Opt::Collector => {
-                    let spec = args::require_string(&mut parser)?;
-                    collector = runtime::parse_collector(&spec).map_err(CliExit::error)?;
-                }
-                Opt::GcHeapInitial => {
-                    let spec = args::require_string(&mut parser)?;
-                    gc_heap_initial_size =
-                        runtime::parse_gc_heap_size(&spec).map_err(CliExit::error)?;
-                }
                 Opt::Profile => {
                     let spec = args::require_string(&mut parser)?;
                     profile = runtime::parse_profile(&spec)?;
@@ -191,8 +172,7 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
         profile,
         preopened_dirs: dirs.finish(),
         program_args,
-        collector,
-        gc_heap_initial_size,
+        runtime: runtime_knobs,
     })
 }
 
@@ -202,10 +182,9 @@ async fn run_cli_component(
     profile: &ProfileMode,
     preopened_dirs: &[(String, String)],
     program_args: &[String],
-    collector: wasmtime::Collector,
-    gc_heap_initial_size: u64,
+    runtime_knobs: RuntimeKnobs,
 ) -> Result<()> {
-    let engine = runtime::create_engine(cranelift_opt, profile, collector, gc_heap_initial_size)?;
+    let engine = runtime::create_engine(cranelift_opt, profile, runtime_knobs)?;
     let component = Component::new(&engine, wasm)?;
     let linker = runtime::create_linker(&engine)?;
     let mut store = runtime::create_store(&engine, preopened_dirs, program_args)?;
@@ -309,8 +288,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
         &opts.profile,
         &opts.preopened_dirs,
         &opts.program_args,
-        opts.collector,
-        opts.gc_heap_initial_size,
+        opts.runtime,
     )
     .await
     .map_err(classify_run_error)
