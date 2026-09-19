@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789852688802,
+  "lastUpdate": 1789856637780,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57057,6 +57057,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 300984,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1182b211939361cefdad6320ae98507fc92eb142",
+          "message": "Merge pull request #2087 from wado-lang/claude/core-prng-implementation-d35s28\n\nfeat: core:prng, reproducible randomness at 1.65 G u64/s, on a multi-value parameter ABI",
+          "timestamp": "2026-09-20T07:08:02+09:00",
+          "tree_id": "41d734b5f3b2fa51564139c9a0dc4b4376e04691",
+          "url": "https://github.com/wado-lang/wado/commit/1182b211939361cefdad6320ae98507fc92eb142"
+        },
+        "date": 1789856637316,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
             "unit": "bytes"
           }
         ]
