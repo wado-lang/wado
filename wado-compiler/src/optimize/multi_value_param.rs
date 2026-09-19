@@ -147,4 +147,3 @@ fn only_field_reads(body: &Body, local: u32, field_names: &[String]) -> bool {
 fn reads_local(body: &Body, expr: ExprId, local: u32) -> bool {
     matches!(&body.exprs[expr].kind, ExprKind::Local { index, .. } if *index == local)
 }
-
