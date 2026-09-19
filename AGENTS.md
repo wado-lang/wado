@@ -64,7 +64,8 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Use plain `cargo build` / `cargo run` / `cargo test` (the `dev` profile) for iteration. `Cargo.toml` raises `opt-level` on `wado-compiler`, `wado-dev-tools`, and deps so dev-build runtime is close to release for the parts that matter. `--release` is only for distributing binaries.
 - A failure that shows only in CI is usually not the environment: a pull request's test jobs run on the branch merged with `main`, not on the branch head. Sync first with the `git-upstream-sync` skill and reproduce on the merged tree before suspecting anything else. `tidy` is the exception, checking out the head ref.
 - Add a new integration test to `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
-- Use the `code-review-response` skill when answering review findings.
+- Run `/code-review-response` to answer any review finding, whoever the reviewer is.
+- Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should.
 
 ## The Wado Language
 
