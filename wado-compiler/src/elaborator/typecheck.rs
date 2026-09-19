@@ -78,9 +78,8 @@ fn check_at(
         return TypeCheckResult::Deferred;
     }
 
-    if let Some(result) = check_projections(actual, expected, type_table) {
-        return result;
-    }
+    assert_projection_owned(actual, type_table);
+    assert_projection_owned(expected, type_table);
 
     // Unwrap references for inner type comparison
     let (actual_inner, actual_is_ref) = unwrap_ref(actual, type_table);
@@ -240,41 +239,20 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
-/// Two associated-type projections, compared as `TypeTable` resolves one: by
-/// parameter and name, with an absent owning trait matching any.
-// A materialized default body re-resolves its signature in the impl's module,
-// where the bound's trait may not be in scope, leaving no trait to name.
-fn check_projections(
-    actual: TypeId,
-    expected: TypeId,
-    type_table: &TypeTable,
-) -> Option<TypeCheckResult> {
-    let (
-        ResolvedType::AssocTypeProjection {
-            param_id: actual_param,
-            assoc_name: actual_name,
-            owning_trait: actual_owner,
-            ..
-        },
-        ResolvedType::AssocTypeProjection {
-            param_id: expected_param,
-            assoc_name: expected_name,
-            owning_trait: expected_owner,
-            ..
-        },
-    ) = (type_table.get(actual), type_table.get(expected))
-    else {
-        return None;
-    };
-    let owner_agrees =
-        actual_owner.is_none() || expected_owner.is_none() || actual_owner == expected_owner;
-    Some(
-        if actual_param == expected_param && actual_name == expected_name && owner_agrees {
-            TypeCheckResult::Compatible
-        } else {
-            TypeCheckResult::Incompatible
-        },
-    )
+/// The owning trait is part of a projection's identity, so one built without it
+/// compares wrong against the same projection built where the trait is in scope.
+fn assert_projection_owned(type_id: TypeId, type_table: &TypeTable) {
+    if let ResolvedType::AssocTypeProjection {
+        assoc_name,
+        owning_trait,
+        ..
+    } = type_table.get(type_id)
+    {
+        assert!(
+            owning_trait.is_some(),
+            "[elaborator] the projection `::{assoc_name}` names no owning trait"
+        );
+    }
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
