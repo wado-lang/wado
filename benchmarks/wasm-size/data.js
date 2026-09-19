@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789833739082,
+  "lastUpdate": 1789852688802,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57013,6 +57013,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 300930,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ac4533baba338906f76f6b5c918a3cb28a50760",
+          "message": "Merge pull request #2086 from wado-lang/claude/declaration-identity-wep-gap-k1lplu\n\nfix(cm): key a canonical payload by its declaration, and read a pattern qualifier's type arguments",
+          "timestamp": "2026-09-20T06:01:11+09:00",
+          "tree_id": "6e598e5853d0eff61b9f764d5a113fa29346e84a",
+          "url": "https://github.com/wado-lang/wado/commit/2ac4533baba338906f76f6b5c918a3cb28a50760"
+        },
+        "date": 1789852688310,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1921,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6477,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19643,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300984,
             "unit": "bytes"
           }
         ]
