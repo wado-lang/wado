@@ -159,6 +159,8 @@ global global:core:prelude/list.wado::$const_obj_41: ref null Array<u8> = array.
 global global:core:prelude/primitive.wado::$const_obj_55: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "bug_generic_newtype_arg_name.wado/$test_0_a_generic_newtype_s_arguments_are_part_of_its_name"() {
+    let ints: ref "core:prelude//List<i32>";
+    let strs: ref "core:prelude//List<core:prelude/string.wado/String>";
     let $v0_6: i32;
     let $v0_8: ref "core:prelude/string.wado//String";
     let $cond_9: bool;
@@ -168,13 +170,15 @@ fn "bug_generic_newtype_arg_name.wado/$test_0_a_generic_newtype_s_arguments_are_
     let $fuse_at_19: i32;
     let self_28: ref "core:prelude//List<i32>";
     let $v1_30: i32;
-    let self_37: ref "core:prelude//List<core:prelude/string.wado/String>";
-    let $v1_39: i32;
+    let self_36: ref "core:prelude//List<core:prelude/string.wado/String>";
+    let $v1_38: i32;
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
     let i: i32;
-    self_28 = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
+    ints = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
+    strs = struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 };
+    self_28 = black_box(ints);
     $v1_30 = self_28.used;
     if @unlikely(0 >= $v1_30) {
         cold_path;
@@ -187,33 +191,33 @@ fn "bug_generic_newtype_arg_name.wado/$test_0_a_generic_newtype_s_arguments_are_
         "bug_generic_newtype_arg_name.wado/$test_0_a_generic_newtype_s_arguments_are_part_of_its_name$cold0"($v0_6);
         unreachable;
     }
-    self_37 = black_box(struct.new "core:prelude//List<core:prelude/string.wado/String>" { repr: array.new_fixed<ref "core:prelude/string.wado//String">(struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }), used: 2 });
-    $v1_39 = self_37.used;
-    if @unlikely(0 >= $v1_39) {
+    self_36 = black_box(strs);
+    $v1_38 = self_36.used;
+    if @unlikely(0 >= $v1_38) {
         cold_path;
-        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_39);
+        "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"(0, $v1_38);
         unreachable;
     }
-    $v0_8 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_37.repr, 0);
-    $cond_9 = $inline_core_prelude_array_wado_seq_eq_u8__15: block -> bool {
+    $v0_8 = builtin::array_get_value<ref "core:prelude/string.wado//String">(self_36.repr, 0);
+    $cond_9 = $inline_core_prelude_array_wado_seq_eq_u8__13: block -> bool {
         a = $v0_8.repr;
         a_end = $v0_8.used;
         b = global:bug_generic_newtype_arg_name.wado::$const_obj_2;
         if a_end != 1 {
-            break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
+            break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
         }
         i = 0;
         b4: block {
             l5: loop {
                 break_if b4 i >= a_end;
                 if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
-                    break $inline_core_prelude_array_wado_seq_eq_u8__15: 0;
+                    break $inline_core_prelude_array_wado_seq_eq_u8__13: 0;
                 }
                 i = i + 1;
                 continue l5;
             };
         };
-        break $inline_core_prelude_array_wado_seq_eq_u8__15: 1;
+        break $inline_core_prelude_array_wado_seq_eq_u8__13: 1;
     };
     if @unlikely($cond_9 == 0) {
         cold_path;
