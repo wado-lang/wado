@@ -694,62 +694,67 @@ compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
-## Component Model types are keyed by declaration
+## Keys past the Component Model boundary
 
-`ComponentModelContext` holds two maps, not one. `type_names` keys a structural
-shape and names no declaration: `"result-unit"`, `"stream-u8"`, an instance type,
-a func type. `decl_types` is keyed by `DefId` and holds every outer-scope type
-that stands for a declaration: a resource own-handle, an aliased record, an
-`error-code`, a `response`, a handler's result.
+§9's boundary step answers with a `DefId`, and every key past it is that
+identity. A component's outer scope holds both kinds of type, so it holds two
+kinds of key: a structural type is keyed by the shape it stands for, and a type
+standing for a declaration is keyed by that declaration.
 
-A name cannot key the second map. A CM name alone puts every package in one
-namespace, and its package puts every interface of that package in one, so
-`wasi:sockets/types#error-code` and `wasi:sockets/ip-name-lookup#error-code` land
-on one entry, and those two are unrelated variants.
+A CM name cannot key the second kind, for the reason §9 gives for not carrying
+the name further. A name alone puts every package in one namespace, and its
+package puts every interface of that package in one, so a key built from either
+names one of two unrelated declarations and drops the other.
 
-Every producer of a declaration-backed type holds the interface it is emitting
-for, so it resolves the declaration through §9's boundary step and binds the index
-to that `DefId`. Codegen fails, naming the type, where a canonical reaches a
-declaration no imported interface aliased. It does not try a second key: that is
-the shape "What a derivation may not be" forbids, and the miss is a bug in the
-import plan rather than an ambiguity to break.
+Every producer of such a type holds the interface it is emitting for, so it
+reaches the declaration through that one step. Reaching none is a missing import,
+and therefore a diagnostic. It is not a second key to try, which is the shape
+"What a derivation may not be" forbids.
 
-One case has no declaration to be keyed by. A resource the program never mentions
-gets no `TypeId`, and the component aliases it anyway, because the instance type's
-own methods reference it. The alias is recorded under the export it was made from,
-which one interface spells once.
+### A canonical intrinsic's payload is a declaration
 
-### A canonical intrinsic's payload carries the declaration
+A payload is a type, so a nominal payload is its declaration. The CM name the ABI
+spells for it travels beside the identity and is never compared, which is §8 at
+this boundary.
 
-`CmPayloadType::Named`, `CmPayloadType::Resource`, `CmStreamPayload::Record`,
-`CmFuturePayload::Transmission` and `CanonicalIntrinsic::ResourceDrop` each hold
-a `CmDecl`: the `DefId`, the declaring module, and the CM name the ABI spells.
-Equality and hashing read the `DefId` alone. The rendering travels beside the
-identity and never stands in for it, which is §8's rule applied at the Component
-Model boundary.
-
-The name such an intrinsic imports under is one of those renderings.
-`resource-drop:wasi/filesystem/types#descriptor` says which declaration it drops,
-and a transmission future spells the interface that declares its `error-code`
-rather than the package around it. `CanonicalIntrinsic::from_import_name` is not
-the inverse and cannot be one: a `#[canonical(…)]` annotation names an operation,
-and a name that carries a payload is refused rather than parsed. The payload comes
-from the annotated signature, which the classifier reads at the one point that has
-the declaration.
+The name such an intrinsic imports under is one of those renderings, and nothing
+reads it back: an annotation names an operation and never a payload. A payload
+comes from the annotated signature, read where the declaration is in hand.
 
 ## Pattern qualifier arguments
 
-A pattern's qualifier is a type, and a type is its declaration plus the arguments
-it was instantiated at. `Maybe<String>::Just` therefore does not qualify a
-`Maybe<i32>` scrutinee: the `DefId`s agree and the instantiations do not. Each
-written argument is resolved at its own reference site and compared against the
-scrutinee's by `TypeKey`, never by arity and never by spelling.
+A pattern's qualifier is a type, and by §6 a type is its declaration plus the
+arguments it was instantiated at. So `Maybe<String>::Just` does not qualify a
+`Maybe<i32>` scrutinee: the declarations agree and the instantiations do not.
 
-A position either side leaves abstract is not compared. A generic body writes its
-own type parameter where the scrutinee carries a concrete type, as
-`unwrap_or<T>`'s `if let Maybe<T>::Just(v) = m` does, and that is ordinary code.
-This follows from §6 rather than softening it: a `TypeParam` names no
-instantiation, so the scrutinee's argument has nothing to disagree with.
+Each written argument is read at its own reference site and compared against the
+scrutinee's as a type — never by arity, and never by spelling, which is §4's rule
+one level out.
 
 Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 `pattern_qualifier_type_param_arg.wado`.
+
+## Known gap: a CM type can reach outer scope with no identity
+
+A resource the program never mentions still reaches a component's outer scope,
+because an imported instance type's own methods reference it. No type was
+interned for it, so §9's step answers nothing, and the alias is keyed by the
+export it was made from — one interface's one spelling of one name, which
+collides with nothing today.
+
+Closing this means the step answering from the declarations a module makes rather
+than from the types the program interned, so a declaration no Wado code mentions
+still has its identity available.
+
+## Known gap: an abstract qualifier argument is not compared
+
+A position either side of a pattern qualifier leaves abstract is accepted
+uncompared. A generic body writes its own type parameter where the scrutinee
+carries a concrete type, which is ordinary code, and a parameter names no
+instantiation, so there is nothing at that position for the scrutinee's argument
+to disagree with.
+
+What this admits is a body whose parameter is bound, at the instantiation being
+compiled, to a type the scrutinee's argument contradicts. Closing it means
+comparing after substitution wherever that instantiation is known, rather than
+declining to compare.
