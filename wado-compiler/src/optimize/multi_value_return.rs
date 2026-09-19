@@ -850,8 +850,7 @@ fn walk_expr_for_uses(
             walk_expr_for_uses_operand(body, source, cx, invalid, tracked);
         }
         // A struct rebuilt from the split locals is a copy, so a mutation
-        // through it would not reach the next read. A whole result read off a
-        // call is a fresh literal instead, which is why only this one refutes.
+        // through it would not reach the next read.
         ExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);

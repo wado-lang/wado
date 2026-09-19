@@ -3,7 +3,6 @@
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
-use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{MangledName, global_name, multi_value_split_local};
 use crate::nir::{NirFunction, NirUnaryOp};
@@ -15,7 +14,7 @@ use crate::wir::{
 };
 
 use super::context::{PendingFunctionBody, WirContext};
-use super::translate::OPTION_NONE_CASE;
+use super::translate::{OPTION_NONE_CASE, resolve_param_names};
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
 };
@@ -402,21 +401,13 @@ fn register_single_function(
     }
 
     // Build param types, filtering out unit-type params (unit has no Wasm representation).
-    // WIR locals are looked up by name during codegen, so any two params sharing a
-    // name would clobber each other in `current_locals`. Disambiguate duplicates by
-    // suffixing `_{local_index}`; matches `FunctionTranslator::local_name`.
+    // The names come from `resolve_param_names`, the same answer the body reads:
+    // codegen keys locals by name, and a second scheme here would drift from it.
     let mut params: Vec<WirType> = Vec::new();
     let mut param_names: Vec<String> = Vec::new();
-    let mut name_counts: IndexMap<String, u32> = IndexMap::default();
+    let resolved_names = resolve_param_names(&tir_func.params);
     for p in &tir_func.params {
-        *name_counts.entry(p.name.clone()).or_insert(0) += 1;
-    }
-    for p in &tir_func.params {
-        let unique_name = if name_counts.get(&p.name).copied().unwrap_or(0) > 1 {
-            format!("{}_{}", p.name, p.local_index)
-        } else {
-            p.name.clone()
-        };
+        let unique_name = &resolved_names[&p.local_index];
         // One Wasm parameter per field, named the way the translator seeds its
         // split locals, so a field read in the body finds them by name.
         if let nir::ParamAbi::MultiValue {
@@ -434,7 +425,7 @@ fn register_single_function(
                     tir_func.name
                 );
                 params.push(wir_type);
-                param_names.push(multi_value_split_local(&unique_name, field_name));
+                param_names.push(multi_value_split_local(unique_name, field_name));
             }
             continue;
         }
@@ -443,7 +434,7 @@ fn register_single_function(
             continue;
         }
         params.push(wir_type);
-        param_names.push(unique_name);
+        param_names.push(unique_name.clone());
     }
 
     // Build result types. Honour the function's `return_abi`:

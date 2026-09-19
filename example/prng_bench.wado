@@ -163,6 +163,7 @@ fn drain_scalar_fill<R: Rng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -> u64
 }
 
 fn drain_batch_fill<R: VectorRng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -> u64 {
+    assert !buffer.is_empty(), "an empty buffer would not advance the loop";
     assert buffer.len() % BATCH_WORDS == 0, "the buffer must hold whole batches";
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += buffer.len() {

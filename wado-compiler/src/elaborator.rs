@@ -2425,13 +2425,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         if let (Some(trait_n), Some(trait_ast)) =
             (trait_name.as_ref(), impl_block.trait_type.as_ref())
         {
-            let trait_sig = trait_n
+            let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_n
                 .canonical()
-                .and_then(|decl| scope.trait_sig_of(&decl));
-            // The body is the trait's, so what it spells is the trait module's
-            // to answer: its own bounds, and the items only it can see.
-            let defaults_home = trait_sig.as_ref().map(|sig| sig.module.clone());
-            let default_methods: Vec<std::rc::Rc<ast::Function>> = trait_sig
+                .and_then(|decl| scope.trait_sig_of(&decl))
                 .map(|trait_sig| {
                     trait_sig
                         .default_methods()
@@ -2449,8 +2445,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // and one `AstId` serves N impls, so each needs its own
             // `ModuleSemantics` snapshot on `default_method_semantics` or the
             // synthesis would overwrite its own per-node facts. `decls` and
-            // `imports` are cloned from the impl module for the impl's own
-            // names; `defaults_home` answers what only the trait module can.
+            // `imports` are cloned from the impl module for name resolution.
             for default_method in &default_methods {
                 // Build a synthetic `ModuleSemantics` for this
                 // one (impl, default_method) synthesis. Fresh
@@ -2474,19 +2469,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // facts.
                 let saved_sem = std::mem::replace(&mut scope.sem, synthetic);
 
-                scope.with_resolving_home(defaults_home.clone(), |scope| {
-                    scope.resolve_method(
-                        default_method,
-                        &struct_name,
-                        &impl_block.ty,
-                        Some(trait_n),
-                        Some(trait_ast),
-                        impl_is_concrete,
-                        &impl_block.type_params,
-                        None,
-                        impl_owner,
-                    )
-                });
+                let _ = scope.resolve_method(
+                    default_method,
+                    &struct_name,
+                    &impl_block.ty,
+                    Some(trait_n),
+                    Some(trait_ast),
+                    impl_is_concrete,
+                    &impl_block.type_params,
+                    None,
+                    impl_owner,
+                );
 
                 // Swap back, take the populated synthetic out.
                 let mut populated = std::mem::replace(&mut scope.sem, saved_sem);

@@ -289,6 +289,11 @@ the derived layer can be fixed.
 The policy is open for reconsideration at 1.0.0, where a stronger promise costs
 something real and may be worth it.
 
+## Roadmap
+
+Nothing is committed. What the Decision settles is in the library, and what is
+left over is unowned, so it is listed under Known gaps instead.
+
 ## Known gaps
 
 - Every row above is below what the same build reaches with a larger inlining

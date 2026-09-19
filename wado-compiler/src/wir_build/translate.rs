@@ -109,16 +109,7 @@ fn split_locals_for_params(
         else {
             continue;
         };
-        let base = resolved_local_names
-            .get(&param.local_index)
-            .unwrap_or_else(|| {
-                panic!(
-                    "[WIR] parameter local {} of `{}` has no resolved name, so \
-                     its field reads would name a base local the split \
-                     signature never declares",
-                    param.local_index, tir_func.name
-                )
-            });
+        let base = &resolved_local_names[&param.local_index];
         let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
         for (field_name, &field_type) in field_names.iter().zip(field_types) {
             let wir_ty = ctx.type_id_to_wir_type(type_table, field_type);
@@ -132,46 +123,60 @@ fn split_locals_for_params(
     out
 }
 
-/// Pre-compute the WIR-side name for every TIR local index, once, so
-/// [`FunctionTranslator::local_name`] is an O(1) lookup rather than a scan of
-/// `params` and `local_names` per reference. Two params sharing a raw name are
-/// both suffixed with `_{local_index}`; a non-param local shadowing a param or
-/// let takes the suffix alone, leaving the shadowed name untouched.
-fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> IndexMap<u32, String> {
-    let param_indices: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
-
-    // Tally raw-name occurrences across all locals and within params only.
-    let mut total_per_name: IndexMap<&str, u32> = IndexMap::default();
-    let mut param_per_name: IndexMap<&str, u32> = IndexMap::default();
-    for (idx, name) in raw {
-        *total_per_name.entry(name.as_str()).or_default() += 1;
-        if param_indices.contains(idx) {
-            *param_per_name.entry(name.as_str()).or_default() += 1;
-        }
+/// The WIR name of every parameter, keyed by local index. The Wasm signature
+/// and the body read this one answer, so a slot has one name on both sides.
+pub(super) fn resolve_param_names(params: &[NirParam]) -> IndexMap<u32, String> {
+    let mut per_name: IndexMap<&str, u32> = IndexMap::default();
+    for p in params {
+        *per_name.entry(p.name.as_str()).or_default() += 1;
     }
 
     let mut out = IndexMap::default();
     let mut used: IndexSet<String> = IndexSet::default();
+    for p in params {
+        let needs_suffix = per_name.get(p.name.as_str()).copied().unwrap_or(0) > 1;
+        out.insert(
+            p.local_index,
+            free_name(&p.name, p.local_index, needs_suffix, &mut used),
+        );
+    }
+    out
+}
+
+/// Pre-compute the WIR-side name for every TIR local index, once, so
+/// [`FunctionTranslator::local_name`] is an O(1) lookup rather than a scan of
+/// `params` and `local_names` per reference. Parameters come from
+/// [`resolve_param_names`]; a non-param local shadowing a param or let takes the
+/// suffix alone, leaving the shadowed name untouched.
+fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> IndexMap<u32, String> {
+    let mut out = resolve_param_names(params);
+    let mut used: IndexSet<String> = out.values().cloned().collect();
+
+    let mut total_per_name: IndexMap<&str, u32> = IndexMap::default();
+    for name in raw.values() {
+        *total_per_name.entry(name.as_str()).or_default() += 1;
+    }
+
     for (idx, name) in raw {
-        let needs_suffix = if param_indices.contains(idx) {
-            param_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
-        } else {
-            total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
-        };
-        let mut final_name = if needs_suffix {
-            format!("{name}_{idx}")
-        } else {
-            name.clone()
-        };
-        // The `_{idx}` suffix is not collision-free: it can equal another local's
-        // literal name (`e` at index 2 -> `e_2`, colliding with a source `e_2`).
-        // Codegen keys locals by name, so a duplicate silently merges two
-        // differently-typed slots into one. Extend with the unique index until
-        // the name is free.
-        while !used.insert(final_name.clone()) {
-            final_name = format!("{final_name}_{idx}");
+        if out.contains_key(idx) {
+            continue;
         }
-        out.insert(*idx, final_name);
+        let needs_suffix = total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1;
+        out.insert(*idx, free_name(name, *idx, needs_suffix, &mut used));
+    }
+    out
+}
+
+/// `name`, suffixed with `_{idx}` until nothing else has taken it. One suffix
+/// is not enough: `e` at index 2 gives `e_2`, which another local may spell.
+fn free_name(name: &str, idx: u32, needs_suffix: bool, used: &mut IndexSet<String>) -> String {
+    let mut out = if needs_suffix {
+        format!("{name}_{idx}")
+    } else {
+        name.to_string()
+    };
+    while !used.insert(out.clone()) {
+        out = format!("{out}_{idx}");
     }
     out
 }
@@ -888,16 +893,16 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
         if tir_func.fn_canonical_dispatch().is_some() {
-            let self_param_name = tir_func
-                .params
-                .first()
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| "self".to_string());
-            let formatter_param_name = tir_func
-                .params
-                .get(1)
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| "f".to_string());
+            let names = resolve_param_names(&tir_func.params);
+            let param_name = |at: usize, fallback: &str| {
+                tir_func
+                    .params
+                    .get(at)
+                    .map(|p| names[&p.local_index].clone())
+                    .unwrap_or_else(|| fallback.to_string())
+            };
+            let self_param_name = param_name(0, "self");
+            let formatter_param_name = param_name(1, "f");
             // After the boxing pass, the synthesized self parameter type
             // `&fn(...)` is rewritten to `Box<fn(...)>` (a struct wrapping
             // a closure ref). When that's happened the dispatch body has
@@ -1282,10 +1287,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Whether a callee's N results can be handed straight to another's N
-    /// parameters. What has to agree is the lowered `WirType` of each field, not
-    /// its `TypeId` — that is a slot, and two of them naming one type is routine.
-    /// `TypeKey` is the wrong question here: it resolves through newtype erasure,
-    /// so two fields can share one and still lower to a ref against an i32.
+    /// parameters, which the lowered `WirType` of each field decides.
+    // Not `TypeKey`: it resolves through newtype erasure, so two fields share
+    // one and still lower to a ref against an i32.
     fn abi_fields_agree(&self, left: &[(String, TypeId)], right: &[(String, TypeId)]) -> bool {
         left.len() == right.len()
             && left.iter().zip(right).all(|((ln, lt), (rn, rt))| {
@@ -2238,11 +2242,9 @@ impl FunctionTranslator<'_, '_> {
             Operand::Value(_) => false,
             Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
         };
-        // An argument evaluated into the prelude runs before every argument left
-        // on the stack, whatever its position. So each one to its left has to be
-        // spilled to hold the source order. Two causes put an argument there: a
-        // unit-typed expression, which lowers to a void instruction, and a
-        // multi-value parameter, which arrives as N reads of a binding.
+        // An argument evaluated into the prelude runs ahead of every argument
+        // left on the stack, so each one to its left is spilled to hold source
+        // order.
         let evaluated_early = |this: &Self, i: usize, op: Operand| {
             split.contains_key(&i)
                 || (this.is_stackless_type(this.operand_type_id(op)) && unit_needs_eval(this, op))
@@ -3343,6 +3345,42 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn param_names_agree_with_the_body() {
+        // `e` at index 2 suffixes to `e_2`, which a third parameter spells
+        // literally.
+        let params = [
+            param_named("e", 0),
+            param_named("e_2", 1),
+            param_named("e", 2),
+        ];
+        let resolved = resolve_param_names(&params);
+        let unique: IndexSet<&str> = resolved.values().map(String::as_str).collect();
+        assert_eq!(
+            unique.len(),
+            resolved.len(),
+            "parameter names must be unique: {resolved:?}"
+        );
+
+        let raw: IndexMap<u32, String> = params
+            .iter()
+            .map(|p| (p.local_index, p.name.clone()))
+            .collect();
+        assert_eq!(resolve_local_names(&raw, &params), resolved);
+    }
+
+    fn param_named(name: &str, local_index: u32) -> NirParam {
+        NirParam {
+            name: name.to_string(),
+            type_id: TypeId(0),
+            local_index,
+            is_mut: false,
+            is_mut_ref: false,
+            span: Span::default(),
+            param_abi: nir::ParamAbi::default(),
+        }
+    }
 
     #[test]
     fn resolve_local_names_are_globally_unique() {

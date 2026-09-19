@@ -32,8 +32,7 @@ pub(crate) struct ModuleSemantics {
     /// `(impl_block.id, trait_default_method.ast_id)`. The same trait body is
     /// synthesised once per impl, so one trait node legitimately carries a fact
     /// set per impl, which snapshot isolation gives and a flat map could not.
-    /// Each value's `decls` / `imports` are cloned from the impl module, and
-    /// the walk carries the trait module as its resolving home for the rest.
+    /// Each value's `decls` / `imports` are cloned from the impl module.
     pub(crate) default_method_semantics: IndexMap<(AstId, AstId), ModuleSemantics>,
 }
 

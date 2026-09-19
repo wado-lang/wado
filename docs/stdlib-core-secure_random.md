@@ -23,9 +23,8 @@ with Random => &mut rng do {
 
 ### `pub fn seed() -> Seed with Random`
 
-Draw a `core:prng` seed from the host's entropy. The one crossing from
-unpredictable randomness into a fast reproducible stream, and the only
-`Random` a program that seeds once has to declare.
+Draw a `core:prng` seed from the host's entropy: the one crossing from
+unpredictable randomness into a reproducible stream, and its only `Random`.
 
 ## Structs
 

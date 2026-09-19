@@ -99,10 +99,8 @@ An integer type a uniform range can be drawn over.
 
 ### `pub trait VectorRng with ()`
 
-A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`.
-
-The width is the library's and not the engine's, so a consumer keeps no
-cursor; the batch crosses the boundary in registers.
+A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`. The
+width is the library's, not the engine's, so a consumer keeps no cursor.
 
 #### `fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2]`
 
@@ -162,8 +160,7 @@ The same, 2^192 steps on.
 ### `pub struct Squares64`
 
 Squares (Widynski, arXiv:2004.06278): the value at a counter, not the next
-value. A chunk regenerates identically on a revisit, and callers need not
-agree on who draws first.
+one. A revisit regenerates it, and no two callers need agree on draw order.
 
 _Fields are private._
 
@@ -178,9 +175,8 @@ same counter always gives the same one.
 
 ### `pub struct XoshiroSimd`
 
-xoshiro256++ run eight times over at once, one independent stream per lane.
-Each lane starts 2^128 steps past the one before it, so the eight are
-disjoint for 2^128 draws apiece.
+xoshiro256++ in eight lanes at once. Each lane starts 2^128 steps past the
+one before, so the eight streams are disjoint for 2^128 draws apiece.
 
 _Fields are private._
 
@@ -194,9 +190,8 @@ _Fields are private._
 
 ### `pub struct Shishua`
 
-SHISHUA: the fastest generator here, and vector-only — its round is eight
-vectors wide and nothing smaller exists inside it. It has no jump, so its
-lanes rest on seeding alone.
+SHISHUA: the fastest generator here, and vector-only, since its round is
+eight vectors wide and nothing smaller exists inside it. It has no jump.
 
 _Fields are private._
 

@@ -1041,8 +1041,8 @@ fn is_nullable_ref_shape(payloads: &[TypeId], project: &NirPackage) -> bool {
 // Phase 2: candidates and validation
 // -----------------------------------------------------------------------
 
-// Trait methods carry the traffic here, and qualify: `Iterator::next` /
-// `Deserializer::*` shapes are ~80% of what this widens on the parser benchmarks.
+// Trait methods carry the traffic: `Iterator::next` / `Deserializer::*` shapes
+// are ~80% of what this widens on the parser benchmarks.
 fn is_eligible(func: &NirFunction) -> bool {
     !func.is_dead && func.body.is_some() && func.only_reached_by_direct_call()
 }
