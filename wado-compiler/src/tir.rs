@@ -6517,6 +6517,9 @@ pub struct TirParam {
     /// plan rewrites `&mut T` and `&T` to the same `Box<T>` type, erasing the
     /// distinction). A `&T` cannot be written through, so only a `&mut`
     /// parameter can mutate the caller's argument storage.
+    ///
+    /// `lower::plan` fills it, so anything running before that — `link` among
+    /// them — reads `false` here whatever the type says, and must ask the type.
     pub is_mut_ref: bool,
     pub span: Span,
 }

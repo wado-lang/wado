@@ -9,7 +9,9 @@ use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::package::Package;
-use crate::tir::{BuiltinDeclaration, BuiltinDeclarations, RetainSpec, TirFunction, TypeTable};
+use crate::tir::{
+    BuiltinDeclaration, BuiltinDeclarations, ResolvedType, RetainSpec, TirFunction, TypeTable,
+};
 use crate::wir_build::component_plan;
 use crate::world_registry::TEST_WORLD;
 
@@ -22,6 +24,7 @@ use crate::world_registry::TEST_WORLD;
 fn record_declaration(
     func: &TirFunction,
     module_source: &ModuleSource,
+    type_table: &TypeTable,
     out: &mut IndexMap<(ModuleSource, String), BuiltinDeclaration>,
 ) {
     if func.body.is_some() {
@@ -49,11 +52,14 @@ fn record_declaration(
         BuiltinDeclaration {
             returns: func.declared_return_convention,
             retains,
+            // Read from the type, which is the only thing that says `&mut` here:
+            // `TirParam::is_mut_ref` is filled by `lower::plan`, which runs
+            // after link, so every one of them is still `false`.
             mut_params: func
                 .params
                 .iter()
                 .enumerate()
-                .filter(|(_, p)| p.is_mut_ref)
+                .filter(|(_, p)| matches!(type_table.get(p.type_id), ResolvedType::MutRef(_)))
                 .map(|(pos, _)| pos)
                 .collect(),
             immediate_params: func.immediates_by_position().collect(),
@@ -119,7 +125,12 @@ pub fn link(package: Package) -> FlatPackage {
         // Functions: set module_source on each function
         for func_rc in tir_mod.functions {
             func_rc.borrow_mut().module_source = ms.clone();
-            record_declaration(&func_rc.borrow(), &ms, &mut builtin_declarations);
+            record_declaration(
+                &func_rc.borrow(),
+                &ms,
+                &type_table.borrow(),
+                &mut builtin_declarations,
+            );
             functions.push(func_rc);
         }
 

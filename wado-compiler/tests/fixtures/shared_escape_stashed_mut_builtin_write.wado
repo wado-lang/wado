@@ -1,0 +1,57 @@
+// A `&mut` builtin parameter is a write, and `shared_escape` must see it.
+//
+// `stash` keeps the argument in the `Holder` it returns and `run` keeps every
+// `Holder`, so the constant is a retained one: legal to share only if nothing
+// in the program writes through it. `h.data[z] = …` lowers to
+// `builtin::array_set(arr, idx, value)`, whose `arr` is `&mut Array<T>` — the
+// write. It is declared nowhere as an attribute, so the only thing that says
+// so is the parameter's type.
+//
+// `link` snapshots the `&mut` positions, and it runs before `lower::plan` fills
+// `TirParam::is_mut_ref`. Reading that field there answers `false` for every
+// builtin, the write goes unseen, one array is shared across all three calls,
+// and the stores accumulate: this printed `9 3`.
+//
+// `stash` is bulky so the inliner declines it; an inlined callee leaves no
+// parameter for the analysis to be asked about.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<f64>,
+    tag: i32,
+}
+
+#[inline(never)]
+fn stash(xs: List<f64>, seed: i32) -> Holder {
+    let mut t = seed;
+    for let i of 0..<8 {
+        t = t * 31 + i;
+        if t > 1000 {
+            t = t % 97;
+        }
+        t = t + i;
+    }
+    return Holder { data: xs, tag: t };
+}
+
+export fn run() with Stdout {
+    // Opaque, so CTFE cannot fold the loop away and decide this by arithmetic
+    // instead of by the store.
+    let z = builtin::black_box(0);
+    let mut total = 0.0;
+    let mut keep: List<Holder> = [];
+    for let _i of 0..<3 {
+        let mut h = stash([1.0, 1.0], z);
+        h.data[z] = h.data[z] + 1.0;
+        total = total + h.data[z];
+        keep.push(h);
+    }
+    // Each iteration starts from a fresh [1.0, 1.0], so each contributes 2.
+    println(`${total} ${keep.len()}`);
+}
+
+__DATA__
+{
+    "stdout": "6 3\n"
+}

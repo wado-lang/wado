@@ -311,12 +311,15 @@ loop, and a pure call building a heap value from literals.
 
 ## Known gaps
 
-- `shared_escape` refuses on two shapes that no fixture covers: a promoted
-  operand whose taint the walk cannot name, and a parameter position the
-  callee's body declares nothing for. Both refuse, so the gap is coverage and
-  not correctness. Closing it means reaching those shapes from Wado source, and
-  neither is steerable today — a test that merely passes would read as coverage
-  the code does not have.
+- Several of `shared_escape`'s conservative answers have no fixture: a promoted
+  operand whose taint the walk cannot name, a parameter position the callee's
+  body declares nothing for, a value carried out of a `Switch`, and a field read
+  by a destructuring pattern. All four refuse or taint, so the gap is coverage
+  and not correctness. None is steerable from Wado source today — the last two
+  were attempted and the program collapsed before reaching the shape, one because CSE
+  folds identical switch arms back to the field read and one because the
+  promoted-operand fallback already covers it. A test that merely passes would
+  read as coverage the code does not have.
 - Only `core:builtin` answers the bodyless-callee question. A Component Model
   import and a `.wasm` asset export always refuse, however read-only they are,
   because `#[retain]` is not complete on them the way it is on `core:builtin`.

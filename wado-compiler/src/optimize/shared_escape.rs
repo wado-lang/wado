@@ -7,7 +7,7 @@ use std::ops::ControlFlow;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
@@ -383,6 +383,7 @@ impl Taint<'_> {
                     }
                 }
             }
+            NodeRef::Pat(p) => self.seed_pattern_field(p, &mut found_locals),
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
                     local_index, value, ..
@@ -398,10 +399,24 @@ impl Taint<'_> {
                 }
                 _ => {}
             },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            NodeRef::Block(_) => {}
         });
         self.exprs.extend(found_exprs);
         self.locals.extend(found_locals);
+    }
+
+    /// Taint what a struct pattern binds out of the seeded field. Destructuring
+    /// reads the field without an `ExprKind::FieldAccess` to match on.
+    fn seed_pattern_field(&self, pat: PatId, out: &mut Vec<u32>) {
+        let Some(seed) = self.seed_field else {
+            return;
+        };
+        let PatKind::Struct { fields, .. } = &self.body.pats[pat].kind else {
+            return;
+        };
+        for field in fields.iter().filter(|f| f.field_name == seed) {
+            collect_pattern_bindings(self.body, field.pattern, out);
+        }
     }
 
     /// Whether `e` denotes the shared object or a projection of it. A scalar
@@ -420,11 +435,14 @@ impl Taint<'_> {
             | ExprKind::Cast { expr, .. }
             | ExprKind::Unary { expr, .. }
             | ExprKind::VariantPayload { expr, .. } => self.operand(*expr),
-            // A block, an `if` or a `match` yields one of its branches; any
-            // tainted node under it is taken to be that branch.
-            ExprKind::LabeledBlock { .. } | ExprKind::If { .. } | ExprKind::Match { .. } => {
-                self.subtree_tainted(NodeRef::Expr(e))
-            }
+            // One of the branches is the value; any tainted node under it is
+            // taken to be that branch. `Switch` belongs here because
+            // `match_to_switch` rewrites a dense `Match` into one before this
+            // pass runs, and the rewrite must not lose the taint.
+            ExprKind::LabeledBlock { .. }
+            | ExprKind::If { .. }
+            | ExprKind::Match { .. }
+            | ExprKind::Switch { .. } => self.subtree_tainted(NodeRef::Expr(e)),
             // A builtin accessor hands back a handle into its array, so the
             // result is a projection. A bodied callee is treated the same way
             // — conservatively, since checking its parameter is what says
@@ -433,7 +451,28 @@ impl Taint<'_> {
                 self.seed_call == Some(*func_id)
                     || args.first().is_some_and(|a| self.operand(a.expr))
             }
-            _ => false,
+            // Builds a container around the object rather than naming it, so
+            // the taint stops here; `check_expr_use` is what answers for it.
+            ExprKind::PackedArray(_)
+            | ExprKind::StructLiteral { .. }
+            | ExprKind::TupleLiteral { .. }
+            | ExprKind::ArrayLiteral { .. }
+            | ExprKind::VariantConstruct { .. }
+            | ExprKind::EnumConstruct { .. } => false,
+            // `check_expr_use` refuses the query before a tainted value can
+            // reach any of these, so no result of one is ever the object.
+            ExprKind::GlobalVarGet { .. }
+            | ExprKind::GlobalVarSet { .. }
+            | ExprKind::IndirectCall { .. }
+            | ExprKind::CmRawCall { .. }
+            | ExprKind::ClosureToCanonical { .. }
+            | ExprKind::Assign { .. } => false,
+            // Yields a scalar, which the type test above has already let
+            // through only where the type table disagrees.
+            ExprKind::Binary { .. }
+            | ExprKind::VariantTag { .. }
+            | ExprKind::VariantTest { .. }
+            | ExprKind::Dead => false,
         }
     }
 
@@ -512,12 +551,26 @@ fn has_seed(
         if found {
             return;
         }
-        if let NodeRef::Expr(e) = node {
-            found = match &body.exprs[e].kind {
-                ExprKind::FieldAccess { field_name, .. } => seed_field == Some(field_name.as_str()),
-                ExprKind::Call { func_id, .. } => seed_call == Some(*func_id),
-                _ => false,
-            };
+        match node {
+            NodeRef::Expr(e) => {
+                found = match &body.exprs[e].kind {
+                    ExprKind::FieldAccess { field_name, .. } => {
+                        seed_field == Some(field_name.as_str())
+                    }
+                    ExprKind::Call { func_id, .. } => seed_call == Some(*func_id),
+                    _ => false,
+                };
+            }
+            // Destructuring reads the field too, and names it in the pattern
+            // rather than in a `FieldAccess` the arm above would catch.
+            NodeRef::Pat(p) => {
+                if let PatKind::Struct { fields, .. } = &body.pats[p].kind {
+                    found = fields
+                        .iter()
+                        .any(|f| seed_field == Some(f.field_name.as_str()));
+                }
+            }
+            NodeRef::Stmt(_) | NodeRef::Block(_) => {}
         }
         if !found {
             body.for_each_operand(node, |op| {
