@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789791297241,
+  "lastUpdate": 1789833739082,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56949,6 +56949,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/19517b79a8aa6dfcb85136fa85e22b681de51139"
         },
         "date": 1789791296628,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19589,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300930,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ddd84236d9264269002f8895d07d4ae9ad5dd489",
+          "message": "Merge pull request #2085 from wado-lang/claude/wasi-webgpu-design-a3aws0\n\nfeat(wasi): bundle `wasi:webgpu`, and run it with `wado run-webgpu`",
+          "timestamp": "2026-09-20T00:34:58+09:00",
+          "tree_id": "7fe47a097305ebd9af421695d2609e4b9799075b",
+          "url": "https://github.com/wado-lang/wado/commit/ddd84236d9264269002f8895d07d4ae9ad5dd489"
+        },
+        "date": 1789833738541,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
