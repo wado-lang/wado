@@ -106,11 +106,8 @@ impl Query<'_> {
         self.holds_at(ty, trait_, args, None)
     }
 
-    /// [`Self::holds`] where the question already peeled a newtype away,
-    /// carrying the type it was first asked at: the impl the newtype inherits
-    /// is the base's with the newtype put in for `Self`, so a `Self` default is
-    /// answered at either spelling. Only the first subject travels, so an
-    /// intermediate link of a chain does not answer for the last.
+    /// [`Self::holds`] carrying the type the question was first asked at: a
+    /// newtype inherits its base's impl with itself put in for `Self`.
     fn holds_at(
         &mut self,
         ty: &SolverType,
@@ -408,9 +405,9 @@ fn answers_args(
     written: &[SolverType],
     args: &[SolverType],
 ) -> bool {
-    // A `Self` default lowers to the impl's target, and the match bound that
-    // target to `ty`. A peeled question answers at the newtype it was asked at
-    // too, since the inherited impl spells that as `Self`.
+    // A `Self` default lowers to the impl's target, which the match bound to
+    // `ty` — and to the newtype a peeled question was asked at, which the
+    // inherited impl also spells `Self`.
     let selves: Vec<SolverType> = [Some(ty), subject].into_iter().flatten().cloned().collect();
     let said = |i: usize, given: Option<&SolverType>| match given {
         Some(given) => vec![given.clone()],

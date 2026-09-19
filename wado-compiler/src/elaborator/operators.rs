@@ -14,6 +14,7 @@ use super::expr::{IndexAccess, int_literal_repr, negated_literal};
 use super::method_lookup::REPLACE_ON_ASSIGN_PLACE;
 use super::types::{FunctionContext, ResolvedTraitMethod, TypeError};
 use super::tysys::TypeSystem;
+use super::util::bound_param_name;
 use crate::elaborator::reify::{CompoundHoist, collect_compound_hoists};
 use crate::elaborator::sem::types::{AssignPlace, DesugarKind, OperatorDispatch};
 use crate::elaborator::synth::ArgClass;
@@ -49,16 +50,6 @@ impl AssignValue<'_> {
             Self::Ast(expr) => expr.span(),
             Self::Resolved { span, .. } => *span,
         }
-    }
-}
-
-/// The name a type carries its operator bounds under, where it carries any.
-/// A pack answers with its own name: a pack's bound holds of each member
-/// (WEP 2026-03-14), and `type_param_bounds` keys both the same way.
-fn bound_param_name(resolved: &ResolvedType) -> Option<&String> {
-    match resolved {
-        ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } => Some(name),
-        _ => None,
     }
 }
 

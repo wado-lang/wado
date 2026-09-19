@@ -997,18 +997,22 @@ fn const_vector(instr: &WirInstr, written: Option<&str>) -> Option<u128> {
 /// Fold a vector built lane by lane out of constants — what a vector literal
 /// lowers to — into one `v128.const`.
 fn try_fold_vector_const(instr: &mut WirInstr) -> bool {
-    let (written, value) = match instr {
+    let folded = match &*instr {
         WirInstr::LocalSet { name, value } | WirInstr::LocalTee { name, value } => {
-            (Some(name.clone()), &mut **value)
+            const_vector(value, Some(name.as_str()))
         }
-        other => (None, other),
+        built => const_vector(built, None),
+    };
+    let Some(folded) = folded else {
+        return false;
+    };
+    let value = match instr {
+        WirInstr::LocalSet { value, .. } | WirInstr::LocalTee { value, .. } => &mut **value,
+        built => built,
     };
     if matches!(value, WirInstr::V128Const(_)) {
         return false;
     }
-    let Some(folded) = const_vector(value, written.as_deref()) else {
-        return false;
-    };
     *value = WirInstr::V128Const(folded as i128);
     true
 }

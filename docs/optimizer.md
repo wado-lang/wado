@@ -265,17 +265,17 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
       the undivided form; what is missing is reaching the fold without the
       inliner paying for the body first.
       `tagged_template_lit_scan_fold.wado` pins all three shapes.
-- [ ] An array literal's length as a known constant. The value graph records one
-      for `array_new` and answers `array_len` from it, but a literal names no
-      allocation, so a length guard over one never folds. A vector literal
-      shorter than its lane count is where it shows: `let v: u64x2 = [a]`
-      inlines `core:simd`'s `if lane < len { get } else { 0 }` per lane, `sroa`
+- [ ] An array literal's length as a known constant. The value graph answers
+      `array_len` from what an `array_new` recorded, and a literal allocates
+      nothing, so a length guard over one never folds. It shows on a vector
+      literal shorter than its lane count. `let v: u64x2 = [a]` inlines
+      `core:simd`'s `if lane < len { get } else { 0 }` once per lane, `sroa`
       declines the candidate over the read past the end, and the array survives
-      with a live guard, where `[a, b]` compiles to two `replace_lane`s.
-      Recording the literal is a few lines; what is missing is asking, since the
-      graph for a function is built before the guard is inlined into it and no
-      later pass rebuilds it. `sroa` cannot close it alone: an out-of-range read
-      it rewrote would have to answer with a value where the array traps.
+      with a live guard. `[a, b]` compiles to two `replace_lane`s. Recording a
+      literal's length is a few lines. Asking for it is the missing part: the
+      graph is built before the guard is inlined, and no later pass rebuilds it.
+      `sroa` cannot close the gap alone, because an out-of-range read it
+      rewrote would have to answer with a value where the array traps.
 
 ## Tried and found ineffective
 

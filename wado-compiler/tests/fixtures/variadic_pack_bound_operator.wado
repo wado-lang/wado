@@ -54,9 +54,7 @@ test "and a unary operator" {
 }
 
 // A newtype inherits its base's impl with itself put in for the base, so a
-// bound naming the newtype is what the inherited impl answers. The solver
-// peeled to the base without carrying the substitution, and disagreed with the
-// rest of the compiler about `Meters: Add`.
+// bound naming the newtype is what the inherited impl answers.
 
 fn add_newtype<T: Add<Meters, Output = Meters>>(v: T, acc: Meters) -> Meters {
     return v + acc;

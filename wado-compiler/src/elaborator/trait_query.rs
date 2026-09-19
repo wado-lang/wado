@@ -21,6 +21,7 @@ use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+use super::util::bound_param_name;
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
@@ -651,11 +652,8 @@ impl TypeSystem {
             return false;
         };
         let wanted = trait_.args();
-        // A bound writing arguments is the solver's question: it answers at the
-        // arguments where this path answers at the trait, so the two differ
-        // exactly where a written argument decides. One answer, the solver's
-        // (WEP 2026-09-01); this path still answers where the lowering states
-        // nothing about the question.
+        // Where a written argument decides, the answer is the solver's — the
+        // one path that reads arguments (WEP 2026-09-01).
         if !wanted.is_empty()
             && let Some(bridge) = self.solver.as_ref()
             && let Some(answer) = bridge.answer(self, ctx, scope, type_id, trait_)
@@ -1368,8 +1366,7 @@ impl TypeSystem {
             return true;
         }
 
-        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
-        {
+        if let Some(name) = bound_param_name(resolved) {
             return ctx
                 .trait_ctx
                 .type_param_bounds

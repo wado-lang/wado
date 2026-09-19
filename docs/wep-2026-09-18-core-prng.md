@@ -149,15 +149,15 @@ counter walk. Two results decided it.
 
 #### No vector form is worth having
 
-The two candidates worth shipping are slower in one, and the third gains 9% and
-is still the slowest of the three in both columns. A keyed round is a serial
-dependency chain, so widening it multiplies the data without shortening the
-chain, and the scalar instruction set wins every exchange that matters: x86
-returns both halves of a 64×64 multiply in one
-`mulq` and rotates in one `rolq`, while Wasm's `i64x2.mul` has no x86
-instruction below AVX512DQ, there is no vector rotate, and the high half of a
-32×32 product takes two widening multiplies and a shuffle. The published
-rankings, all of them taken on scalar or GPU hardware, invert here.
+The two candidates worth shipping are slower in the vector column than in the
+scalar one, and the third gains 9% and is still the slowest of the three in both
+columns. A keyed round is a serial dependency chain, so widening it multiplies
+the data without shortening the chain. The scalar instruction set then wins
+every exchange that matters. x86 returns both halves of a 64×64 multiply in one
+`mulq` and rotates in one `rolq`. Wasm's `i64x2.mul` has no x86 instruction
+below AVX512DQ, there is no vector rotate, and the high half of a 32×32 product
+takes two widening multiplies and a shuffle. The published rankings, all of them
+taken on scalar or GPU hardware, invert here.
 
 #### One u64 per call is the shape the consumer has
 

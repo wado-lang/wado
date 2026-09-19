@@ -1002,13 +1002,10 @@ fn threefry2x64(key0: u64, key1: u64, ctr0: u64, ctr1: u64) -> [u64, u64] {
     return [x0, x1];
 }
 
-#[inline(always)]
-fn rotlx2(x: u64x2, n: u32) -> u64x2 {
-    return x << n | x >> 64 - n;
-}
 
 // Two counters at once: every word of the scalar form becomes a lane, so the
 // instruction count per call is the scalar one and the output is twice as wide.
+#[inline(always)]
 #[inline(always)]
 fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2, u64x2] {
     let parity = u64x2::splat(THREEFRY_PARITY as i64);
@@ -1020,40 +1017,40 @@ fn threefry2x64x2(key0: u64x2, key1: u64x2, ctr0: u64x2, ctr1: u64x2) -> [u64x2,
     let mut x1 = ctr1 + key1;
 
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 16) ^ x0;
+    x1 = vrotl(x1, 16) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 42) ^ x0;
+    x1 = vrotl(x1, 42) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 12) ^ x0;
+    x1 = vrotl(x1, 12) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 31) ^ x0;
+    x1 = vrotl(x1, 31) ^ x0;
     x0 = x0 + key1;
     x1 = x1 + ks2 + one;
 
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 16) ^ x0;
+    x1 = vrotl(x1, 16) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 32) ^ x0;
+    x1 = vrotl(x1, 32) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 24) ^ x0;
+    x1 = vrotl(x1, 24) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 21) ^ x0;
+    x1 = vrotl(x1, 21) ^ x0;
     x0 = x0 + ks2;
     x1 = x1 + key0 + two;
 
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 16) ^ x0;
+    x1 = vrotl(x1, 16) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 42) ^ x0;
+    x1 = vrotl(x1, 42) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 12) ^ x0;
+    x1 = vrotl(x1, 12) ^ x0;
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 31) ^ x0;
+    x1 = vrotl(x1, 31) ^ x0;
     x0 = x0 + key0;
     x1 = x1 + key1 + three;
 
     x0 = x0 + x1;
-    x1 = rotlx2(x1, 16) ^ x0;
+    x1 = vrotl(x1, 16) ^ x0;
     return [x0, x1];
 }
 
@@ -1224,16 +1221,15 @@ global DRAW_COUNT: i32 = 1 << 16;
 
 global GRID_SIDE: i32 = 1 << 8;
 
-// Eight of SHISHUA's rounds and sixteen of xoshiro's steps: enough to cross
-// every boundary in the file several times, and short enough that a failure
-// prints a stream a reader can scan.
+// Long enough to cross every boundary in the file several times, short enough
+// that a failure prints a stream a reader can scan.
 #[allow(dead_code)]
 global STREAM_WORDS: i32 = 128;
 
-// The drains fold a batch into one word, which is what a benchmark wants and
-// what an equivalence must not rest on: a fold agrees across a reordering of
-// the batch or a swap of two lanes. Two paths are equivalent when they emit the
-// same words in the same order, so the tests below collect the words.
+// A drain folds its batch into one word, which a benchmark wants and an
+// equivalence must not rest on: a fold agrees across a reordering of the batch
+// or a swap of two lanes. The collectors below keep the emission order, which
+// is what two paths agreeing means.
 #[allow(dead_code)]
 fn push_lanes(out: &mut List<u64>, v: u64x2) {
     out.push(v.extract_lane(0) as u64);
@@ -1241,18 +1237,23 @@ fn push_lanes(out: &mut List<u64>, v: u64x2) {
 }
 
 #[allow(dead_code)]
+fn push_batch(out: &mut List<u64>, batch: [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2]) {
+    let [a, b, c, d, e, f, g, h] = batch;
+    push_lanes(out, a);
+    push_lanes(out, b);
+    push_lanes(out, c);
+    push_lanes(out, d);
+    push_lanes(out, e);
+    push_lanes(out, f);
+    push_lanes(out, g);
+    push_lanes(out, h);
+}
+
+#[allow(dead_code)]
 fn collect_by_batch<R: VectorBatch>(rng: &mut R, n: i32) -> List<u64> {
     let mut out: List<u64> = [];
     for let mut i = 0; i < n; i += BATCH_WORDS {
-        let [a, b, c, d, e, f, g, h] = rng.next_batch();
-        push_lanes(&mut out, a);
-        push_lanes(&mut out, b);
-        push_lanes(&mut out, c);
-        push_lanes(&mut out, d);
-        push_lanes(&mut out, e);
-        push_lanes(&mut out, f);
-        push_lanes(&mut out, g);
-        push_lanes(&mut out, h);
+        push_batch(&mut out, rng.next_batch());
     }
     return out;
 }
@@ -1261,15 +1262,7 @@ fn collect_by_batch<R: VectorBatch>(rng: &mut R, n: i32) -> List<u64> {
 fn collect_through_trait<R: VectorRound>(rng: &mut R, n: i32) -> List<u64> {
     let mut out: List<u64> = [];
     for let mut i = 0; i < n; i += ROUND_WORDS {
-        let [a, b, c, d, e, f, g, h] = rng.round_of();
-        push_lanes(&mut out, a);
-        push_lanes(&mut out, b);
-        push_lanes(&mut out, c);
-        push_lanes(&mut out, d);
-        push_lanes(&mut out, e);
-        push_lanes(&mut out, f);
-        push_lanes(&mut out, g);
-        push_lanes(&mut out, h);
+        push_batch(&mut out, rng.round_of());
     }
     return out;
 }
@@ -1288,14 +1281,10 @@ fn collect_shishua_bulk(rng: &mut Shishua, n: i32) -> List<u64> {
     let mut out: List<u64> = [];
     for let mut i = 0; i < n; i += ROUND_WORDS {
         rng.round();
-        push_lanes(&mut out, rng.o0);
-        push_lanes(&mut out, rng.o1);
-        push_lanes(&mut out, rng.o2);
-        push_lanes(&mut out, rng.o3);
-        push_lanes(&mut out, rng.o4);
-        push_lanes(&mut out, rng.o5);
-        push_lanes(&mut out, rng.o6);
-        push_lanes(&mut out, rng.o7);
+        push_batch(
+            &mut out,
+            [rng.o0, rng.o1, rng.o2, rng.o3, rng.o4, rng.o5, rng.o6, rng.o7],
+        );
     }
     return out;
 }

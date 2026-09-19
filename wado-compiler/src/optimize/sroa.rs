@@ -1,11 +1,7 @@
 //! Scalar Replacement of Aggregates: a struct, tuple or array used only for
 //! element access — `let s = S { x: e1, y: e2 }; let a = s.x;` — is decomposed
-//! into per-field `$sroa_s_x` locals, and copy propagation then removes the
-//! trivial copies. An array's accesses are the sequence builtins
-//! (`array_get_value(&a, 1)`, `array_len(&a)`) rather than field reads, so it
-//! decomposes only where every index is a constant in range. A local found
-//! `&local`-aliased by a decomposed field flows back into
-//! `func.stores_aliased_locals` through a `RefCell` the driver merges after.
+//! into per-element `$sroa_s_x` locals, and copy propagation then removes the
+//! trivial copies.
 
 use std::cell::{Cell, RefCell};
 
@@ -441,7 +437,7 @@ fn candidate_from_stmt(body: &Body, stmt: StmtId, candidates: &mut Vec<SroaCandi
 // -----------------------------------------------------------------------
 
 /// The local `expr` reads bare, whether or not it is a candidate.
-fn alias_local(body: &Body, expr: ExprId) -> Option<u32> {
+fn bare_local(body: &Body, expr: ExprId) -> Option<u32> {
     match &body.exprs[expr].kind {
         ExprKind::Local { index, .. } => Some(*index),
         _ => None,
@@ -449,12 +445,7 @@ fn alias_local(body: &Body, expr: ExprId) -> Option<u32> {
 }
 
 fn is_candidate_local(body: &Body, expr: ExprId, candidates: &IndexSet<u32>) -> Option<u32> {
-    if let ExprKind::Local { index, .. } = &body.exprs[expr].kind
-        && candidates.contains(index)
-    {
-        return Some(*index);
-    }
-    None
+    bare_local(body, expr).filter(|index| candidates.contains(index))
 }
 
 /// `&candidate` — the shape a callee that does not store its parameter may hold
@@ -562,7 +553,7 @@ fn array_read_of_candidate(
     let seq = args.first()?.expr.as_expr()?;
     let local = is_candidate_local(body, seq, arrays)
         .or_else(|| ref_to_candidate_local(body, seq, arrays).map(|(idx, _)| idx))
-        .or_else(|| alias_local(body, seq).and_then(|a| aliases.get(&a).copied()))?;
+        .or_else(|| bare_local(body, seq).and_then(|a| aliases.get(&a).copied()))?;
     match builtin {
         CtfeBuiltin::ArrayLen => Some((local, ArrayRead::Len)),
         CtfeBuiltin::ArrayGet => {
