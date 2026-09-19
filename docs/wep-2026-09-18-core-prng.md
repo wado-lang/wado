@@ -77,10 +77,10 @@ no implementation of them may perform I/O.
 The vector trait returns eight `u64x2` and not a width the engine chooses.
 Both engines reach sixteen words in a whole number of their own steps — two of
 xoshiro's four-vector step, one of SHISHUA's eight-vector round — so neither
-keeps a cursor, and the tuple return stays in registers (`multi_value_return`
-flattens a tuple return whose call site destructures). Measured through the
-trait, SHISHUA gives 1.55 G and xoshiro ×8 gives 703 M, which is what each gives
-with no trait at all.
+keeps a cursor, and the batch crosses the trait boundary in registers: the
+return is a tuple the call site destructures, and nothing is allocated for it.
+Measured through the trait, SHISHUA gives 1.55 G and xoshiro ×8 gives 703 M,
+which is what each gives with no trait at all.
 
 A per-engine width would be the more general design and would cost the
 generality: a consumer could not be written against it without either a cursor
@@ -143,26 +143,30 @@ its own scalar form:
 | Threefry-2x64-13 |  391 M |  345 M |           189 M |
 | Philox4x32-10    |  111 M |  121 M |            60 M |
 
-Two results decided it.
+The third column folds two coordinates into the counter with odd constants
+before the transform, so what it times is the terrain shape and not a bare
+counter walk. Two results decided it.
 
-**No vector form is worth having.** The two candidates worth shipping are slower
-in one, and the third gains 9% while trailing both by 3.5× either way.
-A keyed round is a serial dependency chain, so widening it multiplies the
-data without shortening the chain, and the scalar instruction set wins every
-exchange that matters: x86 returns both halves of a 64×64 multiply in one
+#### No vector form is worth having
+
+The two candidates worth shipping are slower in one, and the third gains 9%
+while trailing both by 3.5× either way. A keyed round is a serial dependency
+chain, so widening it multiplies the data without shortening the chain, and the
+scalar instruction set wins every exchange that matters: x86 returns both halves
+of a 64×64 multiply in one
 `mulq` and rotates in one `rolq`, while Wasm's `i64x2.mul` has no x86
 instruction below AVX512DQ, there is no vector rotate, and the high half of a
 32×32 product takes two widening multiplies and a shuffle. The published
 rankings, all of them taken on scalar or GPU hardware, invert here.
 
-**One u64 per call is the shape the consumer has.** Threefry leads on a counter
-drain and loses by 1.8× on the terrain shape, because it emits two words per
-call and a consumer asking for the value at one coordinate throws one away.
-Squares emits exactly one. Philox is 3.5× behind on every axis and is out.
+#### One u64 per call is the shape the consumer has
 
-The third column folds two coordinates into the counter with odd constants
-before the transform, so what it times is the terrain shape and not a bare
-counter walk.
+Threefry leads on a counter drain and loses by 1.8× on the terrain shape,
+because it emits two words per call and a consumer asking for the value at one
+coordinate throws one away. Squares emits exactly one. Philox is 3.5× behind on
+every axis and is out.
+
+#### The key is derived, not taken
 
 Squares' output quality depends on its key in a way a block cipher's does not:
 the key 0 yields all zeros, and a small integer key yields roughly 2^16/k zeros
@@ -190,8 +194,8 @@ pub trait Seedable with () {
 
 Nothing in `core:prng` declares an effect, and nothing in it can: a `Seed` is
 data, and every constructor of one is arithmetic. Two hundred and fifty-six bits
-is xoshiro's four words and SHISHUA's state with no expansion, and is the width
-Rust's `SeedableRng` and ChaCha8Rand already use.
+is xoshiro's whole state and SHISHUA's own seed, which SHISHUA expands into its
+1024-bit state, and is the width Rust's `SeedableRng` and ChaCha8Rand already use.
 
 `from_u64` expands through SplitMix64, so `Seed::from_u64(0)` is as good a seed
 as any other — the property NumPy's `SeedSequence` exists to provide, and the
@@ -206,8 +210,8 @@ pub fn seed() -> Seed with Random;
 ```
 
 `core:secure_random` depends on `core:prng` for the type; the dependency does
-not run the other way. A program reaching for unpredictable randomness writes
-one line that carries the effect and none after it:
+not run the other way. A program that wants its run to differ from the last
+writes one line that carries the effect and none after it:
 
 ```wado
 use { seed } from "core:secure_random";
@@ -223,6 +227,23 @@ export fn run() with (Stdout, Random) {
 
 The reproducible construction on the last line declares nothing, which is the
 whole point: a test, a replay and a fixture pay no capability at all.
+
+### Nothing in `core:prng` is cryptographic
+
+xoshiro256++, SHISHUA and Squares64 are simulation generators. Each is built to
+pass statistical tests at the least work per word, and none of them is designed
+to resist an adversary who has seen its output: xoshiro's state transition is
+linear and invertible, and five rounds of middle-square arithmetic are far short
+of a block cipher's. A token, a session identifier, a nonce, a password salt or
+a key therefore comes from `core:secure_random`, which draws from `wasi:random`
+and carries `Random` to say where it came from. `core:prng` is for simulation,
+sampling, procedural generation, randomized algorithms and tests.
+
+The boundary is one-way, and `seed()` is the crossing: entropy may start a fast
+stream, and no output of that stream goes back to a caller asking for a secret.
+No type enforces the direction — a `Seed` is the same value on both sides — so
+what marks it is which module a value was asked from, and the `Random` effect
+that asking one of them carries.
 
 ### Parallel streams: two mechanisms, kept apart
 
