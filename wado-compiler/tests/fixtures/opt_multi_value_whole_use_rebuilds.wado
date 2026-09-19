@@ -18,9 +18,11 @@ fn make(x: i32) -> Pair {
     return Pair { a: x, b: x * 2 };
 }
 
+// Reads the value whole, so its parameter keeps the aggregate and an argument
+// has to arrive as one.
 #[inline("never")]
-fn total(p: Pair) -> i32 {
-    return p.a + p.b;
+fn echo(p: Pair) -> Pair {
+    return p;
 }
 
 // Reads the fields: lowered straight off the two results.
@@ -31,28 +33,30 @@ fn from_fields(x: i32) -> i32 {
 }
 
 // Hands the aggregate on whole: the two results are bound and read back into
-// the struct `total` was compiled to take.
+// the struct `echo` was compiled to take.
 #[inline("never")]
 fn from_whole(x: i32) -> i32 {
-    return total(make(x));
+    let p = echo(make(x));
+    return p.a + p.b;
 }
 
 // Two whole hand-offs of the same callee, each rebuilding its own result.
 #[inline("never")]
 fn from_two(x: i32) -> i32 {
-    return total(make(x)) + total(make(x + 1));
+    return echo(make(x)).a + echo(make(x + 1)).b;
 }
 
 export fn run() {
     assert from_fields(builtin::black_box(5)) == 5;
     assert from_whole(builtin::black_box(5)) == 15;
-    assert from_two(builtin::black_box(5)) == 33;
+    assert from_two(builtin::black_box(5)) == 17;
 }
 
 __DATA__
 {
     "stdout": "",
     "wir_expect:O2": [
-        "make\" = fn(i32) -> [i32, i32]"
+        "make\" = fn(i32) -> [i32, i32]",
+        "multivalue_bind [$mv_a"
     ]
 }

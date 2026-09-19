@@ -205,12 +205,8 @@ fn mix64x2(key: u64x2) -> u64x2 {
     return z ^ z >> 31;
 }
 
-global COORD_X: u64 = 0x9E3779B97F4A7C15;
-
-global COORD_Y: u64 = 0xC2B2AE3D27D4EB4F;
-
 fn value_at(seed: u64, x: i32, y: i32) -> u64 {
-    return mix64(seed ^ x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y);
+    return mix64(seed ^ coord_key(x, y));
 }
 
 global PHILOX_M0: u64 = 0xD2511F53;
@@ -497,9 +493,13 @@ fn drain_philox_simd(n: i32) -> u64 {
     return out;
 }
 
+global COORD_X: u64 = 0x9E3779B97F4A7C15;
+
+global COORD_Y: u64 = 0xC2B2AE3D27D4EB4F;
+
 // The terrain shape: the counter is two coordinates folded into one word, and
-// the key is the world seed. Identical for all three, so the gap between these
-// and the counter drains above is the coordinate fold and nothing else.
+// the key is the world seed. Every candidate folds the same way, so the gap
+// between these and the counter drains above is the fold and nothing else.
 #[inline(always)]
 fn coord_key(x: i32, y: i32) -> u64 {
     return x as i64 as u64 * COORD_X ^ y as i64 as u64 * COORD_Y;

@@ -247,6 +247,12 @@ pub struct ClosureWrapperFuncs {
     pub inspect: Option<WirFuncId>,
 }
 
+/// The `(field_name, type_id)` pairs a multi-value ABI records, in the
+/// declaration order both halves of it index by.
+fn abi_fields(names: &[String], types: &[TypeId]) -> Vec<(String, TypeId)> {
+    names.iter().cloned().zip(types.iter().copied()).collect()
+}
+
 impl<'a> WirContext<'a> {
     /// Create a new `WirContext` from a `NirPackage`.
     pub fn new(package: &'a NirPackage) -> Self {
@@ -260,38 +266,26 @@ impl<'a> WirContext<'a> {
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
 
-        // Pre-compute the map of multi-value-return functions (set by the
-        // TIR `optimize::multi_value_return` pass). The translator queries
-        // this map at call sites to decide between `LocalSet` (single
-        // result) and `MultiValueLocalBind` (split into N locals), and to
-        // get the per-result `(field_name, type_id)` info for naming the
-        // split locals. Keyed by `(name, module_source)` because plain
-        // names are not unique across modules.
+        // Both maps are keyed by `(name, module_source)`, because a plain name
+        // is not unique across modules.
         let multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>> =
             package
                 .functions
                 .iter()
                 .filter_map(|f| {
                     let f = f.try_borrow().ok()?;
-                    if let nir::ReturnAbi::MultiValue {
+                    let nir::ReturnAbi::MultiValue {
                         result_types,
                         field_names,
                     } = &f.return_abi
-                    {
-                        let pairs: Vec<(String, TypeId)> = field_names
-                            .iter()
-                            .cloned()
-                            .zip(result_types.iter().copied())
-                            .collect();
-                        Some(((f.name.clone(), f.module_source.clone()), pairs))
-                    } else {
-                        None
-                    }
+                    else {
+                        return None;
+                    };
+                    let key = (f.name.clone(), f.module_source.clone());
+                    Some((key, abi_fields(field_names, result_types)))
                 })
                 .collect();
 
-        // The parameter side of the same ABI: which positions a call has to
-        // hand over field by field, and under which names.
         let mut multi_value_param_funcs: IndexMap<
             (String, ModuleSource),
             IndexMap<usize, Vec<(String, TypeId)>>,
@@ -308,15 +302,10 @@ impl<'a> WirContext<'a> {
                 else {
                     continue;
                 };
-                let pairs: Vec<(String, TypeId)> = field_names
-                    .iter()
-                    .cloned()
-                    .zip(field_types.iter().copied())
-                    .collect();
                 multi_value_param_funcs
                     .entry((f.name.clone(), f.module_source.clone()))
                     .or_default()
-                    .insert(param_idx, pairs);
+                    .insert(param_idx, abi_fields(field_names, field_types));
             }
         }
 

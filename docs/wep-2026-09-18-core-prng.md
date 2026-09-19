@@ -59,7 +59,7 @@ pub trait VectorRng with () {
 A unified trait would have to name one width. Named one, the eight-lane engine
 spends a cursor and a branch per word to hand out a single u64, and the
 measurement is what that costs: SHISHUA falls from 1.65 G handing out a round to
-185 M handing out a word, an order of magnitude, all of it spent in the API
+185 M handing out a word. That order of magnitude goes entirely into the API
 shape. Named sixteen, the scalar engine has to buffer, and a consumer wanting
 one number pays for fifteen it will not use.
 
@@ -82,10 +82,9 @@ return is a tuple the call site destructures, and nothing is allocated for it.
 Measured through the trait, SHISHUA gives 1.65 G and xoshiro ×8 gives 762 M,
 which is what each gives with no trait at all.
 
-A per-engine width would be the more general design and would cost the
-generality: a consumer could not be written against it without either a cursor
-or a type-level width, and the cursor is the thing measured above at an order of
-magnitude.
+A per-engine width is the more general design, and the generality is what it
+costs. A consumer could not be written against it without either a cursor or a
+type-level width, and the cursor is what the order of magnitude above measures.
 
 ### The vector trait generates and nothing more
 
@@ -184,8 +183,8 @@ Squares' output quality depends on its key in a way a block cipher's does not:
 the key 0 yields all zeros, and a small integer key yields roughly 2^16/k zeros
 before the output becomes usable. `from_seed` therefore does not take the
 seed's word as the key. It mixes, tests the result against the key predicate,
-and mixes again until it passes — deterministic, and in practice one round. The
-predicate is an assert, not a comment, and so is the loop bound.
+and mixes again until it passes. The loop is deterministic and in practice runs
+once. The predicate is an assert, not a comment, and so is the loop bound.
 
 ### A seed is a value, so generation is pure
 
@@ -211,8 +210,8 @@ is xoshiro's whole state and SHISHUA's own seed, which SHISHUA expands into its
 already take.
 
 `from_u64` expands through SplitMix64, so `Seed::from_u64(0)` is as good a seed
-as any other — the property NumPy's `SeedSequence` exists to provide, and the
-reason a user may pass 1, 2, 3 as world seeds without the streams correlating.
+as any other. That is the property NumPy's `SeedSequence` exists to provide, and
+it lets a user pass 1, 2, 3 as world seeds without the streams correlating.
 `from_str` is there because the first consumer names its world.
 
 Entropy lives one module away:
@@ -262,8 +261,8 @@ that asking one of them carries.
 
 `Seed::split(index)` derives a child seed and works for every engine. It is
 pure and takes the index rather than keeping a counter, so worker _n_ derives
-its own seed with no coordination and no agreement on who split first — JAX's
-`fold_in` rather than NumPy's `spawn`, for the same reason the keyed layer
+its own seed with no coordination and no agreement on who split first. This is
+JAX's `fold_in` rather than NumPy's `spawn`, for the same reason the keyed layer
 exists. Independence is statistical.
 
 `Xoshiro256pp::jump()` advances 2^128 steps over the same linear state

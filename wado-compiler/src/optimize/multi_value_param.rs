@@ -1,29 +1,19 @@
 //! Multi-value parameter ABI classification: which aggregate parameters arrive
-//! as one Wasm parameter per field instead of a heap struct. A candidate is a
-//! by-value 2..=[`MAX_PARAM_FIELDS`]-field aggregate whose every use in the body
-//! reads a field. The mirror of [`super::multi_value_return`], and the reason a
-//! multi-value result handed straight on allocates nothing. The one mutation is
-//! `param_abi`.
+//! as one Wasm parameter per field instead of a heap struct. The mirror of
+//! [`super::multi_value_return`]. The one mutation is `param_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FunctionKind, NirFunction, NirStruct, ParamAbi};
+use crate::nir::{NirStruct, ParamAbi};
 use crate::nir_arena::{Body, ExprId, ExprKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeTable;
 
-use super::multi_value_return::aggregate_field_info;
+use super::multi_value_return::{aggregate_field_info, is_eligible_field_type};
 
 /// The same width the return side takes. Beyond it the register pressure of a
 /// call costs more than the aggregate it avoids.
 const MAX_PARAM_FIELDS: usize = 8;
-
-/// What one scalarized parameter carries to WIR build.
-#[derive(Clone)]
-struct ParamInfo {
-    field_types: Vec<TypeId>,
-    field_names: Vec<String>,
-}
 
 /// Set `param_abi` on every parameter that can take one Wasm slot per field.
 /// Runs after every transformation, so it sees the final NIR shape.
@@ -35,28 +25,21 @@ pub fn classify_multi_value_params(project: &mut NirPackage) -> bool {
     if candidates.is_empty() {
         return false;
     }
-
-    let mut changed = false;
-    for ((func_idx, param_idx), info) in candidates {
-        let mut func = project.functions[func_idx].borrow_mut();
-        func.params[param_idx].param_abi = ParamAbi::MultiValue {
-            field_types: info.field_types,
-            field_names: info.field_names,
-        };
-        changed = true;
+    for ((func_idx, param_idx), abi) in candidates {
+        project.functions[func_idx].borrow_mut().params[param_idx].param_abi = abi;
     }
-    changed
+    true
 }
 
 fn collect_candidates(
     project: &NirPackage,
     type_table: &TypeTable,
     structs: &[NirStruct],
-) -> IndexMap<(usize, usize), ParamInfo> {
+) -> IndexMap<(usize, usize), ParamAbi> {
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
-        if !function_eligible(&func) {
+        if !func.only_reached_by_direct_call() {
             continue;
         }
         let Some(body) = &func.body else {
@@ -77,12 +60,21 @@ fn collect_candidates(
             if !(2..=MAX_PARAM_FIELDS).contains(&field_types.len()) {
                 continue;
             }
+            // A field the return side declines takes no Wasm slot of its own,
+            // so splitting it would leave the signature and the call site
+            // counting differently.
+            if !field_types
+                .iter()
+                .all(|&t| is_eligible_field_type(t, type_table))
+            {
+                continue;
+            }
             if !only_field_reads(body, param.local_index, &field_names) {
                 continue;
             }
             out.insert(
                 (func_idx, param_idx),
-                ParamInfo {
+                ParamAbi::MultiValue {
                     field_types,
                     field_names,
                 },
@@ -92,31 +84,16 @@ fn collect_candidates(
     out
 }
 
-/// The gates [`super::multi_value_return`] applies, for the same reasons: every
-/// way a function's address leaves a direct call, and every caller `wir_build`
-/// does not lower through the callee's recorded ABI.
-fn function_eligible(func: &NirFunction) -> bool {
-    matches!(func.kind, FunctionKind::Regular)
-        && !func.is_dispatch_wrapper
-        && !func.is_export
-        && !func.is_cm_export
-        && !func.is_cm_binding
-        && !func.is_async
-        && !func.has_real_type_params()
-        && func.impl_type_params.is_empty()
-        && !func.is_closure_call()
-}
-
-/// Whether every use of `local` reads one of `field_names` off it. A read of the
-/// whole binding refutes: the split locals hold the fields, and the aggregate
-/// they would be built back into is not the one the caller passed.
+/// Whether every read of `local` is the subject of one of `field_names`. A read
+/// of the whole binding refutes: the split locals hold the fields, and an
+/// aggregate built back from them is not the one the caller passed.
 ///
 /// A destructure needs no case of its own — it reaches NIR as one field read per
 /// binding.
 fn only_field_reads(body: &Body, local: u32, field_names: &[String]) -> bool {
     let names: IndexSet<&str> = field_names.iter().map(String::as_str).collect();
     let mut whole_reads: IndexSet<ExprId> = IndexSet::default();
-    let mut through_field: IndexSet<ExprId> = IndexSet::default();
+    let mut field_subjects: IndexSet<ExprId> = IndexSet::default();
 
     for expr in reachable_exprs(body) {
         match &body.exprs[expr].kind {
@@ -127,23 +104,14 @@ fn only_field_reads(body: &Body, local: u32, field_names: &[String]) -> bool {
                 expr: inner,
                 field_name,
                 ..
-            } => {
-                if !names.contains(field_name.as_str()) {
-                    continue;
-                }
-                if let Some(inner) = inner.as_expr()
-                    && reads_local(body, inner, local)
-                {
-                    through_field.insert(inner);
+            } if names.contains(field_name.as_str()) => {
+                if let Some(inner) = inner.as_expr() {
+                    field_subjects.insert(inner);
                 }
             }
             _ => {}
         }
     }
 
-    whole_reads.iter().all(|e| through_field.contains(e))
-}
-
-fn reads_local(body: &Body, expr: ExprId, local: u32) -> bool {
-    matches!(&body.exprs[expr].kind, ExprKind::Local { index, .. } if *index == local)
+    whole_reads.is_subset(&field_subjects)
 }

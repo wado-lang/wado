@@ -468,15 +468,10 @@ pub enum ParamAbi {
     /// One Wasm parameter, of the NIR type as written.
     #[default]
     Single,
-    /// One Wasm parameter per field of the aggregate. The parameter's NIR type
-    /// and local index are unchanged — only the WIR-level ABI shifts, and the
-    /// body reads the fields off split locals as a multi-value call result
-    /// does.
+    /// One Wasm parameter per field, in declaration order. The NIR type and
+    /// local index are unchanged; only the WIR-level ABI shifts.
     MultiValue {
-        /// NIR types of each field, in declaration order.
         field_types: Vec<TypeId>,
-        /// Field names in the same order, which is what a `FieldAccess` on the
-        /// parameter looks the split local up by.
         field_names: Vec<String>,
     },
 }
@@ -592,6 +587,24 @@ impl NirFunction {
     #[inline]
     pub fn has_real_type_params(&self) -> bool {
         self.type_params.iter().any(|p| !p.is_effect)
+    }
+
+    /// Whether every caller reaches this function through a direct call that
+    /// `wir_build` lowers against its recorded ABI, so changing that ABI is safe.
+    ///
+    /// A trait method qualifies: after monomorphization it is an ordinary
+    /// direct-call target.
+    #[inline]
+    pub fn only_reached_by_direct_call(&self) -> bool {
+        matches!(self.kind, FunctionKind::Regular)
+            && !self.is_dispatch_wrapper
+            && !self.is_export
+            && !self.is_cm_export
+            && !self.is_cm_binding
+            && !self.is_async
+            && !self.has_real_type_params()
+            && self.impl_type_params.is_empty()
+            && !self.is_closure_call()
     }
 
     /// Returns the copied type if this is a synthesized value-copy function.

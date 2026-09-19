@@ -426,9 +426,12 @@ fn register_single_function(
         {
             for (field_name, &field_type) in field_names.iter().zip(field_types) {
                 let wir_type = ctx.type_id_to_wir_type(type_table, field_type);
-                if matches!(wir_type, WirType::Unit) {
-                    continue;
-                }
+                debug_assert!(
+                    !matches!(wir_type, WirType::Unit),
+                    "[WIR] a unit field took a multi-value parameter slot: \
+                     `optimize::multi_value_param` declines one, and the split \
+                     locals the body reads are named per field either way"
+                );
                 params.push(wir_type);
                 param_names.push(multi_value_split_local(&unique_name, field_name));
             }

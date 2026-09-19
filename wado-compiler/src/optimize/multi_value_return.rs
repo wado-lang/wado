@@ -6,7 +6,7 @@
 //! than the callee's ABI. The one mutation is `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
+use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::optimize::sroa_variant_return::settled_locals;
@@ -213,22 +213,7 @@ fn candidate_info(
     structs: &[NirStruct],
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> Option<CandidateInfo> {
-    if !matches!(func.kind, FunctionKind::Regular) || func.is_dispatch_wrapper {
-        return None;
-    }
-    if func.is_export || func.is_cm_export || func.is_cm_binding {
-        return None;
-    }
-    if func.is_async {
-        return None;
-    }
-    if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-        return None;
-    }
-    // A trait method is not excluded: after monomorphization it is an ordinary
-    // direct-call target, and the gates above already cover every way a
-    // function's address escapes a direct call.
-    if func.is_closure_call() {
+    if !func.only_reached_by_direct_call() {
         return None;
     }
 
@@ -296,7 +281,7 @@ pub(super) fn aggregate_field_info(
     None
 }
 
-fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Primitive(_)
         | ResolvedType::Struct { .. }
@@ -305,12 +290,14 @@ fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::GenericResource { .. }
-        | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Ref(_)
         | ResolvedType::MutRef(_)
         | ResolvedType::Reactive(_) => true,
+        // A newtype erases to its base, so what the base takes a slot for is
+        // what this does.
+        ResolvedType::Newtype { base_type, .. } => is_eligible_field_type(*base_type, type_table),
         ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::Function { .. }
@@ -597,9 +584,8 @@ struct UseCx<'a> {
     /// binds a call result as safely as a plain `let`.
     settled: &'a IndexSet<u32>,
     /// Set inside the return value of a function that itself takes this ABI.
-    /// `wir_build` lowers that whole subtree with the results accounted for, so
-    /// a nested call there cannot rebuild its aggregate the way one anywhere
-    /// else does — it is the one position that still refutes a candidate.
+    /// The one position a nested call cannot rebuild its aggregate in, and so
+    /// the one that still refutes.
     under_multi_value_return: bool,
 }
 
@@ -863,11 +849,9 @@ fn walk_expr_for_uses(
             }
             walk_expr_for_uses_operand(body, source, cx, invalid, tracked);
         }
-        // A read of the whole binding, not of a field. The split locals hold
-        // the fields, and a struct built back from them would be a copy: a
-        // mutation through it would not reach the next read. So this one still
-        // refutes, unlike a whole result read straight off a call, which is a
-        // fresh literal the callee built and nothing else holds.
+        // A struct rebuilt from the split locals is a copy, so a mutation
+        // through it would not reach the next read. A whole result read off a
+        // call is a fresh literal instead, which is why only this one refutes.
         ExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);

@@ -157,9 +157,8 @@ pub fn sroa_param_name(original: &str) -> String {
     format!("{original}$scalar")
 }
 
-/// The WIR local holding one field of an aggregate taken apart by the
-/// multi-value ABI — a call result bound field by field, or a parameter that
-/// arrives as one Wasm slot per field.
+/// The WIR local holding one field of an aggregate the multi-value ABI took
+/// apart, on either the result side or the parameter side.
 #[must_use]
 pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
     format!("{base}_mv_{field_name}")
