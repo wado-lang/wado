@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.0.29](https://github.com/wado-lang/wado/compare/v0.0.28...v0.0.29) - 2026-09-19
+
+- fix(lower): value-copy hand-over decided by place, and a variant pattern carrying its case index by @gfx in https://github.com/wado-lang/wado/pull/2054
+- feat(gale): diagnostics through core:log, and one checked path for every type-parameter slot by @gfx in https://github.com/wado-lang/wado/pull/2056
+- fix(compiler): two wrong-code bugs, from an EMI campaign widened to a loop guard and five levels by @gfx in https://github.com/wado-lang/wado/pull/2052
+- feat(prelude): StrSlice and AsStrSlice — one signature for String, &String and a view, free at -O2 by @gfx in https://github.com/wado-lang/wado/pull/2055
+- feat: warn when a binder shadows a known name, and check every declared world by @gfx in https://github.com/wado-lang/wado/pull/2062
+- fix(compiler): a global initializer is a function body, and every pass walks it by @gfx in https://github.com/wado-lang/wado/pull/2063
+- feat(lang): branchless comparison chains, and the bounds checks they unblock by @gfx in https://github.com/wado-lang/wado/pull/2065
+- feat(core:icu): Unicode character properties, at 104 KB for a program that uses one by @gfx in https://github.com/wado-lang/wado/pull/2067
+- feat(benchmark): a GPT that trains in Wado, and the suite's first object-graph workload by @gfx in https://github.com/wado-lang/wado/pull/2069
+- feat(stdlib): a text parameter takes `AsStrSlice` by value, so a literal passes bare and a view never copies by @gfx in https://github.com/wado-lang/wado/pull/2066
+- feat(core:secure_random): name randomness by its invariant, and select a rotate in the optimizer by @gfx in https://github.com/wado-lang/wado/pull/2070
+- feat(lang): a trait bound carries the trait's arguments, so text under `AsStrSlice` compares with `==` by @gfx in https://github.com/wado-lang/wado/pull/2071
+- feat(closures): capture a binding across any depth of nesting, and call a captured `fn` by @gfx in https://github.com/wado-lang/wado/pull/2072
+- feat(effects): a trait's `with` clause bounds every impl of it, and effects survive a generic bound by @gfx in https://github.com/wado-lang/wado/pull/2073
+- feat(compiler)!: infer reference retention, and declare it only where a body cannot say it by @gfx in https://github.com/wado-lang/wado/pull/2075
+- fix(traits): a trait question states the arguments it is asked at by @gfx in https://github.com/wado-lang/wado/pull/2074
+- perf(optimizer): version a loop whose entry is no constant, and fix a licm miscompile through a closure capture by @gfx in https://github.com/wado-lang/wado/pull/2076
+- perf(value-copy): key a callee's writes by the handle each is reached through, 467x on json_catalog_v2 by @gfx in https://github.com/wado-lang/wado/pull/2077
+- perf(value-copy): a value argument names storage of its own, restoring json_catalog_v2 to 44 clones by @gfx in https://github.com/wado-lang/wado/pull/2078
+- perf: render text where it lies, and fold a constant view — 40% less generated WIR by @gfx in https://github.com/wado-lang/wado/pull/2079
+- perf(optimizer): devirtualize iterator-adaptor closures — CBOR serialize +46%, microgpt inference +10% by @gfx in https://github.com/wado-lang/wado/pull/2080
+- refactor(tir): make type identity a checked question, not a TypeId comparison by @gfx in https://github.com/wado-lang/wado/pull/2081
+- docs(core:prng): decide the random-number design, and stop a vector literal allocating by @gfx in https://github.com/wado-lang/wado/pull/2082
+- feat(cm): let any module bind a Component Model import, in any namespace by @gfx in https://github.com/wado-lang/wado/pull/2083
+- feat(wasi): bundle `wasi:webgpu`, and run it with `wado run-webgpu` by @gfx in https://github.com/wado-lang/wado/pull/2085
+- docs(agents): make `/distill` a standing rule, not a judgement call by @gfx in https://github.com/wado-lang/wado/pull/2088
+
 ## [v0.0.28](https://github.com/wado-lang/wado/compare/v0.0.27...v0.0.28) - 2026-09-14
 
 - perf(liveness): a trait's default body is an edge, not a root (e2e −8.7%) by @gfx in https://github.com/wado-lang/wado/pull/2017
