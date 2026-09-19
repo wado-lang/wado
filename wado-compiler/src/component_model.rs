@@ -2987,6 +2987,7 @@ impl CmInterfaceRegistry {
     /// A user module is recorded and answers by identity. A bundled `wasi:` /
     /// `core:` interface is absent by design, and its module path is its own
     /// interface FQ, so the two populations are disjoint rather than a fallback.
+    /// A `core:` module carries no namespace, which is what distinguishes it.
     pub fn interface_declaring_module(&self, module: &ModuleSource) -> Option<&str> {
         if let Some((fq, _)) = self
             .cm_interface_module_sources
@@ -2995,15 +2996,16 @@ impl CmInterfaceRegistry {
         {
             return Some(fq);
         }
-        let ModuleSource::Binding {
-            namespace,
-            interface,
-        } = module
-        else {
-            return None;
+        let (namespace, path) = match module {
+            ModuleSource::Binding {
+                namespace,
+                interface,
+            } => (Some(*namespace), interface.as_str()),
+            ModuleSource::Core { name } => (None, name.as_str()),
+            _ => return None,
         };
-        let stem = interface.strip_suffix(".wado").unwrap_or(interface);
-        let wanted = (Some(*namespace), format!("{stem}.wado"));
+        let stem = path.strip_suffix(".wado").unwrap_or(path);
+        let wanted = (namespace, format!("{stem}.wado"));
         self.interfaces
             .keys()
             .map(String::as_str)
