@@ -372,6 +372,13 @@ pub fn parse_collector(s: &str) -> Result<Collector, String> {
     }
 }
 
+/// The GC heap every guest starts with. The copying collector splits it into
+/// two semi-spaces, so a program allocates through half of this between
+/// collections. Sized from the benchmark suite, where microgpt is the row that
+/// answers to it: against this, half the size trains 1.10x slower and starting
+/// from nothing 1.56x slower. Not a peak to balance on — 768 MiB gives 30% back.
+const GC_HEAP_INITIAL_SIZE: u64 = 512 << 20;
+
 /// Create a wasmtime Config with all required Wasm features enabled.
 #[must_use]
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Collector) -> Config {
@@ -387,6 +394,13 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     // predicted-taken path.
     config.wasm_branch_hinting(true);
     config.collector(collector);
+    // Start the GC heap at a size a program can run in, rather than at zero.
+    // wasmtime grows a GC heap by just the allocation that failed, so a heap
+    // that starts empty spends the run a collection away from its own capacity:
+    // microgpt trains 1.2x faster from here and infers 1.5x faster, json-catalog
+    // serializes 1.17x faster, and nothing measures slower. The pages are
+    // reserved, not touched, so the cost is address space rather than memory.
+    config.gc_heap_initial_size(GC_HEAP_INITIAL_SIZE);
 
     config.cranelift_opt_level(opt_level);
 

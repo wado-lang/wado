@@ -141,6 +141,15 @@ paid on a benchmark `fts` never touched.
   columns over nested lists, and don't build what nothing reads.** Measure the GC
   share with `--collector null` (it leaks, so drive a fixed iteration count) vs
   `--collector copying`.
+- **The GC heap's size is part of the measurement.** wasmtime grows a GC heap by
+  only the allocation that failed, so a program allocating faster than its heap
+  can hold runs the whole way a collection away from capacity — and in that
+  regime the ranking of two compilers flips with the heap size, not with the
+  code. A change that allocated 20% less measured **49% slower** there, while
+  `--collector null` and a hand-written `.wat` A/B both put it ahead. If an
+  allocation-bound row contradicts a strictly smaller WIR, sweep
+  `gc_heap_initial_size` before believing either arm; `wado` sets a default that
+  keeps microgpt off that cliff, and a raw `wasmtime` invocation does not.
 - **`with_capacity` zero-fills.** `List::with_capacity(n)` is an
   `array.new_default`, so an over-sized arena pays for every slot it never uses —
   once badly enough to turn a 2× faster build into a 4× slower one. Growing from
