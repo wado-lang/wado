@@ -100,7 +100,7 @@ An integer type a uniform range can be drawn over.
 ### `pub trait VectorRng with ()`
 
 A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`. The
-width is the library's, not the engine's, so a consumer keeps no cursor.
+width is the library's, not the engine's, so a whole-batch consumer knows it.
 
 #### `fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2]`
 

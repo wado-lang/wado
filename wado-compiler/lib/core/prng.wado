@@ -479,7 +479,7 @@ fn key_is_usable(key: u64) -> bool {
 }
 
 /// A lane-parallel generator: sixteen `u64` per call, as eight `u64x2`. The
-/// width is the library's, not the engine's, so a consumer keeps no cursor.
+/// width is the library's, not the engine's, so a whole-batch consumer knows it.
 pub trait VectorRng with () {
     fn next_batch(&mut self) -> [u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2, u64x2];
 }
