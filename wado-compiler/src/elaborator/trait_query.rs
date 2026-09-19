@@ -2017,6 +2017,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
+    /// Whether the trait `key` names declares the associated type `assoc_name`.
+    /// Keyed by the declaration, so it answers the same from any module's frame.
+    pub(super) fn trait_declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
+        self.trait_decl_header_of(key)
+            .is_some_and(|header| header.assoc_types.iter().any(|d| d.name == assoc_name))
+    }
+
     /// Whether the trait `key` names declares `method_name`. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.

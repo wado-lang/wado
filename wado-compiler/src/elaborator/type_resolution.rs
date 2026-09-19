@@ -140,15 +140,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_param_bounds
             .get(param_name)?;
+        // Resolve each bound through its own reference site, then ask that
+        // declaration what it declares. Asking by the written name first would
+        // answer from this frame, which a default body materialized for an impl
+        // in another module does not share.
         bounds
             .iter()
-            .filter(|bound| {
-                self.trait_assoc_type_decl(&bound.name, assoc_name)
-                    .is_some()
-            })
-            // The bound's own reference site says which trait it names, so an
-            // aliased bound and another module's same-named trait stay apart.
-            .find_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
+            .find(|decl| self.trait_declares_assoc_type(decl, assoc_name))
             // A bound inherits its supertraits' associated types, so
             // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
             // a trait redeclaring the name still wins for itself.
@@ -161,10 +160,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .trait_env
                             .supertrait_closure_at(&decl, &bound.type_args)
                     })
-                    .find(|inherited| {
-                        self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
-                            .is_some()
-                    })
+                    .find(|inherited| self.trait_declares_assoc_type(&inherited.decl, assoc_name))
                     .map(|inherited| inherited.decl)
             })
     }
