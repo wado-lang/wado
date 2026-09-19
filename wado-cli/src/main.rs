@@ -1,6 +1,6 @@
 use std::process;
 
-use lexopt::Arg::{Long, Value};
+use lexopt::Arg::{Long, Short, Value};
 use mimalloc::MiMalloc;
 use wado_cli::args::CliExit;
 
@@ -263,7 +263,12 @@ async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
     let Some(arg) = parser.next().map_err(CliExit::error)? else {
         return Err(CliExit::help(usage()));
     };
+    // `wado help help` and `wado help --help` ask the same question `wado help`
+    // does, and the command list is the answer.
     let Value(name_val) = arg else {
+        if matches!(arg, Long("help") | Short('h')) {
+            return Err(CliExit::help(usage()));
+        }
         return Err(CliExit::error_with_usage(arg.unexpected(), &usage()));
     };
     let name = name_val.to_string_lossy().into_owned();
@@ -277,13 +282,11 @@ async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
     wado_cli::external::run(&path, ["--help"])
 }
 
-/// The error for a name that is neither builtin nor on `PATH`, which says where
-/// `wado` looked for it.
+/// The error for a name that is neither builtin nor on `PATH`, which says why
+/// nothing ran.
 fn unknown_command(name: &str) -> CliExit {
-    CliExit::error_with_usage(
-        format!("unknown command '{name}' (no 'wado-{name}' on PATH)"),
-        &usage(),
-    )
+    let reason = wado_cli::external::not_found_reason(name);
+    CliExit::error_with_usage(format!("unknown command '{name}' ({reason})"), &usage())
 }
 
 async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {

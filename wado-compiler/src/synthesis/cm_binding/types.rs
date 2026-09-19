@@ -427,9 +427,13 @@ fn held_type(
     element: impl FnOnce(&Type, &mut TypeTable) -> TypeId,
 ) -> TypeId {
     match ty {
-        Type::Reference(inner) | Type::MutReference(inner) => {
+        Type::Reference(inner) => {
             let inner = element(inner, type_table);
             type_table.make_ref(inner)
+        }
+        Type::MutReference(inner) => {
+            let inner = element(inner, type_table);
+            type_table.make_mut_ref(inner)
         }
         _ => element(ty, type_table),
     }

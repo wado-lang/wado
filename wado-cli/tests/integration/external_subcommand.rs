@@ -111,6 +111,33 @@ fn help_answers_for_a_builtin_without_consulting_path() {
         ));
 }
 
+/// `help` is a command like any other, so it answers for itself.
+#[test]
+fn help_answers_for_itself() {
+    for args in [vec!["help", "help"], vec!["help", "--help"]] {
+        wado()
+            .env("PATH", "")
+            .args(args)
+            .assert()
+            .success()
+            .stderr(predicate::str::contains("Usage: wado <command>"));
+    }
+}
+
+/// A name outside the builtin shape is never searched for, so the error says
+/// what is wrong with the name instead of claiming a search.
+#[test]
+fn an_unsearchable_name_is_told_what_a_subcommand_is_named() {
+    wado()
+        .env("PATH", "")
+        .arg("Run-WebGPU")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "unknown command 'Run-WebGPU' (a subcommand is named in lowercase ASCII, digits and '-')",
+        ));
+}
+
 #[test]
 fn help_rejects_a_name_that_is_on_no_path() {
     wado()

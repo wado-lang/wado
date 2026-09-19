@@ -27,7 +27,9 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - Adding a subcommand means adding a `Cmd` variant in `main.rs` — it must appear
   in `ALL` and gain a `name`, `args`, and `desc` arm — plus its module. The name
   is taken for good: `external.rs` resolves only what `Cmd` does not hold, so a
-  new builtin retires that name from `wado-<name>` on `PATH`.
+  new builtin retires that name from `wado-<name>` on `PATH`. `help` is the one
+  without a module: it answers out of the `Cmd` table and the `PATH` lookup, and
+  both live in `main.rs`.
 - The binary sets mimalloc as the global allocator: `wado serve` is
   allocation-heavy per request and the system allocator contends across threads.
 

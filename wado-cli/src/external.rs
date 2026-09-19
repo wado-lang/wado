@@ -1,7 +1,7 @@
 //! Subcommands `wado` does not hold, found as `wado-<name>` on `PATH`.
 //! See [WEP: External Subcommands](../../docs/wep-2026-09-19-external-subcommands.md).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -26,16 +26,18 @@ pub fn discover() -> Vec<External> {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let Some(file) = path.file_name().and_then(|f| f.to_str()) else {
-                continue;
-            };
-            let Some(name) = subcommand_name(file) else {
-                continue;
-            };
-            if is_executable(&path) {
-                found.entry(name.to_string()).or_insert(path);
+        let names: BTreeSet<String> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let file = entry.file_name();
+                Some(subcommand_name(file.to_str()?)?.to_string())
+            })
+            .collect();
+        // Resolved through `resolve_in`, so the path listed is the path
+        // `wado <name>` would run, whatever order the directory was read in.
+        for name in names {
+            if let Some(path) = resolve_in(&dir, &name) {
+                found.entry(name).or_insert(path);
             }
         }
     }
@@ -53,8 +55,24 @@ pub fn find(name: &str) -> Option<PathBuf> {
     }
     search_dirs()
         .into_iter()
-        .flat_map(|dir| candidates(&dir, name))
-        .find(|path| is_executable(path))
+        .find_map(|dir| resolve_in(&dir, name))
+}
+
+/// The `wado-<name>` one directory offers, taking the extensions in the order
+/// the operating system would.
+fn resolve_in(dir: &Path, name: &str) -> Option<PathBuf> {
+    candidates(dir, name).into_iter().find(|p| is_executable(p))
+}
+
+/// Why no `wado-<name>` was run: the shape the name must have, or the search
+/// that came up empty.
+#[must_use]
+pub fn not_found_reason(name: &str) -> String {
+    if is_subcommand_name(name) {
+        format!("no 'wado-{name}' on PATH")
+    } else {
+        "a subcommand is named in lowercase ASCII, digits and '-'".to_string()
+    }
 }
 
 /// Run an external subcommand's binary, by the absolute path already
@@ -162,7 +180,9 @@ fn candidates(dir: &Path, name: &str) -> Vec<PathBuf> {
 fn strip_executable_extension(file: &str) -> Option<&str> {
     executable_extensions().iter().find_map(|ext| {
         let stem = file.len().checked_sub(ext.len())?;
-        file[stem..]
+        // `get` and not `[..]`: the split lands mid-character on a name whose
+        // tail is multibyte, and slicing there panics.
+        file.get(stem..)?
             .eq_ignore_ascii_case(ext)
             .then(|| &file[..stem])
     })

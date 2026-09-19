@@ -11,6 +11,10 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   repository root, `mise run test`, or the repository's clippy and fmt jobs. The
   `test-webgpu` CI job is what builds, lints and tests it, on every change that
   is not documentation.
+- A program behaves the same here as under `wado run`, which is the only reason
+  to have both: the arguments after the input file go to the guest unparsed,
+  `--dir` and `--no-dir` grant what they grant there, and the engine takes the
+  same collector and Cranelift level. A divergence is a defect, not a variant.
 - It compiles nothing itself. `WADO` names the binary that dispatched the
   subcommand ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)),
   and the tests set it the same way, so the tests and a real invocation reach

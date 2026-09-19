@@ -15,7 +15,7 @@ Usage: wado run-webgpu [options] <file.wado|file.wasm> [args...]
 Options:
   -O<level>        Optimization level: 0, 1, 2, 3 or s (default: 2)
       --dir <path> Preopen a directory (repeatable; default: the current one)
-      --no-dir     Preopen nothing
+      --no-dir     Drop that default
   -h, --help       Show this help
   -V, --version    Show the version
 
@@ -61,8 +61,17 @@ impl Args {
                 }
                 Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
                 Long("no-dir") => no_dir = true,
-                Value(value) if input.is_none() => input = Some(PathBuf::from(value)),
-                Value(value) => program_args.push(value.string()?),
+                // Everything after the input file, flags included, is the
+                // program's, exactly as `wado run` forwards it.
+                Value(value) => {
+                    input = Some(PathBuf::from(value));
+                    if let Some(raw) = parser.try_raw_args() {
+                        for raw_arg in raw {
+                            program_args.push(raw_arg.string()?);
+                        }
+                    }
+                    break;
+                }
                 other => bail!("{}\n\n{USAGE}", other.unexpected()),
             }
         }
@@ -70,9 +79,7 @@ impl Args {
         let Some(input) = input else {
             bail!("no input file\n\n{USAGE}");
         };
-        if no_dir {
-            preopens.clear();
-        } else if preopens.is_empty() {
+        if preopens.is_empty() && !no_dir {
             preopens.push(std::env::current_dir()?);
         }
 
@@ -82,5 +89,34 @@ impl Args {
             preopens,
             program_args,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(argv: &[&str]) -> Args {
+        Args::parse(argv.iter().map(OsString::from))
+            .expect("parsing")
+            .expect("a run to make")
+    }
+
+    #[test]
+    fn everything_after_the_input_file_belongs_to_the_program() {
+        let args = parse(&["-O0", "app.wado", "--dir", "/data", "-x", "rest"]);
+
+        assert_eq!(args.opt_level, "0");
+        assert_eq!(args.program_args, ["--dir", "/data", "-x", "rest"]);
+        assert_eq!(args.preopens, [std::env::current_dir().unwrap()]);
+    }
+
+    #[test]
+    fn no_dir_drops_the_default_grant_and_keeps_every_explicit_one() {
+        assert!(parse(&["--no-dir", "app.wado"]).preopens.is_empty());
+        assert_eq!(
+            parse(&["--no-dir", "--dir", "/data", "app.wado"]).preopens,
+            [PathBuf::from("/data")]
+        );
     }
 }

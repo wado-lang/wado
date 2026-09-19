@@ -8,7 +8,7 @@ use wasi_webgpu_wasmtime::{
     WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions, add_to_linker as add_webgpu_to_linker,
 };
 use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Config, Engine, Store};
+use wasmtime::{Collector, Config, Engine, OptLevel, Store};
 use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
@@ -48,7 +48,7 @@ impl WasiWebGpuCtxView for Host {
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
 pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
-    let engine = Engine::new(&engine_config())?;
+    let engine = Engine::new(&engine_config(&args.opt_level))?;
     let component = Component::from_file(&engine, component)?;
 
     let mut linker: Linker<Host> = Linker::new(&engine);
@@ -66,7 +66,9 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     }
 }
 
-fn engine_config() -> Config {
+/// What `wado run` configures, so a program behaves the same under either
+/// runner: the same features, the same collector, the same Cranelift level.
+fn engine_config(opt_level: &str) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
@@ -74,22 +76,24 @@ fn engine_config() -> Config {
     config.wasm_component_model_async_stackful(true);
     config.wasm_wide_arithmetic(true);
     config.wasm_branch_hinting(true);
+    config.collector(Collector::Copying);
+    config.cranelift_opt_level(cranelift_opt_level(opt_level));
     config
+}
+
+fn cranelift_opt_level(opt_level: &str) -> OptLevel {
+    match opt_level {
+        "0" => OptLevel::None,
+        "s" => OptLevel::SpeedAndSize,
+        _ => OptLevel::Speed,
+    }
 }
 
 fn host(args: &Args, gpu: Gpu) -> Result<Host> {
     let mut builder = WasiCtx::builder();
     builder.inherit_stdio().inherit_env();
 
-    let mut argv = vec![
-        args.input
-            .file_name()
-            .unwrap_or(args.input.as_os_str())
-            .to_string_lossy()
-            .into_owned(),
-    ];
-    argv.extend(args.program_args.iter().cloned());
-    builder.args(&argv);
+    builder.args(&args.program_args);
 
     for dir in &args.preopens {
         let guest = dir.to_string_lossy().into_owned();

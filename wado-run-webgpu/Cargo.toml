@@ -9,6 +9,15 @@ publish = false
 # workspace pins 47.0.3, and one workspace resolves one version of a crate.
 [workspace]
 
+# Its own workspace, so the repository's `[workspace.lints]` never reaches it.
+# The allowances there are compiler-inherent and a runner needs none of them.
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+mod_module_files = "deny"
+redundant_clone = "warn"
+# `Args::program_args` is what `wado run` calls it, and parity is the point.
+struct_field_names = "allow"
+
 [dependencies]
 anyhow = "1"
 lexopt = "0.3"

@@ -3,28 +3,30 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::LazyLock;
 
-/// `WADO` names the `wado` that dispatched the subcommand, which is how the
-/// runner itself finds one. The CI job sets it; a local run falls back to the
-/// repository's own binary.
-fn wado() -> PathBuf {
-    std::env::var_os("WADO").map_or_else(
-        || {
-            let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .parent()
-                .expect("the crate sits in the repository")
-                .to_path_buf();
-            let status = Command::new("cargo")
-                .args(["build", "--quiet", "--bin", "wado"])
-                .current_dir(&repo)
-                .status()
-                .expect("cargo build");
-            assert!(status.success(), "building wado failed");
-            repo.join("target/debug/wado")
-        },
-        PathBuf::from,
-    )
-}
+/// The `wado` the runner compiles with, as `WADO` names it. A local run builds
+/// the repository's own, once for the whole test binary.
+static WADO: LazyLock<PathBuf> = LazyLock::new(|| {
+    if let Some(wado) = std::env::var_os("WADO") {
+        return PathBuf::from(wado);
+    }
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("the crate sits in the repository")
+        .to_path_buf();
+    let status = Command::new("cargo")
+        .args(["build", "--quiet", "--bin", "wado"])
+        .current_dir(&repo)
+        .status()
+        .expect("cargo build");
+    assert!(status.success(), "building wado failed");
+    let target =
+        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| repo.join("target"), PathBuf::from);
+    let wado = target.join("debug/wado");
+    assert!(wado.is_file(), "no wado at {}", wado.display());
+    wado
+});
 
 fn fixture(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -34,7 +36,7 @@ fn fixture(name: &str) -> PathBuf {
 
 fn runner() -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_wado-run-webgpu"));
-    command.env("WADO", wado());
+    command.env("WADO", &*WADO);
     command
 }
 
