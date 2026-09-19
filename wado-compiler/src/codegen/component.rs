@@ -1463,7 +1463,7 @@ fn payload_type_to_cm_key(
 fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
     let fq = project
         .cm_interface_registry
-        .interface_declaring_module(decl.module())
+        .interface_declaring_cm_name(decl.module(), decl.cm_name())
         .unwrap_or_else(|| {
             panic!(
                 "`{}` is declared by no imported CM interface",
@@ -1483,7 +1483,7 @@ fn payload_decl_type_idx(ctx: &ComponentModelContext, project: &NirPackage, decl
         .or_else(|| {
             let fq = project
                 .cm_interface_registry
-                .interface_declaring_module(decl.module())?;
+                .interface_declaring_cm_name(decl.module(), decl.cm_name())?;
             export_alias_idx(ctx, fq, decl.cm_name())
         })
         .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
@@ -1525,7 +1525,7 @@ fn prebuild_resource_payload_types(
         }
         let Some(source) = project
             .cm_interface_registry
-            .interface_declaring_module(decl.module())
+            .interface_declaring_cm_name(decl.module(), decl.cm_name())
             .map(str::to_string)
         else {
             continue;

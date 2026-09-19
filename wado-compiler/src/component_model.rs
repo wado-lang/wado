@@ -2981,20 +2981,24 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources.get(iface_fq)
     }
 
-    /// The CM interface `module` declares. Single-valued because one module
-    /// declares one interface, which the declaration-identity WEP requires.
+    /// The CM interfaces `module` registers, in registration order. One
+    /// component exports as many as it likes through the single binding module
+    /// the loader synthesizes for it, so a module names a set and the
+    /// declaration being placed is what picks one out of it.
     ///
     /// A user module is recorded and answers by identity. A bundled `wasi:` /
     /// `core:` interface is absent by design, and its module path is its own
     /// interface FQ, so the two populations are disjoint rather than a fallback.
     /// A `core:` module carries no namespace, which is what distinguishes it.
-    pub fn interface_declaring_module(&self, module: &ModuleSource) -> Option<&str> {
-        if let Some((fq, _)) = self
+    fn module_interfaces(&self, module: &ModuleSource) -> Vec<&str> {
+        let recorded: Vec<&str> = self
             .cm_interface_module_sources
             .iter()
-            .find(|(_, source)| *source == module)
-        {
-            return Some(fq);
+            .filter(|(_, source)| *source == module)
+            .map(|(fq, _)| fq.as_str())
+            .collect();
+        if !recorded.is_empty() {
+            return recorded;
         }
         let (namespace, path) = match module {
             ModuleSource::Binding {
@@ -3002,15 +3006,18 @@ impl CmInterfaceRegistry {
                 interface,
             } => (Some(*namespace), interface.as_str()),
             ModuleSource::Core { name } => (None, name.as_str()),
-            _ => return None,
+            _ => return Vec::new(),
         };
         let stem = path.strip_suffix(".wado").unwrap_or(path);
         let wanted = (namespace, format!("{stem}.wado"));
-        self.interfaces
+        let bundled: IndexSet<&str> = self
+            .interfaces
             .keys()
             .map(String::as_str)
             .chain(self.resources.keys().map(|(fq, _)| fq.as_str()))
-            .find(|fq| cm_interface_module(fq).as_ref() == Some(&wanted))
+            .filter(|fq| cm_interface_module(fq).as_ref() == Some(&wanted))
+            .collect();
+        bundled.into_iter().collect()
     }
 
     /// A type `iface_fq` already declares, if any. A bundled `wasi:` / `core:`
@@ -3181,19 +3188,57 @@ impl CmInterfaceRegistry {
         self.interface_declaring(source, name).is_some()
     }
 
-    /// The interface registering `name` for the module that declares it, keyed by
-    /// that module rather than by the name alone.
+    /// The interface registering `name` among those the declaring module
+    /// registers, keyed by that module rather than by the name alone.
     ///
     /// A name a bundled interface also spells resolves here to the declaring
     /// module's own interface, so no by-name search can offer the other one.
     pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
-        let fq = self.interface_declaring_module(source)?;
-        let key = (fq.to_string(), name.to_string());
-        let declares = self.structs.contains_key(&key)
-            || self.variants.contains_key(&key)
-            || self.enums.contains_key(&key)
-            || self.flags.contains_key(&key);
-        declares.then_some(fq)
+        self.module_interfaces(source).into_iter().find(|fq| {
+            let key = ((*fq).to_string(), name.to_string());
+            self.structs.contains_key(&key)
+                || self.variants.contains_key(&key)
+                || self.enums.contains_key(&key)
+                || self.flags.contains_key(&key)
+        })
+    }
+
+    /// The interface exporting `cm_name` among those `module` registers, for a
+    /// consumer holding a [`crate::canonical::CmDecl`] rather than a Wado name.
+    ///
+    /// A newtype is peeled before it reaches the boundary, so the kinds that
+    /// record the name the ABI spells are the kinds that can be asked for.
+    pub fn interface_declaring_cm_name(
+        &self,
+        module: &ModuleSource,
+        cm_name: &str,
+    ) -> Option<&str> {
+        self.module_interfaces(module)
+            .into_iter()
+            .find(|fq| self.exports_cm_name(fq, cm_name))
+    }
+
+    fn exports_cm_name(&self, iface_fq: &str, cm_name: &str) -> bool {
+        let in_interface = |fq: &str| fq == iface_fq;
+        self.resources
+            .iter()
+            .any(|((fq, _), cm)| in_interface(fq) && cm == cm_name)
+            || self
+                .structs
+                .iter()
+                .any(|((fq, _), (cm, ..))| in_interface(fq) && cm == cm_name)
+            || self
+                .variants
+                .iter()
+                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
+            || self
+                .enums
+                .iter()
+                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
+            || self
+                .flags
+                .iter()
+                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).
@@ -5631,6 +5676,41 @@ mod tests {
                 .is_none()
         );
         assert!(registry.local_newtype_base(None, "Temp").is_none());
+    }
+
+    #[test]
+    fn a_component_s_later_interface_declares_as_much_as_its_first() {
+        use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
+
+        let mut interner = ModuleSourceInterner::new();
+        let dep = interner.wasm("./brotli.wasm", WasmAssetKind::Wasm);
+        let mut registry = CmInterfaceRegistry::new();
+
+        // One component exporting two interfaces: every FQ it exports maps back
+        // to the single binding module the loader synthesizes for it.
+        for fq in ["acme:brotli/compress@1.0.0", "acme:brotli/decompress@1.0.0"] {
+            registry
+                .cm_interface_module_sources
+                .insert(fq.into(), dep.clone());
+        }
+        registry.structs.insert(
+            ("acme:brotli/compress@1.0.0".into(), "Level".into()),
+            ("level".into(), Vec::new(), Vec::new()),
+        );
+        registry.structs.insert(
+            ("acme:brotli/decompress@1.0.0".into(), "Window".into()),
+            ("window".into(), Vec::new(), Vec::new()),
+        );
+
+        assert_eq!(
+            registry.interface_declaring(&dep, "Level"),
+            Some("acme:brotli/compress@1.0.0")
+        );
+        assert_eq!(
+            registry.interface_declaring(&dep, "Window"),
+            Some("acme:brotli/decompress@1.0.0")
+        );
+        assert_eq!(registry.interface_declaring(&dep, "Absent"), None);
     }
 
     #[test]
