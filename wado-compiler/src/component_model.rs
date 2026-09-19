@@ -1167,6 +1167,18 @@ fn first_name_in_interface<'a, V>(
         .map(|(_, name)| name.as_str())
 }
 
+/// Whether a registration under `iface_fq` spells its CM name `cm_name`, where
+/// `of` reads that name out of the kind's value.
+fn spells_cm_name<V>(
+    map: &IndexMap<(String, String), V>,
+    iface_fq: &str,
+    cm_name: &str,
+    of: impl Fn(&V) -> &str,
+) -> bool {
+    map.iter()
+        .any(|((fq, _), value)| fq == iface_fq && of(value) == cm_name)
+}
+
 /// Return the `source_interface` when `name` has exactly one registrant under
 /// `prefix`.
 fn find_unique_source_with_prefix<'a, V>(
@@ -2981,15 +2993,8 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources.get(iface_fq)
     }
 
-    /// The CM interfaces `module` registers, in registration order. One
-    /// component exports as many as it likes through the single binding module
-    /// the loader synthesizes for it, so a module names a set and the
-    /// declaration being placed is what picks one out of it.
-    ///
-    /// A user module is recorded and answers by identity. A bundled `wasi:` /
-    /// `core:` interface is absent by design, and its module path is its own
-    /// interface FQ, so the two populations are disjoint rather than a fallback.
-    /// A `core:` module carries no namespace, which is what distinguishes it.
+    /// The CM interfaces `module` registers. A component exports as many as it
+    /// likes through the one binding module the loader synthesizes for it.
     fn module_interfaces(&self, module: &ModuleSource) -> Vec<&str> {
         let recorded: Vec<&str> = self
             .cm_interface_module_sources
@@ -3000,6 +3005,9 @@ impl CmInterfaceRegistry {
         if !recorded.is_empty() {
             return recorded;
         }
+        // A bundled `wasi:` / `core:` interface is absent from the map by
+        // design, and its module path is its own interface FQ, so the two
+        // populations are disjoint rather than a fallback.
         let (namespace, path) = match module {
             ModuleSource::Binding {
                 namespace,
@@ -3205,9 +3213,6 @@ impl CmInterfaceRegistry {
 
     /// The interface exporting `cm_name` among those `module` registers, for a
     /// consumer holding a [`crate::canonical::CmDecl`] rather than a Wado name.
-    ///
-    /// A newtype is peeled before it reaches the boundary, so the kinds that
-    /// record the name the ABI spells are the kinds that can be asked for.
     pub fn interface_declaring_cm_name(
         &self,
         module: &ModuleSource,
@@ -3219,26 +3224,13 @@ impl CmInterfaceRegistry {
     }
 
     fn exports_cm_name(&self, iface_fq: &str, cm_name: &str) -> bool {
-        let in_interface = |fq: &str| fq == iface_fq;
-        self.resources
-            .iter()
-            .any(|((fq, _), cm)| in_interface(fq) && cm == cm_name)
-            || self
-                .structs
-                .iter()
-                .any(|((fq, _), (cm, ..))| in_interface(fq) && cm == cm_name)
-            || self
-                .variants
-                .iter()
-                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
-            || self
-                .enums
-                .iter()
-                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
-            || self
-                .flags
-                .iter()
-                .any(|((fq, _), (cm, _))| in_interface(fq) && cm == cm_name)
+        // A newtype is peeled before it reaches the boundary, so the kinds
+        // recording the name the ABI spells are the kinds that can be asked for.
+        spells_cm_name(&self.resources, iface_fq, cm_name, |cm| cm)
+            || spells_cm_name(&self.structs, iface_fq, cm_name, |(cm, ..)| cm)
+            || spells_cm_name(&self.variants, iface_fq, cm_name, |(cm, _)| cm)
+            || spells_cm_name(&self.enums, iface_fq, cm_name, |(cm, _)| cm)
+            || spells_cm_name(&self.flags, iface_fq, cm_name, |(cm, _)| cm)
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).
