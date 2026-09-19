@@ -21,8 +21,10 @@ static WADO: LazyLock<PathBuf> = LazyLock::new(|| {
         .status()
         .expect("cargo build");
     assert!(status.success(), "building wado failed");
-    let target =
-        std::env::var_os("CARGO_TARGET_DIR").map_or_else(|| repo.join("target"), PathBuf::from);
+    // Cargo reads a relative `CARGO_TARGET_DIR` from the directory it was run
+    // in, which is `repo` above and not this process's own.
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map_or_else(|| repo.join("target"), |dir| repo.join(dir));
     let wado = target.join("debug/wado");
     assert!(wado.is_file(), "no wado at {}", wado.display());
     wado

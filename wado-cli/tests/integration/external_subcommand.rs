@@ -124,6 +124,17 @@ fn help_answers_for_itself() {
     }
 }
 
+/// `help` takes one name, so a second argument is a mistake worth reporting.
+#[test]
+fn help_refuses_an_argument_after_the_command_name() {
+    wado()
+        .env("PATH", "")
+        .args(["help", "run", "extra"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("extra"));
+}
+
 /// A name outside the builtin shape is never searched for, so the error says
 /// what is wrong with the name instead of claiming a search.
 #[test]

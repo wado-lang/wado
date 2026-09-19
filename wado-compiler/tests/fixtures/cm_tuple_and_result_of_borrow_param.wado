@@ -1,0 +1,39 @@
+// A `borrow<t>` held by a tuple and by a result. Both are containers, so the
+// element is the `&Resource` of the call site rather than the `i32` handle a
+// bare borrow lowers to, and the borrow wraps the resource, not its `own`.
+
+#[cm("wasi:demo/gfx@0.1.0#item")]
+resource Item {
+    #[cm("wasi:demo/gfx@0.1.0#[method]item.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#get-item")]
+    fn get_item() -> Item;
+    #[cm("wasi:demo/gfx@0.1.0#label")]
+    #[cm_params("entry")]
+    fn label(entry: [&Item, u32]);
+    #[cm("wasi:demo/gfx@0.1.0#settle")]
+    #[cm_params("outcome")]
+    fn settle(outcome: Result<&Item, u32>);
+}
+
+export fn run() with (Api, Item) {
+    let a = Api::get_item();
+    Api::label([&a, 7]);
+    Api::settle(Result::<&Item, u32>::Ok(&a));
+    Api::settle(Result::<&Item, u32>::Err(1));
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(borrow 0)"], "count": 1 },
+    { "contains": ["(borrow 1)"], "count": 0 },
+    { "contains": ["(tuple 2 u32)"], "count": 1 },
+    { "contains": ["(result 2 (error u32))"], "count": 1 }
+  ]
+}

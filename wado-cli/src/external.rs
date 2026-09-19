@@ -149,11 +149,27 @@ fn strip_executable_extension(file: &str) -> Option<&str> {
     Some(file)
 }
 
+/// Whether this user can run it, not merely whether someone can: a file with
+/// an execute bit for another user is one the `PATH` search must walk past.
 #[cfg(unix)]
 fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt as _;
+    use std::os::unix::ffi::OsStrExt as _;
 
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+        return false;
+    }
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated string for the call's duration.
+    unsafe {
+        libc::faccessat(
+            libc::AT_FDCWD,
+            c_path.as_ptr(),
+            libc::X_OK,
+            libc::AT_EACCESS,
+        ) == 0
+    }
 }
 
 /// Windows decides executability by extension, so `PATHEXT` both names the

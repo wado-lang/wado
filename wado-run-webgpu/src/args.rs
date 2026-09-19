@@ -53,8 +53,12 @@ impl Args {
                     println!("wado-run-webgpu {}", env!("CARGO_PKG_VERSION"));
                     return Ok(None);
                 }
+                // Attached and explicit, as `wado run` takes it: `-O2`.
                 Short('O') => {
-                    opt_level = parser.value()?.string()?;
+                    let Some(level) = parser.optional_value() else {
+                        bail!("-O takes its level attached, as '-O2'\n\n{USAGE}");
+                    };
+                    opt_level = level.string()?;
                     if !matches!(opt_level.as_str(), "0" | "1" | "2" | "3" | "s") {
                         bail!("unknown optimization level '-O{opt_level}'\n\n{USAGE}");
                     }
@@ -96,10 +100,20 @@ impl Args {
 mod tests {
     use super::*;
 
-    fn parse(argv: &[&str]) -> Args {
+    fn try_parse(argv: &[&str]) -> Result<Option<Args>> {
         Args::parse(argv.iter().map(OsString::from))
-            .expect("parsing")
-            .expect("a run to make")
+    }
+
+    fn parse(argv: &[&str]) -> Args {
+        try_parse(argv).expect("parsing").expect("a run to make")
+    }
+
+    #[test]
+    fn the_optimization_level_comes_attached() {
+        assert_eq!(parse(&["-O0", "app.wado"]).opt_level, "0");
+        assert!(try_parse(&["-O", "app.wado"]).is_err());
+        assert!(try_parse(&["-O", "2", "app.wado"]).is_err());
+        assert!(try_parse(&["-O9", "app.wado"]).is_err());
     }
 
     #[test]

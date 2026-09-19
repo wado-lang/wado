@@ -272,6 +272,9 @@ async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
         return Err(CliExit::error_with_usage(arg.unexpected(), &usage()));
     };
     let name = name_val.to_string_lossy().into_owned();
+    if let Some(surplus) = parser.next().map_err(CliExit::error)? {
+        return Err(CliExit::error_with_usage(surplus.unexpected(), &usage()));
+    }
 
     if let Some(cmd) = Cmd::from_name(&name) {
         return Box::pin(run_cmd(cmd, lexopt::Parser::from_args(["--help"]))).await;
