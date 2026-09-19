@@ -180,8 +180,8 @@ mod tests {
     #[test]
     fn a_file_name_spells_a_subcommand_only_in_the_builtin_shape() {
         assert_eq!(
-            subcommand_name("wado-run-with-webgpu"),
-            Some("run-with-webgpu")
+            subcommand_name("wado-run-webgpu"),
+            Some("run-webgpu")
         );
         assert_eq!(subcommand_name("wado-x9"), Some("x9"));
         assert_eq!(subcommand_name("wado"), None);

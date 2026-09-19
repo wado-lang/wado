@@ -28,7 +28,7 @@ fn install_exiting(dir: &Path, name: &str, code: i32) {
 #[test]
 fn list_names_an_external_and_marks_one_a_builtin_shadows() {
     let tmp = tempfile::tempdir().unwrap();
-    install(tmp.path(), "wado-run-with-webgpu");
+    install(tmp.path(), "wado-run-webgpu");
     install(tmp.path(), "wado-run");
 
     wado()
@@ -36,7 +36,7 @@ fn list_names_an_external_and_marks_one_a_builtin_shadows() {
         .arg("--list")
         .assert()
         .success()
-        .stdout(predicate::str::contains("run-with-webgpu"))
+        .stdout(predicate::str::contains("run-webgpu"))
         .stdout(predicate::str::contains("shadowed by the builtin"));
 }
 
@@ -45,11 +45,11 @@ fn list_names_an_external_and_marks_one_a_builtin_shadows() {
 #[test]
 fn an_external_receives_the_rest_of_the_command_line_and_owns_the_exit_status() {
     let tmp = tempfile::tempdir().unwrap();
-    install_exiting(tmp.path(), "wado-run-with-webgpu", 7);
+    install_exiting(tmp.path(), "wado-run-webgpu", 7);
 
     wado()
         .env("PATH", tmp.path())
-        .args(["run-with-webgpu", "app.wado", "--dir", ".", "-O2"])
+        .args(["run-webgpu", "app.wado", "--dir", ".", "-O2"])
         .assert()
         .code(7)
         .stdout(predicate::str::contains("argv:app.wado --dir . -O2"));
@@ -73,26 +73,26 @@ fn a_builtin_runs_even_when_path_offers_its_name() {
 fn an_unknown_command_says_where_it_looked() {
     wado()
         .env("PATH", "")
-        .arg("run-with-webgpu")
+        .arg("run-webgpu")
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "unknown command 'run-with-webgpu' (no 'wado-run-with-webgpu' on PATH)",
+            "unknown command 'run-webgpu' (no 'wado-run-webgpu' on PATH)",
         ));
 }
 
 #[test]
 fn help_hands_an_external_its_own_help() {
     let tmp = tempfile::tempdir().unwrap();
-    install(tmp.path(), "wado-run-with-webgpu");
+    install(tmp.path(), "wado-run-webgpu");
 
     wado()
         .env("PATH", tmp.path())
-        .args(["help", "run-with-webgpu"])
+        .args(["help", "run-webgpu"])
         .assert()
         .success()
         .stdout(predicate::str::contains("ran "))
-        .stdout(predicate::str::contains("wado-run-with-webgpu"));
+        .stdout(predicate::str::contains("wado-run-webgpu"));
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn help_answers_for_a_builtin_without_consulting_path() {
 fn help_rejects_a_name_that_is_on_no_path() {
     wado()
         .env("PATH", "")
-        .args(["help", "run-with-webgpu"])
+        .args(["help", "run-webgpu"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unknown command"));
@@ -127,12 +127,12 @@ fn help_rejects_a_name_that_is_on_no_path() {
 #[test]
 fn neither_an_empty_nor_a_relative_path_entry_supplies_a_subcommand() {
     let tmp = tempfile::tempdir().unwrap();
-    install(tmp.path(), "wado-run-with-webgpu");
+    install(tmp.path(), "wado-run-webgpu");
 
     for path in ["/usr/bin::/bin", "/usr/bin:.:/bin"] {
         wado_in(tmp.path())
             .env("PATH", path)
-            .args(["help", "run-with-webgpu"])
+            .args(["help", "run-webgpu"])
             .assert()
             .failure()
             .stderr(predicate::str::contains("unknown command"));

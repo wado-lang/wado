@@ -6,8 +6,8 @@
 host links a GPU stack of 31 crates, about 38 s of a clean release build and
 3.1 MB of binary, on a wasmtime a generation past the workspace pin
 ([`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)), and nothing else
-`wado` does wants it. So the runner is its own binary, `wado-run-with-webgpu`,
-reached as `wado run-with-webgpu`, the way cargo and git reach theirs.
+`wado` does wants it. So the runner is its own binary, `wado-run-webgpu`,
+reached as `wado run-webgpu`, the way cargo and git reach theirs.
 
 ## Decision
 
@@ -80,7 +80,7 @@ defense of the mechanism, and would be one only if a component were the sole
 form accepted, since whoever can write to a `PATH` directory writes the native
 form instead.
 
-The `PATH` form is not replaced either way: `wado-run-with-webgpu` links a
+The `PATH` form is not replaced either way: `wado-run-webgpu` links a
 native GPU stack that no component can. The component form is suggested here
 and not designed here.
 

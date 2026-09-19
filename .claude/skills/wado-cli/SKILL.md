@@ -50,7 +50,7 @@ takes exactly one source file; `dump`, `doc`, and `format` take several.
 ## External Commands
 
 A name the list above does not hold is looked up as `wado-<name>` on `PATH`, so
-`wado run-with-webgpu app.wado` runs `wado-run-with-webgpu app.wado`. The child
+`wado run-webgpu app.wado` runs `wado-run-webgpu app.wado`. The child
 receives the rest of the command line unparsed and owns the exit status, and
 `$WADO` names the `wado` that invoked it. `wado --list` names every one it finds.
 
