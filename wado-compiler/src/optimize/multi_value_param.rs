@@ -39,7 +39,7 @@ fn collect_candidates(
     let mut out = IndexMap::default();
     for (func_idx, func_rc) in project.functions.iter().enumerate() {
         let func = func_rc.borrow();
-        if !func.only_reached_by_direct_call() {
+        if func.is_dead || !func.only_reached_by_direct_call() {
             continue;
         }
         let Some(body) = &func.body else {

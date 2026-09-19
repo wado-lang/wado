@@ -426,11 +426,12 @@ fn register_single_function(
         {
             for (field_name, &field_type) in field_names.iter().zip(field_types) {
                 let wir_type = ctx.type_id_to_wir_type(type_table, field_type);
-                debug_assert!(
+                assert!(
                     !matches!(wir_type, WirType::Unit),
-                    "[WIR] a unit field took a multi-value parameter slot: \
-                     `optimize::multi_value_param` declines one, and the split \
-                     locals the body reads are named per field either way"
+                    "[WIR] a unit field took a multi-value parameter slot in \
+                     `{}`: `optimize::multi_value_param` declines one, and a \
+                     slot the call site never fills is an arity mismatch",
+                    tir_func.name
                 );
                 params.push(wir_type);
                 param_names.push(multi_value_split_local(&unique_name, field_name));

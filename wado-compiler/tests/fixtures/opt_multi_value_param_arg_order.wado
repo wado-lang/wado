@@ -1,0 +1,50 @@
+// An argument taking the multi-value parameter ABI is evaluated into the call's
+// prelude, so it runs before every argument still on the stack. Each argument to
+// its left therefore has to be spilled to keep the source evaluation order.
+//
+// Before the fix only a unit-typed argument forced those spills, and the split
+// argument ran first: the first case logged 21 and the second 132.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+struct Trio {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+global mut LOG: String = "";
+
+fn tick(n: i32) -> i32 {
+    LOG = `${LOG}${n}`;
+    return n;
+}
+
+#[inline("never")]
+fn after(first: i32, p: Pair) -> i32 {
+    return first + p.a + p.b;
+}
+
+#[inline("never")]
+fn around(p: Pair, middle: i32, t: Trio) -> i32 {
+    return p.a + p.b + middle + t.x + t.y + t.z;
+}
+
+export fn run() with Stdout {
+    let a = after(tick(1), Pair { a: tick(2), b: 0 });
+    println(`${LOG} ${a}`);
+
+    LOG = "";
+    let b = around(Pair { a: tick(1), b: 0 }, tick(2), Trio { x: tick(3), y: 0, z: 0 });
+    println(`${LOG} ${b}`);
+}
+
+__DATA__
+{
+    "stdout": "12 3\n123 6\n"
+}

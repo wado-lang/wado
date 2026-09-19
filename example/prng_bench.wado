@@ -149,6 +149,7 @@ fn drain_by_batch<R: VectorRng>(rng: &mut R, n: i32) -> u64 {
 // over a scalar engine, this separates what the generator costs from what
 // landing a u64 in memory costs.
 fn drain_scalar_fill<R: Rng>(rng: &mut R, buffer: &mut List<u64>, n: i32) -> u64 {
+    assert !buffer.is_empty(), "an empty buffer would not advance the loop";
     let mut acc: u64 = 0;
     for let mut i = 0; i < n; i += buffer.len() {
         for let mut k = 0; k < buffer.len(); k += 1 {

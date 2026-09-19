@@ -593,7 +593,10 @@ impl NirFunction {
     /// `wir_build` lowers against its recorded ABI, so changing that ABI is safe.
     ///
     /// A trait method qualifies: after monomorphization it is an ordinary
-    /// direct-call target.
+    /// direct-call target. `ValueCopy` and `FnCanonicalDispatch` do not:
+    /// `ArrayClone` resolves a value-copy helper by metadata at emit time and
+    /// `wir_build` supplies the dispatch stub's body, so neither reaches its
+    /// callee through a NIR call node a signature change would follow.
     #[inline]
     pub fn only_reached_by_direct_call(&self) -> bool {
         matches!(self.kind, FunctionKind::Regular)

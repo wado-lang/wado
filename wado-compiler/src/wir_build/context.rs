@@ -179,17 +179,12 @@ pub struct WirContext<'a> {
     /// Value: the `WirFuncId` for the registered import.
     pub needed_canonicals: IndexMap<CanonicalIntrinsic, WirFuncId>,
 
-    /// Functions whose TIR `return_abi` is `MultiValue`, keyed by
-    /// `(function_name, module_source)` since a name alone is not unique across
-    /// modules. The value is the callee's per-result `(field_name, type_id)` in
-    /// declaration order, which the call-site translator uses to build named
-    /// split locals without re-deriving the aggregate shape.
-    pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
+    /// Functions whose `return_abi` is `MultiValue`, and the per-result
+    /// `(field_name, type_id)` each returns in declaration order.
+    pub multi_value_return_funcs: IndexMap<FuncId, Vec<(String, TypeId)>>,
     /// Which parameter positions of a callee arrive as one Wasm slot per field,
-    /// and the `(field_name, type_id)` of each. Read at call sites to hand the
-    /// argument over field by field. Keyed like `multi_value_return_funcs`.
-    pub multi_value_param_funcs:
-        IndexMap<(String, ModuleSource), IndexMap<usize, Vec<(String, TypeId)>>>,
+    /// and the `(field_name, type_id)` of each.
+    pub multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
@@ -250,6 +245,14 @@ pub struct ClosureWrapperFuncs {
 /// The `(field_name, type_id)` pairs a multi-value ABI records, in the
 /// declaration order both halves of it index by.
 fn abi_fields(names: &[String], types: &[TypeId]) -> Vec<(String, TypeId)> {
+    assert_eq!(
+        names.len(),
+        types.len(),
+        "[WIR] a multi-value ABI paired {} names with {} types; a short zip \
+         would pass fewer arguments than the signature declares",
+        names.len(),
+        types.len()
+    );
     names.iter().cloned().zip(types.iter().copied()).collect()
 }
 
@@ -266,34 +269,22 @@ impl<'a> WirContext<'a> {
         // slim `{ env, func }`.
         let inspectable_fn_dispatch = compute_inspectable_fn_dispatch(package);
 
-        // Both maps are keyed by `(name, module_source)`, because a plain name
-        // is not unique across modules.
-        let multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>> =
-            package
-                .functions
-                .iter()
-                .filter_map(|f| {
-                    let f = f.try_borrow().ok()?;
-                    let nir::ReturnAbi::MultiValue {
-                        result_types,
-                        field_names,
-                    } = &f.return_abi
-                    else {
-                        return None;
-                    };
-                    let key = (f.name.clone(), f.module_source.clone());
-                    Some((key, abi_fields(field_names, result_types)))
-                })
-                .collect();
-
-        let mut multi_value_param_funcs: IndexMap<
-            (String, ModuleSource),
-            IndexMap<usize, Vec<(String, TypeId)>>,
-        > = IndexMap::default();
-        for f in &package.functions {
-            let Ok(f) = f.try_borrow() else {
-                continue;
-            };
+        // Both maps are keyed by `FuncId`, which is the index a call site
+        // already resolves its callee by. A name is not an identity.
+        let mut multi_value_return_funcs: IndexMap<FuncId, Vec<(String, TypeId)>> =
+            IndexMap::default();
+        let mut multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>> =
+            IndexMap::default();
+        for (index, f) in package.functions.iter().enumerate() {
+            let f = f.borrow();
+            let id = FuncId::from_u32(u32::try_from(index).expect("function index fits u32"));
+            if let nir::ReturnAbi::MultiValue {
+                result_types,
+                field_names,
+            } = &f.return_abi
+            {
+                multi_value_return_funcs.insert(id, abi_fields(field_names, result_types));
+            }
             for (param_idx, param) in f.params.iter().enumerate() {
                 let nir::ParamAbi::MultiValue {
                     field_types,
@@ -303,7 +294,7 @@ impl<'a> WirContext<'a> {
                     continue;
                 };
                 multi_value_param_funcs
-                    .entry((f.name.clone(), f.module_source.clone()))
+                    .entry(id)
                     .or_default()
                     .insert(param_idx, abi_fields(field_names, field_types));
             }
