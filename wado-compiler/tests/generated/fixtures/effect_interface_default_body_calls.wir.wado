@@ -126,8 +126,7 @@ global mut global:effect_interface_default_body_calls.wado::TRACE: ref null "cor
 global mut global:effect_interface_default_body_calls.wado::$effect_Calc: ref null "effect_interface_default_body_calls.wado//$Dispatch_Calc" = ref.null none;
 global mut global:effect_interface_default_body_calls.wado::$modules_initialized: bool = 0;
 global global:effect_interface_default_body_calls.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(100, 101, 102, 97, 117, 108, 116, 58);
-global global:effect_interface_default_body_calls.wado::$const_obj_3: ref null "effect_interface_default_body_calls.wado//Fixed" = struct.new "effect_interface_default_body_calls.wado//Fixed" { answer: 7 };
-global global:effect_interface_default_body_calls.wado::$const_obj_4: ref null Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
+global global:effect_interface_default_body_calls.wado::$const_obj_3: ref null Array<u8> = array.new_fixed<u8>(104, 97, 110, 100, 108, 101, 114, 58);
 
 fn "effect_interface_default_body_calls.wado/$effect_default$Calc$value"(n) {
     let $local_1: ref "core:prelude/string.wado//String";
@@ -157,11 +156,11 @@ fn "effect_interface_default_body_calls.wado/$effect_default$Calc$value"(n) {
 }
 
 fn "effect_interface_default_body_calls.wado/run"() with Stdout {
+    let f_0: ref "effect_interface_default_body_calls.wado//Fixed";
     let $local_3_3: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/string.wado//String";
-    let $h_Calc: ref "effect_interface_default_body_calls.wado//Fixed";
     let $save_Calc: ref null "effect_interface_default_body_calls.wado//$Dispatch_Calc";
     let $d_Calc: ref "effect_interface_default_body_calls.wado//$Dispatch_Calc";
     let handle_18: i32;
@@ -260,9 +259,9 @@ fn "effect_interface_default_body_calls.wado/run"() with Stdout {
     handle_40 = "effect_interface_default_body_calls.wado/$cm_binding__Stdout_write_via_stream"(rx_53);
     "core:rt/write_string_to_stream$spec0"(tx_54, $local_5);
     "wasi/future-drop-readable:transmission-cli"(handle_40);
-    $h_Calc = global:effect_interface_default_body_calls.wado::$const_obj_3;
+    f_0 = struct.new "effect_interface_default_body_calls.wado//Fixed" { answer: 7 };
     $save_Calc = global:effect_interface_default_body_calls.wado::$effect_Calc;
-    $d_Calc = struct.new "effect_interface_default_body_calls.wado//$Dispatch_Calc" { outer: $save_Calc, op_value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//$Closure_0" { $capture_0: $h_Calc }, func: ref.func "closure/effect_interface_default_body_calls.wado/$closure_wrapper_0" }, op_twice: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//$Closure_1" {  }, func: ref.func "closure/effect_interface_default_body_calls.wado/$closure_wrapper_1" } };
+    $d_Calc = struct.new "effect_interface_default_body_calls.wado//$Dispatch_Calc" { outer: $save_Calc, op_value: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//$Closure_0" { $capture_0: f_0 }, func: ref.func "closure/effect_interface_default_body_calls.wado/$closure_wrapper_0" }, op_twice: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_interface_default_body_calls.wado//$Closure_1" {  }, func: ref.func "closure/effect_interface_default_body_calls.wado/$closure_wrapper_1" } };
     global:effect_interface_default_body_calls.wado::$effect_Calc = $d_Calc;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee self_72($inline__effect_dispatch__Calc__value_23: block -> i32 {
@@ -709,7 +708,7 @@ fn "effect_interface_default_body_calls.wado/effect_interface_default_body_calls
     return self_2 = self.$capture_0, $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(24), used: 0 }, new_used = 0 + 8, if @unlikely(new_used > builtin::array_len($local_2.repr)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_2, new_used);
-    }, start_19 = $local_2.used, $local_2.used = new_used, builtin::array_copy<u8>($local_2.repr, start_19, global:effect_interface_default_body_calls.wado::$const_obj_4, 0, 8), "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(n, $local_2), self_26 = global:effect_interface_default_body_calls.wado::TRACE, used = self_26.used, if @unlikely(used >= builtin::array_len(self_26.repr)) {
+    }, start_19 = $local_2.used, $local_2.used = new_used, builtin::array_copy<u8>($local_2.repr, start_19, global:effect_interface_default_body_calls.wado::$const_obj_3, 0, 8), "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(n, $local_2), self_26 = global:effect_interface_default_body_calls.wado::TRACE, used = self_26.used, if @unlikely(used >= builtin::array_len(self_26.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/string.wado/String>::grow"(self_26);
     }, builtin::array_set<ref "core:prelude/string.wado//String">(self_26.repr, used, $local_2), self_26.used = used + 1, self_2.answer;

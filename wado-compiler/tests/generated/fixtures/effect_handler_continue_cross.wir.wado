@@ -106,15 +106,13 @@ import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global mut global:effect_handler_continue_cross.wado::$effect_Counter: ref null "effect_handler_continue_cross.wado//$Dispatch_Counter" = ref.null none;
-global global:effect_handler_continue_cross.wado::$const_obj_1: ref null "effect_handler_continue_cross.wado//Inner" = struct.new "effect_handler_continue_cross.wado//Inner" {  };
-global global:effect_handler_continue_cross.wado::$const_obj_2: ref null Array<u8> = array.new_fixed<u8>(114, 61);
-global global:effect_handler_continue_cross.wado::$const_obj_3: ref null "effect_handler_continue_cross.wado//Outer" = struct.new "effect_handler_continue_cross.wado//Outer" {  };
+global global:effect_handler_continue_cross.wado::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(114, 61);
 
 fn "effect_handler_continue_cross.wado/helper"() {
+    let inner: ref "effect_handler_continue_cross.wado//Inner";
     let sum: i32;
     let iters: i32;
     let after: i32;
-    let $h_Counter: ref "effect_handler_continue_cross.wado//Inner";
     let $save_Counter: ref null "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let $d_Counter: ref "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let $local_0_7: ref null "effect_handler_continue_cross.wado//$Dispatch_Counter";
@@ -123,15 +121,15 @@ fn "effect_handler_continue_cross.wado/helper"() {
     let $local_0_10: ref null "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let $local_1_11: ref "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let $local_2_12: i32;
+    inner = struct.new "effect_handler_continue_cross.wado//Inner" {  };
     sum = 0;
     iters = 0;
     b0: block {
         l1: loop {
             break_if b0 iters >= 3;
             iters = iters + 1;
-            $h_Counter = global:effect_handler_continue_cross.wado::$const_obj_1;
             $save_Counter = global:effect_handler_continue_cross.wado::$effect_Counter;
-            $d_Counter = struct.new "effect_handler_continue_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//$Closure_0" { $capture_0: $h_Counter }, func: ref.func "closure/effect_handler_continue_cross.wado/$closure_wrapper_0" } };
+            $d_Counter = struct.new "effect_handler_continue_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//$Closure_0" { $capture_0: inner }, func: ref.func "closure/effect_handler_continue_cross.wado/$closure_wrapper_0" } };
             global:effect_handler_continue_cross.wado::$effect_Counter = $d_Counter;
             if iters == 2 {
                 global:effect_handler_continue_cross.wado::$effect_Counter = $save_Counter;
@@ -180,9 +178,9 @@ fn "effect_handler_continue_cross.wado/helper"() {
 }
 
 fn "effect_handler_continue_cross.wado/run"() with Stdout {
+    let outer: ref "effect_handler_continue_cross.wado//Outer";
     let r: i32;
     let $local_2: ref "core:prelude/string.wado//String";
-    let $h_Counter: ref "effect_handler_continue_cross.wado//Outer";
     let $save_Counter: ref null "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let $d_Counter: ref "effect_handler_continue_cross.wado//$Dispatch_Counter";
     let handle: i32;
@@ -191,9 +189,9 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     let packed: i64;
     let rx_32: i32;
     let tx_33: i32;
-    $h_Counter = global:effect_handler_continue_cross.wado::$const_obj_3;
+    outer = struct.new "effect_handler_continue_cross.wado//Outer" {  };
     $save_Counter = global:effect_handler_continue_cross.wado::$effect_Counter;
-    $d_Counter = struct.new "effect_handler_continue_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//$Closure_1" { $capture_0: $h_Counter }, func: ref.func "closure/effect_handler_continue_cross.wado/$closure_wrapper_1" } };
+    $d_Counter = struct.new "effect_handler_continue_cross.wado//$Dispatch_Counter" { outer: $save_Counter, op_next: struct.new "canonical//CanonicalClosure_0" { env: struct.new "effect_handler_continue_cross.wado//$Closure_1" { $capture_0: outer }, func: ref.func "closure/effect_handler_continue_cross.wado/$closure_wrapper_1" } };
     global:effect_handler_continue_cross.wado::$effect_Counter = $d_Counter;
     r = "effect_handler_continue_cross.wado/helper"();
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
@@ -204,7 +202,7 @@ fn "effect_handler_continue_cross.wado/run"() with Stdout {
     }
     start_24 = $local_2.used;
     $local_2.used = new_used;
-    builtin::array_copy<u8>($local_2.repr, start_24, global:effect_handler_continue_cross.wado::$const_obj_2, 0, 2);
+    builtin::array_copy<u8>($local_2.repr, start_24, global:effect_handler_continue_cross.wado::$const_obj_1, 0, 2);
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(r, $local_2);
     rx_32 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed >> 32_i64);

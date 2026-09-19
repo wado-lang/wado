@@ -77,6 +77,9 @@ import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-read
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
+global global:reflect_member_read_shares.wado::$const_obj_1: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 };
+global global:reflect_member_read_shares.wado::$const_obj_2: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
+
 fn "reflect_member_read_shares.wado/run"() with Stdout {
     let $local_3: ref "core:prelude/string.wado//String";
     let handle: i32;
@@ -86,8 +89,8 @@ fn "reflect_member_read_shares.wado/run"() with Stdout {
     let tx_28: i32;
     let $sroa_h_xs: ref "core:prelude//List<i32>";
     let $sroa_h_ys: ref "core:prelude//List<i32>";
-    $sroa_h_xs = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 });
-    $sroa_h_ys = black_box(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4, 5), used: 3 });
+    $sroa_h_xs = black_box(global:reflect_member_read_shares.wado::$const_obj_2);
+    $sroa_h_ys = black_box(global:reflect_member_read_shares.wado::$const_obj_1);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee n(local.tee n($sroa_h_xs.used) + $sroa_h_ys.used), $local_3);
     rx_27 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
