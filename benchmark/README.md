@@ -31,17 +31,17 @@ Train — 32 steps, one per document, of forward, backward and Adam:
 
 | Implementation |      Throughput |    ms/iter | vs best |
 | -------------- | --------------: | ---------: | ------- |
-| Rust           | 2.80 k tokens/s |  81.205 ms | 1.00x   |
-| JavaScript     | 1.27 k tokens/s | 178.789 ms | 2.20x   |
-| **Wado**       | 974.22 tokens/s | 233.005 ms | 2.87x   |
+| Rust           | 2.70 k tokens/s |  83.935 ms | 1.00x   |
+| **Wado**       | 1.43 k tokens/s | 159.154 ms | 1.90x   |
+| JavaScript     | 1.27 k tokens/s | 179.425 ms | 2.14x   |
 
 Infer — 24 samples of the forward path alone, no gradients:
 
 | Implementation |      Throughput |    ms/iter | vs best |
 | -------------- | --------------: | ---------: | ------- |
-| Rust           | 4.30 k tokens/s |  89.372 ms | 1.00x   |
-| JavaScript     | 3.65 k tokens/s | 105.092 ms | 1.18x   |
-| **Wado**       | 2.09 k tokens/s | 183.590 ms | 2.05x   |
+| Rust           | 4.18 k tokens/s |  91.852 ms | 1.00x   |
+| JavaScript     | 3.71 k tokens/s | 103.504 ms | 1.13x   |
+| **Wado**       | 3.68 k tokens/s | 104.362 ms | 1.14x   |
 
 Wado trails both reference arms, and the gap to Rust is wider on training than
 on inference. Training spends most of its time in the backward pass, which
