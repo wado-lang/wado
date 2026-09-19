@@ -386,22 +386,18 @@ pub const DEFAULT_GC_HEAP_INITIAL_SIZE: u64 = 256 << 20;
 /// Returns an error message if the value is not a size.
 pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
     let lower = s.trim().to_ascii_lowercase();
-    let (digits, shift) = match lower.strip_suffix(['k', 'm', 'g']) {
-        Some(rest) => (
-            rest,
-            match lower.as_bytes()[lower.len() - 1] {
-                b'k' => 10,
-                b'm' => 20,
-                _ => 30,
-            },
-        ),
-        None => (lower.as_str(), 0),
+    let unit = |shift: u32| (&lower[..lower.len() - 1], 1u64 << shift);
+    let (digits, multiple) = match lower.as_bytes().last() {
+        Some(b'k') => unit(10),
+        Some(b'm') => unit(20),
+        Some(b'g') => unit(30),
+        _ => (lower.as_str(), 1),
     };
     let value: u64 = digits
         .parse()
         .map_err(|_| format!("invalid GC heap size '{s}'. Use bytes, or a k / m / g suffix"))?;
     value
-        .checked_shl(shift)
+        .checked_mul(multiple)
         .ok_or_else(|| format!("GC heap size '{s}' does not fit in 64 bits"))
 }
 

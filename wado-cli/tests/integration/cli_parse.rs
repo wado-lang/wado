@@ -291,6 +291,14 @@ fn run_gc_heap_initial_rejects_nonsense() {
     assert_err(wado_cli::run::parse_args(parser), "invalid GC heap size");
 }
 
+/// A suffix multiplies, so a value that fits `u64` on its own need not fit
+/// once scaled. Silently wrapping it would start the guest with no heap.
+#[test]
+fn run_gc_heap_initial_rejects_overflow() {
+    let parser = Parser::from_args(&["--gc-heap-initial", "17179869184g", "input.wado"]);
+    assert_err(wado_cli::run::parse_args(parser), "does not fit in 64 bits");
+}
+
 #[test]
 fn run_no_dir() {
     let parser = Parser::from_args(&["--no-dir", "input.wado"]);

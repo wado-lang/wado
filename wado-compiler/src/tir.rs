@@ -6209,7 +6209,7 @@ impl BuiltinDeclarations {
         self.0.get(&key(call.name))
     }
 
-    /// Whether `func` names a body-less declaration that stated a convention or
+    /// Whether `call` names a body-less declaration that stated a convention or
     /// a retention — the calls that answer from a declaration rather than from
     /// the fixpoint.
     pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {

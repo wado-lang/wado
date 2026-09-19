@@ -140,7 +140,7 @@ pub const GC_HEAP_INITIAL_SPEC: OptSpec = OptSpec {
     long: Some("gc-heap-initial"),
     short: None,
     value: Some("<size>"),
-    desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector halves it\ninto two semi-spaces, so a program allocates through half",
+    desc: "GC heap a guest starts with (default: 256m)\nBytes, or a k / m / g suffix. The copying collector splits it\ninto two semi-spaces, so a program allocates through half",
 };
 
 pub const DIR_SPEC: OptSpec = OptSpec {
