@@ -45,7 +45,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -60,7 +60,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -127,7 +127,7 @@ fn "niri_region_seed_no_receiver_write.wado/run"() with Stdout {
     tx_55 = builtin::i32_wrap_i64(packed_53 >> 32_i64);
     handle_51 = "niri_region_seed_no_receiver_write.wado/$cm_binding__Stdout_write_via_stream"(rx_54);
     "core:rt/write_string_to_stream"(tx_55, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_51);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_51);
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(18), used: 0 };
     $local_3.used = 1;
     builtin::array_copy<u8>($local_3.repr, 0, global:niri_region_seed_no_receiver_write.wado::$const_obj_1, 0, 1);
@@ -161,7 +161,7 @@ fn "niri_region_seed_no_receiver_write.wado/run"() with Stdout {
     tx_108 = builtin::i32_wrap_i64(packed_106 >> 32_i64);
     handle_63 = "niri_region_seed_no_receiver_write.wado/$cm_binding__Stdout_write_via_stream"(rx_107);
     "core:rt/write_string_to_stream"(tx_108, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_63);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_63);
 }
 
 fn "niri_region_seed_no_receiver_write.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -45,7 +45,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -60,7 +60,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -117,12 +117,12 @@ fn "niri_region_seed_snapshot.wado/run"() with Stdout {
     tx_53 = builtin::i32_wrap_i64(packed_51 >> 32_i64);
     handle_49 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_52);
     "core:rt/write_string_to_stream"(tx_53, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_49);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_49);
     rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_61 = "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
     "core:rt/write_string_to_stream"(tx_65, s);
-    "wasi/future-drop-readable:transmission-cli"(handle_61);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_61);
 }
 
 fn "niri_region_seed_snapshot.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

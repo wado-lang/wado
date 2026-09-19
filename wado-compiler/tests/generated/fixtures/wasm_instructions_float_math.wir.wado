@@ -108,7 +108,7 @@ type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" =
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(42)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(43)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(43)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(44)
 
@@ -124,7 +124,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -436,7 +436,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_112 = builtin::i32_wrap_i64(packed_110 >> 32_i64);
     handle_91 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_111);
     "core:rt/write_string_to_stream"(tx_112, $local_30);
-    "wasi/future-drop-readable:transmission-cli"(handle_91);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_91);
     $local_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(31), used: 0 };
     new_used_133 = 0 + 15;
     if @unlikely(new_used_133 > builtin::array_len($local_32.repr)) {
@@ -451,7 +451,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_141 = builtin::i32_wrap_i64(packed_139 >> 32_i64);
     handle_120 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_140);
     "core:rt/write_string_to_stream"(tx_141, $local_32);
-    "wasi/future-drop-readable:transmission-cli"(handle_120);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_120);
     abs_neg32 = builtin::f32_abs(-2.5_f32);
     $local_34 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     new_used_162 = 0 + 16;
@@ -467,7 +467,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_170 = builtin::i32_wrap_i64(packed_168 >> 32_i64);
     handle_149 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_169);
     "core:rt/write_string_to_stream"(tx_170, $local_34);
-    "wasi/future-drop-readable:transmission-cli"(handle_149);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_149);
     ceil1 = builtin::f64_ceil(2.3);
     ceil2 = builtin::f64_ceil(-2.3);
     ceil3 = builtin::f64_ceil(2);
@@ -485,7 +485,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_199 = builtin::i32_wrap_i64(packed_197 >> 32_i64);
     handle_178 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_198);
     "core:rt/write_string_to_stream"(tx_199, $local_36);
-    "wasi/future-drop-readable:transmission-cli"(handle_178);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_178);
     $local_38 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     new_used_220 = 0 + 17;
     if @unlikely(new_used_220 > builtin::array_len($local_38.repr)) {
@@ -500,7 +500,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_228 = builtin::i32_wrap_i64(packed_226 >> 32_i64);
     handle_207 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_227);
     "core:rt/write_string_to_stream"(tx_228, $local_38);
-    "wasi/future-drop-readable:transmission-cli"(handle_207);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_207);
     $local_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     new_used_249 = 0 + 16;
     if @unlikely(new_used_249 > builtin::array_len($local_40.repr)) {
@@ -515,7 +515,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_257 = builtin::i32_wrap_i64(packed_255 >> 32_i64);
     handle_236 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_256);
     "core:rt/write_string_to_stream"(tx_257, $local_40);
-    "wasi/future-drop-readable:transmission-cli"(handle_236);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_236);
     floor1 = builtin::f64_floor(2.7);
     floor2 = builtin::f64_floor(-2.7);
     floor3 = builtin::f64_floor(2);
@@ -533,7 +533,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_286 = builtin::i32_wrap_i64(packed_284 >> 32_i64);
     handle_265 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_285);
     "core:rt/write_string_to_stream"(tx_286, $local_42);
-    "wasi/future-drop-readable:transmission-cli"(handle_265);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_265);
     $local_44 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
     new_used_307 = 0 + 18;
     if @unlikely(new_used_307 > builtin::array_len($local_44.repr)) {
@@ -548,7 +548,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_315 = builtin::i32_wrap_i64(packed_313 >> 32_i64);
     handle_294 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_314);
     "core:rt/write_string_to_stream"(tx_315, $local_44);
-    "wasi/future-drop-readable:transmission-cli"(handle_294);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_294);
     $local_46 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     new_used_336 = 0 + 17;
     if @unlikely(new_used_336 > builtin::array_len($local_46.repr)) {
@@ -563,7 +563,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_344 = builtin::i32_wrap_i64(packed_342 >> 32_i64);
     handle_323 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_343);
     "core:rt/write_string_to_stream"(tx_344, $local_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_323);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_323);
     trunc1 = builtin::f64_trunc(2.9);
     trunc2 = builtin::f64_trunc(-2.9);
     $local_48 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -580,7 +580,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_373 = builtin::i32_wrap_i64(packed_371 >> 32_i64);
     handle_352 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_372);
     "core:rt/write_string_to_stream"(tx_373, $local_48);
-    "wasi/future-drop-readable:transmission-cli"(handle_352);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_352);
     $local_50 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
     new_used_394 = 0 + 18;
     if @unlikely(new_used_394 > builtin::array_len($local_50.repr)) {
@@ -595,7 +595,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_402 = builtin::i32_wrap_i64(packed_400 >> 32_i64);
     handle_381 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_401);
     "core:rt/write_string_to_stream"(tx_402, $local_50);
-    "wasi/future-drop-readable:transmission-cli"(handle_381);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_381);
     near1 = builtin::f64_nearest(2.5);
     near2 = builtin::f64_nearest(3.5);
     near3 = builtin::f64_nearest(2.3);
@@ -614,7 +614,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_431 = builtin::i32_wrap_i64(packed_429 >> 32_i64);
     handle_410 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_430);
     "core:rt/write_string_to_stream"(tx_431, $local_52);
-    "wasi/future-drop-readable:transmission-cli"(handle_410);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_410);
     $local_54 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
     new_used_452 = 0 + 19;
     if @unlikely(new_used_452 > builtin::array_len($local_54.repr)) {
@@ -629,7 +629,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_460 = builtin::i32_wrap_i64(packed_458 >> 32_i64);
     handle_439 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_459);
     "core:rt/write_string_to_stream"(tx_460, $local_54);
-    "wasi/future-drop-readable:transmission-cli"(handle_439);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_439);
     $local_56 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
     new_used_481 = 0 + 19;
     if @unlikely(new_used_481 > builtin::array_len($local_56.repr)) {
@@ -644,7 +644,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_489 = builtin::i32_wrap_i64(packed_487 >> 32_i64);
     handle_468 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_488);
     "core:rt/write_string_to_stream"(tx_489, $local_56);
-    "wasi/future-drop-readable:transmission-cli"(handle_468);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_468);
     $local_58 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(35), used: 0 };
     new_used_510 = 0 + 19;
     if @unlikely(new_used_510 > builtin::array_len($local_58.repr)) {
@@ -659,7 +659,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_518 = builtin::i32_wrap_i64(packed_516 >> 32_i64);
     handle_497 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_517);
     "core:rt/write_string_to_stream"(tx_518, $local_58);
-    "wasi/future-drop-readable:transmission-cli"(handle_497);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_497);
     sqrt1 = builtin::f64_sqrt(4);
     sqrt2 = builtin::f64_sqrt(9);
     sqrt3 = builtin::f64_sqrt(2);
@@ -677,7 +677,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_547 = builtin::i32_wrap_i64(packed_545 >> 32_i64);
     handle_526 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_546);
     "core:rt/write_string_to_stream"(tx_547, $local_60);
-    "wasi/future-drop-readable:transmission-cli"(handle_526);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_526);
     $local_62 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     new_used_568 = 0 + 16;
     if @unlikely(new_used_568 > builtin::array_len($local_62.repr)) {
@@ -692,13 +692,13 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_576 = builtin::i32_wrap_i64(packed_574 >> 32_i64);
     handle_555 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_575);
     "core:rt/write_string_to_stream"(tx_576, $local_62);
-    "wasi/future-drop-readable:transmission-cli"(handle_555);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_555);
     if select i32(sqrt3 > 1.414, sqrt3 < 1.415, 0) {
         rx_587 = builtin::i32_wrap_i64(local.tee packed_586("wasi/stream-new"()));
         tx_588 = builtin::i32_wrap_i64(packed_586 >> 32_i64);
         handle_584 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_587);
         "core:rt/write_string_to_stream"(tx_588, global:wasm_instructions_float_math.wado::$const_obj_30);
-        "wasi/future-drop-readable:transmission-cli"(handle_584);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_584);
     }
     min1 = f64.min(3, 5);
     min2 = f64.min(-1, 1);
@@ -718,7 +718,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_617 = builtin::i32_wrap_i64(packed_615 >> 32_i64);
     handle_596 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_616);
     "core:rt/write_string_to_stream"(tx_617, $local_64);
-    "wasi/future-drop-readable:transmission-cli"(handle_596);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_596);
     $local_66 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 };
     new_used_638 = 0 + 21;
     if @unlikely(new_used_638 > builtin::array_len($local_66.repr)) {
@@ -733,7 +733,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_646 = builtin::i32_wrap_i64(packed_644 >> 32_i64);
     handle_625 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_645);
     "core:rt/write_string_to_stream"(tx_646, $local_66);
-    "wasi/future-drop-readable:transmission-cli"(handle_625);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_625);
     $local_68 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
     new_used_667 = 0 + 20;
     if @unlikely(new_used_667 > builtin::array_len($local_68.repr)) {
@@ -748,7 +748,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_675 = builtin::i32_wrap_i64(packed_673 >> 32_i64);
     handle_654 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_674);
     "core:rt/write_string_to_stream"(tx_675, $local_68);
-    "wasi/future-drop-readable:transmission-cli"(handle_654);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_654);
     $local_70 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(37), used: 0 };
     new_used_696 = 0 + 21;
     if @unlikely(new_used_696 > builtin::array_len($local_70.repr)) {
@@ -763,7 +763,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_704 = builtin::i32_wrap_i64(packed_702 >> 32_i64);
     handle_683 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_703);
     "core:rt/write_string_to_stream"(tx_704, $local_70);
-    "wasi/future-drop-readable:transmission-cli"(handle_683);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_683);
     copy1 = f64.copysign(3, -1);
     copy2 = f64.copysign(-3, 1);
     copy3 = f64.copysign(5, 5);
@@ -781,7 +781,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_733 = builtin::i32_wrap_i64(packed_731 >> 32_i64);
     handle_712 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_732);
     "core:rt/write_string_to_stream"(tx_733, $local_72);
-    "wasi/future-drop-readable:transmission-cli"(handle_712);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_712);
     $local_74 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(42), used: 0 };
     new_used_754 = 0 + 26;
     if @unlikely(new_used_754 > builtin::array_len($local_74.repr)) {
@@ -796,7 +796,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_762 = builtin::i32_wrap_i64(packed_760 >> 32_i64);
     handle_741 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_761);
     "core:rt/write_string_to_stream"(tx_762, $local_74);
-    "wasi/future-drop-readable:transmission-cli"(handle_741);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_741);
     $local_76 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 };
     new_used_783 = 0 + 25;
     if @unlikely(new_used_783 > builtin::array_len($local_76.repr)) {
@@ -811,7 +811,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_791 = builtin::i32_wrap_i64(packed_789 >> 32_i64);
     handle_770 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_790);
     "core:rt/write_string_to_stream"(tx_791, $local_76);
-    "wasi/future-drop-readable:transmission-cli"(handle_770);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_770);
     f32_ceil = builtin::f32_ceil(2.3_f32);
     f32_floor = builtin::f32_floor(2.7_f32);
     f32_sqrt = builtin::f32_sqrt(4_f32);
@@ -831,7 +831,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_820 = builtin::i32_wrap_i64(packed_818 >> 32_i64);
     handle_799 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_819);
     "core:rt/write_string_to_stream"(tx_820, $local_78);
-    "wasi/future-drop-readable:transmission-cli"(handle_799);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_799);
     $local_80 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
     new_used_841 = 0 + 17;
     if @unlikely(new_used_841 > builtin::array_len($local_80.repr)) {
@@ -846,7 +846,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_849 = builtin::i32_wrap_i64(packed_847 >> 32_i64);
     handle_828 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_848);
     "core:rt/write_string_to_stream"(tx_849, $local_80);
-    "wasi/future-drop-readable:transmission-cli"(handle_828);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_828);
     $local_82 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(32), used: 0 };
     new_used_870 = 0 + 16;
     if @unlikely(new_used_870 > builtin::array_len($local_82.repr)) {
@@ -861,7 +861,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_878 = builtin::i32_wrap_i64(packed_876 >> 32_i64);
     handle_857 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_877);
     "core:rt/write_string_to_stream"(tx_878, $local_82);
-    "wasi/future-drop-readable:transmission-cli"(handle_857);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_857);
     $local_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
     new_used_899 = 0 + 20;
     if @unlikely(new_used_899 > builtin::array_len($local_84.repr)) {
@@ -876,7 +876,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_907 = builtin::i32_wrap_i64(packed_905 >> 32_i64);
     handle_886 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_906);
     "core:rt/write_string_to_stream"(tx_907, $local_84);
-    "wasi/future-drop-readable:transmission-cli"(handle_886);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_886);
     $local_86 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(36), used: 0 };
     new_used_928 = 0 + 20;
     if @unlikely(new_used_928 > builtin::array_len($local_86.repr)) {
@@ -891,7 +891,7 @@ fn "wasm_instructions_float_math.wado/run"() with Stdout {
     tx_936 = builtin::i32_wrap_i64(packed_934 >> 32_i64);
     handle_915 = "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(rx_935);
     "core:rt/write_string_to_stream"(tx_936, $local_86);
-    "wasi/future-drop-readable:transmission-cli"(handle_915);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_915);
 }
 
 fn "wasm_instructions_float_math.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -1558,7 +1558,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

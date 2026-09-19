@@ -134,7 +134,7 @@ type "functype//core:prelude/traits.wado/bug_sroa_variant_return_boxed_payload_b
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(45)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(46)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(46)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(47)
 
@@ -150,7 +150,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -299,19 +299,19 @@ fn "bug_sroa_variant_return_boxed_payload_binding.wado/run"() with Stdout {
     tx_8 = builtin::i32_wrap_i64(packed_6 >> 32_i64);
     handle_3 = "bug_sroa_variant_return_boxed_payload_binding.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message_0);
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
     message_13 = "bug_sroa_variant_return_boxed_payload_binding.wado/describe"(struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 }, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(121), used: 1 } }), used: 2 });
     rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
     tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
     handle_16 = "bug_sroa_variant_return_boxed_payload_binding.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
     "core:rt/write_string_to_stream"(tx_21, message_13);
-    "wasi/future-drop-readable:transmission-cli"(handle_16);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_16);
     message_26 = "bug_sroa_variant_return_boxed_payload_binding.wado/describe"(struct.new "core:prelude//List<[core:prelude/string.wado/String,core:prelude/string.wado/String]>" { repr: array.new_fixed<ref "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]">(struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120), used: 1 } }, struct.new "tuple//[core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, 1: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } }), used: 2 });
     rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
     tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
     handle_29 = "bug_sroa_variant_return_boxed_payload_binding.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
     "core:rt/write_string_to_stream"(tx_34, message_26);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
 }
 
 fn "bug_sroa_variant_return_boxed_payload_binding.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -431,7 +431,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

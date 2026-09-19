@@ -31,8 +31,9 @@ use super::lower::{
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
-    cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id,
+    cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
+    needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry_scoped};
@@ -1061,7 +1062,7 @@ impl<'a> AdapterBuilder<'a> {
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
             let elem_tid =
-                cm_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package);
+                cm_held_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package);
             let list_tid = tt.make_list(elem_tid);
             (elem_tid, list_tid)
         };

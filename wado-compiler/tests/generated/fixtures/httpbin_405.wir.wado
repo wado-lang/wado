@@ -905,15 +905,15 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(272)
 
 type "functype//wasi/future-write" = fn(i32, i32) -> i32;  // TypeId(273)
 
-type "functype//wasi/future-new:transmission-http" = fn() -> i64;  // TypeId(274)
+type "functype//wasi/future-new:transmission-wasi/http/types.wado#error-code" = fn() -> i64;  // TypeId(274)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(275)
 
-type "functype//wasi/resource-drop:request" = fn(i32);  // TypeId(276)
+type "functype//wasi/resource-drop:wasi/http/types.wado#request" = fn(i32);  // TypeId(276)
 
-type "functype//wasi/resource-drop:fields" = fn(i32);  // TypeId(277)
+type "functype//wasi/resource-drop:wasi/http/types.wado#fields" = fn(i32);  // TypeId(277)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(278)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(278)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-read from "wasi/stream-read";
@@ -939,11 +939,11 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/task-return:handle from "wasi/task-return:handle";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-write from "wasi/future-write";
-import fn wasi/future-new:transmission-http from "wasi/future-new:transmission-http";
+import fn wasi/future-new:transmission-wasi/http/types.wado#error-code from "wasi/future-new:transmission-wasi/http/types.wado#error-code";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/resource-drop:request from "wasi/resource-drop:request";
-import fn wasi/resource-drop:fields from "wasi/resource-drop:fields";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/resource-drop:wasi/http/types.wado#request from "wasi/resource-drop:wasi/http/types.wado#request";
+import fn wasi/resource-drop:wasi/http/types.wado#fields from "wasi/resource-drop:wasi/http/types.wado#fields";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global mut global:core:base64::URL_SAFE_TABLE: ref null "core:prelude//List<u8>" = ref.null none;
 global mut global:core:base64::DECODE_TABLE: ref null "core:prelude//List<u8>" = ref.null none;
@@ -2234,7 +2234,7 @@ fn "./sub/httpbin_handler.wado/read_body_from_request"(request) {
     let all: ref "core:prelude//List<u8>";
     let $sroa_$pattern_temp_0_0: i32;
     let elements: ref Array<u8>;
-    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-http"()));
+    $sroa_$pattern_temp_0_0 = builtin::i32_wrap_i64(local.tee packed("wasi/future-new:transmission-wasi/http/types.wado#error-code"()));
     $pattern_temp_1 = "httpbin_405.wado/$cm_binding__Request_consume_body"(request, $sroa_$pattern_temp_0_0);
     body_stream = $pattern_temp_1.0;
     body = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<core:prelude/list.wado/List<u8>>"($inline_core_prelude_types_wado_Stream_u8___read_to_end_1: block -> ref "core:prelude//List<u8>" {
@@ -2877,7 +2877,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         };
         break $inline_core_prelude_array_wado_seq_eq_u8__spec0_0: 1;
     } {
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/html; charset=utf-8"), used: 24 }, 2: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("<h1>httpbin</h1>
 "), used: 17 } };
     }
@@ -2931,13 +2931,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             } else {
                 unreachable;
             }); other_59 = global:./sub/httpbin_handler.wado::$const_obj_4; result_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_58.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_60, self_58); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_60, other_59); result_60) };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_28;
         }
         h_4 = "httpbin_405.wado/$cm_binding__Request_get_headers"(request);
         $drop_spill_29 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_61 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_4, ref.null none); other_62 = global:./sub/httpbin_handler.wado::$const_obj_4; result_63 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_61.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_63, self_61); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_63, other_62); result_63) };
-        "wasi/resource-drop:fields"(h_4);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_4);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_29;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__8: block -> bool {
@@ -2990,13 +2990,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             } else {
                 unreachable;
             }); other_71 = global:./sub/httpbin_handler.wado::$const_obj_4; result_72 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_70.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_72, self_70); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_72, other_71); result_72) };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_30;
         }
         h_5 = "httpbin_405.wado/$cm_binding__Request_get_headers"(request);
         data_6 = "./sub/httpbin_handler.wado/read_body_from_request"(request);
         $drop_spill_31 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_73 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_5, data_6); other_74 = global:./sub/httpbin_handler.wado::$const_obj_4; result_75 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_73.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_75, self_73); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_75, other_74); result_75) };
-        "wasi/resource-drop:fields"(h_5);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_5);
         return $drop_spill_31;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__spec1_15: block -> bool {
@@ -3049,13 +3049,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             } else {
                 unreachable;
             }); other_83 = global:./sub/httpbin_handler.wado::$const_obj_4; result_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_82.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_84, self_82); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_84, other_83); result_84) };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_32;
         }
         h_7 = "httpbin_405.wado/$cm_binding__Request_get_headers"(request);
         data_8 = "./sub/httpbin_handler.wado/read_body_from_request"(request);
         $drop_spill_33 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_85 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_7, data_8); other_86 = global:./sub/httpbin_handler.wado::$const_obj_4; result_87 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_85.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_87, self_85); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_87, other_86); result_87) };
-        "wasi/resource-drop:fields"(h_7);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_7);
         return $drop_spill_33;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__22: block -> bool {
@@ -3108,13 +3108,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             } else {
                 unreachable;
             }); other_95 = global:./sub/httpbin_handler.wado::$const_obj_4; result_96 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_94.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_96, self_94); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_96, other_95); result_96) };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_34;
         }
         h_9 = "httpbin_405.wado/$cm_binding__Request_get_headers"(request);
         data_10 = "./sub/httpbin_handler.wado/read_body_from_request"(request);
         $drop_spill_35 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_97 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_9, data_10); other_98 = global:./sub/httpbin_handler.wado::$const_obj_4; result_99 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_97.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_99, self_97); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_99, other_98); result_99) };
-        "wasi/resource-drop:fields"(h_9);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_9);
         return $drop_spill_35;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__29: block -> bool {
@@ -3167,13 +3167,13 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             } else {
                 unreachable;
             }); other_107 = global:./sub/httpbin_handler.wado::$const_obj_4; result_108 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_106.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_108, self_106); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_108, other_107); result_108) };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_36;
         }
         h_11 = "httpbin_405.wado/$cm_binding__Request_get_headers"(request);
         $drop_spill_37 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_109 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_11, ref.null none); other_110 = global:./sub/httpbin_handler.wado::$const_obj_4; result_111 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_109.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_111, self_109); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_111, other_110); result_111) };
-        "wasi/resource-drop:fields"(h_11);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_11);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_37;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__36: block -> bool {
@@ -3234,8 +3234,8 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             unreachable;
         }); other_146 = global:./sub/httpbin_handler.wado::$const_obj_4; result_147 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_145.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_147, self_145); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_147, other_146); result_147) };
-        "wasi/resource-drop:fields"(h_12);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_12);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_38;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__39: block -> bool {
@@ -3311,8 +3311,8 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             unreachable;
         }); other_195 = global:./sub/httpbin_handler.wado::$const_obj_4; result_196 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_194.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_196, self_194); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_196, other_195); result_196) };
-        "wasi/resource-drop:fields"(h_14);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_14);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_39;
     }
     if $inline_core_prelude_array_wado_seq_eq_u8__44: block -> bool {
@@ -3384,8 +3384,8 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             unreachable;
         }); other_242 = global:./sub/httpbin_handler.wado::$const_obj_4; result_243 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_241.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_243, self_241); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_243, other_242); result_243) };
-        "wasi/resource-drop:fields"(h_17);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_17);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_40;
     }
     if "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(repr_457 = path.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_457, start: 0, end: path.used }, global:./sub/httpbin_handler.wado::$const_obj_15) {
@@ -3403,7 +3403,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         multivalue_bind [$match_48_mv_0, $match_48_mv_1] = "./sub/httpbin_handler.wado/parse_status_code"(code_str);
         if $match_48_mv_0 == 0 {
             $drop_spill_41 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: $match_48_mv_1, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }, 2: struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 } };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_41;
         } else {
         }
@@ -3417,7 +3417,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             unreachable;
         }); other_257 = global:./sub/httpbin_handler.wado::$const_obj_4; result_258 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_256.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_258, self_256); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_258, other_257); result_258) };
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_42;
     }
     if "core:prelude/string.wado/core:prelude/string.wado/StrSlice::starts_with<core:prelude/string.wado/String>"(repr_475 = path.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_475, start: 0, end: path.used }, global:./sub/httpbin_handler.wado::$const_obj_13) {
@@ -3434,7 +3434,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
             decoded_bytes = ref.as_non_null($match_49);
             text = "core:prelude/string.wado/core:prelude/string.wado/String::from_utf8_lossy<core:prelude/bytes.wado/ByteList>"(decoded_bytes);
             $drop_spill_43 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("text/plain"), used: 10 }, 2: text };
-            "wasi/resource-drop:request"(request);
+            "wasi/resource-drop:wasi/http/types.wado#request"(request);
             return $drop_spill_43;
         } else {
         }
@@ -3448,7 +3448,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         } else {
             unreachable;
         }); other_274 = global:./sub/httpbin_handler.wado::$const_obj_4; result_275 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_273.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_275, self_273); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_275, other_274); result_275) };
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_44;
     }
     if (if $inline_core_prelude_array_wado_seq_eq_u8__62: block -> bool {
@@ -3544,12 +3544,12 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
         }) {
             data_26 = "./sub/httpbin_handler.wado/read_body_from_request"(request);
             $drop_spill_45 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_286 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_25, data_26); other_287 = global:./sub/httpbin_handler.wado::$const_obj_4; result_288 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_286.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_288, self_286); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_288, other_287); result_288) };
-            "wasi/resource-drop:fields"(h_25);
+            "wasi/resource-drop:wasi/http/types.wado#fields"(h_25);
             return $drop_spill_45;
         }
         $drop_spill_46 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 200, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(self_289 = "./sub/httpbin_handler.wado/build_request_json"(method_str, path, query, h_25, ref.null none); other_290 = global:./sub/httpbin_handler.wado::$const_obj_4; result_291 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_289.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_291, self_289); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_291, other_290); result_291) };
-        "wasi/resource-drop:fields"(h_25);
-        "wasi/resource-drop:request"(request);
+        "wasi/resource-drop:wasi/http/types.wado#fields"(h_25);
+        "wasi/resource-drop:wasi/http/types.wado#request"(request);
         return $drop_spill_46;
     }
     $drop_spill_47 = struct.new "tuple//[i32, core:prelude/string.wado/String, core:prelude/string.wado/String]" { 0: 404, 1: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("application/json"), used: 16 }, 2: ref.as_non_null(msg_292 = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Not Found"), used: 9 }; obj_293 = struct.new "core:collections//TreeMap<core:prelude/string.wado/String,core:value/Value>" { root: struct.new "core:prelude/types.wado//Option<i32>" { 1 }, nodes: struct.new "core:prelude//List<core:collections/TreeMapNode<core:prelude/string.wado/String>>" { repr: array.new_fixed<ref "core:collections//TreeMapNode<core:prelude/string.wado/String>">(), used: 0 }, entries: struct.new "core:prelude//List<core:collections/TreeMapEntry<core:prelude/string.wado/String,core:value/Value>>" { repr: array.new_fixed<ref "core:collections//TreeMapEntry<core:prelude/string.wado/String,core:value/Value>">(), used: 0 }, size: 0, deleted_count: 0 }; "core:collections/core:collections/TreeMap<core:prelude/string.wado/String,core:value/Value>^core:prelude/traits.wado/IndexAssign<K>::index_assign"(obj_293, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("error"), used: 5 }, struct.new "core:value//Value::String" { discriminant: 7, payload_0: msg_292 }); let self_536_mv_0: i32; let self_536_mv_1: ref null "core:prelude/string.wado//String"; let self_536_mv_2: ref null "core:serde//SerializeError"; multivalue_bind [self_536_mv_0, self_536_mv_1, self_536_mv_2] = "core:json/core/json/to_string<core:value/Value>"(struct.new "core:prelude/types.wado//Box<core:value/Value>" { value: struct.new "core:value//Value::Object" { discriminant: 10, payload_0: obj_293 } }, struct.new "core:prelude/types.wado//Option<char>" { 1 }); self_294 = (if @likely(self_536_mv_0 == 0) -> ref "core:prelude/string.wado//String" {
@@ -3562,7 +3562,7 @@ fn "./sub/httpbin_handler.wado/route"(request, method_str, path, query) {
     } else {
         unreachable;
     }); other_295 = global:./sub/httpbin_handler.wado::$const_obj_4; result_296 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self_294.used + 1), used: 0 }; "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_296, self_294); "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"(result_296, other_295); result_296) };
-    "wasi/resource-drop:request"(request);
+    "wasi/resource-drop:wasi/http/types.wado#request"(request);
     return $drop_spill_47;
 }
 
@@ -5286,7 +5286,7 @@ fn "core:rt/panic"(message) {
     builtin::array_set_u8(new_repr, self_14, 10);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 });
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

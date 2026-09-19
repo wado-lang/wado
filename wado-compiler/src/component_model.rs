@@ -15,17 +15,36 @@ use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
     NamedType, NamespacedGenericType, Type, cm_import_of, declares_unrestricted,
 };
-use crate::canonical::{CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
+use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
     CmValType, align_to, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size,
     cm_size, layout_record_with_registry_scoped, layout_tuple_with_registry_scoped,
 };
+use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, to_kebab};
+use crate::synthesis::cm_binding::types::cm_interface_module;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
+
+/// The declaration `interface_fq` names as `wado_name`, or `None` where it
+/// declares none. The boundary step §9 of the declaration-identity WEP reserves.
+pub fn cm_decl_in_interface(
+    type_table: &TypeTable,
+    registry: &CmInterfaceRegistry,
+    interface_fq: &str,
+    wado_name: &str,
+) -> Option<DefId> {
+    if let Some(source) = registry.cm_interface_module_source_of(interface_fq) {
+        return type_table.cm_decl_in(wado_name, source);
+    }
+    // A bundled `wasi:` / `core:` interface records no module, and its FQ is its
+    // own module path.
+    let (namespace, module) = cm_interface_module(interface_fq)?;
+    type_table.cm_decl_in_module_named(wado_name, &module, namespace)
+}
 
 /// The one classifier, so every operation on a given `Future<T>` — read, write,
 /// cancel, drop, new — agrees on its component-level future type.
@@ -110,9 +129,9 @@ fn try_classify_future_payload(
             if type_table.is_result(type_arg) && type_args.len() >= 2 =>
         {
             if matches!(type_table.get(type_args[0]), ResolvedType::Unit)
-                && let Some(source) = wasi_error_code_source(type_table, type_args[1])
+                && let Some(decl) = wasi_error_code_decl(type_table, type_args[1])
             {
-                return Some(CmFuturePayload::Transmission(source));
+                return Some(CmFuturePayload::Transmission(decl));
             }
         }
         _ => {}
@@ -215,8 +234,11 @@ pub fn cm_payload_type_from_type_id(
         ResolvedType::Struct { def, .. }
             if !is_cm_owned_source(type_table.struct_head_module(*def)) =>
         {
-            Some(CmPayloadType::Named(to_kebab(
-                &type_table.struct_head_name(*def),
+            // An anonymous struct names no declaration, so it is no CM record.
+            Some(CmPayloadType::Named(CmDecl::new(
+                type_table.defs(),
+                def.decl()?,
+                &to_kebab(&type_table.struct_head_name(*def)),
             )))
         }
         ResolvedType::Enum { def }
@@ -224,14 +246,20 @@ pub fn cm_payload_type_from_type_id(
         | ResolvedType::Flags { def }
             if !is_cm_owned_source(type_table.def_module(*def)) =>
         {
-            Some(CmPayloadType::Named(to_kebab(type_table.def_name(*def))))
+            Some(CmPayloadType::Named(CmDecl::new(
+                type_table.defs(),
+                *def,
+                &to_kebab(type_table.def_name(*def)),
+            )))
         }
         // Unlike the records above, a WASI-owned resource is included: its
         // component type is aliased from the defining interface, so `own<…>`
         // has one to point at.
-        ResolvedType::Resource { def } => {
-            Some(CmPayloadType::Resource(to_kebab(type_table.def_name(*def))))
-        }
+        ResolvedType::Resource { def } => Some(CmPayloadType::Resource(CmDecl::new(
+            type_table.defs(),
+            *def,
+            &to_kebab(type_table.def_name(*def)),
+        ))),
         _ => None,
     }
 }
@@ -273,6 +301,7 @@ fn cm_scalar_from_ast_name(name: &str) -> Option<CmScalarType> {
 /// AST-`Type` analogue of [`cm_payload_type_from_type_id`], for codegen, which
 /// works off the export's raw Wado return type.
 pub fn cm_payload_type_from_ast(
+    type_table: &TypeTable,
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> Option<CmPayloadType> {
@@ -286,9 +315,16 @@ pub fn cm_payload_type_from_ast(
                 return Some(CmPayloadType::Scalar(scalar));
             }
             let src = registry.resolve_cm_source_for(n, None)?;
+            let declared = |cm: &str| {
+                let def = cm_decl_in_interface(type_table, registry, &src, &n.name)?;
+                Some(CmDecl::new(type_table.defs(), def, cm))
+            };
             // Before the CM-owned bail below: a WASI resource counts.
-            if let Some(cm) = registry.get_resource_cm_name_by_source(&src, &n.name) {
-                return Some(CmPayloadType::Resource(cm.to_string()));
+            if let Some(cm) = registry
+                .get_resource_cm_name_by_source(&src, &n.name)
+                .map(str::to_string)
+            {
+                return Some(CmPayloadType::Resource(declared(&cm)?));
             }
             if src.starts_with("wasi:") || src.starts_with("core:kiln/") {
                 return None;
@@ -297,27 +333,30 @@ pub fn cm_payload_type_from_ast(
                 .get_struct_cm_name_by_source(&src, &n.name)
                 .or_else(|| registry.get_variant_cm_name_by_source(&src, &n.name))
                 .or_else(|| registry.get_enum_cm_name_by_source(&src, &n.name))
-                .or_else(|| registry.get_flags_cm_name_by_source(&src, &n.name))?;
-            Some(CmPayloadType::Named(cm.to_string()))
+                .or_else(|| registry.get_flags_cm_name_by_source(&src, &n.name))?
+                .to_string();
+            Some(CmPayloadType::Named(declared(&cm)?))
         }
         Type::Tuple(elems) => elems
             .iter()
-            .map(|e| cm_payload_type_from_ast(e, registry))
+            .map(|e| cm_payload_type_from_ast(type_table, e, registry))
             .collect::<Option<Vec<_>>>()
             .map(CmPayloadType::Tuple),
         Type::Generic(g) => match g.name.as_str() {
             "Option" if g.args.len() == 1 => Some(CmPayloadType::Option(Box::new(
-                cm_payload_type_from_ast(&g.args[0], registry)?,
+                cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
             ))),
             "List" if g.args.len() == 1 => Some(CmPayloadType::List(Box::new(
-                cm_payload_type_from_ast(&g.args[0], registry)?,
+                cm_payload_type_from_ast(type_table, &g.args[0], registry)?,
             ))),
             "Result" if g.args.len() == 2 => {
                 let arm = |t: &Type| -> Option<Option<Box<CmPayloadType>>> {
                     if t.is_unit() {
                         Some(None)
                     } else {
-                        Some(Some(Box::new(cm_payload_type_from_ast(t, registry)?)))
+                        Some(Some(Box::new(cm_payload_type_from_ast(
+                            type_table, t, registry,
+                        )?)))
                     }
                 };
                 Some(CmPayloadType::Result(arm(&g.args[0])?, arm(&g.args[1])?))
@@ -331,6 +370,7 @@ pub fn cm_payload_type_from_ast(
 /// Classify an AST-`Type` stream element (codegen's `task.return` resolver),
 /// mirroring [`classify_stream_payload`] on resolved types.
 pub fn classify_stream_payload_from_ast(
+    type_table: &TypeTable,
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> CmStreamPayload {
@@ -342,7 +382,7 @@ pub fn classify_stream_payload_from_ast(
     {
         return CmStreamPayload::U8;
     }
-    match cm_payload_type_from_ast(ty, registry) {
+    match cm_payload_type_from_ast(type_table, ty, registry) {
         Some(payload) => CmStreamPayload::Value(payload),
         None => panic!(
             "`Stream<{}>` has no Component Model element type",
@@ -357,6 +397,7 @@ pub fn classify_stream_payload_from_ast(
 /// export's signature declares, and a disagreement builds a component whose
 /// declared type is not the one the body reads.
 pub fn classify_future_payload_from_ast(
+    type_table: &TypeTable,
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
 ) -> CmFuturePayload {
@@ -371,11 +412,11 @@ pub fn classify_future_payload_from_ast(
         && g.name == "Result"
         && g.args.len() == 2
         && g.args[0].is_unit()
-        && let Some(source) = wasi_error_code_source_from_ast(&g.args[1], registry)
+        && let Some(decl) = wasi_error_code_decl_from_ast(type_table, &g.args[1], registry)
     {
-        return CmFuturePayload::Transmission(source);
+        return CmFuturePayload::Transmission(decl);
     }
-    if let Some(payload) = cm_payload_type_from_ast(ty, registry) {
+    if let Some(payload) = cm_payload_type_from_ast(type_table, ty, registry) {
         return CmFuturePayload::Value(payload);
     }
     if is_trailers_payload_from_ast(&resolved, registry) {
@@ -387,23 +428,24 @@ pub fn classify_future_payload_from_ast(
     );
 }
 
-fn wasi_error_code_source_from_ast(
+fn wasi_error_code_decl_from_ast(
+    type_table: &TypeTable,
     ty: &ast::Type,
     registry: &CmInterfaceRegistry,
-) -> Option<String> {
+) -> Option<CmDecl> {
     let ast::Type::Named(n) = &registry.resolve_type(ty) else {
         return None;
     };
     let source = registry.resolve_cm_source_for(n, None)?;
-    let wasi = source.strip_prefix("wasi:")?;
-    let package = wasi.split(['/', '@']).next()?;
-    (registry
+    if !source.starts_with("wasi:") {
+        return None;
+    }
+    let cm_name = registry
         .get_enum_cm_name_by_source(&source, &n.name)
-        .is_some()
-        || registry
-            .get_variant_cm_name_by_source(&source, &n.name)
-            .is_some())
-    .then(|| package.to_string())
+        .or_else(|| registry.get_variant_cm_name_by_source(&source, &n.name))?
+        .to_string();
+    let def = cm_decl_in_interface(type_table, registry, &source, &n.name)?;
+    Some(CmDecl::new(type_table.defs(), def, &cm_name))
 }
 
 /// `result<option<resource>, _>`.
@@ -460,10 +502,13 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
     })
 }
 
-/// WASI package owning an `ErrorCode` type (`"http/types.wado"` → `"http"`), or
+/// The declaration of the WASI `ErrorCode` a transmission future carries, or
 /// `None` if the type is not a WASI error-code — an ordinary `result<_, E>`
 /// payload, then, not a transmission future.
-fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Option<String> {
+///
+/// The declaration and not its package: `wasi:sockets/types` and
+/// `wasi:sockets/ip-name-lookup` each declare one, and they are unrelated.
+fn wasi_error_code_decl(type_table: &TypeTable, error_type_id: TypeId) -> Option<CmDecl> {
     let (ResolvedType::Enum { def } | ResolvedType::Variant { def }) =
         type_table.get(error_type_id)
     else {
@@ -471,12 +516,16 @@ fn wasi_error_code_source(type_table: &TypeTable, error_type_id: TypeId) -> Opti
     };
     let ModuleSource::Binding {
         namespace: CmNamespace::Wasi,
-        interface,
+        ..
     } = type_table.def_module(*def)
     else {
         return None;
     };
-    Some(interface.split('/').next().unwrap_or("cli").to_string())
+    Some(CmDecl::new(
+        type_table.defs(),
+        *def,
+        &to_kebab(type_table.def_name(*def)),
+    ))
 }
 
 /// A variant case with both CM and Wado names.
@@ -1112,6 +1161,18 @@ fn first_name_in_interface<'a, V>(
     map.keys()
         .find(|(source, _)| source == iface_fq)
         .map(|(_, name)| name.as_str())
+}
+
+/// Whether a registration under `iface_fq` spells its CM name `cm_name`, where
+/// `of` reads that name out of the kind's value.
+fn spells_cm_name<V>(
+    map: &IndexMap<(String, String), V>,
+    iface_fq: &str,
+    cm_name: &str,
+    of: impl Fn(&V) -> &str,
+) -> bool {
+    map.iter()
+        .any(|((fq, _), value)| fq == iface_fq && of(value) == cm_name)
 }
 
 /// Return the `source_interface` when `name` has exactly one registrant under
@@ -2622,52 +2683,6 @@ impl CmInterfaceRegistry {
             .map(|(cm_name, _, _)| cm_name.as_str())
     }
 
-    /// [`Self::find_named_type_wado_name_by_cm`] restricted to one interface,
-    /// for a CM name that more than one interface registers.
-    pub fn find_named_type_wado_name_by_cm_in(
-        &self,
-        interface: &str,
-        cm_name: &str,
-    ) -> Option<&str> {
-        self.structs
-            .iter()
-            .map(|((iface, wado), (cm, ..))| (iface, wado, cm))
-            .chain(
-                self.variants
-                    .iter()
-                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
-            )
-            .chain(
-                self.enums
-                    .iter()
-                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
-            )
-            .chain(
-                self.flags
-                    .iter()
-                    .map(|((iface, wado), (cm, _))| (iface, wado, cm)),
-            )
-            .find(|(iface, _, cm)| iface.as_str() == interface && cm.as_str() == cm_name)
-            .map(|(_, wado, _)| wado.as_str())
-    }
-
-    /// The Wado name a record / variant / enum / flags is declared under, when
-    /// unambiguous across interfaces and kinds. Codegen rebuilds the declaring
-    /// `Type::Named` for a `CmPayloadType::Named` payload through it.
-    pub fn find_named_type_wado_name_by_cm(&self, cm_name: &str) -> Option<&str> {
-        let mut hits = self
-            .structs
-            .iter()
-            .map(|((_, wado), (cm, ..))| (wado, cm))
-            .chain(self.variants.iter().map(|((_, wado), (cm, _))| (wado, cm)))
-            .chain(self.enums.iter().map(|((_, wado), (cm, _))| (wado, cm)))
-            .chain(self.flags.iter().map(|((_, wado), (cm, _))| (wado, cm)))
-            .filter(|(_, cm)| cm.as_str() == cm_name)
-            .map(|(wado, _)| wado.as_str());
-        let first = hits.next()?;
-        hits.next().is_none().then_some(first)
-    }
-
     /// Struct registered at `(interface, name)`; returns CM-kebab field
     /// `(name, type)` pairs.
     pub fn get_struct_fields_by_source(
@@ -2974,6 +2989,41 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources.get(iface_fq)
     }
 
+    /// The CM interfaces `module` registers. A component exports as many as it
+    /// likes through the one binding module the loader synthesizes for it.
+    fn module_interfaces(&self, module: &ModuleSource) -> Vec<&str> {
+        let recorded: Vec<&str> = self
+            .cm_interface_module_sources
+            .iter()
+            .filter(|(_, source)| *source == module)
+            .map(|(fq, _)| fq.as_str())
+            .collect();
+        if !recorded.is_empty() {
+            return recorded;
+        }
+        // A bundled `wasi:` / `core:` interface is absent from the map by
+        // design, and its module path is its own interface FQ, so the two
+        // populations are disjoint rather than a fallback.
+        let (namespace, path) = match module {
+            ModuleSource::Binding {
+                namespace,
+                interface,
+            } => (Some(*namespace), interface.as_str()),
+            ModuleSource::Core { name } => (None, name.as_str()),
+            _ => return Vec::new(),
+        };
+        let stem = path.strip_suffix(".wado").unwrap_or(path);
+        let wanted = (namespace, format!("{stem}.wado"));
+        let bundled: IndexSet<&str> = self
+            .interfaces
+            .keys()
+            .map(String::as_str)
+            .chain(self.resources.keys().map(|(fq, _)| fq.as_str()))
+            .filter(|fq| cm_interface_module(fq).as_ref() == Some(&wanted))
+            .collect();
+        bundled.into_iter().collect()
+    }
+
     /// A type `iface_fq` already declares, if any. A bundled `wasi:` / `core:`
     /// interface is absent from `cm_interface_module_sources` by design, so that
     /// map alone reports the whole stdlib as unowned; what the keyspaces hold is
@@ -3084,14 +3134,6 @@ impl CmInterfaceRegistry {
         &self.newtypes
     }
 
-    /// Source interface of the resource whose CM (kebab) name is `cm_name`.
-    pub fn resource_source_by_cm_name(&self, cm_name: &str) -> Option<&str> {
-        self.resources
-            .iter()
-            .find(|((_, _), cm)| cm.as_str() == cm_name)
-            .map(|((src, _), _)| src.as_str())
-    }
-
     /// The CM interface a named type belongs to: its recorded source, else the
     /// emitting interface when that one declares the name, else the bundled
     /// binding that declares it, else a component dependency's re-export. The
@@ -3147,37 +3189,41 @@ impl CmInterfaceRegistry {
     /// module; outside `--lib` it is registered nowhere, so this is `false` and
     /// the payload has no CM type to lower against.
     pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        let declared_here = |fq: &String, decl_name: &String| {
-            decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
-        };
-        self.structs.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.variants.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.enums.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.flags.keys().any(|(fq, n)| declared_here(fq, n))
+        self.interface_declaring(source, name).is_some()
     }
 
-    /// Find the interface declaring a WASI struct with CM kebab name `cm_name`,
-    /// for the component builder's import aliasing. Scoped to `wasi:`, and `Some`
-    /// only when exactly one interface declares it. The key is package-qualified
-    /// (`"http-types"`), matching how codegen registers imported instances — a
-    /// bare name would collide `wasi:cli/types` with `wasi:http/types`.
-    pub fn find_interface_for_struct_cm_name(&self, cm_name: &str) -> Option<String> {
-        let mut found: Option<String> = None;
-        for ((source_path, wado_name), (struct_cm_name, _, _)) in &self.structs {
-            if !source_path.starts_with("wasi:") {
-                continue;
-            }
-            if struct_cm_name != cm_name && wado_name != cm_name {
-                continue;
-            }
-            let wasi = CmImport::parse(source_path)?;
-            let key = format!("{}-{}", wasi.package, wasi.interface);
-            if found.as_ref().is_some_and(|prev| prev != &key) {
-                return None; // ambiguous across interfaces — refuse to guess.
-            }
-            found = Some(key);
-        }
-        found
+    /// The interface declaring `name` among those `source` registers. Keying by
+    /// the module is what keeps a bundled interface spelling `name` out of it.
+    pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
+        self.module_interfaces(source).into_iter().find(|fq| {
+            let key = ((*fq).to_string(), name.to_string());
+            self.structs.contains_key(&key)
+                || self.variants.contains_key(&key)
+                || self.enums.contains_key(&key)
+                || self.flags.contains_key(&key)
+        })
+    }
+
+    /// The interface exporting `cm_name` among those `module` registers, for a
+    /// consumer holding a [`crate::canonical::CmDecl`] rather than a Wado name.
+    pub fn interface_declaring_cm_name(
+        &self,
+        module: &ModuleSource,
+        cm_name: &str,
+    ) -> Option<&str> {
+        self.module_interfaces(module)
+            .into_iter()
+            .find(|fq| self.exports_cm_name(fq, cm_name))
+    }
+
+    fn exports_cm_name(&self, iface_fq: &str, cm_name: &str) -> bool {
+        // A newtype is peeled before it reaches the boundary, so the kinds
+        // recording the name the ABI spells are the kinds that can be asked for.
+        spells_cm_name(&self.resources, iface_fq, cm_name, |cm| cm)
+            || spells_cm_name(&self.structs, iface_fq, cm_name, |(cm, ..)| cm)
+            || spells_cm_name(&self.variants, iface_fq, cm_name, |(cm, _)| cm)
+            || spells_cm_name(&self.enums, iface_fq, cm_name, |(cm, _)| cm)
+            || spells_cm_name(&self.flags, iface_fq, cm_name, |(cm, _)| cm)
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).
@@ -4877,6 +4923,17 @@ pub const MAX_FLAT_RESULTS: usize = 1;
 /// by it, so it is what reaches the declaration.
 pub const ERROR_CODE_WADO_NAME: &str = "ErrorCode";
 
+/// The Wado name of the HTTP fields resource a trailers future carries.
+/// `Trailers` is a newtype over it, so a component type points at the resource.
+pub const FIELDS_WADO_NAME: &str = "Fields";
+
+/// The Wado name of the HTTP response resource a handler result carries.
+pub const RESPONSE_WADO_NAME: &str = "Response";
+
+/// The interface declaring the canonical `error-code` that WASI WIT writes as
+/// the error arm of a bare `result<_, error-code>`.
+pub const CANONICAL_ERROR_CODE_INTERFACE: &str = "wasi:cli/types";
+
 /// What every boundary path says when it meets the empty tuple, which none of
 /// them does.
 pub const EMPTY_TUPLE_AT_BOUNDARY: &str = "the empty tuple `[]` has no Component Model \
@@ -5604,6 +5661,41 @@ mod tests {
                 .is_none()
         );
         assert!(registry.local_newtype_base(None, "Temp").is_none());
+    }
+
+    #[test]
+    fn a_component_s_later_interface_declares_as_much_as_its_first() {
+        use crate::module_source::{ModuleSourceInterner, WasmAssetKind};
+
+        let mut interner = ModuleSourceInterner::new();
+        let dep = interner.wasm("./brotli.wasm", WasmAssetKind::Wasm);
+        let mut registry = CmInterfaceRegistry::new();
+
+        // One component exporting two interfaces: every FQ it exports maps back
+        // to the single binding module the loader synthesizes for it.
+        for fq in ["acme:brotli/compress@1.0.0", "acme:brotli/decompress@1.0.0"] {
+            registry
+                .cm_interface_module_sources
+                .insert(fq.into(), dep.clone());
+        }
+        registry.structs.insert(
+            ("acme:brotli/compress@1.0.0".into(), "Level".into()),
+            ("level".into(), Vec::new(), Vec::new()),
+        );
+        registry.structs.insert(
+            ("acme:brotli/decompress@1.0.0".into(), "Window".into()),
+            ("window".into(), Vec::new(), Vec::new()),
+        );
+
+        assert_eq!(
+            registry.interface_declaring(&dep, "Level"),
+            Some("acme:brotli/compress@1.0.0")
+        );
+        assert_eq!(
+            registry.interface_declaring(&dep, "Window"),
+            Some("acme:brotli/decompress@1.0.0")
+        );
+        assert_eq!(registry.interface_declaring(&dep, "Absent"), None);
     }
 
     #[test]

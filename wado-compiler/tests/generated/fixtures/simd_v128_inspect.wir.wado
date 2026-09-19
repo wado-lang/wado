@@ -65,7 +65,7 @@ type "functype//core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelud
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
@@ -80,7 +80,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -136,7 +136,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
     handle_9 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(rx_49);
     "core:rt/write_string_to_stream"(tx_50, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     w = struct.new "simd_v128_inspect.wado//Wrap" { bytes: v };
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/traits.wado/simd_v128_inspect.wado/Wrap^core:prelude/traits.wado/Inspect::inspect$spec0$scalar"(w, $local_4_4);
@@ -144,7 +144,7 @@ fn "simd_v128_inspect.wado/run"() with Stdout {
     tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
     handle_58 = "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
     "core:rt/write_string_to_stream"(tx_64, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_58);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_58);
 }
 
 fn "simd_v128_inspect.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

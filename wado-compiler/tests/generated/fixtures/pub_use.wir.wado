@@ -41,7 +41,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(15)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(16)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(16)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(17)
 
@@ -56,7 +56,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -77,12 +77,12 @@ fn "pub_use.wado/$cm_export__run"() {
     tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
     handle_5 = "pub_use.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
     "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("multiply ok"), used: 11 });
-    "wasi/future-drop-readable:transmission-cli"(handle_5);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_5);
     rx_32 = builtin::i32_wrap_i64(local.tee packed_31("wasi/stream-new"()));
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_29 = "pub_use.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
     "core:rt/write_string_to_stream"(tx_33, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("hello from lib"), used: 14 });
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
     "wasi/task-return"(0);
 }
 

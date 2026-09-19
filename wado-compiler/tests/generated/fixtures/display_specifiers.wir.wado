@@ -234,7 +234,7 @@ type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(93)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(94)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(94)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(95)
 
@@ -250,7 +250,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -927,7 +927,7 @@ condition: fmt_with(&neg, false, false, 10, Alignment::Left) == \"-42       \"
     tx_195 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_194);
     "core:rt/write_string_to_stream"(tx_195, global:display_specifiers.wado::$const_obj_41);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "display_specifiers.wado/test_format_padding"() with Stdout {
@@ -1330,7 +1330,7 @@ condition: fmt_int(&big, ' ', Alignment::Right, false, false, 2) == \"12345\"
     tx_281 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_280);
     "core:rt/write_string_to_stream"(tx_281, global:display_specifiers.wado::$const_obj_41);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "display_specifiers.wado/test_template_specifiers"() with Stdout {
@@ -4025,7 +4025,7 @@ condition: `${neg_i32:#x}` == \"0xffffffd6\"
     tx_1877 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1876);
     "core:rt/write_string_to_stream"(tx_1877, global:display_specifiers.wado::$const_obj_41);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "display_specifiers.wado/test_template_specifiers_float"() with Stdout {
@@ -6731,7 +6731,7 @@ condition: `${1.0:.10}` == \"1.0000000000\"
     tx_1464 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1463);
     "core:rt/write_string_to_stream"(tx_1464, global:display_specifiers.wado::$const_obj_41);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "display_specifiers.wado/test_fts_precision"() with Stdout {
@@ -7344,7 +7344,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_233 = builtin::i32_wrap_i64(packed_231 >> 32_i64);
     handle_213 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_232);
     "core:rt/write_string_to_stream"(tx_233, $local_10);
-    "wasi/future-drop-readable:transmission-cli"(handle_213);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_213);
     $local_12 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_12.used = 5;
     builtin::array_copy<u8>($local_12.repr, 0, global:display_specifiers.wado::$const_obj_604, 0, 5);
@@ -7354,7 +7354,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_261 = builtin::i32_wrap_i64(packed_259 >> 32_i64);
     handle_241 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_260);
     "core:rt/write_string_to_stream"(tx_261, $local_12);
-    "wasi/future-drop-readable:transmission-cli"(handle_241);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_241);
     $local_14 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_14.used = 5;
     builtin::array_copy<u8>($local_14.repr, 0, global:display_specifiers.wado::$const_obj_603, 0, 5);
@@ -7364,7 +7364,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_289 = builtin::i32_wrap_i64(packed_287 >> 32_i64);
     handle_269 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_288);
     "core:rt/write_string_to_stream"(tx_289, $local_14);
-    "wasi/future-drop-readable:transmission-cli"(handle_269);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_269);
     $local_16 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_16.used = 5;
     builtin::array_copy<u8>($local_16.repr, 0, global:display_specifiers.wado::$const_obj_602, 0, 5);
@@ -7374,7 +7374,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_317 = builtin::i32_wrap_i64(packed_315 >> 32_i64);
     handle_297 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_316);
     "core:rt/write_string_to_stream"(tx_317, $local_16);
-    "wasi/future-drop-readable:transmission-cli"(handle_297);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_297);
     $local_18 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_18.used = 5;
     builtin::array_copy<u8>($local_18.repr, 0, global:display_specifiers.wado::$const_obj_601, 0, 5);
@@ -7384,7 +7384,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_345 = builtin::i32_wrap_i64(packed_343 >> 32_i64);
     handle_325 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_344);
     "core:rt/write_string_to_stream"(tx_345, $local_18);
-    "wasi/future-drop-readable:transmission-cli"(handle_325);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_325);
     $local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_20.used = 5;
     builtin::array_copy<u8>($local_20.repr, 0, global:display_specifiers.wado::$const_obj_600, 0, 5);
@@ -7394,7 +7394,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_373 = builtin::i32_wrap_i64(packed_371 >> 32_i64);
     handle_353 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_372);
     "core:rt/write_string_to_stream"(tx_373, $local_20);
-    "wasi/future-drop-readable:transmission-cli"(handle_353);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_353);
     $local_22 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_22.used = 5;
     builtin::array_copy<u8>($local_22.repr, 0, global:display_specifiers.wado::$const_obj_599, 0, 5);
@@ -7404,7 +7404,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_401 = builtin::i32_wrap_i64(packed_399 >> 32_i64);
     handle_381 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_400);
     "core:rt/write_string_to_stream"(tx_401, $local_22);
-    "wasi/future-drop-readable:transmission-cli"(handle_381);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_381);
     $local_24 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_24.used = 5;
     builtin::array_copy<u8>($local_24.repr, 0, global:display_specifiers.wado::$const_obj_598, 0, 5);
@@ -7414,7 +7414,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_429 = builtin::i32_wrap_i64(packed_427 >> 32_i64);
     handle_409 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_428);
     "core:rt/write_string_to_stream"(tx_429, $local_24);
-    "wasi/future-drop-readable:transmission-cli"(handle_409);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_409);
     $local_26 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_26.used = 5;
     builtin::array_copy<u8>($local_26.repr, 0, global:display_specifiers.wado::$const_obj_597, 0, 5);
@@ -7424,7 +7424,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_457 = builtin::i32_wrap_i64(packed_455 >> 32_i64);
     handle_437 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_456);
     "core:rt/write_string_to_stream"(tx_457, $local_26);
-    "wasi/future-drop-readable:transmission-cli"(handle_437);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_437);
     $local_28 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_28.used = 6;
     builtin::array_copy<u8>($local_28.repr, 0, global:display_specifiers.wado::$const_obj_596, 0, 6);
@@ -7434,7 +7434,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_485 = builtin::i32_wrap_i64(packed_483 >> 32_i64);
     handle_465 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_484);
     "core:rt/write_string_to_stream"(tx_485, $local_28);
-    "wasi/future-drop-readable:transmission-cli"(handle_465);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_465);
     $local_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_30.used = 5;
     builtin::array_copy<u8>($local_30.repr, 0, global:display_specifiers.wado::$const_obj_595, 0, 5);
@@ -7444,7 +7444,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_513 = builtin::i32_wrap_i64(packed_511 >> 32_i64);
     handle_493 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_512);
     "core:rt/write_string_to_stream"(tx_513, $local_30);
-    "wasi/future-drop-readable:transmission-cli"(handle_493);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_493);
     $local_32 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_32.used = 5;
     builtin::array_copy<u8>($local_32.repr, 0, global:display_specifiers.wado::$const_obj_594, 0, 5);
@@ -7454,7 +7454,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_541 = builtin::i32_wrap_i64(packed_539 >> 32_i64);
     handle_521 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_540);
     "core:rt/write_string_to_stream"(tx_541, $local_32);
-    "wasi/future-drop-readable:transmission-cli"(handle_521);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_521);
     $local_34 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_34.used = 5;
     builtin::array_copy<u8>($local_34.repr, 0, global:display_specifiers.wado::$const_obj_593, 0, 5);
@@ -7464,7 +7464,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_569 = builtin::i32_wrap_i64(packed_567 >> 32_i64);
     handle_549 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_568);
     "core:rt/write_string_to_stream"(tx_569, $local_34);
-    "wasi/future-drop-readable:transmission-cli"(handle_549);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_549);
     $local_36 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_36.used = 5;
     builtin::array_copy<u8>($local_36.repr, 0, global:display_specifiers.wado::$const_obj_592, 0, 5);
@@ -7474,7 +7474,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_597 = builtin::i32_wrap_i64(packed_595 >> 32_i64);
     handle_577 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_596);
     "core:rt/write_string_to_stream"(tx_597, $local_36);
-    "wasi/future-drop-readable:transmission-cli"(handle_577);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_577);
     $local_38 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_38.used = 5;
     builtin::array_copy<u8>($local_38.repr, 0, global:display_specifiers.wado::$const_obj_591, 0, 5);
@@ -7484,7 +7484,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_625 = builtin::i32_wrap_i64(packed_623 >> 32_i64);
     handle_605 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_624);
     "core:rt/write_string_to_stream"(tx_625, $local_38);
-    "wasi/future-drop-readable:transmission-cli"(handle_605);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_605);
     $local_40 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_40.used = 5;
     builtin::array_copy<u8>($local_40.repr, 0, global:display_specifiers.wado::$const_obj_590, 0, 5);
@@ -7494,7 +7494,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_653 = builtin::i32_wrap_i64(packed_651 >> 32_i64);
     handle_633 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_652);
     "core:rt/write_string_to_stream"(tx_653, $local_40);
-    "wasi/future-drop-readable:transmission-cli"(handle_633);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_633);
     $local_42 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_42.used = 5;
     builtin::array_copy<u8>($local_42.repr, 0, global:display_specifiers.wado::$const_obj_589, 0, 5);
@@ -7504,7 +7504,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_681 = builtin::i32_wrap_i64(packed_679 >> 32_i64);
     handle_661 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_680);
     "core:rt/write_string_to_stream"(tx_681, $local_42);
-    "wasi/future-drop-readable:transmission-cli"(handle_661);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_661);
     $local_44 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_44.used = 5;
     builtin::array_copy<u8>($local_44.repr, 0, global:display_specifiers.wado::$const_obj_588, 0, 5);
@@ -7514,7 +7514,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_709 = builtin::i32_wrap_i64(packed_707 >> 32_i64);
     handle_689 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_708);
     "core:rt/write_string_to_stream"(tx_709, $local_44);
-    "wasi/future-drop-readable:transmission-cli"(handle_689);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_689);
     $local_46 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_46.used = 5;
     builtin::array_copy<u8>($local_46.repr, 0, global:display_specifiers.wado::$const_obj_587, 0, 5);
@@ -7524,7 +7524,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_737 = builtin::i32_wrap_i64(packed_735 >> 32_i64);
     handle_717 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_736);
     "core:rt/write_string_to_stream"(tx_737, $local_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_717);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_717);
     $local_48 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_48.used = 6;
     builtin::array_copy<u8>($local_48.repr, 0, global:display_specifiers.wado::$const_obj_586, 0, 6);
@@ -7534,7 +7534,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_765 = builtin::i32_wrap_i64(packed_763 >> 32_i64);
     handle_745 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_764);
     "core:rt/write_string_to_stream"(tx_765, $local_48);
-    "wasi/future-drop-readable:transmission-cli"(handle_745);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_745);
     $local_50 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_50.used = 5;
     builtin::array_copy<u8>($local_50.repr, 0, global:display_specifiers.wado::$const_obj_585, 0, 5);
@@ -7544,7 +7544,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_793 = builtin::i32_wrap_i64(packed_791 >> 32_i64);
     handle_773 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_792);
     "core:rt/write_string_to_stream"(tx_793, $local_50);
-    "wasi/future-drop-readable:transmission-cli"(handle_773);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_773);
     $local_52 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_52.used = 5;
     builtin::array_copy<u8>($local_52.repr, 0, global:display_specifiers.wado::$const_obj_584, 0, 5);
@@ -7554,7 +7554,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_821 = builtin::i32_wrap_i64(packed_819 >> 32_i64);
     handle_801 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_820);
     "core:rt/write_string_to_stream"(tx_821, $local_52);
-    "wasi/future-drop-readable:transmission-cli"(handle_801);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_801);
     $local_54 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_54.used = 5;
     builtin::array_copy<u8>($local_54.repr, 0, global:display_specifiers.wado::$const_obj_583, 0, 5);
@@ -7564,7 +7564,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_849 = builtin::i32_wrap_i64(packed_847 >> 32_i64);
     handle_829 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_848);
     "core:rt/write_string_to_stream"(tx_849, $local_54);
-    "wasi/future-drop-readable:transmission-cli"(handle_829);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_829);
     $local_56 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_56.used = 5;
     builtin::array_copy<u8>($local_56.repr, 0, global:display_specifiers.wado::$const_obj_582, 0, 5);
@@ -7574,7 +7574,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_877 = builtin::i32_wrap_i64(packed_875 >> 32_i64);
     handle_857 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_876);
     "core:rt/write_string_to_stream"(tx_877, $local_56);
-    "wasi/future-drop-readable:transmission-cli"(handle_857);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_857);
     $local_58 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_58.used = 5;
     builtin::array_copy<u8>($local_58.repr, 0, global:display_specifiers.wado::$const_obj_581, 0, 5);
@@ -7584,7 +7584,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_905 = builtin::i32_wrap_i64(packed_903 >> 32_i64);
     handle_885 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_904);
     "core:rt/write_string_to_stream"(tx_905, $local_58);
-    "wasi/future-drop-readable:transmission-cli"(handle_885);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_885);
     $local_60 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_60.used = 5;
     builtin::array_copy<u8>($local_60.repr, 0, global:display_specifiers.wado::$const_obj_580, 0, 5);
@@ -7594,7 +7594,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_933 = builtin::i32_wrap_i64(packed_931 >> 32_i64);
     handle_913 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_932);
     "core:rt/write_string_to_stream"(tx_933, $local_60);
-    "wasi/future-drop-readable:transmission-cli"(handle_913);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_913);
     $local_62 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_62.used = 5;
     builtin::array_copy<u8>($local_62.repr, 0, global:display_specifiers.wado::$const_obj_579, 0, 5);
@@ -7604,7 +7604,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_961 = builtin::i32_wrap_i64(packed_959 >> 32_i64);
     handle_941 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_960);
     "core:rt/write_string_to_stream"(tx_961, $local_62);
-    "wasi/future-drop-readable:transmission-cli"(handle_941);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_941);
     $local_64 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_64.used = 5;
     builtin::array_copy<u8>($local_64.repr, 0, global:display_specifiers.wado::$const_obj_578, 0, 5);
@@ -7614,7 +7614,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_989 = builtin::i32_wrap_i64(packed_987 >> 32_i64);
     handle_969 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_988);
     "core:rt/write_string_to_stream"(tx_989, $local_64);
-    "wasi/future-drop-readable:transmission-cli"(handle_969);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_969);
     $local_66 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_66.used = 5;
     builtin::array_copy<u8>($local_66.repr, 0, global:display_specifiers.wado::$const_obj_577, 0, 5);
@@ -7624,7 +7624,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1017 = builtin::i32_wrap_i64(packed_1015 >> 32_i64);
     handle_997 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1016);
     "core:rt/write_string_to_stream"(tx_1017, $local_66);
-    "wasi/future-drop-readable:transmission-cli"(handle_997);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_997);
     $local_68 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_68.used = 6;
     builtin::array_copy<u8>($local_68.repr, 0, global:display_specifiers.wado::$const_obj_576, 0, 6);
@@ -7634,7 +7634,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1045 = builtin::i32_wrap_i64(packed_1043 >> 32_i64);
     handle_1025 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1044);
     "core:rt/write_string_to_stream"(tx_1045, $local_68);
-    "wasi/future-drop-readable:transmission-cli"(handle_1025);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1025);
     $local_70 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_70.used = 5;
     builtin::array_copy<u8>($local_70.repr, 0, global:display_specifiers.wado::$const_obj_575, 0, 5);
@@ -7644,7 +7644,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1073 = builtin::i32_wrap_i64(packed_1071 >> 32_i64);
     handle_1053 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1072);
     "core:rt/write_string_to_stream"(tx_1073, $local_70);
-    "wasi/future-drop-readable:transmission-cli"(handle_1053);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1053);
     $local_72 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_72.used = 5;
     builtin::array_copy<u8>($local_72.repr, 0, global:display_specifiers.wado::$const_obj_574, 0, 5);
@@ -7654,7 +7654,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1101 = builtin::i32_wrap_i64(packed_1099 >> 32_i64);
     handle_1081 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1100);
     "core:rt/write_string_to_stream"(tx_1101, $local_72);
-    "wasi/future-drop-readable:transmission-cli"(handle_1081);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1081);
     $local_74 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_74.used = 5;
     builtin::array_copy<u8>($local_74.repr, 0, global:display_specifiers.wado::$const_obj_573, 0, 5);
@@ -7664,7 +7664,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1129 = builtin::i32_wrap_i64(packed_1127 >> 32_i64);
     handle_1109 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1128);
     "core:rt/write_string_to_stream"(tx_1129, $local_74);
-    "wasi/future-drop-readable:transmission-cli"(handle_1109);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1109);
     $local_76 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_76.used = 5;
     builtin::array_copy<u8>($local_76.repr, 0, global:display_specifiers.wado::$const_obj_572, 0, 5);
@@ -7674,7 +7674,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1157 = builtin::i32_wrap_i64(packed_1155 >> 32_i64);
     handle_1137 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1156);
     "core:rt/write_string_to_stream"(tx_1157, $local_76);
-    "wasi/future-drop-readable:transmission-cli"(handle_1137);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1137);
     $local_78 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_78.used = 5;
     builtin::array_copy<u8>($local_78.repr, 0, global:display_specifiers.wado::$const_obj_571, 0, 5);
@@ -7684,7 +7684,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1185 = builtin::i32_wrap_i64(packed_1183 >> 32_i64);
     handle_1165 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1184);
     "core:rt/write_string_to_stream"(tx_1185, $local_78);
-    "wasi/future-drop-readable:transmission-cli"(handle_1165);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1165);
     $local_80 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_80.used = 5;
     builtin::array_copy<u8>($local_80.repr, 0, global:display_specifiers.wado::$const_obj_570, 0, 5);
@@ -7694,7 +7694,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1213 = builtin::i32_wrap_i64(packed_1211 >> 32_i64);
     handle_1193 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1212);
     "core:rt/write_string_to_stream"(tx_1213, $local_80);
-    "wasi/future-drop-readable:transmission-cli"(handle_1193);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1193);
     $local_82 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_82.used = 5;
     builtin::array_copy<u8>($local_82.repr, 0, global:display_specifiers.wado::$const_obj_569, 0, 5);
@@ -7704,7 +7704,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1241 = builtin::i32_wrap_i64(packed_1239 >> 32_i64);
     handle_1221 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1240);
     "core:rt/write_string_to_stream"(tx_1241, $local_82);
-    "wasi/future-drop-readable:transmission-cli"(handle_1221);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1221);
     $local_84 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_84.used = 5;
     builtin::array_copy<u8>($local_84.repr, 0, global:display_specifiers.wado::$const_obj_568, 0, 5);
@@ -7714,7 +7714,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1269 = builtin::i32_wrap_i64(packed_1267 >> 32_i64);
     handle_1249 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1268);
     "core:rt/write_string_to_stream"(tx_1269, $local_84);
-    "wasi/future-drop-readable:transmission-cli"(handle_1249);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1249);
     $local_86 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_86.used = 5;
     builtin::array_copy<u8>($local_86.repr, 0, global:display_specifiers.wado::$const_obj_567, 0, 5);
@@ -7724,7 +7724,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1297 = builtin::i32_wrap_i64(packed_1295 >> 32_i64);
     handle_1277 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1296);
     "core:rt/write_string_to_stream"(tx_1297, $local_86);
-    "wasi/future-drop-readable:transmission-cli"(handle_1277);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1277);
     $local_88 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_88.used = 6;
     builtin::array_copy<u8>($local_88.repr, 0, global:display_specifiers.wado::$const_obj_566, 0, 6);
@@ -7734,7 +7734,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1325 = builtin::i32_wrap_i64(packed_1323 >> 32_i64);
     handle_1305 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1324);
     "core:rt/write_string_to_stream"(tx_1325, $local_88);
-    "wasi/future-drop-readable:transmission-cli"(handle_1305);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1305);
     $local_90 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_90.used = 5;
     builtin::array_copy<u8>($local_90.repr, 0, global:display_specifiers.wado::$const_obj_565, 0, 5);
@@ -7744,7 +7744,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1353 = builtin::i32_wrap_i64(packed_1351 >> 32_i64);
     handle_1333 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1352);
     "core:rt/write_string_to_stream"(tx_1353, $local_90);
-    "wasi/future-drop-readable:transmission-cli"(handle_1333);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1333);
     $local_92 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_92.used = 5;
     builtin::array_copy<u8>($local_92.repr, 0, global:display_specifiers.wado::$const_obj_564, 0, 5);
@@ -7754,7 +7754,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1381 = builtin::i32_wrap_i64(packed_1379 >> 32_i64);
     handle_1361 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1380);
     "core:rt/write_string_to_stream"(tx_1381, $local_92);
-    "wasi/future-drop-readable:transmission-cli"(handle_1361);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1361);
     $local_94 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_94.used = 5;
     builtin::array_copy<u8>($local_94.repr, 0, global:display_specifiers.wado::$const_obj_563, 0, 5);
@@ -7764,7 +7764,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1409 = builtin::i32_wrap_i64(packed_1407 >> 32_i64);
     handle_1389 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1408);
     "core:rt/write_string_to_stream"(tx_1409, $local_94);
-    "wasi/future-drop-readable:transmission-cli"(handle_1389);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1389);
     $local_96 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_96.used = 5;
     builtin::array_copy<u8>($local_96.repr, 0, global:display_specifiers.wado::$const_obj_562, 0, 5);
@@ -7774,7 +7774,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1437 = builtin::i32_wrap_i64(packed_1435 >> 32_i64);
     handle_1417 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1436);
     "core:rt/write_string_to_stream"(tx_1437, $local_96);
-    "wasi/future-drop-readable:transmission-cli"(handle_1417);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1417);
     $local_98 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_98.used = 5;
     builtin::array_copy<u8>($local_98.repr, 0, global:display_specifiers.wado::$const_obj_561, 0, 5);
@@ -7784,7 +7784,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1465 = builtin::i32_wrap_i64(packed_1463 >> 32_i64);
     handle_1445 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1464);
     "core:rt/write_string_to_stream"(tx_1465, $local_98);
-    "wasi/future-drop-readable:transmission-cli"(handle_1445);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1445);
     $local_100 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_100.used = 5;
     builtin::array_copy<u8>($local_100.repr, 0, global:display_specifiers.wado::$const_obj_560, 0, 5);
@@ -7794,7 +7794,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1493 = builtin::i32_wrap_i64(packed_1491 >> 32_i64);
     handle_1473 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1492);
     "core:rt/write_string_to_stream"(tx_1493, $local_100);
-    "wasi/future-drop-readable:transmission-cli"(handle_1473);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1473);
     $local_102 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_102.used = 5;
     builtin::array_copy<u8>($local_102.repr, 0, global:display_specifiers.wado::$const_obj_559, 0, 5);
@@ -7804,7 +7804,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1521 = builtin::i32_wrap_i64(packed_1519 >> 32_i64);
     handle_1501 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1520);
     "core:rt/write_string_to_stream"(tx_1521, $local_102);
-    "wasi/future-drop-readable:transmission-cli"(handle_1501);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1501);
     $local_104 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_104.used = 5;
     builtin::array_copy<u8>($local_104.repr, 0, global:display_specifiers.wado::$const_obj_558, 0, 5);
@@ -7814,7 +7814,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1549 = builtin::i32_wrap_i64(packed_1547 >> 32_i64);
     handle_1529 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1548);
     "core:rt/write_string_to_stream"(tx_1549, $local_104);
-    "wasi/future-drop-readable:transmission-cli"(handle_1529);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1529);
     $local_106 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_106.used = 5;
     builtin::array_copy<u8>($local_106.repr, 0, global:display_specifiers.wado::$const_obj_557, 0, 5);
@@ -7824,7 +7824,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1577 = builtin::i32_wrap_i64(packed_1575 >> 32_i64);
     handle_1557 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1576);
     "core:rt/write_string_to_stream"(tx_1577, $local_106);
-    "wasi/future-drop-readable:transmission-cli"(handle_1557);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1557);
     $local_108 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_108.used = 6;
     builtin::array_copy<u8>($local_108.repr, 0, global:display_specifiers.wado::$const_obj_556, 0, 6);
@@ -7834,7 +7834,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1605 = builtin::i32_wrap_i64(packed_1603 >> 32_i64);
     handle_1585 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1604);
     "core:rt/write_string_to_stream"(tx_1605, $local_108);
-    "wasi/future-drop-readable:transmission-cli"(handle_1585);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1585);
     $local_110 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_110.used = 5;
     builtin::array_copy<u8>($local_110.repr, 0, global:display_specifiers.wado::$const_obj_555, 0, 5);
@@ -7844,7 +7844,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1633 = builtin::i32_wrap_i64(packed_1631 >> 32_i64);
     handle_1613 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1632);
     "core:rt/write_string_to_stream"(tx_1633, $local_110);
-    "wasi/future-drop-readable:transmission-cli"(handle_1613);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1613);
     $local_112 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_112.used = 5;
     builtin::array_copy<u8>($local_112.repr, 0, global:display_specifiers.wado::$const_obj_554, 0, 5);
@@ -7854,7 +7854,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1661 = builtin::i32_wrap_i64(packed_1659 >> 32_i64);
     handle_1641 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1660);
     "core:rt/write_string_to_stream"(tx_1661, $local_112);
-    "wasi/future-drop-readable:transmission-cli"(handle_1641);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1641);
     $local_114 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_114.used = 5;
     builtin::array_copy<u8>($local_114.repr, 0, global:display_specifiers.wado::$const_obj_553, 0, 5);
@@ -7864,7 +7864,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1689 = builtin::i32_wrap_i64(packed_1687 >> 32_i64);
     handle_1669 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1688);
     "core:rt/write_string_to_stream"(tx_1689, $local_114);
-    "wasi/future-drop-readable:transmission-cli"(handle_1669);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1669);
     $local_116 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_116.used = 5;
     builtin::array_copy<u8>($local_116.repr, 0, global:display_specifiers.wado::$const_obj_552, 0, 5);
@@ -7874,7 +7874,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1717 = builtin::i32_wrap_i64(packed_1715 >> 32_i64);
     handle_1697 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1716);
     "core:rt/write_string_to_stream"(tx_1717, $local_116);
-    "wasi/future-drop-readable:transmission-cli"(handle_1697);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1697);
     $local_118 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_118.used = 5;
     builtin::array_copy<u8>($local_118.repr, 0, global:display_specifiers.wado::$const_obj_551, 0, 5);
@@ -7884,7 +7884,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1745 = builtin::i32_wrap_i64(packed_1743 >> 32_i64);
     handle_1725 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1744);
     "core:rt/write_string_to_stream"(tx_1745, $local_118);
-    "wasi/future-drop-readable:transmission-cli"(handle_1725);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1725);
     $local_120 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_120.used = 5;
     builtin::array_copy<u8>($local_120.repr, 0, global:display_specifiers.wado::$const_obj_550, 0, 5);
@@ -7894,7 +7894,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1773 = builtin::i32_wrap_i64(packed_1771 >> 32_i64);
     handle_1753 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1772);
     "core:rt/write_string_to_stream"(tx_1773, $local_120);
-    "wasi/future-drop-readable:transmission-cli"(handle_1753);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1753);
     $local_122 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_122.used = 5;
     builtin::array_copy<u8>($local_122.repr, 0, global:display_specifiers.wado::$const_obj_549, 0, 5);
@@ -7904,7 +7904,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1801 = builtin::i32_wrap_i64(packed_1799 >> 32_i64);
     handle_1781 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1800);
     "core:rt/write_string_to_stream"(tx_1801, $local_122);
-    "wasi/future-drop-readable:transmission-cli"(handle_1781);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1781);
     $local_124 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_124.used = 5;
     builtin::array_copy<u8>($local_124.repr, 0, global:display_specifiers.wado::$const_obj_548, 0, 5);
@@ -7914,7 +7914,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1829 = builtin::i32_wrap_i64(packed_1827 >> 32_i64);
     handle_1809 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1828);
     "core:rt/write_string_to_stream"(tx_1829, $local_124);
-    "wasi/future-drop-readable:transmission-cli"(handle_1809);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1809);
     $local_126 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_126.used = 5;
     builtin::array_copy<u8>($local_126.repr, 0, global:display_specifiers.wado::$const_obj_547, 0, 5);
@@ -7924,7 +7924,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1857 = builtin::i32_wrap_i64(packed_1855 >> 32_i64);
     handle_1837 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1856);
     "core:rt/write_string_to_stream"(tx_1857, $local_126);
-    "wasi/future-drop-readable:transmission-cli"(handle_1837);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1837);
     $local_128 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_128.used = 6;
     builtin::array_copy<u8>($local_128.repr, 0, global:display_specifiers.wado::$const_obj_546, 0, 6);
@@ -7934,7 +7934,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1885 = builtin::i32_wrap_i64(packed_1883 >> 32_i64);
     handle_1865 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1884);
     "core:rt/write_string_to_stream"(tx_1885, $local_128);
-    "wasi/future-drop-readable:transmission-cli"(handle_1865);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1865);
     $local_130 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_130.used = 5;
     builtin::array_copy<u8>($local_130.repr, 0, global:display_specifiers.wado::$const_obj_545, 0, 5);
@@ -7944,7 +7944,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1913 = builtin::i32_wrap_i64(packed_1911 >> 32_i64);
     handle_1893 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1912);
     "core:rt/write_string_to_stream"(tx_1913, $local_130);
-    "wasi/future-drop-readable:transmission-cli"(handle_1893);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1893);
     $local_132 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_132.used = 5;
     builtin::array_copy<u8>($local_132.repr, 0, global:display_specifiers.wado::$const_obj_544, 0, 5);
@@ -7954,7 +7954,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1941 = builtin::i32_wrap_i64(packed_1939 >> 32_i64);
     handle_1921 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1940);
     "core:rt/write_string_to_stream"(tx_1941, $local_132);
-    "wasi/future-drop-readable:transmission-cli"(handle_1921);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1921);
     $local_134 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_134.used = 5;
     builtin::array_copy<u8>($local_134.repr, 0, global:display_specifiers.wado::$const_obj_543, 0, 5);
@@ -7964,7 +7964,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1969 = builtin::i32_wrap_i64(packed_1967 >> 32_i64);
     handle_1949 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1968);
     "core:rt/write_string_to_stream"(tx_1969, $local_134);
-    "wasi/future-drop-readable:transmission-cli"(handle_1949);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1949);
     $local_136 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_136.used = 5;
     builtin::array_copy<u8>($local_136.repr, 0, global:display_specifiers.wado::$const_obj_542, 0, 5);
@@ -7974,7 +7974,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_1997 = builtin::i32_wrap_i64(packed_1995 >> 32_i64);
     handle_1977 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_1996);
     "core:rt/write_string_to_stream"(tx_1997, $local_136);
-    "wasi/future-drop-readable:transmission-cli"(handle_1977);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_1977);
     $local_138 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_138.used = 5;
     builtin::array_copy<u8>($local_138.repr, 0, global:display_specifiers.wado::$const_obj_541, 0, 5);
@@ -7984,7 +7984,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2025 = builtin::i32_wrap_i64(packed_2023 >> 32_i64);
     handle_2005 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2024);
     "core:rt/write_string_to_stream"(tx_2025, $local_138);
-    "wasi/future-drop-readable:transmission-cli"(handle_2005);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2005);
     $local_140 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_140.used = 5;
     builtin::array_copy<u8>($local_140.repr, 0, global:display_specifiers.wado::$const_obj_540, 0, 5);
@@ -7994,7 +7994,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2053 = builtin::i32_wrap_i64(packed_2051 >> 32_i64);
     handle_2033 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2052);
     "core:rt/write_string_to_stream"(tx_2053, $local_140);
-    "wasi/future-drop-readable:transmission-cli"(handle_2033);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2033);
     $local_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_142.used = 5;
     builtin::array_copy<u8>($local_142.repr, 0, global:display_specifiers.wado::$const_obj_539, 0, 5);
@@ -8004,7 +8004,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2081 = builtin::i32_wrap_i64(packed_2079 >> 32_i64);
     handle_2061 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2080);
     "core:rt/write_string_to_stream"(tx_2081, $local_142);
-    "wasi/future-drop-readable:transmission-cli"(handle_2061);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2061);
     $local_144 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_144.used = 5;
     builtin::array_copy<u8>($local_144.repr, 0, global:display_specifiers.wado::$const_obj_538, 0, 5);
@@ -8014,7 +8014,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2109 = builtin::i32_wrap_i64(packed_2107 >> 32_i64);
     handle_2089 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2108);
     "core:rt/write_string_to_stream"(tx_2109, $local_144);
-    "wasi/future-drop-readable:transmission-cli"(handle_2089);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2089);
     $local_146 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_146.used = 5;
     builtin::array_copy<u8>($local_146.repr, 0, global:display_specifiers.wado::$const_obj_537, 0, 5);
@@ -8024,7 +8024,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2137 = builtin::i32_wrap_i64(packed_2135 >> 32_i64);
     handle_2117 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2136);
     "core:rt/write_string_to_stream"(tx_2137, $local_146);
-    "wasi/future-drop-readable:transmission-cli"(handle_2117);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2117);
     $local_148 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_148.used = 6;
     builtin::array_copy<u8>($local_148.repr, 0, global:display_specifiers.wado::$const_obj_536, 0, 6);
@@ -8034,7 +8034,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2165 = builtin::i32_wrap_i64(packed_2163 >> 32_i64);
     handle_2145 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2164);
     "core:rt/write_string_to_stream"(tx_2165, $local_148);
-    "wasi/future-drop-readable:transmission-cli"(handle_2145);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2145);
     $local_150 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_150.used = 5;
     builtin::array_copy<u8>($local_150.repr, 0, global:display_specifiers.wado::$const_obj_535, 0, 5);
@@ -8044,7 +8044,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2193 = builtin::i32_wrap_i64(packed_2191 >> 32_i64);
     handle_2173 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2192);
     "core:rt/write_string_to_stream"(tx_2193, $local_150);
-    "wasi/future-drop-readable:transmission-cli"(handle_2173);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2173);
     $local_152 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_152.used = 5;
     builtin::array_copy<u8>($local_152.repr, 0, global:display_specifiers.wado::$const_obj_534, 0, 5);
@@ -8054,7 +8054,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2221 = builtin::i32_wrap_i64(packed_2219 >> 32_i64);
     handle_2201 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2220);
     "core:rt/write_string_to_stream"(tx_2221, $local_152);
-    "wasi/future-drop-readable:transmission-cli"(handle_2201);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2201);
     $local_154 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_154.used = 5;
     builtin::array_copy<u8>($local_154.repr, 0, global:display_specifiers.wado::$const_obj_533, 0, 5);
@@ -8064,7 +8064,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2249 = builtin::i32_wrap_i64(packed_2247 >> 32_i64);
     handle_2229 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2248);
     "core:rt/write_string_to_stream"(tx_2249, $local_154);
-    "wasi/future-drop-readable:transmission-cli"(handle_2229);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2229);
     $local_156 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_156.used = 5;
     builtin::array_copy<u8>($local_156.repr, 0, global:display_specifiers.wado::$const_obj_532, 0, 5);
@@ -8074,7 +8074,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2277 = builtin::i32_wrap_i64(packed_2275 >> 32_i64);
     handle_2257 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2276);
     "core:rt/write_string_to_stream"(tx_2277, $local_156);
-    "wasi/future-drop-readable:transmission-cli"(handle_2257);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2257);
     $local_158 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_158.used = 5;
     builtin::array_copy<u8>($local_158.repr, 0, global:display_specifiers.wado::$const_obj_531, 0, 5);
@@ -8084,7 +8084,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2305 = builtin::i32_wrap_i64(packed_2303 >> 32_i64);
     handle_2285 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2304);
     "core:rt/write_string_to_stream"(tx_2305, $local_158);
-    "wasi/future-drop-readable:transmission-cli"(handle_2285);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2285);
     $local_160 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_160.used = 5;
     builtin::array_copy<u8>($local_160.repr, 0, global:display_specifiers.wado::$const_obj_530, 0, 5);
@@ -8094,7 +8094,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2333 = builtin::i32_wrap_i64(packed_2331 >> 32_i64);
     handle_2313 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2332);
     "core:rt/write_string_to_stream"(tx_2333, $local_160);
-    "wasi/future-drop-readable:transmission-cli"(handle_2313);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2313);
     $local_162 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_162.used = 5;
     builtin::array_copy<u8>($local_162.repr, 0, global:display_specifiers.wado::$const_obj_529, 0, 5);
@@ -8104,7 +8104,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2361 = builtin::i32_wrap_i64(packed_2359 >> 32_i64);
     handle_2341 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2360);
     "core:rt/write_string_to_stream"(tx_2361, $local_162);
-    "wasi/future-drop-readable:transmission-cli"(handle_2341);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2341);
     $local_164 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_164.used = 5;
     builtin::array_copy<u8>($local_164.repr, 0, global:display_specifiers.wado::$const_obj_528, 0, 5);
@@ -8114,7 +8114,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2389 = builtin::i32_wrap_i64(packed_2387 >> 32_i64);
     handle_2369 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2388);
     "core:rt/write_string_to_stream"(tx_2389, $local_164);
-    "wasi/future-drop-readable:transmission-cli"(handle_2369);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2369);
     $local_166 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_166.used = 5;
     builtin::array_copy<u8>($local_166.repr, 0, global:display_specifiers.wado::$const_obj_527, 0, 5);
@@ -8124,7 +8124,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2417 = builtin::i32_wrap_i64(packed_2415 >> 32_i64);
     handle_2397 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2416);
     "core:rt/write_string_to_stream"(tx_2417, $local_166);
-    "wasi/future-drop-readable:transmission-cli"(handle_2397);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2397);
     $local_168 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_168.used = 6;
     builtin::array_copy<u8>($local_168.repr, 0, global:display_specifiers.wado::$const_obj_526, 0, 6);
@@ -8134,7 +8134,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2445 = builtin::i32_wrap_i64(packed_2443 >> 32_i64);
     handle_2425 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2444);
     "core:rt/write_string_to_stream"(tx_2445, $local_168);
-    "wasi/future-drop-readable:transmission-cli"(handle_2425);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2425);
     $local_170 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_170.used = 5;
     builtin::array_copy<u8>($local_170.repr, 0, global:display_specifiers.wado::$const_obj_525, 0, 5);
@@ -8144,7 +8144,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2473 = builtin::i32_wrap_i64(packed_2471 >> 32_i64);
     handle_2453 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2472);
     "core:rt/write_string_to_stream"(tx_2473, $local_170);
-    "wasi/future-drop-readable:transmission-cli"(handle_2453);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2453);
     $local_172 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_172.used = 5;
     builtin::array_copy<u8>($local_172.repr, 0, global:display_specifiers.wado::$const_obj_524, 0, 5);
@@ -8154,7 +8154,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2501 = builtin::i32_wrap_i64(packed_2499 >> 32_i64);
     handle_2481 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2500);
     "core:rt/write_string_to_stream"(tx_2501, $local_172);
-    "wasi/future-drop-readable:transmission-cli"(handle_2481);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2481);
     $local_174 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_174.used = 5;
     builtin::array_copy<u8>($local_174.repr, 0, global:display_specifiers.wado::$const_obj_523, 0, 5);
@@ -8164,7 +8164,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2529 = builtin::i32_wrap_i64(packed_2527 >> 32_i64);
     handle_2509 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2528);
     "core:rt/write_string_to_stream"(tx_2529, $local_174);
-    "wasi/future-drop-readable:transmission-cli"(handle_2509);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2509);
     $local_176 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_176.used = 5;
     builtin::array_copy<u8>($local_176.repr, 0, global:display_specifiers.wado::$const_obj_522, 0, 5);
@@ -8174,7 +8174,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2557 = builtin::i32_wrap_i64(packed_2555 >> 32_i64);
     handle_2537 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2556);
     "core:rt/write_string_to_stream"(tx_2557, $local_176);
-    "wasi/future-drop-readable:transmission-cli"(handle_2537);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2537);
     $local_178 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_178.used = 5;
     builtin::array_copy<u8>($local_178.repr, 0, global:display_specifiers.wado::$const_obj_521, 0, 5);
@@ -8184,7 +8184,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2585 = builtin::i32_wrap_i64(packed_2583 >> 32_i64);
     handle_2565 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2584);
     "core:rt/write_string_to_stream"(tx_2585, $local_178);
-    "wasi/future-drop-readable:transmission-cli"(handle_2565);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2565);
     $local_180 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_180.used = 5;
     builtin::array_copy<u8>($local_180.repr, 0, global:display_specifiers.wado::$const_obj_520, 0, 5);
@@ -8194,7 +8194,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2613 = builtin::i32_wrap_i64(packed_2611 >> 32_i64);
     handle_2593 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2612);
     "core:rt/write_string_to_stream"(tx_2613, $local_180);
-    "wasi/future-drop-readable:transmission-cli"(handle_2593);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2593);
     $local_182 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_182.used = 5;
     builtin::array_copy<u8>($local_182.repr, 0, global:display_specifiers.wado::$const_obj_519, 0, 5);
@@ -8204,7 +8204,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2641 = builtin::i32_wrap_i64(packed_2639 >> 32_i64);
     handle_2621 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2640);
     "core:rt/write_string_to_stream"(tx_2641, $local_182);
-    "wasi/future-drop-readable:transmission-cli"(handle_2621);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2621);
     $local_184 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_184.used = 5;
     builtin::array_copy<u8>($local_184.repr, 0, global:display_specifiers.wado::$const_obj_518, 0, 5);
@@ -8214,7 +8214,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2669 = builtin::i32_wrap_i64(packed_2667 >> 32_i64);
     handle_2649 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2668);
     "core:rt/write_string_to_stream"(tx_2669, $local_184);
-    "wasi/future-drop-readable:transmission-cli"(handle_2649);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2649);
     $local_186 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_186.used = 5;
     builtin::array_copy<u8>($local_186.repr, 0, global:display_specifiers.wado::$const_obj_517, 0, 5);
@@ -8224,7 +8224,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2697 = builtin::i32_wrap_i64(packed_2695 >> 32_i64);
     handle_2677 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2696);
     "core:rt/write_string_to_stream"(tx_2697, $local_186);
-    "wasi/future-drop-readable:transmission-cli"(handle_2677);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2677);
     $local_188 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_188.used = 6;
     builtin::array_copy<u8>($local_188.repr, 0, global:display_specifiers.wado::$const_obj_516, 0, 6);
@@ -8234,7 +8234,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2725 = builtin::i32_wrap_i64(packed_2723 >> 32_i64);
     handle_2705 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2724);
     "core:rt/write_string_to_stream"(tx_2725, $local_188);
-    "wasi/future-drop-readable:transmission-cli"(handle_2705);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2705);
     $local_190 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_190.used = 5;
     builtin::array_copy<u8>($local_190.repr, 0, global:display_specifiers.wado::$const_obj_515, 0, 5);
@@ -8244,7 +8244,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2753 = builtin::i32_wrap_i64(packed_2751 >> 32_i64);
     handle_2733 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2752);
     "core:rt/write_string_to_stream"(tx_2753, $local_190);
-    "wasi/future-drop-readable:transmission-cli"(handle_2733);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2733);
     $local_192 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_192.used = 5;
     builtin::array_copy<u8>($local_192.repr, 0, global:display_specifiers.wado::$const_obj_514, 0, 5);
@@ -8254,7 +8254,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2781 = builtin::i32_wrap_i64(packed_2779 >> 32_i64);
     handle_2761 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2780);
     "core:rt/write_string_to_stream"(tx_2781, $local_192);
-    "wasi/future-drop-readable:transmission-cli"(handle_2761);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2761);
     $local_194 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_194.used = 5;
     builtin::array_copy<u8>($local_194.repr, 0, global:display_specifiers.wado::$const_obj_513, 0, 5);
@@ -8264,7 +8264,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2809 = builtin::i32_wrap_i64(packed_2807 >> 32_i64);
     handle_2789 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2808);
     "core:rt/write_string_to_stream"(tx_2809, $local_194);
-    "wasi/future-drop-readable:transmission-cli"(handle_2789);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2789);
     $local_196 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_196.used = 5;
     builtin::array_copy<u8>($local_196.repr, 0, global:display_specifiers.wado::$const_obj_512, 0, 5);
@@ -8274,7 +8274,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2837 = builtin::i32_wrap_i64(packed_2835 >> 32_i64);
     handle_2817 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2836);
     "core:rt/write_string_to_stream"(tx_2837, $local_196);
-    "wasi/future-drop-readable:transmission-cli"(handle_2817);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2817);
     $local_198 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_198.used = 5;
     builtin::array_copy<u8>($local_198.repr, 0, global:display_specifiers.wado::$const_obj_511, 0, 5);
@@ -8284,7 +8284,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2865 = builtin::i32_wrap_i64(packed_2863 >> 32_i64);
     handle_2845 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2864);
     "core:rt/write_string_to_stream"(tx_2865, $local_198);
-    "wasi/future-drop-readable:transmission-cli"(handle_2845);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2845);
     $local_200 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_200.used = 5;
     builtin::array_copy<u8>($local_200.repr, 0, global:display_specifiers.wado::$const_obj_510, 0, 5);
@@ -8294,7 +8294,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2893 = builtin::i32_wrap_i64(packed_2891 >> 32_i64);
     handle_2873 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2892);
     "core:rt/write_string_to_stream"(tx_2893, $local_200);
-    "wasi/future-drop-readable:transmission-cli"(handle_2873);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2873);
     $local_202 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_202.used = 5;
     builtin::array_copy<u8>($local_202.repr, 0, global:display_specifiers.wado::$const_obj_509, 0, 5);
@@ -8304,7 +8304,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2921 = builtin::i32_wrap_i64(packed_2919 >> 32_i64);
     handle_2901 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2920);
     "core:rt/write_string_to_stream"(tx_2921, $local_202);
-    "wasi/future-drop-readable:transmission-cli"(handle_2901);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2901);
     $local_204 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_204.used = 5;
     builtin::array_copy<u8>($local_204.repr, 0, global:display_specifiers.wado::$const_obj_508, 0, 5);
@@ -8314,7 +8314,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2949 = builtin::i32_wrap_i64(packed_2947 >> 32_i64);
     handle_2929 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2948);
     "core:rt/write_string_to_stream"(tx_2949, $local_204);
-    "wasi/future-drop-readable:transmission-cli"(handle_2929);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2929);
     $local_206 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     $local_206.used = 5;
     builtin::array_copy<u8>($local_206.repr, 0, global:display_specifiers.wado::$const_obj_507, 0, 5);
@@ -8324,7 +8324,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_2977 = builtin::i32_wrap_i64(packed_2975 >> 32_i64);
     handle_2957 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_2976);
     "core:rt/write_string_to_stream"(tx_2977, $local_206);
-    "wasi/future-drop-readable:transmission-cli"(handle_2957);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2957);
     $local_208 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     $local_208.used = 6;
     builtin::array_copy<u8>($local_208.repr, 0, global:display_specifiers.wado::$const_obj_506, 0, 6);
@@ -8334,7 +8334,7 @@ fn "display_specifiers.wado/test_fts_precision"() with Stdout {
     tx_3005 = builtin::i32_wrap_i64(packed_3003 >> 32_i64);
     handle_2985 = "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(rx_3004);
     "core:rt/write_string_to_stream"(tx_3005, $local_208);
-    "wasi/future-drop-readable:transmission-cli"(handle_2985);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_2985);
 }
 
 fn "display_specifiers.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -9902,7 +9902,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

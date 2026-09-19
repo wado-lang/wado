@@ -45,7 +45,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(17)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(18)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(18)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(19)
 
@@ -61,7 +61,7 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicClock::now";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -91,13 +91,13 @@ fn "monotonic_clock_now.wado/$cm_export__run"() {
         tx_9 = builtin::i32_wrap_i64(packed_7 >> 32_i64);
         handle_5 = "monotonic_clock_now.wado/$cm_binding__Stdout_write_via_stream"(rx_8);
         "core:rt/write_string_to_stream"(tx_9, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: ok"), used: 13 });
-        "wasi/future-drop-readable:transmission-cli"(handle_5);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_5);
     } else {
         rx_20 = builtin::i32_wrap_i64(local.tee packed_19("wasi/stream-new"()));
         tx_21 = builtin::i32_wrap_i64(packed_19 >> 32_i64);
         handle_17 = "monotonic_clock_now.wado/$cm_binding__Stdout_write_via_stream"(rx_20);
         "core:rt/write_string_to_stream"(tx_21, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("monotonic: FAILED"), used: 17 });
-        "wasi/future-drop-readable:transmission-cli"(handle_17);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_17);
     }
     "wasi/task-return"(0);
 }

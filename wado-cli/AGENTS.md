@@ -29,7 +29,11 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
   path. Use `CliExit::silent_failure` when the subcommand has already printed
   its own diagnostics.
 - Adding a subcommand means adding a `Cmd` variant in `main.rs` — it must appear
-  in `ALL` and gain a `name`, `args`, and `desc` arm — plus its module.
+  in `ALL` and gain a `name`, `args`, and `desc` arm — plus its module. The name
+  is taken for good: `external.rs` resolves only what `Cmd` does not hold, so a
+  new builtin retires that name from `wado-<name>` on `PATH`. `help` is the one
+  without a module: it answers out of the `Cmd` table and the `PATH` lookup, and
+  both live in `main.rs`.
 - The binary sets mimalloc as the global allocator: `wado serve` is
   allocation-heavy per request and the system allocator contends across threads.
 
@@ -41,6 +45,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.
 - `discover.rs`, `test_report.rs` — source file discovery (shared by `test`, `format`, and `query`) and the progress digest. A directory argument goes through `files_in_dir` and a project-wide walk through `discover_tree`; a file named directly is taken as given, filters and all. The subcommand supplies only a `Filters` callback: `filters_at` naming its manifest section, or `no_filters` where a package's excludes must not apply (`query references` spans them). Directory expansion has no second implementation to drift from.
+- `external.rs` — the `wado-<name>` files on `PATH` that `wado --list` names and `wado help <name>` runs. `PATH` only, and never an entry that is empty or relative, which the OS search would read as the current directory. See [WEP: External Subcommands](../docs/wep-2026-09-19-external-subcommands.md).
 - `sync.rs` — how production code locks a mutex: recover a poisoned guard. Test mocks may still `unwrap`.
 - `run_cache.rs` — what one CLI run resolves once and holds fixed: AOT generator components, generator resolutions, and a watch over the sources it read. `wado test` shares one across every fixture, so a mid-run edit cannot split the run and is named in the failure at the end.
 

@@ -13,6 +13,9 @@ mod cli;
 mod cli_parse;
 mod dependency_resolution;
 mod dump_kiln;
+// Installs `wado-<name>` shell scripts on a temporary `PATH`.
+#[cfg(unix)]
+mod external_subcommand;
 mod gale_cli;
 mod git_dependency;
 mod kiln_build_dep;

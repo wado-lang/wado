@@ -114,7 +114,7 @@ type "functype//wasi/stream-drop-readable:val-u32" = fn(i32);  // TypeId(37)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(38)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(39)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(39)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(40)
 
@@ -134,7 +134,7 @@ import fn wasi/stream-new:val-u32 from "wasi/stream-new:val-u32";
 import fn wasi/stream-drop-writable:val-u32 from "wasi/stream-drop-writable:val-u32";
 import fn wasi/stream-drop-readable:val-u32 from "wasi/stream-drop-readable:val-u32";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-read:val-u32 from "wasi/stream-read:val-u32";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
@@ -215,7 +215,7 @@ fn "cm_stream_binding_shared_by_two_call_shapes.wado/run"() with Stdout {
     tx_67 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
     handle = "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_binding__Stdout_write_via_stream"(rx_66);
     "core:rt/write_string_to_stream"(tx_67, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "cm_stream_binding_shared_by_two_call_shapes.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

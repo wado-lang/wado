@@ -185,7 +185,7 @@ impl LiftContext<'_> {
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
             Type::Tuple(elems) if !elems.is_empty() => {
-                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_type_id(e, tt)).collect();
+                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_held_type_id(e, tt)).collect();
                 tt.make_tuple(ids)
             }
             Type::Generic(g) => {
@@ -198,22 +198,27 @@ impl LiftContext<'_> {
                     )
                 };
                 if g.name == list_name && g.args.len() == 1 {
-                    let elem = self.cm_type_id(&g.args[0], tt);
+                    let elem = self.cm_held_type_id(&g.args[0], tt);
                     return tt.make_list(elem);
                 }
                 if g.name == option_name && g.args.len() == 1 {
-                    let inner = self.cm_type_id(&g.args[0], tt);
+                    let inner = self.cm_held_type_id(&g.args[0], tt);
                     return tt.make_option(inner);
                 }
                 if g.name == result_name && g.args.len() == 2 {
-                    let ok = self.cm_type_id(&g.args[0], tt);
-                    let err = self.cm_type_id(&g.args[1], tt);
+                    let ok = self.cm_held_type_id(&g.args[0], tt);
+                    let err = self.cm_held_type_id(&g.args[1], tt);
                     return tt.make_result(ok, err);
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
             _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
         }
+    }
+
+    /// [`Self::cm_type_id`] for a type a container holds.
+    pub(super) fn cm_held_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        held_type(ty, tt, |t, tt| self.cm_type_id(t, tt))
     }
 }
 
@@ -347,7 +352,8 @@ pub fn cm_type_to_type_id(
                 .compiler_struct_name(CompilerItem::List)
                 .to_string();
             if g.name.as_str() == list_name && g.args.len() == 1 {
-                let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let elem_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
             let option_name = type_table
@@ -357,12 +363,15 @@ pub fn cm_type_to_type_id(
                 .compiler_variant_name(CompilerItem::Result)
                 .to_string();
             if g.name.as_str() == option_name && g.args.len() == 1 {
-                let inner_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let inner_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_option(inner_type);
             }
             if g.name.as_str() == result_name && g.args.len() == 2 {
-                let ok_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                let err_type = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                let ok_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let err_type =
+                    cm_held_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
                 return type_table.make_result(ok_type, err_type);
             }
             match g.name.as_str() {
@@ -387,13 +396,46 @@ pub fn cm_type_to_type_id(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| cm_type_to_type_id(t, type_table, registry, wasi_package))
+                .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
         }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
         other => panic!("unsupported type at CM boundary: {other:?}"),
+    }
+}
+
+/// The same conversion for a type a container holds, where a `borrow<t>` is the
+/// `&T` the call site passes rather than the `i32` handle a bare one lowers to.
+pub fn cm_held_type_to_type_id(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+) -> TypeId {
+    held_type(ty, type_table, |t, tt| {
+        cm_type_to_type_id(t, tt, registry, wasi_package)
+    })
+}
+
+/// A container's element type, resolved by `element`. Only a bare `borrow<t>`
+/// is the `i32` the boundary passes; held, it is the `&T` of the call site.
+fn held_type(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    element: impl FnOnce(&Type, &mut TypeTable) -> TypeId,
+) -> TypeId {
+    match ty {
+        Type::Reference(inner) => {
+            let inner = element(inner, type_table);
+            type_table.make_ref(inner)
+        }
+        Type::MutReference(inner) => {
+            let inner = element(inner, type_table);
+            type_table.make_mut_ref(inner)
+        }
+        _ => element(ty, type_table),
     }
 }
 
@@ -1338,6 +1380,17 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
+/// The interface `module` registers `name` under, as an owned FQ.
+fn declaring_interface(
+    registry: &CmInterfaceRegistry,
+    module: &ModuleSource,
+    name: &str,
+) -> Option<String> {
+    registry
+        .interface_declaring(module, name)
+        .map(str::to_string)
+}
+
 /// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
 /// to re-enter the AST-shaped match arms. Only the top-level name and immediate
 /// type args are filled in; deeper structure is looked up lazily. A named type
@@ -1350,33 +1403,22 @@ pub(super) fn type_id_to_ast_type(
 ) -> Type {
     let span = synth_span();
     let resolved = type_table.get(type_id);
-    // Only populate `source_interface` when the TIR type's `module_source`
-    // proves the type came from a CM namespace (`wasi:*` or
-    // `core:kiln/*`). User-local structs may share names with WASI / kiln
-    // records (`Span`, `Error`, `Token` …) but must not pick up the CM
-    // source — otherwise downstream lift/lower paths look up the wrong
-    // record layout and the WIR ends up with mismatched struct refs.
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
+    // The declaring module answers first, so no by-name search can offer
+    // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        // Derive the owning WASI package from the type's own `module_source`
-        // so a name shared across packages (e.g. `ErrorCode` in `wasi:cli`,
-        // `wasi:filesystem`, `wasi:http`, `wasi:sockets`) resolves to *this*
-        // type's package — not whichever unique-by-name match the registry
-        // happens to find first. Without the hint, the three variant
-        // `ErrorCode`s are non-unique and resolution falls through to the
-        // lone `wasi:cli` enum, mis-lifting a filesystem variant as an i32.
-        let (cm_namespace, pkg_hint) = match ms {
-            ModuleSource::Binding { interface, .. } => (true, interface.split('/').next()),
-            ModuleSource::Core { name } if name == "kiln" || name.starts_with("kiln/") => {
-                (true, None)
+        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {
+            ModuleSource::Binding { interface, .. } => {
+                cm_interface_registry.resolve_cm_source_for(&nt, interface.split('/').next())
             }
-            _ => (false, None),
-        };
-        if cm_namespace
-            && let Some(source) = cm_interface_registry.resolve_cm_source_for(&nt, pkg_hint)
-        {
+            ModuleSource::Core { name: core } if core == "kiln" || core.starts_with("kiln/") => {
+                cm_interface_registry.resolve_cm_source_for(&nt, None)
+            }
+            _ => None,
+        });
+        if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
         }
         Type::Named(nt)

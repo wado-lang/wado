@@ -4620,7 +4620,7 @@ wasi            # wasi: namespace for system interfaces
 For full API documentation, see:
 
 - Core Standard Library — one reference per module: [`prelude`](./stdlib-core-prelude.md), [`cli`](./stdlib-core-cli.md), [`collections`](./stdlib-core-collections.md), [`serde`](./stdlib-core-serde.md), [`json`](./stdlib-core-json.md), [`json_nsd`](./stdlib-core-json_nsd.md), [`value`](./stdlib-core-value.md), [`base64`](./stdlib-core-base64.md), [`zlib`](./stdlib-core-zlib.md), [`simd`](./stdlib-core-simd.md), [`url`](./stdlib-core-url.md), [`kiln`](./stdlib-core-kiln.md)
-- [WASI Standard Library Reference](./stdlib-wasi.md)
+- [WASI Standard Library Reference](./stdlib-wasi.md), and [`wasi:webgpu`](./stdlib-wasi-webgpu.md) in a reference of its own
 
 ### Global Functions defined in `core:prelude`
 

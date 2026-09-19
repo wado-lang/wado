@@ -143,7 +143,7 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::intern
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(50)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(51)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(51)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(52)
 
@@ -162,7 +162,7 @@ import fn wasi/wasi:cli/TerminalStdin::get_terminal_stdin from "wasi/wasi:cli/Te
 import fn wasi/wasi:cli/TerminalStdout::get_terminal_stdout from "wasi/wasi:cli/TerminalStdout::get_terminal_stdout";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -238,7 +238,7 @@ condition: stderr_terminal matches { None }
     tx_25 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "wasi_cli_terminal.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
     "core:rt/write_string_to_stream"(tx_25, global:wasi_cli_terminal.wado::$const_obj_5);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "wasi_cli_terminal.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -400,7 +400,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }
