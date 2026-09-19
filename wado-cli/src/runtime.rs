@@ -395,8 +395,9 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, collector: Coll
     config.wasm_branch_hinting(true);
     config.collector(collector);
     // Start the GC heap at a size a program can run in, rather than at zero.
-    // wasmtime grows a GC heap by just the allocation that failed, so a heap
-    // that starts empty spends the run a collection away from its own capacity:
+    // wasmtime collects before it grows, and grows only where the collection
+    // left too little, so a heap starting empty doubles its way up to the
+    // working set with a full trace paid at every rung of the ladder:
     // microgpt trains 1.2x faster from here and infers 1.5x faster, json-catalog
     // serializes 1.17x faster, and nothing measures slower. The pages are
     // reserved, not touched, so the cost is address space rather than memory.
