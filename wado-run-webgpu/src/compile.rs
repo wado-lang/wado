@@ -35,7 +35,7 @@ pub fn component_for(args: &Args) -> Result<Component> {
     let wado = wado_binary();
     let status = Command::new(&wado)
         .arg("compile")
-        .arg(format!("-O{}", args.opt_level))
+        .arg(args.opt_level.flag())
         .arg("-o")
         .arg(&path)
         .arg(&args.input)

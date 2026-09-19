@@ -156,9 +156,8 @@ fn usage() -> String {
     buf
 }
 
-/// Print the builtins and every `wado-<name>` on `PATH`. An external a builtin
-/// shadows is listed too: the file is there, `wado` will never run it, and
-/// nothing else would say so.
+/// Print the builtins and every `wado-<name>` on `PATH`, a shadowed external
+/// included: nothing else would say the file is there and will never run.
 fn print_list() {
     let externals = wado_cli::external::discover();
     let width = Cmd::ALL
@@ -263,15 +262,13 @@ async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
     let Some(arg) = parser.next().map_err(CliExit::error)? else {
         return Err(CliExit::help(usage()));
     };
-    // `wado help help` and `wado help --help` ask the same question `wado help`
-    // does, and the command list is the answer.
-    let Value(name_val) = arg else {
-        if matches!(arg, Long("help") | Short('h')) {
-            return Err(CliExit::help(usage()));
-        }
-        return Err(CliExit::error_with_usage(arg.unexpected(), &usage()));
+    let name = match arg {
+        Value(name_val) => name_val.to_string_lossy().into_owned(),
+        // Asking `help` about itself asks what `wado help` asks, and the
+        // command list is the answer.
+        Long("help") | Short('h') => return Err(CliExit::help(usage())),
+        other => return Err(CliExit::error_with_usage(other.unexpected(), &usage())),
     };
-    let name = name_val.to_string_lossy().into_owned();
     if let Some(surplus) = parser.next().map_err(CliExit::error)? {
         return Err(CliExit::error_with_usage(surplus.unexpected(), &usage()));
     }

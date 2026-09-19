@@ -1,7 +1,7 @@
-// A CM import taking a `list` and returning a `resource`. The adapter's
-// return is an i32 handle until the call site types it, and the retyping
-// used to claim every i32 intermediate the body held — the list parameter's
-// own length among them, which then asked WIR for a `Mul` on a resource.
+// A CM import taking a `list` and returning a `resource`. The adapter's return
+// is an i32 handle until the call site types it, and that retyping starts at
+// the `CmRawCall`, so the list parameter's own length keeps the i32 it was
+// lowered with rather than becoming a resource WIR would multiply.
 
 #[cm("wasi:demo/gfx@0.1.0#layout")]
 resource Layout {

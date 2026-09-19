@@ -33,7 +33,7 @@ package is WIT like the rest, so whatever carries the module generates it.
 wasmtime does not ship this WIT, so it comes from a `vendor/wasi-webgpu`
 submodule, and `mise run update-stdlib-wasi` regenerates from there.
 
-Run against `0.3.0-rc.2`, the WIT frontend emits the whole interface as 2423
+Run against `0.3.0-rc.2`, the WIT frontend emits the whole interface as 2588
 lines. It skips nothing and approximates nothing.
 
 ### The interface is the effect, and each resource is one too
@@ -89,7 +89,9 @@ pub struct GpuBindGroupDescriptor {
 
 `gpu-queue.submit` and `gpu-render-pass-encoder.execute-bundles` take
 `list<borrow<t>>`, which is a `List<&T>`: the element is a borrow at the
-boundary and a reference on the Wado side.
+boundary and a reference on the Wado side. Every container reads the same way,
+a tuple, an option and a result alongside a list. Only a bare `borrow<t>` is
+the `i32` handle the boundary passes.
 
 ### What the boundary already carries
 
@@ -108,10 +110,14 @@ binding is covered end to end and not only to the point of compiling.
       `mise run update-stdlib-wasi` with the other WASI packages.
 - [x] Generate `wado-compiler/lib/wasi/webgpu/` and register `wasi:webgpu` in
       the binding table, which also reserves the namespace.
-- [ ] E2E fixtures for the boundary shapes the package leans on: a descriptor
-      carrying a borrow, a `list<borrow<t>>` submit, and an `async` request.
-      They are `compile_only`, since the host lives in another binary and the
-      e2e harness has none.
+- [x] E2E fixtures for the container shapes the package leans on:
+      `list<borrow<t>>`, `option<borrow<t>>`, a borrow held by a tuple and by a
+      result, a list parameter beside a resource return, and a
+      `result<ok, err>` parameter. They are `compile_only`, since the host
+      lives in another binary and the e2e harness has none.
+- [ ] E2E fixtures for the two shapes still covered only by compiling a program
+      by hand: a descriptor record carrying a borrow, and an `async` request
+      through `.wait()`.
 - [x] [`stdlib-wasi-webgpu.md`](./stdlib-wasi-webgpu.md), generated with the
       other stdlib docs and linked from the cheatsheet and the spec. One
       interface the size of the rest of WASI together keeps its own file rather
@@ -126,8 +132,8 @@ binding is covered end to end and not only to the point of compiling.
 - What bundling costs is measured, against the module generated from
   `0.3.0-rc.2`. The registry bootstrap each `wado` process runs grows by the 8 ms
   the module takes to lex and parse, and each compilation's private copy of that
-  registry by 0.9 ms, so the 13537-fixture e2e suite gains about 12 s of its
-  1608 s. `mise run test-stdlib` gains three files and stays inside its own
+  registry by 0.9 ms, so the e2e suite gains about 12 s of its 1608 s.
+  `mise run test-stdlib` gains three files and stays inside its own
   run-to-run spread, `wado format` 79 ms, and a release binary the module's
   87 KB of source. The vendored proposal is 692 KB beside wasmtime's 93 MB.
   Nothing here needs a mechanism to stay cheap; what is unmeasured is the same
@@ -151,7 +157,7 @@ binding is covered end to end and not only to the point of compiling.
   computes nothing. `mesa-vulkan-drivers` supplies a software adapter
   (lavapipe), a 98.5 MB install, and that is what `test-webgpu` runs on. A
   developer machine without it gets the runner's diagnostic and no run.
-- The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2423 lines.
+- The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2588 lines.
   Regenerating handles that. What nothing records is which version the bundled
   module was cut from, beyond the submodule the generated header names.
 - Presenting to a screen is outside the proposal. `gpu-canvas-context` is

@@ -8,14 +8,14 @@ use wasi_webgpu_wasmtime::{
     WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions, add_to_linker as add_webgpu_to_linker,
 };
 use wasmtime::component::{Component, Linker, ResourceTable};
-use wasmtime::{Collector, Config, Engine, OptLevel, Store};
+use wasmtime::{Collector, Config, Engine, Store};
 use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
 use wgpu_core::global::Global;
 use wgpu_types::{Backends, InstanceDescriptor};
 
-use crate::args::Args;
+use crate::args::{Args, OptLevel};
 
 /// The wgpu instance every `wasi:webgpu` call draws on.
 pub type Gpu = Arc<Global>;
@@ -48,7 +48,7 @@ impl WasiWebGpuCtxView for Host {
 
 /// Run a component that exports `wasi:cli/run`, on the GPU already found.
 pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
-    let engine = Engine::new(&engine_config(&args.opt_level))?;
+    let engine = Engine::new(&engine_config(args.opt_level))?;
     let component = Component::from_file(&engine, component)?;
 
     let mut linker: Linker<Host> = Linker::new(&engine);
@@ -68,7 +68,7 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
 
 /// What `wado run` configures, so a program behaves the same under either
 /// runner: the same features, the same collector, the same Cranelift level.
-fn engine_config(opt_level: &str) -> Config {
+fn engine_config(opt_level: OptLevel) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
     config.wasm_component_model_async(true);
@@ -81,11 +81,11 @@ fn engine_config(opt_level: &str) -> Config {
     config
 }
 
-fn cranelift_opt_level(opt_level: &str) -> OptLevel {
+fn cranelift_opt_level(opt_level: OptLevel) -> wasmtime::OptLevel {
     match opt_level {
-        "0" => OptLevel::None,
-        "s" => OptLevel::SpeedAndSize,
-        _ => OptLevel::Speed,
+        OptLevel::O0 => wasmtime::OptLevel::None,
+        OptLevel::O1 | OptLevel::O2 | OptLevel::O3 => wasmtime::OptLevel::Speed,
+        OptLevel::Os => wasmtime::OptLevel::SpeedAndSize,
     }
 }
 

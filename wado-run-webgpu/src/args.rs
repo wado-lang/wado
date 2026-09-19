@@ -22,9 +22,42 @@ Options:
 Arguments after the input file go to the program.
 ";
 
+/// An optimization level `wado` accepts, so no other spelling reaches a caller.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum OptLevel {
+    O0,
+    O1,
+    O2,
+    O3,
+    Os,
+}
+
+impl OptLevel {
+    fn parse(level: &str) -> Option<Self> {
+        match level {
+            "0" => Some(Self::O0),
+            "1" => Some(Self::O1),
+            "2" => Some(Self::O2),
+            "3" => Some(Self::O3),
+            "s" => Some(Self::Os),
+            _ => None,
+        }
+    }
+
+    pub fn flag(self) -> &'static str {
+        match self {
+            Self::O0 => "-O0",
+            Self::O1 => "-O1",
+            Self::O2 => "-O2",
+            Self::O3 => "-O3",
+            Self::Os => "-Os",
+        }
+    }
+}
+
 pub struct Args {
     pub input: PathBuf,
-    pub opt_level: String,
+    pub opt_level: OptLevel,
     /// Empty means preopen nothing, which `--no-dir` also asks for.
     pub preopens: Vec<PathBuf>,
     pub program_args: Vec<String>,
@@ -38,7 +71,7 @@ impl Args {
     {
         let mut parser = lexopt::Parser::from_args(argv);
         let mut input = None;
-        let mut opt_level = "2".to_string();
+        let mut opt_level = OptLevel::O2;
         let mut preopens = Vec::new();
         let mut no_dir = false;
         let mut program_args = Vec::new();
@@ -58,10 +91,11 @@ impl Args {
                     let Some(level) = parser.optional_value() else {
                         bail!("-O takes its level attached, as '-O2'\n\n{USAGE}");
                     };
-                    opt_level = level.string()?;
-                    if !matches!(opt_level.as_str(), "0" | "1" | "2" | "3" | "s") {
-                        bail!("unknown optimization level '-O{opt_level}'\n\n{USAGE}");
-                    }
+                    let level = level.string()?;
+                    let Some(parsed) = OptLevel::parse(&level) else {
+                        bail!("unknown optimization level '-O{level}'\n\n{USAGE}");
+                    };
+                    opt_level = parsed;
                 }
                 Long("dir") => preopens.push(PathBuf::from(parser.value()?)),
                 Long("no-dir") => no_dir = true,
@@ -110,7 +144,8 @@ mod tests {
 
     #[test]
     fn the_optimization_level_comes_attached() {
-        assert_eq!(parse(&["-O0", "app.wado"]).opt_level, "0");
+        assert_eq!(parse(&["-O0", "app.wado"]).opt_level, OptLevel::O0);
+        assert_eq!(parse(&["app.wado"]).opt_level, OptLevel::O2);
         assert!(try_parse(&["-O", "app.wado"]).is_err());
         assert!(try_parse(&["-O", "2", "app.wado"]).is_err());
         assert!(try_parse(&["-O9", "app.wado"]).is_err());
@@ -120,7 +155,7 @@ mod tests {
     fn everything_after_the_input_file_belongs_to_the_program() {
         let args = parse(&["-O0", "app.wado", "--dir", "/data", "-x", "rest"]);
 
-        assert_eq!(args.opt_level, "0");
+        assert_eq!(args.opt_level, OptLevel::O0);
         assert_eq!(args.program_args, ["--dir", "/data", "-x", "rest"]);
         assert_eq!(args.preopens, [std::env::current_dir().unwrap()]);
     }

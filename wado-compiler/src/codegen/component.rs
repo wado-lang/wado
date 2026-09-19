@@ -2622,7 +2622,6 @@ fn generate_cm_imports(
             }
 
             for func in &cm_functions {
-                // Pre-define param-only types (stream for params, result for params)
                 let needs_stream_u8 = func
                     .params
                     .iter()
@@ -2638,10 +2637,6 @@ fn generate_cm_imports(
                 } else {
                     None
                 };
-
-                // error_code_idx is lazily resolved by emit_cm_val_type via resolve_error_code_idx,
-                // but we still need it for param types that reference Result<_, ErrorCode>.
-                let error_code_idx: Option<u32> = None;
 
                 let kebab_params: Vec<(String, ComponentValType)> = func
                     .params
@@ -2720,7 +2715,7 @@ fn generate_cm_imports(
                             &resolved_ty,
                             &mut instance_type,
                             &mut local_type_idx,
-                            error_code_idx,
+                            None,
                             has_local_error_code,
                             &enum_export_indices,
                             &own_resource_type_indices,
