@@ -1,0 +1,262 @@
+//! Subcommands `wado` does not hold, found as `wado-<name>` on `PATH`.
+//! See [WEP: External Subcommands](../../docs/wep-2026-09-19-external-subcommands.md).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use crate::args::CliExit;
+
+/// What a subcommand's binary is named with.
+const PREFIX: &str = "wado-";
+
+/// One `wado-<name>` that `PATH` offers.
+pub struct External {
+    pub name: String,
+    pub path: PathBuf,
+}
+
+/// Every subcommand `PATH` offers, by name. A name that appears twice keeps
+/// the earlier directory's file, as running it would.
+#[must_use]
+pub fn discover() -> Vec<External> {
+    let mut found: BTreeMap<String, PathBuf> = BTreeMap::new();
+    for dir in search_dirs() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        let names: BTreeSet<String> = entries
+            .flatten()
+            .filter_map(|entry| {
+                let file = entry.file_name();
+                Some(subcommand_name(file.to_str()?)?.to_string())
+            })
+            .collect();
+        // Resolved through `resolve_in`, so the path listed is the path
+        // `wado <name>` would run, whatever order the directory was read in.
+        for name in names {
+            if let Some(path) = resolve_in(&dir, &name) {
+                found.entry(name).or_insert(path);
+            }
+        }
+    }
+    found
+        .into_iter()
+        .map(|(name, path)| External { name, path })
+        .collect()
+}
+
+/// The `wado-<name>` that `wado <name>` would run.
+#[must_use]
+pub fn find(name: &str) -> Option<PathBuf> {
+    if !is_subcommand_name(name) {
+        return None;
+    }
+    search_dirs()
+        .into_iter()
+        .find_map(|dir| resolve_in(&dir, name))
+}
+
+/// The `wado-<name>` one directory offers, taking the extensions in the order
+/// the operating system would.
+fn resolve_in(dir: &Path, name: &str) -> Option<PathBuf> {
+    candidates(dir, name).into_iter().find(|p| is_executable(p))
+}
+
+/// Why no `wado-<name>` was run: the shape the name must have, or the search
+/// that came up empty.
+#[must_use]
+pub fn not_found_reason(name: &str) -> String {
+    if is_subcommand_name(name) {
+        format!("no 'wado-{name}' on PATH")
+    } else {
+        "a subcommand is named in lowercase ASCII, digits and '-'".to_string()
+    }
+}
+
+/// Run an external subcommand's binary, by the absolute path already
+/// resolved. `WADO` names the running binary so the child calls back to the
+/// `wado` the user invoked rather than searching for one.
+///
+/// On Unix this replaces the process, so the exit status and every signal
+/// belong to the child. Elsewhere it waits and exits with the child's status.
+pub fn run<I, S>(path: &Path, args: I) -> Result<(), CliExit>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
+    let mut command = Command::new(path);
+    command.args(args);
+    if let Ok(wado) = std::env::current_exe() {
+        command.env("WADO", wado);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt as _;
+
+        let error = command.exec();
+        Err(CliExit::error(format!("{}: {error}", path.display())))
+    }
+
+    #[cfg(not(unix))]
+    {
+        let status = command
+            .status()
+            .map_err(|e| CliExit::error(format!("{}: {e}", path.display())))?;
+        Err(CliExit::silent_failure(status.code().unwrap_or(1)))
+    }
+}
+
+/// The directories a subcommand may come from.
+fn search_dirs() -> Vec<PathBuf> {
+    dirs_in(&std::env::var_os("PATH").unwrap_or_default())
+}
+
+/// An entry that is empty or relative is skipped: the operating system's own
+/// search reads an empty entry as the current directory and resolves a
+/// relative one against it, so either would let the directory a user stands in
+/// decide what `wado foo` runs.
+fn dirs_in(path: &OsStr) -> Vec<PathBuf> {
+    std::env::split_paths(path)
+        .filter(|dir| dir.is_absolute())
+        .collect()
+}
+
+/// A subcommand is spelled the way a builtin is, so a file named `wado-..` or
+/// `wado-Run` on `PATH` is not one.
+fn is_subcommand_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
+
+/// The subcommand a file name spells, or `None` when it spells none.
+fn subcommand_name(file: &str) -> Option<&str> {
+    let name = strip_executable_extension(file)?.strip_prefix(PREFIX)?;
+    is_subcommand_name(name).then_some(name)
+}
+
+#[cfg(unix)]
+fn candidates(dir: &Path, name: &str) -> Vec<PathBuf> {
+    vec![dir.join(format!("{PREFIX}{name}"))]
+}
+
+#[cfg(unix)]
+fn strip_executable_extension(file: &str) -> Option<&str> {
+    Some(file)
+}
+
+/// Whether this user can run it, not merely whether someone can: a file with
+/// an execute bit for another user is one the `PATH` search must walk past.
+#[cfg(unix)]
+fn is_executable(path: &Path) -> bool {
+    use std::os::unix::ffi::OsStrExt as _;
+
+    if !std::fs::metadata(path).is_ok_and(|m| m.is_file()) {
+        return false;
+    }
+    let Ok(c_path) = std::ffi::CString::new(path.as_os_str().as_bytes()) else {
+        return false;
+    };
+    // SAFETY: `c_path` is a valid NUL-terminated string for the call's duration.
+    unsafe {
+        libc::faccessat(
+            libc::AT_FDCWD,
+            c_path.as_ptr(),
+            libc::X_OK,
+            libc::AT_EACCESS,
+        ) == 0
+    }
+}
+
+/// Windows decides executability by extension, so `PATHEXT` both names the
+/// files to look for and says which of the ones found can run.
+#[cfg(not(unix))]
+fn executable_extensions() -> Vec<String> {
+    std::env::var("PATHEXT")
+        .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string())
+        .split(';')
+        .filter(|ext| !ext.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn candidates(dir: &Path, name: &str) -> Vec<PathBuf> {
+    executable_extensions()
+        .iter()
+        .map(|ext| dir.join(format!("{PREFIX}{name}{ext}")))
+        .collect()
+}
+
+#[cfg(not(unix))]
+fn strip_executable_extension(file: &str) -> Option<&str> {
+    executable_extensions().iter().find_map(|ext| {
+        let stem = file.len().checked_sub(ext.len())?;
+        // `get` and not `[..]`: the split lands mid-character on a name whose
+        // tail is multibyte, and slicing there panics.
+        file.get(stem..)?
+            .eq_ignore_ascii_case(ext)
+            .then(|| &file[..stem])
+    })
+}
+
+#[cfg(not(unix))]
+fn is_executable(path: &Path) -> bool {
+    path.is_file()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// What an executable is named, and where an absolute path starts: both
+    /// differ by platform, and the code under test reads both.
+    #[cfg(unix)]
+    const EXE: &str = "";
+    #[cfg(not(unix))]
+    const EXE: &str = ".EXE";
+    #[cfg(unix)]
+    const ABSOLUTE: [&str; 2] = ["/usr/bin", "/opt/bin"];
+    #[cfg(not(unix))]
+    const ABSOLUTE: [&str; 2] = [r"C:\usr\bin", r"C:\opt\bin"];
+
+    #[test]
+    fn a_file_name_spells_a_subcommand_only_in_the_builtin_shape() {
+        assert_eq!(
+            subcommand_name(&format!("wado-run-webgpu{EXE}")),
+            Some("run-webgpu")
+        );
+        assert_eq!(subcommand_name(&format!("wado-x9{EXE}")), Some("x9"));
+        for file in [
+            "wado",
+            "wado-",
+            "wado-..",
+            "wado-Run",
+            "wado-a b",
+            "cargo-run",
+        ] {
+            assert_eq!(subcommand_name(&format!("{file}{EXE}")), None, "{file}");
+        }
+    }
+
+    /// The empty entry is the one that reads as the current directory.
+    #[test]
+    fn the_search_skips_every_entry_that_is_not_absolute() {
+        let [first, second] = ABSOLUTE;
+        let path = std::env::join_paths([first, "", "rel/bin", second]).unwrap();
+        assert_eq!(
+            dirs_in(&path),
+            vec![PathBuf::from(first), PathBuf::from(second)]
+        );
+    }
+
+    #[test]
+    fn a_name_outside_the_builtin_shape_is_never_searched_for() {
+        assert!(find("../../bin/sh").is_none());
+        assert!(find("").is_none());
+    }
+}

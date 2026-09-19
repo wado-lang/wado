@@ -398,6 +398,10 @@ cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.m
   $CORE_MODULES
 cargo run --bin wado --quiet -- doc --format markdown --title "WASI Standard Library" \
   -o docs/stdlib-wasi.md $WASI_MODULES
+# `wasi:webgpu` is one interface the size of all the others together, so it
+# keeps its own file rather than burying them.
+cargo run --bin wado --quiet -- doc --format markdown --title "WASI WebGPU Standard Library" \
+  -o docs/stdlib-wasi-webgpu.md wasi:webgpu
 """
 
 [tasks.clean]
@@ -522,6 +526,9 @@ cargo run -p wado-from-idl -- \
     --output-dir wado-compiler/lib/wasi
 cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasmtime/crates/wasi-tls/src/p3/wit \
+    --output-dir wado-compiler/lib/wasi
+cargo run -p wado-from-idl -- \
+    --wit-dir vendor/wasi-webgpu/wit \
     --output-dir wado-compiler/lib/wasi
 find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
 """

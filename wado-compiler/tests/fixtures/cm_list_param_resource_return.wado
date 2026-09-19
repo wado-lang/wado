@@ -1,0 +1,30 @@
+// A CM import taking a `list` and returning a `resource`. The adapter's return
+// is an i32 handle until the call site types it, and that retyping starts at
+// the `CmRawCall`, so the list parameter's own length keeps the i32 it was
+// lowered with rather than becoming a resource WIR would multiply.
+
+#[cm("wasi:demo/gfx@0.1.0#layout")]
+resource Layout {
+    #[cm("wasi:demo/gfx@0.1.0#[method]layout.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#make-layout")]
+    #[cm_params("entries")]
+    fn make_layout(entries: List<u32>) -> Layout;
+}
+
+export fn run() with (Api, Layout) {
+    let l = Api::make_layout([1, 2]);
+    let _ = l.id();
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [
+    { "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 }
+  ]
+}
