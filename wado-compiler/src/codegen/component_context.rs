@@ -41,9 +41,10 @@ impl CmTypeKey {
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
-    /// Structural component types, keyed by the shape they stand for
-    /// (`result-unit`, `stream-u8`, an instance or func type). A declaration is
-    /// never in here; `decl_types` keys those by identity.
+    /// Component types a later phase looks up by a key it can rebuild: a
+    /// structure (`result-unit`, `stream-u8`), an instance or func type, an
+    /// import's export coordinate. A declaration is never one; `decl_types`
+    /// keys those by identity.
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 

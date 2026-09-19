@@ -1274,10 +1274,7 @@ fn intern_cm_type(
         ),
     };
 
-    let idx = match debug_name {
-        Some(name) => ctx.register_type(name),
-        None => ctx.register_anon_type(),
-    };
+    let idx = ctx.register_anon_type();
     let (_, enc) = builder.ty(debug_name);
     match resolved {
         ResolvedCmType::Own(resource) => {
@@ -1534,8 +1531,6 @@ fn prebuild_value_named_types(
         if ctx.has_decl_type(decl.def()) {
             continue;
         }
-        // The declaration answers its own Wado name, so no search by CM name
-        // has to pick between a library's type and a bundled one of that name.
         let wado_name = project
             .type_table
             .borrow()
@@ -1945,11 +1940,9 @@ fn resolve_future_type(
 /// Resolve a plan-level [`CmExportType`] to a component type index registered
 /// in `ctx`.
 ///
-/// `Named` follows the `{pkg}-{cm_name}` convention that `import_http_types_for_service`
-/// and `emit_kiln_world_types` register for resource own-handles and named
-/// variants. `HandlerResult` resolves through the structural type interner from
-/// its `ok`/`err` arms, so it shares the type those helpers interned without a
-/// per-world name.
+/// `Named` reaches the declaration the interface names and reads the index bound
+/// to it. `HandlerResult` resolves through the structural interner from its
+/// `ok`/`err` arms, so it shares whatever type an import phase interned.
 fn cm_export_type_to_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -2139,10 +2132,6 @@ fn emit_world_exports(
             {
                 let (_, enc) = builder.ty(Some(&func_type_name));
 
-                // Resources and variants follow the `{pkg}-{cm-name}` naming
-                // convention emitted by `import_wasi_http_types` /
-                // `emit_kiln_world_types`; the synthesized `result<own<resp>, error>`
-                // lives under `{world_pkg}-handler-result`. See [`CmExportType`].
                 let param_vals: Vec<(String, ComponentValType)> = export
                     .cm_params
                     .iter()
@@ -2857,13 +2846,8 @@ fn generate_cm_imports(
     import_interfaces_with_resources(builder, ctx, project, import_plan);
 }
 
-/// The declaration identity of the type `interface_fq` declares as `wado_name`,
-/// or `None` where it declares none.
-///
-/// The one name-to-identity step at the Component Model boundary, which the
-/// declaration-identity WEP §9 reserves for exactly this. Everything downstream
-/// keys by the identity: a key built from the package cannot tell
-/// `wasi:sockets/types`'s `error-code` from `wasi:sockets/ip-name-lookup`'s.
+/// [`cm_decl_in_interface`] against this package's tables — codegen's entry to
+/// the one name-to-identity step the declaration-identity WEP §9 sanctions.
 fn cm_decl_def(project: &NirPackage, interface_fq: &str, wado_name: &str) -> Option<DefId> {
     cm_decl_in_interface(
         &project.type_table.borrow(),
@@ -2967,18 +2951,12 @@ fn error_code_type_idx(ctx: &ComponentModelContext, project: &NirPackage, def: D
 /// arm is missing from outer scope, so this interface provides only the other.
 fn handler_result_key(
     ctx: &ComponentModelContext,
-    project: &NirPackage,
     response: DefId,
     error_code: DefId,
 ) -> Option<CmTypeKey> {
-    if !ctx.has_decl_type(error_code) {
-        return None;
-    }
     Some(CmTypeKey::Result {
         ok: Some(Box::new(CmTypeKey::Leaf(own_handle_idx(ctx, response)?))),
-        err: Some(Box::new(CmTypeKey::Leaf(error_code_type_idx(
-            ctx, project, error_code,
-        )))),
+        err: Some(Box::new(CmTypeKey::Leaf(ctx.decl_type_idx(error_code)?))),
     })
 }
 
@@ -3234,18 +3212,18 @@ fn import_resource_defining_interface(
     // lift and any client interface resolve it by structure.
     if let Some(error_code) = error_code_def(project, types_fq)
         && let Some(response) = cm_decl_def(project, types_fq, RESPONSE_WADO_NAME)
-        && let Some(key) = handler_result_key(ctx, project, response, error_code)
+        && let Some(key) = handler_result_key(ctx, response, error_code)
     {
         intern_cm_type(builder, ctx, &key, None);
     }
 }
 
 /// Resolve a function signature type to a component-level type index, reusing
-/// the resource own-handles and composites a resource-defining interface already
-/// emitted (`{pkg}-{cm}`, the error-code its declaration keys, and the interned
-/// `result<...>`).
-/// Used by composite resource-using interfaces (e.g. the HTTP client) whose
-/// signatures reference another interface's resources and error composite.
+/// what a resource-defining interface already emitted: the own-handles and
+/// error-code its declarations key, and the interned `result<...>`.
+///
+/// For a composite interface such as the HTTP client, whose signatures reference
+/// another interface's resources and error composite.
 fn component_type_idx_for_signature_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,

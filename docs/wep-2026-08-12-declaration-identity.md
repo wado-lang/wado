@@ -696,29 +696,29 @@ Nothing is spelled, so nothing can be spelled two ways.
 
 ## Keys past the Component Model boundary
 
-§9's boundary step answers with a `DefId`, and every key past it is that
-identity. A component's outer scope holds both kinds of type, so it holds two
-kinds of key: a structural type is keyed by the shape it stands for, and a type
-standing for a declaration is keyed by that declaration.
+A component's outer scope holds two kinds of type. One stands for a shape, and is
+keyed by that shape. The other stands for a declaration, and is keyed by that
+declaration. §9's boundary step is where the second kind gets its key: it answers
+with a `DefId`, and every key past it is that identity.
 
 A CM name cannot key the second kind, for the reason §9 gives for not carrying
 the name further. A name alone puts every package in one namespace, and its
-package puts every interface of that package in one, so a key built from either
+package puts every interface of that package in one. A key built from either
 names one of two unrelated declarations and drops the other.
 
 Every producer of such a type holds the interface it is emitting for, so it
-reaches the declaration through that one step. Reaching none is a missing import,
-and therefore a diagnostic. It is not a second key to try, which is the shape
+reaches the declaration through that one step. A producer that reaches none has a
+missing import, which is a diagnostic. Trying a second key instead is the shape
 "What a derivation may not be" forbids.
 
 ### A canonical intrinsic's payload is a declaration
 
 A payload is a type, so a nominal payload is its declaration. The CM name the ABI
-spells for it travels beside the identity and is never compared, which is §8 at
+spells for it travels beside the identity and is never compared. That is §8 at
 this boundary.
 
 The name such an intrinsic imports under is one of those renderings, and nothing
-reads it back: an annotation names an operation and never a payload. A payload
+reads it back. An annotation names an operation and never a payload, so a payload
 comes from the annotated signature, read where the declaration is in hand.
 
 ## Pattern qualifier arguments
@@ -728,8 +728,8 @@ arguments it was instantiated at. So `Maybe<String>::Just` does not qualify a
 `Maybe<i32>` scrutinee: the declarations agree and the instantiations do not.
 
 Each written argument is read at its own reference site and compared against the
-scrutinee's as a type — never by arity, and never by spelling, which is §4's rule
-one level out.
+scrutinee's as a type. Counting them compares nothing, and comparing the
+spellings is §4's defect one level out.
 
 Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 `pattern_qualifier_type_param_arg.wado`.
@@ -738,21 +738,20 @@ Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 
 A resource the program never mentions still reaches a component's outer scope,
 because an imported instance type's own methods reference it. No type was
-interned for it, so §9's step answers nothing, and the alias is keyed by the
-export it was made from — one interface's one spelling of one name, which
+interned for it, so §9's step answers nothing. The alias is keyed by the export
+it was made from instead. One interface spells that export name once, so the key
 collides with nothing today.
 
-Closing this means the step answering from the declarations a module makes rather
-than from the types the program interned, so a declaration no Wado code mentions
-still has its identity available.
+Closing this means the step answering from the declarations a module makes, not
+from the types the program interned. A declaration no Wado code mentions would
+then still have its identity.
 
 ## Known gap: an abstract qualifier argument is not compared
 
-A position either side of a pattern qualifier leaves abstract is accepted
-uncompared. A generic body writes its own type parameter where the scrutinee
+Where either side of a pattern qualifier leaves a position abstract, that
+position is accepted uncompared. A generic body writes its own type parameter where the scrutinee
 carries a concrete type, which is ordinary code, and a parameter names no
-instantiation, so there is nothing at that position for the scrutinee's argument
-to disagree with.
+instantiation, so the scrutinee's argument has nothing to disagree with there.
 
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. Closing it means

@@ -345,13 +345,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         .get_struct_cm_name_by_source(&source, &elem_name)
         .unwrap_or(&elem_name)
         .to_string();
-    let record = {
-        let tt = ctx.type_table.borrow();
-        let def = tt
-            .nominal_def(tt.representation_head(elem_type_id))
-            .unwrap_or_else(|| panic!("record `{elem_name}` names no declaration"));
-        CmDecl::new(tt.defs(), def, &cm_record_name)
-    };
+    let record = stream_element_decl(&ctx.type_table.borrow(), elem_type_id, &cm_record_name);
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),
         CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
@@ -1995,14 +1989,24 @@ fn parameterize_stream_cm_name(
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
-            let def = tt
-                .nominal_def(tt.representation_head(elem))
-                .unwrap_or_else(|| panic!("`stream<{elem_name}>` element names no declaration"));
-            CmStreamPayload::Record(CmDecl::new(tt.defs(), def, &cm_elem))
+            CmStreamPayload::Record(stream_element_decl(tt, elem, &cm_elem))
         },
         CmStreamPayload::Value,
     );
     CanonicalIntrinsic::stream_op(cm_name, payload)
+}
+
+/// The declaration a `stream<T>` element names, under the CM name `cm_name`.
+fn stream_element_decl(tt: &TypeTable, elem: TypeId, cm_name: &str) -> CmDecl {
+    let def = tt
+        .nominal_def(tt.representation_head(elem))
+        .unwrap_or_else(|| {
+            panic!(
+                "`stream<{}>` element names no declaration",
+                tt.base_type_name(elem)
+            )
+        });
+    CmDecl::new(tt.defs(), def, cm_name)
 }
 
 /// Look up the canonical `#[cm("…")]` CM name for a Wado type declared in the

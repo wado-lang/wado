@@ -38,8 +38,8 @@ impl std::hash::Hash for CmDecl {
 }
 
 impl CmDecl {
-    /// Render `def` at its CM name. The declaring module comes off the table,
-    /// never from a caller.
+    /// `def` under the CM name the ABI spells it by. The declaring module comes
+    /// off the table, never from a caller.
     #[must_use]
     pub fn new(defs: &DefTable, def: DefId, cm_name: &str) -> Self {
         Self {

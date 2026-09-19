@@ -442,7 +442,9 @@ fn wasi_error_code_decl_from_ast(
         return None;
     };
     let source = registry.resolve_cm_source_for(n, None)?;
-    source.strip_prefix("wasi:")?;
+    if !source.starts_with("wasi:") {
+        return None;
+    }
     let cm_name = registry
         .get_enum_cm_name_by_source(&source, &n.name)
         .or_else(|| registry.get_variant_cm_name_by_source(&source, &n.name))?
@@ -2980,11 +2982,12 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources.get(iface_fq)
     }
 
-    /// The CM interface whose declaring module is `module`, keyed by the module's
-    /// identity rather than any name.
+    /// The CM interface `module` declares. Single-valued because one module
+    /// declares one interface, which the declaration-identity WEP requires.
     ///
-    /// Single-valued because one module declares one interface, which the
-    /// declaration-identity WEP requires.
+    /// A user module is recorded and answers by identity. A bundled `wasi:` /
+    /// `core:` interface is absent by design, and its module path is its own
+    /// interface FQ, so the two populations are disjoint rather than a fallback.
     pub fn interface_declaring_module(&self, module: &ModuleSource) -> Option<&str> {
         if let Some((fq, _)) = self
             .cm_interface_module_sources

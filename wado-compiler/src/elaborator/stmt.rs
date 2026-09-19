@@ -860,8 +860,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             elab.qualifier_def(q)
                 .is_some_and(|def| chain_defs.contains(&def))
         };
-        // A qualifier need not restate the scrutinee's type arguments, but any it
-        // writes must be the scrutinee's, and a type declaring none takes none.
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
