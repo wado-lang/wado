@@ -762,9 +762,8 @@ question to the next kind, so which kind is asked first is a silent tiebreak.
 `wasi:cli/types`, so the variants decline and the enum answers — for any
 module's `ErrorCode`, including one a user wrote.
 
-Closing this means deleting the search, which requires that every reference
-reaching the boundary carry its declaring module. What is not established is
-whether any reference still arrives without one.
+Which references still arrive without their declaring interface is not
+established.
 
 ## Known gap: an abstract qualifier argument is not compared
 
