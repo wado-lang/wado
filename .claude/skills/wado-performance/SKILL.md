@@ -143,8 +143,8 @@ paid on a benchmark `fts` never touched.
   `--collector copying`.
 - **The GC heap's size is part of the measurement.** wasmtime grows a GC heap by
   only the allocation that failed, so a program allocating faster than its heap
-  can hold runs the whole way a collection away from capacity — and in that
-  regime the ranking of two compilers flips with the heap size, not with the
+  can hold runs the whole way a collection away from capacity. In that regime
+  the ranking of two compilers flips with the heap size rather than with the
   code. A change that allocated 20% less measured **49% slower** there, while
   `--collector null` and a hand-written `.wat` A/B both put it ahead. If an
   allocation-bound row contradicts a strictly smaller WIR, sweep

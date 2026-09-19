@@ -1,36 +1,27 @@
-//! Whether a constant aggregate stays safe to share once it escapes into the
-//! heap: nothing, anywhere in the program, writes through the object a callee
-//! stashes away. [`const_object_globalization`](super::const_object_globalization)
-//! asks this where its own read-only gate stops, at the bare read that hands a
-//! parameter to a struct literal.
-//!
-//! Taint names the shared object itself, never a container holding it: a
-//! projection of a tainted value is tainted, a struct built *around* one is
-//! not. Storing a tainted value away instead raises an obligation on the slot
-//! it lands in — a field name, a callee parameter — and the slot's own reads
-//! are then tainted in turn. A write of anything tainted refuses the query, and
-//! so does every shape this walk does not model.
+//! Whether a constant aggregate stays safe to share once a callee stashes it
+//! into the heap: nothing, anywhere in the program, writes through the object.
+//! [`const_object_globalization`](super::const_object_globalization) asks this
+//! where its own read-only gate stops. See the WEP for the taint model.
 
 use std::cell::{Cell, RefCell};
+use std::ops::ControlFlow;
 
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
+use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, StmtKind};
 use crate::nir_package::NirPackage;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::TypeTable;
 
-use super::arena_query::bare_promoted_local;
+use super::arena_query::{bare_promoted_local, collect_pattern_bindings, holds_reference};
 
 use cranelift_entity::EntityRef;
 
 /// A place a tainted value can come to rest, and so a set of reads to taint.
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 enum Slot {
-    /// Every `_.name` read in the program. Keyed by the field *name* rather
-    /// than by the receiver's type: a name is one key however the receiver is
-    /// spelled, so no newtype or reference wrapper can hide a read from the
-    /// scan.
+    /// Every `_.name` read in the program. A name is one key however the
+    /// receiver is spelled, so no wrapper type hides a read from the scan.
     Field(String),
     /// One callee's parameter, tainted inside that callee's body alone.
     Param(FuncId, usize),
@@ -38,24 +29,13 @@ enum Slot {
     Ret(FuncId),
 }
 
-/// What a bodyless callee does with one argument.
-enum ArgRole {
-    /// Reads it, and hands back no handle into it.
-    Read,
-    /// Reads it, and the result is a handle into it.
-    Project,
-    /// Writes it, or is not modelled here.
-    Opaque,
-}
-
 /// Memoized [`Slot`] verdicts over one `NirPackage`.
 pub(super) struct SharedEscape<'a> {
     project: &'a NirPackage,
     /// Settled verdicts, which no assumption stands behind.
     verdicts: RefCell<IndexMap<Slot, bool>>,
-    /// The slots being computed. One asked for again reads `true`, which is
-    /// the sound seed: "no write reaches this object" is a safety property, so
-    /// a cycle carrying no write of its own really does hold.
+    /// The slots being computed. One asked for again reads `true`, the sound
+    /// seed for a safety property: a cycle carrying no write really does hold.
     in_flight: RefCell<IndexSet<Slot>>,
     /// Whether the query in progress leaned on such an assumption.
     assumed: Cell<bool>,
@@ -75,15 +55,6 @@ impl<'a> SharedEscape<'a> {
     /// shared by every call: no write reaches it, through the callee or
     /// through anywhere the callee leaves it.
     pub(super) fn param_shareable(&self, func_id: FuncId, pos: usize) -> bool {
-        // A bodyless callee has nothing to walk, so its parameter would pass
-        // vacuously: `array_set`'s third argument writes the constant into a
-        // slot nothing here can name, and `v128_const`'s wants a literal.
-        let Some(callee) = self.project.functions.get(func_id.index()) else {
-            return false;
-        };
-        if callee.try_borrow().is_ok_and(|f| f.body.is_none()) {
-            return false;
-        }
         self.slot_ok(&Slot::Param(func_id, pos))
     }
 
@@ -111,13 +82,8 @@ impl<'a> SharedEscape<'a> {
     }
 
     fn compute_slot(&self, slot: &Slot) -> bool {
-        // Nothing to walk is not the same as nothing to find.
-        if let Slot::Param(id, _) | Slot::Ret(id) = slot
-            && self.project.functions[id.index()]
-                .try_borrow()
-                .is_ok_and(|f| f.body.is_none())
-        {
-            return false;
+        if let Some(declared) = self.declared_slot(slot) {
+            return declared;
         }
         let mut obligations: IndexSet<Slot> = IndexSet::default();
         for (idx, func) in self.project.functions.iter().enumerate() {
@@ -133,6 +99,35 @@ impl<'a> SharedEscape<'a> {
         }
         compiler_trace!("shared_escape", "{slot:?} clear, owes {obligations:?}");
         obligations.iter().all(|next| self.slot_ok(next))
+    }
+
+    /// The verdict for a slot whose owner has no body, where the program walk
+    /// would clear it having looked at nothing. `None` where the owner has one.
+    fn declared_slot(&self, slot: &Slot) -> Option<bool> {
+        let (Slot::Param(id, _) | Slot::Ret(id)) = slot else {
+            return None;
+        };
+        let Some(owner) = self.project.functions.get(id.index()) else {
+            return Some(false);
+        };
+        let Ok(owner) = owner.try_borrow() else {
+            return Some(false);
+        };
+        if owner.body.is_some() {
+            return None;
+        }
+        // Only a parameter has something declared about it. A result comes out
+        // of a body nothing here can see.
+        let Slot::Param(_, pos) = slot else {
+            return Some(false);
+        };
+        let verdict = self.reads_arg(&owner, *pos);
+        compiler_trace!(
+            "shared_escape",
+            "{slot:?} bodyless `{}` declares {verdict}",
+            owner.name
+        );
+        Some(verdict)
     }
 
     /// Taint `func`'s body from `slot` and check every use, collecting the
@@ -274,70 +269,41 @@ impl<'a> SharedEscape<'a> {
                 !taint.operand(*callee) && !args.iter().any(|&a| taint.operand(a))
             }
             ExprKind::CmRawCall { args, .. } => !args.iter().any(|&a| taint.operand(a)),
+            // Handing the object to a callee is a question about that callee's
+            // parameter, which [`Self::declared_slot`] answers for a bodyless
+            // one and the program walk for the rest.
             ExprKind::Call { func_id, args, .. } => {
-                let tainted: Vec<usize> = args
+                for (pos, _) in args
                     .iter()
                     .enumerate()
                     .filter(|(_, a)| taint.operand(a.expr))
-                    .map(|(pos, _)| pos)
-                    .collect();
-                if tainted.is_empty() {
-                    return true;
+                {
+                    obligations.insert(Slot::Param(*func_id, pos));
                 }
-                let Some(callee) = self.project.functions.get(func_id.index()) else {
-                    return false;
-                };
-                let Ok(callee) = callee.try_borrow() else {
-                    return false;
-                };
-                if callee.body.is_some() {
-                    for pos in tainted {
-                        obligations.insert(Slot::Param(*func_id, pos));
-                    }
-                    return true;
-                }
-                let reference = FunctionRef::from_resolved(&callee, callee.module_source.clone());
-                tainted
-                    .into_iter()
-                    .all(|pos| !matches!(arg_role(&reference, pos), ArgRole::Opaque))
+                true
             }
             _ => true,
         }
     }
-}
 
-/// What a bodyless callee does with the argument at `pos`. A builtin absent
-/// from the match writes every argument, which refuses the query.
-fn arg_role(reference: &FunctionRef, pos: usize) -> ArgRole {
-    let name = reference
-        .builtin_name()
-        .or_else(|| reference.monomorphized_builtin_name());
-    match (name.as_deref(), pos) {
-        // An element read hands back a handle into the array.
-        (
-            Some(
-                "builtin::array_get_value"
-                | "builtin::array_get_value_u8"
-                | "builtin::array_get_ref",
-            ),
-            0,
-        ) => ArgRole::Project,
-        (Some("builtin::black_box" | "builtin::select"), _) => ArgRole::Project,
-        // Reads the array and builds a fresh one, so no handle survives.
-        (
-            Some(
-                "builtin::array_len"
-                | "builtin::array_clone"
-                | "builtin::array_clone_prefix"
-                | "builtin::array_clone_shallow"
-                | "builtin::copy_value"
-                | "builtin::is_uninitialized",
-            ),
-            0,
-        ) => ArgRole::Read,
-        // `array_copy(dst, dst_start, src, src_start, len)` writes `dst`.
-        (Some("builtin::array_copy"), 2) => ArgRole::Read,
-        _ => ArgRole::Opaque,
+    /// Whether a bodyless callee leaves the argument at `pos` where the caller
+    /// put it: it neither writes through it nor keeps it past the call.
+    ///
+    /// Only `core:builtin` answers. `#[retain(...)]` is already what the
+    /// value-copy plan trusts there, so a clause missing from that file is a
+    /// bug rather than a silence to read as consent — which is exactly what it
+    /// would be on a CM import or a `.wasm` asset export, so those refuse.
+    /// A handle the result carries away needs no case of its own:
+    /// [`Taint::taints`] already taints any call whose first argument is
+    /// tainted.
+    fn reads_arg(&self, callee: &NirFunction, pos: usize) -> bool {
+        if !callee.module_source.is_core_builtin() {
+            return false;
+        }
+        let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
+        self.project
+            .builtin_declarations
+            .reads_param(&reference, pos)
     }
 }
 
@@ -392,6 +358,15 @@ impl Taint<'_> {
                 if !self.exprs.contains(&e) && self.taints(e) {
                     found_exprs.push(e);
                 }
+                // A `match` arm binds from its scrutinee, so a tainted
+                // scrutinee taints every name its arms bind.
+                if let ExprKind::Match { expr, arms } = &body.exprs[e].kind
+                    && self.operand(*expr)
+                {
+                    for arm in arms {
+                        collect_pattern_bindings(body, arm.pattern, &mut found_locals);
+                    }
+                }
             }
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
@@ -403,24 +378,13 @@ impl Taint<'_> {
                 }
                 StmtKind::LetDestructure { pattern, value, .. } => {
                     if self.operand(*value) {
-                        collect_bindings(body, *pattern, &mut found_locals);
+                        collect_pattern_bindings(body, *pattern, &mut found_locals);
                     }
                 }
                 _ => {}
             },
             NodeRef::Block(_) | NodeRef::Pat(_) => {}
         });
-        // A `match` arm binds from its scrutinee, so a tainted scrutinee taints
-        // every name its arms bind.
-        for e in body.exprs.keys() {
-            if let ExprKind::Match { expr, arms } = &body.exprs[e].kind
-                && self.operand(*expr)
-            {
-                for arm in arms {
-                    collect_bindings(body, arm.pattern, &mut found_locals);
-                }
-            }
-        }
         self.exprs.extend(found_exprs);
         self.locals.extend(found_locals);
     }
@@ -429,7 +393,7 @@ impl Taint<'_> {
     /// result never can: it holds no reference.
     fn taints(&self, e: ExprId) -> bool {
         let body = self.body;
-        if !is_reference_type(self.type_table, body.exprs[e].type_id) {
+        if !holds_reference(self.type_table, body.exprs[e].type_id) {
             return false;
         }
         match &body.exprs[e].kind {
@@ -437,9 +401,10 @@ impl Taint<'_> {
             ExprKind::FieldAccess {
                 expr, field_name, ..
             } => self.seed_field == Some(field_name.as_str()) || self.operand(*expr),
-            ExprKind::Index { expr, .. } | ExprKind::Cast { expr, .. } => self.operand(*expr),
-            ExprKind::Unary { expr, .. } => self.operand(*expr),
-            ExprKind::VariantPayload { expr, .. } => self.operand(*expr),
+            ExprKind::Index { expr, .. }
+            | ExprKind::Cast { expr, .. }
+            | ExprKind::Unary { expr, .. }
+            | ExprKind::VariantPayload { expr, .. } => self.operand(*expr),
             // A block, an `if` or a `match` yields one of its branches; any
             // tainted node under it is taken to be that branch.
             ExprKind::LabeledBlock { .. } | ExprKind::If { .. } | ExprKind::Match { .. } => {
@@ -458,29 +423,13 @@ impl Taint<'_> {
     }
 
     fn subtree_tainted(&self, node: NodeRef) -> bool {
-        let mut found = false;
-        self.body.for_each_child(node, |c| {
-            if found {
-                return;
-            }
-            found = match c {
-                NodeRef::Expr(e) if self.exprs.contains(&e) => true,
-                _ => self.subtree_tainted(c),
-            };
-        });
-        found
+        self.body
+            .walk_nodes_under::<()>(node, |c| match c {
+                NodeRef::Expr(e) if self.exprs.contains(&e) => ControlFlow::Break(()),
+                _ => ControlFlow::Continue(true),
+            })
+            .is_some()
     }
-}
-
-fn collect_bindings(body: &Body, pat: PatId, out: &mut Vec<u32>) {
-    if let PatKind::Binding { local_index, .. } = &body.pats[pat].kind {
-        out.push(*local_index);
-    }
-    body.for_each_child(NodeRef::Pat(pat), |c| {
-        if let NodeRef::Pat(p) = c {
-            collect_bindings(body, p, out);
-        }
-    });
 }
 
 /// Whether assigning to `target` writes through a tainted value: any step of
@@ -491,8 +440,9 @@ fn place_writes_taint(taint: &Taint<'_>, target: ExprId) -> bool {
         return true;
     }
     let inner = match &taint.body.exprs[target].kind {
-        ExprKind::FieldAccess { expr, .. } | ExprKind::Index { expr, .. } => *expr,
-        ExprKind::Unary { expr, .. } => *expr,
+        ExprKind::FieldAccess { expr, .. }
+        | ExprKind::Index { expr, .. }
+        | ExprKind::Unary { expr, .. } => *expr,
         _ => return false,
     };
     if taint.operand(inner) {
@@ -515,7 +465,7 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     let Some(v) = op.as_value() else {
         return PromotedRef::None;
     };
-    if !is_reference_type(type_table, body.operand_type(op)) {
+    if !holds_reference(type_table, body.operand_type(op)) {
         return PromotedRef::None;
     }
     if let Some(l) = bare_promoted_local(body, op) {
@@ -560,11 +510,4 @@ fn has_seed(
         }
     });
     found
-}
-
-fn is_reference_type(type_table: &TypeTable, ty: TypeId) -> bool {
-    !matches!(
-        type_table.get(ty),
-        ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
-    )
 }

@@ -178,20 +178,28 @@ shared global and a callee that writes it.
 
 #### Gate: whole-program sharing, where the parameter gate refuses
 
-The two gates above read one callee's body, so a parameter the callee stashes
-away — into a field of a struct it builds, or into a further callee — fails them
-however read-only the program as a whole is. `shared_escape` answers that case
-directly: the constant is safe to share when nothing anywhere writes through it.
+The two gates above read one callee's body. A parameter the callee stashes away,
+into a field of a struct it builds or into a further callee, fails them however
+read-only the program as a whole is. `shared_escape` answers that case directly:
+the constant is safe to share when nothing anywhere writes through it.
 
 Taint names the shared object itself and never a container holding it, so a
 projection of a tainted value is tainted while a struct built around one is not.
 Storing a tainted value away raises an obligation on the slot it lands in — a
 field name, a callee parameter, a callee result — and that slot's own reads are
 then tainted in turn, program-wide. A write of anything tainted refuses the
-query, and so does every shape the walk does not model, a bodyless callee
-included. A field is keyed by its name rather than by its receiver's type: a
-name is one key however the receiver is spelled, so no newtype or reference
-wrapper hides a read from the scan.
+query, and so does every shape the walk does not model. A field is keyed by its
+name rather than by its receiver's type: a name is one key however the receiver
+is spelled, so no newtype or reference wrapper hides a read from the scan.
+
+A bodyless callee has no body for the walk to reach, so its parameter is
+answered from what the declaration stated: `core:builtin` leaves the argument
+where the caller put it when it takes the position by `&` rather than `&mut`,
+and no `#[retain(p)]` clause names it. `#[retain(elements_of = p)]` keeps what
+`p` holds rather than `p` itself, so it leaves the argument object alone. Only
+`core:builtin` answers this way — `#[retain]` is already what the value-copy
+plan trusts there, so a missing clause is a bug rather than a silence to read as
+consent, which is what it would be on a CM import or a `.wasm` asset export.
 
 Because "no write reaches this object" is a safety property, a query that
 re-enters itself reads `true`: a cycle carrying no write of its own really does
