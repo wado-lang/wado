@@ -6,7 +6,8 @@
 use super::component_context::{CmTypeKey, ComponentModelContext};
 use crate::ast::{AstId, CmImport, NamedType, Type};
 use crate::canonical::{
-    CanonicalIntrinsic, CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload,
+    CanonicalIntrinsic, CmDecl, CmDeclKind, CmFuturePayload, CmPayloadType, CmScalarType,
+    CmStreamPayload,
 };
 use crate::codegen::emit::emit_core_module;
 use crate::codegen_flags::CodegenFlags;
@@ -204,8 +205,8 @@ pub fn build_component(
     let needs_trailers_future = all_canonical_intrinsics
         .iter()
         .any(|i| matches!(i.future_payload(), Some(CmFuturePayload::Trailers)));
-    // The error-code declarations transmission futures carry — the identity the
-    // classifier read off the payload, not the package it sits in.
+    // The error-code declarations transmission futures carry, as the classifier
+    // read them off each payload.
     let transmission_decls: Vec<CmDecl> = {
         let mut decls: Vec<CmDecl> = Vec::new();
         for i in &all_canonical_intrinsics {
@@ -942,10 +943,8 @@ fn embed_imported_wasm_modules(
 }
 
 /// Build the `future<result<_, error-code>>` type for one `ErrorCode`
-/// declaration.
-///
-/// Each interface declaring an `error-code` gets its own transmission future
-/// type: two interfaces of one package each declare one, and they are unrelated.
+/// declaration. Two interfaces of one package may each declare one, and the two
+/// are unrelated types.
 fn build_transmission_future_type_for(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1002,9 +1001,10 @@ fn expose_self_owned_resources(
 }
 
 /// Alias the resource `interface_fq` declares as `resource_name` into the outer
-/// component scope, bound to its declaration. Idempotent, and the one place a
-/// resource type reaches outer scope — so every consumer finds it, whichever
-/// import phase put it there.
+/// component scope, bound to its declaration.
+///
+/// Idempotent, and the one place a resource type reaches outer scope, so every
+/// consumer finds it whichever import phase put it there.
 fn alias_resource_type(
     builder: &mut ComponentBuilder,
     ctx: &mut ComponentModelContext,
@@ -1014,7 +1014,7 @@ fn alias_resource_type(
     cm_name: &str,
     instance_key: &str,
 ) -> u32 {
-    if let Some(idx) = aliased_resource_idx(ctx, project, interface_fq, resource_name, cm_name) {
+    if let Some(idx) = aliased_type_idx(ctx, project, interface_fq, resource_name, cm_name) {
         return idx;
     }
     let idx = ctx.register_type(&resource_export_key(interface_fq, cm_name));
@@ -1029,23 +1029,21 @@ fn alias_resource_type(
     idx
 }
 
-/// The outer index [`alias_resource_type`] gave this resource, or `None` where no
-/// phase has aliased it yet.
+/// The outer index an import phase gave the type `interface_fq` exports as
+/// `cm_name`, or `None` where none has.
 ///
 /// A resource the program never mentions has no `TypeId`, so it has no
-/// declaration to be keyed by — and the component aliases it all the same,
-/// because the instance type's own methods reference it. Those two are the cases,
-/// not two keys for one: the export coordinate answers where a declaration does
-/// not exist to.
-fn aliased_resource_idx(
+/// declaration to key it by, and the component aliases it anyway for the
+/// instance type's own methods. The export coordinate answers for that one case.
+fn aliased_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
     interface_fq: &str,
-    resource_name: &str,
+    wado_name: &str,
     cm_name: &str,
 ) -> Option<u32> {
-    if let Some(idx) = cm_decl_def(project, interface_fq, resource_name)
-        .and_then(|def| ctx.decl_type_idx(def))
+    if let Some(idx) =
+        cm_decl_def(project, interface_fq, wado_name).and_then(|def| ctx.decl_type_idx(def))
     {
         return Some(idx);
     }
@@ -1188,10 +1186,8 @@ fn emit_kiln_world_types(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Alias each exported type into the component's local type space, bound to
-    // its declaration. Reserving an index per alias keeps the component's type
-    // counter in lockstep with the encoder's so downstream registrations stay
-    // in sync.
+    // Reserving an index per alias keeps the component's type counter in lockstep
+    // with the encoder's, so downstream registrations stay in sync.
     let mut aliased: IndexMap<&str, u32> = IndexMap::default();
     for (export_name, wado_name) in [
         ("input-file", "InputFile"),
@@ -1338,7 +1334,7 @@ fn build_future_intrinsic_types(
     let fields = intern_cm_type(
         builder,
         ctx,
-        &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(fields_resource_idx))),
+        &CmTypeKey::own_of(fields_resource_idx),
         Some(&format!("{pkg}-fields")),
     );
 
@@ -1450,14 +1446,12 @@ fn payload_type_to_cm_key(payload: &CmPayloadType, ctx: &ComponentModelContext) 
                 .collect(),
         ),
         CmPayloadType::Named(decl) => CmTypeKey::Leaf(payload_decl_type_idx(ctx, decl)),
-        CmPayloadType::Resource(decl) => {
-            CmTypeKey::Own(Box::new(CmTypeKey::Leaf(payload_decl_type_idx(ctx, decl))))
-        }
+        CmPayloadType::Resource(decl) => CmTypeKey::own_of(payload_decl_type_idx(ctx, decl)),
     }
 }
 
-/// The imported instance whose type exports `decl` — the interface that
-/// declares it, found from its module rather than searched for by its CM name.
+/// The imported instance whose type exports `decl`, found from the module that
+/// declares it rather than searched for by its CM name.
 fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
     let fq = project
         .cm_interface_registry
@@ -1476,37 +1470,27 @@ fn decl_instance_key(project: &NirPackage, decl: &CmDecl) -> String {
 
 /// The outer type index a canonical's declaration is bound to.
 fn payload_decl_type_idx(ctx: &ComponentModelContext, decl: &CmDecl) -> u32 {
-    ctx.decl_type_idx(decl.def()).unwrap_or_else(|| {
-        panic!(
-            "a canonical reaches `{}`, but no imported interface aliased it into \
-             outer scope",
-            decl.name_suffix()
-        )
-    })
+    ctx.decl_type_idx(decl.def())
+        .unwrap_or_else(|| unaliased(&format!("the canonical payload `{}`", decl.name_suffix())))
 }
 
-fn collect_named_payload_decls(payload: &CmPayloadType, out: &mut Vec<CmDecl>) {
-    match payload {
-        CmPayloadType::Named(decl) => {
-            if !out.contains(decl) {
-                out.push(decl.clone());
-            }
+/// The distinct declarations the canonicals' payloads reach as `kind`.
+fn payload_decls(canonical_intrinsics: &[CanonicalIntrinsic], kind: CmDeclKind) -> Vec<CmDecl> {
+    let mut out: Vec<CmDecl> = Vec::new();
+    let mut keep = |decl: &CmDecl, at: CmDeclKind| {
+        if at == kind && !out.contains(decl) {
+            out.push(decl.clone());
         }
-        CmPayloadType::List(t) | CmPayloadType::Option(t) => {
-            collect_named_payload_decls(t, out);
+    };
+    for intrinsic in canonical_intrinsics {
+        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
+            p.for_each_decl(&mut keep);
         }
-        CmPayloadType::Result(ok, err) => {
-            for t in [ok, err].into_iter().flatten() {
-                collect_named_payload_decls(t, out);
-            }
+        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
+            p.for_each_decl(&mut keep);
         }
-        CmPayloadType::Tuple(elems) => {
-            for e in elems {
-                collect_named_payload_decls(e, out);
-            }
-        }
-        CmPayloadType::Scalar(_) | CmPayloadType::String | CmPayloadType::Resource(_) => {}
     }
+    out
 }
 
 /// Import the interface defining every resource a payload names, so `own<r>`
@@ -1517,16 +1501,7 @@ fn prebuild_resource_payload_types(
     project: &NirPackage,
     canonical_intrinsics: &[CanonicalIntrinsic],
 ) {
-    let mut decls: Vec<CmDecl> = Vec::new();
-    for intrinsic in canonical_intrinsics {
-        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
-            collect_resource_payload_decls(&p, &mut decls);
-        }
-        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
-            collect_resource_payload_decls(&p, &mut decls);
-        }
-    }
-    for decl in decls {
+    for decl in payload_decls(canonical_intrinsics, CmDeclKind::Resource) {
         if ctx.has_decl_type(decl.def()) {
             continue;
         }
@@ -1538,30 +1513,6 @@ fn prebuild_resource_payload_types(
             continue;
         };
         import_resource_source(builder, ctx, project, &source);
-    }
-}
-
-fn collect_resource_payload_decls(payload: &CmPayloadType, out: &mut Vec<CmDecl>) {
-    match payload {
-        CmPayloadType::Resource(decl) => {
-            if !out.contains(decl) {
-                out.push(decl.clone());
-            }
-        }
-        CmPayloadType::List(t) | CmPayloadType::Option(t) => {
-            collect_resource_payload_decls(t, out);
-        }
-        CmPayloadType::Result(ok, err) => {
-            for t in [ok, err].into_iter().flatten() {
-                collect_resource_payload_decls(t, out);
-            }
-        }
-        CmPayloadType::Tuple(elems) => {
-            for e in elems {
-                collect_resource_payload_decls(e, out);
-            }
-        }
-        CmPayloadType::Scalar(_) | CmPayloadType::String | CmPayloadType::Named(_) => {}
     }
 }
 
@@ -1578,17 +1529,8 @@ fn prebuild_value_named_types(
     let Some(type_gen) = lib_type_gen.as_mut() else {
         return;
     };
-    let mut decls: Vec<CmDecl> = Vec::new();
-    for intrinsic in canonical_intrinsics {
-        if let Some(CmFuturePayload::Value(p)) = intrinsic.future_payload() {
-            collect_named_payload_decls(&p, &mut decls);
-        }
-        if let Some(CmStreamPayload::Value(p)) = intrinsic.stream_payload() {
-            collect_named_payload_decls(&p, &mut decls);
-        }
-    }
     let no_resources: IndexMap<&str, u32> = IndexMap::default();
-    for decl in decls {
+    for decl in payload_decls(canonical_intrinsics, CmDeclKind::Value) {
         if ctx.has_decl_type(decl.def()) {
             continue;
         }
@@ -2023,16 +1965,20 @@ fn cm_export_type_to_idx(
         CmExportType::Named {
             interface_fq,
             cm_name,
-            // A param/return references the value type, which for a resource
-            // is its `own<>` handle — unlike the re-export in
-            // `collect_type_items`, which names the resource itself.
+            // A param or return reaches a resource as its `own<>` handle, unlike
+            // the re-export in `collect_type_items`, which names the type itself.
             is_resource,
         } => {
             assert!(
                 !fq_name_package(interface_fq).is_empty(),
                 "world export Named CM type interface `{interface_fq}` has no `scheme:pkg/...` shape",
             );
-            exported_cm_type_idx(ctx, project, interface_fq, cm_name, *is_resource)
+            let want = if *is_resource {
+                CmDeclKind::Resource
+            } else {
+                CmDeclKind::Value
+            };
+            exported_cm_type_idx(ctx, project, interface_fq, cm_name, want)
         }
         CmExportType::HandlerResult { ok, err } => {
             let arm = |a: &CmExportType| match a {
@@ -2928,9 +2874,7 @@ fn cm_decl_def(project: &NirPackage, interface_fq: &str, wado_name: &str) -> Opt
 }
 
 /// The outer type index bound to the CM type `interface_fq` declares as
-/// `wado_name`. A missing one means a signature reaches a type no imported
-/// interface aliased into outer scope, which only the validator would otherwise
-/// report.
+/// `wado_name`.
 fn cm_decl_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -2939,19 +2883,24 @@ fn cm_decl_type_idx(
 ) -> u32 {
     cm_decl_def(project, interface_fq, wado_name)
         .and_then(|def| ctx.decl_type_idx(def))
-        .unwrap_or_else(|| {
-            panic!(
-                "`{wado_name}` of `{interface_fq}` is reached by a signature, but no \
-                 imported interface aliased it into outer scope"
-            )
-        })
+        .unwrap_or_else(|| unaliased(&format!("`{wado_name}` of `{interface_fq}`")))
 }
 
-/// The `own<r>` handle for the resource `def` declares, which the defining
-/// interface's import interned beside the resource type itself.
+/// What every consumer of an outer type says when it finds none. Only the
+/// validator would otherwise report a signature reaching an unaliased type.
+fn unaliased(subject: &str) -> ! {
+    panic!("{subject} is reached, but no imported interface aliased it into outer scope")
+}
+
+/// The `own<r>` handle over the resource type at `resource`, interned by the
+/// defining interface's import.
+fn own_handle_of(ctx: &ComponentModelContext, resource: u32) -> Option<u32> {
+    ctx.intern_lookup(&CmTypeKey::own_of(resource))
+}
+
+/// [`own_handle_of`] for a resource reached by its declaration.
 fn own_handle_idx(ctx: &ComponentModelContext, def: DefId) -> Option<u32> {
-    let resource = ctx.decl_type_idx(def)?;
-    ctx.intern_lookup(&CmTypeKey::Own(Box::new(CmTypeKey::Leaf(resource))))
+    own_handle_of(ctx, ctx.decl_type_idx(def)?)
 }
 
 /// The declaration identity of the `error-code` `interface_fq` declares.
@@ -2959,31 +2908,22 @@ fn error_code_def(project: &NirPackage, interface_fq: &str) -> Option<DefId> {
     cm_decl_def(project, interface_fq, ERROR_CODE_WADO_NAME)
 }
 
-/// The outer type index a signature references for the CM type `interface_fq`
-/// exports as `cm_name`: the `own<>` handle where that names a resource, the
-/// type itself otherwise. The Wado name is the CM name in `PascalCase`.
+/// The outer type index for the CM type `interface_fq` exports as `cm_name`, in
+/// the kind the reader wants. Its Wado name is that CM name in `PascalCase`.
 fn exported_cm_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,
     interface_fq: &str,
     cm_name: &str,
-    is_resource: bool,
+    want: CmDeclKind,
 ) -> u32 {
     let wado_name = kebab_to_pascal(cm_name);
-    let def = cm_decl_def(project, interface_fq, &wado_name).unwrap_or_else(|| {
-        panic!("`{interface_fq}` declares no `{wado_name}` for the CM type `{cm_name}`")
-    });
-    let idx = if is_resource {
-        own_handle_idx(ctx, def)
-    } else {
-        ctx.decl_type_idx(def)
+    let aliased = aliased_type_idx(ctx, project, interface_fq, &wado_name, cm_name);
+    let idx = match want {
+        CmDeclKind::Value => aliased,
+        CmDeclKind::Resource => aliased.and_then(|idx| own_handle_of(ctx, idx)),
     };
-    idx.unwrap_or_else(|| {
-        panic!(
-            "`{cm_name}` of `{interface_fq}` is reached by a signature, but no imported \
-             interface aliased it into outer scope"
-        )
-    })
+    idx.unwrap_or_else(|| unaliased(&format!("`{cm_name}` of `{interface_fq}`")))
 }
 
 /// Alias an interface's own `error-code` into the outer component scope, where
@@ -3015,22 +2955,16 @@ fn alias_own_error_code(
 }
 
 /// The outer type index standing for `def`, which an alias must already have
-/// bound. A missing one means a signature reaches an `error-code` no imported
-/// interface aliased, which only the validator would otherwise report.
+/// bound.
 fn error_code_type_idx(ctx: &ComponentModelContext, project: &NirPackage, def: DefId) -> u32 {
     ctx.decl_type_idx(def).unwrap_or_else(|| {
-        let type_table = project.type_table.borrow();
-        panic!(
-            "`error-code` declared in `{}` is reached by a signature, but no imported \
-             interface aliased it into outer scope",
-            type_table.defs().module(def)
-        )
+        let module = project.type_table.borrow().defs().module(def).clone();
+        unaliased(&format!("the `error-code` of `{module}`"))
     })
 }
 
-/// `result<own<response>, error-code>` — both arms by declaration. `None` where
-/// this interface's own-handle or error-code is not in outer scope, which is
-/// what says it provides only one arm.
+/// `result<own<response>, error-code>`, both arms by declaration. `None` where an
+/// arm is missing from outer scope, so this interface provides only the other.
 fn handler_result_key(
     ctx: &ComponentModelContext,
     project: &NirPackage,
@@ -3290,7 +3224,7 @@ fn import_resource_defining_interface(
         intern_cm_type(
             builder,
             ctx,
-            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(*resource_idx))),
+            &CmTypeKey::own_of(*resource_idx),
             Some(&format!("{pkg}-{cm_name}")),
         );
     }
@@ -3359,10 +3293,7 @@ fn component_type_idx_for_signature_type(
                     )
                 });
                 return own_handle_idx(ctx, def).unwrap_or_else(|| {
-                    panic!(
-                        "the `own<>` handle of `{}` is not in outer scope",
-                        named.name
-                    )
+                    unaliased(&format!("the `own<>` handle of `{}`", named.name))
                 });
             }
             // A non-resource named type (e.g. the error composite's `error-code`
@@ -3545,7 +3476,7 @@ fn import_interface_with_resource(
         .resource_source_in(Some(&interface_info.path), resource_wado_name)
         .map(str::to_string);
     let outer_resource_idx = declaring.as_deref().and_then(|source| {
-        aliased_resource_idx(ctx, project, source, resource_wado_name, resource_cm_name)
+        aliased_type_idx(ctx, project, source, resource_wado_name, resource_cm_name)
     });
 
     let instance_type_name = format!("{}-instance-type", interface_info.interface);
@@ -3940,7 +3871,7 @@ fn import_resource_using_interfaces(
             else {
                 continue;
             };
-            if aliased_resource_idx(ctx, project, source, resource_name, cm_name).is_some() {
+            if aliased_type_idx(ctx, project, source, resource_name, cm_name).is_some() {
                 continue; // already imported (by the main loop or the source phase)
             }
             if source == &interface_info.path {
@@ -3972,8 +3903,8 @@ fn import_resource_using_interfaces(
                     .cm_interface_registry
                     .get_resource_cm_name_by_source(source, resource_name)
                 {
-                    let outer_resource_idx = cm_decl_def(project, source, resource_name)
-                        .and_then(|def| ctx.decl_type_idx(def));
+                    let outer_resource_idx =
+                        aliased_type_idx(ctx, project, source, resource_name, cm_name);
                     if source == &interface_info.path {
                         // Declare the resource inline so [constructor]X /
                         // [method]X.foo / [static]X.foo are valid in this
@@ -4503,7 +4434,7 @@ fn append_interface_instance_exports(
             CmExportType::Named {
                 interface_fq,
                 cm_name,
-                is_resource,
+                is_resource: _,
             } => {
                 // By owner as well as name: two interfaces may each define a
                 // `request`, and the one this export defines must survive.
@@ -4513,25 +4444,10 @@ fn append_interface_instance_exports(
                 {
                     return;
                 }
-                // A re-export names the resource type itself, not its
-                // `own<>` handle, so the kind decides which is read.
-                let idx = if *is_resource {
-                    aliased_resource_idx(
-                        ctx,
-                        project,
-                        interface_fq,
-                        &kebab_to_pascal(cm_name),
-                        cm_name,
-                    )
-                    .unwrap_or_else(|| {
-                        panic!(
-                            "`{cm_name}` of `{interface_fq}` is re-exported, but no imported \
-                             interface aliased it into outer scope"
-                        )
-                    })
-                } else {
-                    exported_cm_type_idx(ctx, project, interface_fq, cm_name, false)
-                };
+                // A re-export names the type itself, a resource's included —
+                // unlike a signature, which reaches a resource's `own<>` handle.
+                let idx =
+                    exported_cm_type_idx(ctx, project, interface_fq, cm_name, CmDeclKind::Value);
                 out.push((interface_fq.clone(), cm_name.clone(), idx));
             }
             CmExportType::HandlerResult { ok, err } => {
@@ -4657,7 +4573,7 @@ mod tests {
         let own = intern_cm_type(
             &mut builder,
             &mut ctx,
-            &CmTypeKey::Own(Box::new(CmTypeKey::Leaf(leaf))),
+            &CmTypeKey::own_of(leaf),
             Some("own"),
         );
         let opt = intern_cm_type(

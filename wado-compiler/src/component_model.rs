@@ -34,8 +34,7 @@ use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldR
 ///
 /// The one name-to-identity step at the Component Model boundary, which the
 /// declaration-identity WEP §9 reserves for exactly this. Everything downstream
-/// keys by the identity: a key built from the package cannot tell
-/// `wasi:sockets/types`'s `error-code` from `wasi:sockets/ip-name-lookup`'s.
+/// keys by the identity a step like this answers with.
 pub fn cm_decl_in_interface(
     type_table: &TypeTable,
     registry: &CmInterfaceRegistry,
@@ -2981,10 +2980,11 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources.get(iface_fq)
     }
 
-    /// The CM interface whose module is `module` — the reverse of the forward
-    /// FQ-to-module step, keyed by the module's identity rather than by any
-    /// name. Single-valued because one module declares one interface (the
-    /// declaration-identity WEP's "one declaring module per CM interface").
+    /// The CM interface whose declaring module is `module`, keyed by the module's
+    /// identity rather than any name.
+    ///
+    /// Single-valued because one module declares one interface, which the
+    /// declaration-identity WEP requires.
     pub fn interface_declaring_module(&self, module: &ModuleSource) -> Option<&str> {
         if let Some((fq, _)) = self
             .cm_interface_module_sources
@@ -4881,8 +4881,7 @@ pub const MAX_FLAT_RESULTS: usize = 1;
 pub const ERROR_CODE_WADO_NAME: &str = "ErrorCode";
 
 /// The Wado name of the HTTP fields resource a trailers future carries.
-/// `Trailers` is a newtype over it, so the resource itself is what a component
-/// type points at.
+/// `Trailers` is a newtype over it, so a component type points at the resource.
 pub const FIELDS_WADO_NAME: &str = "Fields";
 
 /// The Wado name of the HTTP response resource a handler result carries.

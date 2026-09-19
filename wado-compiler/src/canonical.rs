@@ -14,9 +14,8 @@ use crate::module_source::ModuleSource;
 /// A Component Model type some declaration names: the identity every key
 /// compares, beside the CM name the ABI spells.
 ///
-/// The rendering travels with the identity so a mangle needs no table at hand,
-/// and it is never read back into one — a CM name alone puts every package in
-/// one namespace, and its package puts every interface of that package in one.
+/// The CM name is a rendering and never a way back. A CM name alone puts every
+/// package in one namespace, and its package puts every interface in one.
 #[derive(Debug, Clone)]
 pub struct CmDecl {
     def: DefId,
@@ -73,8 +72,7 @@ impl CmDecl {
     }
 
     /// The CM package the declaring interface sits in (`"http"`, `"cli"`, …),
-    /// for a consumer scoping a name resolution to it. A rendering out of the
-    /// identity, never a key.
+    /// for a consumer scoping a name resolution to it.
     #[must_use]
     pub fn cm_package(&self) -> Option<&str> {
         match &self.module {
@@ -162,6 +160,35 @@ impl CmPayloadType {
             Self::Resource(decl) => format!("own<{}>", decl.name_suffix()),
         }
     }
+
+    /// Visit every declaration this payload reaches, each with the kind it is
+    /// reached as.
+    pub fn for_each_decl(&self, f: &mut impl FnMut(&CmDecl, CmDeclKind)) {
+        match self {
+            Self::Named(decl) => f(decl, CmDeclKind::Value),
+            Self::Resource(decl) => f(decl, CmDeclKind::Resource),
+            Self::List(t) | Self::Option(t) => t.for_each_decl(f),
+            Self::Result(ok, err) => {
+                for t in [ok, err].into_iter().flatten() {
+                    t.for_each_decl(f);
+                }
+            }
+            Self::Tuple(elems) => {
+                for e in elems {
+                    e.for_each_decl(f);
+                }
+            }
+            Self::Scalar(_) | Self::String => {}
+        }
+    }
+}
+
+/// How a payload reaches a declaration: as a value type, or as a resource whose
+/// handle the use site wraps in `own<>`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmDeclKind {
+    Value,
+    Resource,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -178,7 +205,7 @@ pub enum CmFuturePayload {
     /// `future<result<option<trailers>, error-code>>`.
     Trailers,
     /// `future<result<_, error-code>>`, by the declaration of the error-code it
-    /// carries — each is a distinct CM type, and two interfaces of one package
+    /// carries. Each is a distinct CM type, and two interfaces of one package may
     /// each declare one.
     Transmission(CmDecl),
     Scalar(CmScalarType),
@@ -252,14 +279,13 @@ impl CanonicalIntrinsic {
         }
     }
 
-    /// The intrinsic a `#[canonical("wasi", "...")]` annotation names.
+    /// The intrinsic a `#[canonical("wasi", "...")]` annotation names, which is
+    /// always a payload-less operation.
     ///
-    /// Not an inverse of [`Self::import_name`], and deliberately cannot be one:
-    /// an annotation states a payload-less operation, and a payload is a
-    /// declaration or a structure the annotation has no way to spell. A name
-    /// carrying one answers `None` — the call site's `Future<T>` / `Stream<T>`
-    /// supplies the payload instead, through [`Self::future_op`] /
-    /// [`Self::stream_op`].
+    /// Not an inverse of [`Self::import_name`] and cannot be one: an annotation
+    /// cannot spell a payload, so a name carrying one answers `None`. The call
+    /// site's `Future<T>` / `Stream<T>` supplies it through
+    /// [`Self::future_op`] / [`Self::stream_op`].
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
             _ if name.starts_with("stream-") => {
@@ -404,8 +430,8 @@ impl CmCallTarget {
 mod intrinsic_name_tests {
     use super::*;
 
-    /// A payload is a declaration or a structure, and an annotation has no way
-    /// to spell either — so a rendered name never travels back into one.
+    /// A payload is a declaration or a structure, and an annotation can spell
+    /// neither, so a rendered name never travels back into one.
     #[test]
     fn a_payload_carrying_name_does_not_parse() {
         for name in [

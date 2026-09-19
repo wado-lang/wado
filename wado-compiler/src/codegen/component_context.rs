@@ -31,12 +31,19 @@ pub enum CmTypeKey {
     Tuple(Vec<CmTypeKey>),
 }
 
+impl CmTypeKey {
+    /// The `own<r>` handle over an already-emitted resource type.
+    pub fn own_of(resource: u32) -> Self {
+        Self::Own(Box::new(Self::Leaf(resource)))
+    }
+}
+
 /// Tracks component-level indices for types, instances, and core functions.
 /// Used alongside wasm-encoder's `ComponentBuilder` to eliminate magic numbers.
 pub struct ComponentModelContext {
     /// Structural component types, keyed by the shape they stand for
     /// (`result-unit`, `stream-u8`, an instance or func type). A declaration is
-    /// never in here — it is keyed by identity in `decl_types`.
+    /// never in here; `decl_types` keys those by identity.
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 

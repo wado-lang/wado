@@ -697,39 +697,45 @@ Nothing is spelled, so nothing can be spelled two ways.
 ## Component Model types are keyed by declaration
 
 `ComponentModelContext` holds two maps, not one. `type_names` keys a structural
-shape — `"result-unit"`, `"stream-u8"`, an instance or a func type — and names no
-declaration. `decl_types` is keyed by `DefId` and holds every outer-scope type
-that stands for one: a resource own-handle, an aliased record, an `error-code`, a
-`response`, a handler's result. A name cannot key those. A CM name alone puts
-every package in one namespace, and its package puts every interface of that
-package in one, so `wasi:sockets/types#error-code` and
-`wasi:sockets/ip-name-lookup#error-code` — unrelated variants — land on one
-entry.
+shape and names no declaration: `"result-unit"`, `"stream-u8"`, an instance type,
+a func type. `decl_types` is keyed by `DefId` and holds every outer-scope type
+that stands for a declaration: a resource own-handle, an aliased record, an
+`error-code`, a `response`, a handler's result.
+
+A name cannot key the second map. A CM name alone puts every package in one
+namespace, and its package puts every interface of that package in one, so
+`wasi:sockets/types#error-code` and `wasi:sockets/ip-name-lookup#error-code` land
+on one entry, and those two are unrelated variants.
 
 Every producer of a declaration-backed type holds the interface it is emitting
-for, so it resolves the declaration through §9's boundary step and binds the
-index to that `DefId`. Where a canonical reaches a declaration no imported
-interface aliased, codegen fails naming it. It does not try a second key: that is
+for, so it resolves the declaration through §9's boundary step and binds the index
+to that `DefId`. Codegen fails, naming the type, where a canonical reaches a
+declaration no imported interface aliased. It does not try a second key: that is
 the shape "What a derivation may not be" forbids, and the miss is a bug in the
-import plan, not an ambiguity to break.
+import plan rather than an ambiguity to break.
+
+One case has no declaration to be keyed by. A resource the program never mentions
+gets no `TypeId`, and the component aliases it anyway, because the instance type's
+own methods reference it. The alias is recorded under the export it was made from,
+which one interface spells once.
 
 ### A canonical intrinsic's payload carries the declaration
 
 `CmPayloadType::Named`, `CmPayloadType::Resource`, `CmStreamPayload::Record`,
 `CmFuturePayload::Transmission` and `CanonicalIntrinsic::ResourceDrop` each hold
 a `CmDecl`: the `DefId`, the declaring module, and the CM name the ABI spells.
-Equality and hashing read the `DefId` alone, so the rendering travels beside the
-identity and never stands in for it — §8's structured identity that renders on
-demand, at the Component Model boundary.
+Equality and hashing read the `DefId` alone. The rendering travels beside the
+identity and never stands in for it, which is §8's rule applied at the Component
+Model boundary.
 
-The name such an intrinsic imports under is one of those renderings:
+The name such an intrinsic imports under is one of those renderings.
 `resource-drop:wasi/filesystem/types#descriptor` says which declaration it drops,
 and a transmission future spells the interface that declares its `error-code`
 rather than the package around it. `CanonicalIntrinsic::from_import_name` is not
 the inverse and cannot be one: a `#[canonical(…)]` annotation names an operation,
-and a name that carries a payload is refused rather than parsed. The payload
-comes from the annotated signature, which the classifier reads at the one point
-that has the declaration.
+and a name that carries a payload is refused rather than parsed. The payload comes
+from the annotated signature, which the classifier reads at the one point that has
+the declaration.
 
 ## Pattern qualifier arguments
 
@@ -740,11 +746,10 @@ written argument is resolved at its own reference site and compared against the
 scrutinee's by `TypeKey`, never by arity and never by spelling.
 
 A position either side leaves abstract is not compared. A generic body writes its
-own type parameter where the scrutinee carries a concrete type —
-`if let Maybe<T>::Just(v) = m` inside `unwrap_or<T>` — which is ordinary code,
-and comparing there would reject it. This follows from §6 rather than softening
-it: a `TypeParam` names no instantiation, so there is nothing for the scrutinee's
-argument to disagree with.
+own type parameter where the scrutinee carries a concrete type, as
+`unwrap_or<T>`'s `if let Maybe<T>::Just(v) = m` does, and that is ordinary code.
+This follows from §6 rather than softening it: a `TypeParam` names no
+instantiation, so the scrutinee's argument has nothing to disagree with.
 
 Fixtures: `pattern_qualifier_type_args_read_error.wado`,
 `pattern_qualifier_type_param_arg.wado`.

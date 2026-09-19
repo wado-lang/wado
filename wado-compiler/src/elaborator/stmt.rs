@@ -861,7 +861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|def| chain_defs.contains(&def))
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
-        // writes must be the scrutinee's — and a type declaring none takes none.
+        // writes must be the scrutinee's, and a type declaring none takes none.
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
@@ -906,9 +906,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether one written qualifier argument is the scrutinee's at that
     /// position.
     ///
-    /// A position either side leaves abstract is not compared: a generic body's
-    /// qualifier writes the body's own parameter where the monomorphized
-    /// scrutinee already carries a concrete type, which is ordinary code.
+    /// A position either side leaves abstract is not compared. A generic body
+    /// writes its own parameter where the scrutinee carries a concrete type,
+    /// which is ordinary code.
     fn qualifier_arg_agrees(&mut self, written: &Type, scrutinee: TypeId) -> bool {
         let resolved = self.resolve_type(written);
         let tt = self.tysys.type_table.borrow();
