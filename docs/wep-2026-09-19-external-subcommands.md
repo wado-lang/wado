@@ -89,3 +89,6 @@ unknown command does.
 - Nothing distinguishes a `wado-<name>` written for this mechanism from any
   other file on `PATH` that happens to be named that way. cargo has the same
   gap, and closing it means a marker the child answers before it runs.
+
+Neither gap is a hole in the mechanism's safety, and what a protocol would buy
+instead is [Subcommand Plugin Forms](./wep-2026-09-19-subcommand-plugin-forms.md).

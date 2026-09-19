@@ -191,3 +191,4 @@ omission goes in Decision.
 - [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
+- [Subcommand Plugin Forms](./wep-2026-09-19-subcommand-plugin-forms.md)
