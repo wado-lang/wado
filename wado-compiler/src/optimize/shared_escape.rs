@@ -153,8 +153,13 @@ impl<'a> SharedEscape<'a> {
         let mut locals: IndexSet<u32> = IndexSet::default();
         if let Slot::Param(id, pos) = slot
             && id.index() == func_idx
-            && let Some(param) = func.params.get(*pos)
         {
+            // A position this body declares no parameter for is an argument
+            // the walk cannot name, and an argument it cannot name is one
+            // whose writes it cannot see.
+            let Some(param) = func.params.get(*pos) else {
+                return false;
+            };
             locals.insert(param.local_index);
         }
         if locals.is_empty() {
@@ -298,8 +303,8 @@ impl<'a> SharedEscape<'a> {
         }
     }
 
-    /// Whether a bodyless callee leaves the argument at `pos` where the caller
-    /// put it: it neither writes through it nor keeps it past the call.
+    /// Whether a bodyless callee leaves the argument at `pos` and everything it
+    /// holds where the caller put them.
     ///
     /// Only `core:builtin` answers. `#[retain(...)]` is already what the
     /// value-copy plan trusts there, so a clause missing from that file is a
@@ -313,9 +318,18 @@ impl<'a> SharedEscape<'a> {
             return false;
         }
         let reference = FunctionRef::from_resolved(callee, callee.module_source.clone());
-        self.project
-            .builtin_declarations
-            .reads_param(&reference, pos)
+        let declarations = &self.project.builtin_declarations;
+        // `#[retain(elements_of = p)]` leaves `p` alone and re-homes what `p`
+        // holds — into another parameter, or into an owned result. Either lands
+        // the elements under a name this walk never sees, so a write through
+        // that name would reach the shared object's contents unobserved.
+        if declarations
+            .retain_specs(&reference)
+            .any(|r| r.source == pos && r.elements)
+        {
+            return false;
+        }
+        declarations.reads_param(&reference, pos)
     }
 }
 
@@ -434,11 +448,18 @@ impl Taint<'_> {
         }
     }
 
+    /// Whether anything under `node` is tainted. The walk visits skeleton nodes,
+    /// which a promoted operand is not, so each node's operands are read too.
     fn subtree_tainted(&self, node: NodeRef) -> bool {
         self.body
-            .walk_nodes_under::<()>(node, |c| match c {
-                NodeRef::Expr(e) if self.expr(e) => ControlFlow::Break(()),
-                _ => ControlFlow::Continue(true),
+            .walk_nodes_under::<()>(node, |c| {
+                let mut hit = matches!(c, NodeRef::Expr(e) if self.expr(e));
+                self.body.for_each_operand(c, |op| hit |= self.operand(op));
+                if hit {
+                    ControlFlow::Break(())
+                } else {
+                    ControlFlow::Continue(true)
+                }
             })
             .is_some()
     }

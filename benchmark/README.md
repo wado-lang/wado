@@ -43,8 +43,9 @@ Infer — 24 samples of the forward path alone, no gradients:
 | JavaScript     | 3.71 k tokens/s | 103.504 ms | 1.13x   |
 | **Wado**       | 3.68 k tokens/s | 104.362 ms | 1.14x   |
 
-Wado trails both reference arms, and the gap to Rust is wider on training than
-on inference. Training spends most of its time in the backward pass, which
+Wado beats JavaScript on training and ties it on inference. It trails Rust on
+both, and the gap is wider on training. Training spends most of its time in the
+backward pass, which
 sorts the whole graph topologically and then walks every edge again. That is pointer chasing over GC
 objects, where Rust's flat `Vec` of indices is at its strongest. Inference
 never builds that traversal.

@@ -1,0 +1,42 @@
+// `shared_escape` must refuse a constant a callee stashes when anything in the
+// program writes through where it landed.
+//
+// `stash` puts its parameter in `Holder.data`, so the callee-parameter gate in
+// `const_object_globalization` cannot clear it and `shared_escape` is asked
+// instead. The answer must be no: `run` writes `h.data[0]`, and one shared
+// array behind every call would carry the first iteration's store into the
+// next.
+//
+// The assertion is the program's own output rather than a WIR pattern. A wrong
+// share is a wrong answer here, not just a different shape.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<f64>,
+}
+
+#[inline(never)]
+fn stash(xs: List<f64>) -> Holder {
+    return Holder { data: xs };
+}
+
+export fn run() with Stdout {
+    let mut total = 0.0;
+    for let _i of 0..<3 {
+        let mut h = stash([1.0, 1.0]);
+        // Opaque, so CTFE cannot fold the loop away and decide this by
+        // arithmetic instead of by the store.
+        let i = builtin::black_box(0);
+        h.data[i] = h.data[i] + 1.0;
+        total = total + h.data[i];
+    }
+    // Each iteration starts from a fresh [1.0, 1.0], so each contributes 2.
+    // Sharing one array would give 2 + 3 + 4 = 9.
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n"
+}

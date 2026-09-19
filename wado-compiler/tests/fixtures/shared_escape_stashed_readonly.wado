@@ -1,0 +1,38 @@
+// `shared_escape` clears a constant a callee stashes when nothing in the
+// program writes through where it landed.
+//
+// The sibling of `shared_escape_stashed_write.wado`: same shape, no store. The
+// callee-parameter gate still refuses — `stash` puts the argument in a field
+// rather than only reading it — so the hoist here is `shared_escape`'s doing
+// and nothing else's. This is the case the pass exists for, and the one
+// microgpt's `[1.0, 1.0]` takes.
+
+use { println, Stdout } from "core:cli";
+
+struct Holder {
+    data: List<f64>,
+}
+
+#[inline(never)]
+fn stash(xs: List<f64>) -> Holder {
+    return Holder { data: xs };
+}
+
+export fn run() with Stdout {
+    let mut total = 0.0;
+    for let _i of 0..<3 {
+        let h = stash([1.0, 1.0]);
+        // Opaque, so CTFE cannot fold the loop away and leave nothing to hoist.
+        let i = builtin::black_box(0);
+        total = total + h.data[i] + h.data[1];
+    }
+    println(`${total}`);
+}
+
+__DATA__
+{
+    "stdout": "6\n",
+    "wir_expect:O2": [
+        "global:shared_escape_stashed_readonly.wado::$const_obj_{}"
+    ]
+}
