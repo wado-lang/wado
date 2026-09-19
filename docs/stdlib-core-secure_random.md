@@ -19,6 +19,14 @@ with Random => &mut rng do {
 };
 ```
 
+## Functions
+
+### `pub fn seed() -> Seed with Random`
+
+Draw a `core:prng` seed from the host's entropy. The one crossing from
+unpredictable randomness into a fast reproducible stream, and the only
+`Random` a program that seeds once has to declare.
+
 ## Structs
 
 ### `pub struct BufferedRandom`

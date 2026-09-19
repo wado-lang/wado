@@ -1,8 +1,9 @@
 //! Multi-value return ABI classification: which aggregate-returning functions
 //! take the multi-value Wasm ABI, one result per field, instead of a heap
 //! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
-//! fresh literals, and every call site binds it as `let $tmp = Call(f)` whose
-//! only uses are field accesses. The one mutation is `return_abi`.
+//! fresh literals. A call site that reads fields is lowered off the results; one
+//! that takes the whole result rebuilds it from them, so it costs itself rather
+//! than the callee's ABI. The one mutation is `return_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
@@ -177,12 +178,14 @@ fn refute_candidates(
             continue;
         };
         let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
+        let is_candidate = func.id.is_some_and(|id| candidate_ids.contains_key(&id));
         validate_uses_in_block(
             body,
             body.root,
             &candidate_ids,
             candidates,
             passes_through,
+            is_candidate,
             &mut invalid,
             false,
         );
@@ -195,6 +198,7 @@ fn refute_candidates(
             &candidate_ids,
             candidates,
             None,
+            false,
             &mut invalid,
             true,
         );
@@ -556,6 +560,7 @@ fn validate_uses_in_block(
     candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     passes_through: Option<TypeId>,
+    is_candidate: bool,
     invalid: &mut IndexSet<usize>,
     yields_value: bool,
 ) {
@@ -565,7 +570,9 @@ fn validate_uses_in_block(
         candidate_ids,
         candidates,
         passes_through,
+        is_candidate,
         settled: &settled,
+        under_multi_value_return: false,
     };
     let stmts = body.blocks[block].stmts.clone();
     for (i, &stmt) in stmts.iter().enumerate() {
@@ -583,9 +590,17 @@ struct UseCx<'a> {
     /// which a bare `Call` needs no `let` to bind it, because the results go
     /// straight out as our own.
     passes_through: Option<TypeId>,
+    /// Whether this body's own function is a candidate, so `wir_build` will
+    /// lower its return value with the N results accounted for.
+    is_candidate: bool,
     /// Locals bound once and never assigned, so a `let mut` over one of them
     /// binds a call result as safely as a plain `let`.
     settled: &'a IndexSet<u32>,
+    /// Set inside the return value of a function that itself takes this ABI.
+    /// `wir_build` lowers that whole subtree with the results accounted for, so
+    /// a nested call there cannot rebuild its aggregate the way one anywhere
+    /// else does — it is the one position that still refutes a candidate.
+    under_multi_value_return: bool,
 }
 
 /// `discarded` says the statement's value goes nowhere — it is not the last
@@ -652,6 +667,10 @@ fn validate_stmt(
             // leaves its N results on the stack and they are ours, so the call
             // needs no `let` to bind.
             if let Some(ours) = cx.passes_through {
+                let cx = &UseCx {
+                    under_multi_value_return: cx.is_candidate,
+                    ..*cx
+                };
                 validate_tail_return(body, e, ours, cx, invalid, tracked);
                 return;
             }
@@ -844,13 +863,20 @@ fn walk_expr_for_uses(
             }
             walk_expr_for_uses_operand(body, source, cx, invalid, tracked);
         }
+        // A read of the whole binding, not of a field. The split locals hold
+        // the fields, and a struct built back from them would be a copy: a
+        // mutation through it would not reach the next read. So this one still
+        // refutes, unlike a whole result read straight off a call, which is a
+        // fresh literal the callee built and nothing else holds.
         ExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);
             }
         }
         ExprKind::Call { func_id, args, .. } => {
-            if let Some(&candidate_idx) = cx.candidate_ids.get(func_id) {
+            if cx.under_multi_value_return
+                && let Some(&candidate_idx) = cx.candidate_ids.get(func_id)
+            {
                 invalid.insert(candidate_idx);
             }
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();

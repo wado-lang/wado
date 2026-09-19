@@ -1,0 +1,51 @@
+// A trait whose default methods name items only this module has: a private
+// global, a private function, and a second trait carried as a bound whose
+// associated type one of them returns.
+pub trait Source with () {
+    fn next(&mut self) -> i32;
+
+    fn pick<P: Pick>(&mut self, p: P) -> P::Value {
+        return p.take(self);
+    }
+
+    fn scaled(&mut self) -> i32 {
+        return scale(self.next());
+    }
+
+    fn tallied(&mut self) -> i32 {
+        let tally: Tally = { total: 0 };
+        return tally.plus(self.next()).plus(self.next()).total;
+    }
+}
+
+pub trait Pick with () {
+    type Value;
+
+    fn take<S: Source>(&self, source: &mut S) -> Self::Value;
+}
+
+struct Tally {
+    total: i32,
+}
+
+impl Tally {
+    fn plus(&self, value: i32) -> Tally {
+        return Tally { total: self.total + value };
+    }
+}
+
+global FACTOR: i32 = 3;
+
+fn scale(value: i32) -> i32 {
+    return value * FACTOR;
+}
+
+pub struct Doubled {}
+
+impl Pick for Doubled {
+    type Value = i32;
+
+    fn take<S: Source>(&self, source: &mut S) -> i32 {
+        return source.next() * 2;
+    }
+}

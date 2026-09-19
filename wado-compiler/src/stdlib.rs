@@ -84,6 +84,7 @@ stdlib_table! {
     "core:url" => "core/url.wado",
     "core:router" => "core/router.wado",
     "core:digest" => "core/digest.wado",
+    "core:prng" => "core/prng.wado",
     "core:secure_random" => "core/secure_random.wado",
     "core:uuid" => "core/uuid.wado",
     "core:icu" => "core/icu.wado",

@@ -20,6 +20,7 @@ use crate::name::{
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_value_graph::{OpaqueSource, ValueId};
 use crate::optimize::multi_value_return::block_tail_call;
+use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WirAbstractHeapType, WirFuncId, WirLocals, WirMeta,
@@ -908,6 +909,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     local_counter: 0,
                     resolved_local_names,
                     multi_value_split_locals: IndexMap::default(),
+                    settled_locals: settled_locals(body),
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
                 };
@@ -960,6 +962,10 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// instead of `StructGet($tmp, name)`, which would panic at codegen —
     /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
+    /// Locals bound once and never assigned again. Only one of those may be
+    /// split: a second definition would `LocalSet` a base local the split never
+    /// declared.
+    settled_locals: IndexSet<u32>,
     /// Set while lowering a call whose N results have a taker: the split locals
     /// of a `let` bind, the wildcards of a discard, or the enclosing
     /// `ReturnAbi::MultiValue` return that passes them straight through. The
@@ -1066,6 +1072,51 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
+    /// Rebuild the aggregate a multi-value call promised, for a site that takes
+    /// the whole value rather than its fields. The call leaves its N results on
+    /// the stack, so they bind to temporaries and read back into the struct.
+    ///
+    /// Without this a single such site would cost the ABI to every other site,
+    /// since the classifier can only decide a function's return ABI once.
+    fn rebuild_multi_value_result(
+        &mut self,
+        call: WirInstr,
+        result_type: TypeId,
+        fields: &[(String, TypeId)],
+    ) -> WirInstr {
+        let struct_type = self.ref_type_id(result_type);
+        let mut instrs = Vec::with_capacity(fields.len() + 2);
+        let mut reads = Vec::with_capacity(fields.len());
+        let mut locals = Vec::with_capacity(fields.len());
+        for (field_name, field_type) in fields {
+            let name = self.fresh_local(&format!("$mv_{field_name}"));
+            let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
+            instrs.push(WirInstr::DeclareLocal {
+                name: name.clone(),
+                ty: ty.clone(),
+            });
+            reads.push(WirInstr::LocalGet {
+                name: name.clone(),
+                result_ty: ty,
+            });
+            locals.push(Some(name));
+        }
+        instrs.push(WirInstr::MultiValueLocalBind {
+            instr: Box::new(call),
+            locals,
+        });
+        instrs.push(self.struct_new(struct_type, reads));
+        WirInstr::Seq(instrs)
+    }
+
+    /// The per-field result types a multi-value callee returns, in field order.
+    fn multi_value_result_fields(&self, func: &nir::FunctionRef) -> Option<Vec<(String, TypeId)>> {
+        self.ctx
+            .multi_value_return_funcs
+            .get(&(func.name.clone(), func.module_source.clone()))
+            .cloned()
+    }
+
     /// Detect `let local = Call(f)` where `f` has
     /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
     /// locals instead of a single `LocalSet`. Returns `Some` if the
@@ -1083,6 +1134,9 @@ impl FunctionTranslator<'_, '_> {
         // shapes the two accept cannot drift apart: anything it declines falls
         // through to a regular `LocalSet`, which cannot bind N results into one
         // local.
+        if !self.settled_locals.contains(&local_index) {
+            return None;
+        }
         let mut prefix: Vec<StmtId> = Vec::new();
         let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
         let func = self.callee_descriptor(func_id);
@@ -1131,6 +1185,17 @@ impl FunctionTranslator<'_, '_> {
     /// binding or dropping them, so a call inside it may leave N on the stack.
     fn take_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         let outer = std::mem::replace(&mut self.multi_value_results_taken, true);
+        let out = f(self);
+        self.multi_value_results_taken = outer;
+        out
+    }
+
+    /// Lower `f` with no taker for a multi-value result. The taker a `let`, a
+    /// discard or a pass-through return installs is for the call itself, never
+    /// for what the call is passed: an argument is an ordinary value position,
+    /// and a multi-value call there rebuilds its aggregate like any other.
+    fn without_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = std::mem::replace(&mut self.multi_value_results_taken, false);
         let out = f(self);
         self.multi_value_results_taken = outer;
         out
@@ -2404,28 +2469,35 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                debug_assert!(
-                    self.multi_value_results_taken || !self.callee_returns_multi_value(func),
-                    "[WIR] multi-value call to {} lowered as an ordinary call: the shapes \
-                     `optimize::multi_value_return` admits — a `let` bind, a discarded \
-                     statement, a pass-through return — are lowered before this",
-                    func.name
-                );
+                // A multi-value callee whose results nothing here is binding:
+                // the value is wanted whole, so the N results are rebuilt into
+                // the aggregate rather than costing the callee its ABI.
+                let rebuild = (!self.multi_value_results_taken)
+                    .then(|| self.multi_value_result_fields(func))
+                    .flatten();
 
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);
+                let (prelude, translated_args) =
+                    self.without_multi_value_results(|t| t.translate_args_erasing_unit(&ordered));
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     let call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
                     };
-                    self.wrap_call_with_prelude(
-                        prelude,
-                        call,
-                        expr.type_id,
-                        self.callee_returns_multi_value(func),
-                    )
+                    let result_type = expr.type_id;
+                    match rebuild {
+                        Some(fields) => {
+                            let whole = self.rebuild_multi_value_result(call, result_type, &fields);
+                            self.wrap_call_with_prelude(prelude, whole, result_type, false)
+                        }
+                        None => self.wrap_call_with_prelude(
+                            prelude,
+                            call,
+                            result_type,
+                            self.callee_returns_multi_value(func),
+                        ),
+                    }
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(

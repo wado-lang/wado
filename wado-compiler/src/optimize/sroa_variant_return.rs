@@ -1468,7 +1468,7 @@ fn bound_temps(
 /// retypes the local and every read of it, is exact on it. A local with a
 /// second definition is not: the pooled `$hfs_call_*` temps take one index for
 /// two live bindings, and retyping the index would retype both.
-pub(super) fn settled_locals(body: &Body) -> IndexSet<u32> {
+pub(crate) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
     let mut reassigned: IndexSet<u32> = IndexSet::default();
     collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);

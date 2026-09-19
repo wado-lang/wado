@@ -45,7 +45,7 @@ mod scalar_forward;
 mod select_lowering;
 mod sroa;
 mod sroa_param;
-mod sroa_variant_return;
+pub(crate) mod sroa_variant_return;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
