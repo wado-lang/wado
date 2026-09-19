@@ -25,11 +25,13 @@ use super::arena_query::{
 use crate::ast::Visibility;
 use crate::name::{CONST_OBJ_GLOBAL_PREFIX, MODULE_INIT_FUNCTION, MODULES_INIT_FUNCTION};
 use crate::nir::{ArrayElementAccess, FuncId, NirParam, NirStruct};
-use crate::nir_arena::{ArenaCallArg, PatId, PatKind};
+use crate::nir_arena::ArenaCallArg;
 use crate::nir_value_graph::builder::is_const_value;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::niri::is_ctfe_eligible;
-use crate::optimize::arena_query::projected_const_field;
+use crate::optimize::arena_query::{
+    collect_pattern_bindings, holds_reference, projected_const_field,
+};
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::multi_value_return::aggregate_field_info;
 use crate::optimize::shared_escape::SharedEscape;
@@ -1332,21 +1334,21 @@ fn contains_aggregate_operand(body: &Body, op: Operand, gate: &Gate<'_>) -> bool
         .is_some_and(|e| contains_aggregate(body, e, gate))
 }
 
-/// True when `expr` contains at least one aggregate constructor.
+/// True when `expr` contains at least one aggregate constructor that owns heap
+/// storage.
 ///
-/// The gate exists to skip scalars, which are cheaper to rematerialize than to
-/// load from a global. A hoistable pure call returning a reference type builds
-/// a heap object just as a literal constructor does — the constructor is simply
-/// in the callee — so it counts too.
+/// The gate exists to skip what is cheaper to rematerialize than to load from a
+/// global: a scalar, and equally a constructor of scalars — `i128` is two of
+/// them, and `multi_value_return` already hands such a value back in Wasm
+/// multi-values, allocating nothing. A hoistable pure call answers the same way,
+/// its constructor simply being in the callee.
 fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
+    let owns_storage = || {
+        gate.is_reference_type(body.exprs[expr].type_id)
+            && gate.owns_heap_storage(body.exprs[expr].type_id)
+    };
     match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, .. }
-            if gate.is_hoistable_pure(*func_id)
-                && gate.is_reference_type(body.exprs[expr].type_id)
-                && gate.owns_heap_storage(body.exprs[expr].type_id) =>
-        {
-            true
-        }
+        ExprKind::Call { func_id, .. } if gate.is_hoistable_pure(*func_id) => owns_storage(),
         // A packed `Array<u8>` allocates and fills a GC array exactly as an
         // `ArrayLiteral` does — it is the repr a `String` / `List<u8>` literal
         // leaves behind once its aggregate is scalarized away.
@@ -1354,7 +1356,7 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         | ExprKind::StructLiteral { .. }
         | ExprKind::TupleLiteral { .. }
         | ExprKind::ArrayLiteral { .. }
-        | ExprKind::VariantConstruct { .. } => true,
+        | ExprKind::VariantConstruct { .. } => owns_storage(),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
             contains_aggregate_operand(body, *inner, gate)
         }
@@ -1417,10 +1419,7 @@ struct Gate<'a> {
 
 impl Gate<'_> {
     fn is_reference_type(&self, ty: TypeId) -> bool {
-        !matches!(
-            self.type_table.borrow().get(ty),
-            ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
-        )
+        holds_reference(&self.type_table.borrow(), ty)
     }
 
     /// Whether a value of `ty` owns heap storage worth building only once.
@@ -1692,10 +1691,7 @@ impl Gate<'_> {
             return true;
         };
         let return_type = f.borrow().return_type;
-        if !matches!(
-            self.type_table.borrow().get(return_type),
-            ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
-        ) {
+        if self.is_reference_type(return_type) {
             return true;
         }
         let tt = self.type_table.borrow();
@@ -1706,10 +1702,7 @@ impl Gate<'_> {
                 ty = *inner;
                 continue;
             }
-            if matches!(
-                resolved,
-                ResolvedType::Primitive(_) | ResolvedType::Unit | ResolvedType::Never
-            ) {
+            if !holds_reference(&tt, ty) {
                 return false;
             }
             let ResolvedType::BuiltinArray(elem) = resolved else {
@@ -1742,6 +1735,9 @@ impl Gate<'_> {
             return false;
         };
         let f = f.borrow();
+        // A bodyless declaration keeps no parameters past lowering, so there is
+        // nothing here to walk or to read a type from. `shared_escape` answers
+        // for one, from what the declaration stated.
         let Some(param) = f.params.get(param_pos) else {
             return false;
         };
@@ -1752,10 +1748,7 @@ impl Gate<'_> {
             return false;
         }
         let Some(body) = f.body.as_ref() else {
-            // Nothing to walk: only the builtins that state a read-only
-            // parameter on the reference itself pass, everything else fails.
-            return nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-                .reads_param_only(param_pos);
+            return false;
         };
         is_readonly_body(body, param.local_index, self)
             && !param_storage_escapes(body, param.local_index, self)
@@ -2062,18 +2055,6 @@ fn block_tail_delivers(body: &Body, block: BlockId, roots: &[u32], gate: &Gate<'
             StmtKind::Expr(op) => delivers_projection_operand(body, *op, roots, gate),
             _ => false,
         })
-}
-
-/// Every local a pattern binds, appended to `out` if not already there.
-fn collect_pattern_bindings(body: &Body, pattern: PatId, out: &mut Vec<u32>) {
-    body.for_each_live_node_under(NodeRef::Pat(pattern), |node| {
-        if let NodeRef::Pat(p) = node
-            && let PatKind::Binding { local_index, .. } = &body.pats[p].kind
-            && !out.contains(local_index)
-        {
-            out.push(*local_index);
-        }
-    });
 }
 
 /// Every local whose storage evaluating `op` can produce: the root of each
