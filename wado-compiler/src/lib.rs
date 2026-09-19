@@ -226,8 +226,10 @@ fn bail_with<H: compiler_host::CompilerHost>(
 /// The program's own modules that bind a CM import. The stdlib's bindings are
 /// in the shared registry and a component dependency's are folded in by
 /// `fold_component_interfaces`, so only these are left to register.
-fn user_cm_modules(sem: &semantics::Semantics) -> Vec<(ModuleSource, ast::Module)> {
-    sem.modules
+fn user_cm_modules(
+    modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Vec<(&ModuleSource, &ast::Module)> {
+    modules
         .iter()
         .filter(|(source, module)| {
             !source.is_core()
@@ -235,7 +237,6 @@ fn user_cm_modules(sem: &semantics::Semantics) -> Vec<(ModuleSource, ast::Module
                 && !source.is_wasm_asset()
                 && declares_cm_binding(module)
         })
-        .map(|(source, module)| (source.clone(), module.clone()))
         .collect()
 }
 
@@ -244,7 +245,7 @@ fn user_cm_modules(sem: &semantics::Semantics) -> Vec<(ModuleSource, ast::Module
 /// never saw these declarations reports the call unresolved instead.
 fn register_user_cm_modules<H: compiler_host::CompilerHost>(
     registry: &mut Arc<CmInterfaceRegistry>,
-    modules: &[(ModuleSource, ast::Module)],
+    modules: &[(&ModuleSource, &ast::Module)],
     logger: &Logger<'_, H>,
 ) -> Result<(), Bail> {
     if modules.is_empty() {
@@ -1530,8 +1531,6 @@ fn compile_after_load<H: CompilerHost>(
         .as_ref()
         .and_then(|_| sem.modules.get(&sem.entry_module_source).cloned());
 
-    let user_cm_modules = user_cm_modules(&sem);
-
     let semantics::Semantics {
         entry_module_source,
         symbols,
@@ -1539,8 +1538,10 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         liveness,
+        modules,
         ..
     } = sem;
+    let user_cm_modules = user_cm_modules(&modules);
 
     // `is_complete()` was checked above, so the full pipeline ran and `state`
     // is populated.
@@ -2076,7 +2077,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
     let sem = semantics::semantics_with_logger(load_result, &logger, true);
-    let user_cm_modules = user_cm_modules(&sem);
+    let user_cm_modules = user_cm_modules(&sem.modules);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();

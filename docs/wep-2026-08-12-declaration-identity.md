@@ -446,8 +446,8 @@ the first or trip a uniqueness check written for a different failure.
 A module declaring an interface the standard library does not bundle is the
 ordinary case, and the one the `#[cm(…)]` bindings exist for. The rule bites
 where a module declares into `wasi:*` or `core:*`, which the standard library
-already owns, and it forces one other case: a module's types for an interface
-all live in that one module. Splitting them across files is rejected, because
+already owns. It also requires that a module's types for one interface stay in
+that module. Splitting them across files is rejected, because
 the second file is a second declaring module. The `interface` whose operations
 name those types is free to sit elsewhere, since it declares no type of its own.
 

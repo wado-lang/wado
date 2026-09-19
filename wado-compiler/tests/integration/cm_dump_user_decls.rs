@@ -1,7 +1,6 @@
-//! `wado dump` runs the same phases as `wado compile`, so a user module's
-//! `#[cm]` declarations must be registered for it too. Registered on the
-//! compile path alone, a dump of a program `compile` accepts panicked in WIR
-//! with the binding's call unresolved.
+//! `wado dump` runs the same phases as `wado compile`, so it registers a user
+//! module's `#[cm]` declarations too. Either entry point missing them reaches
+//! WIR with the binding's call unresolved.
 
 use crate::common::{InMemoryHost, block_on};
 use wado_compiler::{OptLevel, dump_with_host_and_world};

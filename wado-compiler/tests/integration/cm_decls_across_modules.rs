@@ -1,7 +1,5 @@
-//! A user module's `#[cm]` declarations need not all sit in one file. What
-//! decides whether a module is scanned read only `interface` items, so a module
-//! holding just the resources and records was skipped and the interface using
-//! them reached WIR unresolved.
+//! A user module's `#[cm]` declarations need not sit beside the `interface`
+//! naming them: a module holding only resources and records is scanned too.
 
 use std::path::Path;
 

@@ -979,7 +979,6 @@ fn run_normal_test(
         });
         verify_result(&result, spec, test_id, opt_level);
     }
-
 }
 
 /// Check the fixture's `wir_expect:Ox` / `wir_not_expect:Ox` patterns against the
@@ -1131,15 +1130,13 @@ fn assert_wat_lines(wasm: &[u8], specs: &[WatLineSpec], test_id: &str) {
             .map(str::trim)
             .filter(|line| spec.contains.iter().all(|needle| line.contains(needle)))
             .collect();
-        let wanted = spec.count.unwrap_or(1);
-        let ok = match spec.count {
-            Some(exact) => matched.len() == exact,
-            None => !matched.is_empty(),
+        let (ok, wanted) = match spec.count {
+            Some(exact) => (matched.len() == exact, exact.to_string()),
+            None => (!matched.is_empty(), "1 or more".to_string()),
         };
         assert!(
             ok,
-            "[{test_id}] expected {wanted}{} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
-            if spec.count.is_some() { "" } else { " or more" },
+            "[{test_id}] expected {wanted} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
             spec.contains,
             matched.len(),
         );

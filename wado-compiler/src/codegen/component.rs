@@ -2863,10 +2863,8 @@ fn error_code_def(project: &NirPackage, interface_fq: &str) -> Option<DefId> {
     cm_decl_def(project, interface_fq, ERROR_CODE_WADO_NAME)
 }
 
-/// The outer type index for a CM type an interface exports: its declaration's
-/// where an alias bound one, else `package_key`. An enum or variant must go by
-/// declaration, since the package key holds one type per package and two
-/// interfaces of a package can declare the same CM name.
+/// The outer type index for a CM type an interface exports: the one bound to its
+/// declaration, else `package_key`, which cannot tell two interfaces apart.
 fn decl_or_package_type_idx(
     ctx: &ComponentModelContext,
     project: &NirPackage,

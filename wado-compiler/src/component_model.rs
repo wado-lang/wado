@@ -1169,19 +1169,7 @@ fn find_unique_source_in<'a, V>(
     map: &'a IndexMap<(String, String), V>,
     name: &str,
 ) -> Option<&'a str> {
-    let mut found: Option<&str> = None;
-    for ((src, n), _) in map {
-        if n != name {
-            continue;
-        }
-        if found.is_some() {
-            return None;
-        }
-        if !src.is_empty() {
-            found = Some(src.as_str());
-        }
-    }
-    found
+    find_unique_source_in_set(map, name, &|src| !src.is_empty())
 }
 
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
