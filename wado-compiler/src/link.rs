@@ -28,22 +28,34 @@ fn record_declaration(
         return;
     }
     let retains: Vec<RetainSpec<usize>> = func.retains_by_position().collect();
-    if func.declared_return_convention.is_some() || !retains.is_empty() {
-        // A call re-homes a method's key to the impl block's module, so only a
-        // free function is found again under the module declaring it.
+    // A call re-homes a method's key to the impl block's module, so only a free
+    // function is found again under the module declaring it. A reader takes the
+    // absent method as one it knows nothing about.
+    if func.method_info.is_some() {
         assert!(
-            func.method_info.is_none(),
+            func.declared_return_convention.is_none() && retains.is_empty(),
             "`{}` declares storage as a method; key the snapshot by `DefId` first",
             func.name
         );
-        out.insert(
-            (module_source.clone(), declaration_key(func)),
-            BuiltinDeclaration {
-                returns: func.declared_return_convention,
-                retains,
-            },
-        );
+        return;
     }
+    // Every bodyless free function is snapshot, not only one carrying an
+    // attribute: a reader asking what this call does with an argument must be
+    // able to tell "it says it keeps nothing" from "nothing here says".
+    out.insert(
+        (module_source.clone(), declaration_key(func)),
+        BuiltinDeclaration {
+            returns: func.declared_return_convention,
+            retains,
+            mut_params: func
+                .params
+                .iter()
+                .enumerate()
+                .filter(|(_, p)| p.is_mut_ref)
+                .map(|(pos, _)| pos)
+                .collect(),
+        },
+    );
 }
 
 /// The name a call resolves a declaration by: the generic one where the call is

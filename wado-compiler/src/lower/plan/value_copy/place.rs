@@ -4,7 +4,6 @@
 
 use super::funcset::{FuncKeyMap, FuncKeySet};
 use super::needs_value_copy;
-use super::ownership::BuiltinDeclarations;
 use crate::compiler_item::{CompilerItem, CompilerItems};
 use crate::flat_package::FlatPackage;
 use crate::hashmap::IndexMap;
@@ -12,8 +11,8 @@ use crate::lower::plan::value_copy::analyze::{carries_no_storage, returned_value
 use crate::lower::plan::value_copy::callgraph;
 use crate::name::FqTraitName;
 use crate::tir::{
-    FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam, TirPattern, TirStmt,
-    TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
+    BuiltinDeclarations, FunctionRef, ResolvedType, TirExpr, TirExprKind, TirFunction, TirParam,
+    TirPattern, TirStmt, TirStmtKind, TirUnaryOp, TypeId, TypeTable, matches_builtin,
 };
 use crate::tir_visitor::TirRefVisitor;
 
@@ -341,7 +340,7 @@ impl<'a> Resolver<'a> {
             // further in. `Index` is the honest selector: the index is a runtime
             // value, so which component it lands on is not known here.
             TirExprKind::Call { func, args, .. } if func.module_source.is_core_builtin() => {
-                match self.builtins.part_of(func).and_then(|p| args.get(p)) {
+                match self.builtins.part_of(&**func).and_then(|p| args.get(p)) {
                     Some(arg) => self.project(&arg.expr, Selector::Index),
                     // `builtin::select` names no component and still hands one
                     // back, so a storage-carrying result is no value of its own.

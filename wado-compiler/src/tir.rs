@@ -6156,6 +6156,109 @@ pub struct BuiltinDeclaration {
     pub returns: Option<ReturnConvention>,
     /// `#[retain(...)]` — what this call keeps beyond it.
     pub retains: Vec<RetainSpec<usize>>,
+    /// Positions the declaration takes by `&mut`, the only ones it can write
+    /// the caller's storage through. Snapshot here because the bodyless
+    /// declaration keeps no parameters past lowering.
+    pub mut_params: IndexSet<usize>,
+}
+
+/// All a declaration lookup reads of a call. TIR and NIR each carry their own
+/// `FunctionRef`, so the key is spelled out rather than taken from either.
+#[derive(Clone, Copy)]
+pub struct DeclarationLookup<'a> {
+    pub module_source: &'a ModuleSource,
+    pub name: &'a str,
+    /// The generic declaration a monomorphized instance came from.
+    pub generic_name: Option<&'a str>,
+}
+
+impl<'a> From<&'a FunctionRef> for DeclarationLookup<'a> {
+    fn from(func: &'a FunctionRef) -> Self {
+        Self {
+            module_source: &func.module_source,
+            name: &func.name,
+            generic_name: func
+                .monomorph_info
+                .as_ref()
+                .map(|m| m.generic_name.as_str()),
+        }
+    }
+}
+
+/// What each body-less declaration stated about storage, resolved from a call.
+/// Link snapshots these before monomorphization drops the generic declarations,
+/// and both the lowering plan and the NIR optimizer read them.
+#[derive(Debug, Clone, Default)]
+pub struct BuiltinDeclarations(IndexMap<(ModuleSource, String), BuiltinDeclaration>);
+
+impl BuiltinDeclarations {
+    pub fn new(declarations: IndexMap<(ModuleSource, String), BuiltinDeclaration>) -> Self {
+        Self(declarations)
+    }
+
+    /// What `call` declared, or `None` where it declared nothing. Keyed by the
+    /// generic name a monomorphized instance came from, which is the name the
+    /// declaration was snapshot under.
+    fn get(&self, call: DeclarationLookup<'_>) -> Option<&BuiltinDeclaration> {
+        let key = |name: &str| (call.module_source.clone(), name.to_string());
+        if let Some(generic) = call.generic_name
+            && let Some(declaration) = self.0.get(&key(generic))
+        {
+            return Some(declaration);
+        }
+        self.0.get(&key(call.name))
+    }
+
+    /// Whether `func` names a body-less declaration that stated a convention or
+    /// a retention — the calls that answer from a declaration rather than from
+    /// the fixpoint.
+    pub fn declares<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
+    }
+
+    /// Whether the call leaves the argument at `pos` where the caller put it:
+    /// it neither writes through it (`&mut`) nor keeps it past the return
+    /// (`#[retain(p)]`). `#[retain(elements_of = p)]` keeps what `p` holds
+    /// rather than `p`, so it leaves the argument object alone.
+    ///
+    /// A call with no snapshot answers `false`. Link takes one for every
+    /// bodyless free function, so the gap is a method, whose key would not be
+    /// this one — never a declaration that simply had nothing to say.
+    pub fn reads_param<'a>(&self, call: impl Into<DeclarationLookup<'a>>, pos: usize) -> bool {
+        self.get(call.into()).is_some_and(|d| {
+            !d.mut_params.contains(&pos)
+                && !d.retains.iter().any(|r| r.source == pos && !r.elements)
+        })
+    }
+
+    /// The parameter a declaration's result is a component of, for a call that
+    /// declared `#[result(part_of = p)]`.
+    pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {
+        match self.get(call.into())?.returns? {
+            ReturnConvention::PartOf(param) => Some(param),
+            ReturnConvention::Owned => None,
+        }
+    }
+
+    /// The parameters a declaration keeps beyond the call, from `#[retain(p)]`.
+    pub fn retained_params<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = usize> + '_ {
+        self.retain_specs(call).map(|r| r.source)
+    }
+
+    /// Every `#[retain(...)]` clause a declaration carries, destinations
+    /// included.
+    pub fn retain_specs<'a>(
+        &self,
+        call: impl Into<DeclarationLookup<'a>>,
+    ) -> impl Iterator<Item = &RetainSpec<usize>> + '_ {
+        self.get(call.into())
+            .into_iter()
+            .flat_map(|d| d.retains.iter())
+    }
 }
 
 /// A body's local frame. Taken and given whole, so a caller moving a body

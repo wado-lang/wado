@@ -24,7 +24,7 @@ use crate::nir::{
     ClosureFunctor, FuncId, FunctionRef, NirEnum, NirFlags, NirFunction, NirGlobal, NirImport,
     NirStruct, NirTest, NirVariantDecl,
 };
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{BuiltinDeclarations, TypeId, TypeTable};
 use crate::wir_build::component_plan::ComponentPlan;
 use crate::world_registry::{self, GENERATOR_HOST_INTERFACE, WorldRegistry};
 
@@ -93,6 +93,9 @@ pub struct NirPackage {
     pub function_method_info: IndexMap<(ModuleSource, String), Option<LocalMethodName>>,
     /// Map of module source to wasm module name (from `#![wasm_module("name")]`)
     pub wasm_module_sources: IndexMap<ModuleSource, String>,
+    /// What each bodyless declaration stated about storage. A pass reasoning
+    /// about a builtin call reads this rather than matching on its name.
+    pub builtin_declarations: BuiltinDeclarations,
 
     /// Module name for the output (derived from filename)
     pub module_name: String,
