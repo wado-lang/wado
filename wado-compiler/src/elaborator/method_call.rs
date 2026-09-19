@@ -25,6 +25,7 @@ use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
+use super::util::bound_param_name;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
 use crate::elaborator::call::slot_type_bindings;
@@ -475,16 +476,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // If still not found and receiver is a TypeParam, try trait bounds
         // e.g., T: Ord -> look up cmp() in Ord trait declaration
         if method_info.is_none() {
-            let type_param_name = {
-                let resolved = self.tysys.type_table.borrow().get(base_type_id).clone();
-                if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } =
-                    resolved
-                {
-                    Some(name)
-                } else {
-                    None
-                }
-            };
+            let type_param_name =
+                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
             // Resolved into a local so the probe's borrow ends here: a `let`
             // chain would hold it across the body, which still needs the probe.
             let from_bounds = type_param_name

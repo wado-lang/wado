@@ -21,6 +21,7 @@ use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
 use super::tysys::TypeSystem;
+use super::util::bound_param_name;
 use crate::ast::{AstId, SelfKind};
 use crate::elaborator::sig;
 use crate::elaborator::sig::TraitSig;
@@ -651,6 +652,14 @@ impl TypeSystem {
             return false;
         };
         let wanted = trait_.args();
+        // Where a written argument decides, the answer is the solver's — the
+        // one path that reads arguments (WEP 2026-09-01).
+        if !wanted.is_empty()
+            && let Some(bridge) = self.solver.as_ref()
+            && let Some(answer) = bridge.answer(self, ctx, scope, type_id, trait_)
+        {
+            return answer;
+        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         let result = Self::asking(ctx, type_id, decl, wanted, || {
             self.type_implements_trait_inner(ctx, scope, type_id, &resolved, trait_)
@@ -1357,8 +1366,7 @@ impl TypeSystem {
             return true;
         }
 
-        if let ResolvedType::TypeParam { name, .. } | ResolvedType::TypePack { name, .. } = resolved
-        {
+        if let Some(name) = bound_param_name(resolved) {
             return ctx
                 .trait_ctx
                 .type_param_bounds
@@ -2681,7 +2689,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         );
         let _ = self.emit(TypeError::TraitBoundNotSatisfied {
             type_name,
-            trait_name: trait_name.to_string(),
+            trait_name: bound_as_written(trait_name, trait_),
             param_name: param_name.to_string(),
             reason,
             span,
@@ -3305,6 +3313,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ref_impl_target: None,
         })
     }
+}
+
+/// The bound as the source writes it, so a failure over an argument names the
+/// argument: `Add<i32>` and not the `Add` the type does implement.
+fn bound_as_written(name: &str, trait_: &FqTraitName) -> String {
+    if trait_.args().is_empty() {
+        return name.to_string();
+    }
+    let args: Vec<String> = trait_.args().iter().map(FqTypeName::to_display).collect();
+    format!("{name}<{}>", args.join(", "))
 }
 
 /// Whether the compiler supplies `trait_name`'s operator for the primitive

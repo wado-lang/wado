@@ -299,8 +299,8 @@ fn "simd_basic.wado/run"() with Stdout {
         "core:prelude/fpfmt.wado/$initialize_module"();
         global:simd_basic.wado::$modules_initialized = 1;
     };
-    a = i32x4.splat(10);
-    b = i32x4.splat(20);
+    a = v128.const(792281625327110816715484692490);
+    b = v128.const(1584563250654221633430969384980);
     $v1_2 = i32x4.extract_lane(0, a);
     if @unlikely($v1_2 != 10) {
         cold_path;
@@ -349,8 +349,8 @@ fn "simd_basic.wado/run"() with Stdout {
         "simd_basic.wado/run$cold7"(c, $v1_20);
         unreachable;
     }
-    all_ones = i32x4.splat(-1);
-    zeros = i32x4.splat(0);
+    all_ones = v128.const(-1);
+    zeros = v128.const(0);
     $v1_25 = i32x4.extract_lane(0, local.tee and_result(all_ones v128.and a));
     if @unlikely($v1_25 != 10) {
         cold_path;
@@ -375,8 +375,8 @@ fn "simd_basic.wado/run"() with Stdout {
         "simd_basic.wado/run$cold3"(neg, $v1_34);
         unreachable;
     }
-    fa = f64x2.splat(3.14);
-    fb = f64x2.splat(2);
+    fa = v128.const(85117945477584453503595191395318203679);
+    fb = v128.const(85070591730234615870455337876369440768);
     fsum = fa + fb;
     fprod = fa * fb;
     fdiv = fa / fb;
