@@ -16,6 +16,7 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
     FqTraitName, FqTypeName, MangledName, MethodName, StructName, closure_call_name,
+    multi_value_split_local,
 };
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_value_graph::{OpaqueSource, ValueId};
@@ -87,6 +88,41 @@ fn collect_let_names(body: &Body, names: &mut IndexMap<u32, String>, block: Bloc
             _ => {}
         }
     }
+}
+
+/// The split locals a `ParamAbi::MultiValue` parameter arrives in. The Wasm
+/// parameters carry these names, so a field read on the parameter finds them
+/// through the same map a multi-value call result is bound into, and the body
+/// needs no entry code at all.
+fn split_locals_for_params(
+    ctx: &WirContext<'_>,
+    tir_func: &NirFunction,
+    type_table: &TypeTable,
+    resolved_local_names: &IndexMap<u32, String>,
+) -> IndexMap<u32, IndexMap<String, (String, WirType)>> {
+    let mut out: IndexMap<u32, IndexMap<String, (String, WirType)>> = IndexMap::default();
+    for param in &tir_func.params {
+        let nir::ParamAbi::MultiValue {
+            field_types,
+            field_names,
+        } = &param.param_abi
+        else {
+            continue;
+        };
+        let Some(base) = resolved_local_names.get(&param.local_index) else {
+            continue;
+        };
+        let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
+        for (field_name, &field_type) in field_names.iter().zip(field_types) {
+            let wir_ty = ctx.type_id_to_wir_type(type_table, field_type);
+            split.insert(
+                field_name.clone(),
+                (multi_value_split_local(base, field_name), wir_ty),
+            );
+        }
+        out.insert(param.local_index, split);
+    }
+    out
 }
 
 /// Pre-compute the WIR-side name for every TIR local index, once, so
@@ -895,6 +931,8 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 local_names.entry(key).or_insert_with(|| local.name.clone());
             }
             let resolved_local_names = resolve_local_names(&local_names, &tir_func.params);
+            let param_split_locals =
+                split_locals_for_params(ctx, &tir_func, &type_table, &resolved_local_names);
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
@@ -907,8 +945,8 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
+                    multi_value_split_locals: param_split_locals,
                     resolved_local_names,
-                    multi_value_split_locals: IndexMap::default(),
                     settled_locals: settled_locals(body),
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
@@ -1085,7 +1123,20 @@ impl FunctionTranslator<'_, '_> {
         fields: &[(String, TypeId)],
     ) -> WirInstr {
         let struct_type = self.ref_type_id(result_type);
-        let mut instrs = Vec::with_capacity(fields.len() + 2);
+        let (mut instrs, reads) = self.bind_multi_value_results(call, fields);
+        instrs.push(self.struct_new(struct_type, reads));
+        WirInstr::Seq(instrs)
+    }
+
+    /// Bind the N results a multi-value call leaves on the stack to fresh
+    /// temporaries, and answer the reads of them. What the caller does with the
+    /// reads is what tells a rebuild from a hand-over field by field.
+    fn bind_multi_value_results(
+        &mut self,
+        call: WirInstr,
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let mut instrs = Vec::with_capacity(fields.len() + 1);
         let mut reads = Vec::with_capacity(fields.len());
         let mut locals = Vec::with_capacity(fields.len());
         for (field_name, field_type) in fields {
@@ -1105,8 +1156,93 @@ impl FunctionTranslator<'_, '_> {
             instr: Box::new(call),
             locals,
         });
-        instrs.push(self.struct_new(struct_type, reads));
-        WirInstr::Seq(instrs)
+        (instrs, reads)
+    }
+
+    /// Translate the arguments of a call to `func`, handing a parameter that
+    /// takes the multi-value ABI over one field at a time.
+    ///
+    /// An argument that is itself a multi-value call binds its N results and
+    /// passes those, so the aggregate is never built: that pairing is what the
+    /// two halves of this ABI are for. Anything else is spilled once and read
+    /// field by field, which is the work the callee would have done anyway.
+    fn translate_args_for_callee(
+        &mut self,
+        func: &nir::FunctionRef,
+        ordered: &[Operand],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let Some(positions) = self.multi_value_param_positions(func) else {
+            return self.without_multi_value_results(|t| t.translate_args_erasing_unit(ordered));
+        };
+
+        let mut prelude = Vec::new();
+        let mut call_args = Vec::new();
+        for (i, &op) in ordered.iter().enumerate() {
+            let Some(fields) = positions.get(&i) else {
+                let (p, a) =
+                    self.without_multi_value_results(|t| t.translate_args_erasing_unit(&[op]));
+                prelude.extend(p);
+                call_args.extend(a);
+                continue;
+            };
+            let (p, a) = self.split_argument(op, fields);
+            prelude.extend(p);
+            call_args.extend(a);
+        }
+        (prelude, call_args)
+    }
+
+    /// One argument as N values: bound off a multi-value call, or read off a
+    /// single spill of whatever else it is.
+    fn split_argument(
+        &mut self,
+        op: Operand,
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        if let Some(expr) = op.as_expr()
+            && let ExprKind::Call { func_id, .. } = &self.body.exprs[expr].kind
+        {
+            let callee = self.callee_descriptor(*func_id);
+            if self
+                .multi_value_result_fields(&callee)
+                .is_some_and(|got| got == fields)
+            {
+                let call = self.take_multi_value_results(|t| t.translate_expr(expr));
+                return self.bind_multi_value_results(call, fields);
+            }
+        }
+
+        let ty = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
+        let name = self.fresh_local("$mv_arg");
+        let value = self.without_multi_value_results(|t| t.translate_operand(op));
+        let prelude = declare_and_set_local(name.clone(), ty.clone(), value).to_vec();
+        let struct_type = self.ref_type_id(self.operand_type_id(op));
+        let reads = fields
+            .iter()
+            .map(|(field_name, field_type)| WirInstr::StructGet {
+                type_id: struct_type.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(WirInstr::LocalGet {
+                    name: name.clone(),
+                    result_ty: ty.clone(),
+                }),
+                result_ty: self.ctx.type_id_to_wir_type(self.type_table, *field_type),
+            })
+            .collect();
+        (prelude, reads)
+    }
+
+    /// The parameter positions this callee takes field by field.
+    fn multi_value_param_positions(
+        &self,
+        func: &nir::FunctionRef,
+    ) -> Option<IndexMap<usize, Vec<(String, TypeId)>>> {
+        self.ctx
+            .multi_value_param_funcs
+            .get(&(func.name.clone(), func.module_source.clone()))
+            .cloned()
     }
 
     /// The per-field result types a multi-value callee returns, in field order.
@@ -1148,7 +1284,7 @@ impl FunctionTranslator<'_, '_> {
         let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
         let mut order: Vec<(String, WirType)> = Vec::with_capacity(fields.len());
         for (field_name, result_type) in &fields {
-            let local_name = format!("{base}_mv_{field_name}");
+            let local_name = multi_value_split_local(&base, field_name);
             let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, *result_type);
             split.insert(field_name.clone(), (local_name.clone(), wir_ty.clone()));
             order.push((local_name, wir_ty));
@@ -2477,8 +2613,7 @@ impl FunctionTranslator<'_, '_> {
                     .flatten();
 
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let (prelude, translated_args) =
-                    self.without_multi_value_results(|t| t.translate_args_erasing_unit(&ordered));
+                let (prelude, translated_args) = self.translate_args_for_callee(func, &ordered);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     let call = WirInstr::Call {

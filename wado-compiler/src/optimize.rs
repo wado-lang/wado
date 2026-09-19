@@ -37,6 +37,7 @@ mod loop_version_bce;
 mod match_to_bitset;
 mod match_to_switch;
 mod mod_ref;
+pub(crate) mod multi_value_param;
 pub(crate) mod multi_value_return;
 mod param_spec;
 mod peephole;
@@ -286,6 +287,12 @@ pub fn optimize(
     // other transformation, so the analysis sees the final NIR shape.
     run_pass("nir/multi_value_return", &mut project, profiler, |p| {
         multi_value_return::classify_multi_value_returns(p)
+    });
+
+    // The parameter side of the same ABI, after the return side so a body whose
+    // shape that pass settled is the one this reads.
+    run_pass("nir/multi_value_param", &mut project, profiler, |p| {
+        multi_value_param::classify_multi_value_params(p)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by

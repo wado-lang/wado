@@ -185,6 +185,11 @@ pub struct WirContext<'a> {
     /// declaration order, which the call-site translator uses to build named
     /// split locals without re-deriving the aggregate shape.
     pub multi_value_return_funcs: IndexMap<(String, ModuleSource), Vec<(String, TypeId)>>,
+    /// Which parameter positions of a callee arrive as one Wasm slot per field,
+    /// and the `(field_name, type_id)` of each. Read at call sites to hand the
+    /// argument over field by field. Keyed like `multi_value_return_funcs`.
+    pub multi_value_param_funcs:
+        IndexMap<(String, ModuleSource), IndexMap<usize, Vec<(String, TypeId)>>>,
     /// Unresolved `Type^Trait::method` calls (unsatisfied trait bounds),
     /// collected rather than trapping; the driver reports them and bails.
     pub trait_bound_violations: Vec<TraitBoundViolation>,
@@ -285,6 +290,36 @@ impl<'a> WirContext<'a> {
                 })
                 .collect();
 
+        // The parameter side of the same ABI: which positions a call has to
+        // hand over field by field, and under which names.
+        let mut multi_value_param_funcs: IndexMap<
+            (String, ModuleSource),
+            IndexMap<usize, Vec<(String, TypeId)>>,
+        > = IndexMap::default();
+        for f in &package.functions {
+            let Ok(f) = f.try_borrow() else {
+                continue;
+            };
+            for (param_idx, param) in f.params.iter().enumerate() {
+                let nir::ParamAbi::MultiValue {
+                    field_types,
+                    field_names,
+                } = &param.param_abi
+                else {
+                    continue;
+                };
+                let pairs: Vec<(String, TypeId)> = field_names
+                    .iter()
+                    .cloned()
+                    .zip(field_types.iter().copied())
+                    .collect();
+                multi_value_param_funcs
+                    .entry((f.name.clone(), f.module_source.clone()))
+                    .or_default()
+                    .insert(param_idx, pairs);
+            }
+        }
+
         Self {
             package,
             types: Vec::new(),
@@ -327,6 +362,7 @@ impl<'a> WirContext<'a> {
             pending_bodies: Vec::new(),
             needed_canonicals: IndexMap::default(),
             multi_value_return_funcs,
+            multi_value_param_funcs,
             trait_bound_violations: Vec::new(),
             cm_import_violations: Vec::new(),
         }

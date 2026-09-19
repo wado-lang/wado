@@ -19,7 +19,7 @@ use wado_compiler::hashmap::IndexSet;
 use wado_compiler::module_source::ModuleSource;
 use wado_compiler::nir::{
     FunctionKind, InlineHint, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal, NirParam,
-    NirUnaryOp, ReturnAbi,
+    NirUnaryOp, ParamAbi, ReturnAbi,
 };
 use wado_compiler::nir_arena::{
     ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode, BlockRole, Body,
@@ -5217,6 +5217,7 @@ fn make_pure_fn_stmts(
             is_mut: false,
             is_mut_ref: false,
             span,
+            param_abi: ParamAbi::default(),
         })
         .collect();
     let locals: Vec<NirLocal> = params

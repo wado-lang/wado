@@ -5,7 +5,7 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{MangledName, global_name};
+use crate::name::{MangledName, global_name, multi_value_split_local};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
@@ -412,16 +412,33 @@ fn register_single_function(
         *name_counts.entry(p.name.clone()).or_insert(0) += 1;
     }
     for p in &tir_func.params {
-        let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
-        if matches!(wir_type, WirType::Unit) {
-            continue;
-        }
-        params.push(wir_type);
         let unique_name = if name_counts.get(&p.name).copied().unwrap_or(0) > 1 {
             format!("{}_{}", p.name, p.local_index)
         } else {
             p.name.clone()
         };
+        // One Wasm parameter per field, named the way the translator seeds its
+        // split locals, so a field read in the body finds them by name.
+        if let nir::ParamAbi::MultiValue {
+            field_types,
+            field_names,
+        } = &p.param_abi
+        {
+            for (field_name, &field_type) in field_names.iter().zip(field_types) {
+                let wir_type = ctx.type_id_to_wir_type(type_table, field_type);
+                if matches!(wir_type, WirType::Unit) {
+                    continue;
+                }
+                params.push(wir_type);
+                param_names.push(multi_value_split_local(&unique_name, field_name));
+            }
+            continue;
+        }
+        let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
+        if matches!(wir_type, WirType::Unit) {
+            continue;
+        }
+        params.push(wir_type);
         param_names.push(unique_name);
     }
 

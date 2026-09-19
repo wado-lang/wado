@@ -157,6 +157,14 @@ pub fn sroa_param_name(original: &str) -> String {
     format!("{original}$scalar")
 }
 
+/// The WIR local holding one field of an aggregate taken apart by the
+/// multi-value ABI — a call result bound field by field, or a parameter that
+/// arrives as one Wasm slot per field.
+#[must_use]
+pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
+    format!("{base}_mv_{field_name}")
+}
+
 /// The name of the synthesized `Case::<V, P>::extract` helper for a variant
 /// and one of its payload types, both identified by their structural mangles
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites

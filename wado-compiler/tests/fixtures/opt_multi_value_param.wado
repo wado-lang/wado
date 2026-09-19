@@ -1,0 +1,57 @@
+// A parameter whose every use is a field read takes the multi-value ABI: one
+// Wasm parameter per field, no heap aggregate. The mirror of
+// `opt_multi_value_whole_use_rebuilds.wado`, which does this for a result.
+//
+// The pair is what the two together buy: a multi-value result handed straight
+// into a multi-value parameter flows N values to N values, and nothing is
+// allocated between them.
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn make(x: i32) -> Pair {
+    return Pair { a: x, b: x * 2 };
+}
+
+// Reads both fields and nothing else.
+#[inline("never")]
+fn total(p: Pair) -> i32 {
+    return p.a + p.b;
+}
+
+// Destructures, which is the same use by another spelling.
+#[inline("never")]
+fn spread(p: Pair) -> i32 {
+    let { a, b } = p;
+    return b - a;
+}
+
+// The pair meeting: `make` returns two results, `total` takes two parameters.
+#[inline("never")]
+fn piped(x: i32) -> i32 {
+    return total(make(x));
+}
+
+// A literal argument builds nothing either.
+#[inline("never")]
+fn from_literal(x: i32) -> i32 {
+    return spread(Pair { a: x, b: x * 2 });
+}
+
+export fn run() {
+    assert piped(builtin::black_box(5)) == 15;
+    assert from_literal(builtin::black_box(5)) == 5;
+}
+
+__DATA__
+{
+    "stdout": "",
+    "wir_expect:O2": [
+        "total\" = fn(i32, i32) -> i32",
+        "spread\" = fn(i32, i32) -> i32",
+        "make\" = fn(i32) -> [i32, i32]"
+    ]
+}

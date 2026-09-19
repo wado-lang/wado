@@ -461,6 +461,26 @@ pub enum ReturnAbi {
     },
 }
 
+/// How a parameter arrives at the Wasm level. The mirror of [`ReturnAbi`]: Wasm
+/// takes N parameters as freely as it returns N results.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ParamAbi {
+    /// One Wasm parameter, of the NIR type as written.
+    #[default]
+    Single,
+    /// One Wasm parameter per field of the aggregate. The parameter's NIR type
+    /// and local index are unchanged — only the WIR-level ABI shifts, and the
+    /// body reads the fields off split locals as a multi-value call result
+    /// does.
+    MultiValue {
+        /// NIR types of each field, in declaration order.
+        field_types: Vec<TypeId>,
+        /// Field names in the same order, which is what a `FieldAccess` on the
+        /// parameter looks the split local up by.
+        field_names: Vec<String>,
+    },
+}
+
 /// Semantic category of a `NirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
@@ -637,6 +657,9 @@ pub struct NirParam {
     /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
     pub is_mut_ref: bool,
     pub span: Span,
+    /// How this parameter arrives at the Wasm level. Set by
+    /// `optimize::multi_value_param`; `Single` everywhere else.
+    pub param_abi: ParamAbi,
 }
 
 #[derive(Debug, Clone)]
