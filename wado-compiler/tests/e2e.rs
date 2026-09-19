@@ -920,7 +920,7 @@ fn run_normal_test(
         keep_wasm_artifacts(&dir, &fixture_name, opt_name, &wasm, test_id);
     }
 
-    assert_wat_lines(&wasm, &spec.wat_lines, test_id);
+    assert_wat_lines(&wasm, spec, test_id);
     // Every check on the compiler's own output runs before the execution
     // dispatch: one placed after it is silently skipped by `compile_only`.
     assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
@@ -1118,13 +1118,25 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 }
 
 /// Check each `wat_lines` entry against the emitted component's WAT.
-fn assert_wat_lines(wasm: &[u8], specs: &[WatLineSpec], test_id: &str) {
-    if specs.is_empty() {
+fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
+    if spec.wat_lines.is_empty() {
         return;
     }
+    // `-Os` strips the symbol table, so a `$name` never appears there. Caught
+    // at every level, the fixture fails where it is written rather than in the
+    // one CI job that runs `-Os`.
+    assert!(
+        spec.skip_os
+            || !spec
+                .wat_lines
+                .iter()
+                .any(|line| line.contains.iter().any(|needle| needle.contains('$'))),
+        "[{test_id}] a wat_lines needle names a symbol (`$…`), which `-Os` strips; \
+         set `skip_os` on this fixture"
+    );
     let wat = wasmprinter::print_bytes(wasm)
         .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
-    for spec in specs {
+    for spec in &spec.wat_lines {
         let matched: Vec<&str> = wat
             .lines()
             .map(str::trim)
