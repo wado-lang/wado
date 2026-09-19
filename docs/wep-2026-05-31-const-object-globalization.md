@@ -196,7 +196,10 @@ A bodyless callee has no body for the walk to reach, so its parameter is
 answered from what the declaration stated: `core:builtin` leaves the argument
 where the caller put it when it takes the position by `&` rather than `&mut`,
 and no `#[retain(p)]` clause names it. `#[retain(elements_of = p)]` keeps what
-`p` holds rather than `p` itself, so it leaves the argument object alone. Only
+`p` holds rather than `p` itself, so it leaves the argument object alone. The
+result is a way out of the call too, and no clause follows it: a return type
+that can hold a reference refuses the argument unless `#[result(owned)]` states
+that what comes back is freshly allocated. Only
 `core:builtin` answers this way — `#[retain]` is already what the value-copy
 plan trusts there, so a missing clause is a bug rather than a silence to read as
 consent, which is what it would be on a CM import or a `.wasm` asset export.

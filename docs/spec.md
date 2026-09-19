@@ -5948,7 +5948,9 @@ pub fn v128_const(value: i128) -> v128;
 
 It names one parameter, unquoted, and repeats for a second. Like
 `#[retain(...)]`, it belongs to a declaration with no body: it describes how
-codegen lowers the call, and a body is called rather than lowered.
+codegen lowers the call, and a body is called rather than lowered. A `trait` or
+`interface` method requirement is an error for the same reason — it reaches an
+impl, which is called.
 
 ### The "mem" Core Module
 
