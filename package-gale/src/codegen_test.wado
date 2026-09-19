@@ -263,27 +263,11 @@ test "generate scalar-labeled group `t=(a | b)`" {
     assert labeled_body == bare_body, `scalar label changed the emit:\nlabeled: ${labeled_body}\nbare:    ${bare_body}`;
 }
 
-test "generate scalar-labeled single-alt group `t=(A B)`" {
-    // Variation: the inner Group is a single-alt with multiple
-    // elements. Lower's `lower_op` resolves this to a `SingleAlt`
-    // group shape; `gen_op_group` must still receive the inner
-    // GroupElement (not the outer Label).
-    let mut grammar = parse_grammar(
-        "grammar T; a : t=(A B) ; A : 'a' ; B : 'b' ;",
-        "(test)",
-    );
-    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "p.expect(TK_A,");
-    assert str_contains(&output, "p.expect(TK_B,");
-}
-
-test "generate scalar-labeled wildcard-in-group `t=(.)*`" {
+test "generate scalar-labeled wildcard repeat `t=.*`" {
     // The outer `*` keeps the Label inside the Repeat
-    // (Repeat(Label(Group(Wildcard)))). The peel applies inside the
-    // Repeat body; the Repeat path itself still pattern-matches on
-    // `Element::Repeat`. This shape is the parser-level mirror of
-    // wildcard-in-set / wildcard-in-group ANTLR4 patterns.
-    let mut grammar = parse_grammar("grammar T; a : t=(.)* ; A : 'a' ;", "(test)");
+    // (Repeat(Label(Wildcard))). The peel applies inside the Repeat body;
+    // the Repeat path itself still pattern-matches on `Element::Repeat`.
+    let mut grammar = parse_grammar("grammar T; a : t=.* ; A : 'a' ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, "any");
 }

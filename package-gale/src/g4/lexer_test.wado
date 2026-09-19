@@ -71,10 +71,9 @@ test "string literals" {
 }
 
 test "string literal unicode and control escapes" {
-    // `\uXXXX` reads exactly the hex digits (here only two: `\u41` is 'A'),
-    // not four chars unconditionally; `\u{...}` is the astral form; `\b` and
-    // `\f` are control escapes (ANTLR4 lexicon.md). Unrepresentable code
-    // points fall back to U+FFFD rather than trapping.
+    // `\uXXXX` takes exactly four hex digits; `\u{...}` is the astral form;
+    // `\b` and `\f` are control escapes (ANTLR4 lexicon.md). Unrepresentable
+    // code points fall back to U+FFFD rather than trapping.
     let tokens = tokenize("'\\u0041' '\\u{1F600}' '\\b\\f'");
     assert_token(&tokens[0], G4Token::StringLit, "A");
     assert_token(&tokens[1], G4Token::StringLit, "\u{1F600}");
@@ -82,6 +81,34 @@ test "string literal unicode and control escapes" {
     control.push('\u0008');
     control.push('\u000C');
     assert_token(&tokens[2], G4Token::StringLit, control);
+}
+
+test "an escape ANTLR4 does not define is a token of its own" {
+    // Every one of these is `invalid escape sequence` from the jar. Reading
+    // them as the bare character would make Gale a silent superset: the
+    // grammar compiles here and not upstream, and nothing says so.
+    let cases: List<String> = ["'\\a'", "'\\]'", "'\\-'", "'\\p{Alpha}'", "'\\\"'"];
+    for let src of &cases {
+        let tokens = tokenize(*src);
+        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
+    }
+    assert G4Token::InvalidEscape.name() == "invalid escape sequence";
+}
+
+test "a malformed unicode escape is invalid, not a shorter one" {
+    // `\u41` is four hex digits short one, not `A`; `\u{}` names no code
+    // point and `\u{110000}` none that exists. The jar rejects each.
+    let cases: List<String> = ["'\\u41'", "'\\u{}'", "'\\u{110000}'", "'\\uZZZZ'", "'\\u{41'"];
+    for let src of &cases {
+        let tokens = tokenize(*src);
+        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
+    }
+}
+
+test "an invalid escape names itself and the scan resumes past the literal" {
+    let tokens = tokenize("'\\a' foo");
+    assert_token(&tokens[0], G4Token::InvalidEscape, "\\a");
+    assert_token(&tokens[1], G4Token::Identifier, "foo");
 }
 
 test "char classes" {

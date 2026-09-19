@@ -1585,7 +1585,7 @@ fn scan_opt_bare(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn _parse_ng_labelled__inner(p: &mut Parser) -> () {
     while (p.peek_kind() == TK_A) && (p.peek_at(1) == TK_B) {
-        p.expect(TK_A, &SYNC_0);
+        p.expect(TK_A, &EMPTY_SYNC);
         p.expect(TK_B, &EMPTY_SYNC);
     }
     loop {
@@ -1608,7 +1608,7 @@ fn _parse_ng_labelled__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_A, &SYNC_1);
+        p.expect(TK_A, &SYNC_0);
         p.expect(TK_C, &EMPTY_SYNC);
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1628,7 +1628,7 @@ fn _parse_ng_labelled(p: &mut Parser) -> () {
 
 fn _parse_ng_bare__inner(p: &mut Parser) -> () {
     while (p.peek_kind() == TK_A) && (p.peek_at(1) == TK_B) {
-        p.expect(TK_A, &SYNC_0);
+        p.expect(TK_A, &SYNC_1);
         p.expect(TK_B, &EMPTY_SYNC);
     }
     loop {
@@ -1651,7 +1651,7 @@ fn _parse_ng_bare__inner(p: &mut Parser) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_A, &SYNC_1);
+        p.expect(TK_A, &SYNC_0);
         p.expect(TK_C, &EMPTY_SYNC);
     }
     p.expect(TK_EOF, &EMPTY_SYNC);
@@ -1785,7 +1785,7 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [TK_B];
-global SYNC_1: List<i32> = [TK_C];
+global SYNC_0: List<i32> = [TK_C];
+global SYNC_1: List<i32> = [TK_B];
 global SYNC_2: List<i32> = [TK_EOF];
 

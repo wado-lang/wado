@@ -89,6 +89,9 @@ impl G4Lexer {
         // owned char buffer directly instead of going through an intermediate
         // String + re-collect.
         let mut text: List<char> = [];
+        // The literal is scanned to its closing quote either way, so the next
+        // token starts where it would have; only the kind and the span change.
+        let mut bad: Option<Span> = null;
         loop {
             if self.at_end() {
                 return self.owned_token(G4Token::UnterminatedString, start, self.pos);
@@ -96,19 +99,29 @@ impl G4Lexer {
             let c = self.chars[self.pos];
             self.pos += 1;
             if c == '\'' {
+                if let Some(esc) = bad {
+                    return self.owned_token(G4Token::InvalidEscape, esc.start, esc.end);
+                }
                 return Token::new(G4Token::StringLit as i32, owned_slice(text), Span::new(start, self.pos));
             } else if c == '\\' && !self.at_end() {
-                self.read_string_escape(&mut text);
+                self.read_string_escape(&mut text, &mut bad);
             } else {
                 text.push(c);
             }
         }
     }
 
-    fn read_string_escape(&mut self, text: &mut List<char>) {
+    fn read_string_escape(&mut self, text: &mut List<char>, bad: &mut Option<Span>) {
+        let esc_start = self.pos - 1;
         let mut p = self.pos;
         let cp = decode_string_escape(self.chars, &mut p);
         self.pos = p;
+        if cp == INVALID_ESCAPE {
+            if !*bad matches { Some(_) } {
+                *bad = Option::<Span>::Some(Span::new(esc_start, self.pos));
+            }
+            return;
+        }
         text.push(scalar_or_replacement(cp));
     }
 
@@ -273,19 +286,34 @@ fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
     return i == buf.len();
 }
 
-/// Decode one escape body — the chars *after* the `\` — into a code point.
-/// `pos` enters at the escape character and leaves past the escape.
+/// What a decoder returns for an escape ANTLR4 does not define. No code point
+/// is negative, so a caller tells the two apart by sign.
+pub global INVALID_ESCAPE: i32 = -1;
+
+/// Decode one escape body — the chars *after* the `\` — into a code point, or
+/// `INVALID_ESCAPE`. `pos` enters at the escape character and leaves past the
+/// escape. A string literal defines fewer escapes than a char set: `\]` and
+/// `\-` are the set's, and `\'` is this one's.
 pub fn decode_string_escape(chars: &List<char>, pos: &mut i32) -> i32 {
     let ec = chars[*pos];
     *pos += 1;
     return match ec {
         'u' => resolve_unicode_escape_code(chars, pos),
+        '\'' => ec as i32,
+        _ => decode_shared_escape(ec),
+    };
+}
+
+/// The escapes a string literal and a char set both define.
+pub fn decode_shared_escape(ec: char) -> i32 {
+    return match ec {
         'n' => '\n' as i32,
         'r' => '\r' as i32,
         't' => '\t' as i32,
         'b' => '\u0008' as i32,
         'f' => '\u000C' as i32,
-        _ => ec as i32,
+        '\\' => ec as i32,
+        _ => INVALID_ESCAPE,
     };
 }
 
@@ -301,7 +329,9 @@ pub fn string_literal_code_points(chars: &List<char>, span: Span) -> List<i32> {
         let c = chars[pos];
         pos += 1;
         if c == '\\' && pos < last {
-            out.push(decode_string_escape(chars, &mut pos));
+            let cp = decode_string_escape(chars, &mut pos);
+            assert cp != INVALID_ESCAPE, "a literal carrying an undefined escape lexes as InvalidEscape, so no StringLit reaches here with one";
+            out.push(cp);
         } else {
             out.push(c as i32);
         }
@@ -318,29 +348,39 @@ pub fn scalar_or_replacement(code: i32) -> char {
     };
 }
 
+global MAX_CODE_POINT: i32 = 0x10FFFF;
+
 /// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
-/// `u`). Surrogates come back verbatim; the caller decides what they mean.
+/// `u`), or `INVALID_ESCAPE`. The braced form takes at least one hex digit, a
+/// closing brace, and a value Unicode has; the bare form takes exactly four
+/// digits, so `\u41` is short one rather than `A`. Surrogates come back
+/// verbatim; the caller decides what they mean.
 pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let mut val = 0;
+    let mut n = 0;
     if *pos < chars.len() && chars[*pos] == '{' {
         *pos += 1;
-        while *pos < chars.len() && chars[*pos] != '}' {
-            if !chars[*pos].is_hexdigit() {
-                break;
-            }
-            val = val * 16 + chars[*pos].hex_digit_value();
-            *pos += 1;
-        }
-        if *pos < chars.len() && chars[*pos] == '}' {
-            *pos += 1;
-        }
-    } else {
-        let mut n = 0;
-        while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
+        while *pos < chars.len() && chars[*pos].is_hexdigit() {
             val = val * 16 + chars[*pos].hex_digit_value();
             *pos += 1;
             n += 1;
+            if val > MAX_CODE_POINT {
+                return INVALID_ESCAPE;
+            }
         }
+        if n == 0 || *pos >= chars.len() || chars[*pos] != '}' {
+            return INVALID_ESCAPE;
+        }
+        *pos += 1;
+        return val;
+    }
+    while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
+        val = val * 16 + chars[*pos].hex_digit_value();
+        *pos += 1;
+        n += 1;
+    }
+    if n < 4 {
+        return INVALID_ESCAPE;
     }
     return val;
 }

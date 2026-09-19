@@ -11,7 +11,6 @@ use {
     normalize_caches,
     alias_parser_literals,
     canonicalize_empty_alt_groups,
-    unwrap_labeled_transparent_groups,
 } from "./ir.wado";
 use { render_lexer_dump } from "./lexer_dump.wado";
 use { generate, GenerateOptions } from "./codegen.wado";
@@ -23,7 +22,6 @@ fn lexer_dump<S: AsStrSlice>(input: S) -> String {
     synthesize_implicit_tokens(&mut merged);
     alias_parser_literals(&mut merged);
     canonicalize_empty_alt_groups(&mut merged);
-    unwrap_labeled_transparent_groups(&mut merged);
     normalize_caches(&mut merged);
     return render_lexer_dump(&merged);
 }

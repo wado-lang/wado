@@ -44,7 +44,13 @@ use {
     superclass_bases,
 } from "../ir.wado";
 use { G4Token } from "./token.wado";
-use { tokenize_chars, resolve_unicode_escape_code, string_literal_code_points } from "./lexer.wado";
+use {
+    tokenize_chars,
+    resolve_unicode_escape_code,
+    string_literal_code_points,
+    decode_shared_escape,
+    INVALID_ESCAPE,
+} from "./lexer.wado";
 use { scan_balanced, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
 use {
     clip_to_scalars,
@@ -105,10 +111,32 @@ fn found_desc(tok: &Token) -> String {
     if tok.kind == G4Token::UnterminatedCharClass as i32 {
         return String::from("unterminated character set");
     }
+    if tok.kind == G4Token::InvalidEscape as i32 {
+        return `invalid escape sequence ${tok.text}`;
+    }
     if tok.kind == G4Token::UnexpectedChar as i32 {
         return `unexpected character "${tok.text}"`;
     }
     return `got "${tok.text}"`;
+}
+
+/// Whether a block may carry a label. ANTLR4 takes one only on a set — two or
+/// more alternatives, each a single terminal and nothing else — and reports
+/// `error(130)` otherwise. A richer block has no binding slot it will name, so
+/// accepting one compiles a grammar the jar refuses.
+fn is_labelable_set(g: &GroupElement) -> bool {
+    if g.alternatives.len() < 2 || !g.options.is_empty() {
+        return false;
+    }
+    for let alt of &g.alternatives {
+        if alt.elements.len() != 1 || !alt.actions.is_empty() || !alt.options.is_empty() {
+            return false;
+        }
+        if alt.label matches { Some(_) } || !alt.elements[0] matches { TokenRef(_) | Literal(_) } {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn first_char<S: AsStrSlice>(s: S) -> Option<char> {
@@ -923,6 +951,18 @@ impl G4Parser {
                 let list = self.is_kind(G4Token::PlusAssign);
                 self.advance();
                 let inner = self.parse_atom()?;
+                if let Group(g) = &inner {
+                    if !is_labelable_set(g) {
+                        let expected: List<String> = ["a set of terminals, or an atom"];
+                        return Result::<Element, ParseError>::Err(
+                            ParseError::new(
+                                `label ${name} assigned to a block which is not a set`,
+                                name_span,
+                                expected,
+                            ),
+                        );
+                    }
+                }
                 return Result::<Element, ParseError>::Ok(
                     Element::Label(LabelElement::new(name, list, inner)),
                 );
@@ -1372,9 +1412,12 @@ fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
     return c;
 }
 
-/// Code point of the next char-set item, escapes resolved. Surrogates come
-/// back verbatim — `clip_to_scalars` decides what a range containing one
-/// actually admits.
+/// Code point of the next char-set item, escapes resolved, or
+/// `INVALID_ESCAPE`. Surrogates come back verbatim — `clip_to_scalars` decides
+/// what a range containing one actually admits. A set defines `\-` and `\]`,
+/// which a string literal does not; `\p{…}` is read before this by
+/// `at_property_escape`, so a bare `\p` reaching here is undefined like any
+/// other letter.
 fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let c = advance_char(chars, pos);
     if c != '\\' {
@@ -1382,13 +1425,9 @@ fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     }
     let ec = advance_char(chars, pos);
     return match ec {
-        'n' => '\n' as i32,
-        'r' => '\r' as i32,
-        't' => '\t' as i32,
-        'b' => '\u0008' as i32,
-        'f' => '\u000C' as i32,
         'u' => resolve_unicode_escape_code(chars, pos),
-        _ => ec as i32,
+        '-' | ']' => ec as i32,
+        _ => decode_shared_escape(ec),
     };
 }
 
@@ -1415,6 +1454,22 @@ fn property_range_error(span: Span) -> ParseError {
     return ParseError::new(
         "a Unicode property escape cannot be a bound of a character range",
         span,
+        expected,
+    );
+}
+
+/// The error for an escape the char-set lexicon does not define. ANTLR4 reports
+/// the same shape (`error(156)`); reading the escape as its bare character
+/// instead would compile a grammar the jar refuses, and say nothing about it.
+fn invalid_escape_error(chars: &List<char>, start: i32, end: i32, class_span: Span) -> ParseError {
+    let mut esc = String::with_capacity(end - start);
+    for let mut i = start; i < end; i += 1 {
+        esc.push(chars[i]);
+    }
+    let expected: List<String> = ["a defined escape sequence"];
+    return ParseError::new(
+        `invalid escape sequence ${esc}`,
+        Span::new(class_span.start + start, class_span.start + end),
         expected,
     );
 }
@@ -1460,13 +1515,21 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
             continue;
         }
 
+        let lo_start = pos;
         let c = resolve_char_code(&chars, &mut pos);
+        if c == INVALID_ESCAPE {
+            return Result::<CharClass, ParseError>::Err(invalid_escape_error(&chars, lo_start, pos, span));
+        }
         if opens_char_range(&chars, pos, end) {
             advance_char(&chars, &mut pos);
             if at_property_escape(&chars, pos, end) {
                 return Result::<CharClass, ParseError>::Err(property_range_error(span));
             }
+            let hi_start = pos;
             let c2 = resolve_char_code(&chars, &mut pos);
+            if c2 == INVALID_ESCAPE {
+                return Result::<CharClass, ParseError>::Err(invalid_escape_error(&chars, hi_start, pos, span));
+            }
             clip_to_scalars(&mut ranges, c, c2);
         } else {
             clip_to_scalars(&mut ranges, c, c);
