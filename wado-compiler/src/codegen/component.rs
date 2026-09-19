@@ -759,15 +759,15 @@ fn build_cm_tuple_types(
         .collect()
 }
 
-/// The own-handle type indices under the CM resource names, which is how
-/// [`CmTypeGen::ast_type_to_cm`] asks for them; the instance-type builders key
-/// theirs by Wado name instead. `emitting` is the interface being described.
+/// Per-resource type indices under the CM resource names, which is how
+/// [`CmTypeGen`] asks for them; the instance-type builders key theirs by Wado
+/// name instead. `emitting` is the interface being described.
 fn cm_keyed_resource_exports<'a>(
-    own_resource_type_indices: &IndexMap<String, u32>,
+    resource_type_indices: &IndexMap<String, u32>,
     registry: &'a CmInterfaceRegistry,
     emitting: Option<&str>,
 ) -> IndexMap<&'a str, u32> {
-    own_resource_type_indices
+    resource_type_indices
         .iter()
         .filter_map(|(wado_name, &idx)| {
             let source = registry.resource_source_in(emitting, wado_name)?;
@@ -796,7 +796,6 @@ fn has_named_cm_form(ty: &Type, registry: &CmInterfaceRegistry) -> bool {
 fn wado_type_to_cm_val_type(
     ty: &Type,
     stream_type_idx: Option<u32>,
-    result_param_type_idx: Option<u32>,
     enum_type_indices: &IndexMap<String, u32>,
     flags_type_indices: &IndexMap<String, u32>,
     borrow_resource_type_indices: &IndexMap<String, u32>,
@@ -837,9 +836,6 @@ fn wado_type_to_cm_val_type(
         }
         Type::Generic(generic) => match generic.name.as_str() {
             "Stream" => ComponentValType::Type(stream_type_idx.expect("stream type not defined")),
-            "Result" => ComponentValType::Type(
-                result_param_type_idx.expect("result param type not defined"),
-            ),
             _ => panic!("unsupported generic param type for CM: {}", generic.name),
         },
         _ => panic!("unsupported Wado param type for CM: {ty:?}"),
@@ -2614,36 +2610,27 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
                 Some(interface_info.path.as_str()),
             );
+            // `resource_exports` carries the `own` index, so a borrow minted
+            // from it would wrap that handle rather than the resource.
+            let borrow_exports = cm_keyed_resource_exports(
+                &borrow_resource_type_indices,
+                &project.cm_interface_registry,
+                Some(interface_info.path.as_str()),
+            );
+            for (cm_name, borrow_idx) in borrow_exports {
+                shared_type_gen.register_existing(&format!("borrow:{cm_name}"), borrow_idx);
+            }
 
             for func in &cm_functions {
-                // Pre-define param-only types (stream for params, result for params)
                 let needs_stream_u8 = func
                     .params
                     .iter()
                     .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Stream"));
-                let needs_result_param = func
-                    .params
-                    .iter()
-                    .any(|(_, _, ty)| matches!(ty, Type::Generic(g) if g.name == "Result"));
-
                 let stream_type_idx = if needs_stream_u8 {
                     instance_type
                         .ty()
                         .defined_type()
                         .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
-                    let idx = local_type_idx;
-                    local_type_idx += 1;
-                    Some(idx)
-                } else {
-                    None
-                };
-
-                // error_code_idx is lazily resolved by emit_cm_val_type via resolve_error_code_idx,
-                // but we still need it for param types that reference Result<_, ErrorCode>.
-                let error_code_idx: Option<u32> = None;
-
-                let result_param_type_idx = if needs_result_param {
-                    instance_type.ty().defined_type().result(None, None);
                     let idx = local_type_idx;
                     local_type_idx += 1;
                     Some(idx)
@@ -2660,12 +2647,12 @@ fn generate_cm_imports(
                             .resolve_type_preserving_local_newtypes(ty);
                         let is_named =
                             has_named_cm_form(&resolved_ty, &project.cm_interface_registry);
-                        // A composite (`Option<T>`, `List<T>`, a tuple) needs the
-                        // shared generator too: `wado_type_to_cm_val_type` spells
-                        // only the flat shapes and the pre-defined `Stream` /
-                        // `Result` params.
+                        // A composite (`Option<T>`, `Result<T, E>`, `List<T>`, a
+                        // tuple) needs the shared generator, which spells its
+                        // payloads; `wado_type_to_cm_val_type` spells only the
+                        // flat shapes and the pre-defined `Stream`.
                         let is_composite = match &resolved_ty {
-                            Type::Generic(g) => g.name != "Stream" && g.name != "Result",
+                            Type::Generic(g) => g.name != "Stream",
                             Type::Tuple(_) => true,
                             Type::Named(_)
                             | Type::NamespacedGeneric(_)
@@ -2691,7 +2678,6 @@ fn generate_cm_imports(
                             wado_type_to_cm_val_type(
                                 &resolved_ty,
                                 stream_type_idx,
-                                result_param_type_idx,
                                 &enum_export_indices,
                                 &flags_export_indices,
                                 &borrow_resource_type_indices,
@@ -2729,7 +2715,7 @@ fn generate_cm_imports(
                             &resolved_ty,
                             &mut instance_type,
                             &mut local_type_idx,
-                            error_code_idx,
+                            None,
                             has_local_error_code,
                             &enum_export_indices,
                             &own_resource_type_indices,

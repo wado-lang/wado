@@ -1,0 +1,133 @@
+use { println, Stdout } from "core:cli";
+use {
+    Webgpu,
+    Gpu,
+    GpuAdapter,
+    GpuDevice,
+    GpuQueue,
+    GpuCommandEncoder,
+    GpuCommandBuffer,
+    GpuBuffer,
+    GpuBindGroupLayout,
+    GpuBindGroup,
+    GpuShaderModule,
+    GpuComputePipeline,
+    GpuComputePassEncoder,
+    GpuBufferDescriptor,
+    GpuBufferUsage,
+    GpuBindGroupDescriptor,
+    GpuBindGroupEntry,
+    GpuBindingResource,
+    GpuBufferBinding,
+    GpuCommandEncoderDescriptor,
+    GpuComputePassDescriptor,
+    GpuCommandBufferDescriptor,
+    GpuShaderModuleDescriptor,
+    GpuComputePipelineDescriptor,
+    GpuProgrammableStage,
+    GpuLayoutMode,
+    GpuMapMode,
+    GpuSize32,
+    GpuSize64,
+} from "wasi:webgpu";
+
+global SHADER: String = "
+@group(0) @binding(0) var<storage, read_write> data: array<u32>;
+@compute @workgroup_size(1)
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+    data[id.x] = id.x * 2u;
+}
+";
+
+export fn run() with (Stdout, Webgpu, Gpu, GpuAdapter, GpuDevice, GpuQueue, GpuCommandEncoder, GpuCommandBuffer, GpuBuffer, GpuBindGroupLayout, GpuBindGroup, GpuShaderModule, GpuComputePipeline, GpuComputePassEncoder) {
+    let gpu = Webgpu::get_gpu();
+    let Some(adapter) = gpu.request_adapter(null).wait() else {
+        println("no adapter");
+        return;
+    };
+    let Ok(device) = adapter.request_device(null).wait() else {
+        println("no device");
+        return;
+    };
+
+    let n = 16;
+    let count: GpuSize32 = 16;
+    let bytes: GpuSize64 = 64;
+
+    let storage = device.create_buffer(GpuBufferDescriptor {
+        size: bytes,
+        usage: GpuBufferUsage::Storage | GpuBufferUsage::CopySrc,
+        mapped_at_creation: null,
+        label: Option::Some("storage"),
+    });
+    let readback = device.create_buffer(GpuBufferDescriptor {
+        size: bytes,
+        usage: GpuBufferUsage::MapRead | GpuBufferUsage::CopyDst,
+        mapped_at_creation: null,
+        label: Option::Some("readback"),
+    });
+
+    let module = device.create_shader_module(GpuShaderModuleDescriptor {
+        code: SHADER,
+        compilation_hints: null,
+        label: null,
+    });
+    let pipeline = device.create_compute_pipeline(GpuComputePipelineDescriptor {
+        compute: GpuProgrammableStage {
+            module: &module,
+            entry_point: Option::Some("main"),
+            constants: null,
+        },
+        layout: GpuLayoutMode::Auto,
+        label: null,
+    });
+
+    let layout = pipeline.get_bind_group_layout(0);
+    let group = device.create_bind_group(GpuBindGroupDescriptor {
+        layout: &layout,
+        entries: [
+            GpuBindGroupEntry {
+                binding: 0,
+                resource: GpuBindingResource::GpuBufferBinding(GpuBufferBinding {
+                    buffer: &storage,
+                    offset: null,
+                    size: null,
+                }),
+            },
+        ],
+        label: null,
+    });
+
+    let encoder = device.create_command_encoder(Option::Some(GpuCommandEncoderDescriptor { label: null }));
+    let pass = encoder.begin_compute_pass(Option::Some(GpuComputePassDescriptor {
+        timestamp_writes: null,
+        label: null,
+    }));
+    pass.set_pipeline(&pipeline);
+    let _ = pass.set_bind_group(0, Option::Some(&group), null, null, null);
+    pass.dispatch_workgroups(count, null, null);
+    pass.end();
+    encoder.copy_buffer_to_buffer(&storage, null, &readback, null, Option::Some(bytes));
+    let commands = encoder.finish(Option::Some(GpuCommandBufferDescriptor { label: null }));
+    device.queue().submit([&commands]);
+
+    let Ok(_) = readback.map_async(GpuMapMode::Read, null, null).wait() else {
+        println("map failed");
+        return;
+    };
+    let Ok(out) = readback.get_mapped_range_get_with_copy(null, null) else {
+        println("get_mapped_range failed");
+        return;
+    };
+
+    let mut ok = true;
+    for let mut i = 0; i < n; i += 1 {
+        let want = i * 2;
+        let got = out[i * 4] as i32 | out[i * 4 + 1] as i32 << 8 | out[i * 4 + 2] as i32 << 16 | out[i * 4 + 3] as i32 << 24;
+        if got != want {
+            println(`data[${i}] = ${got}, want ${want}`);
+            ok = false;
+        }
+    }
+    println(if ok { "compute ok" } else { "compute wrong" });
+}

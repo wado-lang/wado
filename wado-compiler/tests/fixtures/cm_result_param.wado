@@ -1,0 +1,24 @@
+// A `result<ok, err>` parameter. Both payloads must reach the component's own
+// type, or the import lowers to fewer core params than the adapter passes and
+// the component does not validate.
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#settle")]
+    #[cm_params("outcome")]
+    fn settle(outcome: Result<u32, u32>);
+    #[cm("wasi:demo/gfx@0.1.0#finish")]
+    #[cm_params("outcome")]
+    fn finish(outcome: Result<(), ()>);
+}
+
+export fn run() with Api {
+    Api::settle(Result::<u32, u32>::Ok(1));
+    Api::settle(Result::<u32, u32>::Err(2));
+    Api::finish(Result::<(), ()>::Ok(()));
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [{ "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 }]
+}
