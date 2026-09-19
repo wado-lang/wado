@@ -7,7 +7,7 @@ use crate::compiler_item::SeqField;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
-use crate::nir::{NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
@@ -16,10 +16,14 @@ use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
     FqTraitName, FqTypeName, MangledName, MethodName, StructName, closure_call_name,
+    multi_value_split_local,
 };
-use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
+use crate::nir_arena::{
+    ArenaStructField, BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
+};
 use crate::nir_value_graph::{OpaqueSource, ValueId};
 use crate::optimize::multi_value_return::block_tail_call;
+use crate::optimize::sroa_variant_return::settled_locals;
 use crate::token::Span;
 use crate::wir::{
     CmImportViolation, TraitBoundViolation, WirAbstractHeapType, WirFuncId, WirLocals, WirMeta,
@@ -50,6 +54,17 @@ pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) 
             value: Box::new(value),
         },
     ]
+}
+
+/// A read of each of the named locals, in order.
+fn local_reads(locals: &[(String, WirType)]) -> Vec<WirInstr> {
+    locals
+        .iter()
+        .map(|(name, ty)| WirInstr::LocalGet {
+            name: name.clone(),
+            result_ty: ty.clone(),
+        })
+        .collect()
 }
 
 /// Recursively collect variable names from Let statements.
@@ -88,46 +103,91 @@ fn collect_let_names(body: &Body, names: &mut IndexMap<u32, String>, block: Bloc
     }
 }
 
-/// Pre-compute the WIR-side name for every TIR local index, once, so
-/// [`FunctionTranslator::local_name`] is an O(1) lookup rather than a scan of
-/// `params` and `local_names` per reference. Two params sharing a raw name are
-/// both suffixed with `_{local_index}`; a non-param local shadowing a param or
-/// let takes the suffix alone, leaving the shadowed name untouched.
-fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> IndexMap<u32, String> {
-    let param_indices: IndexSet<u32> = params.iter().map(|p| p.local_index).collect();
-
-    // Tally raw-name occurrences across all locals and within params only.
-    let mut total_per_name: IndexMap<&str, u32> = IndexMap::default();
-    let mut param_per_name: IndexMap<&str, u32> = IndexMap::default();
-    for (idx, name) in raw {
-        *total_per_name.entry(name.as_str()).or_default() += 1;
-        if param_indices.contains(idx) {
-            *param_per_name.entry(name.as_str()).or_default() += 1;
+/// The split locals a `ParamAbi::MultiValue` parameter arrives in. The Wasm
+/// parameters carry these names, so the body needs no entry code at all.
+fn split_locals_for_params(
+    ctx: &WirContext<'_>,
+    tir_func: &NirFunction,
+    type_table: &TypeTable,
+    resolved_local_names: &IndexMap<u32, String>,
+) -> IndexMap<u32, IndexMap<String, (String, WirType)>> {
+    let mut out: IndexMap<u32, IndexMap<String, (String, WirType)>> = IndexMap::default();
+    for param in &tir_func.params {
+        let nir::ParamAbi::MultiValue {
+            field_types,
+            field_names,
+        } = &param.param_abi
+        else {
+            continue;
+        };
+        let base = &resolved_local_names[&param.local_index];
+        let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
+        for (field_name, &field_type) in field_names.iter().zip(field_types) {
+            let wir_ty = ctx.type_id_to_wir_type(type_table, field_type);
+            split.insert(
+                field_name.clone(),
+                (multi_value_split_local(base, field_name), wir_ty),
+            );
         }
+        out.insert(param.local_index, split);
+    }
+    out
+}
+
+/// The WIR name of every parameter, keyed by local index. The Wasm signature
+/// and the body read this one answer, so a slot has one name on both sides.
+pub(super) fn resolve_param_names(params: &[NirParam]) -> IndexMap<u32, String> {
+    let mut per_name: IndexMap<&str, u32> = IndexMap::default();
+    for p in params {
+        *per_name.entry(p.name.as_str()).or_default() += 1;
     }
 
     let mut out = IndexMap::default();
     let mut used: IndexSet<String> = IndexSet::default();
+    for p in params {
+        let needs_suffix = per_name.get(p.name.as_str()).copied().unwrap_or(0) > 1;
+        out.insert(
+            p.local_index,
+            free_name(&p.name, p.local_index, needs_suffix, &mut used),
+        );
+    }
+    out
+}
+
+/// Pre-compute the WIR-side name for every TIR local index, once, so
+/// [`FunctionTranslator::local_name`] is an O(1) lookup rather than a scan of
+/// `params` and `local_names` per reference. Parameters come from
+/// [`resolve_param_names`]; a non-param local shadowing a param or let takes the
+/// suffix alone, leaving the shadowed name untouched.
+fn resolve_local_names(raw: &IndexMap<u32, String>, params: &[NirParam]) -> IndexMap<u32, String> {
+    let mut out = resolve_param_names(params);
+    let mut used: IndexSet<String> = out.values().cloned().collect();
+
+    let mut total_per_name: IndexMap<&str, u32> = IndexMap::default();
+    for name in raw.values() {
+        *total_per_name.entry(name.as_str()).or_default() += 1;
+    }
+
     for (idx, name) in raw {
-        let needs_suffix = if param_indices.contains(idx) {
-            param_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
-        } else {
-            total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1
-        };
-        let mut final_name = if needs_suffix {
-            format!("{name}_{idx}")
-        } else {
-            name.clone()
-        };
-        // The `_{idx}` suffix is not collision-free: it can equal another local's
-        // literal name (`e` at index 2 -> `e_2`, colliding with a source `e_2`).
-        // Codegen keys locals by name, so a duplicate silently merges two
-        // differently-typed slots into one. Extend with the unique index until
-        // the name is free.
-        while !used.insert(final_name.clone()) {
-            final_name = format!("{final_name}_{idx}");
+        if out.contains_key(idx) {
+            continue;
         }
-        out.insert(*idx, final_name);
+        let needs_suffix = total_per_name.get(name.as_str()).copied().unwrap_or(0) > 1;
+        out.insert(*idx, free_name(name, *idx, needs_suffix, &mut used));
+    }
+    out
+}
+
+/// `name`, suffixed with `_{idx}` until nothing else has taken it. One suffix
+/// is not enough: `e` at index 2 gives `e_2`, which another local may spell.
+fn free_name(name: &str, idx: u32, needs_suffix: bool, used: &mut IndexSet<String>) -> String {
+    let mut out = if needs_suffix {
+        format!("{name}_{idx}")
+    } else {
+        name.to_string()
+    };
+    while !used.insert(out.clone()) {
+        out = format!("{out}_{idx}");
     }
     out
 }
@@ -832,6 +892,7 @@ fn apply_cold_path_hints_instr(instr: &mut WirInstr) {
 
 pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
     let pending: Vec<_> = std::mem::take(&mut ctx.pending_bodies);
+    let ctx_has_multi_value_returns = !ctx.multi_value_return_funcs.is_empty();
 
     for pending_body in &pending {
         let tir_func = pending_body.tir_func.borrow();
@@ -843,16 +904,16 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
         // string-matching post-pass keeps name-format knowledge
         // confined to `name.rs` and `synthesis::traits`.
         if tir_func.fn_canonical_dispatch().is_some() {
-            let self_param_name = tir_func
-                .params
-                .first()
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| "self".to_string());
-            let formatter_param_name = tir_func
-                .params
-                .get(1)
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| "f".to_string());
+            let names = resolve_param_names(&tir_func.params);
+            let param_name = |at: usize, fallback: &str| {
+                tir_func
+                    .params
+                    .get(at)
+                    .map(|p| names[&p.local_index].clone())
+                    .unwrap_or_else(|| fallback.to_string())
+            };
+            let self_param_name = param_name(0, "self");
+            let formatter_param_name = param_name(1, "f");
             // After the boxing pass, the synthesized self parameter type
             // `&fn(...)` is rewritten to `Box<fn(...)>` (a struct wrapping
             // a closure ref). When that's happened the dispatch body has
@@ -894,6 +955,8 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                 local_names.entry(key).or_insert_with(|| local.name.clone());
             }
             let resolved_local_names = resolve_local_names(&local_names, &tir_func.params);
+            let param_split_locals =
+                split_locals_for_params(ctx, &tir_func, &type_table, &resolved_local_names);
 
             // Translate inside a nested block so the translator (and its reborrow of ctx)
             // is dropped before we write back to ctx.functions below.
@@ -906,8 +969,16 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     label_stack: Vec::new(),
                     match_counter: 0,
                     local_counter: 0,
+                    multi_value_split_locals: param_split_locals,
                     resolved_local_names,
-                    multi_value_split_locals: IndexMap::default(),
+                    // Only `try_emit_multi_value_let` reads this, and it returns
+                    // early when no callee takes the ABI. A package with none
+                    // pays no walk at all.
+                    settled_locals: if ctx_has_multi_value_returns {
+                        settled_locals(body)
+                    } else {
+                        IndexSet::default()
+                    },
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
                 };
@@ -960,11 +1031,14 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// instead of `StructGet($tmp, name)`, which would panic at codegen —
     /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
+    /// Locals bound once and never assigned again.
+    // Only one of those may be split: a second definition would `LocalSet` a
+    // base local the split never declared.
+    settled_locals: IndexSet<u32>,
     /// Set while lowering a call whose N results have a taker: the split locals
-    /// of a `let` bind, the wildcards of a discard, or the enclosing
-    /// `ReturnAbi::MultiValue` return that passes them straight through. The
-    /// `Call` arm asserts on it — a multi-value call anywhere else would leave
-    /// N results where one is expected.
+    /// of a `let` bind, the wildcards of a discard, or a pass-through return.
+    // Clear at the `Call` arm means nothing is taking them, so the arm rebuilds
+    // the aggregate rather than leaving N results where one is expected.
     multi_value_results_taken: bool,
     /// True while translating the value of a `GlobalVarSet` to a global with
     /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Bounds-overrides
@@ -977,9 +1051,7 @@ pub(super) struct FunctionTranslator<'a, 'b> {
 
 impl FunctionTranslator<'_, '_> {
     /// The WIR local name for `index`, as [`resolve_local_names`] computed it,
-    /// falling back to `$local_N`. Codegen resolves locals by name, so two
-    /// sharing one would silently mis-resolve — hence the disambiguation there,
-    /// which mirrors `wir_build::functions`' construction of `param_names`.
+    /// falling back to `$local_N`.
     pub(super) fn local_name(&self, index: u32) -> String {
         self.resolved_local_names
             .get(&index)
@@ -1066,62 +1138,222 @@ impl FunctionTranslator<'_, '_> {
         WirInstr::StructNew { type_id, fields }
     }
 
-    /// Detect `let local = Call(f)` where `f` has
-    /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
-    /// locals instead of a single `LocalSet`. Returns `Some` if the
-    /// rewrite fired (the caller should not emit the regular `LocalSet`).
-    ///
-    /// The split locals use names `<base>_mv_<field_name>` where `<base>`
-    /// is the TIR local name. Subsequent
-    /// `FieldAccess(LocalGet(local), name)` accesses read the matching
-    /// split local directly via `multi_value_split_locals`.
-    fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
-        // The initialiser is the call, or a block whose tail is the call with a
-        // receiver hoisted in front of it — the shape `let_block_flatten`
-        // leaves. `block_tail_call` is the same recogniser
-        // `optimize::multi_value_return` validates call sites with, so the
-        // shapes the two accept cannot drift apart: anything it declines falls
-        // through to a regular `LocalSet`, which cannot bind N results into one
-        // local.
-        let mut prefix: Vec<StmtId> = Vec::new();
-        let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
-        let func = self.callee_descriptor(func_id);
-        let key = (func.name.clone(), func.module_source);
-        let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
+    /// Rebuild the aggregate a multi-value call promised, for a site that takes
+    /// the whole value rather than its fields.
+    // Without this, one such site would cost the ABI to every other site: the
+    // classifier decides a function's return ABI once.
+    fn rebuild_multi_value_result(
+        &mut self,
+        call: WirInstr,
+        result_type: TypeId,
+        fields: &[(String, TypeId)],
+    ) -> WirInstr {
+        let struct_type = self.ref_type_id(result_type);
+        let (mut instrs, bound) = self.bind_multi_value_results_to_temps(call, fields);
+        instrs.push(self.struct_new(struct_type, local_reads(&bound)));
+        WirInstr::Seq(instrs)
+    }
 
-        // Build per-field split locals: `<base>_mv_<field_name>`.
-        let base = self.local_name(local_index);
-        let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
-        let mut order: Vec<(String, WirType)> = Vec::with_capacity(fields.len());
-        for (field_name, result_type) in &fields {
-            let local_name = format!("{base}_mv_{field_name}");
-            let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, *result_type);
-            split.insert(field_name.clone(), (local_name.clone(), wir_ty.clone()));
-            order.push((local_name, wir_ty));
-        }
+    /// [`Self::bind_multi_value_results`] into fresh temporaries, for a taker
+    /// with no name of its own to give them.
+    fn bind_multi_value_results_to_temps(
+        &mut self,
+        call: WirInstr,
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        let names: Vec<String> = fields
+            .iter()
+            .map(|(field_name, _)| self.fresh_local(&format!("$mv_{field_name}")))
+            .collect();
+        self.bind_multi_value_results(call, fields, &names)
+    }
 
-        // Whatever ran ahead of the call in the block still has to run, and
-        // ahead of the bind — the receiver the call reads is bound there.
-        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
-
-        // Translate the call (after dropping any borrow on `value`'s expr).
-        let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
-
-        // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
-        instrs.reserve(order.len() + 1);
-        for (name, ty) in &order {
+    /// Declare one local per field, named by `names`, and bind into them the N
+    /// results the call leaves on the stack.
+    fn bind_multi_value_results(
+        &mut self,
+        call: WirInstr,
+        fields: &[(String, TypeId)],
+        names: &[String],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        assert_eq!(
+            names.len(),
+            fields.len(),
+            "[WIR] a multi-value bind needs one local per result"
+        );
+        let mut instrs = Vec::with_capacity(fields.len() + 1);
+        let mut bound = Vec::with_capacity(fields.len());
+        for ((_, field_type), name) in fields.iter().zip(names) {
+            let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
                 ty: ty.clone(),
             });
+            bound.push((name.clone(), ty));
         }
-        let locals = order.iter().map(|(n, _)| Some(n.clone())).collect();
         instrs.push(WirInstr::MultiValueLocalBind {
-            instr: Box::new(call_instr),
-            locals,
+            instr: Box::new(call),
+            locals: bound.iter().map(|(name, _)| Some(name.clone())).collect(),
         });
+        (instrs, bound)
+    }
 
-        // Track for subsequent FieldAccess lookups.
+    /// Translate the arguments of a call to `func`, handing a parameter that
+    /// takes the multi-value ABI over one field at a time.
+    fn translate_args_for_callee(
+        &mut self,
+        func_id: FuncId,
+        ordered: &[Operand],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let split = self
+            .ctx
+            .multi_value_param_funcs
+            .get(&func_id)
+            .cloned()
+            .unwrap_or_default();
+        self.without_multi_value_results(|t| t.translate_args(ordered, &split))
+    }
+
+    /// One argument as N values, taken off a multi-value call's results or a
+    /// literal's own initialisers. Anything else spills once and reads it back.
+    fn split_argument(
+        &mut self,
+        op: Operand,
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        if let Some(expr) = op.as_expr() {
+            match &self.body.exprs[expr].kind {
+                ExprKind::Call { func_id, .. }
+                    if self
+                        .multi_value_result_fields(*func_id)
+                        .is_some_and(|got| self.abi_fields_agree(got, fields)) =>
+                {
+                    let call = self.take_multi_value_results(|t| t.translate_expr(expr));
+                    let (instrs, bound) = self.bind_multi_value_results_to_temps(call, fields);
+                    return (instrs, local_reads(&bound));
+                }
+                ExprKind::StructLiteral {
+                    fields: written, ..
+                } if written.len() == fields.len()
+                    && fields
+                        .iter()
+                        .all(|(n, _)| written.iter().any(|f| f.name == *n)) =>
+                {
+                    let written = written.clone();
+                    return self.split_struct_literal(&written, fields);
+                }
+                _ => {}
+            }
+        }
+
+        let struct_type = self.ref_type_id(self.operand_type_id(op));
+        let (prelude, read_whole) = self.spill_operand(op, "$mv_arg");
+        let reads = fields
+            .iter()
+            .map(|(field_name, field_type)| WirInstr::StructGet {
+                type_id: struct_type.clone(),
+                field_name: field_name.clone(),
+                expr: Box::new(read_whole.clone()),
+                result_ty: self.ctx.type_id_to_wir_type(self.type_table, *field_type),
+            })
+            .collect();
+        (prelude, reads)
+    }
+
+    /// A struct literal's initialisers as the callee's N arguments, so the
+    /// aggregate is never built.
+    // Each is spilled in the order it was written, because the ABI reads them
+    // in declaration order and the two can differ.
+    fn split_struct_literal(
+        &mut self,
+        written: &[ArenaStructField],
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        let mut prelude = Vec::new();
+        let mut by_name: IndexMap<String, WirInstr> = IndexMap::default();
+        for field in written {
+            let (p, read) = self.spill_operand(field.value, "$mv_field");
+            prelude.extend(p);
+            by_name.insert(field.name.clone(), read);
+        }
+        let reads = fields
+            .iter()
+            .map(|(name, _)| {
+                by_name
+                    .swap_remove(name)
+                    .expect("literal field checked present")
+            })
+            .collect();
+        (prelude, reads)
+    }
+
+    /// Evaluate `op` into a fresh local, and answer that with the read of it.
+    /// Pins the evaluation where it stands, ahead of whatever follows.
+    fn spill_operand(&mut self, op: Operand, prefix: &str) -> (Vec<WirInstr>, WirInstr) {
+        let ty = self
+            .ctx
+            .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
+        let name = self.fresh_local(prefix);
+        let value = self.translate_operand(op);
+        let prelude = declare_and_set_local(name.clone(), ty.clone(), value).to_vec();
+        let read = WirInstr::LocalGet {
+            name,
+            result_ty: ty,
+        };
+        (prelude, read)
+    }
+
+    /// The per-field result types a multi-value callee returns, in field order.
+    fn multi_value_result_fields(&self, func_id: FuncId) -> Option<&[(String, TypeId)]> {
+        self.ctx
+            .multi_value_return_funcs
+            .get(&func_id)
+            .map(Vec::as_slice)
+    }
+
+    /// Whether a callee's N results can be handed straight to another's N
+    /// parameters, which the lowered `WirType` of each field decides.
+    // Not `TypeKey`: it resolves through newtype erasure, so two fields share
+    // one and still lower to a ref against an i32.
+    fn abi_fields_agree(&self, left: &[(String, TypeId)], right: &[(String, TypeId)]) -> bool {
+        left.len() == right.len()
+            && left.iter().zip(right).all(|((ln, lt), (rn, rt))| {
+                ln == rn
+                    && self.ctx.type_id_to_wir_type(self.type_table, *lt)
+                        == self.ctx.type_id_to_wir_type(self.type_table, *rt)
+            })
+    }
+
+    /// Bind `let local = Call(f)` to one split local per result of `f`, which a
+    /// later `FieldAccess` on the local then reads in place of the aggregate.
+    // `block_tail_call` is the same recogniser `optimize::multi_value_return`
+    // validates call sites with, so the shapes the two accept cannot drift.
+    fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
+        if !self.settled_locals.contains(&local_index) {
+            return None;
+        }
+        let mut prefix: Vec<StmtId> = Vec::new();
+        let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
+        let fields = self.multi_value_result_fields(func_id)?.to_vec();
+
+        let base = self.local_name(local_index);
+        let names: Vec<String> = fields
+            .iter()
+            .map(|(field_name, _)| multi_value_split_local(&base, field_name))
+            .collect();
+
+        // Whatever ran ahead of the call in the block still has to run, and
+        // ahead of the bind — the receiver the call reads is bound there.
+        let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
+        let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
+        let (bind, bound) = self.bind_multi_value_results(call_instr, &fields, &names);
+        instrs.extend(bind);
+
+        let split = fields
+            .iter()
+            .zip(bound)
+            .map(|((field_name, _), local)| (field_name.clone(), local))
+            .collect();
         self.multi_value_split_locals.insert(local_index, split);
 
         Some(WirInstr::Seq(instrs))
@@ -1130,17 +1362,25 @@ impl FunctionTranslator<'_, '_> {
     /// Lower `f` with the multi-value results accounted for: the caller is
     /// binding or dropping them, so a call inside it may leave N on the stack.
     fn take_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let outer = std::mem::replace(&mut self.multi_value_results_taken, true);
+        self.with_multi_value_results(true, f)
+    }
+
+    /// Lower `f` with no taker for a multi-value result. A taker is for the call
+    /// itself, never for what the call is passed.
+    fn without_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
+        self.with_multi_value_results(false, f)
+    }
+
+    fn with_multi_value_results<R>(&mut self, taken: bool, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = std::mem::replace(&mut self.multi_value_results_taken, taken);
         let out = f(self);
         self.multi_value_results_taken = outer;
         out
     }
 
     /// Whether the callee returns its aggregate as N Wasm results.
-    fn callee_returns_multi_value(&self, func: &nir::FunctionRef) -> bool {
-        self.ctx
-            .multi_value_return_funcs
-            .contains_key(&(func.name.clone(), func.module_source.clone()))
+    fn callee_returns_multi_value(&self, func_id: FuncId) -> bool {
+        self.ctx.multi_value_return_funcs.contains_key(&func_id)
     }
 
     /// A synthetic local's name, out of the way of every source local: codegen
@@ -1224,21 +1464,17 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
-    /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
-    /// A single `Drop` could not consume them. `None` for anything else, which
-    /// falls through to that ordinary `Drop`.
+    /// N results to wildcards, since a single `Drop` cannot consume them.
     fn try_emit_multi_value_discard(&mut self, value: Operand) -> Option<WirInstr> {
         let mut prefix: Vec<StmtId> = Vec::new();
         let (func_id, _, call) = block_tail_call(self.body, value, &mut prefix)?;
-        let func = self.callee_descriptor(func_id);
-        let key = (func.name.clone(), func.module_source);
-        let fields = self.ctx.multi_value_return_funcs.get(&key)?.clone();
+        let arity = self.multi_value_result_fields(func_id)?.len();
 
         let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
         let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call_instr),
-            locals: vec![None; fields.len()],
+            locals: vec![None; arity],
         });
         Some(WirInstr::Seq(instrs))
     }
@@ -1993,40 +2229,49 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         ordered: &[Operand],
     ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        self.translate_args(ordered, &IndexMap::default())
+    }
+
+    /// As above, with the positions in `split` handed over field by field. One
+    /// loop over the whole list, so the ordering analysis sees every argument.
+    fn translate_args(
+        &mut self,
+        ordered: &[Operand],
+        split: &IndexMap<usize, Vec<(String, TypeId)>>,
+    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
         let unit_needs_eval = |this: &Self, op: Operand| match op {
             Operand::Value(_) => false,
             Operand::Expr(e) => !matches!(this.body.exprs[e].kind, ExprKind::Local { .. }),
         };
-        let last_effectful_unit = ordered
+        // An argument evaluated into the prelude runs ahead of every argument
+        // left on the stack, so each one to its left is spilled to hold source
+        // order.
+        let evaluated_early = |this: &Self, i: usize, op: Operand| {
+            split.contains_key(&i)
+                || (this.is_stackless_type(this.operand_type_id(op)) && unit_needs_eval(this, op))
+        };
+        let last_early = ordered
             .iter()
             .enumerate()
-            .filter(|(_, op)| {
-                self.is_stackless_type(self.operand_type_id(**op)) && unit_needs_eval(self, **op)
-            })
+            .filter(|(i, op)| evaluated_early(self, *i, **op))
             .map(|(i, _)| i)
             .next_back();
 
         let mut prelude = Vec::new();
         let mut call_args = Vec::new();
         for (i, &op) in ordered.iter().enumerate() {
-            if self.is_stackless_type(self.operand_type_id(op)) {
+            if let Some(fields) = split.get(&i) {
+                let (p, reads) = self.split_argument(op, fields);
+                prelude.extend(p);
+                call_args.extend(reads);
+            } else if self.is_stackless_type(self.operand_type_id(op)) {
                 if unit_needs_eval(self, op) {
-                    // Unit-typed expressions translate to void instructions
-                    // (the `StmtKind::Expr` discipline), so they slot straight
-                    // into the prelude.
                     prelude.push(self.translate_operand(op));
                 }
-            } else if last_effectful_unit.is_some_and(|last| i < last) {
-                let ty = self
-                    .ctx
-                    .type_id_to_wir_type(self.type_table, self.operand_type_id(op));
-                let name = self.fresh_local("$arg_spill");
-                let value = self.translate_operand(op);
-                prelude.extend(declare_and_set_local(name.clone(), ty.clone(), value));
-                call_args.push(WirInstr::LocalGet {
-                    name,
-                    result_ty: ty,
-                });
+            } else if last_early.is_some_and(|last| i < last) {
+                let (p, read) = self.spill_operand(op, "$arg_spill");
+                prelude.extend(p);
+                call_args.push(read);
             } else {
                 call_args.push(self.translate_operand(op));
             }
@@ -2404,28 +2649,33 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                debug_assert!(
-                    self.multi_value_results_taken || !self.callee_returns_multi_value(func),
-                    "[WIR] multi-value call to {} lowered as an ordinary call: the shapes \
-                     `optimize::multi_value_return` admits — a `let` bind, a discarded \
-                     statement, a pass-through return — are lowered before this",
-                    func.name
-                );
+                // Nothing here is binding the results, so the value is wanted
+                // whole.
+                let rebuild = (!self.multi_value_results_taken)
+                    .then(|| self.multi_value_result_fields(*func_id).map(<[_]>::to_vec))
+                    .flatten();
 
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();
-                let (prelude, translated_args) = self.translate_args_erasing_unit(&ordered);
+                let (prelude, translated_args) = self.translate_args_for_callee(*func_id, &ordered);
 
                 if let Some(wir_func_id) = self.resolve_call(func, *func_id) {
                     let call = WirInstr::Call {
                         func_id: wir_func_id,
                         args: translated_args,
                     };
-                    self.wrap_call_with_prelude(
-                        prelude,
-                        call,
-                        expr.type_id,
-                        self.callee_returns_multi_value(func),
-                    )
+                    let result_type = expr.type_id;
+                    match rebuild {
+                        Some(fields) => {
+                            let whole = self.rebuild_multi_value_result(call, result_type, &fields);
+                            self.wrap_call_with_prelude(prelude, whole, result_type, false)
+                        }
+                        None => self.wrap_call_with_prelude(
+                            prelude,
+                            call,
+                            result_type,
+                            self.callee_returns_multi_value(*func_id),
+                        ),
+                    }
                 } else {
                     self.unresolved_call_or_trap(func, expr.span, || {
                         format!(
@@ -3095,6 +3345,42 @@ fn return_every_exit(instrs: &mut [WirInstr], target_depth: u32, tail: Tail) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn param_names_agree_with_the_body() {
+        // `e` at index 2 suffixes to `e_2`, which a third parameter spells
+        // literally.
+        let params = [
+            param_named("e", 0),
+            param_named("e_2", 1),
+            param_named("e", 2),
+        ];
+        let resolved = resolve_param_names(&params);
+        let unique: IndexSet<&str> = resolved.values().map(String::as_str).collect();
+        assert_eq!(
+            unique.len(),
+            resolved.len(),
+            "parameter names must be unique: {resolved:?}"
+        );
+
+        let raw: IndexMap<u32, String> = params
+            .iter()
+            .map(|p| (p.local_index, p.name.clone()))
+            .collect();
+        assert_eq!(resolve_local_names(&raw, &params), resolved);
+    }
+
+    fn param_named(name: &str, local_index: u32) -> NirParam {
+        NirParam {
+            name: name.to_string(),
+            type_id: TypeId(0),
+            local_index,
+            is_mut: false,
+            is_mut_ref: false,
+            span: Span::default(),
+            param_abi: nir::ParamAbi::default(),
+        }
+    }
 
     #[test]
     fn resolve_local_names_are_globally_unique() {

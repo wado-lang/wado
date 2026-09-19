@@ -20,7 +20,8 @@ use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{
-    FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ReturnAbi,
+    FuncId, FunctionKind, FunctionRef, InlineHint, NirFunction, NirLocal, NirParam, ParamAbi,
+    ReturnAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, BlockId, BlockNode, Body, ExprKind, ExprNode, NodeRef, Operand, PatKind, StmtId,
@@ -567,6 +568,7 @@ fn build_helper(
             is_mut: false,
             is_mut_ref: false,
             span: parent.span,
+            param_abi: ParamAbi::default(),
         });
         lifted_slots.push(NirLocal {
             is_mut: false,

@@ -1,11 +1,8 @@
-//! Multi-value return ABI classification: which aggregate-returning functions
-//! take the multi-value Wasm ABI, one result per field, instead of a heap
-//! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
-//! fresh literals, and every call site binds it as `let $tmp = Call(f)` whose
-//! only uses are field accesses. The one mutation is `return_abi`.
+//! Which aggregate-returning functions return one Wasm result per field instead
+//! of a heap struct: those building a 2..=[`MAX_RESULTS`]-field fresh literal.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ReturnAbi};
+use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_package::NirPackage;
 use crate::optimize::sroa_variant_return::settled_locals;
@@ -177,12 +174,14 @@ fn refute_candidates(
             continue;
         };
         let passes_through = func.id.and_then(|id| tail_ok.get(&id)).copied();
+        let is_candidate = func.id.is_some_and(|id| candidate_ids.contains_key(&id));
         validate_uses_in_block(
             body,
             body.root,
             &candidate_ids,
             candidates,
             passes_through,
+            is_candidate,
             &mut invalid,
             false,
         );
@@ -195,6 +194,7 @@ fn refute_candidates(
             &candidate_ids,
             candidates,
             None,
+            false,
             &mut invalid,
             true,
         );
@@ -209,22 +209,7 @@ fn candidate_info(
     structs: &[NirStruct],
     tail_ok: &IndexMap<FuncId, TypeId>,
 ) -> Option<CandidateInfo> {
-    if !matches!(func.kind, FunctionKind::Regular) || func.is_dispatch_wrapper {
-        return None;
-    }
-    if func.is_export || func.is_cm_export || func.is_cm_binding {
-        return None;
-    }
-    if func.is_async {
-        return None;
-    }
-    if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-        return None;
-    }
-    // A trait method is not excluded: after monomorphization it is an ordinary
-    // direct-call target, and the gates above already cover every way a
-    // function's address escapes a direct call.
-    if func.is_closure_call() {
+    if !func.only_reached_by_direct_call() {
         return None;
     }
 
@@ -292,7 +277,7 @@ pub(super) fn aggregate_field_info(
     None
 }
 
-fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
+pub(super) fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
     match type_table.get(type_id) {
         ResolvedType::Primitive(_)
         | ResolvedType::Struct { .. }
@@ -301,12 +286,14 @@ fn is_eligible_field_type(type_id: TypeId, type_table: &TypeTable) -> bool {
         | ResolvedType::Variant { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::GenericResource { .. }
-        | ResolvedType::Newtype { .. }
         | ResolvedType::Flags { .. }
         | ResolvedType::BuiltinArray(_)
         | ResolvedType::Ref(_)
         | ResolvedType::MutRef(_)
         | ResolvedType::Reactive(_) => true,
+        // A newtype erases to its base, so what the base takes a slot for is
+        // what this does.
+        ResolvedType::Newtype { base_type, .. } => is_eligible_field_type(*base_type, type_table),
         ResolvedType::Unit
         | ResolvedType::Never
         | ResolvedType::Function { .. }
@@ -556,6 +543,7 @@ fn validate_uses_in_block(
     candidate_ids: &IndexMap<FuncId, usize>,
     candidates: &IndexMap<usize, CandidateInfo>,
     passes_through: Option<TypeId>,
+    is_candidate: bool,
     invalid: &mut IndexSet<usize>,
     yields_value: bool,
 ) {
@@ -565,7 +553,9 @@ fn validate_uses_in_block(
         candidate_ids,
         candidates,
         passes_through,
+        is_candidate,
         settled: &settled,
+        under_multi_value_return: false,
     };
     let stmts = body.blocks[block].stmts.clone();
     for (i, &stmt) in stmts.iter().enumerate() {
@@ -583,9 +573,15 @@ struct UseCx<'a> {
     /// which a bare `Call` needs no `let` to bind it, because the results go
     /// straight out as our own.
     passes_through: Option<TypeId>,
+    /// Whether this body's own function is a candidate, so `wir_build` will
+    /// lower its return value with the N results accounted for.
+    is_candidate: bool,
     /// Locals bound once and never assigned, so a `let mut` over one of them
     /// binds a call result as safely as a plain `let`.
     settled: &'a IndexSet<u32>,
+    /// Set inside the return value of a function that itself takes this ABI —
+    /// the one position a nested call cannot rebuild its aggregate in.
+    under_multi_value_return: bool,
 }
 
 /// `discarded` says the statement's value goes nowhere — it is not the last
@@ -652,6 +648,10 @@ fn validate_stmt(
             // leaves its N results on the stack and they are ours, so the call
             // needs no `let` to bind.
             if let Some(ours) = cx.passes_through {
+                let cx = &UseCx {
+                    under_multi_value_return: cx.is_candidate,
+                    ..*cx
+                };
                 validate_tail_return(body, e, ours, cx, invalid, tracked);
                 return;
             }
@@ -844,13 +844,17 @@ fn walk_expr_for_uses(
             }
             walk_expr_for_uses_operand(body, source, cx, invalid, tracked);
         }
+        // A struct rebuilt from the split locals is a copy, so a mutation
+        // through it would not reach the next read.
         ExprKind::Local { index, .. } => {
             if let Some(&candidate_idx) = tracked.get(index) {
                 invalid.insert(candidate_idx);
             }
         }
         ExprKind::Call { func_id, args, .. } => {
-            if let Some(&candidate_idx) = cx.candidate_ids.get(func_id) {
+            if cx.under_multi_value_return
+                && let Some(&candidate_idx) = cx.candidate_ids.get(func_id)
+            {
                 invalid.insert(candidate_idx);
             }
             let args: Vec<ExprId> = args.iter().filter_map(|a| a.expr.as_expr()).collect();

@@ -37,6 +37,7 @@ mod loop_version_bce;
 mod match_to_bitset;
 mod match_to_switch;
 mod mod_ref;
+pub(crate) mod multi_value_param;
 pub(crate) mod multi_value_return;
 mod param_spec;
 mod peephole;
@@ -46,7 +47,7 @@ mod select_lowering;
 mod shared_escape;
 mod sroa;
 mod sroa_param;
-mod sroa_variant_return;
+pub(crate) mod sroa_variant_return;
 mod store_load_forward;
 mod string_push;
 mod tmpl_hoist;
@@ -280,13 +281,14 @@ pub fn optimize(
         select_lowering::select_lowering(p)
     });
 
-    // Multi-value return ABI classification: marks an aggregate-returning
-    // function whose every return builds a fresh literal and whose every call
-    // site destructures the bound temp, which WIR build reads to emit the
-    // multi-value signature and split the call-site binding. Runs after every
-    // other transformation, so the analysis sees the final NIR shape.
+    // The multi-value ABI, both sides. These run after every other
+    // transformation, so each sees the final NIR shape.
     run_pass("nir/multi_value_return", &mut project, profiler, |p| {
         multi_value_return::classify_multi_value_returns(p)
+    });
+
+    run_pass("nir/multi_value_param", &mut project, profiler, |p| {
+        multi_value_param::classify_multi_value_params(p)
     });
 
     // Freeze re-emittable pure arithmetic (constants / local reads composed by

@@ -26,7 +26,7 @@ The fixed-point loop exits early on convergence, so a pass must report a change 
 
 A run that reaches the cap logs it at debug level, naming the passes still reporting changes. At `-O2`/`-Os` and `-O3` that is also a `debug_assert`: their caps are sized so the loop converges under them. `-O1`'s smaller number of rounds and an explicit `--optimize-iterations` are budgets, and say nothing about convergence.
 
-The backend-required rewrites (`select_lowering`, `multi_value_return`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
+The backend-required rewrites (`select_lowering`, `multi_value_return`, `multi_value_param`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.
 
 ## Architecture
 
@@ -117,8 +117,17 @@ Whole-program and backend:
 - `match_to_switch` — lower a dense integer/enum `match` to a `br_table` switch, once it covers twelve values, which one range arm can do alone. The table replaces a cascade the predictor gets right with a single indirect branch, so it pays only once that cascade is long.
 - `if_chain_to_match` — fuse a run of sibling `if K == x { … }` statements over one local into a single `Match`. A derived `Deserialize` routes a field through such a run, unrolled one arm per declared field and left by none of them, so a struct pays one comparison per field declared for _every_ field on the wire. The guards are exclusive because the constants are distinct and no arm writes the local; the constant bindings between the arms (the unrolled index) move ahead of the run. No width threshold of its own — the `Match` alone never tests more keys than the flat run.
 - `select_lowering` — lower an `if` with pure arms to a branchless `builtin::select`.
+<<<<<<< HEAD
 - `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
 - `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A packed `Array<u8>` counts as an aggregate: it is what a `String` literal leaves once `string_push`'s fusion reads only its `repr` and SROA takes the struct away. A field reaching the aggregate through a binding of its own still hoists — that binding is what SROA leaves of a constant it split, so its definition is substituted back in rather than wrapped in a block, a block being a runtime assignment where the point is an instantiation-time constant. A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. Delivering it means reaching a place that outlives the borrow: handing it on as a shared-reference argument asks the same question of that callee instead, a Wasm instruction over primitives cannot keep it at all, and a local assigned from a projection is another name for the same storage rather than an escape. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect. A callee that does stash its parameter away gets a second question from `shared_escape`: a stashed constant is still safe to share when nothing in the whole program ever writes through it, which it answers by tainting the object and following it into every slot it lands in. Profitability turns on the same distinction — a stashed constant would join the live set once per call, so it hoists whatever its shape, while one that dies with the call must own heap storage to pay for a global. A builtin that lowers an argument to a Wasm immediate declares `#[immediate(p)]`, and nothing hoists what sits there: codegen reads that argument's literal, so a global read there is a broken lowering rather than a slow one.
+||||||| 2ac4533baba
+- `multi_value_return` — emit the multi-value ABI for tuple/struct returns whose call sites destructure.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A packed `Array<u8>` counts as an aggregate: it is what a `String` literal leaves once `string_push`'s fusion reads only its `repr` and SROA takes the struct away. A field reaching the aggregate through a binding of its own still hoists — that binding is what SROA leaves of a constant it split, so its definition is substituted back in rather than wrapped in a block, a block being a runtime assignment where the point is an instantiation-time constant. A borrow a builtin receives answers the read-only question from `FunctionRef::reads_param_only`, there being no body to walk. A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. Delivering it means reaching a place that outlives the borrow: handing it on as a shared-reference argument asks the same question of that callee instead, a Wasm instruction over primitives cannot keep it at all, and a local assigned from a projection is another name for the same storage rather than an escape. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+=======
+- `multi_value_return` — return a tuple or struct built from a fresh literal as one Wasm result per field. A call site that reads fields is lowered off the results; one that takes the whole value rebuilds it, so it costs itself rather than the callee its ABI.
+- `multi_value_param` — the mirror for a parameter every use of which is a field read: one Wasm parameter per field, and an argument that is a literal or another multi-value call's results never builds the aggregate at all.
+- `const_object_globalization` — hoist constant read-only aggregates, and pure calls on constants that build heap values, into shared immutable globals (see [WEP](./wep-2026-05-31-const-object-globalization.md)). A packed `Array<u8>` counts as an aggregate: it is what a `String` literal leaves once `string_push`'s fusion reads only its `repr` and SROA takes the struct away. A field reaching the aggregate through a binding of its own still hoists — that binding is what SROA leaves of a constant it split, so its definition is substituted back in rather than wrapped in a block, a block being a runtime assignment where the point is an instantiation-time constant. A borrow a builtin receives answers the read-only question from `FunctionRef::reads_param_only`, there being no body to walk. A constant a callee borrows is left alone when that callee delivers the referent back out, which would share one object across every call. Delivering it means reaching a place that outlives the borrow: handing it on as a shared-reference argument asks the same question of that callee instead, a Wasm instruction over primitives cannot keep it at all, and a local assigned from a projection is another name for the same storage rather than an escape. A hoist the later folds leave with no reader is taken back, dropping the initializer with it — unless it could trap, which is observed like any other effect.
+>>>>>>> origin/main
 
 ## Lowering optimizations
 
@@ -220,11 +229,11 @@ Missing optimizations, one entry per pass-shaped gap. Architectural work — com
 - [ ] Argument promotion — pass a by-reference parameter's fields by value when
       the callee only reads them, and return them by multi-value when it only
       writes them. Together they retire a scratch aggregate at its allocation
-      site, which `sroa` then finishes. `sroa_param` passes one field,
-      `stored_params` decides the escape precondition, and
-      `multi_value_return` / `sroa_variant_return` own the write-back ABI, so
-      what is missing is passing several at once under an arity cap, and
-      returning the written ones.
+      site, which `sroa` then finishes. `multi_value_param` covers the read
+      side for a by-value aggregate, `stored_params` decides the escape
+      precondition, and `multi_value_return` / `sroa_variant_return` own the
+      write-back ABI, so what is missing is reaching a parameter held by
+      reference, and returning the fields the callee wrote.
       `param_spec` covers only the constant case; a non-constant field still
       costs a GC load per read. `core:json`'s number scanner is the standing
       case: its `ScannedNumber` is written by one callee and read by another,

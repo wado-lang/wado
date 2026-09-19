@@ -458,6 +458,21 @@ pub enum ReturnAbi {
     },
 }
 
+/// How a parameter arrives at the Wasm level. The mirror of [`ReturnAbi`]: Wasm
+/// takes N parameters as freely as it returns N results.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum ParamAbi {
+    /// One Wasm parameter, of the NIR type as written.
+    #[default]
+    Single,
+    /// One Wasm parameter per field, in declaration order. The NIR type and
+    /// local index are unchanged; only the WIR-level ABI shifts.
+    MultiValue {
+        field_types: Vec<TypeId>,
+        field_names: Vec<String>,
+    },
+}
+
 /// Semantic category of a `NirFunction`. Carries the type operand so the
 /// optimizer can reason about the call without re-deriving it from the
 /// signature.
@@ -571,6 +586,24 @@ impl NirFunction {
         self.type_params.iter().any(|p| !p.is_effect)
     }
 
+    /// Whether every caller reaches this function through a direct call that
+    /// `wir_build` lowers against its recorded ABI, so changing that ABI is safe.
+    // A monomorphized trait method qualifies. `ValueCopy` and
+    // `FnCanonicalDispatch` do not: neither is reached through a NIR call node,
+    // so nothing at the call site would follow the signature.
+    #[inline]
+    pub fn only_reached_by_direct_call(&self) -> bool {
+        matches!(self.kind, FunctionKind::Regular)
+            && !self.is_dispatch_wrapper
+            && !self.is_export
+            && !self.is_cm_export
+            && !self.is_cm_binding
+            && !self.is_async
+            && !self.has_real_type_params()
+            && self.impl_type_params.is_empty()
+            && !self.is_closure_call()
+    }
+
     /// Returns the copied type if this is a synthesized value-copy function.
     #[inline]
     pub fn value_copy_type(&self) -> Option<TypeId> {
@@ -634,6 +667,9 @@ pub struct NirParam {
     /// caller's argument storage. Captured pre-boxing (see [`crate::tir::TirParam::is_mut_ref`]).
     pub is_mut_ref: bool,
     pub span: Span,
+    /// How this parameter arrives at the Wasm level. Set by
+    /// `optimize::multi_value_param`; `Single` everywhere else.
+    pub param_abi: ParamAbi,
 }
 
 #[derive(Debug, Clone)]
