@@ -158,10 +158,41 @@ jobs:
 
       - run: mise run test-gale-o2
 
+  # `wado-run-webgpu` is its own workspace, so no job above builds, lints or
+  # tests it. See `wado-run-webgpu/AGENTS.md`.
+  test-webgpu:
+    name: Test (WebGPU)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # A runner has no GPU, and wgpu needs a driver to find any adapter at all.
+      # mesa-vulkan-drivers supplies lavapipe, which answers in software.
+      - run: sudo apt-get update && sudo apt-get install -y mesa-vulkan-drivers
+
+      - run: cargo build --locked --bin wado
+
+      - name: Build and test the runner
+        working-directory: wado-run-webgpu
+        env:
+          WADO: ${{ github.workspace }}/target/debug/wado
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
+
   test:
     name: Test
     if: always()
-    needs: [changes, test-core, test-wado, test-gale-o2, test-level]
+    needs: [changes, test-core, test-wado, test-gale-o2, test-level, test-webgpu]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions: {}

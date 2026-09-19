@@ -1,0 +1,2588 @@
+#![generated(by = "wado-from-idl", sources = ["vendor/wasi-webgpu/wit/imports.wit", "vendor/wasi-webgpu/wit/webgpu.wit"])]
+#![stdlib("wasi:webgpu/webgpu.wado")]
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-query-set-error-kind")]
+pub variant CreateQuerySetErrorKind {
+    #[cm("type-error")]
+    TypeError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-query-set-error")]
+pub struct CreateQuerySetError {
+    #[cm("kind")]
+    pub kind: CreateQuerySetErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#get-mapped-range-error-kind")]
+pub variant GetMappedRangeErrorKind {
+    #[cm("operation-error")]
+    OperationError,
+    #[cm("range-error")]
+    RangeError,
+    #[cm("type-error")]
+    TypeError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#get-mapped-range-error")]
+pub struct GetMappedRangeError {
+    #[cm("kind")]
+    pub kind: GetMappedRangeErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-address-mode")]
+pub enum GpuAddressMode {
+    #[cm("clamp-to-edge")]
+    ClampToEdge,
+    #[cm("repeat")]
+    Repeat,
+    #[cm("mirror-repeat")]
+    MirrorRepeat,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-blend-factor")]
+pub enum GpuBlendFactor {
+    #[cm("zero")]
+    Zero,
+    #[cm("one")]
+    One,
+    #[cm("src")]
+    Src,
+    #[cm("one-minus-src")]
+    OneMinusSrc,
+    #[cm("src-alpha")]
+    SrcAlpha,
+    #[cm("one-minus-src-alpha")]
+    OneMinusSrcAlpha,
+    #[cm("dst")]
+    Dst,
+    #[cm("one-minus-dst")]
+    OneMinusDst,
+    #[cm("dst-alpha")]
+    DstAlpha,
+    #[cm("one-minus-dst-alpha")]
+    OneMinusDstAlpha,
+    #[cm("src-alpha-saturated")]
+    SrcAlphaSaturated,
+    #[cm("constant")]
+    Constant,
+    #[cm("one-minus-constant")]
+    OneMinusConstant,
+    #[cm("src1")]
+    Src1,
+    #[cm("one-minus-src1")]
+    OneMinusSrc1,
+    #[cm("src1-alpha")]
+    Src1Alpha,
+    #[cm("one-minus-src1-alpha")]
+    OneMinusSrc1Alpha,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-blend-operation")]
+pub enum GpuBlendOperation {
+    #[cm("add")]
+    Add,
+    #[cm("subtract")]
+    Subtract,
+    #[cm("reverse-subtract")]
+    ReverseSubtract,
+    #[cm("min")]
+    Min,
+    #[cm("max")]
+    Max,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-blend-component")]
+pub struct GpuBlendComponent {
+    #[cm("operation")]
+    pub operation: Option<GpuBlendOperation>,
+    #[cm("src-factor")]
+    pub src_factor: Option<GpuBlendFactor>,
+    #[cm("dst-factor")]
+    pub dst_factor: Option<GpuBlendFactor>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-blend-state")]
+pub struct GpuBlendState {
+    #[cm("color")]
+    pub color: GpuBlendComponent,
+    #[cm("alpha")]
+    pub alpha: GpuBlendComponent,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-binding-type")]
+pub enum GpuBufferBindingType {
+    #[cm("uniform")]
+    Uniform,
+    #[cm("storage")]
+    Storage,
+    #[cm("read-only-storage")]
+    ReadOnlyStorage,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-dynamic-offset")]
+pub type GpuBufferDynamicOffset = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-map-state")]
+pub enum GpuBufferMapState {
+    #[cm("unmapped")]
+    Unmapped,
+    #[cm("pending")]
+    Pending,
+    #[cm("mapped")]
+    Mapped,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-usage")]
+pub flags GpuBufferUsage {
+    #[cm("map-read")]
+    MapRead,
+    #[cm("map-write")]
+    MapWrite,
+    #[cm("copy-src")]
+    CopySrc,
+    #[cm("copy-dst")]
+    CopyDst,
+    #[cm("index")]
+    Index,
+    #[cm("vertex")]
+    Vertex,
+    #[cm("uniform")]
+    Uniform,
+    #[cm("storage")]
+    Storage,
+    #[cm("indirect")]
+    Indirect,
+    #[cm("query-resolve")]
+    QueryResolve,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-alpha-mode")]
+pub enum GpuCanvasAlphaMode {
+    #[cm("opaque")]
+    Opaque,
+    #[cm("premultiplied")]
+    Premultiplied,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-tone-mapping-mode")]
+pub enum GpuCanvasToneMappingMode {
+    #[cm("standard")]
+    Standard,
+    #[cm("extended")]
+    Extended,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-tone-mapping")]
+pub struct GpuCanvasToneMapping {
+    #[cm("mode")]
+    pub mode: Option<GpuCanvasToneMappingMode>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-color")]
+pub struct GpuColor {
+    #[cm("r")]
+    pub r: f64,
+    #[cm("g")]
+    pub g: f64,
+    #[cm("b")]
+    pub b: f64,
+    #[cm("a")]
+    pub a: f64,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-color-write")]
+pub flags GpuColorWrite {
+    #[cm("red")]
+    Red,
+    #[cm("green")]
+    Green,
+    #[cm("blue")]
+    Blue,
+    #[cm("alpha")]
+    Alpha,
+    #[cm("all")]
+    All,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-command-buffer-descriptor")]
+pub struct GpuCommandBufferDescriptor {
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-command-encoder-descriptor")]
+pub struct GpuCommandEncoderDescriptor {
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compare-function")]
+pub enum GpuCompareFunction {
+    #[cm("never")]
+    Never,
+    #[cm("less")]
+    Less,
+    #[cm("equal")]
+    Equal,
+    #[cm("less-equal")]
+    LessEqual,
+    #[cm("greater")]
+    Greater,
+    #[cm("not-equal")]
+    NotEqual,
+    #[cm("greater-equal")]
+    GreaterEqual,
+    #[cm("always")]
+    Always,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compilation-message-type")]
+pub enum GpuCompilationMessageType {
+    #[cm("error")]
+    Error,
+    #[cm("warning")]
+    Warning,
+    #[cm("info")]
+    Info,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-cull-mode")]
+pub enum GpuCullMode {
+    #[cm("none")]
+    None,
+    #[cm("front")]
+    Front,
+    #[cm("back")]
+    Back,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-depth-bias")]
+pub type GpuDepthBias = i32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-device-lost-reason")]
+pub enum GpuDeviceLostReason {
+    #[cm("unknown")]
+    Unknown,
+    #[cm("destroyed")]
+    Destroyed,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-error-filter")]
+pub enum GpuErrorFilter {
+    #[cm("validation")]
+    Validation,
+    #[cm("out-of-memory")]
+    OutOfMemory,
+    #[cm("internal")]
+    Internal,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-error-kind")]
+pub variant GpuErrorKind {
+    #[cm("validation-error")]
+    ValidationError,
+    #[cm("out-of-memory-error")]
+    OutOfMemoryError,
+    #[cm("internal-error")]
+    InternalError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-feature-name")]
+pub enum GpuFeatureName {
+    #[cm("core-features-and-limits")]
+    CoreFeaturesAndLimits,
+    #[cm("depth-clip-control")]
+    DepthClipControl,
+    #[cm("depth32float-stencil8")]
+    Depth32floatStencil8,
+    #[cm("texture-compression-bc")]
+    TextureCompressionBc,
+    #[cm("texture-compression-bc-sliced3d")]
+    TextureCompressionBcSliced3d,
+    #[cm("texture-compression-etc2")]
+    TextureCompressionEtc2,
+    #[cm("texture-compression-astc")]
+    TextureCompressionAstc,
+    #[cm("texture-compression-astc-sliced3d")]
+    TextureCompressionAstcSliced3d,
+    #[cm("timestamp-query")]
+    TimestampQuery,
+    #[cm("indirect-first-instance")]
+    IndirectFirstInstance,
+    #[cm("shader-f16")]
+    ShaderF16,
+    #[cm("rg11b10ufloat-renderable")]
+    Rg11b10ufloatRenderable,
+    #[cm("bgra8unorm-storage")]
+    Bgra8unormStorage,
+    #[cm("float32-filterable")]
+    Float32Filterable,
+    #[cm("float32-blendable")]
+    Float32Blendable,
+    #[cm("clip-distances")]
+    ClipDistances,
+    #[cm("dual-source-blending")]
+    DualSourceBlending,
+    #[cm("subgroups")]
+    Subgroups,
+    #[cm("texture-formats-tier1")]
+    TextureFormatsTier1,
+    #[cm("texture-formats-tier2")]
+    TextureFormatsTier2,
+    #[cm("primitive-index")]
+    PrimitiveIndex,
+    #[cm("texture-component-swizzle")]
+    TextureComponentSwizzle,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-filter-mode")]
+pub enum GpuFilterMode {
+    #[cm("nearest")]
+    Nearest,
+    #[cm("linear")]
+    Linear,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-front-face")]
+pub enum GpuFrontFace {
+    #[cm("ccw")]
+    Ccw,
+    #[cm("cw")]
+    Cw,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-index-format")]
+pub enum GpuIndexFormat {
+    #[cm("uint16")]
+    Uint16,
+    #[cm("uint32")]
+    Uint32,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-index32")]
+pub type GpuIndex32 = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-integer-coordinate")]
+pub type GpuIntegerCoordinate = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-extent3-d")]
+pub struct GpuExtent3D {
+    #[cm("width")]
+    pub width: GpuIntegerCoordinate,
+    #[cm("height")]
+    pub height: Option<GpuIntegerCoordinate>,
+    #[cm("depth-or-array-layers")]
+    pub depth_or_array_layers: Option<GpuIntegerCoordinate>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-integer-coordinate-out")]
+pub type GpuIntegerCoordinateOut = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-load-op")]
+pub enum GpuLoadOp {
+    #[cm("load")]
+    Load,
+    #[cm("clear")]
+    Clear,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-map-mode")]
+pub flags GpuMapMode {
+    #[cm("read")]
+    Read,
+    #[cm("write")]
+    Write,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-mipmap-filter-mode")]
+pub enum GpuMipmapFilterMode {
+    #[cm("nearest")]
+    Nearest,
+    #[cm("linear")]
+    Linear,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-origin3-d")]
+pub struct GpuOrigin3D {
+    #[cm("x")]
+    pub x: Option<GpuIntegerCoordinate>,
+    #[cm("y")]
+    pub y: Option<GpuIntegerCoordinate>,
+    #[cm("z")]
+    pub z: Option<GpuIntegerCoordinate>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-pipeline-constant-value")]
+pub type GpuPipelineConstantValue = f64;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-pipeline-error-reason")]
+pub enum GpuPipelineErrorReason {
+    #[cm("validation")]
+    Validation,
+    #[cm("internal")]
+    Internal,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-pipeline-error-kind")]
+pub variant CreatePipelineErrorKind {
+    #[cm("gpu-pipeline-error")]
+    GpuPipelineError(GpuPipelineErrorReason),
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#create-pipeline-error")]
+pub struct CreatePipelineError {
+    #[cm("kind")]
+    pub kind: CreatePipelineErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-layout-mode")]
+pub variant GpuLayoutMode {
+    #[cm("specific")]
+    Specific(&GpuPipelineLayout),
+    #[cm("auto")]
+    Auto,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-power-preference")]
+pub enum GpuPowerPreference {
+    #[cm("low-power")]
+    LowPower,
+    #[cm("high-performance")]
+    HighPerformance,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-primitive-topology")]
+pub enum GpuPrimitiveTopology {
+    #[cm("point-list")]
+    PointList,
+    #[cm("line-list")]
+    LineList,
+    #[cm("line-strip")]
+    LineStrip,
+    #[cm("triangle-list")]
+    TriangleList,
+    #[cm("triangle-strip")]
+    TriangleStrip,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-primitive-state")]
+pub struct GpuPrimitiveState {
+    #[cm("topology")]
+    pub topology: Option<GpuPrimitiveTopology>,
+    #[cm("strip-index-format")]
+    pub strip_index_format: Option<GpuIndexFormat>,
+    #[cm("front-face")]
+    pub front_face: Option<GpuFrontFace>,
+    #[cm("cull-mode")]
+    pub cull_mode: Option<GpuCullMode>,
+    #[cm("unclipped-depth")]
+    pub unclipped_depth: Option<bool>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-query-type")]
+pub enum GpuQueryType {
+    #[cm("occlusion")]
+    Occlusion,
+    #[cm("timestamp")]
+    Timestamp,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-queue-descriptor")]
+pub struct GpuQueueDescriptor {
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-bundle-descriptor")]
+pub struct GpuRenderBundleDescriptor {
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-request-adapter-options")]
+pub struct GpuRequestAdapterOptions {
+    #[cm("feature-level")]
+    pub feature_level: Option<String>,
+    #[cm("power-preference")]
+    pub power_preference: Option<GpuPowerPreference>,
+    #[cm("force-fallback-adapter")]
+    pub force_fallback_adapter: Option<bool>,
+    #[cm("xr-compatible")]
+    pub xr_compatible: Option<bool>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-sample-mask")]
+pub type GpuSampleMask = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-sampler-binding-type")]
+pub enum GpuSamplerBindingType {
+    #[cm("filtering")]
+    Filtering,
+    #[cm("non-filtering")]
+    NonFiltering,
+    #[cm("comparison")]
+    Comparison,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-sampler-binding-layout")]
+pub struct GpuSamplerBindingLayout {
+    #[cm("type")]
+    pub type: Option<GpuSamplerBindingType>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-sampler-descriptor")]
+pub struct GpuSamplerDescriptor {
+    #[cm("address-mode-u")]
+    pub address_mode_u: Option<GpuAddressMode>,
+    #[cm("address-mode-v")]
+    pub address_mode_v: Option<GpuAddressMode>,
+    #[cm("address-mode-w")]
+    pub address_mode_w: Option<GpuAddressMode>,
+    #[cm("mag-filter")]
+    pub mag_filter: Option<GpuFilterMode>,
+    #[cm("min-filter")]
+    pub min_filter: Option<GpuFilterMode>,
+    #[cm("mipmap-filter")]
+    pub mipmap_filter: Option<GpuMipmapFilterMode>,
+    #[cm("lod-min-clamp")]
+    pub lod_min_clamp: Option<f32>,
+    #[cm("lod-max-clamp")]
+    pub lod_max_clamp: Option<f32>,
+    #[cm("compare")]
+    pub compare: Option<GpuCompareFunction>,
+    #[cm("max-anisotropy")]
+    pub max_anisotropy: Option<u16>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-shader-module-compilation-hint")]
+pub struct GpuShaderModuleCompilationHint {
+    #[cm("entry-point")]
+    pub entry_point: String,
+    #[cm("layout")]
+    pub layout: Option<GpuLayoutMode>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-shader-module-descriptor")]
+pub struct GpuShaderModuleDescriptor {
+    #[cm("code")]
+    pub code: String,
+    #[cm("compilation-hints")]
+    pub compilation_hints: Option<List<GpuShaderModuleCompilationHint>>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-shader-stage")]
+pub flags GpuShaderStage {
+    #[cm("vertex")]
+    Vertex,
+    #[cm("fragment")]
+    Fragment,
+    #[cm("compute")]
+    Compute,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-signed-offset32")]
+pub type GpuSignedOffset32 = i32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-size32")]
+pub type GpuSize32 = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compute-pass-timestamp-writes")]
+pub struct GpuComputePassTimestampWrites {
+    #[cm("query-set")]
+    pub query_set: &GpuQuerySet,
+    #[cm("beginning-of-pass-write-index")]
+    pub beginning_of_pass_write_index: Option<GpuSize32>,
+    #[cm("end-of-pass-write-index")]
+    pub end_of_pass_write_index: Option<GpuSize32>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compute-pass-descriptor")]
+pub struct GpuComputePassDescriptor {
+    #[cm("timestamp-writes")]
+    pub timestamp_writes: Option<GpuComputePassTimestampWrites>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-multisample-state")]
+pub struct GpuMultisampleState {
+    #[cm("count")]
+    pub count: Option<GpuSize32>,
+    #[cm("mask")]
+    pub mask: Option<GpuSampleMask>,
+    #[cm("alpha-to-coverage-enabled")]
+    pub alpha_to_coverage_enabled: Option<bool>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-pipeline-layout-descriptor")]
+pub struct GpuPipelineLayoutDescriptor {
+    #[cm("bind-group-layouts")]
+    pub bind_group_layouts: List<Option<&GpuBindGroupLayout>>,
+    #[cm("immediate-size")]
+    pub immediate_size: Option<GpuSize32>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-query-set-descriptor")]
+pub struct GpuQuerySetDescriptor {
+    #[cm("type")]
+    pub type: GpuQueryType,
+    #[cm("count")]
+    pub count: GpuSize32,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pass-timestamp-writes")]
+pub struct GpuRenderPassTimestampWrites {
+    #[cm("query-set")]
+    pub query_set: &GpuQuerySet,
+    #[cm("beginning-of-pass-write-index")]
+    pub beginning_of_pass_write_index: Option<GpuSize32>,
+    #[cm("end-of-pass-write-index")]
+    pub end_of_pass_write_index: Option<GpuSize32>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-size32-out")]
+pub type GpuSize32Out = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-size64")]
+pub type GpuSize64 = u64;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-binding")]
+pub struct GpuBufferBinding {
+    #[cm("buffer")]
+    pub buffer: &GpuBuffer,
+    #[cm("offset")]
+    pub offset: Option<GpuSize64>,
+    #[cm("size")]
+    pub size: Option<GpuSize64>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-binding-layout")]
+pub struct GpuBufferBindingLayout {
+    #[cm("type")]
+    pub type: Option<GpuBufferBindingType>,
+    #[cm("has-dynamic-offset")]
+    pub has_dynamic_offset: Option<bool>,
+    #[cm("min-binding-size")]
+    pub min_binding_size: Option<GpuSize64>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer-descriptor")]
+pub struct GpuBufferDescriptor {
+    #[cm("size")]
+    pub size: GpuSize64,
+    #[cm("usage")]
+    pub usage: GpuBufferUsage,
+    #[cm("mapped-at-creation")]
+    pub mapped_at_creation: Option<bool>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-size64-out")]
+pub type GpuSize64Out = u64;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-stencil-operation")]
+pub enum GpuStencilOperation {
+    #[cm("keep")]
+    Keep,
+    #[cm("zero")]
+    Zero,
+    #[cm("replace")]
+    Replace,
+    #[cm("invert")]
+    Invert,
+    #[cm("increment-clamp")]
+    IncrementClamp,
+    #[cm("decrement-clamp")]
+    DecrementClamp,
+    #[cm("increment-wrap")]
+    IncrementWrap,
+    #[cm("decrement-wrap")]
+    DecrementWrap,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-stencil-face-state")]
+pub struct GpuStencilFaceState {
+    #[cm("compare")]
+    pub compare: Option<GpuCompareFunction>,
+    #[cm("fail-op")]
+    pub fail_op: Option<GpuStencilOperation>,
+    #[cm("depth-fail-op")]
+    pub depth_fail_op: Option<GpuStencilOperation>,
+    #[cm("pass-op")]
+    pub pass_op: Option<GpuStencilOperation>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-stencil-value")]
+pub type GpuStencilValue = u32;
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-storage-texture-access")]
+pub enum GpuStorageTextureAccess {
+    #[cm("write-only")]
+    WriteOnly,
+    #[cm("read-only")]
+    ReadOnly,
+    #[cm("read-write")]
+    ReadWrite,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-store-op")]
+pub enum GpuStoreOp {
+    #[cm("store")]
+    Store,
+    #[cm("discard")]
+    Discard,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texel-copy-buffer-info")]
+pub struct GpuTexelCopyBufferInfo {
+    #[cm("buffer")]
+    pub buffer: &GpuBuffer,
+    #[cm("offset")]
+    pub offset: Option<GpuSize64>,
+    #[cm("bytes-per-row")]
+    pub bytes_per_row: Option<GpuSize32>,
+    #[cm("rows-per-image")]
+    pub rows_per_image: Option<GpuSize32>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texel-copy-buffer-layout")]
+pub struct GpuTexelCopyBufferLayout {
+    #[cm("offset")]
+    pub offset: Option<GpuSize64>,
+    #[cm("bytes-per-row")]
+    pub bytes_per_row: Option<GpuSize32>,
+    #[cm("rows-per-image")]
+    pub rows_per_image: Option<GpuSize32>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-aspect")]
+pub enum GpuTextureAspect {
+    #[cm("all")]
+    All,
+    #[cm("stencil-only")]
+    StencilOnly,
+    #[cm("depth-only")]
+    DepthOnly,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texel-copy-texture-info")]
+pub struct GpuTexelCopyTextureInfo {
+    #[cm("texture")]
+    pub texture: &GpuTexture,
+    #[cm("mip-level")]
+    pub mip_level: Option<GpuIntegerCoordinate>,
+    #[cm("origin")]
+    pub origin: Option<GpuOrigin3D>,
+    #[cm("aspect")]
+    pub aspect: Option<GpuTextureAspect>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-dimension")]
+pub enum GpuTextureDimension {
+    #[cm("d1")]
+    D1,
+    #[cm("d2")]
+    D2,
+    #[cm("d3")]
+    D3,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-format")]
+pub enum GpuTextureFormat {
+    #[cm("r8unorm")]
+    R8unorm,
+    #[cm("r8snorm")]
+    R8snorm,
+    #[cm("r8uint")]
+    R8uint,
+    #[cm("r8sint")]
+    R8sint,
+    #[cm("r16unorm")]
+    R16unorm,
+    #[cm("r16snorm")]
+    R16snorm,
+    #[cm("r16uint")]
+    R16uint,
+    #[cm("r16sint")]
+    R16sint,
+    #[cm("r16float")]
+    R16float,
+    #[cm("rg8unorm")]
+    Rg8unorm,
+    #[cm("rg8snorm")]
+    Rg8snorm,
+    #[cm("rg8uint")]
+    Rg8uint,
+    #[cm("rg8sint")]
+    Rg8sint,
+    #[cm("r32uint")]
+    R32uint,
+    #[cm("r32sint")]
+    R32sint,
+    #[cm("r32float")]
+    R32float,
+    #[cm("rg16unorm")]
+    Rg16unorm,
+    #[cm("rg16snorm")]
+    Rg16snorm,
+    #[cm("rg16uint")]
+    Rg16uint,
+    #[cm("rg16sint")]
+    Rg16sint,
+    #[cm("rg16float")]
+    Rg16float,
+    #[cm("rgba8unorm")]
+    Rgba8unorm,
+    #[cm("rgba8unorm-srgb")]
+    Rgba8unormSrgb,
+    #[cm("rgba8snorm")]
+    Rgba8snorm,
+    #[cm("rgba8uint")]
+    Rgba8uint,
+    #[cm("rgba8sint")]
+    Rgba8sint,
+    #[cm("bgra8unorm")]
+    Bgra8unorm,
+    #[cm("bgra8unorm-srgb")]
+    Bgra8unormSrgb,
+    #[cm("rgb9e5ufloat")]
+    Rgb9e5ufloat,
+    #[cm("rgb10a2uint")]
+    Rgb10a2uint,
+    #[cm("rgb10a2unorm")]
+    Rgb10a2unorm,
+    #[cm("rg11b10ufloat")]
+    Rg11b10ufloat,
+    #[cm("rg32uint")]
+    Rg32uint,
+    #[cm("rg32sint")]
+    Rg32sint,
+    #[cm("rg32float")]
+    Rg32float,
+    #[cm("rgba16unorm")]
+    Rgba16unorm,
+    #[cm("rgba16snorm")]
+    Rgba16snorm,
+    #[cm("rgba16uint")]
+    Rgba16uint,
+    #[cm("rgba16sint")]
+    Rgba16sint,
+    #[cm("rgba16float")]
+    Rgba16float,
+    #[cm("rgba32uint")]
+    Rgba32uint,
+    #[cm("rgba32sint")]
+    Rgba32sint,
+    #[cm("rgba32float")]
+    Rgba32float,
+    #[cm("stencil8")]
+    Stencil8,
+    #[cm("depth16unorm")]
+    Depth16unorm,
+    #[cm("depth24plus")]
+    Depth24plus,
+    #[cm("depth24plus-stencil8")]
+    Depth24plusStencil8,
+    #[cm("depth32float")]
+    Depth32float,
+    #[cm("depth32float-stencil8")]
+    Depth32floatStencil8,
+    #[cm("bc1-rgba-unorm")]
+    Bc1RgbaUnorm,
+    #[cm("bc1-rgba-unorm-srgb")]
+    Bc1RgbaUnormSrgb,
+    #[cm("bc2-rgba-unorm")]
+    Bc2RgbaUnorm,
+    #[cm("bc2-rgba-unorm-srgb")]
+    Bc2RgbaUnormSrgb,
+    #[cm("bc3-rgba-unorm")]
+    Bc3RgbaUnorm,
+    #[cm("bc3-rgba-unorm-srgb")]
+    Bc3RgbaUnormSrgb,
+    #[cm("bc4-r-unorm")]
+    Bc4RUnorm,
+    #[cm("bc4-r-snorm")]
+    Bc4RSnorm,
+    #[cm("bc5-rg-unorm")]
+    Bc5RgUnorm,
+    #[cm("bc5-rg-snorm")]
+    Bc5RgSnorm,
+    #[cm("bc6h-rgb-ufloat")]
+    Bc6hRgbUfloat,
+    #[cm("bc6h-rgb-float")]
+    Bc6hRgbFloat,
+    #[cm("bc7-rgba-unorm")]
+    Bc7RgbaUnorm,
+    #[cm("bc7-rgba-unorm-srgb")]
+    Bc7RgbaUnormSrgb,
+    #[cm("etc2-rgb8unorm")]
+    Etc2Rgb8unorm,
+    #[cm("etc2-rgb8unorm-srgb")]
+    Etc2Rgb8unormSrgb,
+    #[cm("etc2-rgb8a1unorm")]
+    Etc2Rgb8a1unorm,
+    #[cm("etc2-rgb8a1unorm-srgb")]
+    Etc2Rgb8a1unormSrgb,
+    #[cm("etc2-rgba8unorm")]
+    Etc2Rgba8unorm,
+    #[cm("etc2-rgba8unorm-srgb")]
+    Etc2Rgba8unormSrgb,
+    #[cm("eac-r11unorm")]
+    EacR11unorm,
+    #[cm("eac-r11snorm")]
+    EacR11snorm,
+    #[cm("eac-rg11unorm")]
+    EacRg11unorm,
+    #[cm("eac-rg11snorm")]
+    EacRg11snorm,
+    #[cm("astc4x4-unorm")]
+    Astc4x4Unorm,
+    #[cm("astc4x4-unorm-srgb")]
+    Astc4x4UnormSrgb,
+    #[cm("astc5x4-unorm")]
+    Astc5x4Unorm,
+    #[cm("astc5x4-unorm-srgb")]
+    Astc5x4UnormSrgb,
+    #[cm("astc5x5-unorm")]
+    Astc5x5Unorm,
+    #[cm("astc5x5-unorm-srgb")]
+    Astc5x5UnormSrgb,
+    #[cm("astc6x5-unorm")]
+    Astc6x5Unorm,
+    #[cm("astc6x5-unorm-srgb")]
+    Astc6x5UnormSrgb,
+    #[cm("astc6x6-unorm")]
+    Astc6x6Unorm,
+    #[cm("astc6x6-unorm-srgb")]
+    Astc6x6UnormSrgb,
+    #[cm("astc8x5-unorm")]
+    Astc8x5Unorm,
+    #[cm("astc8x5-unorm-srgb")]
+    Astc8x5UnormSrgb,
+    #[cm("astc8x6-unorm")]
+    Astc8x6Unorm,
+    #[cm("astc8x6-unorm-srgb")]
+    Astc8x6UnormSrgb,
+    #[cm("astc8x8-unorm")]
+    Astc8x8Unorm,
+    #[cm("astc8x8-unorm-srgb")]
+    Astc8x8UnormSrgb,
+    #[cm("astc10x5-unorm")]
+    Astc10x5Unorm,
+    #[cm("astc10x5-unorm-srgb")]
+    Astc10x5UnormSrgb,
+    #[cm("astc10x6-unorm")]
+    Astc10x6Unorm,
+    #[cm("astc10x6-unorm-srgb")]
+    Astc10x6UnormSrgb,
+    #[cm("astc10x8-unorm")]
+    Astc10x8Unorm,
+    #[cm("astc10x8-unorm-srgb")]
+    Astc10x8UnormSrgb,
+    #[cm("astc10x10-unorm")]
+    Astc10x10Unorm,
+    #[cm("astc10x10-unorm-srgb")]
+    Astc10x10UnormSrgb,
+    #[cm("astc12x10-unorm")]
+    Astc12x10Unorm,
+    #[cm("astc12x10-unorm-srgb")]
+    Astc12x10UnormSrgb,
+    #[cm("astc12x12-unorm")]
+    Astc12x12Unorm,
+    #[cm("astc12x12-unorm-srgb")]
+    Astc12x12UnormSrgb,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-color-target-state")]
+pub struct GpuColorTargetState {
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("blend")]
+    pub blend: Option<GpuBlendState>,
+    #[cm("write-mask")]
+    pub write_mask: Option<GpuColorWrite>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-depth-stencil-state")]
+pub struct GpuDepthStencilState {
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("depth-write-enabled")]
+    pub depth_write_enabled: Option<bool>,
+    #[cm("depth-compare")]
+    pub depth_compare: Option<GpuCompareFunction>,
+    #[cm("stencil-front")]
+    pub stencil_front: Option<GpuStencilFaceState>,
+    #[cm("stencil-back")]
+    pub stencil_back: Option<GpuStencilFaceState>,
+    #[cm("stencil-read-mask")]
+    pub stencil_read_mask: Option<GpuStencilValue>,
+    #[cm("stencil-write-mask")]
+    pub stencil_write_mask: Option<GpuStencilValue>,
+    #[cm("depth-bias")]
+    pub depth_bias: Option<GpuDepthBias>,
+    #[cm("depth-bias-slope-scale")]
+    pub depth_bias_slope_scale: Option<f32>,
+    #[cm("depth-bias-clamp")]
+    pub depth_bias_clamp: Option<f32>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-bundle-encoder-descriptor")]
+pub struct GpuRenderBundleEncoderDescriptor {
+    #[cm("depth-read-only")]
+    pub depth_read_only: Option<bool>,
+    #[cm("stencil-read-only")]
+    pub stencil_read_only: Option<bool>,
+    #[cm("color-formats")]
+    pub color_formats: List<Option<GpuTextureFormat>>,
+    #[cm("depth-stencil-format")]
+    pub depth_stencil_format: Option<GpuTextureFormat>,
+    #[cm("sample-count")]
+    pub sample_count: Option<GpuSize32>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-sample-type")]
+pub enum GpuTextureSampleType {
+    #[cm("float")]
+    Float,
+    #[cm("unfilterable-float")]
+    UnfilterableFloat,
+    #[cm("depth")]
+    Depth,
+    #[cm("sint")]
+    Sint,
+    #[cm("uint")]
+    Uint,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-usage")]
+pub flags GpuTextureUsage {
+    #[cm("copy-src")]
+    CopySrc,
+    #[cm("copy-dst")]
+    CopyDst,
+    #[cm("texture-binding")]
+    TextureBinding,
+    #[cm("storage-binding")]
+    StorageBinding,
+    #[cm("render-attachment")]
+    RenderAttachment,
+    #[cm("transient-attachment")]
+    TransientAttachment,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-binding-resource")]
+pub variant GpuBindingResource {
+    #[cm("gpu-buffer")]
+    GpuBuffer(&GpuBuffer),
+    #[cm("gpu-buffer-binding")]
+    GpuBufferBinding(GpuBufferBinding),
+    #[cm("gpu-sampler")]
+    GpuSampler(&GpuSampler),
+    #[cm("gpu-texture")]
+    GpuTexture(&GpuTexture),
+    #[cm("gpu-texture-view")]
+    GpuTextureView(&GpuTextureView),
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group-entry")]
+pub struct GpuBindGroupEntry {
+    #[cm("binding")]
+    pub binding: GpuIndex32,
+    #[cm("resource")]
+    pub resource: GpuBindingResource,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group-descriptor")]
+pub struct GpuBindGroupDescriptor {
+    #[cm("layout")]
+    pub layout: &GpuBindGroupLayout,
+    #[cm("entries")]
+    pub entries: List<GpuBindGroupEntry>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pass-color-attachment")]
+pub struct GpuRenderPassColorAttachment {
+    #[cm("view")]
+    pub view: &GpuTextureView,
+    #[cm("depth-slice")]
+    pub depth_slice: Option<GpuIntegerCoordinate>,
+    #[cm("resolve-target")]
+    pub resolve_target: Option<&GpuTextureView>,
+    #[cm("clear-value")]
+    pub clear_value: Option<GpuColor>,
+    #[cm("load-op")]
+    pub load_op: GpuLoadOp,
+    #[cm("store-op")]
+    pub store_op: GpuStoreOp,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pass-depth-stencil-attachment")]
+pub struct GpuRenderPassDepthStencilAttachment {
+    #[cm("view")]
+    pub view: &GpuTextureView,
+    #[cm("depth-clear-value")]
+    pub depth_clear_value: Option<f32>,
+    #[cm("depth-load-op")]
+    pub depth_load_op: Option<GpuLoadOp>,
+    #[cm("depth-store-op")]
+    pub depth_store_op: Option<GpuStoreOp>,
+    #[cm("depth-read-only")]
+    pub depth_read_only: Option<bool>,
+    #[cm("stencil-clear-value")]
+    pub stencil_clear_value: Option<GpuStencilValue>,
+    #[cm("stencil-load-op")]
+    pub stencil_load_op: Option<GpuLoadOp>,
+    #[cm("stencil-store-op")]
+    pub stencil_store_op: Option<GpuStoreOp>,
+    #[cm("stencil-read-only")]
+    pub stencil_read_only: Option<bool>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pass-descriptor")]
+pub struct GpuRenderPassDescriptor {
+    #[cm("color-attachments")]
+    pub color_attachments: List<Option<GpuRenderPassColorAttachment>>,
+    #[cm("depth-stencil-attachment")]
+    pub depth_stencil_attachment: Option<GpuRenderPassDepthStencilAttachment>,
+    #[cm("occlusion-query-set")]
+    pub occlusion_query_set: Option<&GpuQuerySet>,
+    #[cm("timestamp-writes")]
+    pub timestamp_writes: Option<GpuRenderPassTimestampWrites>,
+    #[cm("max-draw-count")]
+    pub max_draw_count: Option<GpuSize64>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-view-dimension")]
+pub enum GpuTextureViewDimension {
+    #[cm("d1")]
+    D1,
+    #[cm("d2")]
+    D2,
+    #[cm("d2-array")]
+    D2Array,
+    #[cm("cube")]
+    Cube,
+    #[cm("cube-array")]
+    CubeArray,
+    #[cm("d3")]
+    D3,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-storage-texture-binding-layout")]
+pub struct GpuStorageTextureBindingLayout {
+    #[cm("access")]
+    pub access: Option<GpuStorageTextureAccess>,
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("view-dimension")]
+    pub view_dimension: Option<GpuTextureViewDimension>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-binding-layout")]
+pub struct GpuTextureBindingLayout {
+    #[cm("sample-type")]
+    pub sample_type: Option<GpuTextureSampleType>,
+    #[cm("view-dimension")]
+    pub view_dimension: Option<GpuTextureViewDimension>,
+    #[cm("multisampled")]
+    pub multisampled: Option<bool>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group-layout-entry")]
+pub struct GpuBindGroupLayoutEntry {
+    #[cm("binding")]
+    pub binding: GpuIndex32,
+    #[cm("visibility")]
+    pub visibility: GpuShaderStage,
+    #[cm("buffer")]
+    pub buffer: Option<GpuBufferBindingLayout>,
+    #[cm("sampler")]
+    pub sampler: Option<GpuSamplerBindingLayout>,
+    #[cm("texture")]
+    pub texture: Option<GpuTextureBindingLayout>,
+    #[cm("storage-texture")]
+    pub storage_texture: Option<GpuStorageTextureBindingLayout>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group-layout-descriptor")]
+pub struct GpuBindGroupLayoutDescriptor {
+    #[cm("entries")]
+    pub entries: List<GpuBindGroupLayoutEntry>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-descriptor")]
+pub struct GpuTextureDescriptor {
+    #[cm("size")]
+    pub size: GpuExtent3D,
+    #[cm("mip-level-count")]
+    pub mip_level_count: Option<GpuIntegerCoordinate>,
+    #[cm("sample-count")]
+    pub sample_count: Option<GpuSize32>,
+    #[cm("dimension")]
+    pub dimension: Option<GpuTextureDimension>,
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("usage")]
+    pub usage: GpuTextureUsage,
+    #[cm("view-formats")]
+    pub view_formats: Option<List<GpuTextureFormat>>,
+    #[cm("texture-binding-view-dimension")]
+    pub texture_binding_view_dimension: Option<GpuTextureViewDimension>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-view-descriptor")]
+pub struct GpuTextureViewDescriptor {
+    #[cm("format")]
+    pub format: Option<GpuTextureFormat>,
+    #[cm("dimension")]
+    pub dimension: Option<GpuTextureViewDimension>,
+    #[cm("usage")]
+    pub usage: Option<GpuTextureUsage>,
+    #[cm("aspect")]
+    pub aspect: Option<GpuTextureAspect>,
+    #[cm("base-mip-level")]
+    pub base_mip_level: Option<GpuIntegerCoordinate>,
+    #[cm("mip-level-count")]
+    pub mip_level_count: Option<GpuIntegerCoordinate>,
+    #[cm("base-array-layer")]
+    pub base_array_layer: Option<GpuIntegerCoordinate>,
+    #[cm("array-layer-count")]
+    pub array_layer_count: Option<GpuIntegerCoordinate>,
+    #[cm("swizzle")]
+    pub swizzle: Option<String>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-vertex-format")]
+pub enum GpuVertexFormat {
+    #[cm("uint8")]
+    Uint8,
+    #[cm("uint8x2")]
+    Uint8x2,
+    #[cm("uint8x4")]
+    Uint8x4,
+    #[cm("sint8")]
+    Sint8,
+    #[cm("sint8x2")]
+    Sint8x2,
+    #[cm("sint8x4")]
+    Sint8x4,
+    #[cm("unorm8")]
+    Unorm8,
+    #[cm("unorm8x2")]
+    Unorm8x2,
+    #[cm("unorm8x4")]
+    Unorm8x4,
+    #[cm("snorm8")]
+    Snorm8,
+    #[cm("snorm8x2")]
+    Snorm8x2,
+    #[cm("snorm8x4")]
+    Snorm8x4,
+    #[cm("uint16")]
+    Uint16,
+    #[cm("uint16x2")]
+    Uint16x2,
+    #[cm("uint16x4")]
+    Uint16x4,
+    #[cm("sint16")]
+    Sint16,
+    #[cm("sint16x2")]
+    Sint16x2,
+    #[cm("sint16x4")]
+    Sint16x4,
+    #[cm("unorm16")]
+    Unorm16,
+    #[cm("unorm16x2")]
+    Unorm16x2,
+    #[cm("unorm16x4")]
+    Unorm16x4,
+    #[cm("snorm16")]
+    Snorm16,
+    #[cm("snorm16x2")]
+    Snorm16x2,
+    #[cm("snorm16x4")]
+    Snorm16x4,
+    #[cm("float16")]
+    Float16,
+    #[cm("float16x2")]
+    Float16x2,
+    #[cm("float16x4")]
+    Float16x4,
+    #[cm("float32")]
+    Float32,
+    #[cm("float32x2")]
+    Float32x2,
+    #[cm("float32x3")]
+    Float32x3,
+    #[cm("float32x4")]
+    Float32x4,
+    #[cm("uint32")]
+    Uint32,
+    #[cm("uint32x2")]
+    Uint32x2,
+    #[cm("uint32x3")]
+    Uint32x3,
+    #[cm("uint32x4")]
+    Uint32x4,
+    #[cm("sint32")]
+    Sint32,
+    #[cm("sint32x2")]
+    Sint32x2,
+    #[cm("sint32x3")]
+    Sint32x3,
+    #[cm("sint32x4")]
+    Sint32x4,
+    #[cm("unorm1010102")]
+    Unorm1010102,
+    #[cm("unorm8x4-bgra")]
+    Unorm8x4Bgra,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-vertex-attribute")]
+pub struct GpuVertexAttribute {
+    #[cm("format")]
+    pub format: GpuVertexFormat,
+    #[cm("offset")]
+    pub offset: GpuSize64,
+    #[cm("shader-location")]
+    pub shader_location: GpuIndex32,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-vertex-step-mode")]
+pub enum GpuVertexStepMode {
+    #[cm("vertex")]
+    Vertex,
+    #[cm("instance")]
+    Instance,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-vertex-buffer-layout")]
+pub struct GpuVertexBufferLayout {
+    #[cm("array-stride")]
+    pub array_stride: GpuSize64,
+    #[cm("step-mode")]
+    pub step_mode: Option<GpuVertexStepMode>,
+    #[cm("attributes")]
+    pub attributes: List<GpuVertexAttribute>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#map-async-error-kind")]
+pub variant MapAsyncErrorKind {
+    #[cm("operation-error")]
+    OperationError,
+    #[cm("range-error")]
+    RangeError,
+    #[cm("abort-error")]
+    AbortError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#map-async-error")]
+pub struct MapAsyncError {
+    #[cm("kind")]
+    pub kind: MapAsyncErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#pop-error-scope-error-kind")]
+pub variant PopErrorScopeErrorKind {
+    #[cm("operation-error")]
+    OperationError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#pop-error-scope-error")]
+pub struct PopErrorScopeError {
+    #[cm("kind")]
+    pub kind: PopErrorScopeErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#predefined-color-space")]
+pub enum PredefinedColorSpace {
+    #[cm("srgb")]
+    Srgb,
+    #[cm("display-p3")]
+    DisplayP3,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-configuration")]
+pub struct GpuCanvasConfiguration {
+    #[cm("device")]
+    pub device: &GpuDevice,
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("usage")]
+    pub usage: Option<GpuTextureUsage>,
+    #[cm("view-formats")]
+    pub view_formats: Option<List<GpuTextureFormat>>,
+    #[cm("color-space")]
+    pub color_space: Option<PredefinedColorSpace>,
+    #[cm("tone-mapping")]
+    pub tone_mapping: Option<GpuCanvasToneMapping>,
+    #[cm("alpha-mode")]
+    pub alpha_mode: Option<GpuCanvasAlphaMode>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-configuration-owned")]
+pub struct GpuCanvasConfigurationOwned {
+    #[cm("device")]
+    pub device: GpuDevice,
+    #[cm("format")]
+    pub format: GpuTextureFormat,
+    #[cm("usage")]
+    pub usage: Option<GpuTextureUsage>,
+    #[cm("view-formats")]
+    pub view_formats: Option<List<GpuTextureFormat>>,
+    #[cm("color-space")]
+    pub color_space: Option<PredefinedColorSpace>,
+    #[cm("tone-mapping")]
+    pub tone_mapping: Option<GpuCanvasToneMapping>,
+    #[cm("alpha-mode")]
+    pub alpha_mode: Option<GpuCanvasAlphaMode>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-fragment-state")]
+pub struct GpuFragmentState {
+    #[cm("targets")]
+    pub targets: List<Option<GpuColorTargetState>>,
+    #[cm("module")]
+    pub module: &GpuShaderModule,
+    #[cm("entry-point")]
+    pub entry_point: Option<String>,
+    #[cm("constants")]
+    pub constants: Option<RecordGpuPipelineConstantValue>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-programmable-stage")]
+pub struct GpuProgrammableStage {
+    #[cm("module")]
+    pub module: &GpuShaderModule,
+    #[cm("entry-point")]
+    pub entry_point: Option<String>,
+    #[cm("constants")]
+    pub constants: Option<RecordGpuPipelineConstantValue>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compute-pipeline-descriptor")]
+pub struct GpuComputePipelineDescriptor {
+    #[cm("compute")]
+    pub compute: GpuProgrammableStage,
+    #[cm("layout")]
+    pub layout: GpuLayoutMode,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-vertex-state")]
+pub struct GpuVertexState {
+    #[cm("buffers")]
+    pub buffers: Option<List<Option<GpuVertexBufferLayout>>>,
+    #[cm("module")]
+    pub module: &GpuShaderModule,
+    #[cm("entry-point")]
+    pub entry_point: Option<String>,
+    #[cm("constants")]
+    pub constants: Option<RecordGpuPipelineConstantValue>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pipeline-descriptor")]
+pub struct GpuRenderPipelineDescriptor {
+    #[cm("vertex")]
+    pub vertex: GpuVertexState,
+    #[cm("primitive")]
+    pub primitive: Option<GpuPrimitiveState>,
+    #[cm("depth-stencil")]
+    pub depth_stencil: Option<GpuDepthStencilState>,
+    #[cm("multisample")]
+    pub multisample: Option<GpuMultisampleState>,
+    #[cm("fragment")]
+    pub fragment: Option<GpuFragmentState>,
+    #[cm("layout")]
+    pub layout: GpuLayoutMode,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-device-descriptor")]
+pub struct GpuDeviceDescriptor {
+    #[cm("required-features")]
+    pub required_features: Option<List<GpuFeatureName>>,
+    #[cm("required-limits")]
+    pub required_limits: Option<RecordOptionGpuSize64>,
+    #[cm("default-queue")]
+    pub default_queue: Option<GpuQueueDescriptor>,
+    #[cm("label")]
+    pub label: Option<String>,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#request-device-error-kind")]
+pub variant RequestDeviceErrorKind {
+    #[cm("type-error")]
+    TypeError,
+    #[cm("operation-error")]
+    OperationError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#request-device-error")]
+pub struct RequestDeviceError {
+    #[cm("kind")]
+    pub kind: RequestDeviceErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#set-bind-group-error-kind")]
+pub variant SetBindGroupErrorKind {
+    #[cm("range-error")]
+    RangeError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#set-bind-group-error")]
+pub struct SetBindGroupError {
+    #[cm("kind")]
+    pub kind: SetBindGroupErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#unmap-error-kind")]
+pub variant UnmapErrorKind {
+    #[cm("abort-error")]
+    AbortError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#unmap-error")]
+pub struct UnmapError {
+    #[cm("kind")]
+    pub kind: UnmapErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#write-buffer-error-kind")]
+pub variant WriteBufferErrorKind {
+    #[cm("operation-error")]
+    OperationError,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#write-buffer-error")]
+pub struct WriteBufferError {
+    #[cm("kind")]
+    pub kind: WriteBufferErrorKind,
+    #[cm("message")]
+    pub message: String,
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu")]
+pub resource Gpu {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu.request-adapter")]
+    #[cm_params("self", "options")]
+    async fn request_adapter(&self, options: Option<GpuRequestAdapterOptions>) -> AsyncCall<Option<GpuAdapter>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu.get-preferred-canvas-format")]
+    #[cm_params("self")]
+    fn get_preferred_canvas_format(&self) -> GpuTextureFormat;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu.wgsl-language-features")]
+    #[cm_params("self")]
+    fn wgsl_language_features(&self) -> WgslLanguageFeatures;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-adapter")]
+pub resource GpuAdapter {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter.features")]
+    #[cm_params("self")]
+    fn features(&self) -> GpuSupportedFeatures;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter.limits")]
+    #[cm_params("self")]
+    fn limits(&self) -> GpuSupportedLimits;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter.info")]
+    #[cm_params("self")]
+    fn info(&self) -> GpuAdapterInfo;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter.request-device")]
+    #[cm_params("self", "descriptor")]
+    async fn request_device(
+        &self,
+        descriptor: Option<GpuDeviceDescriptor>,
+    ) -> AsyncCall<Result<GpuDevice, RequestDeviceError>>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-adapter-info")]
+pub resource GpuAdapterInfo {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.vendor")]
+    #[cm_params("self")]
+    fn vendor(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.architecture")]
+    #[cm_params("self")]
+    fn architecture(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.device")]
+    #[cm_params("self")]
+    fn device(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.description")]
+    #[cm_params("self")]
+    fn description(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.subgroup-min-size")]
+    #[cm_params("self")]
+    fn subgroup_min_size(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.subgroup-max-size")]
+    #[cm_params("self")]
+    fn subgroup_max_size(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-adapter-info.is-fallback-adapter")]
+    #[cm_params("self")]
+    fn is_fallback_adapter(&self) -> bool;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group")]
+pub resource GpuBindGroup {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-bind-group-layout")]
+pub resource GpuBindGroupLayout {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group-layout.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-bind-group-layout.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-buffer")]
+pub resource GpuBuffer {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.size")]
+    #[cm_params("self")]
+    fn size(&self) -> GpuSize64Out;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.usage")]
+    #[cm_params("self")]
+    fn usage(&self) -> GpuBufferUsage;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.map-state")]
+    #[cm_params("self")]
+    fn map_state(&self) -> GpuBufferMapState;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.map-async")]
+    #[cm_params("self", "mode", "offset", "size")]
+    async fn map_async(
+        &self,
+        mode: GpuMapMode,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    ) -> AsyncCall<Result<(), MapAsyncError>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.get-mapped-range-get-with-copy")]
+    #[cm_params("self", "offset", "size")]
+    fn get_mapped_range_get_with_copy(
+        &self,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    ) -> Result<List<u8>, GetMappedRangeError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.unmap")]
+    #[cm_params("self")]
+    fn unmap(&self) -> Result<(), UnmapError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.destroy")]
+    #[cm_params("self")]
+    fn destroy(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-buffer.get-mapped-range-set-with-copy")]
+    #[cm_params("self", "data", "offset", "size")]
+    fn get_mapped_range_set_with_copy(
+        &self,
+        data: List<u8>,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    ) -> Result<(), GetMappedRangeError>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-canvas-context")]
+pub resource GpuCanvasContext {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-canvas-context.configure")]
+    #[cm_params("self", "configuration")]
+    fn configure(&self, configuration: GpuCanvasConfiguration);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-canvas-context.unconfigure")]
+    #[cm_params("self")]
+    fn unconfigure(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-canvas-context.get-configuration")]
+    #[cm_params("self")]
+    fn get_configuration(&self) -> Option<GpuCanvasConfigurationOwned>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-canvas-context.get-current-texture")]
+    #[cm_params("self")]
+    fn get_current_texture(&self) -> GpuTexture;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-command-buffer")]
+pub resource GpuCommandBuffer {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-buffer.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-buffer.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-command-encoder")]
+pub resource GpuCommandEncoder {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.begin-render-pass")]
+    #[cm_params("self", "descriptor")]
+    fn begin_render_pass(&self, descriptor: GpuRenderPassDescriptor) -> GpuRenderPassEncoder;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.begin-compute-pass")]
+    #[cm_params("self", "descriptor")]
+    fn begin_compute_pass(&self, descriptor: Option<GpuComputePassDescriptor>) -> GpuComputePassEncoder;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.copy-buffer-to-buffer")]
+    #[cm_params("self", "source", "source-offset", "destination", "destination-offset", "size")]
+    fn copy_buffer_to_buffer(
+        &self,
+        source: &GpuBuffer,
+        source_offset: Option<GpuSize64>,
+        destination: &GpuBuffer,
+        destination_offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.copy-buffer-to-texture")]
+    #[cm_params("self", "source", "destination", "copy-size")]
+    fn copy_buffer_to_texture(
+        &self,
+        source: GpuTexelCopyBufferInfo,
+        destination: GpuTexelCopyTextureInfo,
+        copy_size: GpuExtent3D,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.copy-texture-to-buffer")]
+    #[cm_params("self", "source", "destination", "copy-size")]
+    fn copy_texture_to_buffer(
+        &self,
+        source: GpuTexelCopyTextureInfo,
+        destination: GpuTexelCopyBufferInfo,
+        copy_size: GpuExtent3D,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.copy-texture-to-texture")]
+    #[cm_params("self", "source", "destination", "copy-size")]
+    fn copy_texture_to_texture(
+        &self,
+        source: GpuTexelCopyTextureInfo,
+        destination: GpuTexelCopyTextureInfo,
+        copy_size: GpuExtent3D,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.clear-buffer")]
+    #[cm_params("self", "buffer", "offset", "size")]
+    fn clear_buffer(&self, buffer: &GpuBuffer, offset: Option<GpuSize64>, size: Option<GpuSize64>);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.resolve-query-set")]
+    #[cm_params("self", "query-set", "first-query", "query-count", "destination", "destination-offset")]
+    fn resolve_query_set(
+        &self,
+        query_set: &GpuQuerySet,
+        first_query: GpuSize32,
+        query_count: GpuSize32,
+        destination: &GpuBuffer,
+        destination_offset: GpuSize64,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.finish")]
+    #[cm_params("self", "descriptor")]
+    fn finish(&self, descriptor: Option<GpuCommandBufferDescriptor>) -> GpuCommandBuffer;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.push-debug-group")]
+    #[cm_params("self", "group-label")]
+    fn push_debug_group(&self, group_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.pop-debug-group")]
+    #[cm_params("self")]
+    fn pop_debug_group(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-command-encoder.insert-debug-marker")]
+    #[cm_params("self", "marker-label")]
+    fn insert_debug_marker(&self, marker_label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compilation-info")]
+pub resource GpuCompilationInfo {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-info.messages")]
+    #[cm_params("self")]
+    fn messages(&self) -> List<GpuCompilationMessage>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compilation-message")]
+pub resource GpuCompilationMessage {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.message")]
+    #[cm_params("self")]
+    fn message(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.type")]
+    #[cm_params("self")]
+    fn type(&self) -> GpuCompilationMessageType;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.line-num")]
+    #[cm_params("self")]
+    fn line_num(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.line-pos")]
+    #[cm_params("self")]
+    fn line_pos(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.offset")]
+    #[cm_params("self")]
+    fn offset(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compilation-message.length")]
+    #[cm_params("self")]
+    fn length(&self) -> u64;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compute-pass-encoder")]
+pub resource GpuComputePassEncoder {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-pipeline")]
+    #[cm_params("self", "pipeline")]
+    fn set_pipeline(&self, pipeline: &GpuComputePipeline);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.dispatch-workgroups")]
+    #[cm_params("self", "workgroup-count-x", "workgroup-count-y", "workgroup-count-z")]
+    fn dispatch_workgroups(
+        &self,
+        workgroup_count_x: GpuSize32,
+        workgroup_count_y: Option<GpuSize32>,
+        workgroup_count_z: Option<GpuSize32>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.dispatch-workgroups-indirect")]
+    #[cm_params("self", "indirect-buffer", "indirect-offset")]
+    fn dispatch_workgroups_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.end")]
+    #[cm_params("self")]
+    fn end(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.push-debug-group")]
+    #[cm_params("self", "group-label")]
+    fn push_debug_group(&self, group_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.pop-debug-group")]
+    #[cm_params("self")]
+    fn pop_debug_group(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.insert-debug-marker")]
+    #[cm_params("self", "marker-label")]
+    fn insert_debug_marker(&self, marker_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-bind-group")]
+    #[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]
+    fn set_bind_group(
+        &self,
+        index: GpuIndex32,
+        bind_group: Option<&GpuBindGroup>,
+        dynamic_offsets_data: Option<List<GpuBufferDynamicOffset>>,
+        dynamic_offsets_data_start: Option<GpuSize64>,
+        dynamic_offsets_data_length: Option<GpuSize32>,
+    ) -> Result<(), SetBindGroupError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pass-encoder.set-immediates")]
+    #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
+    fn set_immediates(
+        &self,
+        range_offset: GpuSize32,
+        data: List<u8>,
+        data_offset: Option<GpuSize64>,
+        data_size: Option<GpuSize64>,
+    );
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-compute-pipeline")]
+pub resource GpuComputePipeline {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pipeline.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pipeline.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-compute-pipeline.get-bind-group-layout")]
+    #[cm_params("self", "index")]
+    fn get_bind_group_layout(&self, index: u32) -> GpuBindGroupLayout;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-device")]
+pub resource GpuDevice {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.features")]
+    #[cm_params("self")]
+    fn features(&self) -> GpuSupportedFeatures;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.limits")]
+    #[cm_params("self")]
+    fn limits(&self) -> GpuSupportedLimits;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.adapter-info")]
+    #[cm_params("self")]
+    fn adapter_info(&self) -> GpuAdapterInfo;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.queue")]
+    #[cm_params("self")]
+    fn queue(&self) -> GpuQueue;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.destroy")]
+    #[cm_params("self")]
+    fn destroy(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-buffer")]
+    #[cm_params("self", "descriptor")]
+    fn create_buffer(&self, descriptor: GpuBufferDescriptor) -> GpuBuffer;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-texture")]
+    #[cm_params("self", "descriptor")]
+    fn create_texture(&self, descriptor: GpuTextureDescriptor) -> GpuTexture;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-sampler")]
+    #[cm_params("self", "descriptor")]
+    fn create_sampler(&self, descriptor: Option<GpuSamplerDescriptor>) -> GpuSampler;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-bind-group-layout")]
+    #[cm_params("self", "descriptor")]
+    fn create_bind_group_layout(&self, descriptor: GpuBindGroupLayoutDescriptor) -> GpuBindGroupLayout;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-pipeline-layout")]
+    #[cm_params("self", "descriptor")]
+    fn create_pipeline_layout(&self, descriptor: GpuPipelineLayoutDescriptor) -> GpuPipelineLayout;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-bind-group")]
+    #[cm_params("self", "descriptor")]
+    fn create_bind_group(&self, descriptor: GpuBindGroupDescriptor) -> GpuBindGroup;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-shader-module")]
+    #[cm_params("self", "descriptor")]
+    fn create_shader_module(&self, descriptor: GpuShaderModuleDescriptor) -> GpuShaderModule;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-compute-pipeline")]
+    #[cm_params("self", "descriptor")]
+    fn create_compute_pipeline(&self, descriptor: GpuComputePipelineDescriptor) -> GpuComputePipeline;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-render-pipeline")]
+    #[cm_params("self", "descriptor")]
+    fn create_render_pipeline(&self, descriptor: GpuRenderPipelineDescriptor) -> GpuRenderPipeline;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-compute-pipeline-async")]
+    #[cm_params("self", "descriptor")]
+    async fn create_compute_pipeline_async(
+        &self,
+        descriptor: GpuComputePipelineDescriptor,
+    ) -> AsyncCall<Result<GpuComputePipeline, CreatePipelineError>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-render-pipeline-async")]
+    #[cm_params("self", "descriptor")]
+    async fn create_render_pipeline_async(
+        &self,
+        descriptor: GpuRenderPipelineDescriptor,
+    ) -> AsyncCall<Result<GpuRenderPipeline, CreatePipelineError>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-command-encoder")]
+    #[cm_params("self", "descriptor")]
+    fn create_command_encoder(&self, descriptor: Option<GpuCommandEncoderDescriptor>) -> GpuCommandEncoder;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-render-bundle-encoder")]
+    #[cm_params("self", "descriptor")]
+    fn create_render_bundle_encoder(&self, descriptor: GpuRenderBundleEncoderDescriptor) -> GpuRenderBundleEncoder;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.create-query-set")]
+    #[cm_params("self", "descriptor")]
+    fn create_query_set(&self, descriptor: GpuQuerySetDescriptor) -> Result<GpuQuerySet, CreateQuerySetError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.lost")]
+    #[cm_params("self")]
+    fn lost(&self) -> Future<GpuDeviceLostInfo>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.push-error-scope")]
+    #[cm_params("self", "filter")]
+    fn push_error_scope(&self, filter: GpuErrorFilter);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.pop-error-scope")]
+    #[cm_params("self")]
+    async fn pop_error_scope(&self) -> AsyncCall<Result<Option<GpuError>, PopErrorScopeError>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device.on-uncaptured-error")]
+    #[cm_params("self")]
+    fn on_uncaptured_error(&self) -> Stream<GpuError>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-device-lost-info")]
+pub resource GpuDeviceLostInfo {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device-lost-info.reason")]
+    #[cm_params("self")]
+    fn reason(&self) -> GpuDeviceLostReason;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-device-lost-info.message")]
+    #[cm_params("self")]
+    fn message(&self) -> String;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-error")]
+pub resource GpuError {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-error.message")]
+    #[cm_params("self")]
+    fn message(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-error.kind")]
+    #[cm_params("self")]
+    fn kind(&self) -> GpuErrorKind;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-pipeline-layout")]
+pub resource GpuPipelineLayout {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-pipeline-layout.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-pipeline-layout.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-query-set")]
+pub resource GpuQuerySet {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.destroy")]
+    #[cm_params("self")]
+    fn destroy(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.type")]
+    #[cm_params("self")]
+    fn type(&self) -> GpuQueryType;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.count")]
+    #[cm_params("self")]
+    fn count(&self) -> GpuSize32Out;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-query-set.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-queue")]
+pub resource GpuQueue {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.submit")]
+    #[cm_params("self", "command-buffers")]
+    fn submit(&self, command_buffers: List<&GpuCommandBuffer>);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.on-submitted-work-done")]
+    #[cm_params("self")]
+    async fn on_submitted_work_done(&self) -> AsyncCall<()>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-buffer-with-copy")]
+    #[cm_params("self", "buffer", "buffer-offset", "data", "data-offset", "size")]
+    fn write_buffer_with_copy(
+        &self,
+        buffer: &GpuBuffer,
+        buffer_offset: GpuSize64,
+        data: List<u8>,
+        data_offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    ) -> Result<(), WriteBufferError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.write-texture-with-copy")]
+    #[cm_params("self", "destination", "data", "data-layout", "size")]
+    fn write_texture_with_copy(
+        &self,
+        destination: GpuTexelCopyTextureInfo,
+        data: List<u8>,
+        data_layout: GpuTexelCopyBufferLayout,
+        size: GpuExtent3D,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-queue.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-bundle")]
+pub resource GpuRenderBundle {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-bundle-encoder")]
+pub resource GpuRenderBundleEncoder {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.finish")]
+    #[cm_params("self", "descriptor")]
+    fn finish(&self, descriptor: Option<GpuRenderBundleDescriptor>) -> GpuRenderBundle;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.push-debug-group")]
+    #[cm_params("self", "group-label")]
+    fn push_debug_group(&self, group_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.pop-debug-group")]
+    #[cm_params("self")]
+    fn pop_debug_group(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.insert-debug-marker")]
+    #[cm_params("self", "marker-label")]
+    fn insert_debug_marker(&self, marker_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-bind-group")]
+    #[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]
+    fn set_bind_group(
+        &self,
+        index: GpuIndex32,
+        bind_group: Option<&GpuBindGroup>,
+        dynamic_offsets_data: Option<List<GpuBufferDynamicOffset>>,
+        dynamic_offsets_data_start: Option<GpuSize64>,
+        dynamic_offsets_data_length: Option<GpuSize32>,
+    ) -> Result<(), SetBindGroupError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-immediates")]
+    #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
+    fn set_immediates(
+        &self,
+        range_offset: GpuSize32,
+        data: List<u8>,
+        data_offset: Option<GpuSize64>,
+        data_size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-pipeline")]
+    #[cm_params("self", "pipeline")]
+    fn set_pipeline(&self, pipeline: &GpuRenderPipeline);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-index-buffer")]
+    #[cm_params("self", "buffer", "index-format", "offset", "size")]
+    fn set_index_buffer(
+        &self,
+        buffer: &GpuBuffer,
+        index_format: GpuIndexFormat,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.set-vertex-buffer")]
+    #[cm_params("self", "slot", "buffer", "offset", "size")]
+    fn set_vertex_buffer(
+        &self,
+        slot: GpuIndex32,
+        buffer: Option<&GpuBuffer>,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.draw")]
+    #[cm_params("self", "vertex-count", "instance-count", "first-vertex", "first-instance")]
+    fn draw(
+        &self,
+        vertex_count: GpuSize32,
+        instance_count: Option<GpuSize32>,
+        first_vertex: Option<GpuSize32>,
+        first_instance: Option<GpuSize32>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.draw-indexed")]
+    #[cm_params("self", "index-count", "instance-count", "first-index", "base-vertex", "first-instance")]
+    fn draw_indexed(
+        &self,
+        index_count: GpuSize32,
+        instance_count: Option<GpuSize32>,
+        first_index: Option<GpuSize32>,
+        base_vertex: Option<GpuSignedOffset32>,
+        first_instance: Option<GpuSize32>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.draw-indirect")]
+    #[cm_params("self", "indirect-buffer", "indirect-offset")]
+    fn draw_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-bundle-encoder.draw-indexed-indirect")]
+    #[cm_params("self", "indirect-buffer", "indirect-offset")]
+    fn draw_indexed_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pass-encoder")]
+pub resource GpuRenderPassEncoder {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-viewport")]
+    #[cm_params("self", "x", "y", "width", "height", "min-depth", "max-depth")]
+    fn set_viewport(&self, x: f32, y: f32, width: f32, height: f32, min_depth: f32, max_depth: f32);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-scissor-rect")]
+    #[cm_params("self", "x", "y", "width", "height")]
+    fn set_scissor_rect(
+        &self,
+        x: GpuIntegerCoordinate,
+        y: GpuIntegerCoordinate,
+        width: GpuIntegerCoordinate,
+        height: GpuIntegerCoordinate,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-blend-constant")]
+    #[cm_params("self", "color")]
+    fn set_blend_constant(&self, color: GpuColor);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-stencil-reference")]
+    #[cm_params("self", "reference")]
+    fn set_stencil_reference(&self, reference: GpuStencilValue);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.begin-occlusion-query")]
+    #[cm_params("self", "query-index")]
+    fn begin_occlusion_query(&self, query_index: GpuSize32);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.end-occlusion-query")]
+    #[cm_params("self")]
+    fn end_occlusion_query(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.execute-bundles")]
+    #[cm_params("self", "bundles")]
+    fn execute_bundles(&self, bundles: List<&GpuRenderBundle>);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.end")]
+    #[cm_params("self")]
+    fn end(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.push-debug-group")]
+    #[cm_params("self", "group-label")]
+    fn push_debug_group(&self, group_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.pop-debug-group")]
+    #[cm_params("self")]
+    fn pop_debug_group(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.insert-debug-marker")]
+    #[cm_params("self", "marker-label")]
+    fn insert_debug_marker(&self, marker_label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-bind-group")]
+    #[cm_params("self", "index", "bind-group", "dynamic-offsets-data", "dynamic-offsets-data-start", "dynamic-offsets-data-length")]
+    fn set_bind_group(
+        &self,
+        index: GpuIndex32,
+        bind_group: Option<&GpuBindGroup>,
+        dynamic_offsets_data: Option<List<GpuBufferDynamicOffset>>,
+        dynamic_offsets_data_start: Option<GpuSize64>,
+        dynamic_offsets_data_length: Option<GpuSize32>,
+    ) -> Result<(), SetBindGroupError>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-immediates")]
+    #[cm_params("self", "range-offset", "data", "data-offset", "data-size")]
+    fn set_immediates(
+        &self,
+        range_offset: GpuSize32,
+        data: List<u8>,
+        data_offset: Option<GpuSize64>,
+        data_size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-pipeline")]
+    #[cm_params("self", "pipeline")]
+    fn set_pipeline(&self, pipeline: &GpuRenderPipeline);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-index-buffer")]
+    #[cm_params("self", "buffer", "index-format", "offset", "size")]
+    fn set_index_buffer(
+        &self,
+        buffer: &GpuBuffer,
+        index_format: GpuIndexFormat,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.set-vertex-buffer")]
+    #[cm_params("self", "slot", "buffer", "offset", "size")]
+    fn set_vertex_buffer(
+        &self,
+        slot: GpuIndex32,
+        buffer: Option<&GpuBuffer>,
+        offset: Option<GpuSize64>,
+        size: Option<GpuSize64>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.draw")]
+    #[cm_params("self", "vertex-count", "instance-count", "first-vertex", "first-instance")]
+    fn draw(
+        &self,
+        vertex_count: GpuSize32,
+        instance_count: Option<GpuSize32>,
+        first_vertex: Option<GpuSize32>,
+        first_instance: Option<GpuSize32>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.draw-indexed")]
+    #[cm_params("self", "index-count", "instance-count", "first-index", "base-vertex", "first-instance")]
+    fn draw_indexed(
+        &self,
+        index_count: GpuSize32,
+        instance_count: Option<GpuSize32>,
+        first_index: Option<GpuSize32>,
+        base_vertex: Option<GpuSignedOffset32>,
+        first_instance: Option<GpuSize32>,
+    );
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.draw-indirect")]
+    #[cm_params("self", "indirect-buffer", "indirect-offset")]
+    fn draw_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pass-encoder.draw-indexed-indirect")]
+    #[cm_params("self", "indirect-buffer", "indirect-offset")]
+    fn draw_indexed_indirect(&self, indirect_buffer: &GpuBuffer, indirect_offset: GpuSize64);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-render-pipeline")]
+pub resource GpuRenderPipeline {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pipeline.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pipeline.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-render-pipeline.get-bind-group-layout")]
+    #[cm_params("self", "index")]
+    fn get_bind_group_layout(&self, index: u32) -> GpuBindGroupLayout;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-sampler")]
+pub resource GpuSampler {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-sampler.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-sampler.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-shader-module")]
+pub resource GpuShaderModule {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-shader-module.get-compilation-info")]
+    #[cm_params("self")]
+    async fn get_compilation_info(&self) -> AsyncCall<GpuCompilationInfo>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-shader-module.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-shader-module.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-supported-features")]
+pub resource GpuSupportedFeatures {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-features.has")]
+    #[cm_params("self", "value")]
+    fn has(&self, value: String) -> bool;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-supported-limits")]
+pub resource GpuSupportedLimits {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-texture-dimension1-d")]
+    #[cm_params("self")]
+    fn max_texture_dimension1_d(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-texture-dimension2-d")]
+    #[cm_params("self")]
+    fn max_texture_dimension2_d(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-texture-dimension3-d")]
+    #[cm_params("self")]
+    fn max_texture_dimension3_d(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-texture-array-layers")]
+    #[cm_params("self")]
+    fn max_texture_array_layers(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-bind-groups")]
+    #[cm_params("self")]
+    fn max_bind_groups(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-bind-groups-plus-vertex-buffers")]
+    #[cm_params("self")]
+    fn max_bind_groups_plus_vertex_buffers(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-immediate-size")]
+    #[cm_params("self")]
+    fn max_immediate_size(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-bindings-per-bind-group")]
+    #[cm_params("self")]
+    fn max_bindings_per_bind_group(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-dynamic-uniform-buffers-per-pipeline-layout")]
+    #[cm_params("self")]
+    fn max_dynamic_uniform_buffers_per_pipeline_layout(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-dynamic-storage-buffers-per-pipeline-layout")]
+    #[cm_params("self")]
+    fn max_dynamic_storage_buffers_per_pipeline_layout(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-sampled-textures-per-shader-stage")]
+    #[cm_params("self")]
+    fn max_sampled_textures_per_shader_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-samplers-per-shader-stage")]
+    #[cm_params("self")]
+    fn max_samplers_per_shader_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-buffers-per-shader-stage")]
+    #[cm_params("self")]
+    fn max_storage_buffers_per_shader_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-buffers-in-vertex-stage")]
+    #[cm_params("self")]
+    fn max_storage_buffers_in_vertex_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-buffers-in-fragment-stage")]
+    #[cm_params("self")]
+    fn max_storage_buffers_in_fragment_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-textures-per-shader-stage")]
+    #[cm_params("self")]
+    fn max_storage_textures_per_shader_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-textures-in-vertex-stage")]
+    #[cm_params("self")]
+    fn max_storage_textures_in_vertex_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-textures-in-fragment-stage")]
+    #[cm_params("self")]
+    fn max_storage_textures_in_fragment_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-uniform-buffers-per-shader-stage")]
+    #[cm_params("self")]
+    fn max_uniform_buffers_per_shader_stage(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-uniform-buffer-binding-size")]
+    #[cm_params("self")]
+    fn max_uniform_buffer_binding_size(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-storage-buffer-binding-size")]
+    #[cm_params("self")]
+    fn max_storage_buffer_binding_size(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.min-uniform-buffer-offset-alignment")]
+    #[cm_params("self")]
+    fn min_uniform_buffer_offset_alignment(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.min-storage-buffer-offset-alignment")]
+    #[cm_params("self")]
+    fn min_storage_buffer_offset_alignment(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-vertex-buffers")]
+    #[cm_params("self")]
+    fn max_vertex_buffers(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-buffer-size")]
+    #[cm_params("self")]
+    fn max_buffer_size(&self) -> u64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-vertex-attributes")]
+    #[cm_params("self")]
+    fn max_vertex_attributes(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-vertex-buffer-array-stride")]
+    #[cm_params("self")]
+    fn max_vertex_buffer_array_stride(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-inter-stage-shader-variables")]
+    #[cm_params("self")]
+    fn max_inter_stage_shader_variables(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-color-attachments")]
+    #[cm_params("self")]
+    fn max_color_attachments(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-color-attachment-bytes-per-sample")]
+    #[cm_params("self")]
+    fn max_color_attachment_bytes_per_sample(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroup-storage-size")]
+    #[cm_params("self")]
+    fn max_compute_workgroup_storage_size(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-invocations-per-workgroup")]
+    #[cm_params("self")]
+    fn max_compute_invocations_per_workgroup(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroup-size-x")]
+    #[cm_params("self")]
+    fn max_compute_workgroup_size_x(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroup-size-y")]
+    #[cm_params("self")]
+    fn max_compute_workgroup_size_y(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroup-size-z")]
+    #[cm_params("self")]
+    fn max_compute_workgroup_size_z(&self) -> u32;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-supported-limits.max-compute-workgroups-per-dimension")]
+    #[cm_params("self")]
+    fn max_compute_workgroups_per_dimension(&self) -> u32;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture")]
+pub resource GpuTexture {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.create-view")]
+    #[cm_params("self", "descriptor")]
+    fn create_view(&self, descriptor: Option<GpuTextureViewDescriptor>) -> GpuTextureView;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.destroy")]
+    #[cm_params("self")]
+    fn destroy(&self);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.width")]
+    #[cm_params("self")]
+    fn width(&self) -> GpuIntegerCoordinateOut;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.height")]
+    #[cm_params("self")]
+    fn height(&self) -> GpuIntegerCoordinateOut;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.depth-or-array-layers")]
+    #[cm_params("self")]
+    fn depth_or_array_layers(&self) -> GpuIntegerCoordinateOut;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.mip-level-count")]
+    #[cm_params("self")]
+    fn mip_level_count(&self) -> GpuIntegerCoordinateOut;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.sample-count")]
+    #[cm_params("self")]
+    fn sample_count(&self) -> GpuSize32Out;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.dimension")]
+    #[cm_params("self")]
+    fn dimension(&self) -> GpuTextureDimension;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.format")]
+    #[cm_params("self")]
+    fn format(&self) -> GpuTextureFormat;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.usage")]
+    #[cm_params("self")]
+    fn usage(&self) -> GpuTextureUsage;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.texture-binding-view-dimension")]
+    #[cm_params("self")]
+    fn texture_binding_view_dimension(&self) -> Option<GpuTextureViewDimension>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-texture-view")]
+pub resource GpuTextureView {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture-view.label")]
+    #[cm_params("self")]
+    fn label(&self) -> String;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-texture-view.set-label")]
+    #[cm_params("self", "label")]
+    fn set_label(&self, label: String);
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#gpu-uncaptured-error-event")]
+pub resource GpuUncapturedErrorEvent {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]gpu-uncaptured-error-event.error")]
+    #[cm_params("self")]
+    fn error(&self) -> GpuError;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#record-gpu-pipeline-constant-value")]
+pub resource RecordGpuPipelineConstantValue {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[constructor]record-gpu-pipeline-constant-value")]
+    fn new() -> RecordGpuPipelineConstantValue;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.add")]
+    #[cm_params("self", "key", "value")]
+    fn add(&self, key: String, value: GpuPipelineConstantValue);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.get")]
+    #[cm_params("self", "key")]
+    fn get(&self, key: String) -> Option<GpuPipelineConstantValue>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.has")]
+    #[cm_params("self", "key")]
+    fn has(&self, key: String) -> bool;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.remove")]
+    #[cm_params("self", "key")]
+    fn remove(&self, key: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.keys")]
+    #[cm_params("self")]
+    fn keys(&self) -> List<String>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.values")]
+    #[cm_params("self")]
+    fn values(&self) -> List<GpuPipelineConstantValue>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-gpu-pipeline-constant-value.entries")]
+    #[cm_params("self")]
+    fn entries(&self) -> List<[String, GpuPipelineConstantValue]>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#record-option-gpu-size64")]
+pub resource RecordOptionGpuSize64 {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[constructor]record-option-gpu-size64")]
+    fn new() -> RecordOptionGpuSize64;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.add")]
+    #[cm_params("self", "key", "value")]
+    fn add(&self, key: String, value: Option<GpuSize64>);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.get")]
+    #[cm_params("self", "key")]
+    fn get(&self, key: String) -> Option<Option<GpuSize64>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.has")]
+    #[cm_params("self", "key")]
+    fn has(&self, key: String) -> bool;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.remove")]
+    #[cm_params("self", "key")]
+    fn remove(&self, key: String);
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.keys")]
+    #[cm_params("self")]
+    fn keys(&self) -> List<String>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.values")]
+    #[cm_params("self")]
+    fn values(&self) -> List<Option<GpuSize64>>;
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]record-option-gpu-size64.entries")]
+    #[cm_params("self")]
+    fn entries(&self) -> List<[String, Option<GpuSize64>]>;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2#wgsl-language-features")]
+pub resource WgslLanguageFeatures {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#[method]wgsl-language-features.has")]
+    #[cm_params("self", "value")]
+    fn has(&self, value: String) -> bool;
+}
+
+#[cm("wasi:webgpu/webgpu@0.3.0-rc.2")]
+pub interface Webgpu {
+    #[cm("wasi:webgpu/webgpu@0.3.0-rc.2#get-gpu")]
+    fn get_gpu() -> Gpu;
+}

@@ -80,6 +80,7 @@ modules while tuples follow TypeScript.
 
 - `wado-compiler/` — the compiler: frontend, IR pipeline, optimizer, codegen. The Wado standard library (`core:*`, `wasi:*`) lives in `wado-compiler/lib/`. Internals: `docs/compiler.md`, `docs/optimizer.md`.
 - `wado-cli/` — the `wado` binary.
+- `wado-run-webgpu/` — the `wado run-webgpu` subcommand, a separate binary and a workspace of its own: it links a GPU stack on a wasmtime one generation past the pin. Built and tested by the `webgpu` CI job alone.
 - `wado-lsp/` — the language service engine, also compiled to Wasm for the browser.
 - `wado-vscode/` — the VS Code extension.
 - `wado-from-idl/` — generates the `wasi:*`. `core:kiln`, and `web:*` stdlib modules from WIT.

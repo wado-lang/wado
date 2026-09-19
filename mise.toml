@@ -392,7 +392,8 @@ CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zl
   core:serde core:json core:json_nsd core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:secure_random core:uuid core:temporal core:log core:jwt \
   core:icu"
-WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
+WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls \
+  wasi:webgpu"
 
 cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
   $CORE_MODULES
@@ -522,6 +523,9 @@ cargo run -p wado-from-idl -- \
     --output-dir wado-compiler/lib/wasi
 cargo run -p wado-from-idl -- \
     --wit-dir vendor/wasmtime/crates/wasi-tls/src/p3/wit \
+    --output-dir wado-compiler/lib/wasi
+cargo run -p wado-from-idl -- \
+    --wit-dir vendor/wasi-webgpu/wit \
     --output-dir wado-compiler/lib/wasi
 find wado-compiler/lib/wasi -type f -name '*.wado' -exec cargo run -p wado-cli -- format -w {} +
 """

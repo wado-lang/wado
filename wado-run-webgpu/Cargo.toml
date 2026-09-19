@@ -1,0 +1,44 @@
+[package]
+name = "wado-run-webgpu"
+version = "0.1.0"
+edition = "2024"
+description = "The `wado run-webgpu` subcommand: run a Wado program on a wasi:webgpu host"
+publish = false
+
+# Its own workspace, not the repository's. The host needs wasmtime 48 where the
+# workspace pins 47.0.3, and one workspace resolves one version of a crate.
+[workspace]
+
+[dependencies]
+anyhow = "1"
+lexopt = "0.3"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+wasi-webgpu-wasmtime = { git = "https://github.com/wasi-gfx/wasi-gfx-runtime", rev = "c27ddeb95a94c0c5d778de0a58aec96289ee5727" }
+wgpu-types = "29"
+
+[dependencies.wgpu-core]
+version = "29"
+features = ["wgsl", "vulkan"]
+
+[dependencies.wasmtime]
+version = "48"
+default-features = false
+features = [
+    "anyhow",
+    "async",
+    "component-model",
+    "component-model-async",
+    "cranelift",
+    "gc",
+    "gc-drc",
+    "gc-null",
+    "runtime",
+    "stack-switching",
+    "std",
+    "threads",
+]
+
+[dependencies.wasmtime-wasi]
+version = "48"
+features = ["p3"]
