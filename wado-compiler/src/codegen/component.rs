@@ -181,9 +181,8 @@ pub fn build_component(
                 ),
                 CmStreamPayload::Value(_) => unreachable!("handled above"),
                 CmStreamPayload::Record(decl) => {
-                    // An index the declaration already has, rather than a second
-                    // alias: rebinding it repoints every later reader and
-                    // orphans the index an earlier phase handed out.
+                    // An index the declaration already has, never a second one:
+                    // rebinding repoints every later reader.
                     let aliased_idx = ctx.decl_type_idx(decl.def()).unwrap_or_else(|| {
                         // WASI imports are generated first, so the defining
                         // interface's instance is already available to alias from.
@@ -236,10 +235,8 @@ pub fn build_component(
 
     let mut transmission_future_types: IndexMap<DefId, u32> = IndexMap::default();
     let trailers_future_type = if needs_trailers_future {
-        // The plan's resource-defining interface that declares the trailers
-        // type, asked of each candidate's own declarations. Taking the first
-        // entry instead names whichever interface the plan happened to order
-        // first, which need not declare it at all.
+        // Asked of each candidate's own declarations: the plan's first
+        // resource-defining entry need not declare the trailers type at all.
         let types_fq = wir_package
             .import_plan
             .iter()
@@ -3522,10 +3519,8 @@ fn import_interface_with_resource(
         wasm_encoder::ComponentTypeRef::Instance(instance_type_idx),
     );
 
-    // Expose the resource at outer scope so another interface (say
-    // `wasi:filesystem/preopens`) can `alias outer` it. Keyed by the interface
-    // that declares it, which is what every other reader asks for: keying it by
-    // the one using it here would leave that reader aliasing the export twice.
+    // Expose the resource at outer scope, keyed by the interface that declares
+    // it: that is the coordinate every other reader asks for.
     if outer_resource_idx.is_none() {
         alias_resource_type(
             builder,

@@ -1363,10 +1363,8 @@ pub(super) fn type_id_to_ast_type(
     let resolved = type_table.get(type_id);
     let named_no_source =
         |name: &str| Type::Named(NamedType::new(AstId::fresh(), name.to_string(), span));
-    // The declaring module answers first, so no by-name search can offer another
-    // module's same-named type. `ErrorCode` is one in `wasi:cli`,
-    // `wasi:filesystem`, `wasi:http`, `wasi:sockets` and any user module, and
-    // picking the wrong one lifts a record as the other's discriminant (#2090).
+    // The declaring module answers first, so no by-name search can offer
+    // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
         let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {

@@ -365,9 +365,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report a written type position naming a type no declaration answers
-    /// here. Unlike a bound or a signature, an annotation names no type
-    /// parameter it does not already have in scope, so the site's answer is
-    /// decisive; a pattern qualifier's arguments are read the same way.
+    /// here. Unlike a bound or a signature it names no type parameter it does
+    /// not already have in scope, so the site's answer is decisive.
     pub(super) fn reject_unresolved_annotation(&mut self, ty: &ast::Type) {
         if self.logger.has_errors() {
             return;
@@ -1701,9 +1700,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !self
                     .pattern_qualifier_matches_scrutinee(scrutinee_type, variant_qualifier.as_ref())
                 {
-                    // The scrutinee's own type, not its declaration: the
-                    // qualifier is compared against the instantiation, so a
-                    // message naming `Maybe` says nothing about `Maybe<i32>`.
+                    // The scrutinee's type, not its declaration: the qualifier
+                    // is compared against the instantiation.
                     let scrutinee_name = self.tysys.type_table.borrow().type_name(scrutinee_type);
                     let expected = match &resolved_type {
                         ResolvedType::Enum { .. } => format!("valid case of enum {scrutinee_name}"),

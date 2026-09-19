@@ -1007,7 +1007,7 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
 ///
 /// A payload that does carry one carries it as a declaration, so the scope is
 /// read off that rather than guessed. Naming a package the payload does not
-/// belong to resolves its types to that package's same-named ones (issue #2090).
+/// belong to resolves its types to that package's same-named ones.
 fn future_payload_package(payload: &CmFuturePayload) -> String {
     match payload {
         CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
