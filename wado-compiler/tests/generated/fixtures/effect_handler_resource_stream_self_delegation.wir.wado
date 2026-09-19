@@ -289,7 +289,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(100)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(101)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(102)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(102)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(103)
 
@@ -306,7 +306,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 
 global mut global:effect_handler_resource_stream_self_delegation.wado::$effect_Stream<u8>: ref null "effect_handler_resource_stream_self_delegation.wado//$Dispatch_Stream<u8>" = ref.null none;
@@ -599,7 +599,7 @@ condition: got[1] == 105 as u8
     $sroa_$pattern_temp_0_1_166 = v_152.1;
     handle_94 = "effect_handler_resource_stream_self_delegation.wado/$cm_binding__Stdout_write_via_stream"($sroa_$pattern_temp_0_0_165);
     "core:rt/write_string_to_stream"($sroa_$pattern_temp_0_1_166, $local_18);
-    "wasi/future-drop-readable:transmission-cli"(handle_94);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_94);
 }
 
 fn "effect_handler_resource_stream_self_delegation.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -727,7 +727,7 @@ fn "core:rt/panic"(message) {
     $sroa_$pattern_temp_0_1 = v.1;
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"($sroa_$pattern_temp_0_0);
     "core:rt/write_string_to_stream"($sroa_$pattern_temp_0_1, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

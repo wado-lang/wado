@@ -14,7 +14,7 @@ type "functype//cm_user_interface_any_namespace.wado/$cm_binding__Thing_id" = fn
 
 type "functype//cm_user_interface_any_namespace.wado/$cm_export__run" = fn();  // TypeId(5)
 
-type "functype//wasi/resource-drop:thing" = fn(i32);  // TypeId(6)
+type "functype//wasi/resource-drop:cm_user_interface_any_namespace.wado#thing" = fn(i32);  // TypeId(6)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(7)
 
@@ -22,7 +22,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/acme:demo/Api::get_thing from "wasi/acme:demo/Api::get_thing";
 import fn wasi/acme:demo/Thing::id from "wasi/acme:demo/Thing::id";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:thing from "wasi/resource-drop:thing";
+import fn wasi/resource-drop:cm_user_interface_any_namespace.wado#thing from "wasi/resource-drop:cm_user_interface_any_namespace.wado#thing";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_user_interface_any_namespace.wado/$cm_binding__Api_get_thing"() with Api {
@@ -36,7 +36,7 @@ fn "cm_user_interface_any_namespace.wado/$cm_binding__Thing_id"(self) with Thing
 fn "cm_user_interface_any_namespace.wado/$cm_export__run"() {
     let t: i32;
     drop("cm_user_interface_any_namespace.wado/$cm_binding__Thing_id"(local.tee t("cm_user_interface_any_namespace.wado/$cm_binding__Api_get_thing"())));
-    "wasi/resource-drop:thing"(t);
+    "wasi/resource-drop:cm_user_interface_any_namespace.wado#thing"(t);
     "wasi/task-return"(0);
 }
 

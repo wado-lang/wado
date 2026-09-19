@@ -323,17 +323,17 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(84)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(85)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(86)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(86)
 
-type "functype//wasi/future-drop-readable:transmission-filesystem" = fn(i32);  // TypeId(87)
+type "functype//wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code" = fn(i32);  // TypeId(87)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(88)
 
-type "functype//wasi/resource-drop:descriptor" = fn(i32);  // TypeId(89)
+type "functype//wasi/resource-drop:wasi/filesystem/types.wado#descriptor" = fn(i32);  // TypeId(89)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(90)
 
-type "functype//wasi/future-read:transmission-filesystem" = fn(i32, i32) -> i32;  // TypeId(91)
+type "functype//wasi/future-read:transmission-wasi/filesystem/types.wado#error-code" = fn(i32, i32) -> i32;  // TypeId(91)
 
 type "functype//wasi/subtask-drop" = fn(i32);  // TypeId(92)
 
@@ -353,12 +353,12 @@ import fn wasi/wasi:filesystem/Descriptor::open_at from "wasi/wasi:filesystem/De
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn wasi/future-drop-readable:transmission-filesystem from "wasi/future-drop-readable:transmission-filesystem";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/resource-drop:descriptor from "wasi/resource-drop:descriptor";
+import fn wasi/resource-drop:wasi/filesystem/types.wado#descriptor from "wasi/resource-drop:wasi/filesystem/types.wado#descriptor";
 import fn wasi/task-return from "wasi/task-return";
-import fn wasi/future-read:transmission-filesystem from "wasi/future-read:transmission-filesystem";
+import fn wasi/future-read:transmission-wasi/filesystem/types.wado#error-code from "wasi/future-read:transmission-wasi/filesystem/types.wado#error-code";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
 global global:wir_future_unit_result_io.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 119, 114, 105, 116, 101, 45, 110, 111, 110, 101), used: 11 };
@@ -519,7 +519,7 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_133 = builtin::i32_wrap_i64(packed_131 >> 32_i64);
         handle_45 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_132);
         "core:rt/write_string_to_stream$spec0"(tx_133, global:wir_future_unit_result_io.wado::$const_obj_16);
-        "wasi/future-drop-readable:transmission-cli"(handle_45);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
     } else if (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_17) -> i32 {
         $local_19 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_17).payload_0;
         if ref.is_null($local_19) == 0 -> i32 {
@@ -535,17 +535,17 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_140 = builtin::i32_wrap_i64(packed_138 >> 32_i64);
         handle_50 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_139);
         "core:rt/write_string_to_stream$spec0"(tx_140, global:wir_future_unit_result_io.wado::$const_obj_15);
-        "wasi/future-drop-readable:transmission-cli"(handle_50);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_50);
     } else if @likely($match_17.discriminant == 1) {
         rx_146 = builtin::i32_wrap_i64(local.tee packed_145("wasi/stream-new"()));
         tx_147 = builtin::i32_wrap_i64(packed_145 >> 32_i64);
         handle_55 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_146);
         "core:rt/write_string_to_stream$spec0"(tx_147, global:wir_future_unit_result_io.wado::$const_obj_14);
-        "wasi/future-drop-readable:transmission-cli"(handle_55);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_55);
     } else {
         unreachable;
     }
-    "wasi/future-drop-readable:transmission-filesystem"(wsub);
+    "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(wsub);
     self_57 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wir_future_unit_result_io.wado/$cm_binding__Descriptor_open_at$spec1"(root, 0, global:wir_future_unit_result_io.wado::$const_obj_9, 0, 1));
     $pattern_temp_1 = "wir_future_unit_result_io.wado/$cm_binding__Descriptor_read_via_stream"(local.tee rfile((if @likely(ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(self_57)) -> i32 {
         local.tee v_58(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(self_57).payload_0);
@@ -596,7 +596,7 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_155 = builtin::i32_wrap_i64(packed_153 >> 32_i64);
         handle_86 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_154);
         "core:rt/write_string_to_stream$spec0"(tx_155, $local_14);
-        "wasi/future-drop-readable:transmission-cli"(handle_86);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_86);
     } else if (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_21) -> i32 {
         $local_23 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_21).payload_0;
         if ref.is_null($local_23) == 0 -> i32 {
@@ -612,17 +612,17 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_162 = builtin::i32_wrap_i64(packed_160 >> 32_i64);
         handle_91 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_161);
         "core:rt/write_string_to_stream$spec0"(tx_162, global:wir_future_unit_result_io.wado::$const_obj_11);
-        "wasi/future-drop-readable:transmission-cli"(handle_91);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_91);
     } else if @likely($match_21.discriminant == 1) {
         rx_168 = builtin::i32_wrap_i64(local.tee packed_167("wasi/stream-new"()));
         tx_169 = builtin::i32_wrap_i64(packed_167 >> 32_i64);
         handle_96 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_168);
         "core:rt/write_string_to_stream$spec0"(tx_169, global:wir_future_unit_result_io.wado::$const_obj_10);
-        "wasi/future-drop-readable:transmission-cli"(handle_96);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_96);
     } else {
         unreachable;
     }
-    "wasi/future-drop-readable:transmission-filesystem"(rdone);
+    "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(rdone);
     self_98 = "core:prelude/types.wado/core:prelude/types.wado/AsyncCall<core:prelude/types.wado/Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>>::wait"("wir_future_unit_result_io.wado/$cm_binding__Descriptor_open_at$spec1"(root, 0, global:wir_future_unit_result_io.wado::$const_obj_9, 0, 1));
     rofile = (if @likely(ref.test "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(self_98)) -> i32 {
         local.tee v_99(ref.cast "core:prelude/types.wado//Result<wasi:filesystem/types.wado/Descriptor,wasi:filesystem/types.wado/ErrorCode>::Ok"(self_98).payload_0);
@@ -647,7 +647,7 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_176 = builtin::i32_wrap_i64(packed_174 >> 32_i64);
         handle_108 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_175);
         "core:rt/write_string_to_stream$spec0"(tx_176, global:wir_future_unit_result_io.wado::$const_obj_8);
-        "wasi/future-drop-readable:transmission-cli"(handle_108);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_108);
     } else if (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_25) -> i32 {
         $local_27 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_25).payload_0;
         ref.is_null($local_27) == 0;
@@ -658,7 +658,7 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_183 = builtin::i32_wrap_i64(packed_181 >> 32_i64);
         handle_113 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_182);
         "core:rt/write_string_to_stream$spec0"(tx_183, global:wir_future_unit_result_io.wado::$const_obj_7);
-        "wasi/future-drop-readable:transmission-cli"(handle_113);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_113);
     } else if (if ref.test "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_25) -> i32 {
         $local_28 = ref.cast "core:prelude/types.wado//Option<core:prelude/types.wado/Result<(),wasi:filesystem/types.wado/ErrorCode>>::Some"($match_25).payload_0;
         if ref.is_null($local_28) == 0 -> i32 {
@@ -674,21 +674,21 @@ fn "wir_future_unit_result_io.wado/run"() with Preopens, Stdout {
         tx_190 = builtin::i32_wrap_i64(packed_188 >> 32_i64);
         handle_118 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_189);
         "core:rt/write_string_to_stream$spec0"(tx_190, global:wir_future_unit_result_io.wado::$const_obj_6);
-        "wasi/future-drop-readable:transmission-cli"(handle_118);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_118);
     } else if @likely($match_25.discriminant == 1) {
         rx_196 = builtin::i32_wrap_i64(local.tee packed_195("wasi/stream-new"()));
         tx_197 = builtin::i32_wrap_i64(packed_195 >> 32_i64);
         handle_123 = "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(rx_196);
         "core:rt/write_string_to_stream$spec0"(tx_197, global:wir_future_unit_result_io.wado::$const_obj_5);
-        "wasi/future-drop-readable:transmission-cli"(handle_123);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_123);
     } else {
         unreachable;
     }
-    "wasi/future-drop-readable:transmission-filesystem"(esub);
-    "wasi/resource-drop:descriptor"(rofile);
-    "wasi/resource-drop:descriptor"(rfile);
-    "wasi/resource-drop:descriptor"(wfile);
-    "wasi/resource-drop:descriptor"(root);
+    "wasi/future-drop-readable:transmission-wasi/filesystem/types.wado#error-code"(esub);
+    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(rofile);
+    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(rfile);
+    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(wfile);
+    "wasi/resource-drop:wasi/filesystem/types.wado#descriptor"(root);
 }
 
 fn "wir_future_unit_result_io.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -901,7 +901,7 @@ fn "wir_future_unit_result_io.wado/$cm_future_read_core:prelude/types.wado/Resul
     let arr_22: ref Array<u8>;
     let i: i32;
     ptr_1 = "mem/realloc"(0, 0, 4, 20);
-    status_2 = "wasi/future-read:transmission-filesystem"(handle, ptr_1);
+    status_2 = "wasi/future-read:transmission-wasi/filesystem/types.wado#error-code"(handle, ptr_1);
     if status_2 == -1 {
         ws = "wasi/waitable-set-new"();
         "wasi/waitable-join"(handle, ws);
@@ -1180,7 +1180,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream$spec0"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

@@ -21,7 +21,7 @@ type "functype//cm_list_param_resource_return.wado/$cm_binding__Layout_id" = fn(
 
 type "functype//cm_list_param_resource_return.wado/$cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wasi/resource-drop:layout" = fn(i32);  // TypeId(8)
+type "functype//wasi/resource-drop:cm_list_param_resource_return.wado#layout" = fn(i32);  // TypeId(8)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
@@ -29,7 +29,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Api::make_layout from "wasi/wasi:demo/Api::make_layout";
 import fn wasi/wasi:demo/Layout::id from "wasi/wasi:demo/Layout::id";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:layout from "wasi/resource-drop:layout";
+import fn wasi/resource-drop:cm_list_param_resource_return.wado#layout from "wasi/resource-drop:cm_list_param_resource_return.wado#layout";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(entries) with Api {
@@ -63,7 +63,7 @@ fn "cm_list_param_resource_return.wado/$cm_binding__Layout_id"(self) with Layout
 fn "cm_list_param_resource_return.wado/$cm_export__run"() {
     let l: i32;
     drop("cm_list_param_resource_return.wado/$cm_binding__Layout_id"(local.tee l("cm_list_param_resource_return.wado/$cm_binding__Api_make_layout"(struct.new "core:prelude//List<u32>" { repr: array.new_fixed<u32>(1, 2), used: 2 }))));
-    "wasi/resource-drop:layout"(l);
+    "wasi/resource-drop:cm_list_param_resource_return.wado#layout"(l);
     "wasi/task-return"(0);
 }
 

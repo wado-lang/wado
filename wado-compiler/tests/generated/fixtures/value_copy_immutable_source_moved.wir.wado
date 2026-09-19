@@ -85,7 +85,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(30)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(30)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(31)
 
@@ -101,7 +101,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -195,7 +195,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     tx_82 = builtin::i32_wrap_i64(packed_80 >> 32_i64);
     handle_30 = "value_copy_immutable_source_moved.wado/$cm_binding__Stdout_write_via_stream"(rx_81);
     "core:rt/write_string_to_stream"(tx_82, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_30);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_30);
     $sroa_f_x = black_box(5);
     elements_87 = array.new_fixed<ref "value_copy_immutable_source_moved.wado//Point">();
     m = struct.new "core:prelude//List<value_copy_immutable_source_moved.wado/Point>" { repr: elements_87, used: 0 };
@@ -238,7 +238,7 @@ fn "value_copy_immutable_source_moved.wado/run"() with Stdout {
     tx_157 = builtin::i32_wrap_i64(packed_155 >> 32_i64);
     handle_105 = "value_copy_immutable_source_moved.wado/$cm_binding__Stdout_write_via_stream"(rx_156);
     "core:rt/write_string_to_stream"(tx_157, $local_9);
-    "wasi/future-drop-readable:transmission-cli"(handle_105);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_105);
 }
 
 fn "value_copy_immutable_source_moved.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -330,7 +330,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

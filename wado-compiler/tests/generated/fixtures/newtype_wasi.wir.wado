@@ -55,7 +55,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -72,7 +72,7 @@ import fn wasi/wasi:clocks/MonotonicClock::now from "wasi/wasi:clocks/MonotonicC
 import fn wasi/wasi:clocks/MonotonicClock::get_resolution from "wasi/wasi:clocks/MonotonicClock::get_resolution";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -114,13 +114,13 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
         tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
         handle_12 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
         "core:rt/write_string_to_stream"(tx_16, global:newtype_wasi.wado::$const_obj_3);
-        "wasi/future-drop-readable:transmission-cli"(handle_12);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     } else {
         rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
         tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
         handle_24 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
         "core:rt/write_string_to_stream"(tx_28, global:newtype_wasi.wado::$const_obj_2);
-        "wasi/future-drop-readable:transmission-cli"(handle_24);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_24);
     }
     t2 = "newtype_wasi.wado/$cm_binding__MonotonicClock_now"();
     if (t2 - t1) >=u 0_i64 {
@@ -128,13 +128,13 @@ fn "newtype_wasi.wado/newtype_wasi_chained"() with Stdout, MonotonicClock {
         tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
         handle_36 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
         "core:rt/write_string_to_stream"(tx_40, global:newtype_wasi.wado::$const_obj_1);
-        "wasi/future-drop-readable:transmission-cli"(handle_36);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_36);
     }
     rx_51 = builtin::i32_wrap_i64(local.tee packed_50("wasi/stream-new"()));
     tx_52 = builtin::i32_wrap_i64(packed_50 >> 32_i64);
     handle_48 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_51);
     "core:rt/write_string_to_stream"(tx_52, global:newtype_wasi.wado::$const_obj_0);
-    "wasi/future-drop-readable:transmission-cli"(handle_48);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_48);
 }
 
 fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
@@ -165,33 +165,33 @@ fn "newtype_wasi.wado/newtype_wasi_duration"() with Stdout, MonotonicClock {
         tx_10 = builtin::i32_wrap_i64(packed_8 >> 32_i64);
         handle_6 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_9);
         "core:rt/write_string_to_stream"(tx_10, global:newtype_wasi.wado::$const_obj_8);
-        "wasi/future-drop-readable:transmission-cli"(handle_6);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_6);
     } else {
         rx_21 = builtin::i32_wrap_i64(local.tee packed_20("wasi/stream-new"()));
         tx_22 = builtin::i32_wrap_i64(packed_20 >> 32_i64);
         handle_18 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_21);
         "core:rt/write_string_to_stream"(tx_22, global:newtype_wasi.wado::$const_obj_7);
-        "wasi/future-drop-readable:transmission-cli"(handle_18);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_18);
     }
     if (res * 2_i64) >=u res {
         rx_33 = builtin::i32_wrap_i64(local.tee packed_32("wasi/stream-new"()));
         tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
         handle_30 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
         "core:rt/write_string_to_stream"(tx_34, global:newtype_wasi.wado::$const_obj_6);
-        "wasi/future-drop-readable:transmission-cli"(handle_30);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_30);
     }
     if res >u 0_i64 {
         rx_45 = builtin::i32_wrap_i64(local.tee packed_44("wasi/stream-new"()));
         tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
         handle_42 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
         "core:rt/write_string_to_stream"(tx_46, global:newtype_wasi.wado::$const_obj_5);
-        "wasi/future-drop-readable:transmission-cli"(handle_42);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_42);
     }
     rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
     tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
     handle_54 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_57);
     "core:rt/write_string_to_stream"(tx_58, global:newtype_wasi.wado::$const_obj_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_54);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_54);
 }
 
 fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
@@ -217,7 +217,7 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
         tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
         handle_9 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
         "core:rt/write_string_to_stream"(tx_13, global:newtype_wasi.wado::$const_obj_11);
-        "wasi/future-drop-readable:transmission-cli"(handle_9);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     }
     end = "newtype_wasi.wado/$cm_binding__MonotonicClock_now"();
     if (end - start) >=u 0_i64 {
@@ -225,13 +225,13 @@ fn "newtype_wasi.wado/newtype_wasi_multiple"() with Stdout, MonotonicClock {
         tx_25 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
         handle_21 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
         "core:rt/write_string_to_stream"(tx_25, global:newtype_wasi.wado::$const_obj_10);
-        "wasi/future-drop-readable:transmission-cli"(handle_21);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_21);
     }
     rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
     tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
     handle_33 = "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     "core:rt/write_string_to_stream"(tx_37, global:newtype_wasi.wado::$const_obj_9);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_33);
 }
 
 fn "newtype_wasi.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

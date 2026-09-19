@@ -182,7 +182,7 @@ type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(64)
 
 type "functype//wasi/stream-drop-readable" = fn(i32);  // TypeId(65)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(66)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(66)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(67)
 
@@ -206,7 +206,7 @@ import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/stream-drop-readable from "wasi/stream-drop-readable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/subtask-drop from "wasi/subtask-drop";
 
@@ -356,7 +356,7 @@ fn "wasi_tls_mock_recv.wado/run"() with Stdout, Connector, Error {
         tx_76 = builtin::i32_wrap_i64(packed_74 >> 32_i64);
         handle = "wasi_tls_mock_recv.wado/$cm_binding__Stdout_write_via_stream"(rx_75);
         "core:rt/write_string_to_stream"(tx_76, s);
-        "wasi/future-drop-readable:transmission-cli"(handle);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     } else if $match_scrut_1 == 1 {
         "core:rt/panic"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("recv was not valid UTF-8"), used: 24 });
         unreachable;
@@ -546,7 +546,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

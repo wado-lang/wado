@@ -24,7 +24,7 @@ type "functype//cm_option_of_borrow_param.wado/$cm_binding__Api_use_item" = fn(r
 
 type "functype//cm_option_of_borrow_param.wado/$cm_export__run" = fn();  // TypeId(7)
 
-type "functype//wasi/resource-drop:item" = fn(i32);  // TypeId(8)
+type "functype//wasi/resource-drop:cm_option_of_borrow_param.wado#item" = fn(i32);  // TypeId(8)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(9)
 
@@ -32,7 +32,7 @@ import fn mem/realloc from "mem/realloc";
 import fn wasi/wasi:demo/Api::get_item from "wasi/wasi:demo/Api::get_item";
 import fn wasi/wasi:demo/Api::use_item from "wasi/wasi:demo/Api::use_item";
 import memory (1) from "mem/memory";
-import fn wasi/resource-drop:item from "wasi/resource-drop:item";
+import fn wasi/resource-drop:cm_option_of_borrow_param.wado#item from "wasi/resource-drop:cm_option_of_borrow_param.wado#item";
 import fn wasi/task-return from "wasi/task-return";
 
 fn "cm_option_of_borrow_param.wado/$cm_binding__Api_get_item"() with Api {
@@ -57,7 +57,7 @@ fn "cm_option_of_borrow_param.wado/$cm_export__run"() {
     a = "cm_option_of_borrow_param.wado/$cm_binding__Api_get_item"();
     "cm_option_of_borrow_param.wado/$cm_binding__Api_use_item"(struct.new "core:prelude/types.wado//Option<&cm_option_of_borrow_param.wado/Item>::Some" { discriminant: 0, payload_0: a });
     "cm_option_of_borrow_param.wado/$cm_binding__Api_use_item"(struct.new "core:prelude/types.wado//Option<&cm_option_of_borrow_param.wado/Item>" { 1 });
-    "wasi/resource-drop:item"(a);
+    "wasi/resource-drop:cm_option_of_borrow_param.wado#item"(a);
     "wasi/task-return"(0);
 }
 

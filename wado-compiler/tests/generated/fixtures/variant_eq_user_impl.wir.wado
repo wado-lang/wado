@@ -56,7 +56,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
 
@@ -71,7 +71,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -105,12 +105,12 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     handle_12 = "variant_eq_user_impl.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
     "core:rt/write_string_to_stream"(tx_16, global:variant_eq_user_impl.wado::$const_obj_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     rx_31 = builtin::i32_wrap_i64(local.tee packed_30("wasi/stream-new"()));
     tx_32 = builtin::i32_wrap_i64(packed_30 >> 32_i64);
     handle_28 = "variant_eq_user_impl.wado/$cm_binding__Stdout_write_via_stream"(rx_31);
     "core:rt/write_string_to_stream"(tx_32, global:variant_eq_user_impl.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_28);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_28);
     if $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_11: block -> bool {
         if @likely(ref.test "variant_eq_user_impl.wado//Color::Blue"(c3)) {
             b1_39 = ref.cast "variant_eq_user_impl.wado//Color::Blue"(c3).payload_0;
@@ -131,7 +131,7 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
         tx_48 = builtin::i32_wrap_i64(packed_46 >> 32_i64);
         handle_44 = "variant_eq_user_impl.wado/$cm_binding__Stdout_write_via_stream"(rx_47);
         "core:rt/write_string_to_stream"(tx_48, global:variant_eq_user_impl.wado::$const_obj_1);
-        "wasi/future-drop-readable:transmission-cli"(handle_44);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_44);
     }
     if $inline_variant_eq_user_impl_wado_Color_core_prelude_traits_wado_Eq__eq_scalar_16: block -> bool {
         if @likely(ref.test "variant_eq_user_impl.wado//Color::Blue"(c3)) {
@@ -153,7 +153,7 @@ fn "variant_eq_user_impl.wado/run"() with Stdout {
         tx_64 = builtin::i32_wrap_i64(packed_62 >> 32_i64);
         handle_60 = "variant_eq_user_impl.wado/$cm_binding__Stdout_write_via_stream"(rx_63);
         "core:rt/write_string_to_stream"(tx_64, global:variant_eq_user_impl.wado::$const_obj_0);
-        "wasi/future-drop-readable:transmission-cli"(handle_60);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_60);
     }
 }
 
