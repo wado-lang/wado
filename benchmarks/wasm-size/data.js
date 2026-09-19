@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789730563061,
+  "lastUpdate": 1789777380951,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56817,6 +56817,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/21c9fa572d5df432d138c9c72f263af9f2f3d2e6"
         },
         "date": 1789730562446,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19589,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300930,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e97cd5b9d2f11e1b138f8caa1e5685aefed804f4",
+          "message": "Merge pull request #2081 from wado-lang/claude/typeid-canonical\n\nrefactor(tir): make type identity a checked question, not a TypeId comparison",
+          "timestamp": "2026-09-19T09:04:18+09:00",
+          "tree_id": "ee8b7799ee8b6c4dedad1fbf1224eb3a9a427dea",
+          "url": "https://github.com/wado-lang/wado/commit/e97cd5b9d2f11e1b138f8caa1e5685aefed804f4"
+        },
+        "date": 1789777380018,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
