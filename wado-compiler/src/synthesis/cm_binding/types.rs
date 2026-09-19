@@ -347,7 +347,8 @@ pub fn cm_type_to_type_id(
                 .compiler_struct_name(CompilerItem::List)
                 .to_string();
             if g.name.as_str() == list_name && g.args.len() == 1 {
-                let elem_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let elem_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_list(elem_type);
             }
             let option_name = type_table
@@ -357,12 +358,15 @@ pub fn cm_type_to_type_id(
                 .compiler_variant_name(CompilerItem::Result)
                 .to_string();
             if g.name.as_str() == option_name && g.args.len() == 1 {
-                let inner_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let inner_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
                 return type_table.make_option(inner_type);
             }
             if g.name.as_str() == result_name && g.args.len() == 2 {
-                let ok_type = cm_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
-                let err_type = cm_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
+                let ok_type =
+                    cm_held_type_to_type_id(&g.args[0], type_table, registry, wasi_package);
+                let err_type =
+                    cm_held_type_to_type_id(&g.args[1], type_table, registry, wasi_package);
                 return type_table.make_result(ok_type, err_type);
             }
             match g.name.as_str() {
@@ -387,13 +391,32 @@ pub fn cm_type_to_type_id(
         Type::Tuple(types) => {
             let resolved: Vec<TypeId> = types
                 .iter()
-                .map(|t| cm_type_to_type_id(t, type_table, registry, wasi_package))
+                .map(|t| cm_held_type_to_type_id(t, type_table, registry, wasi_package))
                 .collect();
             type_table.make_tuple(resolved)
         }
         // Borrowed resource handles are i32 at the CM boundary.
         Type::Reference(_) | Type::MutReference(_) => TypeTable::I32,
         other => panic!("unsupported type at CM boundary: {other:?}"),
+    }
+}
+
+/// The same conversion for a type a container holds. A bare `borrow<t>`
+/// parameter is the `i32` handle the boundary passes, but a `list<borrow<t>>`
+/// or `option<borrow<t>>` is a `List<&T>` or `Option<&T>` at the call site, and
+/// a container built over `i32` is a GC type the caller's value is not.
+pub fn cm_held_type_to_type_id(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    registry: &CmInterfaceRegistry,
+    wasi_package: &str,
+) -> TypeId {
+    match ty {
+        Type::Reference(inner) | Type::MutReference(inner) => {
+            let inner = cm_type_to_type_id(inner, type_table, registry, wasi_package);
+            type_table.make_ref(inner)
+        }
+        _ => cm_type_to_type_id(ty, type_table, registry, wasi_package),
     }
 }
 

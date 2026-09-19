@@ -31,8 +31,9 @@ use super::lower::{
     synthesize_lower_wasi_variant_to_memory,
 };
 use super::types::{
-    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_param_store_plan, cm_type_to_type_id,
-    cm_val_type_to_type_id, flatten_param_type, needs_flat_result_lifting,
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id,
+    cm_param_store_plan, cm_type_to_type_id, cm_val_type_to_type_id, flatten_param_type,
+    needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry_scoped};
@@ -1057,20 +1058,10 @@ impl<'a> AdapterBuilder<'a> {
         let elem_size = cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
         let elem_align = cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
 
-        // The element's Wado type, not its CM one: a `list<borrow<t>>` is a
-        // `List<&T>` at the call site, and `cm_type_to_type_id` answers `i32`,
-        // whose `List` is a GC type the caller's list is not. The other two
-        // list walkers read this off the value's own list type instead.
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
-            let elem_tid = match elem_type {
-                Type::Reference(inner) | Type::MutReference(inner) => {
-                    let inner_tid =
-                        cm_type_to_type_id(inner, &mut tt, registry, &self.func_info.package);
-                    tt.make_ref(inner_tid)
-                }
-                _ => cm_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package),
-            };
+            let elem_tid =
+                cm_held_type_to_type_id(elem_type, &mut tt, registry, &self.func_info.package);
             let list_tid = tt.make_list(elem_tid);
             (elem_tid, list_tid)
         };

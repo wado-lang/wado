@@ -1,0 +1,30 @@
+// `option<borrow<t>>` — `wasi:webgpu`'s `set-bind-group` shape. The parameter
+// is an `Option<&Resource>` at the call site, so the adapter must unwrap the
+// caller's own option rather than one built over the boundary's `i32` handle.
+
+#[cm("wasi:demo/gfx@0.1.0#item")]
+resource Item {
+    #[cm("wasi:demo/gfx@0.1.0#[method]item.id")]
+    #[cm_params("self")]
+    fn id(&self) -> u32;
+}
+
+interface Api {
+    #[cm("wasi:demo/gfx@0.1.0#get-item")]
+    fn get_item() -> Item;
+    #[cm("wasi:demo/gfx@0.1.0#use-item")]
+    #[cm_params("item")]
+    fn use_item(item: Option<&Item>);
+}
+
+export fn run() with (Api, Item) {
+    let a = Api::get_item();
+    Api::use_item(Option::Some(&a));
+    Api::use_item(null);
+}
+
+__DATA__
+{
+  "compile_only": true,
+  "wat_lines": [{ "contains": ["(import \"wasi:demo/gfx@0.1.0\""], "count": 1 }]
+}

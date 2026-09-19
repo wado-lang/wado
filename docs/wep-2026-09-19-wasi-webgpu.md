@@ -125,9 +125,20 @@ operation through `.wait()`, and a `flags` value built with `|`.
   a program imports — about 1.6 ms per compilation at today's sizes. Making
   either demand-driven means running the two-pass `use` resolution over a
   package closure instead of the whole table.
-- No host implements `wasi:webgpu`, wasmtime included, so the fixtures can only
-  be compiled and never run. Closing this means a host of our own, or a
-  third-party runtime to point `wado run` at.
+- Running needs a host `wado run` does not have. wasmtime ships none, but
+  `wasi-gfx/wasi-gfx-runtime` does, as the `wasi-webgpu-wasmtime` crate, against
+  the same `wasi:webgpu@0.3.0-rc.2` the module is generated from. A Wado
+  component built on that module runs a WGSL compute dispatch through it and
+  reads the results back. Two things stand between that and `wado run`: the
+  crate requires wasmtime 48 where the workspace pins 47.0.3, and the GPU stack
+  behind it is 31 crates — naga, wgpu-core, wgpu-hal and ash among them — about
+  38 s of a clean release build and 3.1 MB of the binary. Whether `wado run`
+  carries it, a separate binary does, or neither, is open.
+- A machine with no GPU has no adapter, and wgpu's `noop` backend is opt-in and
+  computes nothing. `mesa-vulkan-drivers` supplies a software adapter
+  (lavapipe), a 98.5 MB install, and that is what answered the compute run
+  above. A CI job that runs rather than compiles a `wasi:webgpu` fixture needs
+  it installed.
 - The version rides in every `#[cm]` path, so an `rc.3` rewrites all 2423 lines.
   Regenerating handles that. What nothing records is which version the bundled
   module was cut from, beyond the submodule the generated header names.
