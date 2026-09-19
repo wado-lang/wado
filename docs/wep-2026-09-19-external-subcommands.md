@@ -1,0 +1,85 @@
+# WEP: External Subcommands
+
+## Context
+
+`wado` is one binary with a fixed set of subcommands. Running a `wasi:webgpu`
+program needs a host, and the host that exists links a GPU stack — 31 crates,
+about 38 s of a clean release build and 3.1 MB of binary, on a wasmtime one
+generation ahead of the workspace pin
+([`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)). Nothing else a
+`wado` invocation does wants any of that.
+
+So the runner is its own binary, `wado-run-with-webgpu`, and `wado
+run-with-webgpu` reaches it. cargo and git resolve their own subcommands this
+way, so the shape is familiar before it is documented.
+
+## Decision
+
+### A name `wado` does not know is looked up on `PATH`
+
+`wado <name>` first asks the builtin table. Only a name it does not hold reaches
+the search, which looks for a file called `wado-<name>` in the directories
+`PATH` lists, in order, and runs the first one that is a regular file and
+executable. A `<name>` that is not lowercase ASCII, digits and `-` is not a
+subcommand and is never searched for.
+
+`PATH` entries that are empty or relative are skipped. An empty entry means the
+current directory to `execvp`, and a relative entry resolves against it, so
+either lets the directory a user happens to stand in decide what `wado foo`
+runs. `wado` resolves the absolute path itself and runs that path, rather than
+handing a bare name to the operating system's own search, which on Windows
+looks in the application directory and the current directory first.
+
+### A builtin is never overridden
+
+The builtin table answers first, so an external subcommand only ever adds a
+name. A `wado-run` on `PATH` is inert: `wado run` is the builtin, whatever the
+`PATH` holds. This is what makes the mechanism safe to have at all — a
+directory earlier in `PATH` cannot change what `wado build` does.
+
+A name that is neither builtin nor on `PATH` fails as it does today, and the
+message says that `wado-<name>` was looked for on `PATH`.
+
+### The child is handed the rest of the command line
+
+`wado-<name>` receives every argument after the subcommand name, verbatim and
+unparsed: `wado` reads none of them, so an external subcommand's flags are its
+own. The environment carries `WADO`, the absolute path of the running binary,
+so a child that wants to compile calls back to the same `wado` the user invoked
+rather than searching for one.
+
+On Unix `wado` execs the child, replacing itself, so the exit status and every
+signal belong to the child directly. On Windows it spawns, waits, and exits
+with the child's status.
+
+### One listing covers both
+
+A listing exists and names builtin and external subcommands together, since a
+user who installed one has no other way to see that `wado` found it. It also
+marks an external that a builtin shadows, which is otherwise invisible: the
+file is on `PATH`, `wado` will never run it, and nothing says so.
+
+## Roadmap
+
+- [ ] Resolve an unknown subcommand through `PATH` and run it, with the
+      skipping and the absolute-path rules above, and say in the
+      unknown-command error where it looked.
+- [ ] The listing, covering builtins, externals, and shadowed externals.
+- [ ] A `docs/cli.md` section on writing one, including `WADO`.
+
+## Known gaps
+
+- What the listing is called. The proposal is `wado --list`, beside `--help` and
+  `--version`: cargo spells it that way, the dispatcher already has an arm for a
+  global flag, and a flag consumes no subcommand name, where a `wado commands`
+  would take that name out of the external namespace for good. `wado --help`
+  would gain a line pointing at it. Nothing else about the listing depends on
+  the spelling.
+- An external's one-line description. A builtin carries its own, and the only
+  way to obtain an external's is to run it, so the listing can show names alone
+  or pay a process per entry. cargo shows names alone.
+- `wado help <name>` for an external, which would run `wado-<name> --help`.
+  cargo does this; whether `wado` should is untouched here.
+- Nothing distinguishes a `wado-<name>` written for this mechanism from any
+  other file on `PATH` that happens to be named that way. cargo has the same
+  gap, and closing it means a marker the child answers before it runs.
