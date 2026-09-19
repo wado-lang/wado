@@ -6253,6 +6253,13 @@ impl BuiltinDeclarations {
             .unwrap_or_default()
     }
 
+    /// Whether the call declared `#[result(owned)]`: the object it hands back
+    /// is freshly allocated, and so never one it was given.
+    pub fn returns_owned<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> bool {
+        self.get(call.into())
+            .is_some_and(|d| d.returns == Some(ReturnConvention::Owned))
+    }
+
     /// The parameter a declaration's result is a component of, for a call that
     /// declared `#[result(part_of = p)]`.
     pub fn part_of<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> Option<usize> {

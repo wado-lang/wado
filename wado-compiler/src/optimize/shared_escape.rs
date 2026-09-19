@@ -320,7 +320,13 @@ impl<'a> SharedEscape<'a> {
         {
             return false;
         }
-        declarations.reads_param(&reference, pos)
+        // A result that can hold a reference is a way out of the call, and this
+        // walk has no body to follow it through. Only `#[result(owned)]` says
+        // the object it hands back is not the one it was given.
+        let returns_owned = declarations.returns_owned(&reference);
+        let result_carries = !returns_owned
+            && holds_reference(&self.project.type_table.borrow(), callee.return_type);
+        !result_carries && declarations.reads_param(&reference, pos)
     }
 }
 
