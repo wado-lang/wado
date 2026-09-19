@@ -157,6 +157,15 @@ pub fn sroa_param_name(original: &str) -> String {
     format!("{original}$scalar")
 }
 
+/// The WIR local holding one field of an aggregate the multi-value ABI took
+/// apart, on either the result side or the parameter side.
+// Opens with and separates on [`INTERNAL_PREFIX`], so no source local spells
+// one and no two `(base, field_name)` pairs spell the same one.
+#[must_use]
+pub fn multi_value_split_local(base: &str, field_name: &str) -> String {
+    format!("{INTERNAL_PREFIX}mv{INTERNAL_PREFIX}{base}{INTERNAL_PREFIX}{field_name}")
+}
+
 /// The name of the synthesized `Case::<V, P>::extract` helper for a variant
 /// and one of its payload types, both identified by their structural mangles
 /// (same identity discipline as [`value_copy_helper_name`]). Lowering rewrites

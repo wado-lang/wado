@@ -1,0 +1,31 @@
+// `Emit::render` is defaulted and its return type is the projection `S::Value`
+// for a bound naming `Shape`.
+export trait Emit with () {
+    fn tag(&self) -> i32;
+
+    fn render<S: Shape>(&self, shape: S) -> S::Value {
+        return shape.value(self.tag());
+    }
+}
+
+export trait Shape with () {
+    type Value;
+
+    fn value(&self, tag: i32) -> Self::Value;
+}
+
+export struct Doubler {
+    internal factor: i32,
+}
+
+impl Shape for Doubler {
+    type Value = i32;
+
+    fn value(&self, tag: i32) -> i32 {
+        return tag * self.factor;
+    }
+}
+
+pub fn doubler(factor: i32) -> Doubler {
+    return Doubler { factor };
+}

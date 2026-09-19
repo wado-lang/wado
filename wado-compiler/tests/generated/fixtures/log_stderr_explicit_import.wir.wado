@@ -6,37 +6,31 @@ enum core:prelude/types.wado//enum:CopyResult { Completed = 0, Dropped = 1, Canc
 
 array Array<u8> (mut u8);  // TypeId(1)
 
-struct core:prelude/slice.wado//Slice<u8> {  // TypeId(2)
-    mut repr: ref Array<u8>,
-    mut start: i32,
-    mut end: i32,
-}
+type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(2)
 
-type "functype//mem/realloc" = fn(i32, i32, i32, i32) -> i32;  // TypeId(3)
+type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(3)
 
-type "functype//wasi/stream-write" = fn(i32, i32, i32) -> i32;  // TypeId(4)
+type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(4)
 
-type "functype//wasi/waitable-join" = fn(i32, i32);  // TypeId(5)
+type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(5)
 
-type "functype//wasi/waitable-set-drop" = fn(i32);  // TypeId(6)
+type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(6)
 
-type "functype//wasi/waitable-set-new" = fn() -> i32;  // TypeId(7)
+type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(7)
 
-type "functype//wasi/waitable-set-wait" = fn(i32, i32) -> i32;  // TypeId(8)
+type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(8)
 
-type "functype//wasi/wasi:cli/Stderr::write_via_stream" = fn(i32) -> i32;  // TypeId(9)
+type "functype//log_stderr_explicit_import.wado/$cm_export__run" = fn();  // TypeId(9)
 
-type "functype//log_stderr_explicit_import.wado/$cm_export__run" = fn();  // TypeId(10)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(10)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref "core:prelude/slice.wado//Slice<u8>");  // TypeId(11)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(11)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(12)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(12)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(13)
+type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(13)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(14)
-
-type "functype//wasi/task-return" = fn(i32);  // TypeId(15)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(14)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -65,14 +59,13 @@ fn "log_stderr_explicit_import.wado/$cm_export__run"() {
     new_repr = builtin::array_new<u8>(22);
     builtin::array_copy<u8>(new_repr, 0, $sroa_message_repr, 0, 21);
     builtin::array_set_u8(new_repr, 21, 10);
-    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_7, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: 22 });
+    "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_7, new_repr, 0, 22);
     "wasi/stream-drop-writable"(tx_7);
     "wasi/future-drop-readable:transmission-cli"(future_handle);
     "wasi/task-return"(0);
 }
 
-fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, data) {
-    let repr_2: ref Array<u8>;
+fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(self, $mv$data$repr, $mv$data$start, $mv$data$end) {
     let end_3: i32;
     let offset: i32;
     let packed_13: i64;
@@ -88,23 +81,18 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     let $sroa_data_start: i32;
     let $sroa_written_count: i32;
     let $sroa_written_result: "core:prelude/types.wado//enum:CopyResult";
-    let $av_52: i32;
-    let $av_53: i32;
-    $av_52 = data.start;
-    $av_53 = data.end;
-    if ($av_53 - $av_52) == 0 {
+    if ($mv$data$end - $mv$data$start) == 0 {
         return;
     }
-    repr_2 = data.repr;
-    end_3 = $av_52 + ($av_53 - $av_52);
-    offset = data.start;
+    end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
+    offset = $mv$data$start;
     block {
         l2: loop {
             $sroa_data_start = offset;
             ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b3: block {
                 l4: loop {
                     break_if b3 i >= len_23;
-                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8(repr_2, $sroa_data_start + i));
+                    builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
                     continue l4;
                 };

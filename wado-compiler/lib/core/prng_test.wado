@@ -1,0 +1,390 @@
+use { Seed, Seedable, Rng, VectorRng, SampleUniform, Xoshiro256pp, XoshiroSimd, Shishua, Squares64 } from "core:prng";
+use { u64x2 } from "core:simd";
+
+fn xoshiro(n: u64) -> Xoshiro256pp {
+    return Xoshiro256pp::from_seed(Seed::from_u64(n));
+}
+
+fn lanes(v: u64x2) -> [u64, u64] {
+    return [
+        v.extract_lane(0) as u64,
+        v.extract_lane(1) as u64,
+    ];
+}
+
+fn batch_words<R: VectorRng>(rng: &mut R) -> List<u64> {
+    let [a, b, c, d, e, f, g, h] = rng.next_batch();
+    let mut out: List<u64> = [];
+    for let v of [a, b, c, d, e, f, g, h] {
+        let [lo, hi] = lanes(v);
+        out.push(lo);
+        out.push(hi);
+    }
+    return out;
+}
+
+test "the same seed replays the same stream" {
+    let mut a = xoshiro(7);
+    let mut b = xoshiro(7);
+    for let mut i = 0; i < 64; i += 1 {
+        assert a.next_u64() == b.next_u64();
+    }
+}
+
+test "neighbouring seeds do not correlate" {
+    let mut a = xoshiro(1);
+    let mut b = xoshiro(2);
+    let mut c = xoshiro(3);
+    let mut same = 0;
+    for let mut i = 0; i < 64; i += 1 {
+        let x = a.next_u64();
+        let y = b.next_u64();
+        let z = c.next_u64();
+        if x == y || y == z || x == z {
+            same += 1;
+        }
+    }
+    assert same == 0;
+}
+
+test "seeding from zero is as good as any other seed" {
+    let mut rng = xoshiro(0);
+    let mut ones = 0;
+    for let mut i = 0; i < 64; i += 1 {
+        ones += popcount(rng.next_u64());
+    }
+    assert 1900 < ones < 2196;
+}
+
+fn popcount(word: u64) -> i32 {
+    return i64::popcnt(word as i64) as i32;
+}
+
+test "a seed absorbs bytes and a string alike" {
+    let text = "wado";
+    let bytes = b"wado";
+    assert Seed::from_str(&text) == Seed::from_bytes(&bytes);
+    assert Seed::from_str(&text) != Seed::from_str(&"wadp");
+    assert Seed::from_str(&"") != Seed::from_str(&"\u0000");
+}
+
+test "a seed absorbs a whole chunk and a partial one" {
+    // Eight bytes fill a chunk exactly; nine spill into a zero-padded second.
+    assert Seed::from_str(&"01234567") != Seed::from_str(&"012345678");
+    assert Seed::from_str(&"0123456789abcdef") != Seed::from_str(&"0123456789abcde");
+}
+
+test "split derives an independent stream per index" {
+    let root = Seed::from_str(&"world");
+    let mut a = Xoshiro256pp::from_seed(root.split(0));
+    let mut b = Xoshiro256pp::from_seed(root.split(1));
+    let mut c = Xoshiro256pp::from_seed(root);
+    let first = a.next_u64();
+    assert first != b.next_u64();
+    assert first != c.next_u64();
+
+    // Deriving is pure, so worker n needs no coordination to agree with itself.
+    assert root.split(9) == Seed::from_str(&"world").split(9);
+}
+
+test "a jump parts the stream from stepping" {
+    let mut stepped = xoshiro(5);
+    let mut jumped = xoshiro(5);
+    jumped.jump();
+    let mut long_jumped = xoshiro(5);
+    long_jumped.long_jump();
+
+    for let mut i = 0; i < 256; i += 1 {
+        stepped.next_u64();
+    }
+    // 256 steps are not 2^128, so the streams must have parted.
+    assert stepped.next_u64() != jumped.next_u64();
+    assert jumped.next_u64() != long_jumped.next_u64();
+}
+
+test "random_range covers an inclusive range and nothing outside it" {
+    let mut rng = xoshiro(11);
+    let mut seen: List<i32> = [0, 0, 0, 0, 0, 0];
+    for let mut i = 0; i < 6000; i += 1 {
+        let die = rng.random_range(1..=6);
+        assert 1 <= die <= 6;
+        seen[die - 1] += 1;
+    }
+    for let count of seen {
+        assert 800 < count < 1200;
+    }
+}
+
+test "random_range excludes the end of an exclusive range" {
+    let mut rng = xoshiro(12);
+    let mut hits = 0;
+    for let mut i = 0; i < 2000; i += 1 {
+        let v = rng.random_range(0..<3);
+        assert 0 <= v < 3;
+        if v == 2 {
+            hits += 1;
+        }
+    }
+    assert hits > 0;
+}
+
+test "random_range spans one value and the whole width" {
+    let mut rng = xoshiro(13);
+    assert rng.random_range(42..=42) == 42;
+
+    let mut low = false;
+    let mut high = false;
+    for let mut i = 0; i < 64; i += 1 {
+        let v = rng.random_range(i64::MIN..=i64::MAX);
+        if v < 0 {
+            low = true;
+        }
+        if v > 0 {
+            high = true;
+        }
+    }
+    assert low && high;
+}
+
+test "random_range reaches every integer width" {
+    let mut rng = xoshiro(14);
+    for let mut i = 0; i < 64; i += 1 {
+        assert -3 as i8 <= rng.random_range(-3 as i8..=3 as i8) <= 3 as i8;
+        assert -3 as i16 <= rng.random_range(-3 as i16..=3 as i16) <= 3 as i16;
+        assert -3 as i64 <= rng.random_range(-3 as i64..=3 as i64) <= 3 as i64;
+        assert rng.random_range(0 as u8..<200 as u8) < 200 as u8;
+        assert rng.random_range(0 as u16..<200 as u16) < 200 as u16;
+        assert rng.random_range(0 as u32..<200 as u32) < 200 as u32;
+        assert rng.random_range(0 as u64..<200 as u64) < 200 as u64;
+    }
+}
+
+#[expect_trap]
+test "an empty range is a defect, not a value" {
+    let mut rng = xoshiro(15);
+    rng.random_range(5..<5);
+}
+
+#[expect_trap]
+test "an inverted range is a defect, not a value" {
+    let mut rng = xoshiro(16);
+    // A literal `9..=1` is a compile error; only a computed one reaches here.
+    rng.random_range(builtin::black_box(9)..=builtin::black_box(1));
+}
+
+test "random_f64 lands in [0, 1) and spreads over it" {
+    let mut rng = xoshiro(17);
+    let mut buckets: List<i32> = [0, 0, 0, 0];
+    for let mut i = 0; i < 4000; i += 1 {
+        let v = rng.random_f64();
+        assert 0.0 <= v < 1.0;
+        buckets[(v * 4.0) as i32] += 1;
+    }
+    for let count of buckets {
+        assert 800 < count < 1200;
+    }
+}
+
+test "random_bool is a fair coin" {
+    let mut rng = xoshiro(18);
+    let mut heads = 0;
+    for let mut i = 0; i < 4000; i += 1 {
+        if rng.random_bool() {
+            heads += 1;
+        }
+    }
+    assert 1850 < heads < 2150;
+}
+
+test "shuffle permutes and moves every element somewhere" {
+    let mut rng = xoshiro(19);
+    let mut items: List<i32> = [];
+    for let mut i = 0; i < 32; i += 1 {
+        items.push(i);
+    }
+    let before = items;
+    rng.shuffle(&mut items);
+
+    assert items.len() == before.len();
+    assert items != before;
+    items.sort();
+    assert items == before;
+}
+
+test "shuffle leaves a short list alone" {
+    let mut rng = xoshiro(20);
+    let mut empty: List<i32> = [];
+    rng.shuffle(&mut empty);
+    assert empty.is_empty();
+
+    let mut one: List<i32> = [7];
+    rng.shuffle(&mut one);
+    assert one == [7] as List<i32>;
+}
+
+test "choose picks from the list, and nothing from an empty one" {
+    let mut rng = xoshiro(21);
+    let items: List<String> = ["a", "b", "c"];
+    let mut distinct: List<String> = [];
+    for let mut i = 0; i < 64; i += 1 {
+        let Some(picked) = rng.choose(&items) else {
+            panic("choose returned None for a non-empty list");
+        };
+        assert items.contains(&picked);
+        if !distinct.contains(&picked) {
+            distinct.push(picked);
+        }
+    }
+    assert distinct.len() == 3;
+
+    let empty: List<i32> = [];
+    assert rng.choose(&empty) matches { None };
+}
+
+test "Squares64 answers by key, not by order" {
+    let keyed = Squares64::from_seed(Seed::from_str(&"terrain"));
+    assert keyed.at(1000) == keyed.at(1000);
+    assert keyed.at(0) != keyed.at(1);
+
+    // A different world gives different terrain at the same coordinate.
+    let other = Squares64::from_seed(Seed::from_str(&"terrain2"));
+    assert other.at(1000) != keyed.at(1000);
+}
+
+test "Squares64 spreads a counter walk over its output bits" {
+    let keyed = Squares64::from_seed(Seed::from_u64(3));
+    let mut ones = 0;
+    for let mut counter: u64 = 0; counter < 64; counter += 1 {
+        ones += popcount(keyed.at(counter));
+    }
+    assert 1900 < ones < 2196;
+}
+
+test "a small seed still yields a usable Squares64 key" {
+    // The failure mode the key predicate exists for: key 0 emits zeros, and a
+    // small key emits them for a long while.
+    for let mut n: u64 = 0; n < 8; n += 1 {
+        let keyed = Squares64::from_seed(Seed::from_u64(n));
+        let mut nonzero = 0;
+        for let mut counter: u64 = 0; counter < 16; counter += 1 {
+            if keyed.at(counter) != 0 {
+                nonzero += 1;
+            }
+        }
+        assert nonzero == 16;
+    }
+}
+
+test "a vector batch is sixteen distinct words" {
+    let mut shishua = Shishua::from_seed(Seed::from_u64(23));
+    let words = batch_words(&mut shishua);
+    assert words.len() == 16;
+    for let mut i = 0; i < words.len(); i += 1 {
+        for let mut j = i + 1; j < words.len(); j += 1 {
+            assert words[i] != words[j];
+        }
+    }
+}
+
+test "each vector engine replays its own batches" {
+    let mut a = XoshiroSimd::from_seed(Seed::from_u64(24));
+    let mut b = XoshiroSimd::from_seed(Seed::from_u64(24));
+    assert batch_words(&mut a) == batch_words(&mut b);
+    // Consuming one batch more on `a` parts the two streams.
+    batch_words(&mut a);
+    assert batch_words(&mut a) != batch_words(&mut b);
+
+    let mut s = Shishua::from_seed(Seed::from_u64(24));
+    let mut t = Shishua::from_seed(Seed::from_u64(24));
+    assert batch_words(&mut s) == batch_words(&mut t);
+}
+
+test "the SIMD lanes are the scalar streams, a jump apart" {
+    let seed = Seed::from_u64(25);
+    let mut simd = XoshiroSimd::from_seed(seed);
+    let words = batch_words(&mut simd);
+
+    let mut lane = Xoshiro256pp::from_seed(seed);
+    // Lane 0 is the scalar stream from the same seed; the batch holds its first
+    // two draws at word 0 and word 8, one per step.
+    assert words[0] == lane.next_u64();
+    assert words[8] == lane.next_u64();
+
+    lane = Xoshiro256pp::from_seed(seed);
+    lane.jump();
+    assert words[1] == lane.next_u64();
+    assert words[9] == lane.next_u64();
+}
+
+test "SHISHUA rounds keep moving" {
+    let mut rng = Shishua::from_seed(Seed::from_u64(26));
+    let first = batch_words(&mut rng);
+    let second = batch_words(&mut rng);
+    assert first != second;
+}
+
+test "a generic consumer drives either trait" {
+    let mut scalar = xoshiro(27);
+    assert fold_scalar(&mut scalar) != 0;
+
+    let mut vector = Shishua::from_seed(Seed::from_u64(27));
+    assert fold_vector(&mut vector) != 0;
+}
+
+fn fold_scalar<R: Rng>(rng: &mut R) -> u64 {
+    let mut acc: u64 = 0;
+    for let mut i = 0; i < 16; i += 1 {
+        acc = acc ^ rng.next_u64();
+    }
+    return acc;
+}
+
+fn fold_vector<R: VectorRng>(rng: &mut R) -> u64 {
+    let [a, b, c, d, e, f, g, h] = rng.next_batch();
+    let acc = a ^ b ^ c ^ d ^ e ^ f ^ g ^ h;
+    return acc.extract_lane(0) as u64 ^ acc.extract_lane(1) as u64;
+}
+
+test "SampleUniform draws through a bound" {
+    let mut rng = xoshiro(28);
+    assert bounded::<i32, Xoshiro256pp>(&mut rng, 10, 20) <= 20;
+}
+
+fn bounded<T: SampleUniform, R: Rng>(rng: &mut R, low: T, high: T) -> T {
+    return T::sample_inclusive(rng, low, high);
+}
+
+// A jump and a draw are both the same linear transition, so they commute. A
+// wrong polynomial, bit order or accumulation would not.
+test "jumping and drawing commute" {
+    let start = xoshiro(99);
+
+    let mut jumped = start;
+    jumped.jump();
+    assert jumped != start;
+
+    let mut long_jumped = start;
+    long_jumped.long_jump();
+    assert long_jumped != start;
+    assert long_jumped != jumped;
+
+    let mut jump_first = xoshiro(99);
+    jump_first.jump();
+    jump_first.next_u64();
+
+    let mut draw_first = xoshiro(99);
+    draw_first.next_u64();
+    draw_first.jump();
+
+    assert jump_first == draw_first;
+
+    let mut long_first = xoshiro(99);
+    long_first.long_jump();
+    long_first.next_u64();
+
+    let mut long_second = xoshiro(99);
+    long_second.next_u64();
+    long_second.long_jump();
+
+    assert long_first == long_second;
+}

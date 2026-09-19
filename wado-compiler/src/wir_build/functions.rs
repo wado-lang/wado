@@ -3,9 +3,8 @@
 
 use crate::canonical::CanonicalIntrinsic;
 use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_f32_type, prim_of};
-use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::name::{MangledName, global_name};
+use crate::name::{MangledName, global_name, multi_value_split_local};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
@@ -15,7 +14,7 @@ use crate::wir::{
 };
 
 use super::context::{PendingFunctionBody, WirContext};
-use super::translate::OPTION_NONE_CASE;
+use super::translate::{OPTION_NONE_CASE, resolve_param_names};
 use crate::component_model::{
     CmFunctionInfo, CmInterfaceRegistry, cm_return_needs_outptr, flatten_cm_param_type,
 };
@@ -401,28 +400,38 @@ fn register_single_function(
         return;
     }
 
-    // Build param types, filtering out unit-type params (unit has no Wasm representation).
-    // WIR locals are looked up by name during codegen, so any two params sharing a
-    // name would clobber each other in `current_locals`. Disambiguate duplicates by
-    // suffixing `_{local_index}`; matches `FunctionTranslator::local_name`.
+    // A unit parameter has no Wasm representation, so it takes no slot. The
+    // names are the body's own, since codegen keys locals by name.
     let mut params: Vec<WirType> = Vec::new();
     let mut param_names: Vec<String> = Vec::new();
-    let mut name_counts: IndexMap<String, u32> = IndexMap::default();
+    let resolved_names = resolve_param_names(&tir_func.params);
     for p in &tir_func.params {
-        *name_counts.entry(p.name.clone()).or_insert(0) += 1;
-    }
-    for p in &tir_func.params {
+        let unique_name = &resolved_names[&p.local_index];
+        if let nir::ParamAbi::MultiValue {
+            field_types,
+            field_names,
+        } = &p.param_abi
+        {
+            for (field_name, &field_type) in field_names.iter().zip(field_types) {
+                let wir_type = ctx.type_id_to_wir_type(type_table, field_type);
+                assert!(
+                    !matches!(wir_type, WirType::Unit),
+                    "[WIR] a unit field took a multi-value parameter slot in \
+                     `{}`: `optimize::multi_value_param` declines one, and a \
+                     slot the call site never fills is an arity mismatch",
+                    tir_func.name
+                );
+                params.push(wir_type);
+                param_names.push(multi_value_split_local(unique_name, field_name));
+            }
+            continue;
+        }
         let wir_type = ctx.type_id_to_wir_type(type_table, p.type_id);
         if matches!(wir_type, WirType::Unit) {
             continue;
         }
         params.push(wir_type);
-        let unique_name = if name_counts.get(&p.name).copied().unwrap_or(0) > 1 {
-            format!("{}_{}", p.name, p.local_index)
-        } else {
-            p.name.clone()
-        };
-        param_names.push(unique_name);
+        param_names.push(unique_name.clone());
     }
 
     // Build result types. Honour the function's `return_abi`:
