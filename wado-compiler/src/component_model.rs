@@ -2336,7 +2336,7 @@ impl CmInterfaceRegistry {
             !effect
                 .methods
                 .iter()
-                .any(|m| m.attrs.iter().any(|a| a.as_cm_import().is_some()))
+                .any(|m| cm_import_of(&m.attrs).is_some())
         };
         let collisions: Vec<&str> = interfaces
             .iter()

@@ -696,7 +696,7 @@ fn syn() -> Span {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::Item;
+    use crate::ast::{Item, cm_import_of};
     use crate::component_model::CmInterfaceRegistry;
 
     fn decode_fixture() -> (Resolve, WorldId) {
@@ -746,7 +746,7 @@ mod tests {
 
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
-        let cm = id_u32.attrs[0].as_cm_import().unwrap();
+        let cm = cm_import_of(&id_u32.attrs).unwrap();
         assert_eq!(
             cm.interface_path(),
             "wado-lang:cm-catalog/cm-catalog@0.0.16"

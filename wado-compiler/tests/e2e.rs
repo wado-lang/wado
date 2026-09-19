@@ -334,11 +334,12 @@ impl TestSpec {
         !expect.is_empty() || !not_expect.is_empty()
     }
 
-    /// Whether `-Os` runs this fixture. It strips the symbol table, so what a
-    /// fixture may assert about the emitted WAT turns on this one answer.
-    fn runs_at_os(&self) -> bool {
-        !self.skip_os
-            && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == "Os"))
+    /// Whether `opt_level` runs this fixture. The runner skips on it, and the
+    /// WAT guard asks it of `-Os`, which strips the symbols a needle may name.
+    fn runs_at(&self, opt_level: OptLevel) -> bool {
+        let name = common::opt_level_name(opt_level);
+        !(self.skip_os && opt_level == OptLevel::Os)
+            && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == name))
     }
 }
 
@@ -712,18 +713,12 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         },
     };
 
-    if opt_level == OptLevel::Os && !spec.runs_at_os() {
-        eprintln!("[{test_id}] skipped (-Os excluded)");
+    if !spec.runs_at(opt_level) {
+        eprintln!(
+            "[{test_id}] skipped ({} excluded)",
+            common::opt_level_name(opt_level)
+        );
         return;
-    }
-
-    // Skip if only_opt is set and this level is not in the list
-    if !spec.only_opt.is_empty() {
-        let level_str = common::opt_level_name(opt_level);
-        if !spec.only_opt.iter().any(|s| s == level_str) {
-            eprintln!("[{test_id}] skipped (only_opt: {:?})", spec.only_opt);
-            return;
-        }
     }
 
     // Check if source has #![TODO] to determine panic recovery strategy.
@@ -1126,30 +1121,35 @@ fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
     // at every level, the fixture fails where it is written rather than in the
     // one CI job that runs `-Os`.
     assert!(
-        !spec.runs_at_os()
+        !spec.runs_at(OptLevel::Os)
             || !spec
                 .wat_lines
                 .iter()
                 .any(|line| line.contains.iter().any(|needle| needle.contains('$'))),
         "[{test_id}] a wat_lines needle names a symbol (`$…`), which `-Os` strips; \
-         set `skip_os` on this fixture"
+         set `skip_os` on this fixture, or keep `Os` out of its `only_opt`"
     );
     let wat = wasmprinter::print_bytes(wasm)
         .unwrap_or_else(|e| panic!("[{test_id}] disassembling the component failed: {e}"));
-    for spec in &spec.wat_lines {
+    for wanted_line in &spec.wat_lines {
         let matched: Vec<&str> = wat
             .lines()
             .map(str::trim)
-            .filter(|line| spec.contains.iter().all(|needle| line.contains(needle)))
+            .filter(|line| {
+                wanted_line
+                    .contains
+                    .iter()
+                    .all(|needle| line.contains(needle))
+            })
             .collect();
-        let (ok, wanted) = match spec.count {
+        let (ok, wanted) = match wanted_line.count {
             Some(exact) => (matched.len() == exact, exact.to_string()),
             None => (!matched.is_empty(), "1 or more".to_string()),
         };
         assert!(
             ok,
             "[{test_id}] expected {wanted} WAT line(s) holding {:?}, found {}:\n{matched:#?}\n\nfull WAT:\n{wat}",
-            spec.contains,
+            wanted_line.contains,
             matched.len(),
         );
     }

@@ -250,13 +250,13 @@ impl Source {
 /// Is this `__DATA__` key one the harness understands?
 ///
 /// `test` and `allocator` select the world and the allocator. Every other
-/// understood key states an expectation, which the baseline run supersedes —
-/// EMI compares a mutant against the program it came from, not against the
-/// source's recorded output. A key that is *not* understood either feeds the
-/// runner an input the comparison does not reproduce (a request, a preopen,
-/// stdin, a compile-time parameter) or was added after this list was written;
-/// either way the source leaves the corpus instead of being run with the input
-/// silently missing.
+/// understood key states an expectation, which the baseline run supersedes: EMI
+/// compares a mutant against the program it came from, not against the source's
+/// recorded output. An unlisted key either feeds the runner an input the
+/// comparison does not reproduce (a request, a preopen, stdin, a compile-time
+/// parameter), says the program is never run (`compile_only`), or was added
+/// after this list was written. Each leaves the source out of the corpus rather
+/// than running it with the input silently missing.
 fn key_is_understood(key: &str) -> bool {
     matches!(
         key,
@@ -271,6 +271,7 @@ fn key_is_understood(key: &str) -> bool {
             | "skip_os"
             | "warnings_contains"
             | "warnings_not_contains"
+            | "wat_lines"
     ) || key.starts_with("wir_expect:")
         || key.starts_with("wir_not_expect:")
 }
