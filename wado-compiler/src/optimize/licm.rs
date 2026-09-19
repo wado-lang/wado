@@ -18,7 +18,7 @@ use crate::nir_arena::{
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::ValueId;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeKey, TypeTable};
 use crate::token::Span;
 
 use cranelift_entity::EntityRef;
@@ -31,20 +31,18 @@ use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_t
 use crate::optimize::arena_query::storage_root;
 use crate::optimize::condition_implication::{eliminate_at_root, resolve_panic_ids};
 
-/// A set of pointee types, compared by what a `TypeId` resolves to.
-///
-/// One struct is interned under more than one `TypeId`, so an analysis that
-/// keys on the id alone misses the same type arriving by another name.
+/// A set of pointee types, keyed by [`TypeTable::type_key`] so the same type
+/// arriving under another id is still a hit.
 #[derive(Default)]
-struct PointeeSet(IndexSet<ResolvedType>);
+struct PointeeSet(IndexSet<TypeKey>);
 
 impl PointeeSet {
     fn insert(&mut self, pointee: TypeId, type_table: &TypeTable) {
-        self.0.insert(type_table.get(pointee).clone());
+        self.0.insert(type_table.type_key(pointee));
     }
 
     fn contains(&self, pointee: TypeId, type_table: &TypeTable) -> bool {
-        self.0.contains(type_table.get(pointee))
+        self.0.contains(&type_table.type_key(pointee))
     }
 
     fn is_empty(&self) -> bool {
@@ -54,18 +52,15 @@ impl PointeeSet {
 
 /// The same set, for a type's individual field.
 #[derive(Default)]
-struct PointeeFieldSet(IndexSet<(ResolvedType, u32)>);
+struct PointeeFieldSet(IndexSet<(TypeKey, u32)>);
 
 impl PointeeFieldSet {
     fn insert(&mut self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) {
-        self.0.insert((type_table.get(pointee).clone(), field_idx));
+        self.0.insert((type_table.type_key(pointee), field_idx));
     }
 
     fn contains(&self, pointee: TypeId, field_idx: u32, type_table: &TypeTable) -> bool {
-        let resolved = type_table.get(pointee);
-        self.0
-            .iter()
-            .any(|(ty, idx)| *idx == field_idx && ty == resolved)
+        self.0.contains(&(type_table.type_key(pointee), field_idx))
     }
 }
 

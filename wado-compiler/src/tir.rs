@@ -281,6 +281,11 @@ impl std::fmt::Display for TypeId {
     }
 }
 
+/// What a [`TypeId`] resolves to, as a value to compare or key a map by.
+/// An id addresses a slot; this answers identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeKey(TypeId);
+
 /// Identity of an inference variable — see [`ResolvedType::InferVar`].
 ///
 /// Minted per module by the elaborator, so two uses of the same polymorphic
@@ -624,11 +629,6 @@ impl<V> TypeMap<V> {
         self.slots.push(Some(value));
     }
 
-    /// Set `id`'s value in place; `id` must already be in range.
-    pub(crate) fn replace(&mut self, id: TypeId, value: V) {
-        self.slots[id.0 as usize] = Some(value);
-    }
-
     /// Set `id`'s value, growing the backing storage with empty slots as
     /// needed. Used for sparse maps such as erasure redirects.
     pub(crate) fn set_growing(&mut self, id: TypeId, value: V) {
@@ -832,10 +832,6 @@ pub struct TypeTable {
     ///
     /// A sparse [`TypeMap`] keyed by the wrapper `TypeId`.
     box_payload_types: TypeMap<TypeId>,
-    /// The wrapper `TypeId`s the boxing pass redefined from a reference, each
-    /// mapped to whether that reference was shared — the only surviving record
-    /// of how one was spelled, `&T` and `&mut T` sharing a `Box<T>`.
-    boxed_ref_shared: TypeMap<bool>,
     /// Index from (struct name, module source) to `TypeId` for O(1) lookup.
     /// Populated incrementally when Struct types are interned.
     struct_name_index: IndexMap<(String, ModuleSource), TypeId>,
@@ -997,7 +993,6 @@ impl TypeTable {
             generic_assoc_type_defs: IndexMap::default(),
             redirects: TypeMap::default(),
             box_payload_types: TypeMap::default(),
-            boxed_ref_shared: TypeMap::default(),
             struct_name_index: IndexMap::default(),
             decl_name_index: IndexMap::default(),
             type_by_symbol: IndexMap::default(),
@@ -1063,33 +1058,36 @@ impl TypeTable {
         id
     }
 
-    /// Mint a brand-new `TypeId` for `ty`, bypassing `intern`'s structural dedup.
-    /// `intern_map` / `struct_name_index` are deliberately not updated — keyed by
-    /// `(name, module_source)`, a second same-named entry would overwrite the
-    /// first. This is what a local type declaration mints
-    /// through: its identity is the caller's `AstId`, not this type's name.
-    pub fn push_fresh(&mut self, ty: ResolvedType) -> TypeId {
-        let id = self.types.next_id();
-        self.types.push(ty);
-        id
+    /// The slot holding `id`'s value: itself, or what a redirect points it at.
+    /// One hop — [`Self::redefine_to`] refuses a target that is redirected.
+    fn resolved_id(&self, id: TypeId) -> TypeId {
+        self.redirects.get(id).copied().unwrap_or(id)
     }
 
     /// [`Self::get`] for a caller holding an id from another table. One this
     /// table does not carry answers `None` rather than panicking.
     pub fn try_get(&self, id: TypeId) -> Option<&ResolvedType> {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
-        self.types.get(id)
+        self.types.get(self.resolved_id(id))
     }
 
     pub fn get(&self, id: TypeId) -> &ResolvedType {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
+        let id = self.resolved_id(id);
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
     }
 
+    /// Where [`Self::redefine_to`] pointed `id`, when `id` is a borrow it
+    /// redefined. Erasure's redirect is not one, and the spelling tells them
+    /// apart: only a borrow is ever redefined.
+    fn box_redefinition(&self, id: TypeId) -> Option<TypeId> {
+        let target = self.redirects.get(id).copied()?;
+        self.spelled_borrow(id).map(|_| target)
+    }
+
     /// [`Self::get`] before the newtype / flags erasure, which runs once
-    /// monomorphize is done.
+    /// monomorphize is done. A boxing redefinition is no part of that, so a
+    /// redefined borrow reads as the `Box<T>` here too.
     ///
     /// Erasure is a representation choice — a `flags` value is a `u32` at
     /// runtime — but `impl Trait for Perms` is still keyed under `Perms`. A
@@ -1097,6 +1095,7 @@ impl TypeTable {
     /// cares how the value is stored should read [`Self::get`].
     #[must_use]
     pub fn get_unerased(&self, id: TypeId) -> &ResolvedType {
+        let id = self.box_redefinition(id).unwrap_or(id);
         self.types
             .get(id)
             .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"))
@@ -1104,8 +1103,22 @@ impl TypeTable {
 
     /// [`Self::get`] returning `None` for ids pruned by DCE's `retain`.
     pub fn get_pruned(&self, id: TypeId) -> Option<&ResolvedType> {
-        let id = self.redirects.get(id).copied().unwrap_or(id);
-        self.types.get(id)
+        self.types.get(self.resolved_id(id))
+    }
+
+    /// The [`TypeKey`] for `id`.
+    ///
+    /// Newtype erasure and the boxing rewrite both leave many ids resolving to
+    /// one type, so an id is a slot and not a type identity.
+    #[must_use]
+    pub fn type_key(&self, id: TypeId) -> TypeKey {
+        let resolved = self.resolved_id(id);
+        TypeKey(
+            self.types
+                .get(resolved)
+                .and_then(|ty| self.intern_map.get(ty).copied())
+                .unwrap_or(resolved),
+        )
     }
 
     /// True when `id` resolves to the never type `!`. An expression of this type
@@ -1869,10 +1882,6 @@ impl TypeTable {
         self.box_payload_types.retain(|id, &payload| {
             effective_keep.contains(&id) && effective_keep.contains(&payload)
         });
-        // Kept in step with `box_payload_types`: `fq_type_name_unboxed` reads a
-        // payload for every id this still marks.
-        self.boxed_ref_shared
-            .retain(|id, _| self.box_payload_types.get(id).is_some());
         // Retain symbol indices to surviving TypeIds only.
         self.symbol_by_type
             .retain(|id, _| effective_keep.contains(&id));
@@ -1883,7 +1892,12 @@ impl TypeTable {
         self.struct_name_index.clear();
         self.decl_name_index.clear();
         for (id, ty) in self.types.iter() {
-            self.intern_map.insert(ty.clone(), id);
+            // A redefined borrow keeps its spelling in the slot alone.
+            // Re-interning it would hand a later `intern(&T)` an id that no
+            // longer resolves as a borrow.
+            if self.box_redefinition(id).is_none() {
+                self.intern_map.insert(ty.clone(), id);
+            }
             if let Some(def) = Self::nominal_key(ty) {
                 let key = (self.def_name(def).to_string(), self.def_module(def).clone());
                 self.decl_name_index.insert(key, id);
@@ -2607,17 +2621,29 @@ impl TypeTable {
         self.intern(ResolvedType::Resource { def })
     }
 
-    /// Replace the type at an existing `TypeId` with a new type.
-    /// Used by the boxing lowering pass to rewrite `Ref(primitive)` → `Struct(Box<T>)`.
-    /// Removes the old type from the intern map so it won't be found by future `intern()` calls.
-    pub fn replace_type(&mut self, id: TypeId, new_ty: ResolvedType) {
-        if let Some(old_ty) = self.types.get(id).cloned() {
-            // Only remove from intern_map if this TypeId was the canonical one
-            if self.intern_map.get(&old_ty) == Some(&id) {
-                self.intern_map.shift_remove(&old_ty);
-            }
+    /// Redefine `id` to resolve as `target`, retiring its own spelling so a
+    /// later [`Self::intern`] of that spelling mints a fresh id instead.
+    ///
+    /// The boxing pass's `&T` → `Box<T>`. The slot keeps the borrow, which is
+    /// how [`Self::is_mut_box`] still tells `&T` from `&mut T`.
+    pub fn redefine_to(&mut self, id: TypeId, target: TypeId) {
+        assert!(
+            self.redirects.get(target).is_none(),
+            "a redirect target is never itself redirected: `get` takes one hop"
+        );
+        let spelling = self
+            .types
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| panic!("TypeId {id:?} not found in TypeTable"));
+        assert!(
+            matches!(spelling, ResolvedType::Ref(_) | ResolvedType::MutRef(_)),
+            "only a borrow is redefined: `box_redefinition` tells one by that shape"
+        );
+        if self.intern_map.get(&spelling) == Some(&id) {
+            self.intern_map.shift_remove(&spelling);
         }
-        self.types.replace(id, new_ty);
+        self.redirects.set_growing(id, target);
     }
 
     /// Whether `id` bottoms out in a primitive, through any newtype chain.
@@ -2696,19 +2722,23 @@ impl TypeTable {
             || self.box_payload_of(type_id).is_some()
     }
 
-    /// Record that `wrapper` was redefined from a reference, shared or not.
-    /// Called by the boxing pass; see [`Self::is_mut_box`].
-    pub fn register_boxed_ref(&mut self, wrapper: TypeId, is_shared: bool) {
-        self.boxed_ref_shared.set_growing(wrapper, is_shared);
-    }
-
     /// Whether `wrapper` is a boxed reference that can be written through: a
     /// `&mut T` collapsed onto `Box<T>`, where `*q = v` writes the box the
-    /// caller still holds. Only ids known to come from a shared `&T` answer
+    /// caller still holds. Only an id still spelled as a shared `&T` answers
     /// `false`, so an unclassified wrapper stays writable.
     pub fn is_mut_box(&self, wrapper: TypeId) -> bool {
         self.box_payload_types.get(wrapper).is_some()
-            && self.boxed_ref_shared.get(wrapper) != Some(&true)
+            && !matches!(self.spelled_borrow(wrapper), Some((_, RefKind::Shared)))
+    }
+
+    /// How `id`'s own slot spells a borrow, or `None` when it is not one. The
+    /// sole reader of a redefined borrow; every other view answers `Box<T>`.
+    fn spelled_borrow(&self, id: TypeId) -> Option<(TypeId, RefKind)> {
+        match *self.types.get(id)? {
+            ResolvedType::Ref(payload) => Some((payload, RefKind::Shared)),
+            ResolvedType::MutRef(payload) => Some((payload, RefKind::Mut)),
+            _ => None,
+        }
     }
 
     pub fn make_ref(&mut self, inner: TypeId) -> TypeId {
@@ -4506,7 +4536,10 @@ impl TypeTable {
         // stored as, whose impls are a different set.
         match self.get_unerased(id) {
             ResolvedType::Ref(_) | ResolvedType::MutRef(_) => {
-                RefKind::from_resolved(self.get(id)).map_or_else(|| builtin(""), Receiver::Ref)
+                Receiver::Ref(RefKind::from_resolved(self.get(id)).expect(
+                    "a borrow unerased is a borrow erased: `get_unerased` resolves the \
+                     box redefinition, the one rewrite that makes the two views differ",
+                ))
             }
             ResolvedType::Struct { def, .. } => Receiver::Type(self.fq_struct_head(*def)),
             // The head is the declaration, arguments never spelled into it — an
@@ -4627,15 +4660,10 @@ impl TypeTable {
 
     fn fq_type_name_spelled(&self, id: TypeId, unboxed: bool) -> FqTypeName {
         use crate::name::FqTypeName;
-        if unboxed && let Some(&is_shared) = self.boxed_ref_shared.get(id) {
-            let payload = self
-                .box_payload_of(id)
-                .expect("boxing registers a payload with every reference it redefines");
-            let kind = if is_shared {
-                RefKind::Shared
-            } else {
-                RefKind::Mut
-            };
+        // Only a borrow is read off the slot's own type. Every other shape
+        // keeps the erased view below, where ids that erase together must
+        // answer one name.
+        if unboxed && let Some((payload, kind)) = self.spelled_borrow(id) {
             return self
                 .fq_type_name_spelled(payload, unboxed)
                 .with_reference(kind);
@@ -6941,6 +6969,72 @@ mod tests {
         );
         // Note: String is now a user-defined struct, not a builtin type
         assert_matches!(table.get(TypeTable::UNIT), ResolvedType::Unit);
+    }
+
+    /// The boxing rewrite redefines many slots onto one type, so two ids that
+    /// resolve alike are the normal case and `==` is not the question to ask.
+    #[test]
+    fn a_key_unifies_ids_a_redefinition_left_resolving_alike() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        table.redefine_to(redefined, shared);
+
+        assert_ne!(shared, redefined);
+        assert_eq!(table.type_key(redefined), table.type_key(shared));
+        assert_ne!(table.type_key(shared), table.type_key(TypeTable::I32));
+    }
+
+    /// A redefinition reaches every view of the type: only `is_mut_box` reads
+    /// the borrow left in the slot. The spelling also leaves `intern`, so a
+    /// later ask for it mints a live borrow.
+    #[test]
+    fn a_redefinition_reaches_every_view_of_the_type() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let redefined = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        table.redefine_to(redefined, shared);
+
+        assert_matches!(table.get(redefined), ResolvedType::Ref(TypeTable::I32));
+        assert_matches!(
+            table.get_unerased(redefined),
+            ResolvedType::Ref(TypeTable::I32)
+        );
+        let minted = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        assert_ne!(minted, redefined);
+        assert_matches!(table.get(minted), ResolvedType::MutRef(TypeTable::I32));
+    }
+
+    /// `&T` and `&mut T` share one `Box<T>`, so the borrow left in the slot is
+    /// the only thing that still tells a writable box from a shared one.
+    #[test]
+    fn a_redefined_borrow_still_says_whether_it_was_mut() {
+        let mut table = TypeTable::new();
+        let shared = table.intern(ResolvedType::Ref(TypeTable::I32));
+        let mutable = table.intern(ResolvedType::MutRef(TypeTable::I32));
+        for wrapper in [shared, mutable] {
+            table.redefine_to(wrapper, TypeTable::I32);
+            table.register_box_payload(wrapper, TypeTable::I32);
+        }
+
+        assert!(!table.is_mut_box(shared));
+        assert!(table.is_mut_box(mutable));
+    }
+
+    /// `retain` rebuilds the intern map from the surviving slots, and a
+    /// retired borrow is still spelled as one there.
+    #[test]
+    fn retain_leaves_a_retired_spelling_retired() {
+        let mut table = TypeTable::new();
+        let redefined = table.intern(ResolvedType::Ref(TypeTable::I32));
+        table.redefine_to(redefined, TypeTable::I32);
+        let mut keep = IndexSet::default();
+        keep.insert(redefined);
+        keep.insert(TypeTable::I32);
+        table.retain(&keep);
+
+        assert_eq!(table.type_key(redefined), table.type_key(TypeTable::I32));
+        assert_ne!(table.intern(ResolvedType::Ref(TypeTable::I32)), redefined);
     }
 
     #[test]

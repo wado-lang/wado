@@ -24,6 +24,9 @@ The Wado compiler crate.
   (`FunctionContext::fresh_serial`), never a local index the site has yet to
   allocate. A step that reads one before recursing hands its own names to
   whatever nests inside it (issue #1987).
+- A `TypeId` is a slot, not a type identity: newtype erasure and the boxing
+  rewrite both leave many ids resolving to one type. Compare and key by the
+  `TypeKey` that `TypeTable::type_key` answers, never by the id.
 - A declaration is identified by its `DefId`, never by its name. See
   [WEP: Declaration Identity](../docs/wep-2026-08-12-declaration-identity.md).
 - Walk IR through the visitor utilities, and answer a question with one resolver
