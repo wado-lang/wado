@@ -2,11 +2,11 @@
 //! Seedable, reproducible pseudo-randomness for simulation, sampling,
 //! procedural generation, randomized algorithms and tests.
 //!
-//! Three layers that do not mix. [`Rng`] answers "the next value" one word at a
-//! time and carries the derived uniform operations. [`VectorRng`] answers with
-//! sixteen words at once, for a consumer that has use for all of them.
-//! [`Squares64`] answers "the value at this key", so the draw order belongs to
-//! the caller and nothing is carried between calls.
+//! Three ways to ask, and they do not mix. [`Rng`] answers "the next value" one
+//! word at a time and carries the derived uniform operations. [`VectorRng`]
+//! answers with sixteen words at once, for a consumer that has use for all of
+//! them. [`Squares64`] answers "the value at this counter", so the draw order
+//! belongs to the caller and nothing is carried between calls.
 //!
 //! A [`Seed`] is data and every constructor of one is arithmetic, so nothing
 //! here declares an effect. Entropy lives one module away: `core:secure_random`
@@ -18,9 +18,9 @@
 //! key comes from `core:secure_random`.
 //!
 //! An algorithm named in a type is fixed: [`Xoshiro256pp`] emits what
-//! xoshiro256++ emits, for a given state, forever. Everything else — how a
-//! `Seed` becomes a state, what [`split`](Seed::split) derives, how the derived
-//! layer consumes draws — may change between releases.
+//! xoshiro256++ emits, for a given state, forever. Everything else may change
+//! between releases: how a `Seed` becomes a state, what
+//! [`split`](Seed::split) derives, and how many draws an operation takes.
 
 use { u64x2 } from "core:simd";
 
@@ -386,7 +386,7 @@ impl Rng for Xoshiro256pp {
 
 impl Xoshiro256pp {
     /// Advance 2^128 steps, in the time 256 steps take. Two streams a jump
-    /// apart are disjoint for 2^128 draws apiece — proven, not hoped for.
+    /// apart are provably disjoint for 2^128 draws apiece.
     pub fn jump(&mut self) {
         self.jump_by(&JUMP);
     }

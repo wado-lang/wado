@@ -400,16 +400,13 @@ fn register_single_function(
         return;
     }
 
-    // Build param types, filtering out unit-type params (unit has no Wasm representation).
-    // The names come from `resolve_param_names`, the same answer the body reads:
-    // codegen keys locals by name, and a second scheme here would drift from it.
+    // A unit parameter has no Wasm representation, so it takes no slot. The
+    // names are the body's own, since codegen keys locals by name.
     let mut params: Vec<WirType> = Vec::new();
     let mut param_names: Vec<String> = Vec::new();
     let resolved_names = resolve_param_names(&tir_func.params);
     for p in &tir_func.params {
         let unique_name = &resolved_names[&p.local_index];
-        // One Wasm parameter per field, named the way the translator seeds its
-        // split locals, so a field read in the body finds them by name.
         if let nir::ParamAbi::MultiValue {
             field_types,
             field_names,

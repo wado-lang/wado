@@ -1,9 +1,5 @@
-//! Multi-value return ABI classification: which aggregate-returning functions
-//! take the multi-value Wasm ABI, one result per field, instead of a heap
-//! struct. A candidate returns a 2..=[`MAX_RESULTS`]-field tuple or struct from
-//! fresh literals. A call site that reads fields is lowered off the results; one
-//! that takes the whole result rebuilds it from them, so it costs itself rather
-//! than the callee's ABI. The one mutation is `return_abi`.
+//! Which aggregate-returning functions return one Wasm result per field instead
+//! of a heap struct: those building a 2..=[`MAX_RESULTS`]-field fresh literal.
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction, NirStruct, ReturnAbi};
@@ -583,9 +579,8 @@ struct UseCx<'a> {
     /// Locals bound once and never assigned, so a `let mut` over one of them
     /// binds a call result as safely as a plain `let`.
     settled: &'a IndexSet<u32>,
-    /// Set inside the return value of a function that itself takes this ABI.
-    /// The one position a nested call cannot rebuild its aggregate in, and so
-    /// the one that still refutes.
+    /// Set inside the return value of a function that itself takes this ABI —
+    /// the one position a nested call cannot rebuild its aggregate in.
     under_multi_value_return: bool,
 }
 

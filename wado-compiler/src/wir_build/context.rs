@@ -275,15 +275,25 @@ impl<'a> WirContext<'a> {
             IndexMap::default();
         let mut multi_value_param_funcs: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>> =
             IndexMap::default();
-        for (index, f) in package.functions.iter().enumerate() {
+        for f in &package.functions {
             let f = f.borrow();
-            let id = FuncId::from_u32(u32::try_from(index).expect("function index fits u32"));
+            // `f.id`, not the storage position: a `FuncId` is intrinsic to the
+            // entity, and it is what a call site resolves its callee by.
+            let id = || {
+                f.id.unwrap_or_else(|| {
+                    panic!(
+                        "[WIR] `{}` takes a multi-value ABI with no `FuncId`, so no \
+                         call site could lower against it",
+                        f.name
+                    )
+                })
+            };
             if let nir::ReturnAbi::MultiValue {
                 result_types,
                 field_names,
             } = &f.return_abi
             {
-                multi_value_return_funcs.insert(id, abi_fields(field_names, result_types));
+                multi_value_return_funcs.insert(id(), abi_fields(field_names, result_types));
             }
             for (param_idx, param) in f.params.iter().enumerate() {
                 let nir::ParamAbi::MultiValue {
@@ -294,7 +304,7 @@ impl<'a> WirContext<'a> {
                     continue;
                 };
                 multi_value_param_funcs
-                    .entry(id)
+                    .entry(id())
                     .or_default()
                     .insert(param_idx, abi_fields(field_names, field_types));
             }

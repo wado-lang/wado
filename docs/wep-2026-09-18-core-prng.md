@@ -39,10 +39,10 @@ specification.
 
 ## Decision
 
-`core:prng` offers three layers that do not mix: a scalar engine, a vector
-engine, and a keyed function. Each is a separate trait, because the thing each
-one generates is a different thing. `core:secure_random` keeps the entropy, and
-so keeps the only effect.
+`core:prng` answers the three demands separately and does not mix them: a scalar
+engine behind `Rng`, a vector engine behind `VectorRng`, and a keyed function as
+the concrete `Squares64`. `core:secure_random` keeps the entropy, and so keeps
+the only effect.
 
 ### Two traits, because a lane is not a draw
 
@@ -69,8 +69,9 @@ no permute. SHISHUA serves only the vector trait; its round is eight vectors
 wide and nothing smaller exists inside it.
 
 `with ()` is not decoration. It is the rule from `AGENTS.md` applied: every
-standard library trait declares it, and these three say in the type system that
-no implementation of them may perform I/O.
+standard library trait declares it, so `Rng`, `VectorRng`, `Seedable`,
+`SampleUniform` and `SampleRange` all say in the type system that no
+implementation of them may perform I/O.
 
 ### The batch is sixteen u64, fixed by the library
 
@@ -97,9 +98,9 @@ knowingly.
 
 ### The derived layer is uniform only
 
-On `Rng`, as defaulted methods, five of them:
+Five defaulted methods on `Rng`:
 
-|                       |                                                  |
+| operation             | how                                              |
 | --------------------- | ------------------------------------------------ |
 | an integer in a range | Lemire's multiply-shift, with the rare rejection |
 | an f64 in `[0,1)`     | 53 bits, one shift and one multiply              |

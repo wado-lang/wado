@@ -57,11 +57,7 @@ test "seeding from zero is as good as any other seed" {
 }
 
 fn popcount(word: u64) -> i32 {
-    let mut n = 0;
-    for let mut bit: u64 = 0; bit < 64; bit += 1 {
-        n += (word >> bit & 1) as i32;
-    }
-    return n;
+    return i64::popcnt(word as i64) as i32;
 }
 
 test "a seed absorbs bytes and a string alike" {

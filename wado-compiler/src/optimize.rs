@@ -280,17 +280,12 @@ pub fn optimize(
         select_lowering::select_lowering(p)
     });
 
-    // Multi-value return ABI classification: marks an aggregate-returning
-    // function whose every return builds a fresh literal and whose every call
-    // site destructures the bound temp, which WIR build reads to emit the
-    // multi-value signature and split the call-site binding. Runs after every
-    // other transformation, so the analysis sees the final NIR shape.
+    // The multi-value ABI, both sides. These run after every other
+    // transformation, so each sees the final NIR shape.
     run_pass("nir/multi_value_return", &mut project, profiler, |p| {
         multi_value_return::classify_multi_value_returns(p)
     });
 
-    // The parameter side of the same ABI, after the return side so a body whose
-    // shape that pass settled is the one this reads.
     run_pass("nir/multi_value_param", &mut project, profiler, |p| {
         multi_value_param::classify_multi_value_params(p)
     });

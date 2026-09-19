@@ -56,6 +56,17 @@ pub(super) fn declare_and_set_local(name: String, ty: WirType, value: WirInstr) 
     ]
 }
 
+/// A read of each of the named locals, in order.
+fn local_reads(locals: &[(String, WirType)]) -> Vec<WirInstr> {
+    locals
+        .iter()
+        .map(|(name, ty)| WirInstr::LocalGet {
+            name: name.clone(),
+            result_ty: ty.clone(),
+        })
+        .collect()
+}
+
 /// Recursively collect variable names from Let statements.
 ///
 /// These names are gathered eagerly from the statement tree and preferred
@@ -1020,15 +1031,14 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// instead of `StructGet($tmp, name)`, which would panic at codegen —
     /// `$tmp` was never assigned a struct ref.
     pub(super) multi_value_split_locals: IndexMap<u32, IndexMap<String, (String, WirType)>>,
-    /// Locals bound once and never assigned again. Only one of those may be
-    /// split: a second definition would `LocalSet` a base local the split never
-    /// declared.
+    /// Locals bound once and never assigned again.
+    // Only one of those may be split: a second definition would `LocalSet` a
+    // base local the split never declared.
     settled_locals: IndexSet<u32>,
     /// Set while lowering a call whose N results have a taker: the split locals
-    /// of a `let` bind, the wildcards of a discard, or the enclosing
-    /// `ReturnAbi::MultiValue` return that passes them straight through. The
-    /// `Call` arm asserts on it — a multi-value call anywhere else would leave
-    /// N results where one is expected.
+    /// of a `let` bind, the wildcards of a discard, or a pass-through return.
+    // Clear at the `Call` arm means nothing is taking them, so the arm rebuilds
+    // the aggregate rather than leaving N results where one is expected.
     multi_value_results_taken: bool,
     /// True while translating the value of a `GlobalVarSet` to a global with
     /// [`crate::nir::NirGlobal::prefer_fixed_string_repr`] set. Bounds-overrides
@@ -1041,9 +1051,7 @@ pub(super) struct FunctionTranslator<'a, 'b> {
 
 impl FunctionTranslator<'_, '_> {
     /// The WIR local name for `index`, as [`resolve_local_names`] computed it,
-    /// falling back to `$local_N`. Codegen resolves locals by name, so two
-    /// sharing one would silently mis-resolve — hence the disambiguation there,
-    /// which mirrors `wir_build::functions`' construction of `param_names`.
+    /// falling back to `$local_N`.
     pub(super) fn local_name(&self, index: u32) -> String {
         self.resolved_local_names
             .get(&index)
@@ -1132,9 +1140,8 @@ impl FunctionTranslator<'_, '_> {
 
     /// Rebuild the aggregate a multi-value call promised, for a site that takes
     /// the whole value rather than its fields.
-    ///
-    /// Without this one such site would cost the ABI to every other site: the
-    /// classifier decides a function's return ABI once.
+    // Without this, one such site would cost the ABI to every other site: the
+    // classifier decides a function's return ABI once.
     fn rebuild_multi_value_result(
         &mut self,
         call: WirInstr,
@@ -1142,39 +1149,53 @@ impl FunctionTranslator<'_, '_> {
         fields: &[(String, TypeId)],
     ) -> WirInstr {
         let struct_type = self.ref_type_id(result_type);
-        let (mut instrs, reads) = self.bind_multi_value_results(call, fields);
-        instrs.push(self.struct_new(struct_type, reads));
+        let (mut instrs, bound) = self.bind_multi_value_results_to_temps(call, fields);
+        instrs.push(self.struct_new(struct_type, local_reads(&bound)));
         WirInstr::Seq(instrs)
     }
 
-    /// Bind the N results a multi-value call leaves on the stack to fresh
-    /// temporaries, and answer the reads of them.
+    /// [`Self::bind_multi_value_results`] into fresh temporaries, for a taker
+    /// with no name of its own to give them.
+    fn bind_multi_value_results_to_temps(
+        &mut self,
+        call: WirInstr,
+        fields: &[(String, TypeId)],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        let names: Vec<String> = fields
+            .iter()
+            .map(|(field_name, _)| self.fresh_local(&format!("$mv_{field_name}")))
+            .collect();
+        self.bind_multi_value_results(call, fields, &names)
+    }
+
+    /// Declare one local per field, named by `names`, and bind into them the N
+    /// results the call leaves on the stack.
     fn bind_multi_value_results(
         &mut self,
         call: WirInstr,
         fields: &[(String, TypeId)],
-    ) -> (Vec<WirInstr>, Vec<WirInstr>) {
+        names: &[String],
+    ) -> (Vec<WirInstr>, Vec<(String, WirType)>) {
+        assert_eq!(
+            names.len(),
+            fields.len(),
+            "[WIR] a multi-value bind needs one local per result"
+        );
         let mut instrs = Vec::with_capacity(fields.len() + 1);
-        let mut reads = Vec::with_capacity(fields.len());
-        let mut locals = Vec::with_capacity(fields.len());
-        for (field_name, field_type) in fields {
-            let name = self.fresh_local(&format!("$mv_{field_name}"));
+        let mut bound = Vec::with_capacity(fields.len());
+        for ((_, field_type), name) in fields.iter().zip(names) {
             let ty = self.ctx.type_id_to_wir_type(self.type_table, *field_type);
             instrs.push(WirInstr::DeclareLocal {
                 name: name.clone(),
                 ty: ty.clone(),
             });
-            reads.push(WirInstr::LocalGet {
-                name: name.clone(),
-                result_ty: ty,
-            });
-            locals.push(Some(name));
+            bound.push((name.clone(), ty));
         }
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call),
-            locals,
+            locals: bound.iter().map(|(name, _)| Some(name.clone())).collect(),
         });
-        (instrs, reads)
+        (instrs, bound)
     }
 
     /// Translate the arguments of a call to `func`, handing a parameter that
@@ -1193,9 +1214,8 @@ impl FunctionTranslator<'_, '_> {
         self.without_multi_value_results(|t| t.translate_args(ordered, &split))
     }
 
-    /// One argument as N values, without building the aggregate where that is
-    /// possible: off a multi-value call's results, or off a literal's own field
-    /// initialisers. Anything else spills once and reads the fields back.
+    /// One argument as N values, taken off a multi-value call's results or a
+    /// literal's own initialisers. Anything else spills once and reads it back.
     fn split_argument(
         &mut self,
         op: Operand,
@@ -1206,10 +1226,11 @@ impl FunctionTranslator<'_, '_> {
                 ExprKind::Call { func_id, .. }
                     if self
                         .multi_value_result_fields(*func_id)
-                        .is_some_and(|got| self.abi_fields_agree(&got, fields)) =>
+                        .is_some_and(|got| self.abi_fields_agree(got, fields)) =>
                 {
                     let call = self.take_multi_value_results(|t| t.translate_expr(expr));
-                    return self.bind_multi_value_results(call, fields);
+                    let (instrs, bound) = self.bind_multi_value_results_to_temps(call, fields);
+                    return (instrs, local_reads(&bound));
                 }
                 ExprKind::StructLiteral {
                     fields: written, ..
@@ -1240,8 +1261,9 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// A struct literal's initialisers as the callee's N arguments, so the
-    /// aggregate is never built. Each is spilled in the order it was written,
-    /// because the ABI reads them in declaration order and the two can differ.
+    /// aggregate is never built.
+    // Each is spilled in the order it was written, because the ABI reads them
+    // in declaration order and the two can differ.
     fn split_struct_literal(
         &mut self,
         written: &[ArenaStructField],
@@ -1282,8 +1304,11 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// The per-field result types a multi-value callee returns, in field order.
-    fn multi_value_result_fields(&self, func_id: FuncId) -> Option<Vec<(String, TypeId)>> {
-        self.ctx.multi_value_return_funcs.get(&func_id).cloned()
+    fn multi_value_result_fields(&self, func_id: FuncId) -> Option<&[(String, TypeId)]> {
+        self.ctx
+            .multi_value_return_funcs
+            .get(&func_id)
+            .map(Vec::as_slice)
     }
 
     /// Whether a callee's N results can be handed straight to another's N
@@ -1299,58 +1324,36 @@ impl FunctionTranslator<'_, '_> {
             })
     }
 
-    /// Detect `let local = Call(f)` where `f` has
-    /// `ReturnAbi::MultiValue` and emit `MultiValueLocalBind` to N split
-    /// locals instead of a single `LocalSet`. Returns `Some` if the
-    /// rewrite fired (the caller should not emit the regular `LocalSet`).
-    /// A later `FieldAccess` on the local reads its split one instead.
+    /// Bind `let local = Call(f)` to one split local per result of `f`, which a
+    /// later `FieldAccess` on the local then reads in place of the aggregate.
+    // `block_tail_call` is the same recogniser `optimize::multi_value_return`
+    // validates call sites with, so the shapes the two accept cannot drift.
     fn try_emit_multi_value_let(&mut self, local_index: u32, value: ExprId) -> Option<WirInstr> {
-        // The initialiser is the call, or a block whose tail is the call with a
-        // receiver hoisted in front of it — the shape `let_block_flatten`
-        // leaves. `block_tail_call` is the same recogniser
-        // `optimize::multi_value_return` validates call sites with, so the
-        // shapes the two accept cannot drift apart: anything it declines falls
-        // through to a regular `LocalSet`, which cannot bind N results into one
-        // local.
         if !self.settled_locals.contains(&local_index) {
             return None;
         }
         let mut prefix: Vec<StmtId> = Vec::new();
         let (func_id, _, call) = block_tail_call(self.body, Operand::Expr(value), &mut prefix)?;
-        let fields = self.multi_value_result_fields(func_id)?;
+        let fields = self.multi_value_result_fields(func_id)?.to_vec();
 
         let base = self.local_name(local_index);
-        let mut split: IndexMap<String, (String, WirType)> = IndexMap::default();
-        let mut order: Vec<(String, WirType)> = Vec::with_capacity(fields.len());
-        for (field_name, result_type) in &fields {
-            let local_name = multi_value_split_local(&base, field_name);
-            let wir_ty = self.ctx.type_id_to_wir_type(self.type_table, *result_type);
-            split.insert(field_name.clone(), (local_name.clone(), wir_ty.clone()));
-            order.push((local_name, wir_ty));
-        }
+        let names: Vec<String> = fields
+            .iter()
+            .map(|(field_name, _)| multi_value_split_local(&base, field_name))
+            .collect();
 
         // Whatever ran ahead of the call in the block still has to run, and
         // ahead of the bind — the receiver the call reads is bound there.
         let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
-
-        // Translate the call (after dropping any borrow on `value`'s expr).
         let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
+        let (bind, bound) = self.bind_multi_value_results(call_instr, &fields, &names);
+        instrs.extend(bind);
 
-        // Emit DeclareLocal for each split, plus the MultiValueLocalBind.
-        instrs.reserve(order.len() + 1);
-        for (name, ty) in &order {
-            instrs.push(WirInstr::DeclareLocal {
-                name: name.clone(),
-                ty: ty.clone(),
-            });
-        }
-        let locals = order.iter().map(|(n, _)| Some(n.clone())).collect();
-        instrs.push(WirInstr::MultiValueLocalBind {
-            instr: Box::new(call_instr),
-            locals,
-        });
-
-        // Track for subsequent FieldAccess lookups.
+        let split = fields
+            .iter()
+            .zip(bound)
+            .map(|((field_name, _), local)| (field_name.clone(), local))
+            .collect();
         self.multi_value_split_locals.insert(local_index, split);
 
         Some(WirInstr::Seq(instrs))
@@ -1359,17 +1362,17 @@ impl FunctionTranslator<'_, '_> {
     /// Lower `f` with the multi-value results accounted for: the caller is
     /// binding or dropping them, so a call inside it may leave N on the stack.
     fn take_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let outer = std::mem::replace(&mut self.multi_value_results_taken, true);
-        let out = f(self);
-        self.multi_value_results_taken = outer;
-        out
+        self.with_multi_value_results(true, f)
     }
 
     /// Lower `f` with no taker for a multi-value result. A taker is for the call
-    /// itself, never for what the call is passed: an argument is an ordinary
-    /// value position.
+    /// itself, never for what the call is passed.
     fn without_multi_value_results<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let outer = std::mem::replace(&mut self.multi_value_results_taken, false);
+        self.with_multi_value_results(false, f)
+    }
+
+    fn with_multi_value_results<R>(&mut self, taken: bool, f: impl FnOnce(&mut Self) -> R) -> R {
+        let outer = std::mem::replace(&mut self.multi_value_results_taken, taken);
         let out = f(self);
         self.multi_value_results_taken = outer;
         out
@@ -1461,19 +1464,17 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// A statement-position call to a `ReturnAbi::MultiValue` function: bind its
-    /// N results to wildcards, the `MultiValueLocalBind` form of dropping them.
-    /// A single `Drop` could not consume them. `None` for anything else, which
-    /// falls through to that ordinary `Drop`.
+    /// N results to wildcards, since a single `Drop` cannot consume them.
     fn try_emit_multi_value_discard(&mut self, value: Operand) -> Option<WirInstr> {
         let mut prefix: Vec<StmtId> = Vec::new();
         let (func_id, _, call) = block_tail_call(self.body, value, &mut prefix)?;
-        let fields = self.multi_value_result_fields(func_id)?;
+        let arity = self.multi_value_result_fields(func_id)?.len();
 
         let mut instrs: Vec<WirInstr> = self.translate_stmts(&prefix);
         let call_instr = self.take_multi_value_results(|t| t.translate_expr(call));
         instrs.push(WirInstr::MultiValueLocalBind {
             instr: Box::new(call_instr),
-            locals: vec![None; fields.len()],
+            locals: vec![None; arity],
         });
         Some(WirInstr::Seq(instrs))
     }
@@ -2648,11 +2649,10 @@ impl FunctionTranslator<'_, '_> {
                     return instr;
                 }
 
-                // A multi-value callee whose results nothing here is binding:
-                // the value is wanted whole, so the N results are rebuilt into
-                // the aggregate rather than costing the callee its ABI.
+                // Nothing here is binding the results, so the value is wanted
+                // whole.
                 let rebuild = (!self.multi_value_results_taken)
-                    .then(|| self.multi_value_result_fields(*func_id))
+                    .then(|| self.multi_value_result_fields(*func_id).map(<[_]>::to_vec))
                     .flatten();
 
                 let ordered: Vec<Operand> = args.iter().map(|a| a.expr).collect();

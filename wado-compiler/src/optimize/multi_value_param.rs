@@ -1,6 +1,5 @@
-//! Multi-value parameter ABI classification: which aggregate parameters arrive
-//! as one Wasm parameter per field instead of a heap struct. The mirror of
-//! [`super::multi_value_return`]. The one mutation is `param_abi`.
+//! Which aggregate parameters arrive as one Wasm parameter per field instead of
+//! a heap struct. The mirror of [`super::multi_value_return`].
 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirStruct, ParamAbi};
@@ -84,12 +83,9 @@ fn collect_candidates(
     out
 }
 
-/// Whether every read of `local` is the subject of one of `field_names`. A read
-/// of the whole binding refutes: the split locals hold the fields, and an
-/// aggregate built back from them is not the one the caller passed.
-///
-/// A destructure needs no case of its own — it reaches NIR as one field read per
-/// binding.
+/// Whether every read of `local` is the subject of one of `field_names`.
+// A read of the whole binding refutes: an aggregate rebuilt from the split
+// locals is not the one the caller passed.
 fn only_field_reads(body: &Body, local: u32, field_names: &[String]) -> bool {
     let names: IndexSet<&str> = field_names.iter().map(String::as_str).collect();
     let mut whole_reads: IndexSet<ExprId> = IndexSet::default();
