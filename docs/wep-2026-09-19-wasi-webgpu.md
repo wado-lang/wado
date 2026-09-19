@@ -134,12 +134,9 @@ operation through `.wait()`, and a `flags` value built with `|`.
   behind it is 31 crates — naga, wgpu-core, wgpu-hal and ash among them — about
   38 s of a clean release build and 3.1 MB of the binary. `wado` does not carry
   that: the host ships as `wado-run-with-webgpu`, reached through
-  [External Subcommands](./wep-2026-09-19-external-subcommands.md). The GPU
-  stack is native, so this subcommand stays a binary and cannot become a
-  component plugin
-  ([Subcommand Plugin Forms](./wep-2026-09-19-subcommand-plugin-forms.md)). What
-  the binary is built from, and how it tracks the workspace's wasmtime pin, is
-  open.
+  [External Subcommands](./wep-2026-09-19-external-subcommands.md), as a native
+  binary, which the GPU stack leaves no choice about. What the binary is built
+  from, and how it tracks the workspace's wasmtime pin, is open.
 - A machine with no GPU has no adapter, and wgpu's `noop` backend is opt-in and
   computes nothing. `mesa-vulkan-drivers` supplies a software adapter
   (lavapipe), a 98.5 MB install, and that is what answered the compute run
