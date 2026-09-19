@@ -1,10 +1,7 @@
 // Two interfaces in one CM package, each declaring its own `error-code`.
-//
-// `wasi:sockets/types` and `wasi:sockets/ip-name-lookup` both declare one, and
-// they are unrelated variants with different cases. An outer-scope key built
-// from the package cannot name both, so whichever interface aliased first took
-// the key and the other's alias was silently dropped — leaving any consumer
-// that asked for "the sockets error-code" holding the wrong type.
+// `wasi:sockets/types` and `wasi:sockets/ip-name-lookup` declare unrelated
+// variants with different cases, so each alias must key by its declaration:
+// a key built from the package names one of them and drops the other.
 use { TcpSocket, IpAddressFamily, IpNameLookup } from "wasi:sockets";
 
 export fn run() with (TcpSocket, IpNameLookup) {

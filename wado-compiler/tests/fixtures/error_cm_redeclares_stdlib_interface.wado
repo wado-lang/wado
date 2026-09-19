@@ -1,6 +1,6 @@
-// A CM interface has one declaring module. A user module declaring into one the
-// stdlib owns used to overwrite that owner, leaving every stdlib type under the
-// interface unresolvable, and collide in the registry's uniqueness assert.
+// A CM interface has one declaring module, so a user module declaring into one
+// the stdlib owns is refused. Admitting it would leave every stdlib type under
+// that interface unresolvable, and report user code as a stdlib bug.
 use { println, Stdout } from "core:cli";
 
 #[cm("wasi:cli/types@0.3.0#error-code")]

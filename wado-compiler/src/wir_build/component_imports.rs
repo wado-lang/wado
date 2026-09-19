@@ -163,7 +163,7 @@ pub fn resolve_import_plan(
         };
         // This interface's own used operations, not merely some operation of a
         // Wado name it shares: a user module may name a resource what a bundled
-        // interface names one, and gating on the name alone imported that
+        // interface names one, and the shared name alone would import that
         // bundled interface into a program that never mentions it.
         let needed = interface_info
             .functions

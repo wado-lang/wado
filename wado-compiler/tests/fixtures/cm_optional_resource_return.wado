@@ -1,7 +1,6 @@
 // A resource method returning `Option<Resource>` reaches the handle through the
-// shared type walk, which asks for own-handles by CM name. The instance-type
-// builder keys its map by Wado name, so the handle was looked up under a name
-// the map never held.
+// shared type walk, which asks for own-handles by CM name, while the
+// instance-type builder keys its own map by Wado name.
 //
 // The binding then lifts the option as `Option<i32>`, since a restricted
 // resource is an `i32` at the CM boundary, and the call site retypes it to

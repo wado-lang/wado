@@ -56,11 +56,10 @@ pub struct ComponentModelContext {
     instance_names: IndexMap<String, u32>,
     next_instance_idx: u32,
 
-    /// The CM name of the `error-code` each imported instance actually exports,
-    /// recorded where the instance type is built. An alias asks this instead of
-    /// re-deriving from the registry what the builder decided to emit — the two
-    /// answers drifted apart, and an alias of a missing export only fails in the
-    /// validator, as `instance N has no export named error-code`.
+    /// The CM name of the `error-code` each imported instance exports, recorded
+    /// where the instance type is built. An alias reads it here rather than
+    /// re-deriving from the registry what the builder emitted: an alias of a
+    /// missing export fails only in the validator.
     instance_error_codes: IndexMap<String, String>,
 
     // Core function indices (at component level - aliased/lowered functions)

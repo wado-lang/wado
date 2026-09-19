@@ -630,10 +630,8 @@ impl CmFunctionInfo {
     }
 
     /// Whether lowering `ty` needs the `memory` canonical option, counting the
-    /// CM records and variants the registry knows — at any depth. One walker
-    /// answers for every shape: a record reached only through an `Option` needs
-    /// memory exactly as it does at the top, and a walker that stopped at the
-    /// top left the lowering without the option the validator demands.
+    /// CM records and variants the registry knows, at any depth. A record
+    /// reached through an `Option` needs memory exactly as one at the top does.
     fn cm_type_requires_memory(
         ty: &Type,
         registry: &CmInterfaceRegistry,

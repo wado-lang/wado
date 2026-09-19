@@ -1,7 +1,6 @@
 // A resource operation's `#[cm(...)]` import is read off the signature the call
 // resolved to, so the qualified spelling of an inherited *instance* method
-// keeps it. Read from a receiver-less index instead, the binding was lost and
-// the call reached WIR naming a function no module holds.
+// keeps it. A receiver-less index would not: the two spellings share a name.
 
 #[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
 resource EventTarget {
