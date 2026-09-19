@@ -1,0 +1,28 @@
+// A CM interface has one declaring module, so a user module declaring into one
+// the stdlib owns is refused. Admitting it would leave every stdlib type under
+// that interface unresolvable, and report user code as a stdlib bug.
+use { println, Stdout } from "core:cli";
+
+#[cm("wasi:cli/types@0.3.0#error-code")]
+enum ErrorCode {
+    #[cm("access")]
+    Access,
+}
+
+interface Extra {
+    #[cm("wasi:cli/types@0.3.0#do-extra")]
+    fn do_extra() -> u32;
+}
+
+export fn run() with (Stdout, Extra) {
+    println(`${Extra::do_extra()}`);
+}
+
+__DATA__
+{
+  "compile_error": "already declares",
+  "compile_errors_contains": [
+    "wasi:cli/types@0.3.0",
+    "already declares"
+  ]
+}

@@ -58,7 +58,9 @@ pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
 use crate::ast::UseDecl;
-use crate::component_model::wado_primitive_name_to_cm;
+use std::sync::Arc;
+
+use crate::component_model::{CmInterfaceRegistry, declares_cm_binding, wado_primitive_name_to_cm};
 use crate::name::entry_dir_of;
 use crate::wit_consume::module_host_leaf_imports;
 use crate::world_registry::WorldInfo;
@@ -196,19 +198,73 @@ pub struct CompileResult {
     pub kiln_options_descriptor: Option<kiln::OptionsDescriptor>,
 }
 
-/// Report a synthesis rejection — a shape the Component Model cannot express —
-/// and bail. Synthesis names the offending type; it has no span to attach.
-fn bail_unsupported<H: compiler_host::CompilerHost>(
+/// Report a compilation error the pipeline has no span for — it names the
+/// offending declaration instead.
+fn report_without_span<H: compiler_host::CompilerHost>(
     logger: &Logger<'_, H>,
+    code: compiler_host::Code,
     message: String,
-) -> Bail {
+) {
     let _ = logger.error(compiler_host::Diagnostic {
         severity: compiler_host::Severity::Error,
-        code: compiler_host::Code::UnsupportedFeature,
+        code,
         message,
         span: None,
     });
+}
+
+/// [`report_without_span`], for a caller that stops at the first such error.
+fn bail_with<H: compiler_host::CompilerHost>(
+    logger: &Logger<'_, H>,
+    code: compiler_host::Code,
+    message: String,
+) -> Bail {
+    report_without_span(logger, code, message);
     Bail
+}
+
+/// The program's own modules that bind a CM import. The stdlib's bindings are
+/// in the shared registry and a component dependency's are folded in by
+/// `fold_component_interfaces`, so only these are left to register.
+fn user_cm_modules(
+    modules: &IndexMap<ModuleSource, ast::Module>,
+) -> Vec<(&ModuleSource, &ast::Module)> {
+    modules
+        .iter()
+        .filter(|(source, module)| {
+            !source.is_core()
+                && !source.is_binding()
+                && !source.is_wasm_asset()
+                && declares_cm_binding(module)
+        })
+        .collect()
+}
+
+/// Register what [`user_cm_modules`] found, so a call to one of those bindings
+/// lowers to its import. Every entry into the back end runs this: a phase that
+/// never saw these declarations reports the call unresolved instead.
+fn register_user_cm_modules<H: compiler_host::CompilerHost>(
+    registry: &mut Arc<CmInterfaceRegistry>,
+    modules: &[(&ModuleSource, &ast::Module)],
+    logger: &Logger<'_, H>,
+) -> Result<(), Bail> {
+    if modules.is_empty() {
+        return Ok(());
+    }
+    let registry = Arc::make_mut(registry);
+    for (source, module) in modules {
+        registry
+            .register_user_cm_decls(module, source)
+            .map_err(|msg| bail_with(logger, Code::DuplicateDefinition, msg))?;
+    }
+    // Only once every module is registered: an `interface` naming a resource's
+    // operations may sit in a module other than the one declaring it.
+    for (_, module) in modules {
+        registry
+            .validate_cm_function_names(module)
+            .map_err(|msg| bail_with(logger, Code::UnknownType, msg))?;
+    }
+    Ok(())
 }
 
 /// Compilation failure with metadata from the successfully-parsed AST.
@@ -916,13 +972,11 @@ fn select_allocator<H: CompilerHost>(
             }
         }
         if !found {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message: format!("unknown allocator: `{allocator_tag}`"),
-                span: None,
-            });
-            return Err(Bail);
+            return Err(bail_with(
+                logger,
+                Code::UnsupportedFeature,
+                format!("unknown allocator: `{allocator_tag}`"),
+            ));
         }
     }
     Ok(())
@@ -1024,15 +1078,7 @@ async fn resolve_inline_providers<H: CompilerHost>(
         }
     }
 
-    let bail = |msg: String| -> Bail {
-        let _ = logger.error(compiler_host::Diagnostic {
-            severity: compiler_host::Severity::Error,
-            code: compiler_host::Code::ModuleNotFound,
-            message: msg,
-            span: None,
-        });
-        Bail
-    };
+    let bail = |msg: String| bail_with(logger, Code::ModuleNotFound, msg);
 
     let mut providers = Vec::new();
     for (src, use_decl, prov_path) in jobs {
@@ -1322,16 +1368,14 @@ fn compile_after_load<H: CompilerHost>(
             )
             .collect();
         if let Some(dup) = first_duplicate(all_names.iter().map(String::as_str)) {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::DuplicateDefinition,
-                message: format!(
+            return Err(bail_with(
+                logger,
+                Code::DuplicateDefinition,
+                format!(
                     "library type `{dup}` is defined in more than one module; a \
                      library's public types must have distinct names"
                 ),
-                span: None,
-            });
-            return Err(Bail);
+            ));
         }
     }
 
@@ -1366,16 +1410,14 @@ fn compile_after_load<H: CompilerHost>(
         && let Some(world) = lib_world_info.as_ref()
         && let Some(dup) = first_duplicate(world.exports.iter().map(|e| e.name.as_str()))
     {
-        let _ = logger.error(compiler_host::Diagnostic {
-            severity: compiler_host::Severity::Error,
-            code: compiler_host::Code::DuplicateDefinition,
-            message: format!(
+        return Err(bail_with(
+            logger,
+            Code::DuplicateDefinition,
+            format!(
                 "library exports two functions named `{dup}`; a library's \
                  `export fn`s must have distinct names"
             ),
-            span: None,
-        });
-        return Err(Bail);
+        ));
     }
 
     if is_kiln_generator
@@ -1428,15 +1470,13 @@ fn compile_after_load<H: CompilerHost>(
         && world.exports.is_empty()
         && !lib_has_public_type
     {
-        let _ = logger.error(compiler_host::Diagnostic {
-            severity: compiler_host::Severity::Error,
-            code: compiler_host::Code::CodegenError,
-            message: "a library (`--lib`) exports nothing; mark at least one \
-                      function `export fn` so the component has a public API"
+        return Err(bail_with(
+            logger,
+            Code::CodegenError,
+            "a library (`--lib`) exports nothing; mark at least one function \
+             `export fn` so the component has a public API"
                 .to_string(),
-            span: None,
-        });
-        return Err(Bail);
+        ));
     }
 
     // A library's exported signature cannot carry a resource handle: every Wado
@@ -1468,16 +1508,15 @@ fn compile_after_load<H: CompilerHost>(
                     resource_in_lib_sig(registry, resolutions, &declared, ty, &mut entered)
                 {
                     refused = true;
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::CodegenError,
-                        message: format!(
+                    report_without_span(
+                        logger,
+                        Code::CodegenError,
+                        format!(
                             "`export fn {}` reaches the resource `{name}`, which another \
                              interface owns; a library's public API cannot carry a resource handle",
                             export.name
                         ),
-                        span: None,
-                    });
+                    );
                 }
             }
         }
@@ -1499,8 +1538,10 @@ fn compile_after_load<H: CompilerHost>(
         tir_modules,
         interner,
         liveness,
+        modules,
         ..
     } = sem;
+    let user_cm_modules = user_cm_modules(&modules);
 
     // `is_complete()` was checked above, so the full pipeline ran and `state`
     // is populated.
@@ -1523,7 +1564,7 @@ fn compile_after_load<H: CompilerHost>(
     // holds a reference — so the shared copy is never mutated; only this
     // compilation's registry gains the local types.
     if let (Some(fq), Some(entry)) = (synth_world_fq.as_ref(), lib_entry_module.as_ref()) {
-        let registry = std::sync::Arc::make_mut(&mut tysys.cm_interface_registry);
+        let registry = Arc::make_mut(&mut tysys.cm_interface_registry);
         registry.register_lib_local_decls(entry, fq, entry_module_source.clone());
         // Submodule-defined types reachable through the facade's exports.
         registry.register_lib_local_items(&lib_surface.submodule_type_decls, fq);
@@ -1540,18 +1581,14 @@ fn compile_after_load<H: CompilerHost>(
             .collect();
         guest_interfaces.extend(lib_surface.submodule_interfaces.iter());
         if let Err(msg) = registry.register_lib_guest_effect_imports(&guest_interfaces, fq) {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::DuplicateDefinition,
-                message: msg,
-                span: None,
-            });
-            return Err(Bail);
+            return Err(bail_with(logger, Code::DuplicateDefinition, msg));
         }
     }
 
+    register_user_cm_modules(&mut tysys.cm_interface_registry, &user_cm_modules, logger)?;
+
     debug_assert_eq!(
-        std::sync::Arc::strong_count(&tysys.trait_env),
+        Arc::strong_count(&tysys.trait_env),
         1,
         "Package::new must be the unique `Arc<TraitEnv>` owner; a leftover \
          per-module clone would panic in extend_with_synthesised"
@@ -1607,13 +1644,11 @@ fn compile_after_load<H: CompilerHost>(
         match codegen_flags::CodegenFlags::parse(&options.codegen_flags, options.opt_level) {
             Ok(flags) => flags,
             Err(flag) => {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::UnsupportedFeature,
-                    message: codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                    span: None,
-                });
-                return Err(Bail);
+                return Err(bail_with(
+                    logger,
+                    Code::UnsupportedFeature,
+                    codegen_flags::CodegenFlags::unknown_flag_message(&flag),
+                ));
             }
         };
 
@@ -1625,13 +1660,11 @@ fn compile_after_load<H: CompilerHost>(
         && !package.is_lib_world()
         && package.world_registry.get(&package.target_world).is_none()
     {
-        let _ = logger.error(compiler_host::Diagnostic {
-            severity: compiler_host::Severity::Error,
-            code: compiler_host::Code::UnsupportedFeature,
-            message: format!("unknown target world: `{}`", package.target_world),
-            span: None,
-        });
-        return Err(Bail);
+        return Err(bail_with(
+            logger,
+            Code::UnsupportedFeature,
+            format!("unknown target world: `{}`", package.target_world),
+        ));
     }
 
     // Validate that every required `CompilerItem` was registered by the
@@ -1653,10 +1686,10 @@ fn compile_after_load<H: CompilerHost>(
             .missing_required(&package.target_world);
         if !missing.is_empty() {
             for item in &missing {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::CompilerItemAttr,
-                    message: format!(
+                report_without_span(
+                    logger,
+                    Code::CompilerItemAttr,
+                    format!(
                         "required compiler item `{name}` is not registered; \
                          the stdlib must declare a `#[compiler_item(\"{name}\")]` \
                          attribute on the matching {kind} for target world `{world}`",
@@ -1664,8 +1697,7 @@ fn compile_after_load<H: CompilerHost>(
                         kind = item.expected_kind(),
                         world = package.target_world,
                     ),
-                    span: None,
-                });
+                );
             }
             return Err(Bail);
         }
@@ -1674,7 +1706,8 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 8: Synthesis (Package -> Package) ===
     let package = {
         let _span = logger.span("synthesis");
-        synthesis::synthesize(package).map_err(|message| bail_unsupported(logger, message))?
+        synthesis::synthesize(package)
+            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
     };
 
     // === Phase 8c: Effect Dispatch Synthesis ===
@@ -1684,15 +1717,8 @@ fn compile_after_load<H: CompilerHost>(
     // the original `WithHandler` shape.
     let package = {
         let _span = logger.span("effect-dispatch");
-        synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
-            let _ = logger.error(compiler_host::Diagnostic {
-                severity: compiler_host::Severity::Error,
-                code: compiler_host::Code::UnsupportedFeature,
-                message,
-                span: None,
-            });
-            Bail
-        })?
+        synthesis::effect_dispatch::synthesize_post_check(package)
+            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?
     };
 
     // === Phase 8d: Link (Package → FlatPackage) ===
@@ -1746,7 +1772,7 @@ fn compile_after_load<H: CompilerHost>(
         // Ahead of the rewrites, as pre-monomorphize: both consume the pristine
         // `#[cm]` call shape the scan matches.
         let validated = synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
-            .map_err(|message| bail_unsupported(logger, message))?;
+            .map_err(|message| bail_with(logger, Code::UnsupportedFeature, message))?;
         synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
         synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
         mono.resume(&mut flat);
@@ -2051,6 +2077,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
     // `Iterator::Item` projection to reach WIR build and panic on programs
     // `compile` handled fine.
     let sem = semantics::semantics_with_logger(load_result, &logger, true);
+    let user_cm_modules = user_cm_modules(&sem.modules);
     let symbols = sem.symbols.clone();
     let interner = sem.interner.clone();
     let entry_module_source_out = sem.entry_module_source.clone();
@@ -2079,7 +2106,12 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 .state
                 .expect("elaborator state present when is_complete");
             let world_registry = state.world_registry;
-            let tysys = state.tysys;
+            let mut tysys = state.tysys;
+            register_user_cm_modules(
+                &mut tysys.cm_interface_registry,
+                &user_cm_modules,
+                &logger,
+            )?;
             let builtin_registry = std::rc::Rc::try_unwrap(tysys.builtin_registry)
                 .unwrap_or_else(|rc| (*rc).clone());
 
@@ -2107,13 +2139,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 match codegen_flags::CodegenFlags::parse(codegen_flags, opt_level) {
                     Ok(flags) => flags,
                     Err(flag) => {
-                        let _ = logger.error(compiler_host::Diagnostic {
-                            severity: compiler_host::Severity::Error,
-                            code: compiler_host::Code::UnsupportedFeature,
-                            message: codegen_flags::CodegenFlags::unknown_flag_message(&flag),
-                            span: None,
-                        });
-                        return Err(Bail);
+                        return Err(bail_with(
+                            &logger,
+                            Code::UnsupportedFeature,
+                            codegen_flags::CodegenFlags::unknown_flag_message(&flag),
+                        ));
                     }
                 };
 
@@ -2121,13 +2151,11 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             if !package.is_test_world()
                 && package.world_registry.get(&package.target_world).is_none()
             {
-                let _ = logger.error(compiler_host::Diagnostic {
-                    severity: compiler_host::Severity::Error,
-                    code: compiler_host::Code::UnsupportedFeature,
-                    message: format!("unknown target world: `{}`", package.target_world),
-                    span: None,
-                });
-                return Err(Bail);
+                return Err(bail_with(
+                    &logger,
+                    Code::UnsupportedFeature,
+                    format!("unknown target world: `{}`", package.target_world),
+                ));
             }
 
             // Select allocator (must run before synthesis, matching compile).
@@ -2136,22 +2164,16 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
             // Synthesis (must run before monomorphize)
             let package = {
                 let _span = logger.span("synthesis");
-                synthesis::synthesize(package).map_err(|message| bail_unsupported(&logger, message))?
+                synthesis::synthesize(package)
+                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
             };
 
             // Effect dispatch synthesis (lowers WithHandler / Resume).
             // Dump path mirrors the main compile pipeline (Phase 8c).
             let package = {
                 let _span = logger.span("effect-dispatch");
-                synthesis::effect_dispatch::synthesize_post_check(package).map_err(|message| {
-                    let _ = logger.error(compiler_host::Diagnostic {
-                        severity: compiler_host::Severity::Error,
-                        code: compiler_host::Code::UnsupportedFeature,
-                        message,
-                        span: None,
-                    });
-                    Bail
-                })?
+                synthesis::effect_dispatch::synthesize_post_check(package)
+                    .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?
             };
 
             // Link
@@ -2175,7 +2197,7 @@ pub async fn dump_with_host_and_world<H: CompilerHost>(
                 let mut mono = monomorphize(&mut flat);
                 let validated =
                     synthesis::cm_binding::reject_unresolvable_payloads_monomorphized(&flat)
-                        .map_err(|message| bail_unsupported(&logger, message))?;
+                        .map_err(|message| bail_with(&logger, Code::UnsupportedFeature, message))?;
                 synthesis::effect_dispatch::rewrite_resource_calls_monomorphized(&mut flat);
                 synthesis::cm_binding::rewrite_async_primitives_monomorphized(&mut flat, validated);
                 mono.resume(&mut flat);

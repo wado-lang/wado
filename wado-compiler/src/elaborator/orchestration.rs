@@ -27,7 +27,7 @@ use super::types::{
     ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
 };
 use super::tysys::TypeSystem;
-use crate::ast::{CmImport, GenericType, NamedType, UseItem};
+use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
 use crate::compiler_item::Resolved;
 use crate::component_model::SourceInterfaceBatch;
 use crate::defs::{DefId, DefKind, DefTable};
@@ -3881,10 +3881,7 @@ fn component_interface_fqs(module: &Module) -> Vec<String> {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Interface(decl) => decl
-                .attrs
-                .iter()
-                .find_map(|a| a.as_cm_import().map(CmImport::interface_path)),
+            Item::Interface(decl) => cm_import_of(&decl.attrs).map(CmImport::interface_path),
             _ => None,
         })
         .filter(|fq| !imports.contains(fq))

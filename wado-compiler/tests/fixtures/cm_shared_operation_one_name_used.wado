@@ -1,0 +1,23 @@
+// Only `Entropy::next` is called, so the stdlib's binding of the same CM
+// operation is neither aliased nor lowered: the used set decides, not the
+// registry.
+use { println, Stdout } from "core:cli";
+
+interface Entropy {
+    #[cm("wasi:random/random@0.3.0#get-random-u64")]
+    fn next() -> u64;
+}
+
+export fn run() with (Stdout, Entropy) {
+    let _ = Entropy::next();
+    println("drawn");
+}
+
+__DATA__
+{
+  "stdout": "drawn\n",
+  "skip_os": true,
+  "wat_lines": [
+    { "contains": ["(alias export $wasi:random/random"], "count": 1 }
+  ]
+}

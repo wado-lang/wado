@@ -6,6 +6,7 @@
 
 use wasm_encoder::PrimitiveValType;
 
+use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 
 /// Structural key for a defined Component Model type, so a given structure
@@ -37,11 +38,29 @@ pub struct ComponentModelContext {
     type_names: IndexMap<String, u32>,
     next_type_idx: u32,
 
+    /// Outer-scope types that stand for a declaration, keyed by its identity.
+    /// A name cannot key these: two interfaces of one package each declare an
+    /// `error-code` (`wasi:sockets/types` and `wasi:sockets/ip-name-lookup`),
+    /// and a key built from either name collapses them into one. See the
+    /// declaration-identity WEP.
+    decl_types: IndexMap<DefId, u32>,
+
+    /// Which `error-code` declarations each CM package aliased. A consumer that
+    /// can only name the package reads this, and a package that aliased more
+    /// than one says so rather than handing back whichever came first.
+    package_error_codes: IndexMap<String, Vec<DefId>>,
+
     cm_type_interner: IndexMap<CmTypeKey, u32>,
 
     // Component instance indices
     instance_names: IndexMap<String, u32>,
     next_instance_idx: u32,
+
+    /// The CM name of the `error-code` each imported instance exports, recorded
+    /// where the instance type is built. An alias reads it here rather than
+    /// re-deriving from the registry what the builder emitted: an alias of a
+    /// missing export fails only in the validator.
+    instance_error_codes: IndexMap<String, String>,
 
     // Core function indices (at component level - aliased/lowered functions)
     core_func_names: IndexMap<String, u32>,
@@ -77,8 +96,11 @@ impl ComponentModelContext {
             type_names: IndexMap::default(),
             next_type_idx: 0,
             cm_type_interner: IndexMap::default(),
+            decl_types: IndexMap::default(),
+            package_error_codes: IndexMap::default(),
             instance_names: IndexMap::default(),
             next_instance_idx: 0,
+            instance_error_codes: IndexMap::default(),
             core_func_names: IndexMap::default(),
             next_core_func_idx: 0,
             core_memory_idx: None,
@@ -109,6 +131,39 @@ impl ComponentModelContext {
         self.type_names.insert(name.to_string(), idx);
         self.next_type_idx += 1;
         idx
+    }
+
+    /// Bind a declaration's identity to an already-emitted outer type index.
+    pub fn bind_decl_type(&mut self, def: DefId, idx: u32) {
+        self.decl_types.insert(def, idx);
+    }
+
+    /// The outer type index standing for `def`.
+    pub fn decl_type_idx(&self, def: DefId) -> Option<u32> {
+        self.decl_types.get(&def).copied()
+    }
+
+    /// Whether `def` already has an outer type index.
+    pub fn has_decl_type(&self, def: DefId) -> bool {
+        self.decl_types.contains_key(&def)
+    }
+
+    /// Record that `package` aliased the `error-code` `def` declares.
+    pub fn record_package_error_code(&mut self, package: &str, def: DefId) {
+        let defs = self
+            .package_error_codes
+            .entry(package.to_string())
+            .or_default();
+        if !defs.contains(&def) {
+            defs.push(def);
+        }
+    }
+
+    /// The `error-code` declarations `package` aliased, in alias order.
+    pub fn package_error_codes(&self, package: &str) -> &[DefId] {
+        self.package_error_codes
+            .get(package)
+            .map_or(&[], Vec::as_slice)
     }
 
     /// Bind a name to an already-reserved component type index, without bumping
@@ -165,6 +220,18 @@ impl ComponentModelContext {
     /// Check whether a component instance is registered under `name`.
     pub fn has_instance(&self, name: &str) -> bool {
         self.instance_names.contains_key(name)
+    }
+
+    /// Record that instance `name`'s type exports `error-code` under `cm_name`.
+    /// Called where the export is emitted, never predicted from elsewhere.
+    pub fn record_instance_error_code(&mut self, name: &str, cm_name: &str) {
+        self.instance_error_codes
+            .insert(name.to_string(), cm_name.to_string());
+    }
+
+    /// The CM name instance `name` exports its `error-code` under, if it does.
+    pub fn instance_error_code(&self, name: &str) -> Option<&str> {
+        self.instance_error_codes.get(name).map(String::as_str)
     }
 
     /// Get the current component instance count

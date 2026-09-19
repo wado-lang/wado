@@ -12,7 +12,7 @@ mod lower;
 mod resource_rewrite;
 mod task_return;
 mod type_fixup;
-mod types;
+pub(crate) mod types;
 
 use std::cell::RefCell;
 use std::rc::Rc;

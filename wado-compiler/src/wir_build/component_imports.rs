@@ -6,7 +6,7 @@
 
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, ERROR_CODE_WADO_NAME};
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
@@ -70,7 +70,7 @@ pub fn resolve_import_plan(
     // interface is categorized `ResourceUsingInterface` (codegen defers it to the
     // resource-using phase, after the resource-defining interfaces are imported);
     // otherwise it is a plain `FunctionInterface`.
-    let mut needed_resources: IndexSet<String> = IndexSet::default();
+    let mut needed_resources: IndexSet<(String, String)> = IndexSet::default();
     for interface_info in registry.interfaces() {
         if interface_info.interface == "run" {
             continue;
@@ -92,9 +92,7 @@ pub fn resolve_import_plan(
             // itself still needs the response/error-code types).
             let has_used_function = interface_info.functions.iter().any(|func| {
                 registry.is_function_supported(func)
-                    && project
-                        .used_wasi_functions
-                        .contains(&format!("{}::{}", func.interface_name, func.method_name))
+                    && project.used_wasi_functions.contains(&func.used_key())
             });
             if has_used_function || export_referenced_interfaces.contains(&interface_info.path) {
                 push(
@@ -113,28 +111,16 @@ pub fn resolve_import_plan(
             .iter()
             .filter(|func| {
                 registry.is_function_supported(func)
-                    && project
-                        .used_wasi_functions
-                        .contains(&format!("{}::{}", func.interface_name, func.method_name))
+                    && project.used_wasi_functions.contains(&func.used_key())
             })
             .collect();
         if used.is_empty() {
             continue;
         }
-        let mut here: IndexSet<String> = IndexSet::default();
-        for func in &used {
-            if let Some(ret) = &func.return_type {
-                collect_resources_in_type(ret, registry, &mut here);
-            }
-            for (_, _, ty) in &func.params {
-                collect_resources_in_type(ty, registry, &mut here);
-            }
-        }
-        let uses_external_resources = here.iter().any(|resource| {
-            registry
-                .get_resource_source_interface(resource)
-                .is_some_and(|src| src != interface_info.path)
-        });
+        let here = registry.resources_in_signatures(&used, Some(&interface_info.path));
+        let uses_external_resources = here
+            .iter()
+            .any(|(source, _)| source != &interface_info.path);
         let kind = if registry.is_component_interface(&interface_info.path) {
             // Imported like a host interface, but the dependency is composed in
             // at codegen (wasm-compose) rather than provided by the host.
@@ -150,44 +136,39 @@ pub fn resolve_import_plan(
 
     // Phase 2: resource-defining interfaces for every referenced resource
     // (transitive: a defining interface may reference further resources).
-    let mut worklist: Vec<String> = needed_resources.iter().cloned().collect();
-    let mut seen_resources: IndexSet<String> = IndexSet::default();
-    while let Some(resource) = worklist.pop() {
-        if !seen_resources.insert(resource.clone()) {
+    let mut worklist: Vec<String> = needed_resources
+        .iter()
+        .map(|(source, _)| source.clone())
+        .collect();
+    let mut seen_sources: IndexSet<String> = IndexSet::default();
+    while let Some(source) = worklist.pop() {
+        if !seen_sources.insert(source.clone()) {
             continue;
         }
-        let Some(source) = registry.get_resource_source_interface(&resource) else {
-            continue;
-        };
-        let source = source.to_string();
         push(&mut entries, source.clone(), ImportKind::ResourceSource);
-        let mut more: IndexSet<String> = IndexSet::default();
         for info in registry.interfaces().filter(|i| i.path == source) {
-            for func in &info.functions {
-                if let Some(ret) = &func.return_type {
-                    collect_resources_in_type(ret, registry, &mut more);
-                }
-                for (_, _, ty) in &func.params {
-                    collect_resources_in_type(ty, registry, &mut more);
-                }
-            }
+            let funcs: Vec<_> = info.functions.iter().collect();
+            let more = registry.resources_in_signatures(&funcs, Some(&source));
+            worklist.extend(more.into_iter().map(|(next, _)| next));
         }
-        worklist.extend(more);
     }
 
-    // Phase 3: resource-getter interfaces whose accessor is used, gated on
-    // `NirPackage::has_interface` — the gate codegen applies inline, not the
-    // registry's same-named `with`-set predicate. Each used getter contributes
-    // the getter interface itself (http ones going through the HTTP phase) and,
-    // for a resource defined elsewhere, its defining interface.
+    // Phase 3: resource-getter interfaces whose accessor is used. Each such
+    // getter contributes the getter interface itself (http ones going through
+    // the HTTP phase) and, for a resource defined elsewhere, its defining
+    // interface.
     for interface_info in registry.interfaces() {
         let Some((resource_wado_name, _)) = &interface_info.resource_type else {
             continue;
         };
+        // This interface's own used operations, not merely some operation of a
+        // Wado name it shares: a user module may name a resource what a bundled
+        // interface names one, and the shared name alone would import that
+        // bundled interface into a program that never mentions it.
         let needed = interface_info
             .functions
-            .first()
-            .is_some_and(|f| project.has_interface(&f.interface_name));
+            .iter()
+            .any(|f| project.used_wasi_functions.contains(&f.used_key()));
         if !needed {
             continue;
         }
@@ -198,7 +179,8 @@ pub fn resolve_import_plan(
             interface_info.path.clone(),
             ImportKind::ResourceGetter,
         );
-        if let Some(source) = registry.get_resource_source_interface(resource_wado_name)
+        if let Some(source) =
+            registry.resource_source_in(Some(&interface_info.path), resource_wado_name)
             && source != interface_info.path
         {
             push(&mut entries, source.to_string(), ImportKind::ResourceSource);
@@ -272,8 +254,7 @@ fn needs_canonical_cli_error_code(
     // Import side: a used interface's signature references the cli error-code.
     let import_side = project.cm_interface_registry.interfaces().any(|interface| {
         interface.functions.iter().any(|func| {
-            let key = format!("{}::{}", func.interface_name, func.method_name);
-            project.used_wasi_functions.contains(&key)
+            project.used_wasi_functions.contains(&func.used_key())
                 && (func.return_type.as_ref().is_some_and(|ty| {
                     references_cli_error_code(ty, &project.cm_interface_registry)
                 }) || func.params.iter().any(|(_, _, ty)| {
@@ -301,7 +282,7 @@ fn references_cli_error_code(ty: &Type, registry: &CmInterfaceRegistry) -> bool 
     let any = |tys: &[Type]| tys.iter().any(|ty| references_cli_error_code(ty, registry));
     match ty {
         Type::Named(named) => {
-            named.name == "ErrorCode"
+            named.name == ERROR_CODE_WADO_NAME
                 && registry
                     .source_interface(named)
                     .is_some_and(|s| s.starts_with("wasi:cli/types"))
@@ -313,43 +294,5 @@ fn references_cli_error_code(ty: &Type, registry: &CmInterfaceRegistry) -> bool 
             references_cli_error_code(inner, registry)
         }
         Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
-    }
-}
-
-/// Collect resource type names referenced anywhere in `ty` (recursing through
-/// generics, tuples, and references). Mirrors `codegen::component`'s helper.
-fn collect_resources_in_type(
-    ty: &Type,
-    registry: &CmInterfaceRegistry,
-    out: &mut IndexSet<String>,
-) {
-    match ty {
-        Type::Named(named) => {
-            if registry
-                .get_resource_source_interface(&named.name)
-                .is_some()
-            {
-                out.insert(named.name.clone());
-            }
-        }
-        Type::Generic(generic) => {
-            for arg in &generic.args {
-                collect_resources_in_type(arg, registry, out);
-            }
-        }
-        Type::NamespacedGeneric(generic) => {
-            for arg in &generic.args {
-                collect_resources_in_type(arg, registry, out);
-            }
-        }
-        Type::Tuple(elems) => {
-            for elem in elems {
-                collect_resources_in_type(elem, registry, out);
-            }
-        }
-        Type::Reference(inner) | Type::MutReference(inner) => {
-            collect_resources_in_type(inner, registry, out);
-        }
-        Type::Function(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
 }

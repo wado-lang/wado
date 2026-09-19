@@ -1,0 +1,17 @@
+// The same check where the interface declares no resource under that CM name
+// at all: `event-target` is nobody's here.
+
+#[cm("wasi:demo/events@0.1.0#node")]
+resource Subject {
+    #[cm("wasi:demo/events@0.1.0#[method]event-target.tag")]
+    #[cm_params("self")]
+    fn tag(&self) -> String;
+}
+
+export fn run() {}
+
+__DATA__
+{
+  "compile_error": "does not declare",
+  "compile_errors_contains": ["[method]event-target.tag", "event-target"]
+}
