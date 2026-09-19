@@ -520,6 +520,9 @@ Renderings still compared against a declaration's own name:
 The Component Model boundary, permanent for the reason §9 gives:
 
 - `cm_decl_in` and `cm_decl`, which resolve a WIT name to its declaration.
+- `cm_decl_in_interface`, the same step taking the interface rather than the
+  module: it asks the registry which module declares that interface, so a caller
+  holding an interface FQ supplies no vantage of its own.
 - `find_named_type_by_source` and `find_named_type_by_module_name`, the
   `TypeTable` lookups behind them, which answer a `TypeId` for a Wado name in a
   named module.
@@ -691,54 +694,57 @@ compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
-## Known gap: component codegen keys most CM types by name
+## Component Model types are keyed by declaration
 
-`ComponentModelContext` holds outer-scope component types in one string-keyed
-map. Two kinds of key live in it. A structural key names no declaration, such as
-`"types-instance-type"` or an interned `result<…>`. The other kind stands for a
-declaration, which a name cannot carry: `{package}-{cm-name}` puts every
-interface of a package in one namespace, and the CM name alone puts every
-package in one.
+`ComponentModelContext` holds two maps, not one. `type_names` keys a structural
+shape — `"result-unit"`, `"stream-u8"`, an instance or a func type — and names no
+declaration. `decl_types` is keyed by `DefId` and holds every outer-scope type
+that stands for one: a resource own-handle, an aliased record, an `error-code`, a
+`response`, a handler's result. A name cannot key those. A CM name alone puts
+every package in one namespace, and its package puts every interface of that
+package in one, so `wasi:sockets/types#error-code` and
+`wasi:sockets/ip-name-lookup#error-code` — unrelated variants — land on one
+entry.
 
-`error-code` is keyed by `DefId`, resolved once per interface through
-`cm_decl_in`. The resource own-handles and the per-package composites
-(`{pkg}-response`, `{pkg}-fields-resource`) still take the package key, and each
-carries the same collision. Nothing has hit it yet only because no two
-interfaces of one package declare a resource of the same name.
+Every producer of a declaration-backed type holds the interface it is emitting
+for, so it resolves the declaration through §9's boundary step and binds the
+index to that `DefId`. Where a canonical reaches a declaration no imported
+interface aliased, codegen fails naming it. It does not try a second key: that is
+the shape "What a derivation may not be" forbids, and the miss is a bug in the
+import plan, not an ambiguity to break.
 
-Closing this means splitting the map in two, identities on one side and
-structural keys on the other. Each declaration-backed producer then needs the
-interface it is emitting for, which all of them already hold.
+### A canonical intrinsic's payload carries the declaration
 
-## Known gap: a transmission future names a package, not an interface
+`CmPayloadType::Named`, `CmPayloadType::Resource`, `CmStreamPayload::Record`,
+`CmFuturePayload::Transmission` and `CanonicalIntrinsic::ResourceDrop` each hold
+a `CmDecl`: the `DefId`, the declaring module, and the CM name the ABI spells.
+Equality and hashing read the `DefId` alone, so the rendering travels beside the
+identity and never stands in for it — §8's structured identity that renders on
+demand, at the Component Model boundary.
 
-`CmFuturePayload::Transmission` carries a package. Its classifier reads the
-`DefId` off the error-code's own type and truncates it to the package the
-declaring module sits in, so the identity is discarded at the one point that
-has it.
+The name such an intrinsic imports under is one of those renderings:
+`resource-drop:wasi/filesystem/types#descriptor` says which declaration it drops,
+and a transmission future spells the interface that declares its `error-code`
+rather than the package around it. `CanonicalIntrinsic::from_import_name` is not
+the inverse and cannot be one: a `#[canonical(…)]` annotation names an operation,
+and a name that carries a payload is refused rather than parsed. The payload
+comes from the annotated signature, which the classifier reads at the one point
+that has the declaration.
 
-Codegen recovers the interface from the plan. A transmission future streams a
-resource-defining interface's resources, so that interface is the one it means.
-Where the plan names none for the package, the package's single aliased
-`error-code` serves; `wasi:cli` is the case, its `types` interface defining no
-resource. A package that aliased two and has no resource-defining interface is
-refused rather than guessed at.
+## Pattern qualifier arguments
 
-Closing this means `Transmission` carrying the declaration, which the classifier
-already holds. What stands in the way is §8: the payload is rendered into a
-canonical intrinsic's name and parsed back out of it, and a `DefId` has no
-public constructor, so it cannot survive that round trip. The parse is itself
-the thing §8 forbids, so the two are one piece of work.
+A pattern's qualifier is a type, and a type is its declaration plus the arguments
+it was instantiated at. `Maybe<String>::Just` therefore does not qualify a
+`Maybe<i32>` scrutinee: the `DefId`s agree and the instantiations do not. Each
+written argument is resolved at its own reference site and compared against the
+scrutinee's by `TypeKey`, never by arity and never by spelling.
 
-## Known gap: a pattern qualifier's type arguments are counted, not read
+A position either side leaves abstract is not compared. A generic body writes its
+own type parameter where the scrutinee carries a concrete type —
+`if let Maybe<T>::Just(v) = m` inside `unwrap_or<T>` — which is ordinary code,
+and comparing there would reject it. This follows from §6 rather than softening
+it: a `TypeParam` names no instantiation, so there is nothing for the scrutinee's
+argument to disagree with.
 
-`Maybe<i32>::Just` and `Maybe<String>::Just` both qualify a `Maybe<i32>`
-scrutinee. The qualifier itself resolves to a declaration and compares by
-`DefId`. The arguments written beside it are only counted, so any count that
-agrees is accepted. The count still earns its keep: a qualifier whose type
-declares no parameters takes none.
-
-Closing this means comparing each written argument against the scrutinee's. That
-needs a rule for a generic body first. There a type parameter stands where the
-scrutinee carries a concrete type, which is ordinary code, so rejecting it would
-be wrong.
+Fixtures: `pattern_qualifier_type_args_read_error.wado`,
+`pattern_qualifier_type_param_arg.wado`.

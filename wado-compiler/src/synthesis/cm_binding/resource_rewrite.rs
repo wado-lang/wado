@@ -21,7 +21,7 @@ use crate::tir::{
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
-use crate::canonical::{CanonicalIntrinsic, CmFuturePayload, CmStreamPayload};
+use crate::canonical::{CanonicalIntrinsic, CmDecl, CmFuturePayload, CmStreamPayload};
 use crate::synthesis::common::{
     alloc_named_local, assign, binary, break_stmt, builtin_call, cast, cm_canonical_call,
     entry_call, expr_stmt, i32_const, if_stmt, internal_call, let_mut_stmt, let_stmt, local_ref,
@@ -345,9 +345,16 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         .get_struct_cm_name_by_source(&source, &elem_name)
         .unwrap_or(&elem_name)
         .to_string();
+    let record = {
+        let tt = ctx.type_table.borrow();
+        let def = tt
+            .nominal_def(tt.representation_head(elem_type_id))
+            .unwrap_or_else(|| panic!("record `{elem_name}` names no declaration"));
+        CmDecl::new(tt.defs(), def, &cm_record_name)
+    };
     synthesize_stream_read_func(
         record_stream_read_func_name(&elem_name),
-        CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(cm_record_name)),
+        CanonicalIntrinsic::StreamRead(CmStreamPayload::Record(record)),
         elem_type_id,
         elem_size,
         elem_align,
@@ -1004,7 +1011,7 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
 /// resolution in `synthesize_lift`).
 fn future_payload_package(payload: &CmFuturePayload) -> String {
     match payload {
-        CmFuturePayload::Transmission(src) => src.clone(),
+        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or("cli").to_string(),
         CmFuturePayload::Trailers => "http".to_string(),
         CmFuturePayload::Scalar(_) => "cli".to_string(),
         // General value payloads carry no WASI scope; named types in the
@@ -1988,7 +1995,10 @@ fn parameterize_stream_cm_name(
                 .as_deref()
                 .and_then(|source| registered_cm_name(&elem_name, source, cm_interface_registry))
                 .unwrap_or_else(|| pascal_to_kebab(&elem_name));
-            CmStreamPayload::Record(cm_elem)
+            let def = tt
+                .nominal_def(tt.representation_head(elem))
+                .unwrap_or_else(|| panic!("`stream<{elem_name}>` element names no declaration"));
+            CmStreamPayload::Record(CmDecl::new(tt.defs(), def, &cm_elem))
         },
         CmStreamPayload::Value,
     );

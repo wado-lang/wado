@@ -6,7 +6,9 @@
 
 use crate::ast::Type;
 use crate::canonical::{CanonicalIntrinsic, CmFuturePayload};
-use crate::component_model::{CmInterfaceRegistry, ERROR_CODE_WADO_NAME};
+use crate::component_model::{
+    CANONICAL_ERROR_CODE_INTERFACE, CmInterfaceRegistry, ERROR_CODE_WADO_NAME, cm_decl_in_interface,
+};
 use crate::hashmap::IndexSet;
 use crate::nir_package::NirPackage;
 use crate::wir::{ImportEntry, ImportKind};
@@ -266,13 +268,21 @@ fn needs_canonical_cli_error_code(
         return true;
     }
 
-    // Transmission side: an async-export transmission future whose error-code
-    // source is `cli` (the canonical error-code), e.g. a kiln generator's
+    // Transmission side: an async-export transmission future carrying the
+    // canonical error-code itself, e.g. a kiln generator's
     // `task return result<_, error-code>`.
+    let Some(canonical_error_code) = cm_decl_in_interface(
+        &project.type_table.borrow(),
+        &project.cm_interface_registry,
+        CANONICAL_ERROR_CODE_INTERFACE,
+        ERROR_CODE_WADO_NAME,
+    ) else {
+        return false;
+    };
     needed_canonicals.iter().any(|canonical| {
         matches!(
             canonical.future_payload(),
-            Some(CmFuturePayload::Transmission(source)) if source == "cli"
+            Some(CmFuturePayload::Transmission(decl)) if decl.def() == canonical_error_code
         )
     })
 }

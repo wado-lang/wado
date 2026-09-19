@@ -4,7 +4,7 @@
 //! *transferred* when passed by value, returned, or placed in an aggregate — not
 //! by a borrowing receiver or a `&` — so the drop cannot double-free.
 
-use crate::canonical::CanonicalIntrinsic;
+use crate::canonical::{CanonicalIntrinsic, CmDecl};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::CmInterfaceRegistry;
 use crate::hashmap::IndexSet;
@@ -380,7 +380,7 @@ fn drop_value(scrutinee: TirExpr, type_id: TypeId, cx: &mut Cx) -> Vec<TirStmt> 
             .get_resource_cm_name_by_module(&cx.tt.def_module(def).to_string(), cx.tt.def_name(def))
         {
             Some(cm) => vec![expr_stmt(cm_canonical_call(
-                CanonicalIntrinsic::ResourceDrop(cm.to_string()),
+                CanonicalIntrinsic::ResourceDrop(CmDecl::new(cx.tt.defs(), def, cm)),
                 vec![scrutinee],
                 TypeTable::UNIT,
             ))],

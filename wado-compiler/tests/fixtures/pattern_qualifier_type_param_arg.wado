@@ -1,0 +1,37 @@
+// A qualifier written inside a generic body names the body's own parameter,
+// which stands where the monomorphized scrutinee carries a concrete type. A
+// binder therefore agrees with whatever the scrutinee has at that position.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+fn unwrap_or<T>(m: Maybe<T>, fallback: T) -> T {
+    if let Maybe<T>::Just(v) = m { return v; }
+    return fallback;
+}
+
+fn first_just<A, B>(a: Maybe<A>, b: Maybe<B>, fa: A, fb: B) -> [A, B] {
+    let x = match a {
+        Maybe<A>::Just(v) => v,
+        Maybe<A>::Nothing => fa,
+    };
+    let y = match b {
+        Maybe<B>::Just(v) => v,
+        Maybe<B>::Nothing => fb,
+    };
+    return [x, y];
+}
+
+export fn run() {
+    assert unwrap_or(Maybe::Just(7), 0) == 7;
+    assert unwrap_or(Maybe::<i32>::Nothing, -1) == -1;
+    assert unwrap_or(Maybe::Just("a"), "b") == "a";
+    let [n, s] = first_just(Maybe::Just(3), Maybe::<String>::Nothing, 0, "z");
+    assert n == 3;
+    assert s == "z";
+}
+
+__DATA__
+{"stdout": ""}

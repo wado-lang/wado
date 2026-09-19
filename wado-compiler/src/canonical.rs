@@ -8,6 +8,82 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use crate::defs::{DefId, DefTable};
+use crate::module_source::ModuleSource;
+
+/// A Component Model type some declaration names: the identity every key
+/// compares, beside the CM name the ABI spells.
+///
+/// The rendering travels with the identity so a mangle needs no table at hand,
+/// and it is never read back into one — a CM name alone puts every package in
+/// one namespace, and its package puts every interface of that package in one.
+#[derive(Debug, Clone)]
+pub struct CmDecl {
+    def: DefId,
+    module: ModuleSource,
+    cm_name: String,
+}
+
+impl PartialEq for CmDecl {
+    fn eq(&self, other: &Self) -> bool {
+        self.def == other.def
+    }
+}
+
+impl Eq for CmDecl {}
+
+impl std::hash::Hash for CmDecl {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.def.hash(state);
+    }
+}
+
+impl CmDecl {
+    /// Render `def` at its CM name. The declaring module comes off the table,
+    /// never from a caller.
+    #[must_use]
+    pub fn new(defs: &DefTable, def: DefId, cm_name: &str) -> Self {
+        Self {
+            def,
+            module: defs.module(def).clone(),
+            cm_name: cm_name.to_string(),
+        }
+    }
+
+    #[must_use]
+    pub fn def(&self) -> DefId {
+        self.def
+    }
+
+    /// The name the Component Model ABI spells this type by.
+    #[must_use]
+    pub fn cm_name(&self) -> &str {
+        &self.cm_name
+    }
+
+    #[must_use]
+    pub fn module(&self) -> &ModuleSource {
+        &self.module
+    }
+
+    /// The injective spelling a canonical import name embeds.
+    #[must_use]
+    pub fn name_suffix(&self) -> String {
+        format!("{}#{}", self.module.to_path_string(), self.cm_name)
+    }
+
+    /// The CM package the declaring interface sits in (`"http"`, `"cli"`, …),
+    /// for a consumer scoping a name resolution to it. A rendering out of the
+    /// identity, never a key.
+    #[must_use]
+    pub fn cm_package(&self) -> Option<&str> {
+        match &self.module {
+            ModuleSource::Binding { interface, .. } => interface.split('/').next(),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CmScalarType {
     S8,
@@ -43,26 +119,6 @@ impl fmt::Display for CmScalarType {
     }
 }
 
-impl CmScalarType {
-    pub fn from_cm_name(name: &str) -> Option<Self> {
-        Some(match name {
-            "s8" => Self::S8,
-            "s16" => Self::S16,
-            "s32" => Self::S32,
-            "s64" => Self::S64,
-            "u8" => Self::U8,
-            "u16" => Self::U16,
-            "u32" => Self::U32,
-            "u64" => Self::U64,
-            "float32" => Self::F32,
-            "float64" => Self::F64,
-            "bool" => Self::Bool,
-            "char" => Self::Char,
-            _ => return None,
-        })
-    }
-}
-
 /// A Component Model value type carried as a `future<T>` / `stream<T>` payload.
 /// Self-contained — no registry needed — so it doubles as a dedup key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -73,12 +129,12 @@ pub enum CmPayloadType {
     Option(Box<CmPayloadType>),
     Result(Option<Box<CmPayloadType>>, Option<Box<CmPayloadType>>),
     Tuple(Vec<CmPayloadType>),
-    /// A record / variant / enum / flags, by CM kebab name.
-    Named(String),
-    /// An owned resource handle, by the resource's CM kebab name. Separate from
+    /// A record / variant / enum / flags, by its declaration.
+    Named(CmDecl),
+    /// An owned resource handle, by the resource's declaration. Separate from
     /// [`Self::Named`]: its component type is keyed differently and wrapped in
     /// `own` at the use site.
-    Resource(String),
+    Resource(CmDecl),
 }
 
 impl CmPayloadType {
@@ -102,83 +158,18 @@ impl CmPayloadType {
                     .collect::<Vec<_>>()
                     .join(","),
             ),
-            Self::Named(name) => name.clone(),
-            Self::Resource(name) => format!("own<{name}>"),
+            Self::Named(decl) => decl.name_suffix(),
+            Self::Resource(decl) => format!("own<{}>", decl.name_suffix()),
         }
     }
-
-    pub fn parse_suffix(s: &str) -> Option<Self> {
-        let s = s.trim();
-        if let Some(inner) = s.strip_circumfix("list<", ">") {
-            return Some(Self::List(Box::new(Self::parse_suffix(inner)?)));
-        }
-        if let Some(inner) = s.strip_circumfix("option<", ">") {
-            return Some(Self::Option(Box::new(Self::parse_suffix(inner)?)));
-        }
-        if let Some(inner) = s.strip_circumfix("result<", ">") {
-            let parts = split_top_level(inner);
-            if parts.len() != 2 {
-                return None;
-            }
-            let arm = |p: &str| -> Option<Option<Box<Self>>> {
-                if p == "_" {
-                    Some(None)
-                } else {
-                    Some(Some(Box::new(Self::parse_suffix(p)?)))
-                }
-            };
-            return Some(Self::Result(arm(&parts[0])?, arm(&parts[1])?));
-        }
-        if let Some(inner) = s.strip_circumfix("tuple<", ">") {
-            let elems = split_top_level(inner)
-                .iter()
-                .map(|p| Self::parse_suffix(p))
-                .collect::<Option<Vec<_>>>()?;
-            return Some(Self::Tuple(elems));
-        }
-        if let Some(inner) = s.strip_circumfix("own<", ">") {
-            return Some(Self::Resource(inner.to_string()));
-        }
-        if s == "string" {
-            return Some(Self::String);
-        }
-        if let Some(scalar) = CmScalarType::from_cm_name(s) {
-            return Some(Self::Scalar(scalar));
-        }
-        if !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
-            return Some(Self::Named(s.to_string()));
-        }
-        None
-    }
-}
-
-/// Splits at the top nesting level only, so `result<u32,string>,list<u32>`
-/// splits in two.
-fn split_top_level(s: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut depth = 0i32;
-    let mut start = 0usize;
-    for (i, c) in s.char_indices() {
-        match c {
-            '<' => depth += 1,
-            '>' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(s[start..i].trim().to_string());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-    parts.push(s[start..].trim().to_string());
-    parts
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CmStreamPayload {
     /// The default stream, and the only suffix-less one.
     U8,
-    /// A CM record element, by its kebab name.
-    Record(String),
+    /// A CM record element, by its declaration.
+    Record(CmDecl),
     Value(CmPayloadType),
 }
 
@@ -186,9 +177,10 @@ pub enum CmStreamPayload {
 pub enum CmFuturePayload {
     /// `future<result<option<trailers>, error-code>>`.
     Trailers,
-    /// `future<result<_, error-code>>`, keyed by the WASI package defining the
-    /// error-code (`"cli"`, `"filesystem"`, …) — each is a distinct CM type.
-    Transmission(String),
+    /// `future<result<_, error-code>>`, by the declaration of the error-code it
+    /// carries — each is a distinct CM type, and two interfaces of one package
+    /// each declare one.
+    Transmission(CmDecl),
     Scalar(CmScalarType),
     Value(CmPayloadType),
 }
@@ -222,8 +214,8 @@ pub enum CanonicalIntrinsic {
     /// Keyed by the export whose result it delivers; one canon carries one
     /// result type. The empty key is the shared canon of the `result<>` ones.
     TaskReturn(String),
-    /// By the resource's CM name.
-    ResourceDrop(String),
+    /// By the resource's declaration.
+    ResourceDrop(CmDecl),
 }
 
 impl CanonicalIntrinsic {
@@ -256,24 +248,24 @@ impl CanonicalIntrinsic {
             Self::ErrorContextDrop => "error-context-drop".to_string(),
             Self::TaskReturn(key) if key.is_empty() => "task-return".to_string(),
             Self::TaskReturn(key) => format!("task-return:{key}"),
-            Self::ResourceDrop(name) => format!("resource-drop:{name}"),
+            Self::ResourceDrop(decl) => format!("resource-drop:{}", decl.name_suffix()),
         }
     }
 
-    /// Parse the name a `#[canonical("wasi", "...")]` annotation spells. Only a
-    /// partial inverse of [`Self::import_name`]: a name stating no payload does
-    /// not parse.
+    /// The intrinsic a `#[canonical("wasi", "...")]` annotation names.
+    ///
+    /// Not an inverse of [`Self::import_name`], and deliberately cannot be one:
+    /// an annotation states a payload-less operation, and a payload is a
+    /// declaration or a structure the annotation has no way to spell. A name
+    /// carrying one answers `None` — the call site's `Future<T>` / `Stream<T>`
+    /// supplies the payload instead, through [`Self::future_op`] /
+    /// [`Self::stream_op`].
     pub fn from_import_name(name: &str) -> Option<Self> {
         Some(match name {
             _ if name.starts_with("stream-") => {
-                return parse_stream_intrinsic(name);
+                return Self::stream_op(name, CmStreamPayload::U8);
             }
-            _ if name.starts_with("future-") => {
-                return parse_future_intrinsic(name);
-            }
-            _ if name.starts_with("resource-drop:") => {
-                Self::ResourceDrop(name["resource-drop:".len()..].to_string())
-            }
+            _ if name.starts_with("future-") => return None,
             "waitable-set-new" => Self::WaitableSetNew,
             "waitable-set-wait" => Self::WaitableSetWait,
             "waitable-set-poll" => Self::WaitableSetPoll,
@@ -364,43 +356,10 @@ impl CanonicalIntrinsic {
     }
 }
 
-fn parse_stream_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
-    let (base, payload) = if let Some((b, suffix)) = name.split_once(':') {
-        let payload = if let Some(val) = suffix.strip_prefix("val-") {
-            CmStreamPayload::Value(CmPayloadType::parse_suffix(val)?)
-        } else {
-            CmStreamPayload::Record(suffix.to_string())
-        };
-        (b, payload)
-    } else {
-        (name, CmStreamPayload::U8)
-    };
-    CanonicalIntrinsic::stream_op(base, payload)
-}
-
-/// A suffix-less name carries no payload, so it does not parse — unlike the
-/// stream side, where it is the default `stream<u8>`.
-fn parse_future_intrinsic(name: &str) -> Option<CanonicalIntrinsic> {
-    let (base, payload) = match name.split_once(':') {
-        None => return None,
-        Some((b, suffix)) => {
-            let payload = if let Some(source) = suffix.strip_prefix("transmission-") {
-                CmFuturePayload::Transmission(source.to_string())
-            } else if let Some(val) = suffix.strip_prefix("val-") {
-                CmFuturePayload::Value(CmPayloadType::parse_suffix(val)?)
-            } else {
-                CmFuturePayload::Scalar(CmScalarType::from_cm_name(suffix)?)
-            };
-            (b, payload)
-        }
-    };
-    CanonicalIntrinsic::future_op(base, payload)
-}
-
 fn format_stream_name(base: &str, payload: &CmStreamPayload) -> String {
     match payload {
         CmStreamPayload::U8 => base.to_string(),
-        CmStreamPayload::Record(name) => format!("{base}:{name}"),
+        CmStreamPayload::Record(decl) => format!("{base}:{}", decl.name_suffix()),
         CmStreamPayload::Value(t) => format!("{base}:val-{}", t.name_suffix()),
     }
 }
@@ -408,7 +367,9 @@ fn format_stream_name(base: &str, payload: &CmStreamPayload) -> String {
 fn format_future_name(base: &str, payload: CmFuturePayload) -> String {
     match payload {
         CmFuturePayload::Trailers => base.to_string(),
-        CmFuturePayload::Transmission(ref source) => format!("{base}:transmission-{source}"),
+        CmFuturePayload::Transmission(ref decl) => {
+            format!("{base}:transmission-{}", decl.name_suffix())
+        }
         CmFuturePayload::Scalar(scalar) => format!("{base}:{scalar}"),
         CmFuturePayload::Value(ref t) => format!("{base}:val-{}", t.name_suffix()),
     }
@@ -443,17 +404,10 @@ impl CmCallTarget {
 mod intrinsic_name_tests {
     use super::*;
 
-    fn round_trip(intr: CanonicalIntrinsic) {
-        let name = intr.import_name();
-        assert_eq!(
-            CanonicalIntrinsic::from_import_name(&name),
-            Some(intr),
-            "round-trip failed for {name:?}"
-        );
-    }
-
+    /// A payload is a declaration or a structure, and an annotation has no way
+    /// to spell either — so a rendered name never travels back into one.
     #[test]
-    fn a_bare_future_name_does_not_parse_to_a_payload() {
+    fn a_payload_carrying_name_does_not_parse() {
         for name in [
             "future-new",
             "future-read",
@@ -462,56 +416,51 @@ mod intrinsic_name_tests {
             "future-drop-writable",
             "future-cancel-read",
             "future-cancel-write",
+            "future-read:s32",
+            "future-read:transmission-wasi/cli/types#error-code",
+            "stream-read:wasi/filesystem/types#directory-entry",
+            "resource-drop:wasi/filesystem/types#descriptor",
         ] {
             assert_eq!(
                 CanonicalIntrinsic::from_import_name(name),
                 None,
-                "`{name}` states no payload, so it must not parse"
+                "a name carrying a payload must not parse"
             );
         }
     }
 
-    /// `Trailers` is deliberately absent: it renders to the bare name, which
-    /// the test above pins as unparsable.
+    /// The annotation names, which state an operation and no payload. A stream
+    /// one means the default `stream<u8>`.
     #[test]
-    fn future_intrinsics_round_trip() {
-        for base in [
-            CanonicalIntrinsic::FutureNew as fn(CmFuturePayload) -> CanonicalIntrinsic,
-            CanonicalIntrinsic::FutureRead,
-            CanonicalIntrinsic::FutureWrite,
-            CanonicalIntrinsic::FutureDropReadable,
-            CanonicalIntrinsic::FutureDropWritable,
-            CanonicalIntrinsic::FutureCancelRead,
-            CanonicalIntrinsic::FutureCancelWrite,
-        ] {
-            round_trip(base(CmFuturePayload::Transmission("http".to_string())));
-            round_trip(base(CmFuturePayload::Transmission(
-                "filesystem".to_string(),
-            )));
-            round_trip(base(CmFuturePayload::Transmission("cli".to_string())));
-            round_trip(base(CmFuturePayload::Scalar(CmScalarType::S32)));
-            round_trip(base(CmFuturePayload::Scalar(CmScalarType::F64)));
-            round_trip(base(CmFuturePayload::Scalar(CmScalarType::Bool)));
-        }
+    fn annotation_names_denote_their_operation() {
+        assert_eq!(
+            CanonicalIntrinsic::from_import_name("stream-read"),
+            Some(CanonicalIntrinsic::StreamRead(CmStreamPayload::U8)),
+        );
+        assert_eq!(
+            CanonicalIntrinsic::from_import_name("task-return"),
+            Some(CanonicalIntrinsic::TaskReturn(String::new())),
+        );
+        assert_eq!(
+            CanonicalIntrinsic::from_import_name("waitable-join"),
+            Some(CanonicalIntrinsic::WaitableJoin),
+        );
+        assert_eq!(
+            CanonicalIntrinsic::from_import_name("not-a-canonical"),
+            None
+        );
     }
 
     #[test]
-    fn scalar_name_round_trips() {
-        for s in [
-            CmScalarType::S8,
-            CmScalarType::S16,
-            CmScalarType::S32,
-            CmScalarType::S64,
-            CmScalarType::U8,
-            CmScalarType::U16,
-            CmScalarType::U32,
-            CmScalarType::U64,
-            CmScalarType::F32,
-            CmScalarType::F64,
-            CmScalarType::Bool,
-            CmScalarType::Char,
-        ] {
-            assert_eq!(CmScalarType::from_cm_name(&s.to_string()), Some(s));
-        }
+    fn a_scalar_payload_renders_its_cm_name() {
+        assert_eq!(
+            CanonicalIntrinsic::FutureRead(CmFuturePayload::Scalar(CmScalarType::S32))
+                .import_name(),
+            "future-read:s32",
+        );
+        assert_eq!(
+            CanonicalIntrinsic::StreamRead(CmStreamPayload::U8).import_name(),
+            "stream-read",
+        );
     }
 }

@@ -1,0 +1,22 @@
+// A pattern qualifier's type arguments are read, not counted: `Maybe<String>`
+// agrees on arity with a `Maybe<i32>` scrutinee and still names another
+// instantiation.
+
+variant Maybe<T> {
+    Just(T),
+    Nothing,
+}
+
+test "a qualifier's type arguments must be the scrutinee's" {
+    let m = Maybe::<i32>::Just(1);
+    let n = match m {
+        Maybe<String>::Just(_) => 0,
+        Maybe<String>::Nothing => 1,
+    };
+    assert n == 0;
+}
+
+__DATA__
+{
+    "compile_error": "pattern mismatch: expected 'valid case of Maybe<i32>', found 'Maybe<String>::Nothing'"
+}

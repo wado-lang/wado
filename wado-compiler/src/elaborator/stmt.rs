@@ -844,9 +844,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .scrutinee_structure_head(scrutinee_type);
-        let scrutinee_arg_len = match self.tysys.type_table.borrow().get(base_type) {
+        let scrutinee_args = match self.tysys.type_table.borrow().get(base_type) {
             ResolvedType::Enum { .. } | ResolvedType::Variant { .. } => None,
-            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.len()),
+            ResolvedType::GenericInstance { type_args, .. } => Some(type_args.clone()),
             _ => return false,
         };
         // Every name on the chain qualifies the same cases: `C::Green`,
@@ -861,8 +861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .is_some_and(|def| chain_defs.contains(&def))
         };
         // A qualifier need not restate the scrutinee's type arguments, but any it
-        // writes must agree — and a type declaring none takes none.
-        let arity_agrees = |written: usize| scrutinee_arg_len == Some(written);
+        // writes must be the scrutinee's — and a type declaring none takes none.
         match qualifier {
             Type::Named(t) => {
                 names_scrutinee(self, qualifier)
@@ -872,9 +871,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .any(|def| self.namespace_reaches_type(&t.name, t.id, t.span, *def))
             }
-            Type::Generic(g) => arity_agrees(g.args.len()) && names_scrutinee(self, qualifier),
+            Type::Generic(g) => {
+                self.qualifier_args_agree(scrutinee_args.as_deref(), &g.args)
+                    && names_scrutinee(self, qualifier)
+            }
             Type::NamespacedGeneric(ns) => {
-                (ns.args.is_empty() || arity_agrees(ns.args.len()))
+                (ns.args.is_empty()
+                    || self.qualifier_args_agree(scrutinee_args.as_deref(), &ns.args))
                     && names_scrutinee(self, qualifier)
             }
             Type::Function(_)
@@ -885,6 +888,39 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             | Type::Infer(_)
             | Type::Error(_) => false,
         }
+    }
+
+    /// Whether the type arguments a qualifier writes are the ones the scrutinee
+    /// carries, each read at its own reference site rather than counted.
+    fn qualifier_args_agree(&mut self, scrutinee: Option<&[TypeId]>, written: &[Type]) -> bool {
+        let Some(scrutinee) = scrutinee else {
+            return false;
+        };
+        scrutinee.len() == written.len()
+            && written
+                .iter()
+                .zip(scrutinee)
+                .all(|(w, s)| self.qualifier_arg_agrees(w, *s))
+    }
+
+    /// Whether one written qualifier argument is the scrutinee's at that
+    /// position.
+    ///
+    /// A position either side leaves abstract is not compared: a generic body's
+    /// qualifier writes the body's own parameter where the monomorphized
+    /// scrutinee already carries a concrete type, which is ordinary code.
+    fn qualifier_arg_agrees(&mut self, written: &Type, scrutinee: TypeId) -> bool {
+        let resolved = self.resolve_type(written);
+        let tt = self.tysys.type_table.borrow();
+        let abstract_at = |id: TypeId| {
+            matches!(
+                tt.get(id),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_)
+            )
+        };
+        abstract_at(resolved)
+            || abstract_at(scrutinee)
+            || tt.type_key(resolved) == tt.type_key(scrutinee)
     }
 
     /// The declaration a written qualifier means, the resolve pass answering
