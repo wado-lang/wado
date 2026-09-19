@@ -2513,6 +2513,34 @@ impl TypeTable {
             .or_else(|| self.find_resource_type(def))
     }
 
+    /// [`Self::cm_decl_in`] addressed by the module's path rather than by a
+    /// `ModuleSource` value, for a caller holding an interface FQ and no
+    /// interner. Answers for a declaration whose type was never interned.
+    #[must_use]
+    pub fn cm_decl_in_module_named(
+        &self,
+        name: &str,
+        module_name: &str,
+        namespace: Option<CmNamespace>,
+    ) -> Option<DefId> {
+        self.decl_index
+            .iter()
+            .find(|((n, ms), _)| {
+                n == name
+                    && match ms {
+                        ModuleSource::Binding {
+                            namespace: ns,
+                            interface,
+                        } => namespace == Some(*ns) && interface.as_str() == module_name,
+                        ModuleSource::Core { name: cm_name } => {
+                            namespace.is_none() && cm_name.as_str() == module_name
+                        }
+                        _ => false,
+                    }
+            })
+            .map(|(_, def)| *def)
+    }
+
     /// Find any decl-backed named type scoped to a single CM *interface*,
     /// addressed by the namespace that owns it and the module it maps to (e.g.
     /// `(Wasi, sockets/ip_name_lookup.wado)`). `namespace` is `None` for a

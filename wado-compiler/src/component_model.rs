@@ -41,14 +41,13 @@ pub fn cm_decl_in_interface(
     interface_fq: &str,
     wado_name: &str,
 ) -> Option<DefId> {
-    let type_id = registry
-        .cm_interface_module_source_of(interface_fq)
-        .and_then(|source| type_table.find_named_type_by_source(wado_name, source))
-        .or_else(|| {
-            let (namespace, module) = cm_interface_module(interface_fq)?;
-            type_table.find_named_type_by_module_name(wado_name, &module, namespace)
-        })?;
-    type_table.nominal_def(type_id)
+    if let Some(source) = registry.cm_interface_module_source_of(interface_fq) {
+        return type_table.cm_decl_in(wado_name, source);
+    }
+    // A bundled `wasi:` / `core:` interface records no module, and its FQ is its
+    // own module path.
+    let (namespace, module) = cm_interface_module(interface_fq)?;
+    type_table.cm_decl_in_module_named(wado_name, &module, namespace)
 }
 
 /// The one classifier, so every operation on a given `Future<T>` — read, write,
@@ -3177,13 +3176,24 @@ impl CmInterfaceRegistry {
     /// module; outside `--lib` it is registered nowhere, so this is `false` and
     /// the payload has no CM type to lower against.
     pub fn is_named_type_registered_from(&self, source: &ModuleSource, name: &str) -> bool {
-        let declared_here = |fq: &String, decl_name: &String| {
-            decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
-        };
-        self.structs.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.variants.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.enums.keys().any(|(fq, n)| declared_here(fq, n))
-            || self.flags.keys().any(|(fq, n)| declared_here(fq, n))
+        self.interface_declaring(source, name).is_some()
+    }
+
+    /// The interface registering `name` for the module that declares it, keyed by
+    /// that module rather than by the name alone.
+    ///
+    /// A name a bundled interface also spells resolves here to the declaring
+    /// module's own interface, so no by-name search can offer the other one.
+    pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
+        self.structs
+            .keys()
+            .chain(self.variants.keys())
+            .chain(self.enums.keys())
+            .chain(self.flags.keys())
+            .find(|(fq, decl_name)| {
+                decl_name == name && self.cm_interface_module_sources.get(fq) == Some(source)
+            })
+            .map(|(fq, _)| fq.as_str())
     }
 
     /// Iterate over all structs from a specific interface (matched by prefix).

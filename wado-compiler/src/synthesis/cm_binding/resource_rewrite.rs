@@ -1001,16 +1001,17 @@ fn future_read_func_name(tt: &TypeTable, payload_type_id: TypeId) -> String {
     )
 }
 
-/// CM package scope for lifting a future payload (biases named-type source
-/// resolution in `synthesize_lift`).
+/// The CM package a future payload's named types resolve in, or `""` where the
+/// payload names no package and resolution must not be steered into one.
+///
+/// A payload that does carry one carries it as a declaration, so the scope is
+/// read off that rather than guessed. Naming a package the payload does not
+/// belong to resolves its types to that package's same-named ones (issue #2090).
 fn future_payload_package(payload: &CmFuturePayload) -> String {
     match payload {
-        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or("cli").to_string(),
+        CmFuturePayload::Transmission(decl) => decl.cm_package().unwrap_or_default().to_string(),
         CmFuturePayload::Trailers => "http".to_string(),
-        CmFuturePayload::Scalar(_) => "cli".to_string(),
-        // General value payloads carry no WASI scope; named types in the
-        // payload resolve through the registry against the entry package.
-        CmFuturePayload::Value(_) => "cli".to_string(),
+        CmFuturePayload::Scalar(_) | CmFuturePayload::Value(_) => String::new(),
     }
 }
 
