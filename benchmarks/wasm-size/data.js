@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789777380951,
+  "lastUpdate": 1789790376126,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -56861,6 +56861,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e97cd5b9d2f11e1b138f8caa1e5685aefed804f4"
         },
         "date": 1789777380018,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1867,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6423,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19589,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300930,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5ee534144e56c1caa4cdcec66bd3bd7ee469536d",
+          "message": "Merge pull request #2082 from wado-lang/claude/random-library-design-r03bn1\n\ndocs(core:prng): decide the random-number design, and stop a vector literal allocating",
+          "timestamp": "2026-09-19T12:40:48+09:00",
+          "tree_id": "0a8be2d0543277d462c87f6da86c056202209dcb",
+          "url": "https://github.com/wado-lang/wado/commit/5ee534144e56c1caa4cdcec66bd3bd7ee469536d"
+        },
+        "date": 1789790375496,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
