@@ -126,7 +126,7 @@ type "functype//core:prelude/primitive.wado/f64::fmt_into$scalar$spec0$scalar" =
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(48)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(49)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(49)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(50)
 
@@ -142,7 +142,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -246,12 +246,12 @@ fn "match_guard_and_dispatch.wado/match_guard_basic"() with Stdout {
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     handle_12 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
     "core:rt/write_string_to_stream"(tx_16, global:match_guard_and_dispatch.wado::$const_obj_16);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_24 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
     "core:rt/write_string_to_stream"(tx_28, global:match_guard_and_dispatch.wado::$const_obj_15);
-    "wasi/future-drop-readable:transmission-cli"(handle_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_24);
 }
 
 fn "match_guard_and_dispatch.wado/match_guard_custom_variant"() with Stdout {
@@ -271,17 +271,17 @@ fn "match_guard_and_dispatch.wado/match_guard_custom_variant"() with Stdout {
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     handle_12 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
     "core:rt/write_string_to_stream"(tx_16, global:match_guard_and_dispatch.wado::$const_obj_19);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_24 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
     "core:rt/write_string_to_stream"(tx_28, global:match_guard_and_dispatch.wado::$const_obj_18);
-    "wasi/future-drop-readable:transmission-cli"(handle_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_24);
     rx_39 = builtin::i32_wrap_i64(local.tee packed_38("wasi/stream-new"()));
     tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
     handle_36 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
     "core:rt/write_string_to_stream"(tx_40, global:match_guard_and_dispatch.wado::$const_obj_17);
-    "wasi/future-drop-readable:transmission-cli"(handle_36);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_36);
 }
 
 fn "match_guard_and_dispatch.wado/match_guard_variant"() with Stdout {
@@ -303,12 +303,12 @@ fn "match_guard_and_dispatch.wado/match_guard_variant"() with Stdout {
     tx_16 = builtin::i32_wrap_i64(packed_14 >> 32_i64);
     handle_12 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_15);
     "core:rt/write_string_to_stream"(tx_16, global:match_guard_and_dispatch.wado::$const_obj_21);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_24 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
     "core:rt/write_string_to_stream"(tx_28, global:match_guard_and_dispatch.wado::$const_obj_20);
-    "wasi/future-drop-readable:transmission-cli"(handle_24);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_24);
     let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     $match_scrut_0 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     msg3 = (if (if ref.test "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0) -> i32 {
@@ -328,7 +328,7 @@ fn "match_guard_and_dispatch.wado/match_guard_variant"() with Stdout {
     tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
     handle_36 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
     "core:rt/write_string_to_stream"(tx_40, msg3);
-    "wasi/future-drop-readable:transmission-cli"(handle_36);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_36);
 }
 
 fn "match_guard_and_dispatch.wado/match_exhaustive"() with Stdout {
@@ -355,12 +355,12 @@ fn "match_guard_and_dispatch.wado/match_exhaustive"() with Stdout {
     tx_15 = builtin::i32_wrap_i64(packed_13 >> 32_i64);
     handle_10 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_14);
     "core:rt/write_string_to_stream"(tx_15, global:match_guard_and_dispatch.wado::$const_obj_24);
-    "wasi/future-drop-readable:transmission-cli"(handle_10);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
     rx_27 = builtin::i32_wrap_i64(local.tee packed_26("wasi/stream-new"()));
     tx_28 = builtin::i32_wrap_i64(packed_26 >> 32_i64);
     handle_23 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_27);
     "core:rt/write_string_to_stream"(tx_28, global:match_guard_and_dispatch.wado::$const_obj_23);
-    "wasi/future-drop-readable:transmission-cli"(handle_23);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_23);
     let $match_scrut_0: ref "core:prelude/types.wado//Option<i32>";
     $match_scrut_0 = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     val = (if ref.test "core:prelude/types.wado//Option<i32>::Some"($match_scrut_0) -> i32 {
@@ -374,12 +374,12 @@ fn "match_guard_and_dispatch.wado/match_exhaustive"() with Stdout {
     tx_46 = builtin::i32_wrap_i64(packed_44 >> 32_i64);
     handle_36 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_45);
     "core:rt/write_string_to_stream"(tx_46, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_36);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_36);
     rx_57 = builtin::i32_wrap_i64(local.tee packed_56("wasi/stream-new"()));
     tx_58 = builtin::i32_wrap_i64(packed_56 >> 32_i64);
     handle_54 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_57);
     "core:rt/write_string_to_stream"(tx_58, global:match_guard_and_dispatch.wado::$const_obj_22);
-    "wasi/future-drop-readable:transmission-cli"(handle_54);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_54);
 }
 
 fn "match_guard_and_dispatch.wado/match_wildcard"() with Stdout {
@@ -399,17 +399,17 @@ fn "match_guard_and_dispatch.wado/match_wildcard"() with Stdout {
     tx_13 = builtin::i32_wrap_i64(packed_11 >> 32_i64);
     handle_9 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_12);
     "core:rt/write_string_to_stream"(tx_13, global:match_guard_and_dispatch.wado::$const_obj_27);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     rx_24 = builtin::i32_wrap_i64(local.tee packed_23("wasi/stream-new"()));
     tx_25 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
     handle_21 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
     "core:rt/write_string_to_stream"(tx_25, global:match_guard_and_dispatch.wado::$const_obj_22);
-    "wasi/future-drop-readable:transmission-cli"(handle_21);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_21);
     rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
     tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
     handle_33 = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     "core:rt/write_string_to_stream"(tx_37, global:match_guard_and_dispatch.wado::$const_obj_22);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_33);
 }
 
 fn "match_guard_and_dispatch.wado/match_variant_tuple_payload"() with Stdout {
@@ -434,7 +434,7 @@ fn "match_guard_and_dispatch.wado/match_variant_tuple_payload"() with Stdout {
     tx_31 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
     "core:rt/write_string_to_stream"(tx_31, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "match_guard_and_dispatch.wado/run"() with Stdout {
@@ -464,7 +464,7 @@ fn "match_guard_and_dispatch.wado/run"() with Stdout {
             tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
             handle = "match_guard_and_dispatch.wado/$cm_binding__Stdout_write_via_stream"(rx_7);
             "core:rt/write_string_to_stream"(tx_8, message_1);
-            "wasi/future-drop-readable:transmission-cli"(handle);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
             i = i + 1;
             continue l21;
         };
@@ -1002,7 +1002,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

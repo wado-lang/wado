@@ -140,7 +140,7 @@ type "functype//core:prelude/primitive.wado/f64::fmt_fixed$scalar$spec0$scalar" 
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(56)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(57)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(57)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(58)
 
@@ -156,7 +156,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -284,7 +284,7 @@ fn "tmpl_hoist_fmt_params.wado/run"() with Stdout {
     tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
     handle_56 = "tmpl_hoist_fmt_params.wado/$cm_binding__Stdout_write_via_stream"(rx_78);
     "core:rt/write_string_to_stream"(tx_79, $local_16);
-    "wasi/future-drop-readable:transmission-cli"(handle_56);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_56);
     total2 = 0;
     i_4 = 0;
     $tmpl_buf_266 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -323,7 +323,7 @@ fn "tmpl_hoist_fmt_params.wado/run"() with Stdout {
     tx_129 = builtin::i32_wrap_i64(packed_127 >> 32_i64);
     handle_106 = "tmpl_hoist_fmt_params.wado/$cm_binding__Stdout_write_via_stream"(rx_128);
     "core:rt/write_string_to_stream"(tx_129, $local_20);
-    "wasi/future-drop-readable:transmission-cli"(handle_106);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_106);
     total3 = 0;
     i_8 = 0;
     $tmpl_buf_269 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(50), used: 0 };
@@ -370,7 +370,7 @@ fn "tmpl_hoist_fmt_params.wado/run"() with Stdout {
     tx_200 = builtin::i32_wrap_i64(packed_198 >> 32_i64);
     handle_177 = "tmpl_hoist_fmt_params.wado/$cm_binding__Stdout_write_via_stream"(rx_199);
     "core:rt/write_string_to_stream"(tx_200, $local_24);
-    "wasi/future-drop-readable:transmission-cli"(handle_177);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_177);
     total4 = 0;
     i_11 = 0;
     $tmpl_buf_273 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -407,7 +407,7 @@ fn "tmpl_hoist_fmt_params.wado/run"() with Stdout {
     tx_250 = builtin::i32_wrap_i64(packed_248 >> 32_i64);
     handle_227 = "tmpl_hoist_fmt_params.wado/$cm_binding__Stdout_write_via_stream"(rx_249);
     "core:rt/write_string_to_stream"(tx_250, $local_28);
-    "wasi/future-drop-readable:transmission-cli"(handle_227);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_227);
 }
 
 fn "tmpl_hoist_fmt_params.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -1486,7 +1486,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

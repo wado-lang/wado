@@ -43,7 +43,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -78,12 +78,12 @@ fn "wir_optimize_value_copy_call_arg_needed.wado/run"() with Stdout {
     tx_31 = builtin::i32_wrap_i64(packed_29 >> 32_i64);
     handle_20 = "wir_optimize_value_copy_call_arg_needed.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
     "core:rt/write_string_to_stream"(tx_31, global:wir_optimize_value_copy_call_arg_needed.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_20);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_20);
     rx_48 = builtin::i32_wrap_i64(local.tee packed_47("wasi/stream-new"()));
     tx_49 = builtin::i32_wrap_i64(packed_47 >> 32_i64);
     handle_39 = "wir_optimize_value_copy_call_arg_needed.wado/$cm_binding__Stdout_write_via_stream"(rx_48);
     "core:rt/write_string_to_stream"(tx_49, global:wir_optimize_value_copy_call_arg_needed.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_39);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_39);
 }
 
 fn "wir_optimize_value_copy_call_arg_needed.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

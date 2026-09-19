@@ -67,7 +67,7 @@ type "functype//wasi/future-new:s32" = fn() -> i64;  // TypeId(24)
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(25)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(26)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(26)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(27)
 
@@ -87,7 +87,7 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import memory (1) from "mem/memory";
 import fn wasi/future-new:s32 from "wasi/future-new:s32";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/future-read:s32 from "wasi/future-read:s32";
 import fn wasi/future-write:s32 from "wasi/future-write:s32";
@@ -121,13 +121,13 @@ fn "cm_future_read_cli.wado/run"() with Stdout {
         tx_30 = builtin::i32_wrap_i64(packed_28 >> 32_i64);
         handle_19 = "cm_future_read_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
         "core:rt/write_string_to_stream$spec0"(tx_30, $local_4_4);
-        "wasi/future-drop-readable:transmission-cli"(handle_19);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_19);
     } else {
         rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
         tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
         handle_24 = "cm_future_read_cli.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
         "core:rt/write_string_to_stream$spec0"(tx_37, global:cm_future_read_cli.wado::$const_obj_0);
-        "wasi/future-drop-readable:transmission-cli"(handle_24);
+        "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_24);
     }
 }
 

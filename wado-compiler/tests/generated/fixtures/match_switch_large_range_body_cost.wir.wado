@@ -43,7 +43,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -83,17 +83,17 @@ fn "match_switch_large_range_body_cost.wado/run"() with Stdout {
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_9 = "match_switch_large_range_body_cost.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     "core:rt/write_string_to_stream"(tx_19, global:match_switch_large_range_body_cost.wado::$const_obj_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     rx_36 = builtin::i32_wrap_i64(local.tee packed_35("wasi/stream-new"()));
     tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
     handle_27 = "match_switch_large_range_body_cost.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     "core:rt/write_string_to_stream"(tx_37, global:match_switch_large_range_body_cost.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
     rx_54 = builtin::i32_wrap_i64(local.tee packed_53("wasi/stream-new"()));
     tx_55 = builtin::i32_wrap_i64(packed_53 >> 32_i64);
     handle_45 = "match_switch_large_range_body_cost.wado/$cm_binding__Stdout_write_via_stream"(rx_54);
     "core:rt/write_string_to_stream"(tx_55, global:match_switch_large_range_body_cost.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_45);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
 }
 
 fn "match_switch_large_range_body_cost.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -58,7 +58,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -73,7 +73,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -119,7 +119,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     tx_39 = builtin::i32_wrap_i64(packed_37 >> 32_i64);
     handle_29 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__Stdout_write_via_stream"(rx_38);
     "core:rt/write_string_to_stream"(tx_39, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
     a = builtin::array_new<i32>(3);
     builtin::array_set<i32>(a, 0, 10);
     builtin::array_set<i32>(a, 1, 20);
@@ -142,7 +142,7 @@ fn "ref_impl_dispatch_list_vs_array.wado/run"() with Stdout {
     tx_74 = builtin::i32_wrap_i64(packed_72 >> 32_i64);
     handle_64 = "ref_impl_dispatch_list_vs_array.wado/$cm_binding__Stdout_write_via_stream"(rx_73);
     "core:rt/write_string_to_stream"(tx_74, $local_8);
-    "wasi/future-drop-readable:transmission-cli"(handle_64);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_64);
 }
 
 fn "ref_impl_dispatch_list_vs_array.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

@@ -208,7 +208,7 @@ type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(81)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(82)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(82)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(83)
 
@@ -224,7 +224,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -303,7 +303,7 @@ fn "reference.wado/ref_primitive_basic"() with Stdout {
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_8 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     "core:rt/write_string_to_stream"(tx_19, global:reference.wado::$const_obj_20);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     a.value = 10 + 1;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(a.value, $local_3);
@@ -311,7 +311,7 @@ fn "reference.wado/ref_primitive_basic"() with Stdout {
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_28 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_28);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_28);
 }
 
 fn "reference.wado/ref_primitive_semantic"() with Stdout {
@@ -346,7 +346,7 @@ fn "reference.wado/ref_primitive_semantic"() with Stdout {
     tx_34 = builtin::i32_wrap_i64(packed_32 >> 32_i64);
     handle_11 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_33);
     "core:rt/write_string_to_stream"(tx_34, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(25), used: 0 };
     new_used_55 = 0 + 9;
     if @unlikely(new_used_55 > builtin::array_len($local_4_4.repr)) {
@@ -361,7 +361,7 @@ fn "reference.wado/ref_primitive_semantic"() with Stdout {
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_42 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
     "core:rt/write_string_to_stream"(tx_65, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_42);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_42);
 }
 
 fn "reference.wado/ref_primitive_types"() with Stdout {
@@ -427,7 +427,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
     handle_18 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
     "core:rt/write_string_to_stream"(tx_42, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_18);
     a.value = 200_i64;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_65 = 0 + 5;
@@ -443,7 +443,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_75 = builtin::i32_wrap_i64(packed_73 >> 32_i64);
     handle_52 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_74);
     "core:rt/write_string_to_stream"(tx_75, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_52);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_52);
     b = struct.new "core:prelude/types.wado//Box<f64>" { value: 3.14 };
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_96 = 0 + 5;
@@ -459,7 +459,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_105 = builtin::i32_wrap_i64(packed_103 >> 32_i64);
     handle_83 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_104);
     "core:rt/write_string_to_stream"(tx_105, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_83);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_83);
     b.value = 2.718;
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(21), used: 0 };
     new_used_128 = 0 + 5;
@@ -475,7 +475,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_136 = builtin::i32_wrap_i64(packed_134 >> 32_i64);
     handle_115 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_135);
     "core:rt/write_string_to_stream"(tx_136, $local_9);
-    "wasi/future-drop-readable:transmission-cli"(handle_115);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_115);
     c = struct.new "core:prelude/types.wado//Box<bool>" { value: 1 };
     $local_11 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     new_used_157 = 0 + 6;
@@ -494,7 +494,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_169 = builtin::i32_wrap_i64(packed_167 >> 32_i64);
     handle_144 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_168);
     "core:rt/write_string_to_stream"(tx_169, $local_11);
-    "wasi/future-drop-readable:transmission-cli"(handle_144);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_144);
     c.value = 0;
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     new_used_192 = 0 + 6;
@@ -515,7 +515,7 @@ fn "reference.wado/ref_primitive_types"() with Stdout {
     tx_203 = builtin::i32_wrap_i64(packed_201 >> 32_i64);
     handle_179 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_202);
     "core:rt/write_string_to_stream"(tx_203, $local_13);
-    "wasi/future-drop-readable:transmission-cli"(handle_179);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_179);
 }
 
 fn "reference.wado/ref_deref_assign_struct"() with Stdout {
@@ -556,7 +556,7 @@ fn "reference.wado/ref_deref_assign_struct"() with Stdout {
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_8 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
     "core:rt/write_string_to_stream"(tx_36, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     $sroa_p_x = 0;
     $sroa_p_y = 0;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(33), used: 0 };
@@ -576,7 +576,7 @@ fn "reference.wado/ref_deref_assign_struct"() with Stdout {
     tx_75 = builtin::i32_wrap_i64(packed_73 >> 32_i64);
     handle_47 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_74);
     "core:rt/write_string_to_stream"(tx_75, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_47);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_47);
 }
 
 fn "reference.wado/ref_deref_assign_variant"() with Stdout {
@@ -608,27 +608,27 @@ fn "reference.wado/ref_deref_assign_variant"() with Stdout {
     tx_11 = builtin::i32_wrap_i64(packed_9 >> 32_i64);
     handle_7 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_10);
     "core:rt/write_string_to_stream"(tx_11, message_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_7);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_7);
     message_16 = "reference.wado/maybe_read$scalar"(struct.new "core:prelude/types.wado//Option<i32>" { 1 });
     rx_22 = builtin::i32_wrap_i64(local.tee packed_21("wasi/stream-new"()));
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_19 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     "core:rt/write_string_to_stream"(tx_23, message_16);
-    "wasi/future-drop-readable:transmission-cli"(handle_19);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_19);
     c = struct.new "core:prelude/types.wado//Box<core:prelude/types.wado/Option<i32>>" { value: struct.new "core:prelude/types.wado//Option<i32>::Some" { discriminant: 0, payload_0: 10 } };
     message_28 = "reference.wado/maybe_read$scalar"(c.value);
     rx_34 = builtin::i32_wrap_i64(local.tee packed_33("wasi/stream-new"()));
     tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
     handle_31 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
     "core:rt/write_string_to_stream"(tx_35, message_28);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
     c.value = struct.new "core:prelude/types.wado//Option<i32>" { 1 };
     message_40 = "reference.wado/maybe_read$scalar"(c.value);
     rx_46 = builtin::i32_wrap_i64(local.tee packed_45("wasi/stream-new"()));
     tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
     handle_43 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
     "core:rt/write_string_to_stream"(tx_47, message_40);
-    "wasi/future-drop-readable:transmission-cli"(handle_43);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_43);
 }
 
 fn "reference.wado/ref_deref_reassign"() with Stdout {
@@ -671,7 +671,7 @@ fn "reference.wado/ref_deref_reassign"() with Stdout {
     tx_37 = builtin::i32_wrap_i64(packed_35 >> 32_i64);
     handle_14 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_36);
     "core:rt/write_string_to_stream"(tx_37, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_14);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_14);
     $sroa_r2_value = original.value;
     original.value = 0;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
@@ -688,7 +688,7 @@ fn "reference.wado/ref_deref_reassign"() with Stdout {
     tx_68 = builtin::i32_wrap_i64(packed_66 >> 32_i64);
     handle_45 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_67);
     "core:rt/write_string_to_stream"(tx_68, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_45);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
     $local_9 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(22), used: 0 };
     new_used_89 = 0 + 6;
     if @unlikely(new_used_89 > builtin::array_len($local_9.repr)) {
@@ -703,7 +703,7 @@ fn "reference.wado/ref_deref_reassign"() with Stdout {
     tx_99 = builtin::i32_wrap_i64(packed_97 >> 32_i64);
     handle_76 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_98);
     "core:rt/write_string_to_stream"(tx_99, $local_9);
-    "wasi/future-drop-readable:transmission-cli"(handle_76);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_76);
 }
 
 fn "reference.wado/ref_alias_mut"() with Stdout {
@@ -745,7 +745,7 @@ fn "reference.wado/ref_alias_mut"() with Stdout {
     tx_35 = builtin::i32_wrap_i64(packed_33 >> 32_i64);
     handle_12 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
     "core:rt/write_string_to_stream"(tx_35, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     x.value = 20;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(26), used: 0 };
     new_used_56 = 0 + 10;
@@ -761,7 +761,7 @@ fn "reference.wado/ref_alias_mut"() with Stdout {
     tx_66 = builtin::i32_wrap_i64(packed_64 >> 32_i64);
     handle_43 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_65);
     "core:rt/write_string_to_stream"(tx_66, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_43);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_43);
     x.value = (x.value + x.value) + 5;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(23), used: 0 };
     new_used_87 = 0 + 7;
@@ -777,7 +777,7 @@ fn "reference.wado/ref_alias_mut"() with Stdout {
     tx_97 = builtin::i32_wrap_i64(packed_95 >> 32_i64);
     handle_74 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_96);
     "core:rt/write_string_to_stream"(tx_97, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_74);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_74);
 }
 
 fn "reference.wado/ref_swap_test"() with Stdout {
@@ -820,7 +820,7 @@ fn "reference.wado/ref_swap_test"() with Stdout {
     tx_50 = builtin::i32_wrap_i64(packed_48 >> 32_i64);
     handle_9 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_49);
     "core:rt/write_string_to_stream"(tx_50, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     x.value = 2;
     y.value = 1;
     $local_4_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 };
@@ -842,7 +842,7 @@ fn "reference.wado/ref_swap_test"() with Stdout {
     tx_102 = builtin::i32_wrap_i64(packed_100 >> 32_i64);
     handle_61 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_101);
     "core:rt/write_string_to_stream"(tx_102, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_61);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_61);
 }
 
 fn "reference.wado/ref_reassign_test"() with Stdout {
@@ -874,14 +874,14 @@ fn "reference.wado/ref_reassign_test"() with Stdout {
     tx_25 = builtin::i32_wrap_i64(packed_23 >> 32_i64);
     handle_15 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
     "core:rt/write_string_to_stream"(tx_25, global:reference.wado::$const_obj_20);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(20, $local_6);
     rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
     tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     handle_33 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     "core:rt/write_string_to_stream"(tx_43, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_33);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_33);
     mr = a;
     mr.value = 100;
     mr = b;
@@ -892,14 +892,14 @@ fn "reference.wado/ref_reassign_test"() with Stdout {
     tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
     handle_51 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
     "core:rt/write_string_to_stream"(tx_61, $local_8);
-    "wasi/future-drop-readable:transmission-cli"(handle_51);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_51);
     $local_10 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(b.value, $local_10);
     rx_78 = builtin::i32_wrap_i64(local.tee packed_77("wasi/stream-new"()));
     tx_79 = builtin::i32_wrap_i64(packed_77 >> 32_i64);
     handle_69 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_78);
     "core:rt/write_string_to_stream"(tx_79, $local_10);
-    "wasi/future-drop-readable:transmission-cli"(handle_69);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_69);
 }
 
 fn "reference.wado/ref_tuple_basic_test"() with Stdout {
@@ -915,12 +915,12 @@ fn "reference.wado/ref_tuple_basic_test"() with Stdout {
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_10 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
     "core:rt/write_string_to_stream"(tx_33, global:reference.wado::$const_obj_44);
-    "wasi/future-drop-readable:transmission-cli"(handle_10);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
     rx_64 = builtin::i32_wrap_i64(local.tee packed_63("wasi/stream-new"()));
     tx_65 = builtin::i32_wrap_i64(packed_63 >> 32_i64);
     handle_42 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_64);
     "core:rt/write_string_to_stream"(tx_65, global:reference.wado::$const_obj_43);
-    "wasi/future-drop-readable:transmission-cli"(handle_42);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_42);
 }
 
 fn "reference.wado/ref_return_test"() with Stdout {
@@ -932,7 +932,7 @@ fn "reference.wado/ref_return_test"() with Stdout {
     tx_25 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_24);
     "core:rt/write_string_to_stream"(tx_25, global:reference.wado::$const_obj_46);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "reference.wado/process"(arr, input) {
@@ -1053,7 +1053,7 @@ fn "reference.wado/ref_mut_array_ops"() with Stdout {
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_12 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
     "core:rt/write_string_to_stream"(tx_36, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     if @unlikely(3 >= builtin::array_len(nums.repr)) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(nums);
@@ -1081,7 +1081,7 @@ fn "reference.wado/ref_mut_array_ops"() with Stdout {
     tx_83 = builtin::i32_wrap_i64(packed_81 >> 32_i64);
     handle_59 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_82);
     "core:rt/write_string_to_stream"(tx_83, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_59);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_59);
     i_89 = 0;
     $licm_used_139 = nums.used;
     $licm_repr_141 = nums.repr;
@@ -1107,7 +1107,7 @@ fn "reference.wado/ref_mut_array_ops"() with Stdout {
             tx_128 = builtin::i32_wrap_i64(packed_126 >> 32_i64);
             handle_112 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_127);
             "core:rt/write_string_to_stream"(tx_128, $local_6_6);
-            "wasi/future-drop-readable:transmission-cli"(handle_112);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_112);
             i_1 = i_1 + 1;
             continue l36;
         };
@@ -1156,7 +1156,7 @@ fn "reference.wado/ref_loop_mut_test"() with Stdout {
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_13 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
     "core:rt/write_string_to_stream"(tx_36, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_13);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_13);
     count = struct.new "core:prelude/types.wado//Box<i32>" { value: 0 };
     b40: block {
         l41: loop {
@@ -1179,7 +1179,7 @@ fn "reference.wado/ref_loop_mut_test"() with Stdout {
     tx_67 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
     handle_44 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_66);
     "core:rt/write_string_to_stream"(tx_67, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_44);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_44);
 }
 
 fn "reference.wado/ref_conditional_mut_test"() with Stdout {
@@ -1220,7 +1220,7 @@ fn "reference.wado/ref_conditional_mut_test"() with Stdout {
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_15 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     b = struct.new "core:prelude/types.wado//Box<i32>" { value: -10 };
     b.value = 0;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
@@ -1237,7 +1237,7 @@ fn "reference.wado/ref_conditional_mut_test"() with Stdout {
     tx_72 = builtin::i32_wrap_i64(packed_70 >> 32_i64);
     handle_49 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_71);
     "core:rt/write_string_to_stream"(tx_72, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_49);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_49);
     c = struct.new "core:prelude/types.wado//Box<i32>" { value: 200 };
     c.value = 100;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(29), used: 0 };
@@ -1254,7 +1254,7 @@ fn "reference.wado/ref_conditional_mut_test"() with Stdout {
     tx_106 = builtin::i32_wrap_i64(packed_104 >> 32_i64);
     handle_83 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_105);
     "core:rt/write_string_to_stream"(tx_106, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_83);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_83);
 }
 
 fn "reference.wado/ref_mut_while_condition_test"() with Stdout {
@@ -1288,7 +1288,7 @@ fn "reference.wado/ref_mut_while_condition_test"() with Stdout {
     tx_30 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_29);
     "core:rt/write_string_to_stream"(tx_30, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "reference.wado/ref_nested_mut_write_test"() with Stdout {
@@ -1357,7 +1357,7 @@ fn "reference.wado/ref_nested_mut_write_test"() with Stdout {
     tx_59 = builtin::i32_wrap_i64(packed_57 >> 32_i64);
     handle_8 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_58);
     "core:rt/write_string_to_stream"(tx_59, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     $sroa_$sroa_$sroa_data_middle_inner_value = 42;
     $sroa_$sroa_data_middle_label = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("updated"), used: 7 };
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(41), used: 0 };
@@ -1399,7 +1399,7 @@ fn "reference.wado/ref_nested_mut_write_test"() with Stdout {
     tx_122 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
     handle_71 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_121);
     "core:rt/write_string_to_stream"(tx_122, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_71);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_71);
 }
 
 fn "reference.wado/ref_mut_array_append_complex_test"() with Stdout {
@@ -1438,7 +1438,7 @@ fn "reference.wado/ref_mut_array_append_complex_test"() with Stdout {
     tx_36 = builtin::i32_wrap_i64(packed_34 >> 32_i64);
     handle_12 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_35);
     "core:rt/write_string_to_stream"(tx_36, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_12);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_12);
     i = 0;
     $licm_used_70 = out_0.used;
     $licm_repr_71 = out_0.repr;
@@ -1451,7 +1451,7 @@ fn "reference.wado/ref_mut_array_append_complex_test"() with Stdout {
             tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
             handle_45 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
             "core:rt/write_string_to_stream"(tx_61, $local_5_5);
-            "wasi/future-drop-readable:transmission-cli"(handle_45);
+            "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_45);
             i = i + 1;
             continue l59;
         };
@@ -1490,7 +1490,7 @@ fn "reference.wado/ref_struct_mut"() with Stdout {
     tx_35 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_34);
     "core:rt/write_string_to_stream"(tx_35, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "reference.wado/ref_struct_nested"() with Stdout {
@@ -1512,7 +1512,7 @@ fn "reference.wado/ref_struct_nested"() with Stdout {
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_8 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     "core:rt/write_string_to_stream"(tx_19, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     $sroa_$sroa_o_inner_value = 100;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_$sroa_o_inner_value, $local_3);
@@ -1520,7 +1520,7 @@ fn "reference.wado/ref_struct_nested"() with Stdout {
     tx_40 = builtin::i32_wrap_i64(packed_38 >> 32_i64);
     handle_29 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_39);
     "core:rt/write_string_to_stream"(tx_40, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_29);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_29);
 }
 
 fn "reference.wado/ref_struct_string_field"() with Stdout {
@@ -1573,7 +1573,7 @@ fn "reference.wado/ref_struct_string_field"() with Stdout {
     tx_45 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
     handle_8 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
     "core:rt/write_string_to_stream"(tx_45, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_8);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_8);
     $sroa_u_name = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(66, 111, 98), used: 3 };
     $sroa_u_age = 31;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(34), used: 0 };
@@ -1603,7 +1603,7 @@ fn "reference.wado/ref_struct_string_field"() with Stdout {
     tx_93 = builtin::i32_wrap_i64(packed_91 >> 32_i64);
     handle_56 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_92);
     "core:rt/write_string_to_stream"(tx_93, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_56);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_56);
 }
 
 fn "reference.wado/ref_array_basic"() with Stdout {
@@ -1640,7 +1640,7 @@ fn "reference.wado/ref_array_basic"() with Stdout {
     tx_42 = builtin::i32_wrap_i64(packed_40 >> 32_i64);
     handle_19 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_41);
     "core:rt/write_string_to_stream"(tx_42, $local_3);
-    "wasi/future-drop-readable:transmission-cli"(handle_19);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_19);
     block {
     };
     builtin::array_set<i32>($sroa_nums_repr, 0, 100);
@@ -1659,7 +1659,7 @@ fn "reference.wado/ref_array_basic"() with Stdout {
     tx_93 = builtin::i32_wrap_i64(packed_91 >> 32_i64);
     handle_70 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_92);
     "core:rt/write_string_to_stream"(tx_93, $local_5_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_70);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_70);
 }
 
 fn "reference.wado/ref_array_ref_element"() with Stdout {
@@ -1703,7 +1703,7 @@ fn "reference.wado/ref_array_ref_element"() with Stdout {
     tx_41 = builtin::i32_wrap_i64(packed_39 >> 32_i64);
     handle_18 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_40);
     "core:rt/write_string_to_stream"(tx_41, $local_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_18);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_18);
     block {
     };
     builtin::array_set<i32>($sroa_arr_repr, 1, 999);
@@ -1721,7 +1721,7 @@ fn "reference.wado/ref_array_ref_element"() with Stdout {
     tx_89 = builtin::i32_wrap_i64(packed_87 >> 32_i64);
     handle_60 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_88);
     "core:rt/write_string_to_stream"(tx_89, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_60);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_60);
     $local_6_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(27), used: 0 };
     new_used_110 = 0 + 11;
     if @unlikely(new_used_110 > builtin::array_len($local_6_6.repr)) {
@@ -1736,7 +1736,7 @@ fn "reference.wado/ref_array_ref_element"() with Stdout {
     tx_120 = builtin::i32_wrap_i64(packed_118 >> 32_i64);
     handle_97 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_119);
     "core:rt/write_string_to_stream"(tx_120, $local_6_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_97);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_97);
 }
 
 fn "reference.wado/ref_closure_capture"() with Stdout {
@@ -1752,12 +1752,12 @@ fn "reference.wado/ref_closure_capture"() with Stdout {
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_15 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, global:reference.wado::$const_obj_75);
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     rx_72 = builtin::i32_wrap_i64(local.tee packed_71("wasi/stream-new"()));
     tx_73 = builtin::i32_wrap_i64(packed_71 >> 32_i64);
     handle_50 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_72);
     "core:rt/write_string_to_stream"(tx_73, global:reference.wado::$const_obj_74);
-    "wasi/future-drop-readable:transmission-cli"(handle_50);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_50);
 }
 
 fn "reference.wado/ref_method_receivers_test"() with Stdout {
@@ -1773,12 +1773,12 @@ fn "reference.wado/ref_method_receivers_test"() with Stdout {
     tx_33 = builtin::i32_wrap_i64(packed_31 >> 32_i64);
     handle_9 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
     "core:rt/write_string_to_stream"(tx_33, global:reference.wado::$const_obj_78);
-    "wasi/future-drop-readable:transmission-cli"(handle_9);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_9);
     rx_67 = builtin::i32_wrap_i64(local.tee packed_66("wasi/stream-new"()));
     tx_68 = builtin::i32_wrap_i64(packed_66 >> 32_i64);
     handle_44 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_67);
     "core:rt/write_string_to_stream"(tx_68, global:reference.wado::$const_obj_77);
-    "wasi/future-drop-readable:transmission-cli"(handle_44);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_44);
 }
 
 fn "reference.wado/run"() with Stdout {
@@ -1865,7 +1865,7 @@ fn "reference.wado/run"() with Stdout {
     tx_17 = builtin::i32_wrap_i64(packed_15 >> 32_i64);
     handle_6 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_16);
     "core:rt/write_string_to_stream"(tx_17, global:reference.wado::$const_obj_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_6);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_6);
     "reference.wado/ref_primitive_semantic"();
     "reference.wado/ref_primitive_types"();
     $sroa_greeting_repr = array.new_data<u8>("hello");
@@ -1874,7 +1874,7 @@ fn "reference.wado/run"() with Stdout {
     tx_31 = builtin::i32_wrap_i64(packed_29 >> 32_i64);
     handle_26 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_30);
     "core:rt/write_string_to_stream"(tx_31, message_23);
-    "wasi/future-drop-readable:transmission-cli"(handle_26);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_26);
     $sroa_$deref_val_2_repr = array.new_data<u8>("goodbye");
     $sroa_greeting_repr = $sroa_$deref_val_2_repr;
     message_39 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_4: ref Array<u8>; $array_clone_src_4 = $sroa_greeting_repr; let $array_clone_dst_5: ref Array<u8>; $array_clone_dst_5 = builtin::array_new<u8>(7); builtin::array_copy<u8>($array_clone_dst_5, 0, $array_clone_src_4, 0, 7); $array_clone_dst_5), used: 7 };
@@ -1882,7 +1882,7 @@ fn "reference.wado/run"() with Stdout {
     tx_47 = builtin::i32_wrap_i64(packed_45 >> 32_i64);
     handle_42 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_46);
     "core:rt/write_string_to_stream"(tx_47, message_39);
-    "wasi/future-drop-readable:transmission-cli"(handle_42);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_42);
     "reference.wado/ref_deref_assign_struct"();
     "reference.wado/ref_deref_assign_variant"();
     "reference.wado/ref_deref_reassign"();
@@ -1899,13 +1899,13 @@ fn "reference.wado/run"() with Stdout {
     tx_91 = builtin::i32_wrap_i64(packed_89 >> 32_i64);
     handle_87 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_90);
     "core:rt/write_string_to_stream"(tx_91, global:reference.wado::$const_obj_91);
-    "wasi/future-drop-readable:transmission-cli"(handle_87);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_87);
     "reference.wado/ref_return_test"();
     rx_112 = builtin::i32_wrap_i64(local.tee packed_111("wasi/stream-new"()));
     tx_113 = builtin::i32_wrap_i64(packed_111 >> 32_i64);
     handle_103 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_112);
     "core:rt/write_string_to_stream"(tx_113, global:reference.wado::$const_obj_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_103);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_103);
     "reference.wado/ref_mut_array_ops"();
     msg = struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Hello"), used: 5 };
     other_122 = global:reference.wado::$const_obj_89;
@@ -1920,7 +1920,7 @@ fn "reference.wado/run"() with Stdout {
     tx_143 = builtin::i32_wrap_i64(packed_141 >> 32_i64);
     handle_139 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_142);
     "core:rt/write_string_to_stream"(tx_143, msg);
-    "wasi/future-drop-readable:transmission-cli"(handle_139);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_139);
     s_119 = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 };
     other_151 = global:reference.wado::$const_obj_88;
     if @unlikely(2 > builtin::array_len(s_119.repr)) {
@@ -1942,7 +1942,7 @@ fn "reference.wado/run"() with Stdout {
     tx_187 = builtin::i32_wrap_i64(packed_185 >> 32_i64);
     handle_183 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_186);
     "core:rt/write_string_to_stream"(tx_187, s_119);
-    "wasi/future-drop-readable:transmission-cli"(handle_183);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_183);
     "reference.wado/ref_loop_mut_test"();
     "reference.wado/ref_conditional_mut_test"();
     "reference.wado/ref_mut_while_condition_test"();
@@ -1971,13 +1971,13 @@ fn "reference.wado/run"() with Stdout {
     tx_226 = builtin::i32_wrap_i64(packed_224 >> 32_i64);
     handle_203 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_225);
     "core:rt/write_string_to_stream"(tx_226, $local_1_194);
-    "wasi/future-drop-readable:transmission-cli"(handle_203);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_203);
     "reference.wado/ref_method_receivers_test"();
     rx_248 = builtin::i32_wrap_i64(local.tee packed_247("wasi/stream-new"()));
     tx_249 = builtin::i32_wrap_i64(packed_247 >> 32_i64);
     handle_239 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_248);
     "core:rt/write_string_to_stream"(tx_249, global:reference.wado::$const_obj_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_239);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_239);
     a_254 = struct.new "core:prelude/types.wado//Box<i32>" { value: 42 };
     a_254.value = 99;
     $local_3_257 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -1986,7 +1986,7 @@ fn "reference.wado/run"() with Stdout {
     tx_272 = builtin::i32_wrap_i64(packed_270 >> 32_i64);
     handle_262 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_271);
     "core:rt/write_string_to_stream"(tx_272, $local_3_257);
-    "wasi/future-drop-readable:transmission-cli"(handle_262);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_262);
     a_277 = struct.new "core:prelude/types.wado//Box<i32>" { value: 10 };
     a_277.value = 11;
     a_277.value = 12;
@@ -1995,17 +1995,17 @@ fn "reference.wado/run"() with Stdout {
     tx_296 = builtin::i32_wrap_i64(packed_294 >> 32_i64);
     handle_286 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_295);
     "core:rt/write_string_to_stream"(tx_296, global:reference.wado::$const_obj_85);
-    "wasi/future-drop-readable:transmission-cli"(handle_286);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_286);
     rx_318 = builtin::i32_wrap_i64(local.tee packed_317("wasi/stream-new"()));
     tx_319 = builtin::i32_wrap_i64(packed_317 >> 32_i64);
     handle_309 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_318);
     "core:rt/write_string_to_stream"(tx_319, global:reference.wado::$const_obj_46);
-    "wasi/future-drop-readable:transmission-cli"(handle_309);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_309);
     rx_339 = builtin::i32_wrap_i64(local.tee packed_338("wasi/stream-new"()));
     tx_340 = builtin::i32_wrap_i64(packed_338 >> 32_i64);
     handle_330 = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_339);
     "core:rt/write_string_to_stream"(tx_340, global:reference.wado::$const_obj_83);
-    "wasi/future-drop-readable:transmission-cli"(handle_330);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_330);
 }
 
 fn "reference.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {
@@ -2070,7 +2070,7 @@ fn "reference.wado/print_basic_point$spec0"() with Stdout {
     tx_33 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "reference.wado/$cm_binding__Stdout_write_via_stream"(rx_32);
     "core:rt/write_string_to_stream"(tx_33, $local_1);
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
 }
 
 fn "core:prelude/fpfmt.wado/unpack64"(f) {
@@ -2588,7 +2588,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

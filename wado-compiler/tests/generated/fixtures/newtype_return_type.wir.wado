@@ -65,7 +65,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(24)
 
@@ -80,7 +80,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -137,7 +137,7 @@ fn "newtype_return_type.wado/run"() with Stdout {
     tx_67 = builtin::i32_wrap_i64(packed_65 >> 32_i64);
     handle_13 = "newtype_return_type.wado/$cm_binding__Stdout_write_via_stream"(rx_66);
     "core:rt/write_string_to_stream"(tx_67, $local_5);
-    "wasi/future-drop-readable:transmission-cli"(handle_13);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_13);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(44), used: 0 };
     $local_7.used = 9;
     builtin::array_copy<u8>($local_7.repr, 0, global:newtype_return_type.wado::$const_obj_3, 0, 9);
@@ -165,7 +165,7 @@ fn "newtype_return_type.wado/run"() with Stdout {
     tx_132 = builtin::i32_wrap_i64(packed_130 >> 32_i64);
     handle_78 = "newtype_return_type.wado/$cm_binding__Stdout_write_via_stream"(rx_131);
     "core:rt/write_string_to_stream"(tx_132, $local_7);
-    "wasi/future-drop-readable:transmission-cli"(handle_78);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_78);
 }
 
 fn "newtype_return_type.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

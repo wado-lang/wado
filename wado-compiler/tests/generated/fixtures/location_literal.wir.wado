@@ -49,7 +49,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(19)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(20)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(20)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(21)
 
@@ -64,7 +64,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -99,30 +99,30 @@ fn "location_literal.wado/$cm_export__run"() {
     handle_3 = "location_literal.wado/$cm_binding__Stdout_write_via_stream"(rx_6);
     "core:rt/write_string_to_stream"(tx_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("{\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\"]}
 "), used: 104 });
-    "wasi/future-drop-readable:transmission-cli"(handle_3);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_3);
     rx_107 = builtin::i32_wrap_i64(local.tee packed_106("wasi/stream-new"()));
     tx_108 = builtin::i32_wrap_i64(packed_106 >> 32_i64);
     handle_104 = "location_literal.wado/$cm_binding__Stdout_write_via_stream"(rx_107);
     "core:rt/write_string_to_stream"(tx_108, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("data: {\"stdout_contains\": [\"LOCATION_DATA_MARKER\", \"data: \", \"LOCATION_DATA_MARKER\", \"location_merged.wado\"]}
 "), used: 110 });
-    "wasi/future-drop-readable:transmission-cli"(handle_104);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_104);
     rx_18 = builtin::i32_wrap_i64(local.tee packed_17("wasi/stream-new"()));
     tx_19 = builtin::i32_wrap_i64(packed_17 >> 32_i64);
     handle_15 = "location_literal.wado/$cm_binding__Stdout_write_via_stream"(rx_18);
     "core:rt/write_string_to_stream"(tx_19, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("location_literal.wado"), used: 21 });
-    "wasi/future-drop-readable:transmission-cli"(handle_15);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_15);
     buf_30 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(12), used: 0 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(21, buf_30);
     rx_37 = builtin::i32_wrap_i64(local.tee packed_36("wasi/stream-new"()));
     tx_38 = builtin::i32_wrap_i64(packed_36 >> 32_i64);
     handle_27 = "location_literal.wado/$cm_binding__Stdout_write_via_stream"(rx_37);
     "core:rt/write_string_to_stream"(tx_38, buf_30);
-    "wasi/future-drop-readable:transmission-cli"(handle_27);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_27);
     rx_70 = builtin::i32_wrap_i64(local.tee packed_69("wasi/stream-new"()));
     tx_71 = builtin::i32_wrap_i64(packed_69 >> 32_i64);
     handle_48 = "location_literal.wado/$cm_binding__Stdout_write_via_stream"(rx_70);
     "core:rt/write_string_to_stream"(tx_71, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("line: 25"), used: 8 });
-    "wasi/future-drop-readable:transmission-cli"(handle_48);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_48);
     "wasi/task-return"(0);
 }
 

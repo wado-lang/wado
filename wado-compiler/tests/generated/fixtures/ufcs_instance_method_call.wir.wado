@@ -43,7 +43,7 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(16)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(17)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(17)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(18)
 
@@ -58,7 +58,7 @@ import fn wasi/waitable-set-wait from "wasi/waitable-set-wait";
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -82,17 +82,17 @@ fn "ufcs_instance_method_call.wado/run"() with Stdout {
     tx_23 = builtin::i32_wrap_i64(packed_21 >> 32_i64);
     handle_11 = "ufcs_instance_method_call.wado/$cm_binding__Stdout_write_via_stream"(rx_22);
     "core:rt/write_string_to_stream"(tx_23, global:ufcs_instance_method_call.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_11);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_11);
     rx_42 = builtin::i32_wrap_i64(local.tee packed_41("wasi/stream-new"()));
     tx_43 = builtin::i32_wrap_i64(packed_41 >> 32_i64);
     handle_31 = "ufcs_instance_method_call.wado/$cm_binding__Stdout_write_via_stream"(rx_42);
     "core:rt/write_string_to_stream"(tx_43, global:ufcs_instance_method_call.wado::$const_obj_2);
-    "wasi/future-drop-readable:transmission-cli"(handle_31);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
     rx_61 = builtin::i32_wrap_i64(local.tee packed_60("wasi/stream-new"()));
     tx_62 = builtin::i32_wrap_i64(packed_60 >> 32_i64);
     handle_51 = "ufcs_instance_method_call.wado/$cm_binding__Stdout_write_via_stream"(rx_61);
     "core:rt/write_string_to_stream"(tx_62, global:ufcs_instance_method_call.wado::$const_obj_1);
-    "wasi/future-drop-readable:transmission-cli"(handle_51);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_51);
 }
 
 fn "ufcs_instance_method_call.wado/$cm_binding__Stdout_write_via_stream"(data) with Stdout {

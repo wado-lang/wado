@@ -365,7 +365,7 @@ type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(107)
 
 type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(108)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(109)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(109)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -378,7 +378,7 @@ import memory (1) from "mem/memory";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:./sub/wir_xmodule_return_eval.wado::$const_obj_0: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 120, 112, 101, 99, 116, 101, 100, 32, 97, 32, 99, 104, 105, 108, 100, 32, 114, 117, 108, 101, 32, 110, 111, 100, 101), used: 26 };
 global global:./sub/wir_xmodule_return_parser.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(84, 114, 101, 101, 66, 117, 105, 108, 100, 101, 114, 58, 32, 101, 120, 112, 101, 99, 116, 101, 100, 32, 79, 112, 101, 110, 32, 101, 118, 101, 110, 116), used: 32 };
@@ -1520,7 +1520,7 @@ fn "core:rt/panic"(message) {
     builtin::array_set_u8(new_repr, self_14, 10);
     "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all"(tx_8, struct.new "core:prelude/slice.wado//Slice<u8>" { repr: new_repr, start: 0, end: self_14 + 1 });
     "wasi/stream-drop-writable"(tx_8);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }

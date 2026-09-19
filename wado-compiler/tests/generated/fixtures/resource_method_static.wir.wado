@@ -83,9 +83,9 @@ type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(22)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(23)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(23)
 
-type "functype//wasi/resource-drop:tcp-socket" = fn(i32);  // TypeId(24)
+type "functype//wasi/resource-drop:wasi/sockets/types.wado#tcp-socket" = fn(i32);  // TypeId(24)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(25)
 
@@ -101,8 +101,8 @@ import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::wri
 import fn wasi/wasi:sockets/TcpSocket::create from "wasi/wasi:sockets/TcpSocket::create";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
-import fn wasi/resource-drop:tcp-socket from "wasi/resource-drop:tcp-socket";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
+import fn wasi/resource-drop:wasi/sockets/types.wado#tcp-socket from "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -193,9 +193,9 @@ fn "resource_method_static.wado/$cm_export__run"() {
     tx_11 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "resource_method_static.wado/$cm_binding__Stdout_write_via_stream"(rx_10);
     "core:rt/write_string_to_stream"(tx_11, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("Resource static method called"), used: 29 });
-    "wasi/future-drop-readable:transmission-cli"(handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle);
     if ref.test "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result) {
-        "wasi/resource-drop:tcp-socket"(local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0));
+        "wasi/resource-drop:wasi/sockets/types.wado#tcp-socket"(local.tee $drop_v_2(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Ok"(result).payload_0));
     } else {
         drop(ref.cast "core:prelude/types.wado//Result<wasi:sockets/types.wado/TcpSocket,wasi:sockets/types.wado/ErrorCode>::Err"(result).payload_0);
     }

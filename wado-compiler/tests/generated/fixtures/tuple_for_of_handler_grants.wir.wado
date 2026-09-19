@@ -83,7 +83,7 @@ type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pre
 
 type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(31)
 
-type "functype//wasi/future-drop-readable:transmission-cli" = fn(i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
 
 type "functype//wasi/task-return" = fn(i32);  // TypeId(33)
 
@@ -99,7 +99,7 @@ import fn wasi/wasi:cli/Stderr::write_via_stream from "wasi/wasi:cli/Stderr::wri
 import fn wasi/wasi:cli/Stdout::write_via_stream from "wasi/wasi:cli/Stdout::write_via_stream";
 import memory (1) from "mem/memory";
 import fn wasi/stream-new from "wasi/stream-new";
-import fn wasi/future-drop-readable:transmission-cli from "wasi/future-drop-readable:transmission-cli";
+import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 import fn wasi/task-return from "wasi/task-return";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
@@ -156,7 +156,7 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     tx_27 = builtin::i32_wrap_i64(packed_25 >> 32_i64);
     handle_17 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"(rx_26);
     "core:rt/write_string_to_stream"(tx_27, $local_4_4);
-    "wasi/future-drop-readable:transmission-cli"(handle_17);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_17);
     global:tuple_for_of_handler_grants.wado::$effect_A = $save_A_9;
     $save_A_12 = global:tuple_for_of_handler_grants.wado::$effect_A;
     $d_A_13 = struct.new "tuple_for_of_handler_grants.wado//$Dispatch_A" { outer: $save_A_12, op_a_op: struct.new "canonical//CanonicalClosure_0" { env: struct.new "tuple_for_of_handler_grants.wado//$Closure_1" { $capture_0: h }, func: ref.func "closure/tuple_for_of_handler_grants.wado/$closure_wrapper_1" } };
@@ -184,7 +184,7 @@ fn "tuple_for_of_handler_grants.wado/run"() with Stdout {
     tx_45 = builtin::i32_wrap_i64(packed_43 >> 32_i64);
     handle_35 = "tuple_for_of_handler_grants.wado/$cm_binding__Stdout_write_via_stream"(rx_44);
     "core:rt/write_string_to_stream"(tx_45, $local_6);
-    "wasi/future-drop-readable:transmission-cli"(handle_35);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_35);
     global:tuple_for_of_handler_grants.wado::$effect_A = $save_A_12;
 }
 
@@ -277,7 +277,7 @@ fn "core:rt/panic"(message) {
     tx_8 = builtin::i32_wrap_i64(packed >> 32_i64);
     future_handle = "wasi/wasi:cli/Stderr::write_via_stream"(rx_7);
     "core:rt/write_string_to_stream"(tx_8, message);
-    "wasi/future-drop-readable:transmission-cli"(future_handle);
+    "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
 }
