@@ -6,7 +6,7 @@
 //! `param_abi`.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, NirFunction, NirStruct, ParamAbi};
+use crate::nir::{FunctionKind, NirFunction, NirStruct, ParamAbi};
 use crate::nir_arena::{Body, ExprId, ExprKind};
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::reachable_exprs;
@@ -148,33 +148,3 @@ fn reads_local(body: &Body, expr: ExprId, local: u32) -> bool {
     matches!(&body.exprs[expr].kind, ExprKind::Local { index, .. } if *index == local)
 }
 
-/// Every parameter position a call has to expand, by callee.
-pub(crate) fn multi_value_param_positions(
-    project: &NirPackage,
-) -> IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>> {
-    let mut out: IndexMap<FuncId, IndexMap<usize, Vec<(String, TypeId)>>> = IndexMap::default();
-    for func_rc in &project.functions {
-        let Ok(func) = func_rc.try_borrow() else {
-            continue;
-        };
-        let Some(id) = func.id else {
-            continue;
-        };
-        for (param_idx, param) in func.params.iter().enumerate() {
-            let ParamAbi::MultiValue {
-                field_types,
-                field_names,
-            } = &param.param_abi
-            else {
-                continue;
-            };
-            let pairs: Vec<(String, TypeId)> = field_names
-                .iter()
-                .cloned()
-                .zip(field_types.iter().copied())
-                .collect();
-            out.entry(id).or_default().insert(param_idx, pairs);
-        }
-    }
-    out
-}
