@@ -2347,13 +2347,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let Some(ast::AttrArg::Ident(name)) = attr.args.first() else {
             return emit("#[immediate] names one parameter, unquoted".to_string());
         };
+        if !params.iter().any(|p| &p.name == name) {
+            return emit(format!("#[immediate] names no parameter: {name}"));
+        }
         if attr.args.len() > 1 {
             return emit(
                 "#[immediate] names one parameter; repeat the attribute for another".to_string(),
             );
-        }
-        if !params.iter().any(|p| &p.name == name) {
-            return emit(format!("#[immediate] names no parameter: {name}"));
         }
         if has_body {
             return emit(

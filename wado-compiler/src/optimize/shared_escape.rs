@@ -1,7 +1,5 @@
 //! Whether a constant aggregate stays safe to share once a callee stashes it
-//! into the heap: nothing, anywhere in the program, writes through the object.
-//! [`const_object_globalization`](super::const_object_globalization) asks this
-//! where its own read-only gate stops. See the WEP for the taint model.
+//! into the heap: nothing in the program writes through the object. See the WEP.
 
 use std::cell::{Cell, RefCell};
 use std::ops::ControlFlow;
@@ -190,9 +188,8 @@ impl<'a> SharedEscape<'a> {
         self.check_uses(&taint, FuncId::new(func_idx), obligations)
     }
 
-    /// Every use of a tainted value, refused or turned into an obligation.
-    /// A `Break` stays inside the body, so its value is left to the taint walk;
-    /// a `Return` hands the object to every caller, which is a slot of its own.
+    /// Every use of a tainted value, refused or turned into an obligation. A
+    /// `Return` hands the object to every caller, which is a slot of its own.
     fn check_uses(
         &self,
         taint: &Taint<'_>,
@@ -305,15 +302,9 @@ impl<'a> SharedEscape<'a> {
 
     /// Whether a bodyless callee leaves the argument at `pos` and everything it
     /// holds where the caller put them.
-    ///
-    /// Only `core:builtin` answers. `#[retain(...)]` is already what the
-    /// value-copy plan trusts there, so a clause missing from that file is a
-    /// bug rather than a silence to read as consent — which is exactly what it
-    /// would be on a CM import or a `.wasm` asset export, so those refuse.
-    /// A handle the result carries away needs no case of its own:
-    /// [`Taint::taints`] already taints any call whose first argument is
-    /// tainted.
     fn reads_arg(&self, callee: &NirFunction, pos: usize) -> bool {
+        // Only `core:builtin` answers, where the value-copy plan already trusts
+        // `#[retain]`. Elsewhere an absent clause is silence, not consent.
         if !callee.module_source.is_core_builtin() {
             return false;
         }
@@ -349,8 +340,7 @@ impl Taint<'_> {
     }
 
     /// A promoted operand carries no skeleton node, so it is read through the
-    /// local it extracts back to; one that extracts to no local, and could
-    /// hold a reference, counts as tainted rather than as unseen.
+    /// local it extracts back to, and counts as tainted where it extracts to none.
     fn operand(&self, op: Operand) -> bool {
         match op {
             Operand::Expr(e) => self.expr(e),
@@ -362,9 +352,8 @@ impl Taint<'_> {
         }
     }
 
-    /// Re-walk the body until no new expression or local is tainted. Each pass
-    /// is one linear walk, and the height of the projection chains bounds how
-    /// many it takes.
+    /// Re-walk the body until no new expression or local is tainted. The height
+    /// of the projection chains bounds how many linear passes that takes.
     fn saturate(&mut self) {
         loop {
             let before = (self.exprs.len(), self.locals.len());

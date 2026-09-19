@@ -6311,37 +6311,35 @@ impl LocalFrame {
 }
 
 impl TirFunction {
+    /// Where an attribute's named parameter sits. Reify drops a clause naming
+    /// no parameter, so one reaching here names a parameter of this very
+    /// declaration.
+    fn param_position(&self, name: &str) -> usize {
+        self.params
+            .iter()
+            .position(|p| p.name == name)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`{}` names `{name}`, which it takes no parameter for",
+                    self.name
+                )
+            })
+    }
+
     /// This declaration's `#[retain(...)]` clauses by parameter position.
-    /// Reify drops a clause naming no parameter, so one reaching here names a
-    /// parameter of this very declaration.
     pub fn retains_by_position(&self) -> impl Iterator<Item = RetainSpec<usize>> + '_ {
-        let position = |name: &str| {
-            self.params
-                .iter()
-                .position(|p| p.name == name)
-                .unwrap_or_else(|| panic!("`{}` retains `{name}`, which it takes no", self.name))
-        };
         self.retains.iter().map(move |r| RetainSpec {
-            source: position(&r.source),
+            source: self.param_position(&r.source),
             elements: r.elements,
-            into: r.into.as_deref().map(position),
+            into: r.into.as_deref().map(|name| self.param_position(name)),
         })
     }
 
-    /// This declaration's `#[immediate(...)]` parameters by position. Reify
-    /// drops a clause naming no parameter, as it does for `#[retain]`.
+    /// This declaration's `#[immediate(...)]` parameters by position.
     pub fn immediates_by_position(&self) -> impl Iterator<Item = usize> + '_ {
-        self.immediates.iter().map(move |name| {
-            self.params
-                .iter()
-                .position(|p| &p.name == name)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "`{}` declares `{name}` immediate, which it takes no",
-                        self.name
-                    )
-                })
-        })
+        self.immediates
+            .iter()
+            .map(move |name| self.param_position(name))
     }
 
     /// Take the body's frame, leaving an empty one. The counterpart of

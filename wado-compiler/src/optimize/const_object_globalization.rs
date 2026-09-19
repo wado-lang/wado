@@ -618,9 +618,6 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
 
 /// Every operand feeding a parameter the callee lowers to a Wasm immediate:
 /// the argument expressions, and the locals a `let` delivers to one.
-///
-/// Codegen reads the argument's literal value there, so replacing it with a
-/// global read — which is what a hoist leaves behind — breaks the lowering.
 fn immediate_operands(body: &Body, gate: &Gate<'_>) -> (IndexSet<ExprId>, IndexSet<u32>) {
     let mut exprs: IndexSet<ExprId> = IndexSet::default();
     let mut locals: IndexSet<u32> = IndexSet::default();
@@ -1395,13 +1392,8 @@ fn worth_hoisting_operand(body: &Body, op: Operand, gate: &Gate<'_>, reach: Reac
         .is_some_and(|e| worth_hoisting(body, e, gate, reach))
 }
 
-/// Whether hoisting `expr` pays for the global it costs.
-///
-/// A [`Reach::Retained`] constant pays whatever its shape: every evaluation
-/// would join the live set, and the live set is what a collection walks, so N
-/// of them become one. A [`Reach::Transient`] one dies before the next
-/// collection either way, so only the work of building it is saved — worth a
-/// global for an array to fill, not for a struct of scalars.
+/// Whether hoisting `expr` pays for the global it costs. A [`Reach::Retained`]
+/// constant pays whatever its shape, a transient one only if it owns storage.
 fn worth_hoisting(body: &Body, expr: ExprId, gate: &Gate<'_>, reach: Reach) -> bool {
     let allocates = || {
         let ty = body.exprs[expr].type_id;
@@ -1497,11 +1489,9 @@ impl Gate<'_> {
     }
 
     /// Whether `func_id` lowers its parameter at `pos` to a Wasm immediate.
-    ///
-    /// A callee with no entry answers `true`, which only costs a hoist: the
-    /// other way round codegen would reach an immediate that is now a global
-    /// read, so the unknown must land on the side that changes nothing.
     fn is_immediate_param(&self, func_id: FuncId, pos: usize) -> bool {
+        // An unknown callee answers `true`, costing one hoist. The other way
+        // round codegen reaches for a literal that is now a global read.
         self.immediate_params
             .get(func_id.index())
             .is_none_or(|positions| positions.contains(&pos))
@@ -1820,9 +1810,8 @@ impl Gate<'_> {
             return false;
         };
         let f = f.borrow();
-        // A bodyless declaration keeps no parameters past lowering, so there is
-        // nothing here to walk or to read a type from. `shared_escape` answers
-        // for one, from what the declaration stated.
+        // A bodyless declaration keeps no parameters past lowering, so nothing
+        // here reads a type. `shared_escape` answers for one, from what it said.
         let Some(param) = f.params.get(param_pos) else {
             return false;
         };

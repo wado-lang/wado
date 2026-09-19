@@ -415,12 +415,9 @@ pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeK
     // predicted-taken path.
     config.wasm_branch_hinting(true);
     config.collector(knobs.collector);
-    // Start the GC heap at a size a program can run in, rather than at zero.
-    // wasmtime collects before it grows, and grows only where the collection
-    // left too little, so a heap starting empty doubles its way up to the
-    // working set with a full trace paid at every rung of the ladder. The 4 GiB
-    // of address space is reserved either way, so this decides what is
-    // committed, not what is mapped.
+    // wasmtime collects before it grows, so a heap starting at zero doubles its
+    // way up to the working set and pays a full trace at every rung. The 4 GiB
+    // of address space is reserved either way: this commits, it does not map.
     config.gc_heap_initial_size(knobs.gc_heap_initial_size);
 
     config.cranelift_opt_level(opt_level);

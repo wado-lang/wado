@@ -200,6 +200,8 @@ pub enum Code {
     /// A `#[retain(...)]` attribute is malformed, names something that is not a
     /// parameter, or sits on a declaration that has a body to read instead.
     RetainAttr,
+    /// An `#[immediate(...)]` attribute is malformed, names something that is
+    /// not a parameter, or sits on a declaration with a body.
     ImmediateAttr,
     ResourceExtends,
 
