@@ -333,6 +333,13 @@ impl TestSpec {
         let (expect, not_expect) = self.wir_expectations(opt_level);
         !expect.is_empty() || !not_expect.is_empty()
     }
+
+    /// Whether `-Os` runs this fixture. It strips the symbol table, so what a
+    /// fixture may assert about the emitted WAT turns on this one answer.
+    fn runs_at_os(&self) -> bool {
+        !self.skip_os
+            && (self.only_opt.is_empty() || self.only_opt.iter().any(|level| level == "Os"))
+    }
 }
 
 /// Whether `wir` contains `pattern`, where `{}` stands for a run of digits.
@@ -705,21 +712,14 @@ fn run_fixture_test_with_opt(fixture_path: &Path, source: &str, opt_level: OptLe
         },
     };
 
-    // Skip if the spec says skip_os and we're running -Os
-    if spec.skip_os && opt_level == OptLevel::Os {
-        eprintln!("[{test_id}] skipped (skip_os)");
+    if opt_level == OptLevel::Os && !spec.runs_at_os() {
+        eprintln!("[{test_id}] skipped (-Os excluded)");
         return;
     }
 
     // Skip if only_opt is set and this level is not in the list
     if !spec.only_opt.is_empty() {
-        let level_str = match opt_level {
-            OptLevel::O0 => "O0",
-            OptLevel::O1 => "O1",
-            OptLevel::O2 => "O2",
-            OptLevel::O3 => "O3",
-            OptLevel::Os => "Os",
-        };
+        let level_str = common::opt_level_name(opt_level);
         if !spec.only_opt.iter().any(|s| s == level_str) {
             eprintln!("[{test_id}] skipped (only_opt: {:?})", spec.only_opt);
             return;
@@ -1126,7 +1126,7 @@ fn assert_wat_lines(wasm: &[u8], spec: &TestSpec, test_id: &str) {
     // at every level, the fixture fails where it is written rather than in the
     // one CI job that runs `-Os`.
     assert!(
-        spec.skip_os
+        !spec.runs_at_os()
             || !spec
                 .wat_lines
                 .iter()
