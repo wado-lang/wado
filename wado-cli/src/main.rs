@@ -128,8 +128,9 @@ impl Cmd {
     }
 }
 
-fn write_usage(buf: &mut String) {
+fn usage() -> String {
     use std::fmt::Write as _;
+    let mut buf = String::new();
     writeln!(buf, "Usage: wado <command> [options]").unwrap();
     writeln!(buf).unwrap();
     writeln!(buf, "Commands:").unwrap();
@@ -152,6 +153,7 @@ fn write_usage(buf: &mut String) {
         "Use 'wado <command> --help' for more information on a command."
     )
     .unwrap();
+    buf
 }
 
 /// Print the builtins and every `wado-<name>` on `PATH`. An external a builtin
@@ -226,17 +228,11 @@ async fn dispatch() -> Result<(), CliExit> {
     let mut parser = lexopt::Parser::from_env();
 
     let Some(arg) = parser.next().map_err(CliExit::error)? else {
-        let mut usage = String::new();
-        write_usage(&mut usage);
-        return Err(CliExit::error_with_usage("missing command", &usage));
+        return Err(CliExit::error_with_usage("missing command", &usage()));
     };
 
     match arg {
-        Long("help") => {
-            let mut usage = String::new();
-            write_usage(&mut usage);
-            Err(CliExit::help(usage))
-        }
+        Long("help") => Err(CliExit::help(usage())),
         Long("list") => {
             print_list();
             Ok(())
@@ -253,47 +249,41 @@ async fn dispatch() -> Result<(), CliExit> {
                 return run_cmd(cmd, parser).await;
             }
             let Some(path) = wado_cli::external::find(&name) else {
-                let mut usage = String::new();
-                write_usage(&mut usage);
-                return Err(CliExit::error_with_usage(
-                    format!("unknown command '{name}' (no 'wado-{name}' on PATH)"),
-                    &usage,
-                ));
+                return Err(unknown_command(&name));
             };
             wado_cli::external::run(&path, parser.raw_args().map_err(CliExit::error)?)
         }
-        _ => {
-            let mut usage = String::new();
-            write_usage(&mut usage);
-            Err(CliExit::error_with_usage("expected command", &usage))
-        }
+        _ => Err(CliExit::error_with_usage("expected command", &usage())),
     }
 }
 
 /// `wado help <name>` is `wado <name> --help`, and for an external subcommand
 /// the child is what answers.
 async fn run_help(mut parser: lexopt::Parser) -> Result<(), CliExit> {
-    let mut usage = String::new();
-    write_usage(&mut usage);
-
     let Some(arg) = parser.next().map_err(CliExit::error)? else {
-        return Err(CliExit::help(usage));
+        return Err(CliExit::help(usage()));
     };
     let Value(name_val) = arg else {
-        return Err(CliExit::error_with_usage(arg.unexpected(), &usage));
+        return Err(CliExit::error_with_usage(arg.unexpected(), &usage()));
     };
     let name = name_val.to_string_lossy().into_owned();
 
     if let Some(cmd) = Cmd::from_name(&name) {
         return Box::pin(run_cmd(cmd, lexopt::Parser::from_args(["--help"]))).await;
     }
-    if let Some(path) = wado_cli::external::find(&name) {
-        return wado_cli::external::run(&path, ["--help"]);
-    }
-    Err(CliExit::error_with_usage(
-        format!("unknown command '{name}'"),
-        &usage,
-    ))
+    let Some(path) = wado_cli::external::find(&name) else {
+        return Err(unknown_command(&name));
+    };
+    wado_cli::external::run(&path, ["--help"])
+}
+
+/// The error for a name that is neither builtin nor on `PATH`, which says where
+/// `wado` looked for it.
+fn unknown_command(name: &str) -> CliExit {
+    CliExit::error_with_usage(
+        format!("unknown command '{name}' (no 'wado-{name}' on PATH)"),
+        &usage(),
+    )
 }
 
 async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
@@ -318,10 +308,9 @@ async fn run_cmd(cmd: Cmd, parser: lexopt::Parser) -> Result<(), CliExit> {
             let opts = wado_cli::build::parse_args(parser)?;
             Box::pin(wado_cli::build::run(opts)).await
         }
-        // Each subcommand's future is boxed so `dispatch`'s state
-        // machine doesn't recursively inline all 12 subcommands'
-        // await chains and blow past Rust's query-depth limit on
-        // `--release` builds.
+        // Each subcommand's future is boxed, or this state machine inlines
+        // every subcommand's await chain into one and a `--release` build
+        // passes Rust's query-depth limit.
         Cmd::Compile => {
             let opts = wado_cli::compile::parse_args(parser)?;
             Box::pin(wado_cli::compile::run(opts)).await

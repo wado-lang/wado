@@ -4,9 +4,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use anyhow::{Result, bail};
-use wasi_webgpu_wasmtime::{WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions};
+use wasi_webgpu_wasmtime::{
+    WasiWebGpuCtx, WasiWebGpuCtxView, WasiWebGpuOptions, add_to_linker as add_webgpu_to_linker,
+};
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
+use wasmtime_wasi::p3::add_to_linker as add_wasi_to_linker;
 use wasmtime_wasi::p3::bindings::Command;
 use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
 use wgpu_core::global::Global;
@@ -49,8 +52,8 @@ pub async fn run(component: &Path, args: &Args, gpu: Gpu) -> Result<()> {
     let component = Component::from_file(&engine, component)?;
 
     let mut linker: Linker<Host> = Linker::new(&engine);
-    wasmtime_wasi::p3::add_to_linker(&mut linker)?;
-    wasi_webgpu_wasmtime::add_to_linker(&mut linker)?;
+    add_wasi_to_linker(&mut linker)?;
+    add_webgpu_to_linker(&mut linker)?;
 
     let mut store = Store::new(&engine, host(args, gpu)?);
     let command = Command::instantiate_async(&mut store, &component, &linker).await?;

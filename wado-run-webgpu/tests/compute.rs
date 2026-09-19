@@ -32,9 +32,14 @@ fn fixture(name: &str) -> PathBuf {
         .join(name)
 }
 
+fn runner() -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_wado-run-webgpu"));
+    command.env("WADO", wado());
+    command
+}
+
 fn run(args: &[&str]) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_wado-run-webgpu"))
-        .env("WADO", wado())
+    runner()
         .args(args)
         .output()
         .expect("running wado-run-webgpu")
@@ -66,8 +71,7 @@ fn an_unknown_option_is_refused_before_anything_is_compiled() {
 #[test]
 #[cfg(target_os = "linux")]
 fn a_machine_without_an_adapter_is_told_what_to_install() {
-    let output = Command::new(env!("CARGO_BIN_EXE_wado-run-webgpu"))
-        .env("WADO", wado())
+    let output = runner()
         .env("VK_DRIVER_FILES", "/nonexistent.json")
         .arg(fixture("compute_double.wado"))
         .output()

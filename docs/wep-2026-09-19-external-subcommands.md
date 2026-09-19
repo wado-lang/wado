@@ -86,8 +86,8 @@ and not designed here.
 
 ## Roadmap
 
-The `PATH` form ships, including an `External Commands` section in the
-`wado-cli` skill. Nothing about the component form is committed work.
+- [x] The `PATH` form: resolution, `--list`, `help <name>`, and the
+      `External Commands` section of the `wado-cli` skill.
 
 ## Known gaps
 

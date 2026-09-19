@@ -185,7 +185,7 @@ impl LiftContext<'_> {
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
             Type::Tuple(elems) if !elems.is_empty() => {
-                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_type_id(e, tt)).collect();
+                let ids: Vec<TypeId> = elems.iter().map(|e| self.cm_held_type_id(e, tt)).collect();
                 tt.make_tuple(ids)
             }
             Type::Generic(g) => {
@@ -198,22 +198,27 @@ impl LiftContext<'_> {
                     )
                 };
                 if g.name == list_name && g.args.len() == 1 {
-                    let elem = self.cm_type_id(&g.args[0], tt);
+                    let elem = self.cm_held_type_id(&g.args[0], tt);
                     return tt.make_list(elem);
                 }
                 if g.name == option_name && g.args.len() == 1 {
-                    let inner = self.cm_type_id(&g.args[0], tt);
+                    let inner = self.cm_held_type_id(&g.args[0], tt);
                     return tt.make_option(inner);
                 }
                 if g.name == result_name && g.args.len() == 2 {
-                    let ok = self.cm_type_id(&g.args[0], tt);
-                    let err = self.cm_type_id(&g.args[1], tt);
+                    let ok = self.cm_held_type_id(&g.args[0], tt);
+                    let err = self.cm_held_type_id(&g.args[1], tt);
                     return tt.make_result(ok, err);
                 }
                 cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package)
             }
             _ => cm_type_to_type_id(ty, tt, self.cm_interface_registry, self.cm_package),
         }
+    }
+
+    /// [`Self::cm_type_id`] for a type a container holds.
+    pub(super) fn cm_held_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
+        held_type(ty, tt, |t, tt| self.cm_type_id(t, tt))
     }
 }
 
@@ -401,22 +406,32 @@ pub fn cm_type_to_type_id(
     }
 }
 
-/// The same conversion for a type a container holds. A bare `borrow<t>`
-/// parameter is the `i32` handle the boundary passes, but a `list<borrow<t>>`
-/// or `option<borrow<t>>` is a `List<&T>` or `Option<&T>` at the call site, and
-/// a container built over `i32` is a GC type the caller's value is not.
+/// The same conversion for a type a container holds, where a `borrow<t>` is the
+/// `&T` the call site passes rather than the `i32` handle a bare one lowers to.
 pub fn cm_held_type_to_type_id(
     ty: &Type,
     type_table: &mut TypeTable,
     registry: &CmInterfaceRegistry,
     wasi_package: &str,
 ) -> TypeId {
+    held_type(ty, type_table, |t, tt| {
+        cm_type_to_type_id(t, tt, registry, wasi_package)
+    })
+}
+
+/// A container's element type, resolved by `element`. Only a bare `borrow<t>`
+/// is the `i32` the boundary passes; held, it is the `&T` of the call site.
+fn held_type(
+    ty: &Type,
+    type_table: &mut TypeTable,
+    element: impl FnOnce(&Type, &mut TypeTable) -> TypeId,
+) -> TypeId {
     match ty {
         Type::Reference(inner) | Type::MutReference(inner) => {
-            let inner = cm_type_to_type_id(inner, type_table, registry, wasi_package);
+            let inner = element(inner, type_table);
             type_table.make_ref(inner)
         }
-        _ => cm_type_to_type_id(ty, type_table, registry, wasi_package),
+        _ => element(ty, type_table),
     }
 }
 

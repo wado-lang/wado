@@ -205,9 +205,8 @@ fn fixup_wasi_derived_types_in_adapter(
     }
 }
 
-/// Fix up the return expression's type in the binding body to match the caller's
-/// expected return type. The binding was created with placeholder `TypeId`s
-/// (e.g., `TypeTable::I32`) that need to be corrected to actual Wado types.
+/// Give the return value the caller's type, in place of the `TypeTable::I32`
+/// the binding was built with.
 fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_type: TypeId) {
     if let Some(body) = &mut adapter.body {
         let from = raw_call_stmt_index(body);
@@ -220,8 +219,9 @@ fn fixup_return_type_in_body(adapter: &mut TirFunction, old_type: TypeId, new_ty
     }
 }
 
-/// Where the adapter's `CmRawCall` sits. Parameter lowering precedes it, so a
-/// statement before it holds a parameter's intermediate and never the result.
+/// Where the adapter's `CmRawCall` sits, or 0 where it makes none. Parameter
+/// lowering precedes it, so a statement before it holds a parameter's
+/// intermediate and never the result.
 fn raw_call_stmt_index(body: &TirBlock) -> usize {
     struct FindRawCall {
         found: bool,

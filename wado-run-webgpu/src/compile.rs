@@ -4,34 +4,33 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context as _, Result, bail};
+use tempfile::{TempDir, tempdir};
 
 use crate::args::Args;
 
-/// A component to run, and the temporary directory holding it while it does.
-pub enum Component {
-    Given(PathBuf),
-    Compiled {
-        path: PathBuf,
-        _dir: tempfile::TempDir,
-    },
+/// A component to run. A compiled one holds its temporary directory open for
+/// as long as the run needs the file in it.
+pub struct Component {
+    path: PathBuf,
+    _dir: Option<TempDir>,
 }
 
 impl Component {
     pub fn path(&self) -> &Path {
-        match self {
-            Self::Given(path) => path,
-            Self::Compiled { path, .. } => path,
-        }
+        &self.path
     }
 }
 
 /// Compile the input unless it is already a component.
 pub fn component_for(args: &Args) -> Result<Component> {
     if args.input.extension().is_some_and(|ext| ext == "wasm") {
-        return Ok(Component::Given(args.input.clone()));
+        return Ok(Component {
+            path: args.input.clone(),
+            _dir: None,
+        });
     }
 
-    let dir = tempfile::tempdir()?;
+    let dir = tempdir()?;
     let path = dir.path().join("program.wasm");
     let wado = wado_binary();
     let status = Command::new(&wado)
@@ -46,7 +45,10 @@ pub fn component_for(args: &Args) -> Result<Component> {
         bail!("{} compile failed", wado.display());
     }
 
-    Ok(Component::Compiled { path, _dir: dir })
+    Ok(Component {
+        path,
+        _dir: Some(dir),
+    })
 }
 
 /// `WADO` is the binary that dispatched this subcommand, so a child compiles

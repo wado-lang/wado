@@ -23,7 +23,7 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id,
+    LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_held_type_to_type_id,
     disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
@@ -602,7 +602,7 @@ pub(super) fn synthesize_lift_list(
         {
             pair
         } else {
-            let elem = ctx.cm_type_id(elem_ty, &mut tt);
+            let elem = ctx.cm_held_type_id(elem_ty, &mut tt);
             let lt = tt.make_list(elem);
             (lt, elem)
         };
@@ -770,7 +770,7 @@ fn synthesize_lift_option_inner(
     let option_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
         let inner_type_id =
-            cm_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_held_type_to_type_id(inner_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         tt.make_option(inner_type_id)
     };
 
@@ -868,9 +868,9 @@ fn synthesize_lift_result_inner(
     let (result_type_id, ok_name, ok_index, err_name, err_index) = {
         let mut tt = ctx.type_table.borrow_mut();
         let ok_type_id =
-            cm_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_held_type_to_type_id(ok_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let err_type_id =
-            cm_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
+            cm_held_type_to_type_id(err_ty, &mut tt, ctx.cm_interface_registry, ctx.cm_package);
         let result_type_id = tt.make_result(ok_type_id, err_type_id);
         let items = tt.compiler_items();
         let (_, _, ok_n, ok_i) = items.require_variant_case(CompilerItem::ResultOk);
@@ -993,7 +993,10 @@ fn synthesize_lift_tuple(
     }
     let tuple_type_id = {
         let mut tt = ctx.type_table.borrow_mut();
-        let elem_type_ids: Vec<TypeId> = elems.iter().map(|t| ctx.cm_type_id(t, &mut tt)).collect();
+        let elem_type_ids: Vec<TypeId> = elems
+            .iter()
+            .map(|t| ctx.cm_held_type_id(t, &mut tt))
+            .collect();
         tt.make_tuple(elem_type_ids)
     };
     // CM lift bindings synthesise tuple values that flow across the

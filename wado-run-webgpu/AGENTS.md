@@ -9,8 +9,8 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
   It needs wasmtime 48 where the workspace pins 47.0.3, and one workspace
   resolves one version of a crate. Nothing here is built by `cargo build` at the
   repository root, `mise run test`, or the repository's clippy and fmt jobs. The
-  `webgpu` CI job builds and tests it, on a change to this directory or to
-  `wado-compiler/lib/wasi/webgpu/`.
+  `test-webgpu` CI job is what builds, lints and tests it, on every change that
+  is not documentation.
 - It compiles nothing itself. `WADO` names the binary that dispatched the
   subcommand ([External Subcommands](../docs/wep-2026-09-19-external-subcommands.md)),
   and the tests set it the same way, so the tests and a real invocation reach

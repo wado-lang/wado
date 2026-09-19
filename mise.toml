@@ -392,13 +392,16 @@ CORE_MODULES="core:prelude core:cli core:collections core:fs core:base64 core:zl
   core:serde core:json core:json_nsd core:args core:value core:cbor core:simd core:url core:kiln \
   core:benchmark core:router core:digest core:secure_random core:uuid core:temporal core:log core:jwt \
   core:icu"
-WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls \
-  wasi:webgpu"
+WASI_MODULES="wasi:cli wasi:filesystem wasi:http wasi:clocks wasi:random wasi:sockets wasi:tls"
 
 cargo run --bin wado --quiet -- doc --format markdown -o 'docs/stdlib-{module}.md' \
   $CORE_MODULES
 cargo run --bin wado --quiet -- doc --format markdown --title "WASI Standard Library" \
   -o docs/stdlib-wasi.md $WASI_MODULES
+# `wasi:webgpu` is one interface the size of all the others together, so it
+# keeps its own file rather than burying them.
+cargo run --bin wado --quiet -- doc --format markdown --title "WASI WebGPU Standard Library" \
+  -o docs/stdlib-wasi-webgpu.md wasi:webgpu
 """
 
 [tasks.clean]

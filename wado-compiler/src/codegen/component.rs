@@ -2614,9 +2614,8 @@ fn generate_cm_imports(
                 &project.cm_interface_registry,
                 Some(interface_info.path.as_str()),
             );
-            // `resource_exports` carries the `own` index, so a borrow the
-            // shared generator minted from it would wrap that handle rather
-            // than the resource. Hand it the borrow this pass already defined.
+            // `resource_exports` carries the `own` index, so a borrow minted
+            // from it would wrap that handle rather than the resource.
             let borrow_exports = cm_keyed_resource_exports(
                 &borrow_resource_type_indices,
                 &project.cm_interface_registry,
