@@ -24,7 +24,7 @@ fn match_rule<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     let built = build_latn(&g);
     let blob = atn_blob_bytes(&built.atn);
     let sim = atn_decode(&blob);
-    let idx = built.rule_index.get(rule.to_string()).unwrap();
+    let idx = built.rule_index.get_str(rule).unwrap();
     let chars: List<char> = input.chars().collect();
     return latn_match(&sim, idx, &chars, 0, longest);
 }

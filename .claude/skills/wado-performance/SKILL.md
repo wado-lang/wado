@@ -302,18 +302,24 @@ it. `wado compile` reports on stderr even when it succeeds, so its output is
 held back and printed with the failure, which keeps the sweep's own lines
 readable.
 
+Keep the world one `--world=…` token: zsh does not word-split an expansion, so
+two words in a variable reach `wado` as a single flag it rejects.
+
 ```sh
 for f in benchmark/*/*.wado; do
   case "$f" in *_schema.wado) continue ;; esac
-  world=""
-  case "$f" in */http_routing/*) world="--world wasi:http/service" ;; esac
-  "$base" compile -O2 $world -o /tmp/b.wasm "$f" > /tmp/cc.log 2>&1 \
+  world=
+  case "$f" in */http_routing/*) world=--world=wasi:http/service ;; esac
+  "$base" compile -O2 ${world:+"$world"} -o /tmp/b.wasm "$f" > /tmp/cc.log 2>&1 \
     || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
-  target/release/wado compile -O2 $world -o /tmp/h.wasm "$f" > /tmp/cc.log 2>&1 \
+  target/release/wado compile -O2 ${world:+"$world"} -o /tmp/h.wasm "$f" > /tmp/cc.log 2>&1 \
     || { echo "FAILED  $f"; cat /tmp/cc.log; continue; }
   cmp -s /tmp/b.wasm /tmp/h.wasm || echo "DIFFERS $f"
 done
 ```
+
+Give the four `wasm-size` programs the same pass at `-Os`: no benchmark covers
+`sqlite_highlight`, the largest generated program in the tree.
 
 Then time only the rows that differ, back to back, and read the rest as unmoved.
 

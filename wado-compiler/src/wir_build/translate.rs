@@ -15,7 +15,7 @@ use super::context::WirContext;
 use crate::canonical::CanonicalIntrinsic;
 use crate::compiler_item::CompilerItem;
 use crate::name::{
-    CLOSURE_CALL_METHOD, FqTraitName, FqTypeName, MangledName, MethodName, StructName,
+    FqTraitName, FqTypeName, MangledName, MethodName, StructName, closure_call_name,
 };
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind};
 use crate::nir_value_graph::{OpaqueSource, ValueId};
@@ -155,11 +155,7 @@ pub fn register_closure_wrappers(ctx: &mut WirContext<'_>) {
         // This check must come before type lookups since DCE may have removed the
         // functor's types from the TypeTable.
         let functor_name = &functor.struct_name;
-        let call_method_local = MethodName::format_local(
-            &FqTypeName::shape(module_source, functor_name),
-            None,
-            CLOSURE_CALL_METHOD,
-        );
+        let call_method_local = closure_call_name(module_source, functor.id);
         let call_method_fq = MangledName::in_module(module_source, &call_method_local);
         let call_func_id = match ctx.func_map.get(&call_method_fq).cloned() {
             Some(id) => id,

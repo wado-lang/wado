@@ -1,4 +1,5 @@
-//! Constant-argument propagation and constant-field specialization.
+//! Constant-argument propagation, and specialization on a constant argument or
+//! on a constant field of one passed by reference.
 //! Compiler items and cached clones retain their contracts for synthesized calls.
 
 use std::cell::RefCell;
@@ -7,7 +8,7 @@ use std::rc::Rc;
 use cranelift_entity::EntityRef;
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
+use crate::nir::{FuncId, FunctionRef, NirFunction, NirParam, NirUnaryOp};
 use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatKind, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
@@ -18,6 +19,7 @@ use super::dae::is_dae_sroa_eligible;
 use super::dce::reachable_function_positions;
 use super::extract::is_place_read;
 use super::gate::FunctionGate;
+use super::inline::find_recursive_functions;
 use crate::ast::Visibility;
 use crate::compiler_trace;
 use crate::module_source::ModuleSource;
@@ -101,13 +103,25 @@ impl FieldConst {
 /// Constant fields keyed by field index.
 type FieldConsts = IndexMap<u32, FieldConst>;
 
+/// What a binding replaces: a by-value scalar parameter itself, or one field
+/// reached through a struct-reference parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum Slot {
+    Whole,
+    Field(u32),
+}
+
+/// One substitution a clone carries: the callee parameter's local index, the
+/// slot it replaces, and the constant.
+type Binding = (u32, Slot, FieldConst);
+
 /// Identity of a clone: the original callee plus the bindings substituted into
-/// it, as `(parameter local index, field index, constant)` sorted for a stable
-/// key. Two call sites agreeing on the bindings share one clone.
+/// it, sorted for a stable key. Two call sites agreeing on the bindings share
+/// one clone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SpecKey {
     callee: FuncId,
-    bindings: Vec<(u32, u32, FieldConst)>,
+    bindings: Vec<Binding>,
 }
 
 /// Cross-iteration state, so a clone minted in one iteration is reused by the
@@ -192,17 +206,41 @@ struct Signatures {
     /// Whether the function may be cloned. A `#[compiler_item]` may not: it is
     /// the unique anchor passes resolve that item by.
     specializable: Vec<bool>,
+    /// Whether each parameter's own slot may be replaced by a constant. A
+    /// slot the body reassigns, borrows or aliases holds more than the argument.
+    param_fixed: Vec<Vec<bool>>,
+    /// Whether the function's scalar arguments may move into a clone. A callee
+    /// writing through a reference is one a compile-time frame runs for those
+    /// writes, and a constant it no longer receives is one that frame cannot
+    /// see — which costs a whole folded region to save a parameter. A callee on
+    /// a call cycle is one whose recursion the constant decides nothing about,
+    /// and cloning one member splits a cycle the return-ABI analysis reasons
+    /// about whole.
+    scalar_specializable: Vec<bool>,
 }
 
 impl Signatures {
     fn build(project: &NirPackage, types: &TypeTable) -> Self {
+        let recursive = find_recursive_functions(&project.functions);
         let mut param_locals = Vec::with_capacity(project.functions.len());
         let mut param_struct = Vec::with_capacity(project.functions.len());
         let mut has_body = Vec::with_capacity(project.functions.len());
         let mut specializable = Vec::with_capacity(project.functions.len());
-        for func in &project.functions {
+        let mut param_fixed = Vec::with_capacity(project.functions.len());
+        let mut scalar_specializable = Vec::with_capacity(project.functions.len());
+        for (index, func) in project.functions.iter().enumerate() {
             let func = func.borrow();
             param_locals.push(func.params.iter().map(|p| p.local_index).collect());
+            scalar_specializable.push(
+                !func.params.iter().any(|p| p.is_mut_ref)
+                    && !recursive.contains(&FuncId::new(index)),
+            );
+            param_fixed.push(
+                func.params
+                    .iter()
+                    .map(|p| is_param_fixed(&func, p))
+                    .collect(),
+            );
             param_struct.push(
                 func.params
                     .iter()
@@ -224,6 +262,8 @@ impl Signatures {
             param_struct,
             has_body,
             specializable,
+            param_fixed,
+            scalar_specializable,
         }
     }
 
@@ -236,6 +276,15 @@ impl Signatures {
         }
         self.param_locals[index].get(position).copied()
     }
+}
+
+/// Whether the parameter's slot holds exactly what the argument gave it for the
+/// whole body, so every read of it is that constant.
+fn is_param_fixed(func: &NirFunction, param: &NirParam) -> bool {
+    !param.is_mut
+        && !param.is_mut_ref
+        && !func.address_taken_locals.contains(&param.local_index)
+        && !func.stores_aliased_locals.contains(&param.local_index)
 }
 
 /// The struct type a `&T` / `&mut T` points at, looking through newtypes.
@@ -260,15 +309,18 @@ fn struct_base(type_id: TypeId, types: &TypeTable) -> Option<TypeId> {
     }
 }
 
-/// Classify every reachable use of each tracked local in `body`.
+/// Classify every reachable use of each tracked local in `body`. `alias_reads`
+/// names the reads that bind a borrow tracked alongside its referent, which are
+/// accounted by that pairing rather than by this walk.
 fn collect_local_uses(
     body: &Body,
     tracked: &IndexSet<u32>,
+    alias_reads: &IndexSet<ExprId>,
     signatures: &Signatures,
     out: &mut IndexMap<u32, LocalUses>,
 ) {
     let (assigned, borrowed) = collect_place_contexts(body);
-    let mut classified: IndexSet<ExprId> = IndexSet::default();
+    let mut classified: IndexSet<ExprId> = alias_reads.clone();
     body.for_each_reachable_node(|node| {
         let NodeRef::Expr(id) = node else {
             return;
@@ -382,29 +434,16 @@ fn mark_unclassified_opaque(
 
 /// The tracked local an operand reads directly, if any.
 fn tracked_local(body: &Body, op: Operand, tracked: &IndexSet<u32>) -> Option<u32> {
-    let expr = op.as_expr()?;
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } if tracked.contains(index) => Some(*index),
-        _ => None,
-    }
+    body.local_read(op)
+        .map(|(local, _)| local)
+        .filter(|local| tracked.contains(local))
 }
 
 /// The local an argument names, looking through the `&` / `&mut` a by-value
 /// place is borrowed through. Returns the `Local` node too, which the caller
 /// marks classified so the catch-all does not re-read it as an escape.
 fn argument_local(body: &Body, arg: Operand) -> Option<(u32, ExprId)> {
-    let mut expr = arg.as_expr()?;
-    if let ExprKind::Unary {
-        op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-        expr: inner,
-    } = &body.exprs[expr].kind
-    {
-        expr = inner.as_expr()?;
-    }
-    match &body.exprs[expr].kind {
-        ExprKind::Local { index, .. } => Some((*index, expr)),
-        _ => None,
-    }
+    body.borrowed_local(arg).or_else(|| body.local_read(arg))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -474,7 +513,7 @@ fn summarize_params(
             continue;
         }
         let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-        collect_local_uses(body, &tracked, signatures, &mut uses);
+        collect_local_uses(body, &tracked, &IndexSet::default(), signatures, &mut uses);
         for local in tracked {
             let use_facts = uses.swap_remove(&local).unwrap_or_default();
             facts.insert(
@@ -575,7 +614,10 @@ fn collect_roots(
         }
     }
 
-    let mut defined: IndexSet<u32> = roots.keys().copied().collect();
+    // A parameter arrives defined, by the argument. A later assignment is a
+    // second definition to narrow against, never the local's only one, and a
+    // borrow assigned to it does not make it a second name for the referent.
+    let mut defined: IndexSet<u32> = func.params.iter().map(|p| p.local_index).collect();
     let mut invalid: IndexSet<u32> = IndexSet::default();
     let mut note_def = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
         let expected = locals.get(local as usize).map(|l| l.type_id);
@@ -590,23 +632,52 @@ fn collect_roots(
         }
     };
 
+    let is_struct_local = |local: u32| {
+        locals
+            .get(local as usize)
+            .is_some_and(|l| struct_base(l.type_id, types).is_some())
+    };
+    // A borrow is a second name for one object, so the two locals share a root
+    // rather than the borrow ending the chain. Inlining a function that passes
+    // its `&mut` parameter on mints exactly this binding.
+    let mut alias_defs: Vec<AliasDef> = Vec::new();
+    let mut define = |local: u32, value: Operand, roots: &mut IndexMap<u32, FieldConsts>| {
+        if !is_struct_local(local) {
+            return;
+        }
+        match body.borrowed_local(value) {
+            Some((base, read)) if base != local => alias_defs.push(AliasDef { local, base, read }),
+            _ => note_def(local, value, roots),
+        }
+    };
     body.for_each_reachable_node(|node| match node {
         NodeRef::Stmt(id) => {
             if let StmtKind::Let {
                 local_index, value, ..
             } = &body.stmts[id].kind
-                && locals
-                    .get(*local_index as usize)
-                    .is_some_and(|l| struct_base(l.type_id, types).is_some())
             {
-                note_def(*local_index, *value, &mut roots);
+                define(*local_index, *value, &mut roots);
             }
         }
-        NodeRef::Expr(_) | NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        NodeRef::Expr(id) => {
+            if let ExprKind::Assign { target, value } = &body.exprs[id].kind
+                && let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+            {
+                define(*index, *value, &mut roots);
+            }
+        }
+        NodeRef::Block(_) | NodeRef::Pat(_) => {}
     });
 
-    for local in invalid {
-        roots.swap_remove(&local);
+    for local in &invalid {
+        roots.swap_remove(local);
+    }
+    let (mut alias_of, alias_reads) = settle_aliases(&alias_defs, &defined, &invalid);
+    flatten_aliases(&mut alias_of);
+    for (alias, base) in &alias_of {
+        if let Some(consts) = roots.get(base).cloned() {
+            roots.insert(*alias, consts);
+        }
     }
     roots.retain(|_, consts| !consts.is_empty());
     if roots.is_empty() {
@@ -615,7 +686,7 @@ fn collect_roots(
 
     let tracked: IndexSet<u32> = roots.keys().copied().collect();
     let mut uses: IndexMap<u32, LocalUses> = IndexMap::default();
-    collect_local_uses(body, &tracked, signatures, &mut uses);
+    collect_local_uses(body, &tracked, &alias_reads, signatures, &mut uses);
 
     for (local, use_facts) in &uses {
         let Some(consts) = roots.get_mut(local) else {
@@ -631,6 +702,12 @@ fn collect_roots(
             }
         }
         for rebind in &use_facts.rebinds {
+            if body
+                .borrowed_local(*rebind)
+                .is_some_and(|(_, read)| alias_reads.contains(&read))
+            {
+                continue;
+            }
             let expected = locals.get(*local as usize).map(|l| l.type_id);
             let Some(assigned) = struct_literal_consts(body, types, *rebind, expected) else {
                 consts.clear();
@@ -647,8 +724,89 @@ fn collect_roots(
             }
         }
     }
+    merge_aliases(&mut roots, &alias_of);
     roots.retain(|_, consts| !consts.is_empty());
     roots
+}
+
+/// One `let r = &base;` or `r = &base;`: the borrowing local, the local it
+/// names, and the node reading that local.
+struct AliasDef {
+    local: u32,
+    base: u32,
+    read: ExprId,
+}
+
+/// The alias edges that survive, and the reads they justify. A local is a second
+/// name for one object only while it names exactly one: bound to two different
+/// bases, or defined some other way as well, it is neither name's root. Both
+/// come out of the same pass so a dropped edge cannot leave its read behind —
+/// a read classified with no edge to narrow through is a write the base never
+/// hears about.
+fn settle_aliases(
+    defs: &[AliasDef],
+    defined: &IndexSet<u32>,
+    invalid: &IndexSet<u32>,
+) -> (IndexMap<u32, u32>, IndexSet<ExprId>) {
+    let mut alias_of: IndexMap<u32, u32> = IndexMap::default();
+    let mut rebound: IndexSet<u32> = IndexSet::default();
+    for def in defs {
+        let defined_otherwise = defined.contains(&def.local) || invalid.contains(&def.local);
+        let names_another_base = alias_of.get(&def.local).is_some_and(|b| *b != def.base);
+        if defined_otherwise || names_another_base {
+            rebound.insert(def.local);
+        } else {
+            alias_of.insert(def.local, def.base);
+        }
+    }
+    alias_of.retain(|alias, _| !rebound.contains(alias));
+    let reads = defs
+        .iter()
+        .filter(|def| alias_of.contains_key(&def.local))
+        .map(|def| def.read)
+        .collect();
+    (alias_of, reads)
+}
+
+/// Point every alias at the root of its chain, so one pass reaches a borrow of
+/// a borrow.
+fn flatten_aliases(alias_of: &mut IndexMap<u32, u32>) {
+    let resolved: Vec<(u32, u32)> = alias_of
+        .iter()
+        .map(|(alias, base)| {
+            let mut base = *base;
+            let mut steps = 0;
+            while let Some(next) = alias_of.get(&base) {
+                base = *next;
+                steps += 1;
+                assert!(
+                    steps <= alias_of.len(),
+                    "an alias is bound once, to an earlier local, so the chain cannot cycle"
+                );
+            }
+            (*alias, base)
+        })
+        .collect();
+    for (alias, base) in resolved {
+        alias_of.insert(alias, base);
+    }
+}
+
+/// Give a borrow and its referent one answer: what either use narrows away is
+/// narrowed away from both, since the two names reach one object.
+fn merge_aliases(roots: &mut IndexMap<u32, FieldConsts>, alias_of: &IndexMap<u32, u32>) {
+    for (alias, base) in alias_of {
+        let narrowed = roots.get(alias).cloned().unwrap_or_default();
+        if let Some(consts) = roots.get_mut(base) {
+            consts.retain(|field, c| narrowed.get(field) == Some(c));
+        }
+    }
+    for (alias, base) in alias_of {
+        let merged = roots.get(base).cloned().unwrap_or_default();
+        if let Some(consts) = roots.get_mut(alias) {
+            *consts = merged;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -661,7 +819,7 @@ fn collect_roots(
 struct Site {
     call: ExprId,
     callee: FuncId,
-    bindings: Vec<(u32, u32, FieldConst)>,
+    bindings: Vec<Binding>,
 }
 
 fn select_sites(
@@ -671,6 +829,7 @@ fn select_sites(
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
     roots: &IndexMap<u32, FieldConsts>,
+    constants: &CallConsts,
     state: &ParamSpecState,
 ) -> Vec<Site> {
     let mut sites = Vec::new();
@@ -678,10 +837,14 @@ fn select_sites(
         let NodeRef::Expr(id) = node else {
             return;
         };
-        let (callee, arguments): (FuncId, Vec<(usize, Operand)>) = match &body.exprs[id].kind {
+        let (callee, arguments): (FuncId, Vec<(usize, Operand, bool)>) = match &body.exprs[id].kind
+        {
             ExprKind::Call { func_id, args, .. } => (
                 *func_id,
-                args.iter().enumerate().map(|(i, a)| (i, a.expr)).collect(),
+                args.iter()
+                    .enumerate()
+                    .map(|(i, a)| (i, a.expr, a.is_mut))
+                    .collect(),
             ),
             _ => return,
         };
@@ -692,45 +855,47 @@ fn select_sites(
         if !signatures.specializable[index] {
             return;
         }
-        let mut bindings: Vec<(u32, u32, FieldConst)> = Vec::new();
-        for (position, arg) in arguments {
-            let Some((local, _)) = argument_local(body, arg) else {
+        let unanimous = constants.get(&callee);
+        let mut bindings: Vec<Binding> = Vec::new();
+        for (position, arg, is_mut) in arguments {
+            let Some(&param_local) = signatures.param_locals[index].get(position) else {
                 continue;
             };
-            let Some(consts) = roots.get(&local) else {
-                continue;
-            };
-            let Some(pointee) = signatures.param_struct[index]
+            match signatures.param_struct[index]
                 .get(position)
                 .copied()
                 .flatten()
-            else {
-                continue;
-            };
-            let local_struct = locals
-                .get(local as usize)
-                .and_then(|l| struct_base(l.type_id, types));
-            if local_struct != Some(pointee) {
-                continue;
-            }
-            let param_local = signatures.param_locals[index][position];
-            let Some(param) = facts.get(&(callee, param_local)) else {
-                continue;
-            };
-            if param.opaque {
-                continue;
-            }
-            for (field, value) in consts {
-                if param.writes.contains(field) || !param.reads.contains(field) {
-                    continue;
+            {
+                Some(pointee) => select_field_bindings(
+                    SelectField {
+                        locals,
+                        body,
+                        types,
+                        facts,
+                        roots,
+                    },
+                    (callee, param_local, pointee),
+                    arg,
+                    &mut bindings,
+                ),
+                // A scalar every caller agrees on is propagated in place, so
+                // only a position they disagree on is worth a clone.
+                None => {
+                    if !is_mut
+                        && signatures.scalar_specializable[index]
+                        && signatures.param_fixed[index][position]
+                        && unanimous.is_some_and(|u| u.get(position).is_some_and(Option::is_none))
+                        && let Some(value) = FieldConst::of_operand(body, arg)
+                    {
+                        bindings.push((param_local, Slot::Whole, value));
+                    }
                 }
-                bindings.push((param_local, *field, *value));
             }
         }
         if bindings.is_empty() {
             return;
         }
-        bindings.sort_unstable_by_key(|(param, field, value)| (*param, *field, value.sort_key()));
+        bindings.sort_unstable_by_key(|(param, slot, value)| (*param, *slot, value.sort_key()));
         bindings.dedup();
         sites.push(Site {
             call: id,
@@ -741,27 +906,70 @@ fn select_sites(
     sites
 }
 
+/// The caller-side facts `select_field_bindings` reads, gathered so the call
+/// keeps one argument per idea.
+struct SelectField<'a> {
+    locals: &'a [NirLocal],
+    body: &'a Body,
+    types: &'a TypeTable,
+    facts: &'a IndexMap<(FuncId, u32), ParamFacts>,
+    roots: &'a IndexMap<u32, FieldConsts>,
+}
+
+/// Bind the constant fields of a struct the caller passes by reference, for
+/// each field the callee reads and never writes.
+fn select_field_bindings(
+    caller: SelectField,
+    (callee, param_local, pointee): (FuncId, u32, TypeId),
+    arg: Operand,
+    bindings: &mut Vec<Binding>,
+) {
+    let Some((local, _)) = argument_local(caller.body, arg) else {
+        return;
+    };
+    let Some(consts) = caller.roots.get(&local) else {
+        return;
+    };
+    let local_struct = caller
+        .locals
+        .get(local as usize)
+        .and_then(|l| struct_base(l.type_id, caller.types));
+    if local_struct != Some(pointee) {
+        return;
+    }
+    let Some(param) = caller.facts.get(&(callee, param_local)) else {
+        return;
+    };
+    if param.opaque {
+        return;
+    }
+    for (field, value) in consts {
+        if param.writes.contains(field) || !param.reads.contains(field) {
+            continue;
+        }
+        bindings.push((param_local, Slot::Field(*field), *value));
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Pass entry
 // ---------------------------------------------------------------------------
 
-/// Specialize callees on the constant fields of the struct references their
-/// callers pass. Returns whether anything changed.
+/// Specialize callees on the constants their callers pass — a scalar argument,
+/// or a field of a struct passed by reference. Returns whether anything changed.
 pub(super) fn specialize_const_params(
     project: &mut NirPackage,
     state: &mut ParamSpecState,
     gate: &mut FunctionGate,
 ) -> bool {
-    let propagated = propagate_scalar_constants(project, state, gate);
+    let constants = collect_call_constants(project, state);
+    let propagated = propagate_scalar_constants(project, state, &constants, gate);
     let signatures = {
         let types = project.type_table.borrow();
         Signatures::build(project, &types)
     };
     let facts = summarize_params(project, &signatures);
-    if facts.is_empty() {
-        return propagated;
-    }
-    let per_caller = collect_sites(project, state, &signatures, &facts);
+    let per_caller = collect_sites(project, state, &signatures, &facts, &constants);
     if per_caller.is_empty() {
         return propagated;
     }
@@ -777,13 +985,12 @@ pub(super) fn specialize_const_params(
     true
 }
 
-/// A scalar agreed on by every caller needs no clone. DAE removes the parameter
-/// after its reads have folded. Borrowed and mutable parameters keep their slots.
-fn propagate_scalar_constants(
-    project: &mut NirPackage,
-    state: &ParamSpecState,
-    gate: &mut FunctionGate,
-) -> bool {
+/// The constant every call site passes at each argument position, per callee.
+/// `None` at a position the callers disagree on, or pass something non-constant
+/// at — which is what tells `select_sites` a clone is the only way to reach it.
+type CallConsts = IndexMap<FuncId, Vec<Option<FieldConst>>>;
+
+fn collect_call_constants(project: &mut NirPackage, state: &ParamSpecState) -> CallConsts {
     let cached: Vec<_> = state
         .clones
         .values()
@@ -791,7 +998,7 @@ fn propagate_scalar_constants(
         .copied()
         .collect();
     let reachable = reachable_function_positions(project, cached);
-    let mut constants: IndexMap<FuncId, Vec<Option<FieldConst>>> = IndexMap::default();
+    let mut constants: CallConsts = IndexMap::default();
     let mut collect = |body: &Body| {
         body.for_each_reachable_node(|node| {
             let NodeRef::Expr(e) = node else { return };
@@ -830,11 +1037,21 @@ fn propagate_scalar_constants(
     for global in &project.globals {
         collect(global.init.slot_expr().body());
     }
+    constants
+}
 
+/// A scalar agreed on by every caller needs no clone. DAE removes the parameter
+/// after its reads have folded. Borrowed and mutable parameters keep their slots.
+fn propagate_scalar_constants(
+    project: &mut NirPackage,
+    state: &ParamSpecState,
+    constants: &CallConsts,
+    gate: &mut FunctionGate,
+) -> bool {
     let mut changed = false;
     let mut buffers = EngineBuffers::default();
     for (id, values) in constants {
-        let mut func = project.functions[id.index()].borrow_mut();
+        let (id, mut func) = (*id, project.functions[id.index()].borrow_mut());
         // Cached clones and compiler items can gain callers in a later round;
         // their current call sites are not their whole contract.
         if !is_dae_sroa_eligible(&func, false)
@@ -849,14 +1066,10 @@ fn propagate_scalar_constants(
             .iter()
             .zip(values)
             .filter_map(|(p, value)| {
-                if p.is_mut
-                    || p.is_mut_ref
-                    || func.address_taken_locals.contains(&p.local_index)
-                    || func.stores_aliased_locals.contains(&p.local_index)
-                {
-                    return None;
-                }
-                value.map(|v| (p.local_index, v))
+                is_param_fixed(&func, p)
+                    .then_some(*value)
+                    .flatten()
+                    .map(|v| (p.local_index, v))
             })
             .collect();
         if bindings.is_empty() {
@@ -864,29 +1077,7 @@ fn propagate_scalar_constants(
         }
         let NirFunction { body, locals, .. } = &mut *func;
         let body = body.as_mut().expect("eligible function has a body");
-        let mut engine = Engine::new(body, &mut buffers, locals);
-        let mut reads = Vec::new();
-        engine.body.for_each_reachable_node(|node| {
-            if let NodeRef::Expr(e) = node
-                && let ExprKind::Local { index, .. } = &engine.body.exprs[e].kind
-                && let Some(value) = bindings.get(index)
-            {
-                reads.push((e, *value));
-            }
-        });
-        let mut rewritten = false;
-        for (read, value) in reads {
-            if is_place_read(&engine, read) {
-                continue;
-            }
-            let ty = engine.body.exprs[read].type_id;
-            if let Some(kind) = value.value_kind_at(ty) {
-                let value = engine.body.values.alloc_unshared(kind, ty);
-                engine.redirect_expr(read, Operand::Value(value));
-                rewritten = true;
-            }
-        }
-        if rewritten {
+        if substitute_locals(body, locals, &mut buffers, &bindings) {
             gate.mark_changed(id);
             changed = true;
         }
@@ -901,6 +1092,7 @@ fn collect_sites(
     state: &ParamSpecState,
     signatures: &Signatures,
     facts: &IndexMap<(FuncId, u32), ParamFacts>,
+    constants: &CallConsts,
 ) -> Vec<(usize, Vec<Site>)> {
     let types = project.type_table.borrow();
     let mut per_caller = Vec::new();
@@ -914,10 +1106,16 @@ fn collect_sites(
         }
         let seed = state.param_consts.get(&FuncId::new(index));
         let roots = collect_roots(&func, body, &types, signatures, facts, seed);
-        if roots.is_empty() {
-            continue;
-        }
-        let sites = select_sites(&func.locals, body, &types, signatures, facts, &roots, state);
+        let sites = select_sites(
+            &func.locals,
+            body,
+            &types,
+            signatures,
+            facts,
+            &roots,
+            constants,
+            state,
+        );
         if !sites.is_empty() {
             per_caller.push((index, sites));
         }
@@ -959,7 +1157,7 @@ fn mint_clones(
             }
             compiler_trace!(
                 "param_spec",
-                "specialized {} on {} field(s)",
+                "specialized {} on {} binding(s)",
                 project.functions[site.callee.index()].borrow().name,
                 site.bindings.len()
             );
@@ -1015,16 +1213,25 @@ fn build_clone(project: &mut NirPackage, site: &Site, id: FuncId, ordinal: usize
     clone.is_export = false;
 
     let mut bound: IndexMap<u32, FieldConsts> = IndexMap::default();
-    for (param_local, field, value) in &site.bindings {
-        bound
-            .entry(*param_local)
-            .or_default()
-            .insert(*field, *value);
+    let mut whole: IndexMap<u32, FieldConst> = IndexMap::default();
+    for (param_local, slot, value) in &site.bindings {
+        match slot {
+            Slot::Whole => {
+                whole.insert(*param_local, *value);
+            }
+            Slot::Field(field) => {
+                bound
+                    .entry(*param_local)
+                    .or_default()
+                    .insert(*field, *value);
+            }
+        }
     }
 
     let body = clone.body.as_mut().expect("specialized callee has a body");
     let mut buffers = EngineBuffers::default();
     substitute_fields(body, &mut clone.locals, &mut buffers, &bound);
+    substitute_locals(body, &mut clone.locals, &mut buffers, &whole);
 
     let types = project.type_table.borrow();
     let param_consts: IndexMap<String, ParamSeed> = clone
@@ -1099,7 +1306,7 @@ fn substitute_fields(
     locals: &mut Vec<NirLocal>,
     buffers: &mut EngineBuffers,
     bindings: &IndexMap<u32, FieldConsts>,
-) {
+) -> bool {
     let mut engine = Engine::new(body, buffers, locals);
     let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
     engine.body.for_each_reachable_node(|node| {
@@ -1122,9 +1329,35 @@ fn substitute_fields(
             reads.push((id, *value));
         }
     });
+    redirect_const_reads(&mut engine, reads)
+}
 
+/// Replace every read of a bound local with its constant.
+fn substitute_locals(
+    body: &mut Body,
+    locals: &mut Vec<NirLocal>,
+    buffers: &mut EngineBuffers,
+    bindings: &IndexMap<u32, FieldConst>,
+) -> bool {
+    let mut engine = Engine::new(body, buffers, locals);
+    let mut reads: Vec<(ExprId, FieldConst)> = Vec::new();
+    engine.body.for_each_reachable_node(|node| {
+        if let NodeRef::Expr(id) = node
+            && let ExprKind::Local { index, .. } = &engine.body.exprs[id].kind
+            && let Some(value) = bindings.get(index)
+        {
+            reads.push((id, *value));
+        }
+    });
+    redirect_const_reads(&mut engine, reads)
+}
+
+/// Point each read at its constant, leaving a place read — a read that names
+/// storage rather than a value — alone. Returns whether anything moved.
+fn redirect_const_reads(engine: &mut Engine, reads: Vec<(ExprId, FieldConst)>) -> bool {
+    let mut rewritten = false;
     for (read, value) in reads {
-        if is_place_read(&engine, read) {
+        if is_place_read(engine, read) {
             continue;
         }
         let type_id = engine.body.exprs[read].type_id;
@@ -1133,5 +1366,7 @@ fn substitute_fields(
         };
         let interned = engine.body.values.alloc_unshared(kind, type_id);
         engine.redirect_expr(read, Operand::Value(interned));
+        rewritten = true;
     }
+    rewritten
 }

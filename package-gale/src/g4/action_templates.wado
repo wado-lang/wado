@@ -296,10 +296,11 @@ fn eval_arg(chars: &List<char>, start: i32) -> Result<Expanded, String> {
 /// The Java-target expansion table. `recv` is the chained receiver
 /// (`X:F()` passes X's expansion), `args` are the evaluated arguments.
 fn expand_helper<S: AsStrSlice>(name: S, recv: &Option<String>, args: &List<String>) -> Result<String, String> {
+    let name = name.as_str_slice();
     // Receiver-capable helpers: the print helpers take the value chained or
     // as a single argument; the combinators require a chained receiver. A
     // non-match falls through to the receiver-free table below.
-    match name.to_string() {
+    match name {
         "writeln" => {
             return Result::Ok(`System.out.println(${chain_or_arg(recv, args, name)?});`);
         },
@@ -343,7 +344,7 @@ fn expand_helper<S: AsStrSlice>(name: S, recv: &Option<String>, args: &List<Stri
         return Result::Err(`template helper '${name}' does not take a chained receiver`);
     }
 
-    return match name.to_string() {
+    return match name {
         // Constants.
         "True" => Result::Ok("true"),
         "False" => Result::Ok("false"),

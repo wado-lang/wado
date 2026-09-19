@@ -2115,6 +2115,7 @@ fn lower_scan_body<S: AsStrSlice>(
     rule_name: S,
     reaches_rule_tail: bool,
 ) -> ScanBody {
+    let probe_rule = rule_name.to_string();
     let mut elements: List<ScanElement> = [];
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         elements.push(lower_alt_scan_element(
@@ -2123,7 +2124,7 @@ fn lower_scan_body<S: AsStrSlice>(
             ctx,
             reaches_rule_tail,
             true,
-            &rule_name.to_string(),
+            &probe_rule,
         ));
     }
     return ScanBody {

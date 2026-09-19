@@ -166,9 +166,8 @@ fn "value_copy_share_reference_field.wado/$test_0_a_read_through_a_reference_fie
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
     let used: i32;
-    let len_31: i32;
     let i_32: i32;
-    let len_42: i32;
+    let a_end_38: i32;
     let i_43: i32;
     let $sroa_v_used: i32;
     let $licm_repr_48: ref Array<i32>;
@@ -189,15 +188,14 @@ fn "value_copy_share_reference_field.wado/$test_0_a_read_through_a_reference_fie
     builtin::array_set<i32>(xs.repr, used, 999);
     xs.used = used + 1;
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
-        len_31 = $sroa_v_used - 0;
-        if len_31 != 2 {
+        if $sroa_v_used != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
         }
         i_32 = 0;
         b2: block {
             l3: loop {
-                break_if b2 i_32 >= len_31;
-                if builtin::array_get_value<i32>($array_clone_dst_2, 0 + i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, 0 + i_32) {
+                break_if b2 i_32 >= $sroa_v_used;
+                if builtin::array_get_value<i32>($array_clone_dst_2, i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, i_32) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
                 }
                 i_32 = i_32 + 1;
@@ -214,16 +212,16 @@ condition: v == [1, 2]
         unreachable;
     }
     $cond_4 = $inline_core_prelude_array_wado_seq_eq_i32__10: block -> bool {
-        len_42 = xs.used - 0;
-        if len_42 != 3 {
+        a_end_38 = xs.used;
+        if a_end_38 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
         }
         i_43 = 0;
         $licm_repr_48 = xs.repr;
         b7: block {
             l8: loop {
-                break_if b7 i_43 >= len_42;
-                if builtin::array_get_value<i32>($licm_repr_48, 0 + i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, 0 + i_43) {
+                break_if b7 i_43 >= a_end_38;
+                if builtin::array_get_value<i32>($licm_repr_48, i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, i_43) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
                 }
                 i_43 = i_43 + 1;
@@ -254,9 +252,8 @@ fn "value_copy_share_reference_field.wado/$test_1_a_read_through_a_callee_s_refe
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
     let used: i32;
-    let len_32: i32;
     let i_33: i32;
-    let len_43: i32;
+    let a_end_39: i32;
     let i_44: i32;
     let $sroa_v_used: i32;
     let $licm_repr_49: ref Array<i32>;
@@ -277,15 +274,14 @@ fn "value_copy_share_reference_field.wado/$test_1_a_read_through_a_callee_s_refe
     builtin::array_set<i32>(xs.repr, used, 999);
     xs.used = used + 1;
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_i32__8: block -> bool {
-        len_32 = $sroa_v_used - 0;
-        if len_32 != 2 {
+        if $sroa_v_used != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__8: 0;
         }
         i_33 = 0;
         b13: block {
             l14: loop {
-                break_if b13 i_33 >= len_32;
-                if builtin::array_get_value<i32>($array_clone_dst_2, 0 + i_33) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, 0 + i_33) {
+                break_if b13 i_33 >= $sroa_v_used;
+                if builtin::array_get_value<i32>($array_clone_dst_2, i_33) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, i_33) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__8: 0;
                 }
                 i_33 = i_33 + 1;
@@ -302,16 +298,16 @@ condition: v == [1, 2]
         unreachable;
     }
     $cond_4 = $inline_core_prelude_array_wado_seq_eq_i32__11: block -> bool {
-        len_43 = xs.used - 0;
-        if len_43 != 3 {
+        a_end_39 = xs.used;
+        if a_end_39 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
         }
         i_44 = 0;
         $licm_repr_49 = xs.repr;
         b18: block {
             l19: loop {
-                break_if b18 i_44 >= len_43;
-                if builtin::array_get_value<i32>($licm_repr_49, 0 + i_44) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, 0 + i_44) {
+                break_if b18 i_44 >= a_end_39;
+                if builtin::array_get_value<i32>($licm_repr_49, i_44) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, i_44) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__11: 0;
                 }
                 i_44 = i_44 + 1;
@@ -342,9 +338,8 @@ fn "value_copy_share_reference_field.wado/$test_2_a_read_through_one_reference_f
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
     let used: i32;
-    let len_31: i32;
     let i_32: i32;
-    let len_42: i32;
+    let a_end_38: i32;
     let i_43: i32;
     let $sroa_v_used: i32;
     let $licm_repr_49: ref Array<i32>;
@@ -365,15 +360,14 @@ fn "value_copy_share_reference_field.wado/$test_2_a_read_through_one_reference_f
     builtin::array_set<i32>(xs.repr, used, 999);
     xs.used = used + 1;
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
-        len_31 = $sroa_v_used - 0;
-        if len_31 != 2 {
+        if $sroa_v_used != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
         }
         i_32 = 0;
         b24: block {
             l25: loop {
-                break_if b24 i_32 >= len_31;
-                if builtin::array_get_value<i32>($array_clone_dst_2, 0 + i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, 0 + i_32) {
+                break_if b24 i_32 >= $sroa_v_used;
+                if builtin::array_get_value<i32>($array_clone_dst_2, i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, i_32) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
                 }
                 i_32 = i_32 + 1;
@@ -390,16 +384,16 @@ condition: v == [1, 2]
         unreachable;
     }
     $cond_4 = $inline_core_prelude_array_wado_seq_eq_i32__10: block -> bool {
-        len_42 = xs.used - 0;
-        if len_42 != 3 {
+        a_end_38 = xs.used;
+        if a_end_38 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
         }
         i_43 = 0;
         $licm_repr_49 = xs.repr;
         b29: block {
             l30: loop {
-                break_if b29 i_43 >= len_42;
-                if builtin::array_get_value<i32>($licm_repr_49, 0 + i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, 0 + i_43) {
+                break_if b29 i_43 >= a_end_38;
+                if builtin::array_get_value<i32>($licm_repr_49, i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, i_43) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
                 }
                 i_43 = i_43 + 1;
@@ -430,9 +424,8 @@ fn "value_copy_share_reference_field.wado/$test_3_a_write_through_a_reference_fi
     let $fuse_at_11: i32;
     let $fuse_at_12: i32;
     let used: i32;
-    let len_31: i32;
     let i_32: i32;
-    let len_42: i32;
+    let a_end_38: i32;
     let i_43: i32;
     let $licm_repr_46: ref Array<i32>;
     let $sroa_v_used: i32;
@@ -453,15 +446,14 @@ fn "value_copy_share_reference_field.wado/$test_3_a_write_through_a_reference_fi
     builtin::array_set<i32>(xs.repr, used, 999);
     xs.used = used + 1;
     $cond_3 = $inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
-        len_31 = $sroa_v_used - 0;
-        if len_31 != 2 {
+        if $sroa_v_used != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
         }
         i_32 = 0;
         b35: block {
             l36: loop {
-                break_if b35 i_32 >= len_31;
-                if builtin::array_get_value<i32>($array_clone_dst_2, 0 + i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, 0 + i_32) {
+                break_if b35 i_32 >= $sroa_v_used;
+                if builtin::array_get_value<i32>($array_clone_dst_2, i_32) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, i_32) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
                 }
                 i_32 = i_32 + 1;
@@ -478,16 +470,16 @@ condition: v == [1, 2]
         unreachable;
     }
     $cond_4 = $inline_core_prelude_array_wado_seq_eq_i32__10: block -> bool {
-        len_42 = xs.used - 0;
-        if len_42 != 3 {
+        a_end_38 = xs.used;
+        if a_end_38 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
         }
         i_43 = 0;
         $licm_repr_46 = xs.repr;
         b40: block {
             l41: loop {
-                break_if b40 i_43 >= len_42;
-                if builtin::array_get_value<i32>($licm_repr_46, 0 + i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, 0 + i_43) {
+                break_if b40 i_43 >= a_end_38;
+                if builtin::array_get_value<i32>($licm_repr_46, i_43) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, i_43) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
                 }
                 i_43 = i_43 + 1;
@@ -521,9 +513,8 @@ fn "value_copy_share_reference_field.wado/$test_4_a_read_off_a_reference_bound_o
     let v_16: ref "core:prelude//List<i32>";
     let self_17: ref "core:prelude//List<i32>";
     let used: i32;
-    let len_33: i32;
     let i_34: i32;
-    let len_44: i32;
+    let a_end_40: i32;
     let i_45: i32;
     let $sroa_v_used: i32;
     let $licm_repr_49: ref Array<i32>;
@@ -546,15 +537,14 @@ fn "value_copy_share_reference_field.wado/$test_4_a_read_off_a_reference_bound_o
     builtin::array_set<i32>(self_17.repr, used, 999);
     self_17.used = used + 1;
     $cond_4 = $inline_core_prelude_array_wado_seq_eq_i32__7: block -> bool {
-        len_33 = $sroa_v_used - 0;
-        if len_33 != 2 {
+        if $sroa_v_used != 2 {
             break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
         }
         i_34 = 0;
         b46: block {
             l47: loop {
-                break_if b46 i_34 >= len_33;
-                if builtin::array_get_value<i32>($array_clone_dst_2, 0 + i_34) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, 0 + i_34) {
+                break_if b46 i_34 >= $sroa_v_used;
+                if builtin::array_get_value<i32>($array_clone_dst_2, i_34) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_6, i_34) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__7: 0;
                 }
                 i_34 = i_34 + 1;
@@ -572,16 +562,16 @@ condition: v == [1, 2]
     }
     $v0 = inner.f;
     $cond_6 = $inline_core_prelude_array_wado_seq_eq_i32__10: block -> bool {
-        len_44 = $v0.used - 0;
-        if len_44 != 3 {
+        a_end_40 = $v0.used;
+        if a_end_40 != 3 {
             break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
         }
         i_45 = 0;
         $licm_repr_49 = $v0.repr;
         b51: block {
             l52: loop {
-                break_if b51 i_45 >= len_44;
-                if builtin::array_get_value<i32>($licm_repr_49, 0 + i_45) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, 0 + i_45) {
+                break_if b51 i_45 >= a_end_40;
+                if builtin::array_get_value<i32>($licm_repr_49, i_45) != builtin::array_get_value<i32>(global:value_copy_share_reference_field.wado::$const_obj_4, i_45) {
                     break $inline_core_prelude_array_wado_seq_eq_i32__10: 0;
                 }
                 i_45 = i_45 + 1;
@@ -1262,7 +1252,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: $av_310 };
     $av_308 = self.sign_plus;
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
-    prefix_len = select i32(self.alternate, $av_310 - 0, 0);
+    prefix_len = select i32(self.alternate, $av_310, 0);
     content_len = (sign_len + prefix_len) + digit_count;
     $av_309 = self.width;
     if select i32($av_309 <= 0, 1, content_len >= $av_309) {

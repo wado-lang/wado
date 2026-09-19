@@ -5,6 +5,10 @@
 // other in round 1). The optimistic assume-then-refute fix-point keeps both:
 // each one's tail call targets the other, which stays assumed. Both must get
 // the multi-value ABI.
+//
+// `black_box` keeps the entry constant: `even_step(4)` is a constant object,
+// which globalization caches in a global — a slot holding one ref, so the
+// multi-value ABI is declined at that call and the shape under test is gone.
 
 #[inline("never")]
 fn even_step(n: i32) -> Result<i32, String> {
@@ -35,9 +39,9 @@ fn is_even(n: i32) -> i32 {
 }
 
 export fn run() {
-    assert is_even(4) == 1;
-    assert is_even(5) == 0;
-    assert is_even(-1) == -1;
+    assert is_even(builtin::black_box(4)) == 1;
+    assert is_even(builtin::black_box(5)) == 0;
+    assert is_even(builtin::black_box(-1)) == -1;
 }
 
 __DATA__

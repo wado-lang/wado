@@ -13,9 +13,9 @@ use crate::defs::DefId;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{
-    CLOSURE_CALL_METHOD, CLOSURE_STRUCT_PREFIX, FqTraitName, FqTypeName, FreeFunctionName,
-    FunctionId, MethodName, is_fn_type_name, mangle_generic_name, mangle_local_trait_method,
-    mangle_method_generic,
+    FqTraitName, FqTypeName, FreeFunctionName, FunctionId, MethodName, closure_call_method_name,
+    closure_call_name, closure_functor_type, is_fn_type_name, mangle_generic_name,
+    mangle_local_trait_method, mangle_method_generic,
 };
 use crate::nir::{FuncId, FunctionRef, NirFunction, NirImport, NirStruct};
 use crate::nir_arena::{
@@ -652,11 +652,7 @@ pub fn remove_unreachable_closure_functors(project: &mut NirPackage) {
         .collect();
 
     project.closure_functors.retain(|functor| {
-        let call_method_name = MethodName::format_local(
-            &FqTypeName::shape(&functor.module_source, &functor.struct_name),
-            None,
-            CLOSURE_CALL_METHOD,
-        );
+        let call_method_name = closure_call_name(&functor.module_source, functor.id);
         surviving_funcs.contains(&(functor.module_source.clone(), call_method_name))
     });
 }
@@ -1291,17 +1287,12 @@ impl<'a> DceWalker<'a> {
     ) {
         // `$call` is always live: the canonical closure struct holds
         // a `ref.func` to it directly.
-        let struct_name = FqTypeName::shape(
-            closure_module,
-            &format!("{CLOSURE_STRUCT_PREFIX}{functor_id}"),
-        );
+        let struct_name = closure_functor_type(closure_module, functor_id);
         self.analysis
             .callees
-            .insert(FunctionId::Method(MethodName::new(
-                closure_module.clone(),
-                struct_name.clone(),
-                None,
-                CLOSURE_CALL_METHOD.to_string(),
+            .insert(FunctionId::Method(closure_call_method_name(
+                closure_module,
+                functor_id,
             )));
 
         // A per-functor `$Closure_N^Inspect` impl only needs to stay alive

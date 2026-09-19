@@ -91,6 +91,18 @@ The key-value pairs, in insertion order.
 
 Removes all key-value pairs from the map.
 
+#### `pub fn get_str<S: AsStrSlice>(&self, key: S) -> Option<V>`
+
+Returns the value stored under text equal to `key`, or null.
+
+#### `pub fn contains_key_str<S: AsStrSlice>(&self, key: S) -> bool`
+
+Returns true if some key spells the same text as `key`.
+
+#### `pub fn get_ref_str<S: AsStrSlice>(&self, key: S) -> Option<&V>`
+
+Returns a reference to the value stored under text equal to `key`.
+
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
 ##### `fn index_assign(&mut self, key: K, value: Self::Output)`

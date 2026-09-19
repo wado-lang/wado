@@ -573,3 +573,38 @@ test "index assignment still overwrites" {
     map["a"] = 2;
     assert map.get("a") matches { Some(v) && v == 2 };
 }
+
+test "get_str and contains_key_str look up by a view" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map["alpha"] = 1;
+    map["beta"] = 2;
+
+    let text = "xx-beta-xx".as_str_slice();
+    assert map.contains_key_str(text.sub(3, 7));
+    assert map.get_str(text.sub(3, 7)) matches { Some(v) && v == 2 };
+
+    assert !map.contains_key_str(text.sub(0, 2));
+    assert map.get_str(text.sub(0, 2)) matches { None };
+
+    assert map.get_str("alpha") matches { Some(v) && v == 1 };
+}
+
+test "get_str sees a removed key as absent" {
+    let mut map: TreeMap<String, i32> = TreeMap::new();
+    map["alpha"] = 1;
+    map.remove("alpha");
+    assert !map.contains_key_str("alpha".as_str_slice());
+    assert map.get_str("alpha".as_str_slice()) matches { None };
+}
+
+test "get_ref_str borrows the stored value" {
+    let mut map: TreeMap<String, List<i32>> = TreeMap::new();
+    map["alpha"] = [1, 2];
+
+    let text = "xx-alpha-xx".as_str_slice();
+    assert map.get_ref_str(text.sub(3, 8)) matches { Some(v) && v.len() == 2 };
+    assert map.get_ref_str("beta") matches { None };
+
+    map.remove("alpha");
+    assert map.get_ref_str("alpha") matches { None };
+}

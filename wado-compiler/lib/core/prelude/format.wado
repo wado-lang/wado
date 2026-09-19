@@ -122,6 +122,12 @@ impl Formatter {
         self.buf.push_str(s);
     }
 
+    /// Write a `Display` value with the default spec, as `write_str` writes
+    /// text as it stands: the spec belongs to the value, not to its parts.
+    pub fn write_display<T: Display>(&mut self, value: &T) {
+        self.buf.push_display(value);
+    }
+
     /// Write a single character to the output buffer.
     pub fn write_char(&mut self, c: char) {
         self.buf.push(c);
@@ -138,9 +144,6 @@ impl Formatter {
     /// If no width is set or content is already as wide, writes content as-is.
     /// Width counts characters, so a multi-byte content pads by what it renders.
     pub fn pad<S: AsStrSlice>(&mut self, content: S) {
-        // The unpadded paths append `content` itself rather than a view of it:
-        // a view hides the append's operands from the constant-folding frame,
-        // and every `${x}` with no width specifier lands here.
         if self.width <= 0 {
             self.buf.push_str(content);
             return;
@@ -400,16 +403,20 @@ impl Formatter {
 // Defined here (not in string.wado) to avoid string.wado depending on format.wado,
 // which would cause codegen struct registration order issues.
 
+/// Write text through the spec. Precision caps the length in characters
+/// (Rust's `{:.N}`), narrowing the view rather than copying it out.
+fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
+    if f.precision < 0 {
+        f.pad(text);
+        return;
+    }
+    let view = text.as_str_slice();
+    f.pad(view.sub_unchecked(0, view.char_prefix_end(f.precision)));
+}
+
 impl Display for String {
     pub fn fmt(&self, f: &mut Formatter) {
-        // Precision caps the length in characters (Rust's `{:.N}`); no marker.
-        if f.precision >= 0 {
-            let mut capped = *self;
-            capped.truncate_chars(f.precision);
-            f.pad(capped);
-        } else {
-            f.pad(*self);
-        }
+        pad_text(f, *self);
     }
 }
 
@@ -432,70 +439,71 @@ impl PushDisplay for String {
     }
 }
 
-impl Inspect for String {
-    pub fn inspect(&self, f: &mut Formatter) {
-        // The escape policy below is mirrored by `write_escaped` in
-        // package-gale's wadopoet.wado (it emits Wado source literals). Keep
-        // the two in lockstep — same escaped set.
-        //
-        // Caps to N chars and appends `...` outside the quotes when truncated
-        // (the marker doesn't count toward N). PRECISION_DEFAULT uses the
-        // default cap; negatives below it mean no cap.
-        let limit = f.resolved_seq_limit();
-        f.write_char('"');
-        let mut count = 0;
-        let mut truncated = false;
-        for let c of (*self).chars() {
-            if limit >= 0 && count >= limit {
-                truncated = true;
-                break;
-            }
-            if c == '"' {
-                f.write_char('\\');
-                f.write_char('"');
-            } else if c == '\\' {
-                f.write_char('\\');
-                f.write_char('\\');
-            } else if c == '\n' {
-                f.write_char('\\');
-                f.write_char('n');
-            } else if c == '\r' {
-                f.write_char('\\');
-                f.write_char('r');
-            } else if c == '\t' {
-                f.write_char('\\');
-                f.write_char('t');
+/// Write text as a quoted, escaped literal, capped at the formatter's
+/// sequence limit with a trailing `...` outside the quotes when it cuts.
+fn inspect_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
+    // The escaped set is mirrored by `write_escaped` in package-gale's
+    // wadopoet.wado, which emits Wado source literals. Keep the two in lockstep.
+    let limit = f.resolved_seq_limit();
+    f.write_char('"');
+    let mut count = 0;
+    let mut truncated = false;
+    for let c of text.chars() {
+        if limit >= 0 && count >= limit {
+            truncated = true;
+            break;
+        }
+        if c == '"' {
+            f.write_char('\\');
+            f.write_char('"');
+        } else if c == '\\' {
+            f.write_char('\\');
+            f.write_char('\\');
+        } else if c == '\n' {
+            f.write_char('\\');
+            f.write_char('n');
+        } else if c == '\r' {
+            f.write_char('\\');
+            f.write_char('r');
+        } else if c == '\t' {
+            f.write_char('\\');
+            f.write_char('t');
+        } else {
+            let code = c as i32;
+            if code < 0x20 || code == 0x7f {
+                // Control char with no named escape: `\u{HEX}`, never raw.
+                f.write_str("\\u{");
+                f.write_str(`${code:x}`);
+                f.write_char('}');
             } else {
-                let code = c as i32;
-                if code < 0x20 || code == 0x7f {
-                    // Control char with no named escape: `\u{HEX}`, never raw.
-                    f.write_str("\\u{");
-                    f.write_str(`${code:x}`);
-                    f.write_char('}');
-                } else {
-                    f.write_char(c);
-                }
+                f.write_char(c);
             }
-            count += 1;
         }
-        f.write_char('"');
-        if truncated {
-            f.write_str("...");
-        }
+        count += 1;
+    }
+    f.write_char('"');
+    if truncated {
+        f.write_str("...");
     }
 }
 
-// A view renders as the text it views, so both traits copy it out and defer to
-// `String`'s. Placed here for the same reason `impl Display for String` is.
+impl Inspect for String {
+    pub fn inspect(&self, f: &mut Formatter) {
+        inspect_text(f, *self);
+    }
+}
+
+// A view renders as the text it views, so both traits render it where it lies.
+// Placed here for the same reason `impl Display for String` is.
 impl Display for StrSlice {
     pub fn fmt(&self, f: &mut Formatter) {
-        self.to_string().fmt(f);
+        pad_text(f, *self);
     }
 }
 
 impl Inspect for StrSlice {
     pub fn inspect(&self, f: &mut Formatter) {
-        self.to_string().inspect(f);
+        inspect_text(f, *self);
     }
 }
 

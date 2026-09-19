@@ -11,7 +11,7 @@ use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
     PatKind, StmtId, StmtKind,
 };
-use crate::nir_value_graph::ValueKind;
+use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 
@@ -94,6 +94,9 @@ impl Interpreter<'_> {
             return true;
         }
         if rewrite_short_circuit_via(sink, e) {
+            return true;
+        }
+        if rewrite_arith_identity_via(sink, e) {
             return true;
         }
         if self.rewrite_if_expr_via(sink, e) {
@@ -1142,6 +1145,35 @@ pub(super) fn rewrite_short_circuit_via<S: EditSink>(sink: &mut S, e: ExprId) ->
     }
 }
 
+/// Drop an integer operand that is its operator's neutral element, keeping the
+/// other one: `x + 0`, `x - 0`, `x * 1`, `x / 1`, `x | 0`, `x ^ 0`, `x << 0`,
+/// `x >> 0`, and the commutative mirrors.
+///
+/// Integers only: `x + 0.0` is `+0.0` rather than `x` when `x` is `-0.0`. Both
+/// operands run either way, so unlike a short-circuit nothing here has to be
+/// discardable — a promoted constant is all that is dropped.
+pub(super) fn rewrite_arith_identity_via<S: EditSink>(sink: &mut S, e: ExprId) -> bool {
+    let body = sink.body();
+    let ExprKind::Binary { left, op, right } = &body.exprs[e].kind else {
+        return false;
+    };
+    let (left, op, right) = (*left, *op, *right);
+    let keep = if operand_int(body, right).is_some_and(|n| neutral_int(op, n, Side::Right)) {
+        left
+    } else if operand_int(body, left).is_some_and(|n| neutral_int(op, n, Side::Left)) {
+        right
+    } else {
+        return false;
+    };
+    match keep {
+        Operand::Expr(keep_e) => {
+            sink.become_expr(e, keep_e);
+            true
+        }
+        Operand::Value(v) => sink.redirect_to_value(e, v),
+    }
+}
+
 /// The value a short-circuit collapses to when one operand is its absorbing
 /// element — `true` for `||`, `false` for `&&`. `None` unless the *other*
 /// operand is discardable: `x || true` still evaluates `x` first, so deleting
@@ -1364,6 +1396,15 @@ fn existing_elements(body: &Body, existing: Option<Operand>) -> Option<Vec<Optio
 pub(super) fn operand_bool(body: &Body, op: Operand) -> Option<bool> {
     match body.values.kind(op.as_value()?) {
         ValueKind::Bool(b) => Some(*b),
+        _ => None,
+    }
+}
+
+/// The integer value of an operand: a promoted `ValueKind::Int` in the pool.
+/// A float is a different kind, which is what keeps [`neutral_int`] off them.
+fn operand_int(body: &Body, op: Operand) -> Option<u64> {
+    match body.values.kind(op.as_value()?) {
+        ValueKind::Int(n, _) => Some(*n),
         _ => None,
     }
 }

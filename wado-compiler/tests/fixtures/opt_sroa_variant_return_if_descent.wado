@@ -34,10 +34,12 @@ fn dispatch(use_leaf: bool, x: i32) -> Result<i32, String> {
     };
 }
 
+// `black_box` keeps the arguments off the constant path: specializing
+// `dispatch` on them renames the callee the expectation below pins.
 fn run_all() -> i32 {
-    let a = match dispatch(true, 5) { Ok(v) => v, Err(_) => -100 };
-    let b = match dispatch(false, 0) { Ok(v) => v, Err(_) => -100 };
-    let c = match dispatch(true, -1) { Ok(v) => v, Err(_) => -100 };
+    let a = match dispatch(builtin::black_box(true), builtin::black_box(5)) { Ok(v) => v, Err(_) => -100 };
+    let b = match dispatch(builtin::black_box(false), builtin::black_box(0)) { Ok(v) => v, Err(_) => -100 };
+    let c = match dispatch(builtin::black_box(true), builtin::black_box(-1)) { Ok(v) => v, Err(_) => -100 };
     return a + b + c;
 }
 

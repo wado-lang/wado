@@ -296,6 +296,58 @@ pub fn to_kebab(name: &str) -> String {
 /// convention — there is no Wado-side declaration to anchor it to.
 pub const CLOSURE_STRUCT_PREFIX: &str = "$Closure_";
 
+/// The name closure `functor_id`'s functor struct is interned under.
+#[must_use]
+pub fn closure_functor_struct_name(functor_id: u32) -> String {
+    format!("{CLOSURE_STRUCT_PREFIX}{functor_id}")
+}
+
+/// The functor struct closure `functor_id` lowers to.
+#[must_use]
+pub fn closure_functor_type(module: &ModuleSource, functor_id: u32) -> FqTypeName {
+    FqTypeName::shape(module, &closure_functor_struct_name(functor_id))
+}
+
+/// The `$call` triple codegen re-mangles a functor's method from.
+#[must_use]
+pub fn closure_call_method_info(module: &ModuleSource, functor_id: u32) -> LocalMethodName {
+    LocalMethodName::new(
+        closure_functor_type(module, functor_id),
+        None,
+        CLOSURE_CALL_METHOD.to_string(),
+    )
+}
+
+/// The mangled name of closure functor `functor_id`'s `$call`.
+#[must_use]
+pub fn closure_call_name(module: &ModuleSource, functor_id: u32) -> String {
+    MethodName::format_local(
+        &closure_functor_type(module, functor_id),
+        None,
+        CLOSURE_CALL_METHOD,
+    )
+}
+
+/// The call-graph identity of closure functor `functor_id`'s `$call`.
+#[must_use]
+pub fn closure_call_method_name(module: &ModuleSource, functor_id: u32) -> MethodName {
+    MethodName::new(
+        module.clone(),
+        closure_functor_type(module, functor_id),
+        None,
+        CLOSURE_CALL_METHOD.to_string(),
+    )
+}
+
+/// Whether `name` is one [`closure_call_name`] builds, for any functor.
+#[must_use]
+pub fn is_closure_call_name(name: &str) -> bool {
+    name.strip_suffix(CLOSURE_CALL_METHOD)
+        .and_then(|head| head.strip_suffix("::"))
+        .and_then(|head| head.rsplit_once(CLOSURE_STRUCT_PREFIX))
+        .is_some_and(|(_, id)| !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// Field name of the `index`-th environment slot on a closure functor
 /// (`$capture_0`, `$capture_1`, …).
 #[must_use]
@@ -2063,6 +2115,14 @@ mod tests {
     use super::*;
     use crate::compiler_host::DependencyIndex;
     use std::assert_matches;
+
+    #[test]
+    fn closure_call_name_is_recognised_under_its_module_qualifier() {
+        assert!(is_closure_call_name("main.wado//$Closure_0::$call"));
+        assert!(is_closure_call_name("$Closure_12::$call"));
+        assert!(!is_closure_call_name("main.wado//Point::$call"));
+        assert!(!is_closure_call_name("main.wado//$Closure_0::apply"));
+    }
 
     #[test]
     fn diagnostic_name_drops_a_clone_suffix_but_keeps_a_minted_name() {

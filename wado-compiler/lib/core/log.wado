@@ -88,15 +88,25 @@ impl LenientFromStr for Level {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Level, LenientParseError> {
-        let text = s.as_str_slice().to_string();
-        return match text.to_ascii_lowercase() {
-            "trace" => Result::Ok(Level::Trace),
-            "debug" => Result::Ok(Level::Debug),
-            "info" => Result::Ok(Level::Info),
-            "warn" => Result::Ok(Level::Warn),
-            "error" => Result::Ok(Level::Error),
-            _ => Result::Err(LenientParseError::new(`unknown log level: ${text}`)),
-        };
+        // Compared in place: lowercasing a copy to match it allocates twice per
+        // directive, and every name here is ASCII.
+        let text = s.as_str_slice();
+        if text.eq_ignore_ascii_case("trace") {
+            return Result::Ok(Level::Trace);
+        }
+        if text.eq_ignore_ascii_case("debug") {
+            return Result::Ok(Level::Debug);
+        }
+        if text.eq_ignore_ascii_case("info") {
+            return Result::Ok(Level::Info);
+        }
+        if text.eq_ignore_ascii_case("warn") {
+            return Result::Ok(Level::Warn);
+        }
+        if text.eq_ignore_ascii_case("error") {
+            return Result::Ok(Level::Error);
+        }
+        return Result::Err(LenientParseError::new(`unknown log level: ${text}`));
     }
 }
 

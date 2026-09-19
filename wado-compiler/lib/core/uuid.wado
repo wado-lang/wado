@@ -175,27 +175,32 @@ impl Uuid {
     /// The canonical hyphenated lowercase string form.
     pub fn to_string(&self) -> String {
         let mut s = String::with_capacity(36);
+        self.write_to(&mut s);
+        return s;
+    }
+
+    /// Append the canonical form, so rendering one needs no `to_string` copy.
+    fn write_to(&self, out: &mut String) {
         for let mut i = 0; i < 16; i += 1 {
             if i == 4 || i == 6 || i == 8 || i == 10 {
-                s.push('-');
+                out.push('-');
             }
             let byte = self.bytes.extract_lane(i);
-            s.push(hex_digit(byte >> 4 & 0xF));
-            s.push(hex_digit(byte & 0xF));
+            out.push(hex_digit(byte >> 4 & 0xF));
+            out.push(hex_digit(byte & 0xF));
         }
-        return s;
     }
 }
 
 impl Display for Uuid {
     fn fmt(&self, f: &mut Formatter) {
-        f.write_str(&self.to_string());
+        self.write_to(f.buf);
     }
 }
 
 impl Inspect for Uuid {
     pub fn inspect(&self, f: &mut Formatter) {
-        f.write_str(&self.to_string());
+        self.write_to(f.buf);
     }
 }
 

@@ -12,6 +12,7 @@ use crate::nir_package::NirPackage;
 use crate::niri::{build_callee_map, build_ctfe_builtin_map};
 
 use super::aggregate_forward::AggregateForwardRule;
+use super::closure_devirt::build_closure_devirt;
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
 use super::const_folding::ConstFoldRule;
 use super::drop_value::DropValueRule;
@@ -69,6 +70,9 @@ pub(super) fn run_peephole(
     let if_chain_rule = IfChainToMatchRule::new(&type_table);
     let tuple_projection_rule = TupleProjectionRule;
     let known_case_rule = KnownCaseRule;
+    // Post-inline only: the closure-bearing field read it resolves through is
+    // what `inline` exposes when an iterator adaptor's `next` is copied in.
+    let closure_devirt_rule = (!pre_inline).then(|| build_closure_devirt(project));
 
     let len = project.functions.len();
     let mut buffers = EngineBuffers::default();
@@ -161,6 +165,9 @@ pub(super) fn run_peephole(
         // `elide_rule`, which reclaims what it strips.
         if !pre_inline {
             rules.push(&DropValueRule);
+        }
+        if let Some(closure_devirt_rule) = closure_devirt_rule.as_ref() {
+            rules.push(closure_devirt_rule);
         }
         rules.extend([
             // Ahead of the folding rules: the arms it drops are what leaves a

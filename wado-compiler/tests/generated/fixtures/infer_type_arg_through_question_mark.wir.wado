@@ -74,7 +74,6 @@ fn "infer_type_arg_through_question_mark.wado/$test_0_infer_through___on_a_resul
     let a: ref Array<u8>;
     let a_end: i32;
     let b: ref Array<u8>;
-    let len: i32;
     let i: i32;
     let $sroa_slot_36: ref null "core:prelude/string.wado//String";
     $sroa_slot_36 = ref.null none;
@@ -85,15 +84,14 @@ fn "infer_type_arg_through_question_mark.wado/$test_0_infer_through___on_a_resul
         a = v_2.repr;
         a_end = v_2.used;
         b = global:infer_type_arg_through_question_mark.wado::$const_obj_1;
-        len = a_end - 0;
-        if len != 2 {
+        if a_end != 2 {
             break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
         }
         i = 0;
         b1: block {
             l2: loop {
-                break_if b1 i >= len;
-                if builtin::array_get_value<u8>(a, 0 + i) != builtin::array_get_value<u8>(b, 0 + i) {
+                break_if b1 i >= a_end;
+                if builtin::array_get_value<u8>(a, i) != builtin::array_get_value<u8>(b, i) {
                     break $inline_core_prelude_array_wado_seq_eq_u8__6: 0;
                 }
                 i = i + 1;

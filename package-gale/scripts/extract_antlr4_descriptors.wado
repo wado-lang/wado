@@ -88,7 +88,7 @@ fn triage_doc_line<S: AsStrSlice>(axis: S) -> String {
 // ===== Descriptor format =====
 
 fn is_known_section<S: AsStrSlice>(name: S) -> bool {
-    return match name.to_string() {
+    return match name.as_str_slice() {
         "notes" | "type" | "grammar" | "slaveGrammar" | "start" | "input" | "output" | "errors" | "flags" | "skip" => true,
         _ => false,
     };
@@ -131,7 +131,7 @@ struct ParsedDescriptor {
 /// The recognizer a `[type]` names. A `Composite*` one is the same recognizer
 /// with its grammar spread over more than one file.
 fn recognizer_type<S: AsStrSlice>(declared: S) -> String {
-    return match declared.to_string() {
+    return match declared.as_str_slice() {
         "CompositeParser" => "Parser",
         "CompositeLexer" => "Lexer",
         _ => declared.to_string(),
@@ -537,7 +537,7 @@ fn list_files_with_suffix<S: AsStrSlice>(dir: &Descriptor, suffix: S) -> List<St
     loop {
         let chunk = stream.read(DIR_READ_CHUNK);
         for let e of chunk.items {
-            if e.type matches { RegularFile } && e.name.ends_with(suffix.to_string()) {
+            if e.type matches { RegularFile } && e.name.ends_with(suffix) {
                 out.push(e.name);
             }
         }
@@ -1127,7 +1127,7 @@ fn parse_call_for_start<S: AsStrSlice>(start: S) -> String {
 /// other diagnostics that don't actually fail the parse — those are
 /// not parse-must-error candidates.
 fn stage_a_err_category_eligible<S: AsStrSlice>(category: S) -> bool {
-    return match category.to_string() {
+    return match category.as_str_slice() {
         "ParserErrors" | "LexerErrors" => true,
         _ => false,
     };
@@ -2462,7 +2462,7 @@ test "normalize: line-noise output starting with paren but no name is rejected" 
 // ===== Stage B: status.toml triage parser =====
 
 fn lookup_for_axis<S: AsStrSlice, S1: AsStrSlice>(maps: &TriageMaps, axis: S, key: S1) -> Triage {
-    return match axis.to_string() {
+    return match axis.as_str_slice() {
         "cat" => maps.category.lookup(key),
         "a" => maps.stage_a.lookup(key),
         "oracle" => maps.stage_b_oracle.lookup(key),

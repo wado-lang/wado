@@ -12,7 +12,7 @@ use crate::compiler_item::CompilerItem;
 use crate::hashmap::{IndexMap, IndexSet};
 
 use crate::module_source::ModuleSource;
-use crate::name::{FunctionId, LocalMethodName};
+use crate::name::{FunctionId, LocalMethodName, closure_call_method_info, closure_call_name};
 use crate::nir_arena::{Body, ExprBody};
 use crate::tir::{self, EffectRef, StructDef, TypeId, TypeTable};
 use crate::token::Span;
@@ -144,6 +144,17 @@ impl FunctionRef {
             | "is_uninitialized"
             | "black_box" => Some(format!("builtin::{generic_name}")),
             _ => None,
+        }
+    }
+
+    /// The `$call` of closure functor `functor_id`, under the mangled name
+    /// `lower` mints. Spelled a second way it would be a second key.
+    pub fn closure_call(module: &ModuleSource, functor_id: u32) -> Self {
+        Self {
+            module_source: module.clone(),
+            name: closure_call_name(module, functor_id),
+            monomorph_info: None,
+            method_info: Some(closure_call_method_info(module, functor_id)),
         }
     }
 

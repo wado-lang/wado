@@ -1,0 +1,29 @@
+// Test: a callee whose callers disagree on a scalar argument is cloned per
+// constant, so each clone folds the branch that constant decides.
+//
+// `#[inline(never)]` keeps the callee a call, which is what makes the clone
+// observable; `black_box` keeps the other argument opaque.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn scaled(n: i32, factor: i32) -> i32 {
+    if factor == 0 {
+        return 0;
+    }
+    return n * factor;
+}
+
+export fn run() with Stdout {
+    let n = builtin::black_box(7);
+    println(`${scaled(n, 0)}`);
+    println(`${scaled(n, 3)}`);
+}
+
+__DATA__
+{
+    "stdout": "0\n21\n",
+    "wir_expect:O2": [
+        "scaled$spec"
+    ]
+}
