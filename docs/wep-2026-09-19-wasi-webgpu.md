@@ -111,6 +111,20 @@ operation through `.wait()`, and a `flags` value built with `|`.
   Phase 2 proposal most programs never import, and `#[cm]` in any namespace lets
   an external package carry it instead. The first two roadmap items assume
   bundling and would be dropped if it were refused.
+- What bundling costs is measured, against the module generated from
+  `0.3.0-rc.2`. The registry bootstrap each `wado` process runs grows by the 8 ms
+  the module takes to lex and parse, and each compilation's private copy of that
+  registry by 0.9 ms, so the 13537-fixture e2e suite gains about 12 s of its
+  1608 s. `mise run test-stdlib` gains three files and stays inside its own
+  run-to-run spread, `wado format` 79 ms, and a release binary the module's
+  87 KB of source. The vendored proposal is 692 KB beside wasmtime's 93 MB.
+  Nothing here needs a mechanism to stay cheap; what is unmeasured is the same
+  module once the LSP ships it to a browser.
+- The bootstrap parses every bundled binding module, and each compilation copies
+  the registry it fills, so both scale with what is bundled rather than with what
+  a program imports — about 1.6 ms per compilation at today's sizes. Making
+  either demand-driven means running the two-pass `use` resolution over a
+  package closure instead of the whole table.
 - No host implements `wasi:webgpu`, wasmtime included, so the fixtures can only
   be compiled and never run. Closing this means a host of our own, or a
   third-party runtime to point `wado run` at.
