@@ -197,25 +197,44 @@ fn is_executable(path: &Path) -> bool {
 mod tests {
     use super::*;
 
+    /// What an executable is named, and where an absolute path starts: both
+    /// differ by platform, and the code under test reads both.
+    #[cfg(unix)]
+    const EXE: &str = "";
+    #[cfg(not(unix))]
+    const EXE: &str = ".EXE";
+    #[cfg(unix)]
+    const ABSOLUTE: [&str; 2] = ["/usr/bin", "/opt/bin"];
+    #[cfg(not(unix))]
+    const ABSOLUTE: [&str; 2] = [r"C:\usr\bin", r"C:\opt\bin"];
+
     #[test]
     fn a_file_name_spells_a_subcommand_only_in_the_builtin_shape() {
-        assert_eq!(subcommand_name("wado-run-webgpu"), Some("run-webgpu"));
-        assert_eq!(subcommand_name("wado-x9"), Some("x9"));
-        assert_eq!(subcommand_name("wado"), None);
-        assert_eq!(subcommand_name("wado-"), None);
-        assert_eq!(subcommand_name("wado-.."), None);
-        assert_eq!(subcommand_name("wado-Run"), None);
-        assert_eq!(subcommand_name("wado-a b"), None);
-        assert_eq!(subcommand_name("cargo-run"), None);
+        assert_eq!(
+            subcommand_name(&format!("wado-run-webgpu{EXE}")),
+            Some("run-webgpu")
+        );
+        assert_eq!(subcommand_name(&format!("wado-x9{EXE}")), Some("x9"));
+        for file in [
+            "wado",
+            "wado-",
+            "wado-..",
+            "wado-Run",
+            "wado-a b",
+            "cargo-run",
+        ] {
+            assert_eq!(subcommand_name(&format!("{file}{EXE}")), None, "{file}");
+        }
     }
 
     /// The empty entry is the one that reads as the current directory.
     #[test]
     fn the_search_skips_every_entry_that_is_not_absolute() {
-        let path = std::env::join_paths(["/usr/bin", "", "rel/bin", "/opt/bin"]).unwrap();
+        let [first, second] = ABSOLUTE;
+        let path = std::env::join_paths([first, "", "rel/bin", second]).unwrap();
         assert_eq!(
             dirs_in(&path),
-            vec![PathBuf::from("/usr/bin"), PathBuf::from("/opt/bin")]
+            vec![PathBuf::from(first), PathBuf::from(second)]
         );
     }
 
