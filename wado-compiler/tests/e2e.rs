@@ -921,6 +921,9 @@ fn run_normal_test(
     }
 
     assert_wat_lines(&wasm, &spec.wat_lines, test_id);
+    // Every check on the compiler's own output runs before the execution
+    // dispatch: one placed after it is silently skipped by `compile_only`.
+    assert_wir_expectations(wir_text.as_deref(), spec, opt_level, test_id);
 
     if spec.compile_only {
         return;
@@ -977,37 +980,52 @@ fn run_normal_test(
         verify_result(&result, spec, test_id, opt_level);
     }
 
-    if let Some(wir_text) = wir_text {
-        let (expect, not_expect) = spec.wir_expectations(opt_level);
-        let opt_name = common::opt_level_name(opt_level);
-        let wir_text = match spec.wir_scope.as_deref() {
-            None => wir_text.as_str(),
-            Some(scope) => scope_to_function(&wir_text, scope).unwrap_or_else(|| {
-                panic!(
-                    "[{test_id}] wir_scope names no function in the WIR\n\
-                     scope: {scope}\n\
-                     WIR output:\n{wir_text}"
-                )
-            }),
-        };
+}
 
-        for pattern in expect {
-            assert!(
-                wir_contains(wir_text, pattern),
-                "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
-                 pattern: {pattern}\n\
+/// Check the fixture's `wir_expect:Ox` / `wir_not_expect:Ox` patterns against the
+/// retained WIR, narrowed to `wir_scope` where the fixture names one.
+fn assert_wir_expectations(
+    wir_text: Option<&str>,
+    spec: &TestSpec,
+    opt_level: OptLevel,
+    test_id: &str,
+) {
+    let Some(wir_text) = wir_text else {
+        assert!(
+            !spec.has_wir_expectations(opt_level),
+            "[{test_id}] the fixture states WIR expectations but no WIR was retained"
+        );
+        return;
+    };
+    let (expect, not_expect) = spec.wir_expectations(opt_level);
+    let opt_name = common::opt_level_name(opt_level);
+    let wir_text = match spec.wir_scope.as_deref() {
+        None => wir_text,
+        Some(scope) => scope_to_function(wir_text, scope).unwrap_or_else(|| {
+            panic!(
+                "[{test_id}] wir_scope names no function in the WIR\n\
+                 scope: {scope}\n\
                  WIR output:\n{wir_text}"
-            );
-        }
+            )
+        }),
+    };
 
-        for pattern in not_expect {
-            assert!(
-                !wir_contains(wir_text, pattern),
-                "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
-                 pattern: {pattern}\n\
-                 WIR output:\n{wir_text}"
-            );
-        }
+    for pattern in expect {
+        assert!(
+            wir_contains(wir_text, pattern),
+            "[{test_id}] wir_expect:{opt_name} failed: pattern not found in WIR\n\
+             pattern: {pattern}\n\
+             WIR output:\n{wir_text}"
+        );
+    }
+
+    for pattern in not_expect {
+        assert!(
+            !wir_contains(wir_text, pattern),
+            "[{test_id}] wir_not_expect:{opt_name} failed: pattern unexpectedly found in WIR\n\
+             pattern: {pattern}\n\
+             WIR output:\n{wir_text}"
+        );
     }
 }
 
