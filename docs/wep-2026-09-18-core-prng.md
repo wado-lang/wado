@@ -33,9 +33,9 @@ specification.
 
 |              | scalar | vector |
 | ------------ | -----: | -----: |
-| RomuTrio     |  398 M |      — |
-| xoshiro256++ |  227 M |  693 M |
-| SHISHUA      |  155 M | 1.62 G |
+| RomuTrio     |  402 M |      — |
+| xoshiro256++ |  230 M |  746 M |
+| SHISHUA      |   80 M | 1.81 G |
 
 ## Decision
 
@@ -58,9 +58,9 @@ pub trait VectorRng with () {
 
 A unified trait would have to name one width. Named one, the eight-lane engine
 spends a cursor and a branch per word to hand out a single u64, and the
-measurement is what that costs: SHISHUA falls from 1.62 G handing out a round to
-155 M handing out a word, an order of magnitude, all of it spent in the API
-shape. Named sixteen, the scalar engine has to buffer, and a consumer that wants
+measurement is what that costs: SHISHUA falls from 1.81 G handing out a round to
+80 M handing out a word, more than an order of magnitude, all of it spent in the
+API shape. Named sixteen, the scalar engine has to buffer, and a consumer wanting
 one number pays for fifteen it will not use.
 
 So the traits are separate, and an engine implements whichever it can serve.
@@ -79,7 +79,7 @@ Both engines reach sixteen words in a whole number of their own steps — two of
 xoshiro's four-vector step, one of SHISHUA's eight-vector round — so neither
 keeps a cursor, and the batch crosses the trait boundary in registers: the
 return is a tuple the call site destructures, and nothing is allocated for it.
-Measured through the trait, SHISHUA gives 1.55 G and xoshiro ×8 gives 703 M,
+Measured through the trait, SHISHUA gives 1.81 G and xoshiro ×8 gives 746 M,
 which is what each gives with no trait at all.
 
 A per-engine width would be the more general design and would cost the
@@ -292,6 +292,15 @@ something real and may be worth it.
 
 ## Known gaps
 
+- The scalar column for SHISHUA measures the optimizer as much as the engine.
+  `optimize::multi_value_return` keeps a batch in registers wherever the call
+  site destructures it, but a site that hands the batch on whole rebuilds it,
+  and `optimize::sroa_param` scalarizes one field of a parameter rather than
+  all of them, so a helper taking the batch cannot take it as sixteen values.
+  The cursor therefore allocates once per batch: forcing that helper inline
+  measures 200 M rather than 80 M. Closing it means generalizing `sroa_param`
+  from one field to a whole aggregate, which changes the arity of the clone it
+  mints and of every call site it retargets.
 - The names are Rust's (`random_range`, `random_bool`, `shuffle`, `choose`),
   which is what the library spells. Ratifying that house, or moving to Go's
   (`IntN`, `Float64`), is still open; a mixture is worse than either.
