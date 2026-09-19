@@ -5,7 +5,7 @@
 //! Whatever the rewrite misses, [`rebox_stragglers`] wraps back into a variant.
 
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::nir::{FuncId, FunctionKind, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirLiteralPattern, NirLocal};
 use crate::nir_arena::{
     ArenaStructField, ArmData, BlockId, BlockNode, Body, ExprId, ExprKind, ExprNode, NodeRef,
     Operand, PatKind, PatNode, StmtId, StmtKind, StmtNode,
@@ -1041,30 +1041,10 @@ fn is_nullable_ref_shape(payloads: &[TypeId], project: &NirPackage) -> bool {
 // Phase 2: candidates and validation
 // -----------------------------------------------------------------------
 
+// Trait methods carry the traffic: `Iterator::next` / `Deserializer::*` shapes
+// are ~80% of what this widens on the parser benchmarks.
 fn is_eligible(func: &NirFunction) -> bool {
-    if func.is_dead || func.body.is_none() {
-        return false;
-    }
-    if func.is_export || func.is_cm_export || func.is_cm_binding || func.is_async {
-        return false;
-    }
-    if func.is_dispatch_wrapper || func.is_closure_call() {
-        return false;
-    }
-    if func.has_real_type_params() || !func.impl_type_params.is_empty() {
-        return false;
-    }
-    // A trait method is *not* excluded: after monomorphization it is an
-    // ordinary direct-call target, and it is where the traffic is —
-    // `Iterator::next` / `Deserializer::*` shapes are ~80% of the functions
-    // `wir_optimize`'s variant-return SROA widens on the parser benchmarks.
-    match func.kind {
-        FunctionKind::Regular => true,
-        // `ArrayClone` resolves a value-copy helper by metadata at emit time,
-        // and `wir_build` supplies the dispatch stub's body; neither reaches
-        // its callee through a NIR call node a signature change would follow.
-        FunctionKind::ValueCopy { .. } | FunctionKind::FnCanonicalDispatch { .. } => false,
-    }
+    !func.is_dead && func.body.is_some() && func.only_reached_by_direct_call()
 }
 
 fn collect_and_validate(
@@ -1468,7 +1448,7 @@ fn bound_temps(
 /// retypes the local and every read of it, is exact on it. A local with a
 /// second definition is not: the pooled `$hfs_call_*` temps take one index for
 /// two live bindings, and retyping the index would retype both.
-pub(super) fn settled_locals(body: &Body) -> IndexSet<u32> {
+pub(crate) fn settled_locals(body: &Body) -> IndexSet<u32> {
     let mut defs: IndexMap<u32, u32> = IndexMap::default();
     let mut reassigned: IndexSet<u32> = IndexSet::default();
     collect_defs(body, NodeRef::Block(body.root), &mut defs, &mut reassigned);

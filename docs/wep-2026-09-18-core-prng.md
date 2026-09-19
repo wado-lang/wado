@@ -33,16 +33,16 @@ specification.
 
 |              | scalar | vector |
 | ------------ | -----: | -----: |
-| RomuTrio     |  398 M |      — |
-| xoshiro256++ |  227 M |  693 M |
-| SHISHUA      |  155 M | 1.62 G |
+| RomuTrio     |  403 M |      — |
+| xoshiro256++ |  187 M |  762 M |
+| SHISHUA      |  185 M | 1.65 G |
 
 ## Decision
 
-`core:prng` offers three layers that do not mix: a scalar engine, a vector
-engine, and a keyed function. Each is a separate trait, because the thing each
-one generates is a different thing. `core:secure_random` keeps the entropy, and
-so keeps the only effect.
+`core:prng` answers the three demands separately and does not mix them: a scalar
+engine behind `Rng`, a vector engine behind `VectorRng`, and a keyed function as
+the concrete `Squares64`. `core:secure_random` keeps the entropy, and so keeps
+the only effect.
 
 ### Two traits, because a lane is not a draw
 
@@ -58,9 +58,9 @@ pub trait VectorRng with () {
 
 A unified trait would have to name one width. Named one, the eight-lane engine
 spends a cursor and a branch per word to hand out a single u64, and the
-measurement is what that costs: SHISHUA falls from 1.62 G handing out a round to
-155 M handing out a word, an order of magnitude, all of it spent in the API
-shape. Named sixteen, the scalar engine has to buffer, and a consumer that wants
+measurement is what that costs: SHISHUA falls from 1.65 G handing out a round to
+185 M handing out a word. That order of magnitude goes entirely into the API
+shape. Named sixteen, the scalar engine has to buffer, and a consumer wanting
 one number pays for fifteen it will not use.
 
 So the traits are separate, and an engine implements whichever it can serve.
@@ -69,8 +69,9 @@ no permute. SHISHUA serves only the vector trait; its round is eight vectors
 wide and nothing smaller exists inside it.
 
 `with ()` is not decoration. It is the rule from `AGENTS.md` applied: every
-standard library trait declares it, and these three say in the type system that
-no implementation of them may perform I/O.
+standard library trait declares it, so `Rng`, `VectorRng`, `Seedable`,
+`SampleUniform` and `SampleRange` all say in the type system that no
+implementation of them may perform I/O.
 
 ### The batch is sixteen u64, fixed by the library
 
@@ -79,13 +80,12 @@ Both engines reach sixteen words in a whole number of their own steps — two of
 xoshiro's four-vector step, one of SHISHUA's eight-vector round — so neither
 keeps a cursor, and the batch crosses the trait boundary in registers: the
 return is a tuple the call site destructures, and nothing is allocated for it.
-Measured through the trait, SHISHUA gives 1.55 G and xoshiro ×8 gives 703 M,
+Measured through the trait, SHISHUA gives 1.65 G and xoshiro ×8 gives 762 M,
 which is what each gives with no trait at all.
 
-A per-engine width would be the more general design and would cost the
-generality: a consumer could not be written against it without either a cursor
-or a type-level width, and the cursor is the thing measured above at an order of
-magnitude.
+A per-engine width is the more general design, and the generality is what it
+costs. A consumer could not be written against it without either a cursor or a
+type-level width, and the cursor is what the order of magnitude above measures.
 
 ### The vector trait generates and nothing more
 
@@ -98,19 +98,31 @@ knowingly.
 
 ### The derived layer is uniform only
 
-On `Rng`, as defaulted methods, five of them:
+Five defaulted methods on `Rng`:
 
-|                       |                                                  |
+| operation             | how                                              |
 | --------------------- | ------------------------------------------------ |
 | an integer in a range | Lemire's multiply-shift, with the rare rejection |
 | an f64 in `[0,1)`     | 53 bits, one shift and one multiply              |
 | a bool                | one bit                                          |
 | shuffle a `List`      | Fisher–Yates over the bounded integer            |
-| choose from a `List`  | `Option<&T>`, empty list gives `None`            |
+| choose from a `List`  | `Option<T>`, empty list gives `None`             |
 
 Every one of these is arithmetic on a draw, with no table and no state of its
 own. That is the line, and it is drawn at **uniform**: a shape other than
 uniform is a distribution and does not live here.
+
+"An integer in a range" is one operation over eight widths and two range types,
+so it reaches them through two traits rather than eight overloads:
+`SampleUniform` is what an integer type implements, `SampleRange` what `..<` and
+`..=` implement over one, and `random_range` is the defaulted method that puts
+them together. Both are public, because a caller writing a bound over "whatever
+`random_range` accepts" needs to name them.
+
+`choose` hands back a value and not a reference because value semantics leave it
+no choice: `&T` requires `T: Ref`, which no primitive is, and a list of numbers
+is the case the operation exists for. `TreeMap::get` answers the same way for
+the same reason.
 
 The excluded case that makes the line worth stating is the normal distribution.
 Its good implementation is the Ziggurat, which carries two precomputed tables of
@@ -172,8 +184,8 @@ Squares' output quality depends on its key in a way a block cipher's does not:
 the key 0 yields all zeros, and a small integer key yields roughly 2^16/k zeros
 before the output becomes usable. `from_seed` therefore does not take the
 seed's word as the key. It mixes, tests the result against the key predicate,
-and mixes again until it passes — deterministic, and in practice one round. The
-predicate is an assert, not a comment, and so is the loop bound.
+and mixes again until it passes. The loop is deterministic and in practice runs
+once. The predicate is an assert, not a comment, and so is the loop bound.
 
 ### A seed is a value, so generation is pure
 
@@ -182,7 +194,7 @@ pub struct Seed { /* 256 bits, private */ }
 
 impl Seed {
     pub fn from_u64(n: u64) -> Seed;
-    pub fn from_bytes(bytes: &ByteList) -> Seed;
+    pub fn from_bytes<B: AsByteSlice>(bytes: &B) -> Seed;
     pub fn from_str(s: &String) -> Seed;
     pub fn split(&self, index: u64) -> Seed;
 }
@@ -199,8 +211,8 @@ is xoshiro's whole state and SHISHUA's own seed, which SHISHUA expands into its
 already take.
 
 `from_u64` expands through SplitMix64, so `Seed::from_u64(0)` is as good a seed
-as any other — the property NumPy's `SeedSequence` exists to provide, and the
-reason a user may pass 1, 2, 3 as world seeds without the streams correlating.
+as any other. That is the property NumPy's `SeedSequence` exists to provide, and
+it lets a user pass 1, 2, 3 as world seeds without the streams correlating.
 `from_str` is there because the first consumer names its world.
 
 Entropy lives one module away:
@@ -250,8 +262,8 @@ that asking one of them carries.
 
 `Seed::split(index)` derives a child seed and works for every engine. It is
 pure and takes the index rather than keeping a counter, so worker _n_ derives
-its own seed with no coordination and no agreement on who split first — JAX's
-`fold_in` rather than NumPy's `spawn`, for the same reason the keyed layer
+its own seed with no coordination and no agreement on who split first. This is
+JAX's `fold_in` rather than NumPy's `spawn`, for the same reason the keyed layer
 exists. Independence is statistical.
 
 `Xoshiro256pp::jump()` advances 2^128 steps over the same linear state
@@ -280,21 +292,21 @@ something real and may be worth it.
 
 ## Roadmap
 
-1. `Seed`, `Seedable`, and `core:secure_random::seed`. Nothing else can be
-   constructed without them.
-2. `Rng` with `Xoshiro256pp`, and the uniform derived layer over it.
-3. `Squares64`, with the key predicate asserted.
-4. `VectorRng` with `XoshiroSimd` and `Shishua`.
-5. `example/prng_bench.wado` retargeted at the library, so the numbers above
-   keep being checked against the thing that ships rather than against a copy.
+Nothing is committed. What the Decision settles is in the library, and what is
+left over is unowned, so it is listed under Known gaps instead.
 
 ## Known gaps
 
-- Every name above is a placeholder. The traits, the five derived operations,
-  and `Squares64::at` are named here so the document can refer to them, and
-  nothing has chosen between Rust's spelling (`random_range`, `random_bool`)
-  and Go's (`IntN`, `Float64`). Closing it means picking one house and
-  following it, since a mixture is worse than either.
+- Every row above is below what the same build reaches with a larger inlining
+  budget: `--optimize-inline-growth 250` measures 233 M for xoshiro256++,
+  213 M for SHISHUA per draw and 1.81 G for its batch. The binding constraint
+  is the default growth budget rather than anything about these engines, so
+  the ranking the table is for holds while the absolute numbers do not.
+  Closing it means finding what the default spends its budget on instead,
+  which is a question about `optimize::inline` and not about `core:prng`.
+- The names are Rust's (`random_range`, `random_bool`, `shuffle`, `choose`),
+  which is what the library spells. Ratifying that house, or moving to Go's
+  (`IntN`, `Float64`), is still open; a mixture is worse than either.
 - The derived layer's exact roster is the five operations and no more. Whether
   `next_u32` joins them — the high half of a draw, free to provide and one more
   name to keep — is open.
@@ -304,13 +316,20 @@ something real and may be worth it.
   is a method on `Squares64`, a free function, or left to the caller is not
   decided.
 - The exact key predicate `Squares64::from_seed` establishes is not settled.
-  Widynski's `keys.h` generator draws hexadecimal digits under constraints that
-  a bit-level test approximates rather than reproduces. Closing it means
-  choosing the predicate against that generator and stating it as the assert.
+  Widynski's `keys.h` generator draws sixteen nonzero hexadecimal digits with no
+  two adjacent alike and an odd lowest digit; reproducing that at bit level
+  would reject two thirds of what it is given, so the library rejects the
+  failure mode instead — a low nibble of zero, a zero upper half, or more than
+  four zero nibbles. Closing it means choosing the predicate against that
+  generator and stating it as the assert.
 - No known-answer vectors are checked anywhere. Each vector form is checked
   against its own scalar form, which catches a transcription error but not a
-  wrong constant shared by both. Closing it means a fixture per algorithm
-  against the reference implementation's published output.
+  wrong constant shared by both. SHISHUA is the widest case: the library
+  expands the seed through SplitMix64 and keeps the reference's thirteen
+  discarded rounds rather than its table of digits of phi, so its stream is not
+  the reference's. Closing it means a fixture per algorithm against the
+  reference implementation's published output, and for SHISHUA the reference's
+  own seeding first.
 - A generic consumer over `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2,
   Output = u64x2>` compiles and runs, so the fixed sixteen-word batch is a
   choice rather than a workaround: what it costs is a width the library names

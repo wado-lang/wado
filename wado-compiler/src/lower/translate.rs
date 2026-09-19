@@ -33,7 +33,7 @@ use crate::name::{
 use crate::nir::{
     FuncId, NirEnum, NirEnumCase, NirField, NirFlags, NirFlagsMember, NirFunction, NirGlobal,
     NirImport, NirLiteralPattern, NirLocal, NirParam, NirStruct, NirTest, NirTypeParam,
-    NirVariantCase, NirVariantDecl,
+    NirVariantCase, NirVariantDecl, ParamAbi,
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
@@ -2589,6 +2589,7 @@ impl FunctionTranslator<'_, '_> {
             is_mut: param.is_mut,
             is_mut_ref: param.is_mut_ref,
             span: param.span,
+            param_abi: ParamAbi::default(),
         }
     }
 }

@@ -1,0 +1,47 @@
+// The multi-value parameter ABI holds each field in a WIR local of its own.
+// Those names are minted, so they open with `$` and no source local can spell
+// one — codegen keys locals by name and would merge two slots that share it.
+//
+// The locals below are named exactly as a spellable scheme would have named the
+// split slots. Before the fix each field read resolved to the source local, and
+// this printed 600 instead of 303.
+//
+// The sibling `multi_value_return_local_name_collision.wado` is the same class
+// on the result side.
+
+use { println, Stdout } from "core:cli";
+
+struct Pair {
+    a: i32,
+    b: i32,
+}
+
+#[inline("never")]
+fn take(p: Pair) -> i32 {
+    let p_mv_a: i32 = 100;
+    let p_mv_b: i32 = 200;
+    return p.a + p.b + p_mv_a + p_mv_b;
+}
+
+// The same collision against a bound multi-value result rather than a parameter.
+#[inline("never")]
+fn make(x: i32) -> Pair {
+    return Pair { a: x, b: x * 2 };
+}
+
+#[inline("never")]
+fn bound(x: i32) -> i32 {
+    let q_mv_a: i32 = 7;
+    let q = make(x);
+    return q.a + q.b + q_mv_a;
+}
+
+export fn run() with Stdout {
+    println(`${take(Pair { a: builtin::black_box(1), b: 2 })}`);
+    println(`${bound(builtin::black_box(5))}`);
+}
+
+__DATA__
+{
+    "stdout": "303\n22\n"
+}
