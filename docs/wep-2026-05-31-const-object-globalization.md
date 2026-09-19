@@ -311,15 +311,19 @@ loop, and a pure call building a heap value from literals.
 
 ## Known gaps
 
-- Several of `shared_escape`'s conservative answers have no fixture: a promoted
-  operand whose taint the walk cannot name, a parameter position the callee's
-  body declares nothing for, a value carried out of a `Switch`, and a field read
-  by a destructuring pattern. All four refuse or taint, so the gap is coverage
-  and not correctness. None is steerable from Wado source today — the last two
-  were attempted and the program collapsed before reaching the shape, one because CSE
-  folds identical switch arms back to the field read and one because the
-  promoted-operand fallback already covers it. A test that merely passes would
-  read as coverage the code does not have.
+- Two of `shared_escape`'s conservative answers have no fixture: a promoted
+  operand whose taint the walk cannot name, and a parameter position the
+  callee's body declares nothing for. Both refuse, so the gap is coverage and
+  not correctness, and neither is steerable from Wado source today.
+
+  A fixture reaches this analysis at all only when the callee survives
+  inlining, since an inlined one leaves no parameter to ask about. Making the
+  callee bulky is what does it — the three `shared_escape_stashed_*` fixtures
+  all do, and each was verified against the trace rather than assumed.
+
+- A value carried out of an `ExprKind::Switch` has no fixture either. The
+  program that would show it needs the switch arms to differ, because CSE folds
+  identical ones back to the field read the taint already follows.
 - Only `core:builtin` answers the bodyless-callee question. A Component Model
   import and a `.wasm` asset export always refuse, however read-only they are,
   because `#[retain]` is not complete on them the way it is on `core:builtin`.

@@ -383,7 +383,11 @@ impl Taint<'_> {
                     }
                 }
             }
-            NodeRef::Pat(p) => self.seed_pattern_field(p, &mut found_locals),
+            NodeRef::Pat(p) => {
+                for sub in pattern_field_reads(body, p, self.seed_field) {
+                    collect_pattern_bindings(body, sub, &mut found_locals);
+                }
+            }
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let {
                     local_index, value, ..
@@ -405,20 +409,6 @@ impl Taint<'_> {
         self.locals.extend(found_locals);
     }
 
-    /// Taint what a struct pattern binds out of the seeded field. Destructuring
-    /// reads the field without an `ExprKind::FieldAccess` to match on.
-    fn seed_pattern_field(&self, pat: PatId, out: &mut Vec<u32>) {
-        let Some(seed) = self.seed_field else {
-            return;
-        };
-        let PatKind::Struct { fields, .. } = &self.body.pats[pat].kind else {
-            return;
-        };
-        for field in fields.iter().filter(|f| f.field_name == seed) {
-            collect_pattern_bindings(self.body, field.pattern, out);
-        }
-    }
-
     /// Whether `e` denotes the shared object or a projection of it. A scalar
     /// result never can: it holds no reference.
     fn taints(&self, e: ExprId) -> bool {
@@ -435,18 +425,14 @@ impl Taint<'_> {
             | ExprKind::Cast { expr, .. }
             | ExprKind::Unary { expr, .. }
             | ExprKind::VariantPayload { expr, .. } => self.operand(*expr),
-            // One of the branches is the value; any tainted node under it is
-            // taken to be that branch. `Switch` belongs here because
-            // `match_to_switch` rewrites a dense `Match` into one before this
-            // pass runs, and the rewrite must not lose the taint.
+            // One branch is the value, so any tainted node under it is taken to
+            // be it. `match_to_switch` makes a `Switch` of a dense `Match` here.
             ExprKind::LabeledBlock { .. }
             | ExprKind::If { .. }
             | ExprKind::Match { .. }
             | ExprKind::Switch { .. } => self.subtree_tainted(NodeRef::Expr(e)),
-            // A builtin accessor hands back a handle into its array, so the
-            // result is a projection. A bodied callee is treated the same way
-            // — conservatively, since checking its parameter is what says
-            // whether the handle comes back out.
+            // An accessor hands back a handle into its first argument. A bodied
+            // callee is read the same way, its parameter being the real answer.
             ExprKind::Call { func_id, args, .. } => {
                 self.seed_call == Some(*func_id)
                     || args.first().is_some_and(|a| self.operand(a.expr))
@@ -467,8 +453,8 @@ impl Taint<'_> {
             | ExprKind::CmRawCall { .. }
             | ExprKind::ClosureToCanonical { .. }
             | ExprKind::Assign { .. } => false,
-            // Yields a scalar, which the type test above has already let
-            // through only where the type table disagrees.
+            // None of these yields a reference: the first three are scalars,
+            // and a `Dead` node is never evaluated.
             ExprKind::Binary { .. }
             | ExprKind::VariantTag { .. }
             | ExprKind::VariantTest { .. }
@@ -538,6 +524,24 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
+/// The sub-patterns `pat` binds out of the field named `field`. Destructuring
+/// reads a field by naming it here, leaving no `ExprKind::FieldAccess` to match.
+fn pattern_field_reads<'a>(
+    body: &'a Body,
+    pat: PatId,
+    field: Option<&'a str>,
+) -> impl Iterator<Item = PatId> + 'a {
+    let fields = match (&body.pats[pat].kind, field) {
+        (PatKind::Struct { fields, .. }, Some(_)) => Some(fields),
+        _ => None,
+    };
+    fields
+        .into_iter()
+        .flatten()
+        .filter(move |f| field == Some(f.field_name.as_str()))
+        .map(|f| f.pattern)
+}
+
 /// Whether `body` can read the slot at all. A function that cannot is left
 /// alone, so an unrelated one never refuses the query.
 fn has_seed(
@@ -561,14 +565,8 @@ fn has_seed(
                     _ => false,
                 };
             }
-            // Destructuring reads the field too, and names it in the pattern
-            // rather than in a `FieldAccess` the arm above would catch.
             NodeRef::Pat(p) => {
-                if let PatKind::Struct { fields, .. } = &body.pats[p].kind {
-                    found = fields
-                        .iter()
-                        .any(|f| seed_field == Some(f.field_name.as_str()));
-                }
+                found = pattern_field_reads(body, p, seed_field).next().is_some();
             }
             NodeRef::Stmt(_) | NodeRef::Block(_) => {}
         }
