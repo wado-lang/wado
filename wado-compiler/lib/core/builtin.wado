@@ -528,6 +528,9 @@ pub fn v128_load(addr: i32) -> v128;
 pub fn v128_store(addr: i32, value: v128);
 
 /// Creates a v128 constant from an i128 bit pattern.
+/// The bit pattern becomes the `v128.const` immediate, so it must reach
+/// codegen as a literal — nothing may hoist or forward it into a load.
+#[immediate(value)]
 pub fn v128_const(value: i128) -> v128;
 
 /// Bitwise NOT of a v128.

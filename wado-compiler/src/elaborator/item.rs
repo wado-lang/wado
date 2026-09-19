@@ -84,6 +84,7 @@ fn placeholder_function(name: String, span: Span) -> TirFunction {
         task_return_type: None,
         effects: vec![],
         retains: vec![],
+        immediates: vec![],
         body: None,
         span,
         local_count: 0,

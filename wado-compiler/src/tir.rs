@@ -5980,6 +5980,9 @@ pub struct TirFunction {
     /// `#[retain(...)]` on a bodyless declaration — what the call keeps past
     /// its return. A function with a body declares none: the body is read.
     pub retains: Vec<RetainSpec<String>>,
+    /// `#[immediate(...)]` — parameters lowered to a Wasm immediate, whose
+    /// argument must still be a literal when codegen reads it.
+    pub immediates: Vec<String>,
     pub body: Option<TirBlock>,
     pub span: Span,
     pub local_count: u32,
@@ -6160,6 +6163,10 @@ pub struct BuiltinDeclaration {
     /// the caller's storage through. Snapshot here because the bodyless
     /// declaration keeps no parameters past lowering.
     pub mut_params: IndexSet<usize>,
+    /// `#[immediate(...)]` positions, lowered to a Wasm immediate. Codegen
+    /// reads the argument's literal value, so nothing may rewrite it into a
+    /// load.
+    pub immediate_params: IndexSet<usize>,
 }
 
 /// All a declaration lookup reads of a call. TIR and NIR each carry their own
@@ -6217,10 +6224,12 @@ impl BuiltinDeclarations {
             .is_some_and(|d| d.returns.is_some() || !d.retains.is_empty())
     }
 
-    /// Whether the call leaves the argument at `pos` where the caller put it:
-    /// it neither writes through it (`&mut`) nor keeps it past the return
-    /// (`#[retain(p)]`). `#[retain(elements_of = p)]` keeps what `p` holds
-    /// rather than `p`, so it leaves the argument object alone.
+    /// Whether the call leaves the argument *object* at `pos` where the caller
+    /// put it: it neither writes through it (`&mut`) nor keeps it past the
+    /// return (`#[retain(p)]`). It says nothing about what that object holds —
+    /// `#[retain(elements_of = p)]` re-homes the elements and still answers
+    /// `true` here, so a caller asking about reachable storage must read the
+    /// retain specs itself.
     ///
     /// A call with no snapshot answers `false`. Link takes one for every
     /// bodyless free function, so the gap is a method, whose key would not be
@@ -6230,6 +6239,18 @@ impl BuiltinDeclarations {
             !d.mut_params.contains(&pos)
                 && !d.retains.iter().any(|r| r.source == pos && !r.elements)
         })
+    }
+
+    /// The positions the call lowers to a Wasm immediate, where codegen reads
+    /// the argument's literal. An optimizer that would replace one with
+    /// anything else — a global read, a local — must leave it alone.
+    ///
+    /// Read from the snapshot rather than from the callee's parameters, which a
+    /// bodyless declaration does not keep past lowering.
+    pub fn immediate_params<'a>(&self, call: impl Into<DeclarationLookup<'a>>) -> IndexSet<usize> {
+        self.get(call.into())
+            .map(|d| d.immediate_params.clone())
+            .unwrap_or_default()
     }
 
     /// The parameter a declaration's result is a component of, for a call that
@@ -6307,6 +6328,22 @@ impl TirFunction {
         })
     }
 
+    /// This declaration's `#[immediate(...)]` parameters by position. Reify
+    /// drops a clause naming no parameter, as it does for `#[retain]`.
+    pub fn immediates_by_position(&self) -> impl Iterator<Item = usize> + '_ {
+        self.immediates.iter().map(move |name| {
+            self.params
+                .iter()
+                .position(|p| &p.name == name)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "`{}` declares `{name}` immediate, which it takes no",
+                        self.name
+                    )
+                })
+        })
+    }
+
     /// Take the body's frame, leaving an empty one. The counterpart of
     /// [`Self::set_frame`]: a caller moving a body elsewhere takes what
     /// describes its locals with it.
@@ -6362,6 +6399,7 @@ impl TirFunction {
             task_return_type: None,
             effects: Vec::new(),
             retains: Vec::new(),
+            immediates: Vec::new(),
             body: Some(body),
             span,
             local_count: u32::try_from(locals.len()).expect("local count fits in u32"),

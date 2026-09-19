@@ -206,14 +206,41 @@ re-enters itself reads `true`: a cycle carrying no write of its own really does
 hold. A verdict resting on that assumption is not cached, since a later
 refutation of the cycle would leave it stale.
 
+#### Gate: legality of the operand
+
+Some builtins lower their argument to a Wasm immediate rather than to a value on
+the stack, and codegen reads its literal out. `builtin::v128_const` is the first:
+its bit pattern becomes the `v128.const` immediate. Replacing such an argument
+with a global read is not a bad trade but a broken lowering.
+
+The declaration says so, with `#[immediate(p)]` beside `#[retain]` and
+`#[result]`, and the pass reads the declaration rather than matching on a name.
+A builtin that gains an immediate operand later is covered the day it is
+declared. Nothing hoists an argument at such a position, nor a `let` that
+delivers one.
+
 #### Gate: profitability
 
 Hoisting costs a global, a guard branch, and an object that stays live for the
-whole program, so it is restricted to values that own heap storage — those that
-transitively own a GC array, as `String` and `List` do. A small aggregate of
-scalars owns nothing: `multi_value_return` already lifts such a return into Wasm
-multi-values and allocates nothing, so hoisting it would trade zero allocations
-for a global.
+whole program. What it buys depends on what would otherwise become of the
+constant, which is two different trades:
+
+- **Retained** — a callee stores the constant into the heap, which is the case
+  the sharing gate above admits. Each evaluation would add one more object to
+  the live set, and the live set is what a collection walks. Hoisting collapses
+  all of them into one, so it pays whatever the constant's shape.
+- **Transient** — nothing keeps it past the use, so its allocation dies before
+  the next collection and never costs a trace. Only the work of building it is
+  saved. That is worth a global for a value owning heap storage — one that
+  transitively owns a GC array, as `String` and `List` do, where the constructor
+  fills every element — and not for an aggregate of scalars, which is a couple
+  of field stores.
+
+So the storage test decides the transient case alone. It does not carry over to
+the retained one, where a `struct` of scalars is worth a global however cheap it
+is to rebuild. `multi_value_return` is no argument against hoisting one either:
+it hands such a value back in Wasm multi-values in return position, which says
+nothing about an argument.
 
 #### Lazy-init guard
 

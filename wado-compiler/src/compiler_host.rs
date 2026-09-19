@@ -200,6 +200,7 @@ pub enum Code {
     /// A `#[retain(...)]` attribute is malformed, names something that is not a
     /// parameter, or sits on a declaration that has a body to read instead.
     RetainAttr,
+    ImmediateAttr,
     ResourceExtends,
 
     // Compile-time parameters (`#[param]`)
@@ -273,6 +274,7 @@ impl std::fmt::Display for Code {
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
             Code::ResultAttr => "RESULT_ATTR",
             Code::RetainAttr => "RETAIN_ATTR",
+            Code::ImmediateAttr => "IMMEDIATE_ATTR",
             Code::ResourceExtends => "RESOURCE_EXTENDS",
             Code::ParamAttr => "PARAM_ATTR",
             Code::ParamUnknown => "PARAM_UNKNOWN",

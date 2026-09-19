@@ -33,8 +33,10 @@ fn record_declaration(
     // absent method as one it knows nothing about.
     if func.method_info.is_some() {
         assert!(
-            func.declared_return_convention.is_none() && retains.is_empty(),
-            "`{}` declares storage as a method; key the snapshot by `DefId` first",
+            func.declared_return_convention.is_none()
+                && retains.is_empty()
+                && func.immediates.is_empty(),
+            "`{}` declares storage or an immediate as a method; key the snapshot by `DefId` first",
             func.name
         );
         return;
@@ -54,6 +56,7 @@ fn record_declaration(
                 .filter(|(_, p)| p.is_mut_ref)
                 .map(|(pos, _)| pos)
                 .collect(),
+            immediate_params: func.immediates_by_position().collect(),
         },
     );
 }

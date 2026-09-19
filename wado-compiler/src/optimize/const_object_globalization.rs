@@ -158,9 +158,21 @@ pub fn globalize_const_objects(project: &mut NirPackage) -> bool {
             nir::FunctionRef::from_resolved(&f, f.module_source.clone()).array_element_access()
         })
         .collect();
+    // Asked of every argument of every call, and fixed per function, so the
+    // declaration lookup happens once here rather than per argument.
+    let immediate_params: Vec<IndexSet<usize>> = project
+        .functions
+        .iter()
+        .map(|f| {
+            let f = f.borrow();
+            let reference = nir::FunctionRef::from_resolved(&f, f.module_source.clone());
+            project.builtin_declarations.immediate_params(&reference)
+        })
+        .collect();
     let shared_escape = SharedEscape::new(project);
     let gate = Gate {
         shared_escape: &shared_escape,
+        immediate_params: &immediate_params,
         funcs: &project.functions,
         type_table: &type_table,
         hoistable_pure: &hoistable_pure,
@@ -316,6 +328,7 @@ fn collect_candidates(
     promoted_local_reads(body, &mut read_locals);
     let buried = buried_promoted_reads(body);
     let leaked_ref_args = ref_args_that_escape(body, gate);
+    let (immediate_args, immediate_locals) = immediate_operands(body, gate);
     let first = out.len();
     let mut stack = vec![NodeRef::Block(body.root)];
     while let Some(node) = stack.pop() {
@@ -326,6 +339,7 @@ fn collect_candidates(
                 ..
             } = &body.stmts[s].kind
             && single_decl_locals.contains(local_index)
+            && !immediate_locals.contains(local_index)
             && let Some(sibling_lets) =
                 let_stmt_qualifies(body, s, gate, &siblings, &read_locals, &buried)
         {
@@ -358,8 +372,11 @@ fn collect_candidates(
             let inner_ty = body.exprs[inner].type_id;
             if gate.is_reference_type(inner_ty)
                 && !leaked_ref_args.contains(&id)
+                && !immediate_args.contains(&id)
                 && is_globalizable_const(body, inner, gate, &mut siblings.set.clone())
-                && contains_aggregate(body, inner, gate)
+                // A borrow that survives the call is in `leaked_ref_args`, so
+                // what reaches here is read and dropped.
+                && worth_hoisting(body, inner, gate, Reach::Transient)
                 && let Some(sibling_lets) =
                     substitutable_sibling_lets(body, Operand::Expr(inner), &siblings)
             {
@@ -599,6 +616,39 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
     out
 }
 
+/// Every operand feeding a parameter the callee lowers to a Wasm immediate:
+/// the argument expressions, and the locals a `let` delivers to one.
+///
+/// Codegen reads the argument's literal value there, so replacing it with a
+/// global read — which is what a hoist leaves behind — breaks the lowering.
+fn immediate_operands(body: &Body, gate: &Gate<'_>) -> (IndexSet<ExprId>, IndexSet<u32>) {
+    let mut exprs: IndexSet<ExprId> = IndexSet::default();
+    let mut locals: IndexSet<u32> = IndexSet::default();
+    for node in reachable_nodes(body) {
+        let NodeRef::Expr(e) = node else {
+            continue;
+        };
+        let ExprKind::Call { func_id, args, .. } = &body.exprs[e].kind else {
+            continue;
+        };
+        for (pos, arg) in args.iter().enumerate() {
+            if !gate.is_immediate_param(*func_id, pos) {
+                continue;
+            }
+            if let Some(arg_expr) = arg.expr.as_expr() {
+                exprs.insert(arg_expr);
+                if let ExprKind::Local { index, .. } = &body.exprs[arg_expr].kind {
+                    locals.insert(*index);
+                }
+            }
+            if let Some(local) = bare_promoted_local(body, arg.expr) {
+                locals.insert(local);
+            }
+        }
+    }
+    (exprs, locals)
+}
+
 /// The arguments of the call at `expr` that qualify for by-value hoisting.
 ///
 /// An argument qualifies when it is a closed constant aggregate (the gate the
@@ -631,12 +681,23 @@ fn value_arg_candidates(
             )
         })
         .filter(|&(pos, arg)| {
-            let ty = body.exprs[arg].type_id;
-            gate.is_reference_type(ty)
-                && is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
-                && contains_aggregate(body, arg, gate)
-                && (gate.callee_param_readonly(func_id, pos)
-                    || gate.shared_escape.param_shareable(func_id, pos))
+            if gate.is_immediate_param(func_id, pos)
+                || !gate.is_reference_type(body.exprs[arg].type_id)
+                || !is_globalizable_const(body, arg, gate, &mut siblings.set.clone())
+            {
+                return false;
+            }
+            // A callee that only reads the argument lets it die with the call.
+            // One that stashes it is exactly why the constant would otherwise
+            // join the live set once per call, and is `shared_escape`'s case.
+            let reach = if gate.callee_param_readonly(func_id, pos) {
+                Reach::Transient
+            } else if gate.shared_escape.param_shareable(func_id, pos) {
+                Reach::Retained
+            } else {
+                return false;
+            };
+            worth_hoisting(body, arg, gate, reach)
         })
         .map(|(_, arg)| arg)
         .collect()
@@ -861,15 +922,17 @@ fn let_stmt_qualifies(
     let Some((used_siblings, lets)) = confined_sibling_lets(body, value, siblings) else {
         return decline("a sibling const is read from outside the initializer");
     };
-    let has_aggregate = contains_aggregate_operand(body, value, gate)
+    // `local_leaks_through_call` above already declined anything a callee keeps,
+    // so a binding reaching here dies with its body.
+    let pays = worth_hoisting_operand(body, value, gate, Reach::Transient)
         || used_siblings.iter().any(|l| {
             siblings
                 .defs
                 .get(l)
-                .is_some_and(|&d| contains_aggregate_operand(body, d, gate))
+                .is_some_and(|&d| worth_hoisting_operand(body, d, gate, Reach::Transient))
         });
-    if !has_aggregate {
-        return decline("no aggregate to hoist");
+    if !pays {
+        return decline("not worth a global");
     }
     Some(lets)
 }
@@ -1327,26 +1390,25 @@ fn references_one_binding(body: &Body, value: Operand) -> bool {
     }
 }
 
-fn contains_aggregate_operand(body: &Body, op: Operand, gate: &Gate<'_>) -> bool {
+fn worth_hoisting_operand(body: &Body, op: Operand, gate: &Gate<'_>, reach: Reach) -> bool {
     op.as_expr()
-        .is_some_and(|e| contains_aggregate(body, e, gate))
+        .is_some_and(|e| worth_hoisting(body, e, gate, reach))
 }
 
-/// True when `expr` contains at least one aggregate constructor that owns heap
-/// storage.
+/// Whether hoisting `expr` pays for the global it costs.
 ///
-/// The gate exists to skip what is cheaper to rematerialize than to load from a
-/// global: a scalar, and equally a constructor of scalars — `i128` is two of
-/// them, and `multi_value_return` already hands such a value back in Wasm
-/// multi-values, allocating nothing. A hoistable pure call answers the same way,
-/// its constructor simply being in the callee.
-fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
-    let owns_storage = || {
-        gate.is_reference_type(body.exprs[expr].type_id)
-            && gate.owns_heap_storage(body.exprs[expr].type_id)
+/// A [`Reach::Retained`] constant pays whatever its shape: every evaluation
+/// would join the live set, and the live set is what a collection walks, so N
+/// of them become one. A [`Reach::Transient`] one dies before the next
+/// collection either way, so only the work of building it is saved — worth a
+/// global for an array to fill, not for a struct of scalars.
+fn worth_hoisting(body: &Body, expr: ExprId, gate: &Gate<'_>, reach: Reach) -> bool {
+    let allocates = || {
+        let ty = body.exprs[expr].type_id;
+        gate.is_reference_type(ty) && (reach == Reach::Retained || gate.owns_heap_storage(ty))
     };
     match &body.exprs[expr].kind {
-        ExprKind::Call { func_id, .. } if gate.is_hoistable_pure(*func_id) => owns_storage(),
+        ExprKind::Call { func_id, .. } if gate.is_hoistable_pure(*func_id) => allocates(),
         // A packed `Array<u8>` allocates and fills a GC array exactly as an
         // `ArrayLiteral` does — it is the repr a `String` / `List<u8>` literal
         // leaves behind once its aggregate is scalarized away.
@@ -1354,26 +1416,37 @@ fn contains_aggregate(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
         | ExprKind::StructLiteral { .. }
         | ExprKind::TupleLiteral { .. }
         | ExprKind::ArrayLiteral { .. }
-        | ExprKind::VariantConstruct { .. } => owns_storage(),
+        | ExprKind::VariantConstruct { .. } => allocates(),
         ExprKind::Unary { expr: inner, .. } | ExprKind::Cast { expr: inner, .. } => {
-            contains_aggregate_operand(body, *inner, gate)
+            worth_hoisting_operand(body, *inner, gate, reach)
         }
         // Answered by the projected field, never by the receiver:
         // `String { .. }.used` is a scalar though the struct owns an array.
         ExprKind::FieldAccess { .. } => projected_const_field(body, expr)
-            .is_some_and(|op| contains_aggregate_operand(body, op, gate)),
+            .is_some_and(|op| worth_hoisting_operand(body, op, gate, reach)),
         ExprKind::LabeledBlock { block, .. } => {
             let stmts = body.blocks[*block].stmts.clone();
             stmts.iter().any(|&s| match &body.stmts[s].kind {
-                StmtKind::Let { value, .. } => contains_aggregate_operand(body, *value, gate),
+                StmtKind::Let { value, .. } => worth_hoisting_operand(body, *value, gate, reach),
                 StmtKind::Expr(value) => value
                     .as_expr()
-                    .is_some_and(|e| contains_aggregate(body, e, gate)),
+                    .is_some_and(|e| worth_hoisting(body, e, gate, reach)),
                 _ => false,
             })
         }
         _ => false,
     }
+}
+
+/// What becomes of a constant once the use that names it has run.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Reach {
+    /// Nothing keeps it past the use, so its allocation dies before the next
+    /// collection and never costs a trace.
+    Transient,
+    /// A callee stores it into the heap, so every evaluation adds one more
+    /// object to the live set.
+    Retained,
 }
 
 // ---------------------------------------------------------------------------
@@ -1385,6 +1458,9 @@ struct Gate<'a> {
     /// a parameter the callee stashes away, where nothing ever writes what it
     /// lands in.
     shared_escape: &'a SharedEscape<'a>,
+    /// Which positions each function lowers to a Wasm immediate, by
+    /// `func_id.index()`. Declared with `#[immediate(p)]`, never inferred.
+    immediate_params: &'a [IndexSet<usize>],
     funcs: &'a [Rc<RefCell<NirFunction>>],
     type_table: &'a Rc<RefCell<TypeTable>>,
     /// Indexed by `func_id.index()`.
@@ -1418,6 +1494,17 @@ struct Gate<'a> {
 impl Gate<'_> {
     fn is_reference_type(&self, ty: TypeId) -> bool {
         holds_reference(&self.type_table.borrow(), ty)
+    }
+
+    /// Whether `func_id` lowers its parameter at `pos` to a Wasm immediate.
+    ///
+    /// A callee with no entry answers `true`, which only costs a hoist: the
+    /// other way round codegen would reach an immediate that is now a global
+    /// read, so the unknown must land on the side that changes nothing.
+    fn is_immediate_param(&self, func_id: FuncId, pos: usize) -> bool {
+        self.immediate_params
+            .get(func_id.index())
+            .is_none_or(|positions| positions.contains(&pos))
     }
 
     /// Whether a value of `ty` owns heap storage worth building only once.
