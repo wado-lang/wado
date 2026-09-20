@@ -1,0 +1,70 @@
+// A callee that hands its argument straight back keeps nothing, so it raises no
+// obligation of its own. The object lands in the caller, and every read of it
+// there is what `Slot::Ret` already asks of the whole program.
+// `#[result(part_of = p)]` declares this, and `builtin::black_box` is the one
+// builtin saying it of a by-value parameter.
+//
+// `#[inline(never)]` keeps each call out of the caller's template block. A
+// tainted node anywhere under a block taints the block's value
+// (`Taint::subtree_tainted`), so inlining one into `${…}` would refuse the query
+// for a reason that has nothing to do with the pass-through.
+//
+// The two structs share no field name on purpose. A `Slot::Field` is keyed by
+// the name alone, so one name in common would let the write in `bump` refuse
+// the read-only case as well.
+
+use { println, Stdout } from "core:cli";
+
+struct Weights {
+    a: f64,
+    b: f64,
+    c: f64,
+}
+
+struct Bias {
+    x: f64,
+    y: f64,
+    z: f64,
+}
+
+fn total(w: &Weights) -> f64 {
+    return w.a + w.b + w.c;
+}
+
+fn total_bias(b: &Bias) -> f64 {
+    return b.x + b.y + b.z;
+}
+
+// Read-only through the handed-back object: the constant is shareable.
+#[inline(never)]
+fn sum_through() -> f64 {
+    let w = builtin::black_box(Weights { a: 1.0, b: 2.0, c: 4.0 });
+    return total(&w);
+}
+
+// Written through it: sharing would let the second call see the first's write,
+// so this constant stays where it is.
+#[inline(never)]
+fn bump() -> f64 {
+    let mut b = builtin::black_box(Bias { x: 8.0, y: 16.0, z: 32.0 });
+    b.x = b.x + 100.0;
+    return total_bias(&b);
+}
+
+export fn run() with Stdout {
+    let shared = sum_through();
+    let first = bump();
+    let second = bump();
+    println(`${shared} ${first} ${second}`);
+}
+
+__DATA__
+{
+    "stdout": "7 156 156\n",
+    "wir_expect:O2": [
+        "$const_obj_{}: ref null \"const_object_globalization_pass_through.wado//Weights\" = struct.new \"const_object_globalization_pass_through.wado//Weights\" { a: 1, b: 2, c: 4 }"
+    ],
+    "wir_not_expect:O2": [
+        "$const_obj_{}: ref null \"const_object_globalization_pass_through.wado//Bias\""
+    ]
+}
