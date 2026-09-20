@@ -778,6 +778,5 @@ where the scrutinee carries a concrete type, which is ordinary code. A parameter
 names no instantiation, so the scrutinee's argument has nothing to disagree with.
 
 What this admits is a body whose parameter is bound, at the instantiation being
-compiled, to a type the scrutinee's argument contradicts. Closing it means
-comparing after substitution wherever that instantiation is known, rather than
-declining to compare.
+compiled, to a type the scrutinee's argument contradicts. The pattern is taken
+as matching, and nothing later rejects it.

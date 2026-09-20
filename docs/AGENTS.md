@@ -44,9 +44,13 @@ history is the SSoT.
 
 Roadmap and Known gaps split on commitment, not on size. A roadmap item will be
 done, so it is ordered and each entry says what finishing it means. A known gap
-is known and unowned: what is missing and what closing it would take, with no
-claim that it will be. Demoting a roadmap item to a gap, or promoting a gap, is
-the human's call.
+is known and unowned: what is missing and what it admits, with no claim that it
+will be closed. Demoting a roadmap item to a gap, or promoting a gap, is the
+human's call.
+
+A gap does not say how to close it. Whoever closes it should think from zero,
+and a written approach anchors them to the one that was obvious to the writer
+when the better answer was not yet in view.
 
 No "out of scope" section: an unfinished mechanism is a known gap. A deliberate
 omission goes in Decision.

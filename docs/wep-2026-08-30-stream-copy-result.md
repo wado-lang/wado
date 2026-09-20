@@ -205,12 +205,9 @@ Neutral:
 ## Known gaps
 
 - Operating on an end whose peer has dropped still traps rather than being
-  defined. Closing it means the end value carrying its own copy status — the
-  `AsyncCall<T>` shape, a struct pairing the raw handle with what the CM told us
-  — so that a post-`Dropped` read answers an empty chunk instead of reaching the
-  canonical. `Stream<T>` is an opaque `i32` handle today
-  (`GenericResource` → `WirType::I32`) with nowhere to keep it, and the
-  `&mut self` route is blocked by D6 below.
+  defined. `Stream<T>` is an opaque `i32` handle today (`GenericResource` →
+  `WirType::I32`), so an end value has nowhere to keep the copy status a defined
+  answer would read, and D6 below blocks the `&mut self` route.
 - D6 of [Reference Representation](./wep-2026-06-13-reference-representation.md):
   `&mut resource` has no stable cell, so a method cannot write a handle back to
   the caller's binding. Independent of this WEP, and a prerequisite for any
@@ -220,15 +217,14 @@ Neutral:
   `cancel_write` remain unreachable — see
   [Async Canonical Options](./wep-2026-07-25-async-stream-canonical.md). This is
   what a Go-style channel needs and does not have yet.
-- A non-byte `write_raw` has no lowering. Giving it one means a slice-sourced
-  counterpart to `synthesize_lower_list_to_buffer`, which reads its length and
-  elements through `List` alone today.
+- A non-byte `write_raw` has no lowering. `synthesize_lower_list_to_buffer` reads
+  its length and elements through `List` alone, so nothing sources them from a
+  slice.
 - `write_all` and `write_raw_all` re-lower the untransferred tail on every
   iteration, where the loop inside the compiler lowered once and advanced a
   pointer. Against a reader taking short prefixes that is quadratic in the
   bytes copied. A loop in Wado cannot hold the linear-memory pointer the old one
-  advanced, so closing it means an internal `core:rt` drain that lowers once —
-  keeping `write_raw` itself one copy, as the decision above requires.
+  advanced, and the decision above requires `write_raw` itself to stay one copy.
 - `STREAM_CHUNK_ELEMENTS` is 4096 for every payload, where the call sites this
   WEP replaced picked per site (`read(65536)` for bytes, `read(16)` for
   records). The read helper allocates `max * elem_size` up front, so one number

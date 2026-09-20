@@ -160,21 +160,18 @@ caller in the repository needs them, not because they would not fit.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
   descriptor plumbing. It threads nested `Descriptor`s through some twenty
   sites, and it cannot run here at all without the `vendor/antlr4` submodule, so
-  converting it is a refactor no test in this repository would check. Closing it
-  means porting those sites to paths and re-running the vendor extract.
-- A second preopen is unreachable. Closing it means resolving a path against the
-  preopen whose name is its longest matching prefix, and deciding what an
-  ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
-  that reason: it searches every grant and names the ones it searched, which is
-  what makes `wado run --dir` legible there.
+  converting it is a refactor no test in this repository would check.
+- A second preopen is unreachable: a path resolves against the first one, and
+  what an ambiguous path means is undecided. `package-gale/src/main.wado` keeps
+  its own opener for that reason: it searches every grant and names the ones it
+  searched, which is what makes `wado run --dir` legible there.
 - No handler can stand in for the filesystem, so a test of a caller still needs
-  a real directory. Closing it needs an operation to be able to declare an
-  effect (`docs/spec.md`, "Beyond a name, parameters and a return type, an
-  operation declares nothing else"), after which these functions become the
-  defaults of an `interface FileSystem`.
+  a real directory. An operation cannot declare an effect (`docs/spec.md`,
+  "Beyond a name, parameters and a return type, an operation declares nothing
+  else"), which is what an `interface FileSystem` would rest on.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so
-  reading one fails with `Loop`. Closing it means passing `SymlinkFollow` and
-  deciding what a link that points out of the preopen does.
+  reading one fails with `Loop`. What a link pointing out of the preopen means is
+  undecided.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
-  as `path: ErrorCode::Access` rather than as prose. Closing it means a message
-  per `ErrorCode`, which is 40 strings for the codes no caller branches on.
+  as `path: ErrorCode::Access` rather than as prose. Wording all 40 `ErrorCode`s
+  is wording the ones no caller branches on.

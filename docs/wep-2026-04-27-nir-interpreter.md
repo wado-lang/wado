@@ -475,13 +475,12 @@ purity gate. It would cover what the in-process engine balks at: recursion beyon
 a base case, `fib(20)`-shaped work, lookup-table generation. The cost is ms per
 call against `niri`'s µs, amortized through a module cache.
 
-Closing it takes: a route through the compiler host, since `wado-compiler` must
-compile to `wasm32-unknown-unknown` and cannot link a runtime, as Kiln generator
-execution already does; a resolution of the async boundary, since the host's
-generator entry point is async and the optimizer's fixed-point loop is not; an
-answer to the circularity of needing a compiled module to evaluate a call made
-while compiling; and a module-cache lifetime, per `compile` invocation or per
-process.
+Four things stand against it. `wado-compiler` must compile to
+`wasm32-unknown-unknown` and cannot link a runtime, so execution has to leave the
+crate, as Kiln generator execution already does. The host's generator entry point
+is async and the optimizer's fixed-point loop is not. Evaluating a call made
+while compiling needs a compiled module, which is circular. And no module-cache
+lifetime is settled.
 
 Unowned because the demand is not visible. No benchmark, stdlib path or corpus
 program exhibits recursion over constants, and
@@ -497,9 +496,9 @@ runtime trap inside an unfolded body stays observable.
 ### A write whose place roots in no local
 
 The census counts 13. The frame cannot say where such a write lands, so it
-refuses the region rather than carry it out. Closing it takes a place for the
-roots a local does not cover — a global, a call result — or a count showing each
-is rare enough to leave refused.
+refuses the region rather than carry it out. A frame's places cover locals only,
+and how the 13 divide among the roots a local does not cover — a global, a call
+result — is not counted.
 
 ### Comparing two literal strings as a guard
 

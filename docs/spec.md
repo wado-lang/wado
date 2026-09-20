@@ -14,7 +14,7 @@ one. That gets settled when the disagreement is found.
 
 What is not allowed is leaving the disagreement in place as an accepted
 difference. If it is not resolved, it becomes a Known gap, recorded wherever
-that area is owned, saying what it would take to close it.
+that area is owned, saying what the disagreement is and what it admits.
 
 | Document               | Holds                                                         |
 | ---------------------- | ------------------------------------------------------------- |

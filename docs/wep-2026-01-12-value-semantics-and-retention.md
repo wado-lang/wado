@@ -394,9 +394,8 @@ answer per local, and the last a change to the lattice the rest are read over.
 A function value is followed only while it stays in a local or a parameter. One
 put in a field, captured by a closure, or reached through a reference taken of
 the local holding it goes where the walk does not, and every call that could
-reach a value of that type is then read off the type. Closing that would take
-following function values through the heap, which is a shape-level points-to
-answer and nothing here is one.
+reach a value of that type is then read off the type. Following a function value
+through the heap is a shape-level points-to answer, and nothing here is one.
 
 An element claim reads what a value holds, which a body fills but a signature
 never states. A parameter arrives holding whatever the caller put there, and
@@ -404,8 +403,8 @@ nothing names that, so the claim is answered from the writes this body made and
 the positions those writes came from. A caller that hands on its own argument's
 elements untouched is not telling its own caller so, which is what makes the
 claim useful — it stops at the frame that filled the container — and also what
-bounds it. Closing that would take a summary of what a parameter holds on entry,
-which is the same points-to answer.
+bounds it. What a parameter holds on entry is the same points-to answer, and
+nothing states it.
 
 The write-back reads the union where the move reads the destination. Refusing a
 write-back is a correctness rule rather than a precision one — a `&mut` to a
@@ -422,8 +421,8 @@ A retention into a reference-typed local is bounded only where every assignment
 to that local roots at one of this body's own parameters. That is a must-alias
 reading, so one assignment from anywhere else — a call result, a global, another
 local with such an assignment — makes every write through the local an escape,
-however narrow the other assignments are. Closing it takes a per-program-point
-reading rather than one answer per local.
+however narrow the other assignments are. The pass holds one answer per local,
+not one per program point.
 
 A lifted closure is not read as the value it came from. Lifting rewrites the
 closure literal at a call site into an object holding the lifted function, while
@@ -433,18 +432,12 @@ to any value of its own type. Where one function type has several closures, that
 takes each specialization back to their join, which is the coarsest reading of
 the one place exactly one value arrives.
 
-Closing it takes reading such an object as a mint of the function it holds,
-which the object does say — and at a shift, which is what makes it work. The
-function it holds is the lifted body, whose parameters are the closure's
-preceded by its environment, so the call's position `p` is that function's
-`p + 1`. A mint would therefore have to carry where its positions start, and
-every reader of one — the join, the row a call resolves to, the destination a
-caller resolves against its own arguments — apply it. That is a change to the
-lattice rather than to one arm of the walk, and the size of it is the reason
-this is open rather than done. Reading the lifting phase's own record of which
-closure it specialized each copy for would need no shift, but the answer would
-then come from a previous phase instead of the tree the reader walks, which is
-what the decision above rests on.
+The object does say which function it holds. What the lattice has no term for is
+the shift: the function it holds is the lifted body, whose parameters are the
+closure's preceded by its environment, so the call's position `p` is that
+function's `p + 1`, and a mint carries no record of where its positions start.
+Every reader of a mint — the join, the row a call resolves to, the destination a
+caller resolves against its own arguments — reads them from zero.
 
 ## References
 

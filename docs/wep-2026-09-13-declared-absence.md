@@ -135,8 +135,8 @@ Nothing is queued. The gaps below are unowned.
   `interface` operation, and a `resource` method reject it. Each extension
   looks mechanical, and none is owned.
 - A trait may declare a name `#[unavailable]` and an `impl` may still supply a
-  body for it, which the receiver's own type then dispatches to. Closing it
-  needs a rule Wado does not have today for any member: that an
-  `impl Trait for T` declares only members the trait declares.
+  body for it, which the receiver's own type then dispatches to. Wado has no rule
+  for any member that an `impl Trait for T` declares only what the trait
+  declares.
 - Whether a declaration standing in for a removed method is ever pruned, and on
   what schedule, is undecided. Left alone, they accumulate.

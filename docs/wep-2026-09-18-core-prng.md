@@ -301,9 +301,9 @@ left over is unowned, so it is listed under Known gaps instead.
   budget: `--optimize-inline-growth 250` measures 233 M for xoshiro256++,
   213 M for SHISHUA per draw and 1.81 G for its batch. The binding constraint
   is the default growth budget rather than anything about these engines, so
-  the ranking the table is for holds while the absolute numbers do not.
-  Closing it means finding what the default spends its budget on instead,
-  which is a question about `optimize::inline` and not about `core:prng`.
+  the ranking the table is for holds while the absolute numbers do not. What the
+  default spends that budget on is a question about `optimize::inline` and not
+  about `core:prng`.
 - The names are Rust's (`random_range`, `random_bool`, `shuffle`, `choose`),
   which is what the library spells. Ratifying that house, or moving to Go's
   (`IntN`, `Float64`), is still open; a mixture is worse than either.
@@ -320,16 +320,14 @@ left over is unowned, so it is listed under Known gaps instead.
   two adjacent alike and an odd lowest digit; reproducing that at bit level
   would reject two thirds of what it is given, so the library rejects the
   failure mode instead — a low nibble of zero, a zero upper half, or more than
-  four zero nibbles. Closing it means choosing the predicate against that
-  generator and stating it as the assert.
+  four zero nibbles. Which keys that admits, and whether any of them is weak, is
+  not established.
 - No known-answer vectors are checked anywhere. Each vector form is checked
   against its own scalar form, which catches a transcription error but not a
   wrong constant shared by both. SHISHUA is the widest case: the library
   expands the seed through SplitMix64 and keeps the reference's thirteen
   discarded rounds rather than its table of digits of phi, so its stream is not
-  the reference's. Closing it means a fixture per algorithm against the
-  reference implementation's published output, and for SHISHUA the reference's
-  own seeding first.
+  the reference's and no published vector applies to it as it stands.
 - A generic consumer over `R: VectorRng<Batch = [..V]>, ..V: BitXor<u64x2,
   Output = u64x2>` compiles and runs, so the fixed sixteen-word batch is a
   choice rather than a workaround: what it costs is a width the library names
@@ -337,7 +335,7 @@ left over is unowned, so it is listed under Known gaps instead.
   Reaching a member of the batch still puts the pack on the left of the
   operator (`v ^ acc`, never `acc ^ v`), as it would in Rust.
 - SHISHUA has no jump and no proven stream separation, so its lanes rest on
-  seeding alone. Closing it is not possible within the algorithm; the honest
-  answer is that a consumer needing proven disjointness uses xoshiro.
+  seeding alone. The algorithm admits no remedy, so a consumer needing proven
+  disjointness uses xoshiro.
 - Distributions and noise functions have no home yet. Both sit on this library
   and neither belongs inside it.
