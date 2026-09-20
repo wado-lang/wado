@@ -57,6 +57,13 @@ pub flags Perms {
     Execute,
 }
 
+// A variant with no payload-bearing case lays out as its bare discriminant,
+// one byte here, not the handle width an unknown name defaults to.
+pub variant Status {
+    Active,
+    Inactive,
+}
+
 pub type Meters = f64;
 
 // A variant whose cases flatten to the same slot size but different core
@@ -238,6 +245,22 @@ export fn id_list_flags(v: List<Perms>) -> List<Perms> {
     return v;
 }
 export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
+    return v;
+}
+
+// --- Payload-less variant nested in aggregates ---
+// Only a composite reads a stride or an offset. `[Status, u8]` is the sharpest:
+// nothing in it forces padding, so a wider discriminant moves the second element.
+export fn id_payload_less_variant(v: Status) -> Status {
+    return v;
+}
+export fn id_option_payload_less_variant(v: Option<Status>) -> Option<Status> {
+    return v;
+}
+export fn id_list_payload_less_variant(v: List<Status>) -> List<Status> {
+    return v;
+}
+export fn id_tuple_payload_less_variant(v: [Status, u8]) -> [Status, u8] {
     return v;
 }
 

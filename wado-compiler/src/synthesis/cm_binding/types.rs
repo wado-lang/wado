@@ -854,7 +854,7 @@ pub fn flatten_param_type(
         .collect()
 }
 
-pub use crate::cm_abi::{cm_enum_byte_size, cm_flags_byte_size};
+pub use crate::cm_abi::{cm_discriminant_byte_size, cm_flags_byte_size};
 
 /// Core-wasm load op for a CM discriminant of the given byte size.
 /// Discriminants are unsigned, so 1/2-byte widths zero-extend.
@@ -910,7 +910,7 @@ pub(super) fn cm_param_store_plan(
             .as_deref()
             .and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
         {
-            let store = disc_store_op(cm_enum_byte_size(variants.len()));
+            let store = disc_store_op(cm_discriminant_byte_size(variants.len()));
             return vec![(0, store)];
         }
         // Standard named types

@@ -1,4 +1,4 @@
-use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters, Status } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -77,6 +77,18 @@ test "variant round-trip" {
 
 test "flags round-trip" {
     assert CmCatalog::id_flags(Perms::Read | Perms::Write) == Perms::Read | Perms::Write;
+}
+
+// A variant with no payload-bearing case lays out as its bare discriminant.
+// Sizing it as a handle moves everything an aggregate places after it.
+test "payload-less variant round-trip" {
+    assert CmCatalog::id_payload_less_variant(Status::Inactive) == Status::Inactive;
+    assert CmCatalog::id_option_payload_less_variant(Option::Some(Status::Inactive))
+        == Option::Some(Status::Inactive);
+    assert CmCatalog::id_list_payload_less_variant([Status::Active, Status::Inactive])
+        == [Status::Active, Status::Inactive];
+    assert CmCatalog::id_tuple_payload_less_variant([Status::Inactive, 200])
+        == [Status::Inactive, 200];
 }
 
 test "tuple round-trip" {

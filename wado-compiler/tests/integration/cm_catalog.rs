@@ -143,7 +143,10 @@ where
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
-const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.16";
+const LIB_WORLD_FQ: &str = concat!(
+    "wado-lang:cm-catalog/cm-catalog@",
+    env!("CARGO_PKG_VERSION")
+);
 
 const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -311,6 +314,28 @@ fn cases() -> Vec<Case> {
         case(
             "id-tuple-flags",
             Val::Tuple(vec![flags(&["read", "execute"]), Val::U32(9)]),
+        ),
+        // A variant with no payload-bearing case is its bare discriminant, one
+        // CM byte, and only these read a stride or an offset.
+        case(
+            "id-payload-less-variant",
+            Val::Variant("inactive".into(), None),
+        ),
+        case(
+            "id-option-payload-less-variant",
+            Val::Option(b(Val::Variant("active".into(), None))),
+        ),
+        case("id-option-payload-less-variant", Val::Option(None)),
+        case(
+            "id-list-payload-less-variant",
+            Val::List(vec![
+                Val::Variant("active".into(), None),
+                Val::Variant("inactive".into(), None),
+            ]),
+        ),
+        case(
+            "id-tuple-payload-less-variant",
+            Val::Tuple(vec![Val::Variant("inactive".into(), None), Val::U8(200)]),
         ),
     ]
 }

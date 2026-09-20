@@ -149,6 +149,7 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
     {
         let payloads: Vec<Option<Type>> = cases.iter().map(|c| c.payload.clone()).collect();
         let payload_offset = cm_abi::variant_payload_offset_with_registry(
+            payloads.len(),
             payloads.iter().flatten(),
             ctx.cm_interface_registry,
         );

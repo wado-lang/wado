@@ -169,37 +169,48 @@ fn cm_align_generic(generic: &GenericType) -> u32 {
     }
 }
 
-/// Layout for a variant: a 1-byte discriminant, then every case's payload at
-/// one shared max-aligned offset. `offsets` is `[discriminant, payload]`.
-pub fn layout_variant<'a>(payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
+/// Layout for a variant: the discriminant `case_count` calls for, then the
+/// payload-bearing cases at one shared offset. `offsets` is `[disc, payload]`.
+pub fn layout_variant<'a>(case_count: usize, payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
     let mut payload_size = 0u32;
     let mut payload_align = 1u32;
     for ty in payloads {
         payload_size = payload_size.max(cm_size(ty));
         payload_align = payload_align.max(cm_align(ty));
     }
-    let payload_offset = align_to(1, payload_align);
+    variant_layout(
+        cm_discriminant_byte_size(case_count),
+        payload_size,
+        payload_align,
+    )
+}
+
+/// The shared tail of both variant layouts: the discriminant at offset 0, the
+/// payload after it at its own alignment, padded to the wider of the two.
+fn variant_layout(disc: u32, payload_size: u32, payload_align: u32) -> CmLayout {
+    let align = disc.max(payload_align);
+    let payload_offset = align_to(disc, payload_align);
     CmLayout {
-        size: align_to(payload_offset + payload_size, payload_align),
-        align: payload_align,
+        size: align_to(payload_offset + payload_size, align),
+        align,
         offsets: vec![0, payload_offset],
     }
 }
 
 /// Layout for `option<T>`.
 pub fn layout_option(inner: &Type) -> CmLayout {
-    layout_variant(std::iter::once(inner))
+    layout_variant(2, std::iter::once(inner))
 }
 
 /// Layout for `result<T, E>`.
 pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
-    layout_variant([ok, err].into_iter())
+    layout_variant(2, [ok, err].into_iter())
 }
 
-/// Registry-aware layout for a variant: a 1-byte discriminant, then every
-/// case's payload at one shared max-aligned offset. `payloads` iterates the
-/// payload-bearing cases only, and `offsets` is `[discriminant, payload]`.
+/// Registry-aware [`layout_variant`]. A variant whose cases carry no payload
+/// lays out as its bare discriminant.
 pub fn layout_variant_with_registry<'a>(
+    case_count: usize,
     payloads: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
@@ -209,17 +220,16 @@ pub fn layout_variant_with_registry<'a>(
         payload_size = payload_size.max(cm_size_with_registry(ty, registry));
         payload_align = payload_align.max(cm_align_with_registry(ty, registry));
     }
-    let payload_offset = align_to(1, payload_align);
-    CmLayout {
-        size: align_to(payload_offset + payload_size, payload_align),
-        align: payload_align,
-        offsets: vec![0, payload_offset],
-    }
+    variant_layout(
+        cm_discriminant_byte_size(case_count),
+        payload_size,
+        payload_align,
+    )
 }
 
 /// Registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry(inner: &Type, registry: &CmInterfaceRegistry) -> CmLayout {
-    layout_variant_with_registry(std::iter::once(inner), registry)
+    layout_variant_with_registry(2, std::iter::once(inner), registry)
 }
 
 /// Registry-aware layout for a tuple. Unlike [`layout_tuple`], element
@@ -264,12 +274,13 @@ pub fn layout_record_with_registry(
     layout_fields_with_registry(field_types.iter(), registry)
 }
 
-/// The offset every case's payload starts at, for a caller that needs no size.
+/// The offset a variant's case payloads start at, for a caller needing no size.
 pub fn variant_payload_offset_with_registry<'a>(
+    case_count: usize,
     payloads: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
 ) -> u32 {
-    layout_variant_with_registry(payloads, registry).offsets[1]
+    layout_variant_with_registry(case_count, payloads, registry).offsets[1]
 }
 
 /// CM Canonical ABI byte size for a flags type given its label count.
@@ -297,9 +308,9 @@ pub fn cm_flags_byte_align(count: usize) -> u32 {
     }
 }
 
-/// CM Canonical ABI byte size for an enum discriminant given its case count.
-/// Per the CM spec `discriminant_type`: ≤256 → 1 byte, ≤65536 → 2 bytes, else 4 bytes.
-pub fn cm_enum_byte_size(count: usize) -> u32 {
+/// CM Canonical ABI byte size of the discriminant an enum or variant with
+/// `count` cases carries. Per the CM spec `discriminant_type`.
+pub fn cm_discriminant_byte_size(count: usize) -> u32 {
     if count <= 256 {
         1
     } else if count <= 65536 {
@@ -315,7 +326,7 @@ pub fn layout_result_with_registry(
     err: &Type,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
-    layout_variant_with_registry([ok, err].into_iter(), registry)
+    layout_variant_with_registry(2, [ok, err].into_iter(), registry)
 }
 
 /// Compute the flat (core Wasm) parameter types for a Canonical ABI type.

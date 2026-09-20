@@ -23,8 +23,8 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_held_type_to_type_id,
-    disc_load_op, kebab_to_pascal,
+    LiftContext, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
+    cm_held_type_to_type_id, disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{cm_align_with_registry, cm_size_with_registry};
@@ -196,7 +196,7 @@ fn synthesize_lift_inner(
                             .cm_interface_registry
                             .get_enum_variants_by_source(source, &named.name)
                         {
-                            let load_name = disc_load_op(cm_enum_byte_size(variants.len()));
+                            let load_name = disc_load_op(cm_discriminant_byte_size(variants.len()));
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
                     }
@@ -254,7 +254,6 @@ pub(super) fn try_lift_wasi_variant_or_enum(
             ctx.type_table.borrow_mut().make_variant(def)
         };
         return Some(synthesize_lift_wasi_variant(
-            &named.name,
             variant_type,
             &cases,
             addr,
@@ -274,7 +273,6 @@ pub(super) fn try_lift_wasi_variant_or_enum(
             ctx.type_table.borrow_mut().make_enum(def)
         };
         return Some(synthesize_lift_wasi_enum(
-            &named.name,
             enum_type,
             &case_names,
             addr,
@@ -385,7 +383,6 @@ fn try_lift_wasi_struct(
 /// Generates an if/else chain: disc==0 → Case0, disc==1 → Case1, ...
 /// Payload cases lift the payload from the appropriate memory offset.
 fn synthesize_lift_wasi_variant(
-    _name: &str,
     variant_type: TypeId,
     cases: &[CmVariantCase],
     addr: TirExpr,
@@ -394,14 +391,38 @@ fn synthesize_lift_wasi_variant(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    // Load discriminant: 1 byte (u8) for variants with ≤ 256 cases
+    let load = disc_load_op(cm_discriminant_byte_size(cases.len()));
+    let disc = builtin_call(load, vec![addr.clone()], TypeTable::I32);
+    lift_variant_from_disc(
+        variant_type,
+        cases,
+        disc,
+        Some(addr),
+        next_local,
+        stmts,
+        locals,
+        ctx,
+    )
+}
+
+/// Build a CM variant's GC value from its discriminant. `payload_base` is the
+/// address the payloads sit after, absent only where no case carries one.
+pub(super) fn lift_variant_from_disc(
+    variant_type: TypeId,
+    cases: &[CmVariantCase],
+    disc: TirExpr,
+    payload_base: Option<TirExpr>,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LiftContext<'_>,
+) -> TirExpr {
+    assert!(
+        payload_base.is_some() || cases.iter().all(|case| case.payload.is_none()),
+        "a variant carrying a payload needs the address to read it from"
+    );
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "$vdisc",
-        disc_local,
-        TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
-    ));
+    stmts.push(let_stmt("$vdisc", disc_local, TypeTable::I32, disc));
 
     // Result local (typed as the variant type)
     let result_local = alloc_local(next_local, locals, variant_type);
@@ -413,6 +434,7 @@ fn synthesize_lift_wasi_variant(
     ));
 
     let payload_offset = cm_abi::variant_payload_offset_with_registry(
+        cases.len(),
         cases.iter().filter_map(|case| case.payload.as_ref()),
         ctx.cm_interface_registry,
     );
@@ -428,7 +450,10 @@ fn synthesize_lift_wasi_variant(
         // Lift payload if present
         let mut case_stmts: Vec<TirStmt> = Vec::new();
         let payload_box = if let Some(payload_ty) = payload_type {
-            let payload_addr = binary_add(addr.clone(), i32_const(payload_offset as i32));
+            let base = payload_base
+                .clone()
+                .expect("the assertion above admits no payload without a base");
+            let payload_addr = binary_add(base, i32_const(payload_offset as i32));
             let lifted = synthesize_lift_inner(
                 payload_ty,
                 payload_addr,
@@ -486,7 +511,6 @@ fn synthesize_lift_wasi_variant(
 /// Lift a WASI enum type from an i32 discriminant.
 /// Same pattern as variant but uses `EnumConstruct`.
 fn synthesize_lift_wasi_enum(
-    _name: &str,
     enum_type: TypeId,
     case_names: &[String],
     addr: TirExpr,
@@ -495,7 +519,7 @@ fn synthesize_lift_wasi_enum(
     locals: &mut Vec<TirLocal>,
 ) -> TirExpr {
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    let load_name = disc_load_op(cm_enum_byte_size(case_names.len()));
+    let load_name = disc_load_op(cm_discriminant_byte_size(case_names.len()));
     stmts.push(let_stmt(
         "$edisc",
         disc_local,

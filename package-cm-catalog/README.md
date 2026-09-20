@@ -35,6 +35,9 @@ Full intended scope; checked items are implemented.
 - [x] Nested compositions
 - [x] `flags` inside `option` / `list` / `tuple` — the CM width (one byte at ≤8
       labels) only shows up where the ABI reads a stride or an offset
+- [x] A `variant` with no payload-bearing case, bare and inside
+      `option` / `list` / `tuple` — it lays out as its bare discriminant, and
+      the same stride-or-offset reads are what show that width
 
 ### `future<T>` (consume/produce)
 

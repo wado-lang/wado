@@ -12,7 +12,10 @@ const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/cm_catalog.wado"
 );
-const LIB_WORLD_FQ: &str = "wado-lang:cm-catalog/cm-catalog@0.0.16";
+const LIB_WORLD_FQ: &str = concat!(
+    "wado-lang:cm-catalog/cm-catalog@",
+    env!("CARGO_PKG_VERSION")
+);
 
 fn compile_lib() -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).unwrap();

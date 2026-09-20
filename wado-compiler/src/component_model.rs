@@ -17,8 +17,8 @@ use crate::ast::{
 };
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
-    CmValType, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, cm_size,
-    layout_option_with_registry, layout_record_with_registry, layout_result_with_registry,
+    CmValType, cm_align, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
+    cm_size, layout_option_with_registry, layout_record_with_registry, layout_result_with_registry,
     layout_tuple_with_registry, layout_variant_with_registry,
 };
 use crate::defs::DefId;
@@ -2913,19 +2913,6 @@ impl CmInterfaceRegistry {
         found
     }
 
-    /// Given a source-interface prefix (e.g. `"wasi:filesystem/types@"`) and
-    /// a Wado type name, return the full registered source interface that
-    /// matches in any type kind. Used by TIR → AST conversion to recover the
-    /// exact versioned `source_interface` from a coarser `ModuleSource`.
-    pub fn find_source_under_prefix(&self, prefix: &str, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.structs, prefix, name)
-            .or_else(|| find_unique_source_with_prefix(&self.variants, prefix, name))
-            .or_else(|| find_unique_source_with_prefix(&self.enums, prefix, name))
-            .or_else(|| find_unique_source_with_prefix(&self.flags, prefix, name))
-            .or_else(|| find_unique_source_with_prefix(&self.resources, prefix, name))
-            .or_else(|| find_unique_source_with_prefix(&self.newtypes, prefix, name))
-    }
-
     /// The `ModuleSource` a CM interface FQ was registered under — the entry
     /// module for a `--lib` local, or the dependency `ModuleSource::Wasm` for a
     /// component import. `None` for a WASI/core interface (whose source is
@@ -4885,17 +4872,13 @@ pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
 }
 
-/// Compute the CM canonical-ABI size and alignment for a WASI variant type.
-///
-/// Returns `None` if the type is not a known WASI variant with payload cases.
+/// The CM canonical-ABI size and alignment of a registered variant, `None` for
+/// a type that is not one.
 fn cm_variant_size_align(named: &NamedType, registry: &CmInterfaceRegistry) -> Option<(u32, u32)> {
     let source = registry.resolve_cm_source_for(named)?;
     let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
-    let payloads = || cases.iter().filter_map(|case| case.payload.as_ref());
-    if payloads().next().is_none() {
-        return None;
-    }
-    Some(layout_variant_with_registry(payloads(), registry).size_align())
+    let payloads = cases.iter().filter_map(|case| case.payload.as_ref());
+    Some(layout_variant_with_registry(cases.len(), payloads, registry).size_align())
 }
 
 /// Registry-aware CM canonical ABI size and alignment for a type. A struct,
@@ -4924,7 +4907,7 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
                 return sa;
             }
             if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
-                let disc = cm_enum_byte_size(variants.len());
+                let disc = cm_discriminant_byte_size(variants.len());
                 return (disc, disc);
             }
             if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
@@ -5127,6 +5110,30 @@ mod tests {
             registry.find_binding_struct_source("Rect"),
             Some("web:dom/types")
         );
+    }
+
+    /// Sizing a payload-less variant as the 4-byte handle of an unregistered
+    /// name moves every later field of an enclosing record.
+    #[test]
+    fn a_payload_less_variant_lays_out_as_its_discriminant() {
+        let registry = registry_from(
+            "wasi:demo",
+            r#"
+            #[cm("wasi:demo/types@0.1.0#status")]
+            pub variant Status {
+                #[cm("active")]
+                Active,
+                #[cm("inactive")]
+                Inactive,
+            }
+            "#,
+        );
+        let status = Type::Named(NamedType {
+            id: AstId::fresh(),
+            name: "Status".to_string(),
+            span: make_span(),
+        });
+        assert_eq!(cm_layout_with_registry(&status, &registry), (1, 1));
     }
 
     fn make_stream_u8_type() -> Type {

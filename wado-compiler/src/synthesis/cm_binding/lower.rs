@@ -293,6 +293,7 @@ fn synthesize_lower_variant_to_memory(
     )));
 
     let payload_offset = cm_abi::variant_payload_offset_with_registry(
+        cases.len(),
         cases
             .iter()
             .filter_map(|(_, _, p)| p.as_ref().map(|(ty, _)| ty)),

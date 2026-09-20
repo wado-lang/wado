@@ -23,7 +23,9 @@ use crate::synthesis::common::{
     loop_stmt, null_expr, return_stmt, split_packed_ptr_len, synth_span,
 };
 
-use super::lift::{materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum};
+use super::lift::{
+    lift_variant_from_disc, materialize_if_needed, synthesize_lift, try_lift_wasi_variant_or_enum,
+};
 use super::lower::{
     flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
     synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
@@ -1534,10 +1536,42 @@ impl<'a> AdapterBuilder<'a> {
         lifted_type_id // real type, fixed up at call site if needed
     }
 
-    /// Flat result strategy: the raw call returns the value on the stack.
-    /// A `Result<(), E>` discriminant is rebuilt into its GC variant, a
-    /// record flattening to one core value is rebuilt into its GC struct,
-    /// and everything else passes through.
+    /// Rebuild a payload-less variant from the bare discriminant it returns as.
+    /// An enum passes through as the scalar it already is.
+    fn emit_flat_payload_less_variant(
+        &mut self,
+        raw_call: &TirExpr,
+        resolved: &Type,
+    ) -> Option<TirExpr> {
+        let Type::Named(named) = resolved else {
+            return None;
+        };
+        let registry = self.registry();
+        let source = registry.resolve_cm_source_for(named)?;
+        let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
+        if cases.iter().any(|case| case.payload.is_some()) {
+            return None;
+        }
+        let cases = cases.to_vec();
+        let lift_ctx = self.lift_ctx();
+        let variant_type = {
+            let def = lift_ctx.cm_decl(&source, &named.name);
+            lift_ctx.type_table.borrow_mut().make_variant(def)
+        };
+        Some(lift_variant_from_disc(
+            variant_type,
+            &cases,
+            raw_call.clone(),
+            None,
+            &mut self.next_local,
+            &mut self.body_stmts,
+            &mut self.locals,
+            &lift_ctx,
+        ))
+    }
+
+    /// Flat result strategy: the raw call returns the value on the stack, and a
+    /// discriminant or a one-value record is rebuilt into its GC form.
     fn emit_flat_result(
         &mut self,
         raw_call: TirExpr,
@@ -1556,6 +1590,11 @@ impl<'a> AdapterBuilder<'a> {
                 .is_some_and(|s| {
                     registry.get_struct_fields_by_source(&s, &n.name).is_some()
                 }));
+        if let Some(lifted) = self.emit_flat_payload_less_variant(&raw_call, &resolved) {
+            let lifted_type_id = lifted.type_id;
+            self.body_stmts.push(return_stmt(Some(lifted)));
+            return lifted_type_id;
+        }
         if needs_flat_result_lifting(&resolved, &self.lower_ctx.names) {
             // Flat return with complex type (e.g., Result<(), ()>): the raw call returns
             // an i32 discriminant on the stack, but the binding needs to return a GC struct.

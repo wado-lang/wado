@@ -31,6 +31,10 @@ interface cm-catalog {
   record single {
     value: u64,
   }
+  variant status {
+    active,
+    inactive,
+  }
   id-bool: func(v: bool) -> bool;
   id-u8: func(v: u8) -> u8;
   id-u16: func(v: u16) -> u16;
@@ -78,6 +82,10 @@ interface cm-catalog {
   id-option-flags: func(v: option<perms>) -> option<perms>;
   id-list-flags: func(v: list<perms>) -> list<perms>;
   id-tuple-flags: func(v: tuple<perms, u32>) -> tuple<perms, u32>;
+  id-payload-less-variant: func(v: status) -> status;
+  id-option-payload-less-variant: func(v: option<status>) -> option<status>;
+  id-list-payload-less-variant: func(v: list<status>) -> list<status>;
+  id-tuple-payload-less-variant: func(v: tuple<status, u8>) -> tuple<status, u8>;
   id-future-bool: func(v: future<bool>) -> future<bool>;
   id-future-u8: func(v: future<u8>) -> future<u8>;
   id-future-u16: func(v: future<u16>) -> future<u16>;
