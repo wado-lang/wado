@@ -431,6 +431,26 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    fn simple_all_of(source: &str) -> String {
+        let parsed = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse");
+        let doc = extract_doc_with(&parsed.ast, &parsed.trivia, source, "demo", true);
+        render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
+    }
+
+    /// `--all` documents a struct at every visibility.
+    #[test]
+    fn an_internal_struct_heads_its_impl_block_with_its_own_name() {
+        let out = simple_all_of(
+            "//! Demo.\n\ninternal struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n}\n",
+        );
+        assert!(
+            out.contains("impl Limit {"),
+            "an internal struct's impl block must name the struct:\n{out}"
+        );
+    }
+
     /// A `pub const` is part of the type's API wherever it is declared.
     #[test]
     fn a_struct_documents_its_associated_constants() {
@@ -1228,14 +1248,7 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
         if !s.constants.is_empty() || !s.methods.is_empty() {
-            let type_name = s
-                .signature
-                .strip_prefix("pub ")
-                .unwrap_or(&s.signature)
-                .strip_prefix("struct ")
-                .and_then(|rest| rest.split([' ', '<', '{']).next())
-                .expect("a struct signature names its type");
-            writeln!(out, "\nimpl {type_name} {{").unwrap();
+            writeln!(out, "\nimpl {} {{", s.name).unwrap();
             for c in &s.constants {
                 writeln!(out, "    {};", c.signature).unwrap();
             }

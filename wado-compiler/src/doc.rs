@@ -75,6 +75,7 @@ pub struct DocTrait {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DocStruct {
+    pub name: String,
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
@@ -391,6 +392,7 @@ fn build_doc_struct(
     let constants = collect_impl_constants_for_type(&s.name, impls, trivia, include_private);
 
     DocStruct {
+        name: s.name.clone(),
         signature: unparse_struct_signature(s, !include_private),
         doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
         fields,
