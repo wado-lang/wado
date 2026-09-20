@@ -841,11 +841,11 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
 rejected the input, so the reify-side read is an `.expect`.
 
-Finishing it: a recorded fact per question reify re-asks — the callee's shape on
-a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
-case index on every case identifier and pattern, the resolved effects on the
-written `fn(…) with E` node — after which the two borrowed AST inputs, the two
-type-param name lists and the surviving `resolve_type` have no caller left.
+Finishing it means one recorded fact per question reify re-asks: the callee's
+shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
+owner and case index on every case identifier and pattern, and the resolved
+effects on the written `fn(…) with E` node. The two borrowed AST inputs, the two
+type-param name lists and the surviving `resolve_type` then have no caller left.
 
 ### The same shape is written several times
 

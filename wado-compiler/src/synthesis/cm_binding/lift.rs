@@ -23,7 +23,7 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
+    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
     cm_held_type_to_type_id, disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
@@ -770,7 +770,7 @@ fn synthesize_lift_option_inner(
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
     let layout = cm_abi::layout_option_with_registry(inner_ty, ctx.cm_interface_registry);
-    let payload_offset = layout.offsets[1];
+    let payload_offset = layout.payload_offset();
 
     // Resolve the concrete Option<T> TypeId so the local and null/some exprs
     // use the correct GC reference type.
@@ -786,7 +786,11 @@ fn synthesize_lift_option_inner(
         "$disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
+        builtin_call(
+            disc_load_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
+            vec![addr.clone()],
+            TypeTable::I32,
+        ),
     ));
 
     let result_local = alloc_local(next_local, locals, option_type_id);
@@ -854,15 +858,18 @@ fn synthesize_lift_result_inner(
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
     let layout = cm_abi::layout_result_with_registry(ok_ty, err_ty, ctx.cm_interface_registry);
-    let payload_offset = layout.offsets[1];
+    let payload_offset = layout.payload_offset();
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    // Result is a variant with 2 cases; CM spec discriminant is u8 (1 byte).
     stmts.push(let_stmt(
         "$disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
+        builtin_call(
+            disc_load_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
+            vec![addr.clone()],
+            TypeTable::I32,
+        ),
     ));
 
     // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the

@@ -793,9 +793,9 @@ nothing measured pays for it.
 
 ### Known gap: freshness does not read the fold's own wraps
 
-A copy hands its target storage nothing else reaches, but ownedness is computed
-from a local's source before any wrap site is chosen, so the fold does not read
-the wrap it has just decided as the freshness that wrap creates.
+A copy hands its target storage nothing else reaches. Ownedness is computed from
+a local's source before any wrap site is chosen, so a wrap the fold has just
+decided does not count as making its target fresh.
 
 No program reaches the imprecision. For a second read to pay a copy its move must
 be refused, and a copied local aliases nothing, so only a read that is not the

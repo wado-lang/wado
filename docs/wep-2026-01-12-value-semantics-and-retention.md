@@ -433,11 +433,11 @@ takes each specialization back to their join, which is the coarsest reading of
 the one place exactly one value arrives.
 
 The object does say which function it holds. What the lattice has no term for is
-the shift: the function it holds is the lifted body, whose parameters are the
+the shift. The function it holds is the lifted body, whose parameters are the
 closure's preceded by its environment, so the call's position `p` is that
-function's `p + 1`, and a mint carries no record of where its positions start.
-Every reader of a mint — the join, the row a call resolves to, the destination a
-caller resolves against its own arguments — reads them from zero.
+function's `p + 1`. A mint carries no record of where its positions start, and
+every reader of one counts from zero: the join, the row a call resolves to, and
+the destination a caller resolves against its own arguments.
 
 ## References
 

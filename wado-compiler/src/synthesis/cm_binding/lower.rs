@@ -21,9 +21,9 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LowerContext, binary_add, cm_discriminant_byte_size, cm_type_to_type_id,
-    cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access, flatten_param_type,
-    kebab_to_pascal, variant_tag, variant_test,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
+    flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
 use crate::component_model::cm_layout_with_registry;
@@ -144,9 +144,11 @@ pub fn synthesize_lower(
                     TypeTable::UNIT,
                 ))]
             }
-            // Unknown named types: treat as i32 handles (enums, resources)
+            // A declaration the registry can size — an enum, a flags, a
+            // payload-less variant — stores at that width; a resource handle
+            // and anything unresolved keep the 4-byte default.
             _ => vec![expr_stmt(builtin_call(
-                "i32_store",
+                scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
                 vec![addr, value],
                 TypeTable::UNIT,
             ))],
@@ -389,18 +391,12 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     ctx: &LowerContext<'_>,
 ) {
     let name = named.name.as_str();
-    let Some(cases) = ctx
+    let cases = ctx
         .cm_interface_registry
         .get_variant_cases_by_source(source, name)
-    else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
+        .unwrap_or_else(|| {
+            panic!("variant `{name}` resolved to `{source}`, which registers no cases for it")
+        });
     let mem_cases: Vec<CmMemCase> = cases
         .iter()
         .cloned()
@@ -450,11 +446,10 @@ pub(super) fn synthesize_lower_option_to_memory(
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("$opt_val", value_local, value_type_id, value));
 
-    // Store discriminant byte: variant_test(Some) → 1 = Some, 0 = None.
-    // Use variant_test (ref.test) rather than variant_tag (struct.get)
-    // because variant_tag traps on null refs.
+    // `variant_test` (ref.test) rather than `variant_tag` (struct.get), which
+    // traps on a null ref.
     stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
+        disc_store_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
         vec![
             addr.clone(),
             variant_test(
@@ -467,7 +462,7 @@ pub(super) fn synthesize_lower_option_to_memory(
     )));
 
     let payload_offset =
-        cm_abi::layout_option_with_registry(inner_type, ctx.cm_interface_registry).offsets[1];
+        cm_abi::layout_option_with_registry(inner_type, ctx.cm_interface_registry).payload_offset();
 
     let payload_addr = if payload_offset == 0 {
         addr

@@ -102,8 +102,8 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
         }
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             let payload_offset =
-                cm_abi::layout_option_with_registry(&g.args[0], ctx.cm_interface_registry).offsets
-                    [1];
+                cm_abi::layout_option_with_registry(&g.args[0], ctx.cm_interface_registry)
+                    .payload_offset();
             CmShape::Variant(vec![None, payload_case(&g.args[0], payload_offset, ctx)])
         }
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
@@ -112,7 +112,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
                 &g.args[1],
                 ctx.cm_interface_registry,
             )
-            .offsets[1];
+            .payload_offset();
             CmShape::Variant(vec![
                 payload_case(&g.args[0], payload_offset, ctx),
                 payload_case(&g.args[1], payload_offset, ctx),

@@ -143,12 +143,12 @@ where
 
 /// FQ of the synthesized library world. Mirrors `lib_world_fq` in
 /// `wado-cli`: `namespace:name/name@version`.
-const LIB_WORLD_FQ: &str = concat!(
+pub(crate) const LIB_WORLD_FQ: &str = concat!(
     "wado-lang:cm-catalog/cm-catalog@",
     env!("CARGO_PKG_VERSION")
 );
 
-const FIXTURE: &str = concat!(
+pub(crate) const FIXTURE: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/tests/fixtures/cm_catalog.wado"
 );

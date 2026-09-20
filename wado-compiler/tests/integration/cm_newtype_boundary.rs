@@ -4,18 +4,10 @@
 //! from the component's own types, so a decoded `id-newtype` that reads
 //! `func(v: f64) -> f64` (with no `meters` type) is the drift this guards.
 
+use crate::cm_catalog::{FIXTURE, LIB_WORLD_FQ};
 use crate::common::compile_source_with_compiler_options;
 use std::path::Path;
 use wado_compiler::{CompilerOptions, OptLevel};
-
-const FIXTURE: &str = concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/tests/fixtures/cm_catalog.wado"
-);
-const LIB_WORLD_FQ: &str = concat!(
-    "wado-lang:cm-catalog/cm-catalog@",
-    env!("CARGO_PKG_VERSION")
-);
 
 fn compile_lib() -> Vec<u8> {
     let source = std::fs::read_to_string(FIXTURE).unwrap();

@@ -1031,8 +1031,10 @@ impl<'a> AdapterBuilder<'a> {
     /// buffer and pass (base, len) as flat args.
     fn emit_list_buffer(&mut self, param_name: &str, param_local: u32, elem_type: &Type) {
         let registry = self.lower_ctx.cm_interface_registry;
-        let (elem_size, elem_align) = cm_layout_with_registry(elem_type, registry);
-        let (elem_size, elem_align) = (elem_size as i32, elem_align as i32);
+        let (elem_size, elem_align) = {
+            let (size, align) = cm_layout_with_registry(elem_type, registry);
+            (size as i32, align as i32)
+        };
 
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();

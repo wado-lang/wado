@@ -849,6 +849,10 @@ pub fn flatten_param_type(
 
 pub use crate::cm_abi::{cm_discriminant_byte_size, cm_flags_byte_size};
 
+/// `option` and `result` are two-case variants, so their discriminant takes its
+/// width from the same place every other variant's does.
+pub(super) const OPTION_OR_RESULT_CASES: usize = 2;
+
 /// Core-wasm load op for a CM discriminant of the given byte size.
 /// Discriminants are unsigned, so 1/2-byte widths zero-extend.
 pub(super) fn disc_load_op(byte_size: u32) -> &'static str {
@@ -890,9 +894,13 @@ pub(super) fn cm_param_store_plan(
         Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             let payload_offset =
-                cm_abi::layout_option_with_registry(&g.args[0], cm_interface_registry).offsets[1];
+                cm_abi::layout_option_with_registry(&g.args[0], cm_interface_registry)
+                    .payload_offset();
             let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
-            let mut stores = vec![(0, disc_store_op(cm_discriminant_byte_size(2)))];
+            let mut stores = vec![(
+                0,
+                disc_store_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
+            )];
             for (sub_offset, store_name) in inner_store {
                 stores.push((payload_offset + sub_offset, store_name));
             }
@@ -905,7 +913,7 @@ pub(super) fn cm_param_store_plan(
 
 /// The integer store for one flat value of `ty`, at the width its CM layout
 /// gives it. A type arriving as several values is not one store.
-fn scalar_store_op(
+pub(super) fn scalar_store_op(
     ty: &Type,
     cm_interface_registry: &CmInterfaceRegistry,
     names: &CmStdlibNames,

@@ -67,6 +67,12 @@ impl CmLayout {
     pub fn size_align(&self) -> (u32, u32) {
         (self.size, self.align)
     }
+
+    /// The offset every payload-bearing case shares, on a variant layout. A
+    /// field layout's `offsets` are per field and have no such entry.
+    pub fn payload_offset(&self) -> u32 {
+        self.offsets[1]
+    }
 }
 
 /// Layout for a tuple. A record lays out the same way, as a tuple of its field
@@ -77,7 +83,7 @@ pub fn layout_tuple(elements: &[Type]) -> CmLayout {
 
 /// The size and alignment of a type read without a registry, so a named
 /// declaration falls back to the 4-byte handle.
-fn plain_size_align(ty: &Type) -> (u32, u32) {
+pub fn plain_size_align(ty: &Type) -> (u32, u32) {
     (cm_size(ty), cm_align(ty))
 }
 
@@ -234,7 +240,7 @@ pub fn variant_payload_offset_with_registry<'a>(
     payloads: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
 ) -> u32 {
-    layout_variant_with_registry(case_count, payloads, registry).offsets[1]
+    layout_variant_with_registry(case_count, payloads, registry).payload_offset()
 }
 
 /// Registry-aware [`layout_tuple`], resolving each element through the

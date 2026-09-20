@@ -596,12 +596,7 @@ export fn id_record_future(v: FutureCell) -> FutureCell {
 // --- Narrow scalars in the indirect params buffer ---
 // An `Option` param forces an async call onto the one-buffer path. There a
 // scalar stored wider than its CM size writes past its slot, and past the end.
-export async fn narrow_scalars_in_params_buffer(
-    c: Color,
-    o: Option<u8>,
-    p: Perms,
-    s: Status,
-) -> u32 {
+export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
     let tag: u32 = match c {
         Red => 1,
         Green => 2,
@@ -611,7 +606,7 @@ export async fn narrow_scalars_in_params_buffer(
         Active => 1,
         Inactive => 2,
     };
-    task return tag * 1000 + (o.unwrap_or(0) as u32) * 10 + (p as u32) * 100 + seen;
+    task return tag * 1000 + o.unwrap_or(0) as u32 * 10 + p as u32 * 100 + seen;
 }
 
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it

@@ -17,9 +17,9 @@ use crate::ast::{
 };
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
-    CmValType, cm_align, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
-    cm_size, layout_fields_with_registry, layout_option_with_registry, layout_result_with_registry,
-    layout_tuple_with_registry, layout_variant_with_registry,
+    CmValType, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
+    layout_fields_with_registry, layout_option_with_registry, layout_result_with_registry,
+    layout_tuple_with_registry, layout_variant_with_registry, plain_size_align,
 };
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -1167,8 +1167,7 @@ pub enum CmDeclKind {
 
 impl CmDeclKind {
     /// The order a bare-name search asks the kinds in. Which kind answers first
-    /// is the tiebreak [WEP: Declaration Identity] records as unowned; it is
-    /// written once here so the answer does not vary by call site.
+    /// is the tiebreak [WEP: Declaration Identity] records as unowned.
     ///
     /// [WEP: Declaration Identity]: ../../docs/wep-2026-08-12-declaration-identity.md
     pub const ALL: [Self; 6] = [
@@ -2763,8 +2762,7 @@ impl CmInterfaceRegistry {
     }
 
     /// The unique source interface registering `name` across every kind, among
-    /// those `is_member` admits. Two kinds answering different sources is an
-    /// ambiguity, not a race the first kind wins.
+    /// those `is_member` admits. Two kinds disagreeing is an ambiguity, not a race.
     fn find_unique_source_across_kinds(
         &self,
         name: &str,
@@ -2986,9 +2984,8 @@ impl CmInterfaceRegistry {
         self.lib_local_type_sources.get(name)
     }
 
-    /// The source interface of a named type: its own where the reference
-    /// carries one, else the interface a name search reaches. The search is the
-    /// known gap in [WEP: Declaration Identity].
+    /// The source interface of a named type: its own where the reference carries
+    /// one, else the bare-name search [WEP: Declaration Identity] calls a gap.
     ///
     /// [WEP: Declaration Identity]: ../../docs/wep-2026-08-12-declaration-identity.md
     pub fn resolve_cm_source_for(&self, named: &NamedType) -> Option<String> {
@@ -4874,11 +4871,10 @@ fn cm_variant_size_align(named: &NamedType, registry: &CmInterfaceRegistry) -> O
     Some(layout_variant_with_registry(cases.len(), payloads, registry).size_align())
 }
 
-/// Registry-aware CM canonical ABI size and alignment for a type. A struct,
-/// enum, flags or variant resolves through the registry to its true CM layout,
-/// rather than defaulting to the 4-byte i32 handle.
+/// Registry-aware CM canonical ABI size and alignment. A named declaration
+/// resolves through the registry rather than defaulting to the 4-byte handle.
 pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u32, u32) {
-    let unregistered = || (cm_size(ty), cm_align(ty));
+    let unregistered = || plain_size_align(ty);
     match ty {
         Type::Named(named) => {
             let Some(source) = registry.resolve_cm_source_for(named) else {
