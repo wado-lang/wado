@@ -351,30 +351,40 @@ global MAX_CODE_POINT: i32 = 0x10FFFF;
 /// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
 /// `u`), or `INVALID_ESCAPE`. Surrogates come back verbatim.
 pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
-    let mut val = 0;
-    let mut n = 0;
     if *pos < chars.len() && chars[*pos] == '{' {
         *pos += 1;
-        while *pos < chars.len() && chars[*pos].is_hexdigit() {
-            val = val * 16 + chars[*pos].hex_digit_value();
-            *pos += 1;
-            n += 1;
-            if val > MAX_CODE_POINT {
-                return INVALID_ESCAPE;
-            }
-        }
-        if n == 0 || *pos >= chars.len() || chars[*pos] != '}' {
-            return INVALID_ESCAPE;
-        }
-        *pos += 1;
-        return val;
+        return resolve_braced_escape_code(chars, pos);
     }
+    let mut val = 0;
+    let mut n = 0;
     while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
         val = val * 16 + chars[*pos].hex_digit_value();
         *pos += 1;
         n += 1;
     }
     if n < 4 {
+        return INVALID_ESCAPE;
+    }
+    return val;
+}
+
+/// The `\u{…}` body past its `{`. The whole form is consumed before anything is
+/// decided, so a caller reporting `pos` names the escape and not a prefix.
+fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
+    let mut val = 0;
+    let mut n = 0;
+    while *pos < chars.len() && chars[*pos].is_hexdigit() {
+        if val <= MAX_CODE_POINT {
+            val = val * 16 + chars[*pos].hex_digit_value();
+        }
+        *pos += 1;
+        n += 1;
+    }
+    let closed = *pos < chars.len() && chars[*pos] == '}';
+    if closed {
+        *pos += 1;
+    }
+    if n == 0 || !closed || val > MAX_CODE_POINT {
         return INVALID_ESCAPE;
     }
     return val;

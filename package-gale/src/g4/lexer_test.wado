@@ -83,10 +83,12 @@ test "string literal unicode and control escapes" {
     assert_token(&tokens[2], G4Token::StringLit, control);
 }
 
-fn assert_invalid_escapes(cases: &List<String>) {
-    for let src of cases {
-        let tokens = tokenize(*src);
-        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
+/// Each case is a literal and the escape the token must span. Pinning the text
+/// is what keeps the report from naming a prefix of what is wrong.
+fn assert_invalid_escapes(cases: &List<[String, String]>) {
+    for let mut i = 0; i < cases.len(); i += 1 {
+        let tokens = tokenize(cases[i].0);
+        assert_token(&tokens[0], G4Token::InvalidEscape, cases[i].1);
     }
 }
 
@@ -94,14 +96,30 @@ test "an escape ANTLR4 does not define is a token of its own" {
     // Every one of these is `invalid escape sequence` from the jar. Reading
     // them as the bare character would make Gale a silent superset: the
     // grammar compiles here and not upstream, and nothing says so.
-    assert_invalid_escapes(&["'\\a'", "'\\]'", "'\\-'", "'\\p{Alpha}'", "'\\\"'"]);
+    assert_invalid_escapes(
+        &[
+            ["'\\a'", "\\a"],
+            ["'\\]'", "\\]"],
+            ["'\\-'", "\\-"],
+            ["'\\p{Alpha}'", "\\p"],
+            ["'\\\"'", "\\\""],
+        ],
+    );
     assert G4Token::InvalidEscape.name() == "invalid escape sequence";
 }
 
 test "a malformed unicode escape is invalid, not a shorter one" {
     // `\u41` gives two hex digits where four are required, so it is not `A`.
     // `\u{}` names no code point and `\u{110000}` names none that exists.
-    assert_invalid_escapes(&["'\\u41'", "'\\u{}'", "'\\u{110000}'", "'\\uZZZZ'", "'\\u{41'"]);
+    assert_invalid_escapes(
+        &[
+            ["'\\u41'", "\\u41"],
+            ["'\\u{}'", "\\u{}"],
+            ["'\\u{110000}'", "\\u{110000}"],
+            ["'\\uZZZZ'", "\\u"],
+            ["'\\u{41'", "\\u{41"],
+        ],
+    );
 }
 
 test "an invalid escape names itself and the scan resumes past the literal" {
