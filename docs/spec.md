@@ -5321,18 +5321,23 @@ concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 ```
 
 A tuple holding two packs (`[..A, ..B]`) is a legal type, but it determines
-neither pack: matching it against a concrete tuple admits every split. It is a
-return type, not a source of inference.
+neither pack: matching it against a concrete tuple admits every split. Its ends
+still hold. The elements ahead of the first pack and behind the last keep their
+positions, so `[X, ..A, ..B, Y]` settles `X` and `Y` and nothing else. An
+element between two packs is inferred from no argument, so name it in a
+turbofish.
 
 A turbofish spells each pack as its own tuple, since a flat list carries no
 boundary either:
 
 ```wado
 concat::<[i32], [bool, String]>([1], [true, "x"]);
-// concat::<i32, bool, String>(…)  // ERROR: spell each type pack as a tuple
+// concat::<i32, String>(…)  // ERROR: spell each type pack as a tuple
 ```
 
-The flat form stays available where one pack absorbs the surplus on its own
+One argument per pack is refused too. `<i32, String>` and `<[i32, String], []>`
+split the same list, and a flat list does not say which was meant. The flat form
+stays available where one pack absorbs the surplus on its own
 (`make_defaults::<i32, String>()`).
 
 #### Lexical note

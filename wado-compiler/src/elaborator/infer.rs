@@ -65,16 +65,14 @@ pub(super) fn unify(
                     matches!(type_table.borrow().get(**e), ResolvedType::TypePack { .. })
                 })
                 .map(|(i, _)| i);
-            let pack_idx = packs.next().expect("the arm's guard found a pack");
-            // Two packs in one tuple (`[..A, ..B]`) leave the boundary between
-            // them undetermined, so nothing here can be learned. Each is
-            // settled by the argument that carries it alone.
-            if packs.next().is_some() {
-                return;
-            }
+            let first_pack = packs.next().expect("the arm's guard found a pack");
+            let last_pack = packs.last().unwrap_or(first_pack);
 
-            let fixed_before = pack_idx;
-            let fixed_after = expected_elems.len() - pack_idx - 1;
+            // The elements ahead of the first pack and behind the last keep
+            // their positions whatever the packs expand to; what lies between
+            // two moves with a boundary the source never wrote.
+            let fixed_before = first_pack;
+            let fixed_after = expected_elems.len() - last_pack - 1;
             let total_fixed = fixed_before + fixed_after;
 
             if actual_elems.len() >= total_fixed {
@@ -84,17 +82,21 @@ pub(super) fn unify(
                 for i in 0..fixed_after {
                     unify(
                         type_table,
-                        expected_elems[pack_idx + 1 + i],
+                        expected_elems[last_pack + 1 + i],
                         actual_elems[actual_elems.len() - fixed_after + i],
                         bindings,
                     );
                 }
-                let pack_elements: Vec<TypeId> =
-                    actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
-                let pack_tuple = type_table.borrow_mut().make_tuple(pack_elements);
-                bindings
-                    .entry(expected_elems[pack_idx])
-                    .or_insert(pack_tuple);
+                // One pack takes what the fixed elements leave over; two divide
+                // it at a boundary nothing here can find.
+                if first_pack == last_pack {
+                    let pack_elements: Vec<TypeId> =
+                        actual_elems[fixed_before..actual_elems.len() - fixed_after].to_vec();
+                    let pack_tuple = type_table.borrow_mut().make_tuple(pack_elements);
+                    bindings
+                        .entry(expected_elems[first_pack])
+                        .or_insert(pack_tuple);
+                }
             }
         }
         // Same-named generic instance (including tuples): unify type

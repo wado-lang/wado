@@ -968,8 +968,8 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 }
 
 // More than one pack: each is settled by the argument carrying it alone, so a
-// turbofish spells each as its own tuple. `[..A, ..B]` determines neither pack,
-// and is a return type rather than a source of inference.
+// turbofish spells each as its own tuple. `[..A, ..B]` determines neither pack;
+// only its ends keep their positions.
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     return [..a, ..b];
 }

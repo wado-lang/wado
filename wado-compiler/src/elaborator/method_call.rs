@@ -644,7 +644,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
-        self.group_variadic_type_args_of(&method_own_params, &mut type_args, span);
+        if self.group_variadic_type_args_of(&method_own_params, &mut type_args, span) {
+            return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+        }
         // What the turbofish alone already says, ahead of the value-default
         // walk that resolves against it. An empty list is no turbofish at all.
         if !type_args.is_empty() {
@@ -1690,7 +1692,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // element until they are grouped.
         if let Some(sig) = callee_sig.as_ref() {
             let own_params = sig.own_params.clone();
-            self.group_variadic_type_args_of(&own_params, &mut method_type_args, static_call.span);
+            if self.group_variadic_type_args_of(
+                &own_params,
+                &mut method_type_args,
+                static_call.span,
+            ) {
+                return TypeTable::ERROR;
+            }
         }
 
         // Not folded into `lookup_static_method_param_types`: variant

@@ -54,6 +54,17 @@ test "two packs through a forwarding call" {
     assert r.2 == true;
 }
 
+// The elements ahead of the first pack and behind the last keep their
+// positions whatever the packs expand to, so `X` and `Y` are settled by this
+// argument even though the two packs in the middle are not.
+fn head_of<X, ..A, ..B, Y>(a: [..A], b: [..B], t: [X, ..A, ..B, Y]) -> X {
+    return t.0;
+}
+
+test "a tuple holding two packs still fixes its ends" {
+    assert head_of([1], [true], [42, 1, true, "tail"]) == 42;
+}
+
 struct Holder<T> {
     v: T,
 }

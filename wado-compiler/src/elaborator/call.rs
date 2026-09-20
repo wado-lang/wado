@@ -1023,7 +1023,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Before anything counts slots, since a pack's arguments are
                 // one per element until they are grouped.
                 let mut written = type_args.clone();
-                self.group_variadic_type_args_of(&mtype_params, &mut written, call.span);
+                if self.group_variadic_type_args_of(&mtype_params, &mut written, call.span) {
+                    return TypeTable::ERROR;
+                }
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -1857,7 +1859,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
         // one tuple, the per-param shape inference already produces.
-        self.group_variadic_type_args_of(&declared, &mut type_args, call.span);
+        if self.group_variadic_type_args_of(&declared, &mut type_args, call.span) {
+            return TypeTable::ERROR;
+        }
 
         if !type_args.is_empty() {
             // Resolve any type parameter that appears only inside another
@@ -3151,17 +3155,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Group flat turbofish type args into a variadic pack: `ids::<i32, bool>()`
-    /// writes two args for one `..T`, whose slot holds the tuple `[i32, bool]`.
-    ///
-    /// Two packs leave the boundary between them unwritten, so the flat form
-    /// has no meaning there and the site must spell each pack as a tuple.
+    /// Group flat turbofish type args into a variadic pack — `ids::<i32, bool>()`
+    /// fills one `..T` slot with `[i32, bool]` — or report, and say which.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
         span: token::Span,
-    ) {
+    ) -> bool {
         let real = RealTypeParams::borrowed(declared);
         let mut packs = real
             .iter()
@@ -3169,19 +3170,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter(|(_, p)| p.is_pack)
             .map(|(i, _)| i);
         let Some(pack_pos) = packs.next() else {
-            return;
+            return false;
         };
-        if type_args.len() <= real.len() {
-            return;
-        }
         if packs.next().is_some() {
-            let _ = self.emit(TypeError::InvalidLiteral {
-                message: "a flat turbofish cannot be split between two type packs; \
-                          spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`"
-                    .to_string(),
-                span,
-            });
-            return;
+            return self.report_unspelled_pack_args(&real, type_args, span);
+        }
+        if type_args.len() <= real.len() {
+            return false;
         }
         // One pack: it absorbs every arg past the non-pack params.
         let non_pack = real.len() - 1;
@@ -3189,6 +3184,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
         let tuple = self.tysys.type_table.borrow_mut().make_tuple(pack_args);
         type_args.insert(pack_pos, tuple);
+        false
+    }
+
+    /// Report a site that leaves two packs' boundary unwritten, and say whether
+    /// it did: one pack absorbs a flat list, two cannot, at any arity.
+    fn report_unspelled_pack_args(
+        &mut self,
+        real: &[&ast::GenericParam],
+        type_args: &[TypeId],
+        span: token::Span,
+    ) -> bool {
+        // A tuple says where the pack ends, and so does anything still
+        // undecided, which a later pass answers.
+        let spelled = type_args.len() <= real.len()
+            && type_args.iter().enumerate().all(|(i, &arg)| {
+                let table = self.tysys.type_table.borrow();
+                !real[i].is_pack || table.is_tuple(arg) || table.contains_undecided(arg)
+            });
+        if spelled {
+            return false;
+        }
+        let _ = self.emit(TypeError::InvalidLiteral {
+            message: "with more than one type pack, a flat list of type arguments does not \
+                      say where one pack ends; spell each type pack as a tuple, as in \
+                      `f::<[i32], [bool]>(...)`"
+                .to_string(),
+            span,
+        });
+        true
     }
 
     /// Settle a pack slot nothing else answered for to the empty pack: a pack
