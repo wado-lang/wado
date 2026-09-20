@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789913366380,
+  "lastUpdate": 1789937451827,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57477,6 +57477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/d358fbb7f11721a8083073dc903d25adc5a70d5b"
         },
         "date": 1789913366117,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "673ef2c8dcd0037a7b408a9bcfad5f3032b73474",
+          "message": "Merge pull request #2100 from wado-lang/claude/compiler-no-std-fs\n\nrefactor(compiler): the host supplies the stdlib and saves the ICE artifact, so wado-compiler opens no file",
+          "timestamp": "2026-09-21T05:31:30+09:00",
+          "tree_id": "25167a3ec9ea78118169d7e728f6cd6e07b64f3f",
+          "url": "https://github.com/wado-lang/wado/commit/673ef2c8dcd0037a7b408a9bcfad5f3032b73474"
+        },
+        "date": 1789937450909,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
