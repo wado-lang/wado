@@ -3033,10 +3033,23 @@ impl From<&ast::GenericParam> for ParamSlot {
     }
 }
 
+/// A declaration's type parameters as the dense type-argument space holds
+/// them: a position here is the index an argument fills.
+// An effect or `fn`-bound parameter holds no position there, so counting one
+// leaves a slot no argument can fill, and WIR build meets an instance whose
+// arguments never arrived.
+pub(super) fn real_type_params(params: &[ast::GenericParam]) -> Vec<ast::GenericParam> {
+    params
+        .iter()
+        .filter(|param| param.is_real_type_param())
+        .cloned()
+        .collect()
+}
+
 impl ParamSlot {
     /// A declaration's parameter list as slots, in declaration order.
     pub(super) fn list(params: &[ast::GenericParam]) -> Vec<Self> {
-        params.iter().map(Self::from).collect()
+        real_type_params(params).iter().map(Self::from).collect()
     }
 }
 

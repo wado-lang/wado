@@ -828,7 +828,7 @@ arguments.
 
 The completeness rule holds for the facts that exist; what is left is the
 facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads,
-runs `type_lookup()` at 13 sites, and keeps `current_effect_param_names` so an
+runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
 effect name that is a parameter resolves — in a phase whose contract is that it
 resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
 global's declared type in that global's own module scope.
