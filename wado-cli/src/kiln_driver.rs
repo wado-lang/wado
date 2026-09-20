@@ -411,7 +411,7 @@ fn settle_extents(request: &mut GeneratorRequest, extents: Vec<Option<u64>>) -> 
         .files_mut()
         .zip(extents)
         .map(|(file, extent)| {
-            let n = usize::try_from(extent?).unwrap_or(usize::MAX);
+            let n = extent_len(extent?);
             if n >= file.content.len() {
                 return None;
             }
@@ -419,6 +419,12 @@ fn settle_extents(request: &mut GeneratorRequest, extents: Vec<Option<u64>>) -> 
             Some(n as u64)
         })
         .collect()
+}
+
+/// An extent as a length on this target. One past `usize` saturates, which
+/// reads as the whole file and is the right answer for a 32-bit host.
+fn extent_len(extent: u64) -> usize {
+    usize::try_from(extent).unwrap_or(usize::MAX)
 }
 
 /// Point every module that declared `invocation` at the generated entry it
@@ -607,7 +613,7 @@ async fn matches_file<H: CompilerHost>(
     match host.load_source(path.as_str()).await {
         Ok(mut bytes) => {
             if let Some(n) = extent {
-                bytes.truncate(usize::try_from(n).unwrap_or(usize::MAX));
+                bytes.truncate(extent_len(n));
             }
             hash_matches_bytes(&bytes, expected_hex)
         }

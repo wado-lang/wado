@@ -53,13 +53,6 @@ pub struct Options {
 
 impl Deserialize for Options;
 
-/// Kiln entry point. Called by the compiler via
-/// `core:kiln/generator.generate` when `[build.generators.*]` references
-/// this package as its `module`. The compiler rewrites the
-/// `Request<Options>` form to the internal `RawRequest` +
-/// `bind_request` shape during
-/// `kiln::import_check::inject_kiln_request_adapter` (runs before
-/// analyze).
 fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
     return match read_text(content) {
         Ok(text) => Result::Ok(text),
@@ -67,6 +60,13 @@ fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
     };
 }
 
+/// Kiln entry point. Called by the compiler via
+/// `core:kiln/generator.generate` when `[build.generators.*]` references
+/// this package as its `module`. The compiler rewrites the
+/// `Request<Options>` form to the internal `RawRequest` +
+/// `bind_request` shape during
+/// `kiln::import_check::inject_kiln_request_adapter` (runs before
+/// analyze).
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
@@ -75,7 +75,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // grammar half merged into the primary.
     let primary_path = req.primary.path;
     let primary_text = decode_input(&primary_path, req.primary.content)?;
-    let mut inputs: List<[String, String]> = [
+    let mut g4_inputs: List<[String, String]> = [
         [primary_path, primary_text],
     ];
     let mut scm_inputs: List<[String, String]> = [];
@@ -85,20 +85,20 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
         if path.ends_with(".scm") {
             scm_inputs.push([path, text]);
         } else {
-            inputs.push([path, text]);
+            g4_inputs.push([path, text]);
         }
     }
-    let mut grammar = match assemble_grammar(&inputs) {
+    let mut grammar = match assemble_grammar(&g4_inputs) {
         Ok(g) => g,
         Err(Parse(pe)) => {
-            let which = if pe.0 == req.primary.path { "primary" } else { "supplementary" };
+            let which = if pe.0 == primary_path { "primary" } else { "supplementary" };
             return Result::Err(Error::InvalidSchema(
                 `gale: failed to parse ${which} grammar '${pe.0}': ${pe.1}`,
             ));
         },
         Err(Check(msg)) => {
             return Result::Err(Error::InvalidSchema(
-                `gale: unresolved rule references in '${req.primary.path}': ${msg}`,
+                `gale: unresolved rule references in '${primary_path}': ${msg}`,
             ));
         },
     };

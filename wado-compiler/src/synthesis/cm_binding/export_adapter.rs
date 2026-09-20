@@ -2043,10 +2043,8 @@ pub(super) fn synthesize_variant_lower_to_flat(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) {
-    // Set flat[0] = discriminant. The tag is an i32, but this slot may be wider:
-    // nested in an enclosing variant it is shared with a sibling case, and the
-    // Canonical ABI join takes the wider of the two — `result<u64, error>` gives
-    // the error's tag an i64 slot. Coerce as every other slot assignment does.
+    // The tag is an i32 but flat[0] may be wider: the Canonical ABI joins this
+    // slot with an enclosing variant's sibling case, as `result<u64, error>` does.
     if !flat_locals.is_empty() {
         stmts.push(expr_stmt(assign(
             local_ref(

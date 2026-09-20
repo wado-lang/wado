@@ -11,7 +11,7 @@
 
 use std::fs;
 
-use crate::common::wado_in;
+use crate::common::{wado_in, write_kiln_project};
 use predicates::prelude::*;
 
 /// The extent is everything through the first newline. `generate` then sees
@@ -50,26 +50,7 @@ export fn generate(req: Request) -> Result<Response, Error> {
 "#;
 
 fn write_project(root: &std::path::Path, schema: &str) {
-    fs::write(
-        root.join("wado.toml"),
-        "[package]\nname = \"probed\"\nversion = \"0.1.0\"\n\n[world]\n\"wasi:cli/command\" = \"src/main.wado\"\n",
-    )
-    .unwrap();
-    fs::create_dir_all(root.join("src")).unwrap();
-    fs::write(root.join("src/gen.wado"), HEADER_GENERATOR).unwrap();
-    fs::write(root.join("src/schema.bin"), schema).unwrap();
-    fs::write(
-        root.join("src/main.wado"),
-        r#"use { println, Stdout } from "core:cli";
-use { hello } from "./schema.bin"
-    with { generator: { module: "./gen.wado" } };
-
-export fn run() with Stdout {
-    println(`${hello()}`);
-}
-"#,
-    )
-    .unwrap();
+    write_kiln_project(root, "probed", HEADER_GENERATOR, schema.as_bytes());
 }
 
 /// The payload past the extent never reaches `generate`: the output is built

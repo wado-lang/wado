@@ -16,7 +16,7 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use wasmtime::component::types::Type;
+use wasmtime::component::types::{ComponentItem, Type};
 use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
 
@@ -42,10 +42,9 @@ use self::core::kiln::kiln_host;
 ///
 /// `fuel` is the wasmtime fuel ceiling for the call; `0` means no ceiling
 /// (the store is seeded with `u64::MAX`). The default is `0` because no
-/// finite ceiling has yet proven to fit every Gale-sized grammar — the
-/// 1 GiB initial pick tripped on `SQLite`. WEP 2026-04-12 (Kiln)
-/// open-question #10 tracks exposing this as a `wado.toml` knob and
-/// pairing it with a wall-clock deadline.
+/// finite ceiling has yet proven to fit every Gale-sized grammar: the
+/// 1 GiB initial pick tripped on `SQLite`. The fuel budget is a known gap in
+/// WEP 2026-04-12 (Kiln).
 #[derive(Clone, Copy, Default)]
 pub struct KilnRunPolicy {
     pub fuel: u64,
@@ -78,11 +77,10 @@ fn lift_diagnostic(d: kiln_host::Diagnostic) -> GeneratorDiagnostic {
     }
 }
 
-/// Locate the generator's `generate` export by scanning the component's
-/// exported interfaces. `generate` always references named `core:kiln/types`
-/// records, so the compiler groups it into a synthesized default interface
-/// whose FQ it owns (and may make package-specific) — scanning avoids
-/// hardcoding that FQ.
+/// Locate `export` by scanning the component's exported interfaces. A generator
+/// export references named `core:kiln/types` records, so the compiler groups it
+/// into a synthesized default interface whose FQ it owns and may make
+/// package-specific. Scanning avoids hardcoding that FQ.
 fn find_export<T>(
     component: &Component,
     engine: &Engine,
@@ -104,6 +102,18 @@ fn find_export<T>(
         }
     }
     None
+}
+
+/// Whether any exported interface carries `export`. Read off the component
+/// type, so asking costs no instantiation.
+fn exports(component: &Component, engine: &Engine, export: &str) -> bool {
+    component
+        .component_type()
+        .exports(engine)
+        .any(|(_, item)| match item.ty {
+            ComponentItem::ComponentInstance(iface) => iface.get_export(engine, export).is_some(),
+            _ => false,
+        })
 }
 
 /// A fresh store and instance for one generator call. The kiln determinism
@@ -453,6 +463,10 @@ pub async fn run_probe(
     Result<Vec<Option<u64>>, GeneratorRunnerError>,
     Vec<GeneratorDiagnostic>,
 ) {
+    if !exports(component, engine, "probe") {
+        return (Ok(Vec::new()), Vec::new());
+    }
+
     let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
     let diagnostics_inner = diagnostics.clone();
 
@@ -463,7 +477,7 @@ pub async fn run_probe(
                 instantiate(engine, component, policy, diagnostics_inner.clone()).await?;
 
             let Some(probe) = find_export(component, engine, &instance, &mut store, "probe") else {
-                return Ok(Vec::new());
+                unreachable!("the component type carries a `probe` export");
             };
 
             // `probe(path, content[, options])`, matching `generate`: the
