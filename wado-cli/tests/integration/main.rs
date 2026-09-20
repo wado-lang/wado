@@ -24,6 +24,7 @@ mod kiln_embed_wit;
 mod kiln_multi_file;
 mod kiln_options_diagnostics;
 mod kiln_pipeline;
+mod kiln_probe;
 mod lsp;
 mod manifest_integration;
 mod run_inprocess;

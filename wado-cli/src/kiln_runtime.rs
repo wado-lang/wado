@@ -83,12 +83,13 @@ fn lift_diagnostic(d: kiln_host::Diagnostic) -> GeneratorDiagnostic {
 /// records, so the compiler groups it into a synthesized default interface
 /// whose FQ it owns (and may make package-specific) — scanning avoids
 /// hardcoding that FQ.
-fn find_generate<T>(
+fn find_export<T>(
     component: &Component,
     engine: &Engine,
     instance: &Instance,
     store: &mut Store<T>,
-) -> Result<Func, GeneratorRunnerError> {
+    export: &str,
+) -> Option<Func> {
     let interface_names: Vec<String> = component
         .component_type()
         .exports(engine)
@@ -96,15 +97,23 @@ fn find_generate<T>(
         .collect();
     for name in interface_names {
         if let Some(iface) = instance.get_export_index(&mut *store, None, &name)
-            && let Some(idx) = instance.get_export_index(&mut *store, Some(&iface), "generate")
+            && let Some(idx) = instance.get_export_index(&mut *store, Some(&iface), export)
             && let Some(func) = instance.get_func(&mut *store, idx)
         {
-            return Ok(func);
+            return Some(func);
         }
     }
-    Err(GeneratorRunnerError::Host(
-        "generator exports no `generate`".to_string(),
-    ))
+    None
+}
+
+fn find_generate<T>(
+    component: &Component,
+    engine: &Engine,
+    instance: &Instance,
+    store: &mut Store<T>,
+) -> Result<Func, GeneratorRunnerError> {
+    find_export(component, engine, instance, store, "generate")
+        .ok_or_else(|| GeneratorRunnerError::Host("generator exports no `generate`".to_string()))
 }
 
 /// Build an `input-file` record `Val` (`{ path, content }`), the content as a
@@ -414,6 +423,109 @@ pub async fn run_generator(
                 "generate returned a non-result value: {other:?}"
             ))),
         }
+    }
+    .await;
+
+    let emitted: Vec<GeneratorDiagnostic> = lock(&diagnostics).drain(..).collect();
+    (outcome, emitted)
+}
+
+/// Call the generator's optional `probe` once per input file, in declaration
+/// order, and return the extent each reported. An empty vector means the
+/// generator exports no probe, which is the whole file for every input.
+///
+/// A fresh instance per call, so a probe carries nothing between inputs and
+/// the host stays free to choose how it instantiates.
+pub async fn run_probe(
+    engine: &Engine,
+    component: &Component,
+    request: &GeneratorRequest,
+    policy: KilnRunPolicy,
+) -> (
+    Result<Vec<Option<u64>>, GeneratorRunnerError>,
+    Vec<GeneratorDiagnostic>,
+) {
+    let diagnostics = Arc::new(Mutex::new(Vec::<GeneratorDiagnostic>::new()));
+    let diagnostics_inner = diagnostics.clone();
+
+    let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
+        let mut extents = Vec::with_capacity(1 + request.inputs.len());
+        for file in std::iter::once(&request.primary).chain(request.inputs.iter()) {
+            let state = KilnHostState {
+                diagnostics: diagnostics_inner.clone(),
+            };
+            let mut linker: Linker<KilnHostState> = Linker::new(engine);
+            kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
+                .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
+
+            let mut store = Store::new(engine, state);
+            let fuel = if policy.fuel == 0 {
+                u64::MAX
+            } else {
+                policy.fuel
+            };
+            store
+                .set_fuel(fuel)
+                .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
+
+            let instance = linker
+                .instantiate_async(&mut store, component)
+                .await
+                .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+
+            let Some(probe) = find_export(component, engine, &instance, &mut store, "probe") else {
+                return Ok(Vec::new());
+            };
+
+            // `probe(path, content[, options])`, matching `generate`: the
+            // options parameter is present only when the generator declares a
+            // non-empty `Options`.
+            let options_ty = probe.ty(&store).params().nth(2).map(|(_, t)| t);
+            let stream = StreamReader::new(&mut store, file.content.clone())
+                .and_then(|s| s.try_into_stream_any(&mut store))
+                .map_err(|e| {
+                    GeneratorRunnerError::Host(format!(
+                        "input `{}`: host stream create: {e:#}",
+                        file.path
+                    ))
+                })?;
+            let mut args = vec![Val::String(file.path.clone()), Val::Stream(stream)];
+            if let Some(ty) = &options_ty {
+                args.push(
+                    options_to_val(&request.options, ty)
+                        .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?,
+                );
+            }
+
+            let mut results = [Val::Bool(false)];
+            probe
+                .call_async(&mut store, &args, &mut results)
+                .await
+                .map_err(|e| GeneratorRunnerError::Host(format!("probe call: {e}")))?;
+
+            let [result] = results;
+            match result {
+                Val::Result(Ok(payload)) => match payload.as_deref() {
+                    Some(Val::U64(n)) => extents.push(Some(*n)),
+                    other => {
+                        return Err(GeneratorRunnerError::Host(format!(
+                            "probe returned a non-u64 extent: {other:?}"
+                        )));
+                    }
+                },
+                Val::Result(Err(payload)) => {
+                    return Err(GeneratorRunnerError::Generator(lift_error_val(
+                        payload.as_deref(),
+                    )?));
+                }
+                other => {
+                    return Err(GeneratorRunnerError::Host(format!(
+                        "probe returned a non-result value: {other:?}"
+                    )));
+                }
+            }
+        }
+        Ok(extents)
     }
     .await;
 

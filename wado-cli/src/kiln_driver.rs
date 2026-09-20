@@ -96,6 +96,12 @@ pub struct InvocationRun {
     /// project-root-relative, normalized (`output_dir` joined with the
     /// generator-relative path and forward-slash-only).
     pub outputs: Vec<OutputHash>,
+    /// What the generator's probe reported for the primary and then each
+    /// input, in the order `primary` and `inputs` are listed above. Empty when
+    /// the generator exports no probe, which means the whole file throughout.
+    /// Kept beside `primary`/`inputs` rather than inside their `FileHash`, so
+    /// that type stays exactly the cache key's ingredients.
+    pub extents: Vec<Option<u64>>,
 }
 
 /// Output-file identity recorded after a generator run.
@@ -219,20 +225,33 @@ pub async fn execute_with_mode<H: CompilerHost>(
     mode: ExecuteMode,
 ) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
-    let primary_hash = file_hash(&invocation.from, &primary.content);
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
-    let mut input_hashes = Vec::with_capacity(invocation.inputs.len());
     for p in &invocation.inputs {
-        let file = load_input(host, p).await?;
-        input_hashes.push(file_hash(p, &file.content));
-        inputs.push(file);
+        inputs.push(load_input(host, p).await?);
     }
 
-    let request = GeneratorRequest {
+    let mut request = GeneratorRequest {
         primary,
         inputs,
         options: invocation.options.clone(),
     };
+
+    // The probe reports how much of each input determines the output, and the
+    // clamp below enforces that claim: a generator that reads past its own
+    // extent sees EOF rather than bytes the cache key does not cover.
+    let extents = host
+        .probe_generator(component_wasm, &request)
+        .await
+        .map_err(ExecuteError::Runner)?;
+    clamp_to_extents(&mut request, &extents);
+
+    let primary_hash = file_hash(&invocation.from, &request.primary.content);
+    let input_hashes: Vec<_> = invocation
+        .inputs
+        .iter()
+        .zip(&request.inputs)
+        .map(|(p, f)| file_hash(p, &f.content))
+        .collect();
 
     let response = host
         .run_generator(component_wasm, request)
@@ -315,6 +334,7 @@ pub async fn execute_with_mode<H: CompilerHost>(
         primary: primary_hash,
         inputs: input_hashes,
         outputs,
+        extents,
     })
 }
 
@@ -336,8 +356,14 @@ pub fn build_metadata(
     generator_source_hash: String,
 ) -> Metadata {
     let generator = generator_identity(&invocation.module);
-    let primary = to_meta_file_hash(&run.primary);
-    let inputs: Vec<MetaFileHash> = run.inputs.iter().map(to_meta_file_hash).collect();
+    let extent_at = |i: usize| run.extents.get(i).copied().flatten();
+    let primary = to_meta_file_hash(&run.primary, extent_at(0));
+    let inputs: Vec<MetaFileHash> = run
+        .inputs
+        .iter()
+        .enumerate()
+        .map(|(i, f)| to_meta_file_hash(f, extent_at(i + 1)))
+        .collect();
 
     let outputs: Vec<MetaOutputEntry> = run
         .outputs
@@ -361,10 +387,36 @@ pub fn build_metadata(
     }
 }
 
-fn to_meta_file_hash(f: &FileHash) -> MetaFileHash {
+fn to_meta_file_hash(f: &FileHash, extent: Option<u64>) -> MetaFileHash {
     MetaFileHash {
         path: f.path.clone(),
         hash: hex_digest(&f.hash),
+        extent,
+    }
+}
+
+/// Cut each input down to the extent its probe reported, so what the generator
+/// reads is exactly what the cache key covers. An empty `extents` — no probe —
+/// leaves every input whole.
+fn clamp_to_extents(request: &mut GeneratorRequest, extents: &[Option<u64>]) {
+    if extents.is_empty() {
+        return;
+    }
+    assert_eq!(
+        extents.len(),
+        1 + request.inputs.len(),
+        "kiln: probe must answer once per input file"
+    );
+    for (file, extent) in std::iter::once(&mut request.primary)
+        .chain(request.inputs.iter_mut())
+        .zip(extents)
+    {
+        if let Some(n) = extent {
+            let n = usize::try_from(*n)
+                .unwrap_or(usize::MAX)
+                .min(file.content.len());
+            file.content.truncate(n);
+        }
     }
 }
 
@@ -441,7 +493,14 @@ pub async fn cache_matches<H: CompilerHost>(
     if metadata.primary.path != invocation.from.as_str() {
         return CacheCheck::Miss;
     }
-    if !matches_file(host, &invocation.from, &metadata.primary.hash).await {
+    if !matches_file(
+        host,
+        &invocation.from,
+        &metadata.primary.hash,
+        metadata.primary.extent,
+    )
+    .await
+    {
         return CacheCheck::Miss;
     }
     // Generator source closure must match. An empty `current` means the
@@ -459,7 +518,7 @@ pub async fn cache_matches<H: CompilerHost>(
         if declared.as_str() != recorded.path {
             return CacheCheck::Miss;
         }
-        if !matches_file(host, declared, &recorded.hash).await {
+        if !matches_file(host, declared, &recorded.hash, recorded.extent).await {
             return CacheCheck::Miss;
         }
     }
@@ -532,13 +591,25 @@ fn emit_cache_io_warning<H: CompilerHost>(host: &H, path: &Path, source: &std::i
     });
 }
 
+/// Re-hash a recorded input over the extent it was recorded with, so a cache
+/// hit costs the header rather than the whole file. `None` is the whole file.
+///
+/// Sound because a generator owes that its extent is determined by bytes inside
+/// it: a header that grew changes bytes within the old extent, so the hash
+/// below still differs and the build misses.
 async fn matches_file<H: CompilerHost>(
     host: &H,
     path: &InvocationPath,
     expected_hex: &str,
+    extent: Option<u64>,
 ) -> bool {
     match host.load_source(path.as_str()).await {
-        Ok(bytes) => hash_matches_bytes(&bytes, expected_hex),
+        Ok(mut bytes) => {
+            if let Some(n) = extent {
+                bytes.truncate(usize::try_from(n).unwrap_or(usize::MAX));
+            }
+            hash_matches_bytes(&bytes, expected_hex)
+        }
         Err(_) => false,
     }
 }

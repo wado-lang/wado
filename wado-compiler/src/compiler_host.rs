@@ -438,6 +438,18 @@ pub trait CompilerHost: Send + Sync {
         async move { Err(GeneratorRunnerError::Unsupported) }
     }
 
+    /// Ask a generator how many leading bytes of each input determine its
+    /// output, one answer per file in declaration order. `None` in a slot —
+    /// and the default empty answer — means the whole file, which is what a
+    /// generator exporting no `probe` gets. Protocol: WEP 2026-04-12.
+    fn probe_generator(
+        &self,
+        _component_wasm: &[u8],
+        _request: &GeneratorRequest,
+    ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
+        async move { Ok(Vec::new()) }
+    }
+
     /// Resolve `[dependencies]` for bare-name `use { … } from "<name>"`.
     /// Consulted once when the module loader is created; empty by default
     /// (single-file and in-memory hosts have no manifest).

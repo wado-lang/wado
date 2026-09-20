@@ -1424,10 +1424,12 @@ fn compile_after_load<H: CompilerHost>(
         && let Some(kiln_registry) = cm_registry
         && let Some(world) = lib_world_info.as_mut()
     {
-        // Only `generate` is the generator world's contract; a helper
-        // `export fn` beside it is not a world export and must not be
-        // force-routed through the async binding below.
-        world.exports.retain(|e| e.name == "generate");
+        // `generate` and the optional `probe` are the generator world's
+        // contract; a helper `export fn` beside them is not a world export and
+        // must not be force-routed through the async binding below.
+        world
+            .exports
+            .retain(|e| e.name == "generate" || e.name == "probe");
         let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
             .iter()
             .map(|s| (*s).to_string())

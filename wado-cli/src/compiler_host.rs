@@ -305,4 +305,18 @@ impl CompilerHost for FilesystemCompilerHost {
         }
         outcome
     }
+
+    async fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &GeneratorRequest,
+    ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+        let (engine, component) = self.run.components().get_or_compile(component_wasm)?;
+        let (outcome, diagnostics) =
+            kiln_runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
+        for diag in diagnostics {
+            kiln_runtime::relay_diagnostic(self, diag);
+        }
+        outcome
+    }
 }
