@@ -17,10 +17,8 @@ static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> = std::syn
 /// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
 /// relative to [`DEV_STDLIB_ROOT`], paired with its source. The first install
 /// wins, since a run that compiled two versions of a module describes neither.
-///
-/// Every caller installs, and only the first one walks `sources`. Pass a lazy
-/// iterator and the rest read nothing: a host is built per LSP request, and
-/// re-reading the stdlib to discard it would cost that request megabytes.
+/// Only that one walks `sources`, so a lazy iterator costs the callers after
+/// it nothing — and a host is built per LSP request.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
     INSTALLED.get_or_init(|| {
