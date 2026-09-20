@@ -1,4 +1,5 @@
 use { MemberField, MemberMethod, MemberDecls } from "./java2wado/jmembers.wado";
+use { collect_range } from "./text.wado";
 
 pub fn translate_wado_members<S: AsStrSlice>(body: S) -> Result<MemberDecls, String> {
     let chars: List<char> = body.chars().collect();
@@ -228,12 +229,4 @@ fn skip_quoted(chars: &List<char>, open: i32, n: i32, quote: char) -> i32 {
         i += 1;
     }
     return n;
-}
-
-fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(if end > start { end - start } else { 0 });
-    for let mut i = start; i < end; i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
 }

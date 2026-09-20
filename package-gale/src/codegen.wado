@@ -7,7 +7,6 @@ use {
     normalize_caches,
     assert_canonical_shape,
     canonicalize_empty_alt_groups,
-    unwrap_labeled_transparent_groups,
     alias_parser_literals,
     assign_atn_call_sites,
     assign_atn_decisions,
@@ -127,8 +126,6 @@ pub fn canonicalize_for_analysis(grammar: &mut Grammar) -> TokenKinds {
     // before any structural pass (lowering, ATN build) sees them, so both
     // the emitter and `build_atn` agree on the canonical repeat shape.
     canonicalize_empty_alt_groups(grammar);
-    // Before the stamping passes, so lower and emit see the same shape.
-    unwrap_labeled_transparent_groups(grammar);
     // Canonicalization is done; everything downstream may assume its shape.
     assert_canonical_shape(grammar);
     // Number every surface `RuleRef` call site so `build_atn`'s

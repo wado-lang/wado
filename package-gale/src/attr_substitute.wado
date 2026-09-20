@@ -12,6 +12,7 @@
 //! the expression mapping keeps both trivially testable.
 
 use { ResolvedAttr } from "./attr_resolve.wado";
+use { push_range } from "./text.wado";
 
 /// Rewrite `body`, replacing each `ResolvedAttr`'s `[start, end)` char span
 /// with the corresponding entry in `replacements`. `refs` must be in
@@ -33,10 +34,4 @@ pub fn splice_attrs<S: AsStrSlice>(body: S, refs: &List<ResolvedAttr>, replaceme
     }
     push_range(&mut out, &chars, cursor, n);
     return out;
-}
-
-fn push_range(out: &mut String, chars: &List<char>, start: i32, end: i32) {
-    for let mut i = start; i < end; i += 1 {
-        out.push(chars[i]);
-    }
 }

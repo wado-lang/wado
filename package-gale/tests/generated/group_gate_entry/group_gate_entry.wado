@@ -1972,55 +1972,45 @@ fn _parse_nongreedy(p: &mut Parser) -> () {
 fn _parse_list_label__inner(p: &mut Parser) -> () {
     loop {
         if p.recovering { break; }
-        let mut rep_scan_pos: i32 = -1;
-        rep_scan: {
-            let tokens = &p.kinds;
-            let mut pos: i32 = p.pos;
-            let gp_12 = pos;
-            let sgk_12 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            let mut sg_12_best = -1;
-            if sgk_12 == TK_A {
-                pos = gp_12;
-                sg_12_0: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_12_0; }
-                    pos += 1;
-                    if pos > sg_12_best { sg_12_best = pos; }
-                }
-            } else if sgk_12 == TK_B {
-                pos = gp_12;
-                sg_12_1: {
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_12_1; }
-                    pos += 1;
-                    if pos > sg_12_best { sg_12_best = pos; }
-                }
-            }
-            if sg_12_best >= 0 {
-                pos = sg_12_best;
-            } else {
-                break rep_scan;
-            }
-            if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_body_end_scan; }
+        let mut gd_winner: i32 = -1;
+        let mut gd_best: i32 = -1;
+        let gd_kind = p.peek_kind();
+        if gd_kind == TK_A && (pred_3(p)) {
+            gd_winner = 0;
+            gd_scan: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                 pos += 1;
-                rep_body_end_ok = true;
+                gd_best = pos;
             }
-            pos = rep_body_end;
-            let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_kind_set_0(rep_body_end_kind)) { break rep_scan; }
-            rep_scan_pos = pos;
+        } else if gd_kind == TK_B {
+            gd_winner = 1;
+            gd_scan_2: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
+                pos += 1;
+                gd_best = pos;
+            }
         }
-        if rep_scan_pos < 0 { break; }
-        if !((p.peek_kind() == TK_A && (pred_3(p))) || (p.peek_kind() == TK_B)) { break; }
-        let grp_kind = p.peek_kind();
-        if grp_kind == TK_A && (pred_3(p)) {
-            let a = p.expect(TK_A, &EMPTY_SYNC);
-        } else if grp_kind == TK_B {
-            let b = p.expect(TK_B, &EMPTY_SYNC);
+        if gd_best <= p.pos { break; }
+        if gd_best >= 0 {
+            let mut rep_reserve_ok = false;
+            rep_reserve: {
+                let tokens = &p.kinds;
+                let mut pos: i32 = gd_best;
+                if pos >= tokens.len() || tokens[pos] != TK_A { break rep_reserve; }
+                pos += 1;
+                rep_reserve_ok = true;
+            }
+            let rep_reserve_kind = if gd_best < p.kinds.len() { p.kinds[gd_best] } else { TK_EOF };
+            if !rep_reserve_ok && !(_kind_set_0(rep_reserve_kind)) { break; }
+        }
+        if gd_winner == 0 {
+            let xs_item = p.expect(TK_A, &EMPTY_SYNC);
         } else {
-            p.no_viable("no viable alternative", p.peek_span(), &SYNC_0);
+            let xs_item = p.expect(TK_B, &EMPTY_SYNC);
         }
     }
     let a = p.expect(TK_A, &EMPTY_SYNC);
@@ -2075,13 +2065,13 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_13_done: {
-                sg_13: {
-                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_13; }
+            sg_12_done: {
+                sg_12: {
+                    if pos >= tokens.len() || tokens[pos] != TK_A { break sg_12; }
                     pos += 1;
-                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_13; }
+                    if pos >= tokens.len() || tokens[pos] != TK_B { break sg_12; }
                     pos += 1;
-                    break sg_13_done;
+                    break sg_12_done;
                 }
                 break rep_scan;
             }
