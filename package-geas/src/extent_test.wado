@@ -1,0 +1,25 @@
+use { Extent } from "./extent.wado";
+
+test "two numbers agree when they are the same number" {
+    assert Extent::Static(4).agrees(&Extent::Static(4));
+    assert !Extent::Static(4).agrees(&Extent::Static(8));
+}
+
+test "a symbol agrees only with itself" {
+    // The batch axis flows through a whole network unchanged, so it meets its
+    // own symbol at every operation and never has to be a number.
+    assert Extent::Symbol("batch").agrees(&Extent::Symbol("batch"));
+    assert !Extent::Symbol("batch").agrees(&Extent::Symbol("seq"));
+}
+
+test "a symbol proves nothing about a number" {
+    // Stage 0 has no runtime tier to fall back on, so an undischargeable
+    // condition is a failure rather than a check deferred to the run.
+    assert !Extent::Symbol("seq").agrees(&Extent::Static(4));
+    assert !Extent::Static(4).agrees(&Extent::Symbol("seq"));
+}
+
+test "an extent renders as what a diagnostic should name it" {
+    assert `${Extent::Static(512)}` == "512";
+    assert `${Extent::Symbol("seq")}` == "seq";
+}
