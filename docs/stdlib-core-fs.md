@@ -66,8 +66,9 @@ leaves the old one. That is atomicity, not durability: nothing here is
 synced, so a host that loses power can still lose a write it reported as
 complete. [`root`] hands over the descriptor for a caller that needs more.
 
-A path that names anything but a regular file is refused, as a read of it
-is: a rename replaces a symlink rather than follows it.
+A path found naming anything but a regular file is refused, as a read of it
+is: a rename replaces a symlink rather than follows it. The look comes
+before the rename, so another writer in that window gets the rename.
 
 `data` is anything that views as bytes — a `String`, a `ByteList`, a
 `ByteSlice` — and is written through without a copy.
@@ -146,8 +147,8 @@ What the host knows about what `path` names, without opening it.
 
 ### `pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens`
 
-Whether `path` names anything, a symlink no read here follows included.
-[`metadata`] is the call that says what, and reports one as `Other`.
+Whether [`metadata`] answers for `path`, a symlink no read here follows
+included. A path it cannot stat at all is `false`, not an error.
 
 ### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 

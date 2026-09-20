@@ -241,8 +241,9 @@ A rename replaces a symlink rather than following it. That is the one thing
 this shape does that a truncating write could not: it detaches a link where
 `write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a link
 to `AGENTS.md`, so the difference is a file the next `git status` reports. So
-`write` refuses a target that is not a regular file. Every read here already
-does, and a write is not the place to start following links.
+`write` refuses a target that is not a regular file, as far as a check before a
+rename reaches. Every read here already refuses one, and a write is not the
+place to start following links.
 
 `write_in_place` keeps the truncating write for the callers that want it: a
 file too large to exist twice, and a directory that should not gain a second
@@ -255,6 +256,21 @@ calls `sync_data` on the file or `sync` on the directory, so power loss can
 still take a write the host reported as complete. The doc comment says so.
 A caller that needs otherwise syncs the descriptor `root()` hands over, which
 is the escape hatch this module keeps for exactly this.
+
+### What holds against another writer
+
+Two steps are atomic because the host makes them so: `Create | Exclusive`
+settles which writer owns a temporary name, and `rename` replaces the target in
+one step. Every refusal that reads the path first is best-effort. `write`
+refuses a target that is not a regular file, and `create_dir_all` accepts a path
+that is already a directory, by asking what is there and then acting on the
+answer; a writer that changes the path in between gets the action rather than
+the refusal.
+
+That is the whole of it, and it is as far as the primitives reach:
+`wasi:filesystem` has no rename that validates its destination and no create
+that would be the check. A caller that needs more owns the directory it writes
+in.
 
 ### A walk is a list, because an iterator may not perform I/O
 
@@ -335,6 +351,13 @@ cannot reach is unowned and sits below.
   `extract_antlr4_descriptors.wado` reads a file to find out whether it exists.
   Both are blocked by the two gaps below rather than by `metadata`, which
   answers the question for every path this module can reach.
+- A refusal that reads the path first holds only while no other writer changes
+  the path between the read and the act, so `write` can still replace a symlink
+  that arrives in that window. Closing it needs a rename that validates its
+  destination, which `wasi:filesystem` does not offer.
+- `exists` answers `false` for a path it could not stat, so a directory the
+  preopen grants no search permission on reads as absence. Closing it means a
+  fallible spelling beside it, which is what Rust's `try_exists` is.
 - A temporary file outlives a process that dies between creating it and
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
   writer owns. Closing it means deciding what makes one stale — an age read

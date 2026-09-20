@@ -172,8 +172,9 @@ pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Pr
 /// synced, so a host that loses power can still lose a write it reported as
 /// complete. [`root`] hands over the descriptor for a caller that needs more.
 ///
-/// A path that names anything but a regular file is refused, as a read of it
-/// is: a rename replaces a symlink rather than follows it.
+/// A path found naming anything but a regular file is refused, as a read of it
+/// is: a rename replaces a symlink rather than follows it. The look comes
+/// before the rename, so another writer in that window gets the rename.
 ///
 /// `data` is anything that views as bytes — a `String`, a `ByteList`, a
 /// `ByteSlice` — and is written through without a copy.
@@ -192,9 +193,8 @@ pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsE
     return Result::Ok(());
 }
 
-/// Rename `temp` over `path`, which has to be a regular file or nothing. A
-/// rename replaces a symlink instead of following it, and this module never
-/// follows one, so it may not silently detach one either.
+/// Rename `temp` over `path`, refusing what is there unless it is a regular
+/// file: a rename replaces a symlink rather than following it.
 fn replace_file<S: AsStrSlice>(temp: &String, path: S) -> Result<(), FsError> with Preopens {
     match metadata(path) {
         Ok(found) => {
@@ -403,8 +403,8 @@ pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preope
     };
 }
 
-/// Whether `path` names anything, a symlink no read here follows included.
-/// [`metadata`] is the call that says what, and reports one as `Other`.
+/// Whether [`metadata`] answers for `path`, a symlink no read here follows
+/// included. A path it cannot stat at all is `false`, not an error.
 pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens {
     return metadata(path).is_ok();
 }
