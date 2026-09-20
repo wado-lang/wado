@@ -18,6 +18,7 @@ use {
     is_id_start_char,
     is_id_continue_char,
 } from "./g4/scan.wado";
+use { collect_range } from "./text.wado";
 
 /// A raw `$name` or `$name.member` attribute reference located in a
 /// fragment, with its char span within the fragment text (`start` points
@@ -119,12 +120,4 @@ fn scan_template(chars: &List<char>, pos: i32, end: i32, out: &mut List<AttrRef>
         i += 1;
     }
     return end;
-}
-
-fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(end - start);
-    for let mut i = start; i < end; i += 1 {
-        s.push(chars[i]);
-    }
-    return s;
 }

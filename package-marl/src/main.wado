@@ -7,7 +7,7 @@ use { from_env } from "core:args";
 use { Deserialize } from "core:serde";
 use { TreeSet } from "core:collections";
 use fs from "core:fs";
-use { Preopens } from "wasi:filesystem";
+use { Preopens } from "core:fs";
 use { format } from "./format.wado";
 
 struct Cli {
@@ -72,26 +72,22 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
     }
 }
 
-/// Recursively collects `*.md` files under `dir`, skipping `EXCLUDED_DIRS`.
-/// `dir` is the path from the preopened root, empty at the root itself.
+/// Collects `*.md` files under `dir`, skipping `EXCLUDED_DIRS`. `dir` is the
+/// path from the preopened root, empty at the root itself.
 fn collect_md_files<S: AsStrSlice>(dir: S) -> Result<List<String>, fs::FsError> with Preopens {
     let mut out: List<String> = [];
-    for let entry of fs::read_dir(dir)? {
-        if is_excluded_dir(&entry.name) {
-            continue;
-        }
-        let path = join_path(dir, &entry.name);
-        if entry.type matches { Directory } {
-            let nested = collect_md_files(&path)?;
-            out.extend(&nested);
-        } else if entry.name.ends_with(".md") {
-            out.push(path);
+    for let entry of fs::walk_dir(dir, |found| !is_excluded_dir(found))? {
+        if entry.type matches { File } && entry.path.ends_with(".md") {
+            out.push(entry.path);
         }
     }
     return Result::Ok(out);
 }
 
-fn is_excluded_dir<S: AsStrSlice>(name: S) -> bool {
+fn is_excluded_dir(entry: &fs::WalkEntry) -> bool {
+    let Some(name) = fs::file_name(&entry.path) else {
+        return false;
+    };
     for let excluded of EXCLUDED_DIRS {
         if name == excluded {
             return true;
@@ -100,19 +96,18 @@ fn is_excluded_dir<S: AsStrSlice>(name: S) -> bool {
     return false;
 }
 
-fn join_path<S: AsStrSlice, S1: AsStrSlice>(prefix: S, name: S1) -> String {
-    if prefix.is_empty() {
-        return name.to_string();
-    }
-    return `${prefix}/${name}`;
-}
-
-/// Resolves explicit CLI path arguments: a `.md`-suffixed path is treated as
-/// a single file, anything else as a directory to walk recursively.
+/// Resolves explicit CLI path arguments: a directory is walked, anything else
+/// is taken as one file.
 fn resolve_paths(paths: &List<String>) -> Result<List<String>, fs::FsError> with Preopens {
     let mut out: List<String> = [];
     for let path of paths {
-        if path.ends_with(".md") {
+        // A path the host will not stat is taken as a file, so the loop that
+        // reads each one reports it and the rest are still formatted.
+        let walk = match fs::metadata(path) {
+            Ok(found) => found.type matches { Directory },
+            Err(_) => false,
+        };
+        if !walk {
             out.push(*path);
             continue;
         }
@@ -138,9 +133,11 @@ fn unique_sorted(items: List<String>) -> List<String> {
     return out;
 }
 
-test "a directory that cannot be walked fails the collection" {
-    let paths: List<String> = ["no-such-directory"];
-    assert resolve_paths(&paths).is_err();
+test "a path that names nothing is left for the caller to report" {
+    // The loop that reads each file names the one that is missing, so a single
+    // bad argument no longer aborts a run that also has good ones.
+    let paths: List<String> = ["no-such-directory", "also-missing.md"];
+    assert resolve_paths(&paths).unwrap() == ["also-missing.md", "no-such-directory"];
 }
 
 test "unique_sorted removes duplicates and sorts" {

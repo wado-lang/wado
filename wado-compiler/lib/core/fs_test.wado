@@ -1,16 +1,18 @@
 use fs from "core:fs";
-use { ErrorCode, Preopens } from "wasi:filesystem";
+use { ErrorCode, Preopens } from "core:fs";
 
 // `wado test` preopens the working directory, so each test owns a directory
-// under the gitignored `target/` and reads only what it wrote there.
-fn scratch(case: &String) -> String with Preopens {
-    let dir = `target/core-fs-test/${*case}`;
+// under the gitignored `target/` and reads only what it wrote there. The
+// directory is emptied first, so what a previous run left is not an input.
+fn scratch<S: AsStrSlice>(case: S) -> String with Preopens {
+    let dir = `target/core-fs-test/${case}`;
+    fs::remove_dir_all(&dir).unwrap();
     fs::create_dir_all(&dir).unwrap();
     return dir;
 }
 
 test "text round-trips" {
-    let dir = scratch(&"text");
+    let dir = scratch("text");
     let path = `${dir}/greeting.txt`;
     let text: String = "hello, wado\n";
     fs::write(&path, &text).unwrap();
@@ -18,7 +20,7 @@ test "text round-trips" {
 }
 
 test "bytes round-trip" {
-    let dir = scratch(&"bytes");
+    let dir = scratch("bytes");
     let path = `${dir}/raw.bin`;
     let bytes: ByteList = [0xff as u8, 0x00 as u8, 0xfe as u8];
     fs::write(&path, &bytes).unwrap();
@@ -26,7 +28,7 @@ test "bytes round-trip" {
 }
 
 test "bytes that are not UTF-8 do not read as text" {
-    let dir = scratch(&"not-utf8");
+    let dir = scratch("not-utf8");
     let path = `${dir}/raw.bin`;
     fs::write(&path, &([0xff as u8] as ByteList)).unwrap();
     let e = fs::read_to_string(&path).unwrap_err();
@@ -34,35 +36,27 @@ test "bytes that are not UTF-8 do not read as text" {
 }
 
 test "a path that names nothing is NotFound" {
-    let dir = scratch(&"missing");
+    let dir = scratch("missing");
     let e = fs::read_to_string(`${dir}/nope.txt`).unwrap_err();
     assert e.kind matches { NotFound };
 }
 
 test "create_dir creates one directory, and will not take an occupied path" {
-    let dir = scratch(&"create-dir");
+    let dir = scratch("create-dir");
     let path = `${dir}/one`;
-    remove_dir(&path);
     fs::create_dir(&path).unwrap();
     assert fs::read_dir(&path).unwrap().is_empty();
     assert fs::create_dir(&path).unwrap_err().kind matches { Io(Exist) };
 }
 
 test "create_dir needs the parent to be there" {
-    let dir = scratch(&"create-dir-parent");
+    let dir = scratch("create-dir-parent");
     let e = fs::create_dir(`${dir}/absent/child`).unwrap_err();
     assert e.kind matches { NotFound };
 }
 
-/// Remove the directory `path` names, which a previous run left behind. The
-/// module does not remove a directory, so this is WASI's own call.
-fn remove_dir(path: &String) with Preopens {
-    let root = fs::root().unwrap();
-    let _ = root.remove_directory_at(*path).wait();
-}
-
 test "create_dir_all creates every parent, and repeating it is not an error" {
-    let dir = scratch(&"nested");
+    let dir = scratch("nested");
     let leaf = `${dir}/a/b/c`;
     fs::create_dir_all(&leaf).unwrap();
     fs::create_dir_all(&leaf).unwrap();
@@ -73,7 +67,7 @@ test "create_dir_all creates every parent, and repeating it is not an error" {
 
 test "a directory does not read as a file" {
     // `read_via_stream` traps on one, so `read` refuses it first.
-    let dir = scratch(&"read-a-directory");
+    let dir = scratch("read-a-directory");
     let e = fs::read(&dir).unwrap_err();
     assert e.kind matches { Io(IsDirectory) };
 }
@@ -85,7 +79,7 @@ test "an absolute path is not rebuilt under the preopen" {
 }
 
 test "a file occupying the path is not the directory it names" {
-    let dir = scratch(&"occupied");
+    let dir = scratch("occupied");
     let path = `${dir}/raw.bin`;
     fs::write(&path, &"not a directory").unwrap();
     let e = fs::create_dir_all(&path).unwrap_err();
@@ -93,7 +87,7 @@ test "a file occupying the path is not the directory it names" {
 }
 
 test "directory entries carry their type" {
-    let dir = scratch(&"entries");
+    let dir = scratch("entries");
     fs::create_dir_all(`${dir}/sub`).unwrap();
     fs::write(`${dir}/sub/leaf.txt`, &"leaf").unwrap();
 
@@ -124,11 +118,432 @@ test "the empty path and \".\" both name the preopen" {
 }
 
 test "remove_file removes it" {
-    let dir = scratch(&"remove");
+    let dir = scratch("remove");
     let path = `${dir}/doomed.txt`;
     fs::write(&path, &"doomed").unwrap();
     fs::remove_file(&path).unwrap();
     assert fs::read(&path).is_err();
+}
+
+test "remove_dir removes an empty directory" {
+    let dir = scratch("remove-dir");
+    let path = `${dir}/empty`;
+    fs::create_dir_all(&path).unwrap();
+    fs::remove_dir(&path).unwrap();
+    assert fs::read_dir(&path).unwrap_err().kind matches { NotFound };
+}
+
+test "remove_dir leaves a directory that has anything in it" {
+    let dir = scratch("remove-dir-not-empty");
+    fs::create_dir_all(`${dir}/full`).unwrap();
+    fs::write(`${dir}/full/leaf.txt`, &"leaf").unwrap();
+    assert fs::remove_dir(`${dir}/full`).unwrap_err().kind matches { Io(NotEmpty) };
+    assert fs::read_to_string(`${dir}/full/leaf.txt`).unwrap() == "leaf";
+}
+
+test "remove_dir on a path that names nothing is NotFound" {
+    let dir = scratch("remove-dir-missing");
+    assert fs::remove_dir(`${dir}/absent`).unwrap_err().kind matches { NotFound };
+}
+
+test "remove_dir_all takes the whole tree down" {
+    let dir = scratch("remove-dir-all");
+    let tree = `${dir}/tree`;
+    fs::create_dir_all(`${tree}/a/b/c`).unwrap();
+    fs::write(`${tree}/top.txt`, &"top").unwrap();
+    fs::write(`${tree}/a/mid.txt`, &"mid").unwrap();
+    fs::write(`${tree}/a/b/c/leaf.txt`, &"leaf").unwrap();
+
+    fs::remove_dir_all(&tree).unwrap();
+    assert fs::read_dir(&tree).unwrap_err().kind matches { NotFound };
+    assert fs::read_dir(&dir).unwrap().is_empty();
+}
+
+test "remove_dir_all on a path that names nothing is not a failure" {
+    let dir = scratch("remove-dir-all-missing");
+    fs::remove_dir_all(`${dir}/absent`).unwrap();
+    fs::remove_dir_all(`${dir}/absent/deeper`).unwrap();
+}
+
+test "remove_dir_all is not a way to remove a file" {
+    let dir = scratch("remove-dir-all-file");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &"not a directory").unwrap();
+    assert fs::remove_dir_all(&path).unwrap_err().kind matches { Io(NotDirectory) };
+    assert fs::read_to_string(&path).unwrap() == "not a directory";
+}
+
+test "remove_dir_all unlinks a symlink instead of emptying what it points at" {
+    let dir = scratch("remove-dir-all-symlink");
+    let keep = `${dir}/keep`;
+    fs::create_dir(&keep).unwrap();
+    fs::write(`${keep}/survivor.txt`, &"untouched").unwrap();
+
+    let tree = `${dir}/tree`;
+    fs::create_dir(&tree).unwrap();
+    fs::root().unwrap().symlink_at("../keep", `${tree}/escape`).wait().unwrap();
+
+    fs::remove_dir_all(&tree).unwrap();
+    assert !fs::exists(&tree);
+    assert fs::read_to_string(`${keep}/survivor.txt`).unwrap() == "untouched";
+}
+
+test "remove_dir_all refuses a symlink root rather than emptying it" {
+    let dir = scratch("remove-dir-all-symlink-root");
+    let real = `${dir}/real`;
+    fs::create_dir(&real).unwrap();
+    fs::write(`${real}/survivor.txt`, &"untouched").unwrap();
+
+    let link = `${dir}/link`;
+    fs::root().unwrap().symlink_at("real", link).wait().unwrap();
+
+    assert fs::remove_dir_all(&link).is_err();
+    assert fs::exists(&link);
+    assert fs::read_to_string(`${real}/survivor.txt`).unwrap() == "untouched";
+}
+
+test "neither removal takes the preopened directory itself" {
+    assert fs::remove_dir("").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir(".").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all(".").unwrap_err().kind matches { Io(NotPermitted) };
+    assert !fs::read_dir(".").unwrap().is_empty();
+}
+
+test "a removal that spells the preopen another way is refused too" {
+    // Each of these resolves to the preopen, and the guard resolves the path
+    // rather than reading it, so none reaches the walk that would empty it.
+    assert fs::remove_dir_all("./").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("target/..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("./target/../.").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir("./").unwrap_err().kind matches { Io(NotPermitted) };
+    assert !fs::read_dir(".").unwrap().is_empty();
+}
+
+test "a removal that climbs out of the preopen is refused" {
+    assert fs::remove_dir_all("..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("target/../..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir("/tmp").unwrap_err().kind matches { Io(NotPermitted) };
+}
+
+test "walk_dir reaches every entry under the path" {
+    let dir = scratch("walk");
+    fs::create_dir_all(`${dir}/a/b`).unwrap();
+    fs::write(`${dir}/top.txt`, &"top").unwrap();
+    fs::write(`${dir}/a/mid.txt`, &"mid").unwrap();
+    fs::write(`${dir}/a/b/leaf.txt`, &"leaf").unwrap();
+
+    let mut names: List<String> = [];
+    for let entry of fs::walk_dir(&dir).unwrap() {
+        names.push(entry.path);
+    }
+    names.sort();
+    assert names.len() == 5;
+    assert names[0] == `${dir}/a`;
+    assert names[1] == `${dir}/a/b`;
+    assert names[2] == `${dir}/a/b/leaf.txt`;
+    assert names[3] == `${dir}/a/mid.txt`;
+    assert names[4] == `${dir}/top.txt`;
+}
+
+test "a walked path reads back without being rebuilt" {
+    let dir = scratch("walk-read");
+    fs::create_dir_all(`${dir}/a`).unwrap();
+    fs::write(`${dir}/a/leaf.txt`, &"leaf").unwrap();
+
+    let mut found = 0;
+    for let entry of fs::walk_dir(&dir).unwrap() {
+        if entry.type matches { File } {
+            assert fs::read_to_string(&entry.path).unwrap() == "leaf";
+            found += 1;
+        }
+    }
+    assert found == 1;
+}
+
+test "a walk skips the subtree it is told not to enter" {
+    let dir = scratch("walk-skip");
+    fs::create_dir_all(`${dir}/keep`).unwrap();
+    fs::create_dir_all(`${dir}/skip/inner`).unwrap();
+    fs::write(`${dir}/keep/leaf.txt`, &"leaf").unwrap();
+    fs::write(`${dir}/skip/hidden.txt`, &"hidden").unwrap();
+
+    // `e.path` reaches the entry from the walk's root, so a predicate that
+    // means a name takes the name.
+    let mut names: List<String> = [];
+    for let entry of fs::walk_dir(&dir, |e| fs::file_name(&e.path).unwrap() != "skip").unwrap() {
+        names.push(entry.path);
+    }
+    names.sort();
+    assert names.len() == 3;
+    assert names[0] == `${dir}/keep`;
+    assert names[1] == `${dir}/keep/leaf.txt`;
+    assert names[2] == `${dir}/skip`;
+}
+
+test "walking an empty directory answers nothing" {
+    let dir = scratch("walk-empty");
+    assert fs::walk_dir(&dir).unwrap().is_empty();
+}
+
+test "walking what is not a directory fails" {
+    let dir = scratch("walk-file");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &"not a directory").unwrap();
+    assert fs::walk_dir(&path).unwrap_err().kind matches { Io(NotDirectory) };
+    assert fs::walk_dir(`${dir}/absent`).unwrap_err().kind matches { NotFound };
+}
+
+test "rename moves a file to the new path" {
+    let dir = scratch("rename");
+    let from = `${dir}/from.txt`;
+    let to = `${dir}/to.txt`;
+    fs::write(&from, &"moved").unwrap();
+    fs::rename(&from, &to).unwrap();
+    assert !fs::exists(&from);
+    assert fs::read_to_string(&to).unwrap() == "moved";
+}
+
+test "rename replaces what is at the new path" {
+    let dir = scratch("rename-over");
+    let from = `${dir}/from.txt`;
+    let to = `${dir}/to.txt`;
+    fs::write(&from, &"new").unwrap();
+    fs::write(&to, &"old").unwrap();
+    fs::rename(&from, &to).unwrap();
+    assert fs::read_to_string(&to).unwrap() == "new";
+    assert !fs::exists(&from);
+}
+
+test "rename on a path that names nothing is NotFound" {
+    let dir = scratch("rename-missing");
+    let e = fs::rename(`${dir}/absent`, `${dir}/to`).unwrap_err();
+    assert e.kind matches { NotFound };
+}
+
+test "a write leaves no temporary file behind" {
+    let dir = scratch("write-clean");
+    fs::write(`${dir}/out.txt`, &"written").unwrap();
+    let entries = fs::read_dir(&dir).unwrap();
+    assert entries.len() == 1;
+    assert entries[0].name == "out.txt";
+}
+
+test "a write replaces the file rather than truncating it" {
+    let dir = scratch("write-replaces");
+    let path = `${dir}/out.txt`;
+    fs::write(&path, &"first").unwrap();
+    let before = fs::metadata(&path).unwrap();
+    fs::write(&path, &"second pass").unwrap();
+    let after = fs::metadata(&path).unwrap();
+    assert fs::read_to_string(&path).unwrap() == "second pass";
+    assert before.size == 5 as u64;
+    assert after.size == 11 as u64;
+}
+
+test "a write that cannot place its file leaves the target alone" {
+    let dir = scratch("write-fails");
+    let path = `${dir}/kept.txt`;
+    fs::write(&path, &"kept").unwrap();
+    // The parent of the target is a file, so no temporary file can be made
+    // next to it and the rename never happens.
+    let e = fs::write(`${path}/child.txt`, &"never").unwrap_err();
+    assert e.kind matches { Io(NotDirectory) };
+    assert fs::read_to_string(&path).unwrap() == "kept";
+    assert fs::read_dir(&dir).unwrap().len() == 1;
+}
+
+test "a name too long to take the suffix is still written" {
+    let dir = scratch("write-long-name");
+    let mut long = String::new();
+    for let _ of 0..<250 {
+        long.push('a');
+    }
+    // The name fits the host's limit but `<name>.wado-tmp` does not, so the
+    // temporary file keeps the directory and drops the target's name.
+    let path = `${dir}/${long}.txt`;
+    fs::write(&path, &"written").unwrap();
+    assert fs::read_to_string(&path).unwrap() == "written";
+    assert fs::read_dir(&dir).unwrap().len() == 1;
+}
+
+test "a temporary file a dead run left behind does not stop a write" {
+    let dir = scratch("write-stale-temp");
+    let path = `${dir}/out.txt`;
+    let stale = `${path}.wado-tmp`;
+    fs::write(&stale, &"stale").unwrap();
+    fs::write(&path, &"written").unwrap();
+    assert fs::read_to_string(&path).unwrap() == "written";
+    assert fs::read_to_string(&stale).unwrap() == "stale";
+    assert fs::read_dir(&dir).unwrap().len() == 2;
+}
+
+test "a write refuses a symlink rather than detaching it" {
+    let dir = scratch("write-symlink");
+    let target = `${dir}/real.txt`;
+    let link = `${dir}/alias.txt`;
+    fs::write(&target, &"original").unwrap();
+    fs::root().unwrap().symlink_at("real.txt", link).wait().unwrap();
+
+    // Every read here declines to follow a link, so no write may replace one.
+    assert fs::read_to_string(&link).unwrap_err().kind matches { Io(Loop) };
+    assert fs::write(&link, &"replaced").unwrap_err().kind matches { Io(Loop) };
+    assert fs::read_to_string(&target).unwrap() == "original";
+    assert fs::metadata(&link).unwrap().type matches { Other };
+    assert fs::read_dir(&dir).unwrap().len() == 2;
+}
+
+test "a write reports the path the caller named, not the temporary file" {
+    let dir = scratch("write-error-path");
+    let path = `${dir}/occupied`;
+    fs::create_dir(&path).unwrap();
+    let e = fs::write(&path, &"never").unwrap_err();
+    assert e.path == path;
+    assert e.kind matches { Io(IsDirectory) };
+}
+
+test "a write does not replace a directory with a file" {
+    let dir = scratch("write-onto-dir");
+    let path = `${dir}/occupied`;
+    fs::create_dir(&path).unwrap();
+    assert fs::write(&path, &"never").is_err();
+    assert fs::metadata(&path).unwrap().type matches { Directory };
+    assert fs::read_dir(&dir).unwrap().len() == 1;
+}
+
+test "write_in_place truncates the file that is there" {
+    let dir = scratch("write-in-place");
+    let path = `${dir}/out.txt`;
+    fs::write_in_place(&path, &"first pass").unwrap();
+    fs::write_in_place(&path, &"second").unwrap();
+    assert fs::read_to_string(&path).unwrap() == "second";
+    assert fs::read_dir(&dir).unwrap().len() == 1;
+}
+
+test "metadata answers the type and the size" {
+    let dir = scratch("metadata");
+    let path = `${dir}/five.txt`;
+    fs::write(&path, &"hello").unwrap();
+    let meta = fs::metadata(&path).unwrap();
+    assert meta.type matches { File };
+    assert meta.size == 5 as u64;
+}
+
+test "metadata answers a directory as one" {
+    let dir = scratch("metadata-dir");
+    assert fs::metadata(&dir).unwrap().type matches { Directory };
+    assert fs::metadata("").unwrap().type matches { Directory };
+    assert fs::metadata(".").unwrap().type matches { Directory };
+    // The preopen under its other spellings, which resolve to the same place.
+    assert fs::metadata("./").unwrap().type matches { Directory };
+    assert fs::metadata("target/..").unwrap().type matches { Directory };
+}
+
+test "metadata on a path that names nothing is NotFound" {
+    let dir = scratch("metadata-missing");
+    assert fs::metadata(`${dir}/absent`).unwrap_err().kind matches { NotFound };
+}
+
+test "both spellings of the existence question agree on what is there" {
+    let dir = scratch("exists");
+    let path = `${dir}/here.txt`;
+    assert !fs::exists(&path);
+    assert !fs::try_exists(&path).unwrap();
+
+    fs::write(&path, &"here").unwrap();
+    assert fs::exists(&path);
+    assert fs::try_exists(&path).unwrap();
+    assert fs::exists(&dir);
+    assert fs::try_exists(&dir).unwrap();
+
+    fs::remove_file(&path).unwrap();
+    assert !fs::exists(&path);
+    assert !fs::try_exists(&path).unwrap();
+
+    // A link is what it names, not what it points at, so a dangling one is
+    // still there rather than absent.
+    let link = `${dir}/link`;
+    fs::root().unwrap().symlink_at("gone.txt", link).wait().unwrap();
+    assert fs::exists(&link);
+    assert fs::try_exists(&link).unwrap();
+}
+
+test "join puts one separator between the two" {
+    assert fs::join("a", "b") == "a/b";
+    assert fs::join("a/", "b") == "a/b";
+    assert fs::join("a/b", "c/d") == "a/b/c/d";
+}
+
+test "join with an empty side answers the other" {
+    assert fs::join("", "b") == "b";
+    assert fs::join("a", "") == "a";
+    assert fs::join("", "") == "";
+}
+
+test "a name that is absolute replaces the base" {
+    assert fs::join("a", "/b") == "/b";
+}
+
+test "parent drops the last component" {
+    assert fs::parent("a/b/c").unwrap() == "a/b";
+    assert fs::parent("a/b/").unwrap() == "a";
+    assert fs::parent("a").unwrap() == "";
+}
+
+test "the preopen has no parent" {
+    assert fs::parent("") matches { None };
+    assert fs::parent(".") matches { None };
+}
+
+test "file_name answers the last component" {
+    assert fs::file_name("a/b.txt").unwrap() == "b.txt";
+    assert fs::file_name("b.txt").unwrap() == "b.txt";
+    assert fs::file_name("a/b/").unwrap() == "b";
+    assert fs::file_name("") matches { None };
+    assert fs::file_name(".") matches { None };
+}
+
+test "a traversal is not a name" {
+    // `.` and `..` move through the tree rather than naming an entry in it,
+    // so a caller matching on a name never has to recognize one.
+    assert fs::file_name("a/.") matches { None };
+    assert fs::file_name("a/..") matches { None };
+    assert fs::file_name("..") matches { None };
+    assert fs::file_stem("a/..") matches { None };
+    assert fs::extension("a/..") matches { None };
+    assert fs::parent("a/..").unwrap() == "a";
+}
+
+test "a stem and an extension split at the last dot" {
+    assert fs::file_stem("a/b.txt").unwrap() == "b";
+    assert fs::extension("a/b.txt").unwrap() == "txt";
+    assert fs::file_stem("a.b.c").unwrap() == "a.b";
+    assert fs::extension("a.b.c").unwrap() == "c";
+}
+
+test "a name with no dot is all stem" {
+    assert fs::file_stem("a/b").unwrap() == "b";
+    assert fs::extension("a/b") matches { None };
+}
+
+test "a leading dot names the file, it does not start an extension" {
+    assert fs::file_stem(".gitignore").unwrap() == ".gitignore";
+    assert fs::extension(".gitignore") matches { None };
+}
+
+test "normalize drops . and applies .." {
+    assert fs::normalize("a/./b").unwrap() == "a/b";
+    assert fs::normalize("a/b/../c").unwrap() == "a/c";
+    assert fs::normalize("a//b").unwrap() == "a/b";
+    assert fs::normalize("./a/").unwrap() == "a";
+    assert fs::normalize("").unwrap() == "";
+    assert fs::normalize(".").unwrap() == "";
+}
+
+test "normalize refuses a path that leaves the preopen" {
+    assert fs::normalize("..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::normalize("a/../../b").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::normalize("/a").unwrap_err().kind matches { Io(NotPermitted) };
 }
 
 test "root answers the preopened directory" {

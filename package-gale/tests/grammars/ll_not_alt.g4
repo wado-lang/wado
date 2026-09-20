@@ -3,8 +3,8 @@
 // reach the same wildcard-aware dispatch. Recognising only `.` leaves the
 // `~SEMI` alt behind a kind-check that commits to `assign` on any `ID`.
 //
-// The label + group wrapper on the second rule is the same claim for `x=(.)`:
-// neither a label nor a `( … )` wrapper narrows what the element matches.
+// The label on the second rule is the same claim for `x=.`: a label does not
+// narrow what the element matches.
 //
 // Source: derived from ANTLR4 runtime-testsuite descriptor
 //   ParserExec/Wildcard.txt
@@ -14,7 +14,7 @@
 grammar LlNotAlt;
 
 a : (assign | ~SEMI)+ EOF ;
-b : (assign | x=(.))+ EOF ;
+b : (assign | x=.)+ EOF ;
 assign : ID '=' INT ';' ;
 
 ID   : 'a'..'z'+ ;

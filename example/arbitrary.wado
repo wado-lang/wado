@@ -10,39 +10,32 @@
 
 use { println, Stdout } from "core:cli";
 use { to_string, from_string } from "core:json";
+use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
 
 // ── A deterministic random source ─────────────────────────────────────────
 
-/// SplitMix64. `size` is the generation budget: it bounds collection lengths
-/// and terminates recursive types.
+/// A `core:prng` engine and a generation budget: `size` bounds collection
+/// lengths and terminates recursive types.
 struct Gen {
-    state: u64,
+    rng: Xoshiro256pp,
     size: i32,
 }
 
 impl Gen {
     fn new(seed: u64) -> Gen {
-        return Gen { state: seed, size: 6 };
+        return Gen { rng: Xoshiro256pp::from_seed(Seed::from_u64(seed)), size: 6 };
     }
 
-    fn next_u64(&mut self) -> u64 {
-        self.state = self.state + 0x9E3779B97F4A7C15;
-        let mut z = self.state;
-        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
-        z = (z ^ z >> 27) * 0x94D049BB133111EB;
-        return z ^ z >> 31;
-    }
-
-    /// A value in `0..<n`.
+    /// A value in `0..<n`. A range holding at most one value needs no draw.
     fn below(&mut self, n: i32) -> i32 {
         if n <= 1 {
             return 0;
         }
-        return (self.next_u64() >> 33) as i32 % n;
+        return self.rng.random_range(0..<n);
     }
 
     fn bool(&mut self) -> bool {
-        return self.next_u64() >> 63 == 1;
+        return self.rng.random_bool();
     }
 
     fn size(&self) -> i32 {

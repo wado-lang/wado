@@ -53,6 +53,14 @@ and often a helper the codebase already had.
   to fix. Rename and decompose until it is redundant, then delete it.
 - Invariants: state them as an assertion — `assert!` in Rust, `assert` in Wado
   — never as a comment.
+- Contracts, not defences: a function states what it requires and trusts its
+  callers. Defensive programming is banned. A default or a fallback whose
+  validity you cannot argue is the smell. It turns a broken call into a wrong
+  answer that no test will catch. Write `assert!` for what the caller owes and
+  `unreachable!` for the arm that cannot happen, and say which caller
+  establishes it where that is not obvious. A branch that genuinely can happen
+  is control flow and stays; the ban is on inventing an answer for a case you
+  have not shown to be reachable.
 
 ### Comments
 

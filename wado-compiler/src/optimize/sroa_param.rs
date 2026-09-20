@@ -245,11 +245,7 @@ fn collect_and_validate(
         let mut invalid: IndexSet<(FnKey, usize)> = IndexSet::default();
         let mut resolved: Vec<((FnKey, usize), u32)> = Vec::new();
         for ((key, pi), info) in &candidates {
-            let Some(func_rc) = project.functions.get(key.index()) else {
-                invalid.insert((*key, *pi));
-                continue;
-            };
-            let func = func_rc.borrow();
+            let func = project.functions[key.index()].borrow();
             let local_index = func.params[*pi].local_index;
             let body = func
                 .body
@@ -889,10 +885,7 @@ fn mint_scalarized_clones(
     let mut minted: Vec<Rc<RefCell<NirFunction>>> = Vec::new();
     let mut next_id = project.next_func_id().index();
     for (key, positions) in &by_fn {
-        let Some(original) = project.functions.get(key.index()) else {
-            continue;
-        };
-        let mut clone = original.borrow().clone();
+        let mut clone = project.functions[key.index()].borrow().clone();
         let origin = (clone.module_source.clone(), clone.name.clone());
         let name = sroa_param_name(&clone.name);
         clone.name.clone_from(&name);
@@ -988,10 +981,7 @@ fn standing_clone_matches(
     key: FnKey,
     candidates: &IndexMap<(FnKey, usize), SroaInfo>,
 ) -> bool {
-    let Some(standing) = project.functions.get(existing.index()) else {
-        return false;
-    };
-    let standing = standing.borrow();
+    let standing = project.functions[existing.index()].borrow();
     standing.params.len() == fresh.params.len()
         && standing.params.iter().enumerate().all(|(pi, param)| {
             // `fresh` is still the original's copy here, so its type is what a
