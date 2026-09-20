@@ -5,7 +5,7 @@
 //! the callee's parameter, a by-value constant crossing uncopied.
 
 use cranelift_entity::EntityRef;
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 
 use crate::hashmap::{IndexMap, IndexSet};
@@ -587,9 +587,8 @@ fn ref_args_that_escape(body: &Body, gate: &Gate<'_>) -> IndexSet<ExprId> {
                         }
                     }
                 }
-                // No callee body to ask, so every borrow handed over is assumed
-                // to escape — the verdict `callee_ref_param_leaks` gives an
-                // unknown callee.
+                // An indirect call names no callee, so there is no body to ask
+                // and every borrow handed over is assumed to escape.
                 ExprKind::IndirectCall { args, .. } => {
                     for &arg in args {
                         if let Some(a) = arg.as_expr()
@@ -1488,13 +1487,15 @@ impl Gate<'_> {
         holds_reference(&self.type_table.borrow(), ty)
     }
 
+    /// The callee `func_id` names. Every per-function table here is collected
+    /// from `project.functions`, which is the list a `FuncId` indexes.
+    fn func(&self, func_id: FuncId) -> Ref<'_, NirFunction> {
+        self.funcs[func_id.index()].borrow()
+    }
+
     /// Whether `func_id` lowers its parameter at `pos` to a Wasm immediate.
     fn is_immediate_param(&self, func_id: FuncId, pos: usize) -> bool {
-        // An unknown callee answers `true`, costing one hoist. The other way
-        // round codegen reaches for a literal that is now a global read.
-        self.immediate_params
-            .get(func_id.index())
-            .is_none_or(|positions| positions.contains(&pos))
+        self.immediate_params[func_id.index()].contains(&pos)
     }
 
     /// Whether a value of `ty` owns heap storage worth building only once.
@@ -1556,18 +1557,14 @@ impl Gate<'_> {
     }
 
     fn is_hoistable_pure(&self, func_id: FuncId) -> bool {
-        self.hoistable_pure
-            .get(func_id.index())
-            .copied()
-            .unwrap_or(false)
+        self.hoistable_pure[func_id.index()]
     }
 
     /// `Some(true)` when `func`'s `self` parameter is `&mut self`,
-    /// `Some(false)` when it is `&self` / by-value, `None` when unresolvable
-    /// (conservatively treated as mutating).
+    /// `Some(false)` when it is `&self` / by-value. `None` where the callee
+    /// declares no parameter at all, which is no receiver to answer about.
     fn callee_mutates_self(&self, func_id: FuncId) -> Option<bool> {
-        use cranelift_entity::EntityRef;
-        let f = self.funcs.get(func_id.index())?.borrow();
+        let f = self.func(func_id);
         Some(self.param_borrows_mutably(f.params.first()?))
     }
 
@@ -1589,14 +1586,9 @@ impl Gate<'_> {
 
     /// Whether the callee takes its receiver by `&self` — the only receiver
     /// convention that neither writes the caller's storage (`&mut self`) nor
-    /// takes it over (a by-value `self`). An unknown callee answers `false`.
+    /// takes it over (a by-value `self`).
     fn callee_borrows_self(&self, func_id: FuncId) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return false;
-        };
-        let f = f.borrow();
-        f.params.first().is_some_and(|p0| {
+        self.func(func_id).params.first().is_some_and(|p0| {
             matches!(
                 self.type_table.borrow().get(p0.type_id),
                 ResolvedType::Ref(_)
@@ -1606,18 +1598,13 @@ impl Gate<'_> {
 
     /// Whether `func_id` is one of the array element accessors.
     fn element_accessor(&self, func_id: FuncId) -> bool {
-        use cranelift_entity::EntityRef;
-        self.element_access
-            .get(func_id.index())
-            .is_some_and(Option::is_some)
+        self.element_access[func_id.index()].is_some()
     }
 
     /// Whether `func_id` reaches an array element without writing through it.
     /// `array_get_ref_mut` is excluded: a mutable element handle is a write.
     fn reads_element(&self, func_id: FuncId) -> bool {
-        use cranelift_entity::EntityRef;
-        self.element_access.get(func_id.index()).copied().flatten()
-            == Some(ArrayElementAccess::Read)
+        self.element_access[func_id.index()] == Some(ArrayElementAccess::Read)
     }
 
     /// Whether a handle handed to `func_id`'s parameter `param_pos` merely
@@ -1632,12 +1619,8 @@ impl Gate<'_> {
         param_pos: usize,
         arg_ty: TypeId,
     ) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return false;
-        };
-        let declared_mut = f
-            .borrow()
+        let declared_mut = self
+            .func(func_id)
             .params
             .get(param_pos)
             .is_some_and(|p| self.param_borrows_mutably(p));
@@ -1648,7 +1631,6 @@ impl Gate<'_> {
     /// erases `&` / `&mut` from the parameter type, so the body — not the
     /// passing mode — is what answers.
     fn callee_param_writes_through(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.param_writes_through.borrow().get(&key) {
             return cached;
@@ -1662,11 +1644,7 @@ impl Gate<'_> {
     }
 
     fn compute_param_writes_through(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return true;
-        };
-        let f = f.borrow();
+        let f = self.func(func_id);
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
@@ -1682,12 +1660,11 @@ impl Gate<'_> {
     /// consumed inside the callee — the precondition for handing it a shared
     /// global instead of a fresh object.
     ///
-    /// A bodyless callee (an import, an unresolved id) answers `false`: nothing
-    /// here can prove what it does with the value. A `&` / `&mut` parameter
-    /// answers `false` too — a by-value argument never lands there, and `&mut`
-    /// writes the caller's storage outright.
+    /// A bodyless callee answers `false`: nothing here can prove what it does
+    /// with the value. A `&` / `&mut` parameter answers `false` too — a
+    /// by-value argument never lands there, and `&mut` writes the caller's
+    /// storage outright.
     fn callee_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.param_readonly.borrow().get(&key) {
             return cached;
@@ -1698,14 +1675,13 @@ impl Gate<'_> {
     }
 
     /// Whether the callee's parameter at `param_pos` — a borrow — delivers its
-    /// referent's storage out of the callee. Unknown callees count as leaking.
+    /// referent's storage out of the callee. A bodyless one counts as leaking.
     ///
     /// The walk asks the same question of the callees it hands the borrow on
     /// to, so a recursive helper re-enters this query for a key already in
     /// flight. Seeding the memo with the leaking verdict cuts the cycle the
     /// conservative way.
     fn callee_ref_param_leaks(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
         let key = (func_id.index(), param_pos);
         if let Some(&cached) = self.ref_param_leaks.borrow().get(&key) {
             return cached;
@@ -1724,12 +1700,8 @@ impl Gate<'_> {
     /// `&mut` parameter is excluded — the callee may write through it, which
     /// the shared global must never see.
     fn callee_only_borrows_arg(&self, func_id: FuncId, pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return false;
-        };
         let borrows = {
-            let f = f.borrow();
+            let f = self.func(func_id);
             let Some(param) = f.params.get(pos) else {
                 return false;
             };
@@ -1753,19 +1725,10 @@ impl Gate<'_> {
     /// moves elementwise (`array.copy`) means the argument may only be a
     /// primitive or an array of them.
     fn instruction_arg_captures(&self, func_id: FuncId, arg_ty: TypeId) -> bool {
-        use cranelift_entity::EntityRef;
-        if !self
-            .instruction_leaf
-            .get(func_id.index())
-            .copied()
-            .unwrap_or(false)
-        {
+        if !self.instruction_leaf[func_id.index()] {
             return true;
         }
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return true;
-        };
-        let return_type = f.borrow().return_type;
+        let return_type = self.func(func_id).return_type;
         if self.is_reference_type(return_type) {
             return true;
         }
@@ -1791,11 +1754,7 @@ impl Gate<'_> {
     }
 
     fn compute_ref_param_leaks(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return true;
-        };
-        let f = f.borrow();
+        let f = self.func(func_id);
         let Some(param) = f.params.get(param_pos) else {
             return true;
         };
@@ -1805,11 +1764,7 @@ impl Gate<'_> {
     }
 
     fn compute_param_readonly(&self, func_id: FuncId, param_pos: usize) -> bool {
-        use cranelift_entity::EntityRef;
-        let Some(f) = self.funcs.get(func_id.index()) else {
-            return false;
-        };
-        let f = f.borrow();
+        let f = self.func(func_id);
         // A bodyless declaration keeps no parameters past lowering, so nothing
         // here reads a type. `shared_escape` answers for one, from what it said.
         let Some(param) = f.params.get(param_pos) else {
