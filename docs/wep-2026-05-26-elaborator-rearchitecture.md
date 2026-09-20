@@ -283,14 +283,14 @@ unrelated `impl`'s `type Item = …` answers for a type parameter's, and
 recursion through the right-hand side has no fixpoint. An unanswered name
 stays abstract.
 
-### Name-keyed facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
+### AST-shaped facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
 
 Both are declaration facts, and the phase that asks decides which structure
 can answer. `TraitEnv::build` runs before any decl pass; `Signatures` is
 assembled after all of them. So a fact the decl pass needs _about itself_ —
 which trait declares `Self::X`, asked while resolving that trait's own method
-signatures — can only live on `TraitEnv`, alongside `assoc_type_bound_index`.
-Filing it in the digest type-checks and silently answers `None`.
+signatures — can only live on `TraitEnv`, alongside `TraitDeclHeader`. Filing
+it in the digest type-checks and silently answers `None`.
 
 ### One place per question
 
@@ -596,9 +596,8 @@ A method reached through a generic bound instantiates the recorded
   bound (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
   projection receiver's own bindings. Use-site data, so it enters as
   `SlotProjections`, never as a re-resolution.
-- The `ast::TraitBound` lists behind both. Declaration facts, but name-keyed
-  and AST-shaped, so they stay on `TraitEnv` — `assoc_type_bound_index` and
-  `TraitDeclHeader::assoc_types`.
+- The `ast::TraitBound` lists behind both. Declaration facts, but AST-shaped,
+  so they stay on `TraitEnv` as `TraitDeclHeader::assoc_types`.
 
 The query writes no walk state: no scope to enter, no `self_type` to set, no
 `assoc_type_bindings` to seed and restore.
