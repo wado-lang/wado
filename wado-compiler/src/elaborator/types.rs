@@ -3033,6 +3033,13 @@ impl From<&ast::GenericParam> for ParamSlot {
     }
 }
 
+impl ParamSlot {
+    /// A declaration's parameter list as slots, in declaration order.
+    pub(super) fn list(params: &[ast::GenericParam]) -> Vec<Self> {
+        params.iter().map(Self::from).collect()
+    }
+}
+
 /// Read-only view resolving a type name from a module's perspective without
 /// cloning per-module maps. Precedence, highest first: local additions found
 /// during resolution, the current module's own definitions, then its imports

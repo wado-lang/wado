@@ -572,9 +572,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Some(params);
         }
-        // Only the current-module scan can add anything the key lookup did not:
-        // a trait declared here whose canonical key missed the decl index.
-        // (`trait_decl_headers` covers every loaded module, this one included.)
+        // The same headers, reached by module and name, for a trait declared
+        // here that the name resolved to no key at all.
         let defs = self.tysys.resolutions.defs();
         self.tysys
             .trait_env
@@ -1667,7 +1666,7 @@ impl TypeSystem {
         let Some(decl) = header.trait_def() else {
             return true;
         };
-        let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
+        let Some(decl_header) = self.trait_env.decl_header_of(&decl) else {
             return true;
         };
         header_answers_bound_args(

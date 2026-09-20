@@ -812,8 +812,6 @@ pub struct TraitEnv {
     /// on that path.
     by_receiver: ReceiverImplIndex,
     all_by_receiver: ReceiverImplIndex,
-    /// Trait name → trait declaration location.
-    pub(super) decl_index: TraitDeclIndex,
     /// Every declaration in the program. Held here so a query keyed by an
     /// identity can render one for a diagnostic without every caller threading
     /// the table.
@@ -994,7 +992,6 @@ impl TraitEnv {
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
-        let mut decl_index: TraitDeclIndex = IndexSet::default();
         let mut effect_decl_index: EffectDeclIndex = IndexSet::default();
         let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
             IndexMap::default();
@@ -1026,13 +1023,6 @@ impl TraitEnv {
             for item in &module.items {
                 match item {
                     Item::Trait(trait_decl) => {
-                        // Keyed by the declaration, so two modules declaring a
-                        // same-named trait cannot share an entry. The previous
-                        // bare-name key first-wrote-wins and silently routed
-                        // both declarations to the same one.
-                        if let Some(def) = defs.of_ast_id(trait_decl.id) {
-                            decl_index.insert(def);
-                        }
                         for assoc in &trait_decl.associated_types {
                             assoc_type_bound_index
                                 .entry(assoc.name.clone())
@@ -1330,6 +1320,9 @@ impl TraitEnv {
             }
         }
 
+        // Every trait declaration, as the whole-program checks below want it.
+        let decl_index: TraitDeclIndex = trait_decl_headers.keys().copied().collect();
+
         // The one answer to "which declaration does this written name mean?",
         // from the writing module's vantage. Every whole-program check below
         // takes it rather than reading a head off the AST, so no check can
@@ -1385,7 +1378,6 @@ impl TraitEnv {
                 all_by_receiver: index_by_receiver(&all_impl_index, defs),
                 impl_index,
                 all_impl_index,
-                decl_index,
                 defs: resolutions.defs().clone(),
                 effect_decl_index,
                 resource_decl_index,
@@ -1529,7 +1521,7 @@ impl TraitEnv {
 
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
-        self.decl_index.contains(key)
+        self.trait_decl_headers.contains_key(key)
     }
 
     /// Every declaration written under `name`, whichever module declares it.
@@ -1563,7 +1555,7 @@ impl TraitEnv {
         let written = args_at_impl_target(fq.args().to_vec(), target, resolutions);
         let Some(params) = fq
             .canonical()
-            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .and_then(|decl| self.decl_header_of(&decl))
             .map(|header| &header.type_params)
         else {
             return fq.with_args(written);
@@ -1585,7 +1577,7 @@ impl TraitEnv {
         }
         let Some(params) = fq
             .canonical()
-            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .and_then(|decl| self.decl_header_of(&decl))
             .map(|header| &header.type_params)
         else {
             return fq;
@@ -1621,8 +1613,7 @@ impl TraitEnv {
     /// The type parameters `trait_` declares, empty for one that declares none
     /// and for a name reaching no declaration.
     pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
-        self.trait_decl_headers
-            .get(&trait_)
+        self.decl_header_of(&trait_)
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
@@ -1634,7 +1625,7 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<usize> {
-        let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
+        let defaults = &self.decl_header_of(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
             if header.trait_def() != Some(trait_) {
@@ -1867,8 +1858,8 @@ impl TraitEnv {
     /// stdlib trait, so this is its identity — and a user trait sharing the
     /// name is a different declaration, not an exemption to special-case.
     pub(super) fn stdlib_trait_decl_key(&self, name: &str) -> Option<ImplTargetKey> {
-        self.decl_index
-            .iter()
+        self.trait_decl_headers
+            .keys()
             .find(|def| self.defs.name(**def) == name && !is_user_local(self.defs.module(**def)))
             .map(|def| ImplTargetKey::Decl(*def))
     }
@@ -1885,8 +1876,7 @@ impl TraitEnv {
     /// The digested declaration `key` identifies, or `None` when it names no
     /// trait.
     pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
-        let loc = self.decl_index.get(key)?;
-        self.trait_decl_headers.get(loc)
+        self.trait_decl_headers.get(key)
     }
 
     /// The trait's declaration of the associated type `assoc_name`, or `None`

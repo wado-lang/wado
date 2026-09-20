@@ -7072,7 +7072,7 @@ mod tests {
         let _ = table.type_id_of_decl(unregistered);
     }
 
-    fn projection(table: &mut TypeTable, base: TypeId, assoc: &str) -> TypeId {
+    fn make_projection(table: &mut TypeTable, base: TypeId, assoc: &str) -> TypeId {
         table.make_assoc_type_projection(
             base,
             DefId::for_test(0),
@@ -7090,7 +7090,7 @@ mod tests {
     fn substitute_rewrites_projection_base_to_another_param() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = projection(&mut table, self_param, "Item");
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substitution = IndexMap::from_iter([(0, receiver)]);
@@ -7115,7 +7115,7 @@ mod tests {
     fn a_projection_answer_replaces_the_projection() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = projection(&mut table, self_param, "Item");
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let projections =
@@ -7136,7 +7136,7 @@ mod tests {
     fn an_unanswered_projection_stays_abstract() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = projection(&mut table, self_param, "Iter");
+        let projection = make_projection(&mut table, self_param, "Iter");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
@@ -7158,7 +7158,7 @@ mod tests {
     fn substitute_leaves_unrelated_projection_untouched() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = projection(&mut table, self_param, "Item");
+        let projection = make_projection(&mut table, self_param, "Item");
 
         let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
         assert_eq!(

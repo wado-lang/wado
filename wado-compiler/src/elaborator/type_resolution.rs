@@ -162,8 +162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(params) = self
             .tysys
             .trait_env
-            .trait_decl_headers
-            .get(&trait_decl)
+            .decl_header_of(&trait_decl)
             .map(|header| header.type_params.clone())
         else {
             return TraitRef::bare(trait_decl);
@@ -1089,8 +1088,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name its writer's own type parameters, which a bound cannot supply. Only
     /// `Self` crosses, being the bounded type here.
     fn frame_can_answer(&self, writer: Option<DefId>, ty: &ast::Type) -> bool {
-        let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
-        else {
+        let Some(header) = writer.and_then(|w| self.tysys.trait_env.decl_header_of(&w)) else {
             return true;
         };
         let mut mentioned = Vec::new();

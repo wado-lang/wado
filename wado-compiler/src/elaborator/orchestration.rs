@@ -785,11 +785,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         let mut fields = Vec::new();
                         let mut field_ast_ids = Vec::new();
                         let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
-                        let struct_slots: Vec<ParamSlot> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(ParamSlot::from)
-                            .collect();
+                        let struct_slots = ParamSlot::list(&struct_decl.type_params);
                         for field in &struct_decl.fields {
                             let type_id = Self::resolve_type_static_with_params(
                                 &field.ty,
@@ -856,15 +852,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     Item::Variant(variant_decl) => {
-                        let variant_slots: Vec<ParamSlot> = variant_decl
-                            .type_params
-                            .iter()
-                            .map(ParamSlot::from)
-                            .collect();
+                        let variant_slots = ParamSlot::list(&variant_decl.type_params);
                         let mut cases = Vec::new();
                         for case in &variant_decl.cases {
-                            // Each variant case has exactly one payload type.
-                            // Unit variants have `()` (unit type) payload.
                             let payload = if let Some(payload_ty) = &case.payload {
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
@@ -873,7 +863,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     &variant_slots,
                                 )
                             } else {
-                                // Unit variant: payload is unit type
                                 TypeTable::UNIT
                             };
                             cases.push(VariantCaseData {
