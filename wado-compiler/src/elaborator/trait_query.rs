@@ -431,11 +431,8 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The declaration header of a trait already identified.
-    ///
-    /// The only way in, so a caller answers about the declaration its site
-    /// resolved to rather than re-resolving the spelling in its own frame,
-    /// which two modules can share.
+    /// The declaration header of a trait already identified, so a caller
+    /// answers about the declaration its site resolved to, not a spelling.
     pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
         self.tysys.trait_env.decl_header_of(key)
     }
@@ -559,8 +556,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
-    /// The declared type parameters of an already-identified trait.
+    /// The declared type parameters of an already-identified trait: the
+    /// `<T, U>` of `trait Foo<T, U>`.
     pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
         self.trait_decl_header_of(key)
             .map(|header| header.type_params.clone())

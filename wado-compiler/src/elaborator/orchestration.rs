@@ -791,8 +791,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             .map(ParamSlot::from)
                             .collect();
                         for field in &struct_decl.fields {
-                            // Use resolve_type_static_with_params for generic structs
-                            // so that type params like K in Node<K> become TypeParam types
                             let type_id = Self::resolve_type_static_with_params(
                                 &field.ty,
                                 &mut type_table.borrow_mut(),
@@ -803,19 +801,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }
-                        // Collect TypeIds for struct's own type params in declaration order.
-                        // This allows infer_struct_type_args to fill phantom type params
-                        // that don't appear in any field (e.g., D in struct DirMap<D, V>).
-                        let type_param_type_ids: Vec<TypeId> = struct_decl
-                            .type_params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, param)| {
-                                type_table
-                                    .borrow_mut()
-                                    .make_type_param(param.name.clone(), i as u32)
-                            })
-                            .collect();
+                        // In declaration order, so `infer_struct_type_args` can fill a
+                        // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
+                        let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
 
                         // Drop lookup so we can mutate `all_struct_fields`.
 
@@ -868,7 +856,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     Item::Variant(variant_decl) => {
-                        // Resolve variant case field types
                         let variant_slots: Vec<ParamSlot> = variant_decl
                             .type_params
                             .iter()
@@ -879,8 +866,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             // Each variant case has exactly one payload type.
                             // Unit variants have `()` (unit type) payload.
                             let payload = if let Some(payload_ty) = &case.payload {
-                                // Use resolve_type_static_with_params for variant payloads
-                                // so that type params like T in Ok(T) become TypeParam types
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
@@ -897,15 +882,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: case.id,
                             });
                         }
-                        let type_param_type_ids: Vec<TypeId> = variant_slots
-                            .iter()
-                            .enumerate()
-                            .map(|(i, slot)| {
-                                type_table
-                                    .borrow_mut()
-                                    .make_type_param(slot.name.clone(), i as u32)
-                            })
-                            .collect();
+                        let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
                         if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
                             all_variant_cases.insert(
                                 def,
@@ -3278,6 +3255,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Self::resolve_type_static_with_params(ty, type_table, lookup, &[])
     }
 
+    /// A `TypeId` per slot, in declaration order, so a slot's position is the
+    /// index [`Self::resolve_type_static_with_params`] gave it.
+    fn slot_type_ids(slots: &[ParamSlot], type_table: &RefCell<TypeTable>) -> Vec<TypeId> {
+        slots
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| {
+                type_table
+                    .borrow_mut()
+                    .make_type_param(slot.name.clone(), i as u32)
+            })
+            .collect()
+    }
+
     /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
     /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
@@ -3296,7 +3287,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return alias_type_id;
                 }
 
-                // Check if it's a type parameter (e.g., T in Result<T, E>)
                 if let Some(index) = type_params.iter().position(|p| p.name == named.name) {
                     return type_table.make_type_param(named.name.clone(), index as u32);
                 }
@@ -3450,7 +3440,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
-                // Handle T::AssocType where T is a type parameter
                 if let Some(index) = type_params
                     .iter()
                     .position(|p| p.name == namespaced.namespace)
