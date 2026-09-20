@@ -13,7 +13,7 @@ use { parse as parse_args } from "core:args";
 use { Deserialize } from "core:serde";
 use fs from "core:fs";
 use { MonotonicClock } from "wasi:clocks";
-use { Preopens } from "wasi:filesystem";
+use { Preopens } from "core:fs";
 
 struct Options {
     output_dir: String,
@@ -96,7 +96,7 @@ fn highlight_file<S: AsStrSlice, S1: AsStrSlice>(
     let ms = elapsed as f64 / 1000000.0;
 
     let out_path = `${output_dir}/${path}.html`;
-    if let Err(e) = fs::create_dir_all(&parent_of(&out_path)) {
+    if let Err(e) = fs::create_dir_all(fs::parent(&out_path).unwrap()) {
         error(`cannot create output directory`, { out_path, reason: `${e}` });
         return null;
     }
@@ -106,13 +106,4 @@ fn highlight_file<S: AsStrSlice, S1: AsStrSlice>(
     }
     debug(`highlighted`, { path: path.to_string(), out_path, ms });
     return Option::Some(elapsed as u64);
-}
-
-/// The directory part of `path`, empty when it names none. The output tree is
-/// created one file at a time, so this is what `create_dir_all` is given.
-fn parent_of<S: AsStrSlice>(path: S) -> String {
-    let Some(cut) = path.rfind("/") else {
-        return "";
-    };
-    return path.substr_bytes(0, cut);
 }

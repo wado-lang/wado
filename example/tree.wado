@@ -21,7 +21,7 @@
 
 use { args, println, eprintln, Stdout, Stderr, Environment } from "core:cli";
 use fs from "core:fs";
-use { Preopens } from "wasi:filesystem";
+use { Preopens } from "core:fs";
 
 struct Options {
     max_depth: i32,  // -1 = unlimited
@@ -138,20 +138,12 @@ fn walk(
                 let mut child_prefix = String::with_capacity(prefix.len() + 4);
                 child_prefix.push_str(&prefix);
                 child_prefix.push_str(&next_prefix_fragment);
-                enter(&join_path(dir, &entry.name), depth + 1, child_prefix, opts, stats);
+                enter(&fs::join(dir, &entry.name), depth + 1, child_prefix, opts, stats);
             }
         } else {
             stats.files += 1;
         }
     }
-}
-
-/// `name` under `dir`, which is empty at the preopened directory itself.
-fn join_path(dir: &String, name: &String) -> String {
-    if dir.is_empty() {
-        return *name;
-    }
-    return `${dir}/${name}`;
 }
 
 export fn run() with (Stdout, Stderr, Environment, Preopens) {
