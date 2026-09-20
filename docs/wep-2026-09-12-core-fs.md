@@ -130,12 +130,12 @@ on purpose.
 buffer first. A writer that calls `content.bytes().collect()` pays for that
 copy.
 
-Deliberately absent: append, rename, symlink, metadata / `stat`, file times,
-permissions, random access, and reading a file that does not fit in memory.
-Each is `wasi:filesystem` through `root()`. They are out because nothing calls
-them, here or in a module written against this one. A caller that needs one is
-a reason to move the line, as
-[#2061](https://github.com/wado-lang/wado/issues/2061) was for `remove_dir`.
+Deliberately absent: append, symlink, file times, permissions, random access,
+and reading a file that does not fit in memory. Each is `wasi:filesystem`
+through `root()`. They are out because nothing calls them, here or in a module
+written against this one. A caller that needs one is a reason to move the line,
+as [#2061](https://github.com/wado-lang/wado/issues/2061) was for `remove_dir`.
+The roadmap carries the ones a caller has already reached for.
 
 ### Removing a directory
 
@@ -168,6 +168,44 @@ and a default is trailing so it would fit. Wado has no named arguments
 site reads `remove_dir(path, true)`. The flag that decides whether a tree
 survives would be spelled as a bare `true`, which is why the pair stays.
 
+### Path operations live here, not in a `core:path`
+
+Joining, taking a parent or an extension, and normalizing a path are `core:fs`
+functions. Every other language splits them off. The three reasons it has for
+that are absent here.
+
+Two of them are about what a path is. A separate path module carries an owned
+path type (`PathBuf`, `OsString`) and the differences between one operating
+system's path syntax and another's. A WASI path is UTF-8, `/`-separated and
+relative to a preopen, so there is no syntax to abstract over, and a Wado
+newtype carries no invariant its base lacks
+([WEP: Newtype Semantics](./wep-2026-01-29-newtype-semantics.md)), so a
+`type Path = String` would buy nothing that `AsStrSlice` does not already give.
+Nothing is left for the module to own.
+
+The third is about what a path means, and it points the other way. The rules
+these functions apply are this module's: a leading `/` resolves against no
+preopen, `""` and `"."` name the preopen itself, and a `..` that climbs out of
+it is the sandbox boundary rather than a string. `create_dir_all` already
+splits a path and rejects a leading `/` to make those calls. A module that did
+not know them would have to restate them, and one that was free of them could
+not answer `normalize` at all.
+
+The usual reason to split is to keep a caller that only joins strings away from
+the filesystem. Wado already does that with effects: a path function declares no
+`with` clause, so its signature says it performs no I/O, and calling one adds no
+import to the component. `wasi:filesystem` enters the generated world only when
+a call that performs `Preopens` is reached. The module boundary would repeat
+what the effect already states.
+
+`core:url` also joins and normalizes paths, and shares none of this. Its rules
+come from the WHATWG URL standard, which resolves `..`, percent-encoding and
+schemes its own way. Two standards that look alike are the reason to keep two
+implementations, not to merge them.
+
+If a caller with no filesystem at all appears, the pure half can move out and
+`core:fs` can re-export it with `pub use`, so this is not a one-way door.
+
 ## Roadmap
 
 1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, tested by
@@ -189,14 +227,57 @@ survives would be spelled as a bare `true`, which is why the pair stays.
    rather than running it. Done when each package's tests pass,
    `expand_action_templates_in_place.wado` reports its corpus unchanged, and the
    regenerated highlighters carry the shorter `run`.
+4. Path operations: `join`, `parent`, `file_name`, `file_stem`, `extension`,
+   and `normalize`. Everything but `normalize` is pure string work over
+   `AsStrSlice`, and `normalize` applies the preopen rules above, so it answers
+   a `Result`. The views come back as `StrSlice`, so taking a parent or an
+   extension copies nothing. This goes first because the call sites of 5 and 7
+   name a file and test its extension. Done when the four helpers that do this
+   by hand are gone — `join_path` in `package-marl/src/main.wado` and
+   `example/tree.wado`, which are byte-identical, `parent_of` in
+   `package-gale/src/highlight/facade.wado`, and `grant_hint` in
+   `package-gale/src/main.wado` — the two `substr_bytes(0, len - 4)` extension
+   strips in `package-gale/scripts/extract_antlr4_descriptors.wado` read
+   `file_stem`, and `create_dir_all` and `remove_dir_all` call the public
+   functions instead of splitting and joining themselves.
+5. `metadata`: the type, the size, and the modification time of what a path
+   names, plus the `exists` that reads from it. Thirteen places answer "is it
+   there?" by discarding the error of a call made for another purpose, and
+   `package-marl/src/main.wado` decides file-or-directory from the `.md` suffix
+   because no call answers it. `stat_at` is already here, privately, inside
+   `ensure_dir`. Done when those sites ask instead, and `ensure_dir` asks
+   through the public function.
+6. `rename`, and with it the write that does not destroy what it replaces.
+   Nine writes truncate a file the user already has, among them the markdown
+   formatter rewriting a `.md` in place and the two scripts that rewrite
+   committed `.g4` and baseline files, so a process that dies mid-write takes
+   the original with it. `extract_antlr4_descriptors.wado` already builds a
+   two-file rollback out of `remove_file` for the same reason. Done when
+   `rename` exists with tests, and the in-place rewrites that can reach it no
+   longer truncate their target.
+7. `walk_dir`: every entry under a path, depth-first, as an iterator of the
+   path and its type. `read_dir` lists one level, so four places write the
+   recursion themselves, one of them chunking the raw directory stream 64
+   entries at a time. It needs no WASI surface this module does not already
+   use. Done when `package-marl/src/main.wado` and `example/tree.wado` walk
+   through it and their own recursion is gone.
 
 ## Known gaps
 
+- Roadmap item 6 does not say what shape the safe write takes: whether `write`
+  itself becomes write-elsewhere-then-rename, or a second function carries it
+  and `write` keeps truncating. Making every `write` atomic costs a second path
+  in the same directory and changes what a reader sees mid-write, which is a
+  choice for whoever takes the item.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
-  descriptor plumbing. It threads nested `Descriptor`s through some twenty
-  sites, and it cannot run here at all without the `vendor/antlr4` submodule, so
-  converting it is a refactor no test in this repository would check. Closing it
-  means porting those sites to paths and re-running the vendor extract.
+  descriptor plumbing, a shadow copy of some seven functions here. Its helpers
+  each take a subdirectory `Descriptor`, which this module cannot express
+  because every path resolves against the first preopen, and it opens
+  directories with `MutateDirectory`, which this module never requests. It also
+  cannot run here at all without the `vendor/antlr4` submodule, so converting it
+  is a refactor no test in this repository would check. Closing it means writing
+  those sites as preopen-relative paths, or giving this module a handle for a
+  directory below the preopen, and then re-running the vendor extract.
 - A second preopen is unreachable. Closing it means resolving a path against the
   preopen whose name is its longest matching prefix, and deciding what an
   ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
