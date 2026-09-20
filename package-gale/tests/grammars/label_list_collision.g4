@@ -17,6 +17,9 @@
 //   inside it. Both orders: emit can rebind against a name the alternative has
 //   already bound, but not against one it binds later, so the iteration needs
 //   a scope of its own either way.
+// - `lazy_plus_list_after` — the same shape with a list label on the loop, so
+//   the mandatory first iteration has a container to push into before the
+//   loop that owns it starts.
 
 grammar label_list_collision;
 

@@ -287,7 +287,7 @@ fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
 }
 
 /// What a decoder returns for an escape ANTLR4 does not define. No code point
-/// is negative, so a caller tells the two apart by sign.
+/// is negative, so it collides with none.
 pub global INVALID_ESCAPE: i32 = -1;
 
 /// One escape body — the chars *after* the `\` — as a code point, or
@@ -355,13 +355,7 @@ pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
         *pos += 1;
         return resolve_braced_escape_code(chars, pos);
     }
-    let mut val = 0;
-    let mut n = 0;
-    while n < 4 && *pos < chars.len() && chars[*pos].is_hexdigit() {
-        val = val * 16 + chars[*pos].hex_digit_value();
-        *pos += 1;
-        n += 1;
-    }
+    let [val, n] = scan_hex_digits(chars, pos, 4);
     if n < 4 {
         return INVALID_ESCAPE;
     }
@@ -371,15 +365,7 @@ pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
 /// The `\u{…}` body past its `{`. The whole form is consumed before anything is
 /// decided, so a caller reporting `pos` names the escape and not a prefix.
 fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
-    let mut val = 0;
-    let mut n = 0;
-    while *pos < chars.len() && chars[*pos].is_hexdigit() {
-        if val <= MAX_CODE_POINT {
-            val = val * 16 + chars[*pos].hex_digit_value();
-        }
-        *pos += 1;
-        n += 1;
-    }
+    let [val, n] = scan_hex_digits(chars, pos, i32::MAX);
     let closed = *pos < chars.len() && chars[*pos] == '}';
     if closed {
         *pos += 1;
@@ -388,4 +374,19 @@ fn resolve_braced_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
         return INVALID_ESCAPE;
     }
     return val;
+}
+
+/// The value and length of the hex run at `pos`, taking at most `limit` digits.
+/// The value stops climbing at `MAX_CODE_POINT`, so no run overflows.
+fn scan_hex_digits(chars: &List<char>, pos: &mut i32, limit: i32) -> [i32, i32] {
+    let mut val = 0;
+    let mut n = 0;
+    while n < limit && *pos < chars.len() && chars[*pos].is_hexdigit() {
+        if val <= MAX_CODE_POINT {
+            val = val * 16 + chars[*pos].hex_digit_value();
+        }
+        *pos += 1;
+        n += 1;
+    }
+    return [val, n];
 }
