@@ -67,16 +67,16 @@ in _when_ the computation graph is fixed and _who_ writes the kernels.
 | Kernel DSL in a typed host language  | build/JIT time | you, abstractly | Triton, CubeCL, Mojo, Halide, Exo     |
 | Typed array language                 | build time     | compiler        | Dex, Futhark                          |
 
-Two observations about the table.
+### ONNX Is Not a Framework
 
-**ONNX is not a framework.** It is a serialized graph IR plus an operator set.
-Its shapes are dynamic (symbolic `dim_param`), its axes positional, and its type
-information is dtype only. Optimization belongs to the runtime that loads it, not
-to the format.
+It is a serialized graph IR plus an operator set. Its shapes are dynamic
+(symbolic `dim_param`), its axes positional, and its type information is dtype
+only. Optimization belongs to the runtime that loads it, not to the format.
 
-**Popularity is anticorrelated with compiler sophistication.** The two kinds with
-the weakest compiler stories (runtime graph, load-time optimizer) have the largest
-deployments. Section 3 covers why.
+### Popularity Is Anticorrelated with Compiler Sophistication
+
+The two kinds with the weakest compiler stories — runtime graph, load-time
+optimizer — have the largest deployments. Section 3 covers why.
 
 ---
 
