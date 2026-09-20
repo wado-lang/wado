@@ -113,10 +113,11 @@ changing their signatures.
 
 ### Whole files only
 
-`read` buffers the whole file, and `write` creates or truncates one and closes
-it. `read` also checks that the path names a regular file, because
-`read_via_stream` traps on anything else, and a trap aborts the program instead
-of returning the `Result` the signature promises. Every other operation states
+`read` buffers the whole file, and `write` puts one in place of whatever the
+path held, as the section below describes. `read` also checks that the path
+names a regular file, because `read_via_stream` traps on anything else, and a
+trap aborts the program instead of returning the `Result` the signature
+promises. Every other operation states
 what it expects in its open flags, so the host makes that check.
 
 Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read
@@ -167,6 +168,47 @@ and a default is trailing so it would fit. Wado has no named arguments
 ([WEP: Default Arguments](./wep-2026-04-11-default-arguments.md)), so the call
 site reads `remove_dir(path, true)`. The flag that decides whether a tree
 survives would be spelled as a bare `true`, which is why the pair stays.
+
+### A write replaces the file, it does not truncate it
+
+`write` puts its bytes in a new file beside the target and renames that over
+it. A truncating write is only correct when nothing reads the file and nothing
+interrupts the writer, and the repository's own writers are the other case:
+they rewrite a `.md` the user is editing, a committed grammar, and a checked-in
+baseline. A process that dies mid-write takes the original with it.
+
+The temporary file is a sibling of the target, not a file in a temporary
+directory. Rename is atomic within one filesystem and fails across two, the
+host refuses a rename between two grants whose permissions differ, and WASI has
+no temporary directory to reach for in the first place: the preopen tree is
+all there is. The same reason puts Rust's `NamedTempFile::new_in` and Go's
+`os.CreateTemp(filepath.Dir(dst))` next to their targets.
+
+The name is `<target>.wado-tmp`, then `.1`, `.2` and on. The file is created
+with `Create | Exclusive`, so the host decides uniqueness atomically and a
+second writer that loses the race takes the next name. That is what makes a
+random name unnecessary, and a random name is what would otherwise put
+`Random` in the signature of every function that writes a file and
+`wasi:random` in its component's imports. An unpredictable name defends a
+shared `/tmp` against a symlink planted by another user, a threat this tree
+does not have.
+
+A failed write unlinks its temporary file, best effort: the write already
+failed, so a failure to clean up is not a second error to report. A process
+that dies between the create and the rename leaves one behind, which every
+implementation of this pattern leaves behind.
+
+`write_in_place` keeps the truncating write for the callers that want it: a
+file too large to exist twice, and a directory that should not gain a second
+entry. The name says which one it is, so the safe spelling is also the short
+one.
+
+Atomicity is not durability, and `write` promises only the first. A reader sees
+the old file or the new one and never a half-written one, but nothing here
+calls `sync_data` on the file or `sync` on the directory, so power loss can
+still take a write the host reported as complete. The doc comment says so.
+A caller that needs otherwise syncs the descriptor `root()` hands over, which
+is the escape hatch this module keeps for exactly this.
 
 ### Path operations live here, not in a `core:path`
 
@@ -247,14 +289,15 @@ If a caller with no filesystem at all appears, the pure half can move out and
    because no call answers it. `stat_at` is already here, privately, inside
    `ensure_dir`. Done when those sites ask instead, and `ensure_dir` asks
    through the public function.
-6. `rename`, and with it the write that does not destroy what it replaces.
-   Nine writes truncate a file the user already has, among them the markdown
-   formatter rewriting a `.md` in place and the two scripts that rewrite
-   committed `.g4` and baseline files, so a process that dies mid-write takes
-   the original with it. `extract_antlr4_descriptors.wado` already builds a
-   two-file rollback out of `remove_file` for the same reason. Done when
-   `rename` exists with tests, and the in-place rewrites that can reach it no
-   longer truncate their target.
+6. `rename`, and the replacing `write` above that is built on it, with
+   `write_in_place` carrying what `write` does today. Nine writes truncate a
+   file the user already has, among them the markdown formatter rewriting a
+   `.md` and the two scripts that rewrite committed `.g4` and baseline files,
+   and `extract_antlr4_descriptors.wado` already builds a two-file rollback out
+   of `remove_file` for want of this. Done when a test shows the target
+   unchanged after a write that fails partway, no temporary file is left behind
+   on that path, and the nine callers are replacing rather than truncating
+   without having been edited.
 7. `walk_dir`: every entry under a path, depth-first, as an iterator of the
    path and its type. `read_dir` lists one level, so four places write the
    recursion themselves, one of them chunking the raw directory stream 64
@@ -264,11 +307,11 @@ If a caller with no filesystem at all appears, the pure half can move out and
 
 ## Known gaps
 
-- Roadmap item 6 does not say what shape the safe write takes: whether `write`
-  itself becomes write-elsewhere-then-rename, or a second function carries it
-  and `write` keeps truncating. Making every `write` atomic costs a second path
-  in the same directory and changes what a reader sees mid-write, which is a
-  choice for whoever takes the item.
+- A temporary file outlives a process that dies between creating it and
+  renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
+  writer owns. Closing it means deciding what makes one stale — an age read
+  from `metadata`, or a sweep a caller asks for — and neither answer is safe
+  while another process may be mid-write on the same name.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
   descriptor plumbing, a shadow copy of some seven functions here. Its helpers
   each take a subdirectory `Descriptor`, which this module cannot express
