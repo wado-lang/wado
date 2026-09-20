@@ -234,23 +234,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<DefId> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
-        if self
-            .tysys
-            .trait_env
-            .declares_assoc_type(&self_trait, assoc_name)
-        {
-            return Some(self_trait);
-        }
         self.tysys
             .trait_env
-            .supertrait_closure_at(&self_trait, &[])
-            .iter()
-            .find(|inherited| {
-                self.tysys
-                    .trait_env
-                    .declares_assoc_type(&inherited.decl, assoc_name)
-            })
-            .map(|inherited| inherited.decl)
+            .trait_declaring_assoc_type(&self_trait, &[], assoc_name)
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`

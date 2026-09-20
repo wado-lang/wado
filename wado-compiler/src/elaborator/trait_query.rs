@@ -274,7 +274,7 @@ pub(crate) fn trait_sig_of_with<'a>(
     trait_env: &TraitEnv,
     signatures: &'a sig::Signatures,
 ) -> Option<&'a TraitSig> {
-    if !trait_env.is_trait_decl(&decl) {
+    if !trait_env.declares_trait(&decl) {
         return None;
     }
     signatures.trait_sig(decl)
@@ -444,10 +444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         key: &DefId,
         assoc_name: &str,
     ) -> Option<&ast::AssociatedTypeDecl> {
-        self.trait_decl_header_of(key)?
-            .assoc_types
-            .iter()
-            .find(|decl| decl.name == assoc_name)
+        self.tysys.trait_env.assoc_type_decl(key, assoc_name)
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
@@ -1043,7 +1040,7 @@ impl TypeSystem {
     /// than a reference site; a caller with a site asks the site instead.
     fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DefId> {
         let key = scope.declaration(name)?;
-        self.trait_env.is_trait_decl(&key).then_some(key)
+        self.trait_env.declares_trait(&key).then_some(key)
     }
 
     /// Whether what a bound writes for `trait_`'s own parameters answers
@@ -1109,7 +1106,7 @@ impl TypeSystem {
     ) -> Option<&'a ModuleSource> {
         let def = scope.declaration(trait_name)?;
         self.trait_env
-            .is_trait_decl(&def)
+            .declares_trait(&def)
             .then(|| scope.resolutions.defs().module(def))
     }
 
@@ -2001,7 +1998,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is no trait at all — a same-named enum case in the prelude.
     pub(super) fn trait_decl_at(&self, site: AstId, written: &str) -> Option<DefId> {
         if let Some(def) = self.tysys.resolutions.declared(site)
-            && self.tysys.trait_env.is_trait_decl(&def)
+            && self.tysys.trait_env.declares_trait(&def)
         {
             return Some(def);
         }
@@ -2076,7 +2073,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
     /// second resolution found nothing.
     pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
-        if !self.tysys.trait_env.is_trait_decl(key) {
+        if !self.tysys.trait_env.declares_trait(key) {
             return None;
         }
         self.tysys.signatures.trait_sig(*key)

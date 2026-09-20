@@ -496,7 +496,9 @@ a sited entry point a caller with a reference site reaches instead.
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
 - `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
-- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name
+- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
+  One algorithm on `TraitEnv`, reading each bound through the reference site its
+  caller supplies, so a frame and a declaration-level resolver share it.
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 

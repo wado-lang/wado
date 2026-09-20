@@ -1713,7 +1713,7 @@ impl TraitEnv {
     /// `key` itself when it declares a trait, else `None` — the question the
     /// callers actually ask, phrased as the identity they then compare.
     pub(crate) fn trait_def(&self, key: &DefId) -> Option<DefId> {
-        self.decl_index.contains(key).then_some(*key)
+        self.declares_trait(key).then_some(*key)
     }
 
     /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
@@ -1882,11 +1882,6 @@ impl TraitEnv {
         self.decl_header_of(decl_key)
     }
 
-    /// Whether `key` identifies a trait declaration.
-    pub(super) fn is_trait_decl(&self, key: &DefId) -> bool {
-        self.decl_index.contains(key)
-    }
-
     /// The digested declaration `key` identifies, or `None` when it names no
     /// trait.
     pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
@@ -1894,10 +1889,51 @@ impl TraitEnv {
         self.trait_decl_headers.get(loc)
     }
 
+    /// The trait's declaration of the associated type `assoc_name`, or `None`
+    /// when `key` names no trait or that trait declares no such type.
+    pub(super) fn assoc_type_decl(
+        &self,
+        key: &DefId,
+        assoc_name: &str,
+    ) -> Option<&ast::AssociatedTypeDecl> {
+        self.decl_header_of(key)?
+            .assoc_types
+            .iter()
+            .find(|decl| decl.name == assoc_name)
+    }
+
     /// Whether the trait `key` identifies declares `assoc_name`.
     pub(super) fn declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
-        self.decl_header_of(key)
-            .is_some_and(|header| header.assoc_types.iter().any(|d| d.name == assoc_name))
+        self.assoc_type_decl(key, assoc_name).is_some()
+    }
+
+    /// The supertrait of `key` declaring `assoc_name`, re-spelled at `written`.
+    /// A trait inherits its supertraits' associated types, so `T: Ord` answers
+    /// for `Eq`'s.
+    pub(super) fn supertrait_declaring_assoc_type(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        self.supertrait_closure_at(key, written)
+            .into_iter()
+            .find(|inherited| self.declares_assoc_type(&inherited.decl, assoc_name))
+            .map(|inherited| inherited.decl)
+    }
+
+    /// `key` or the supertrait of it declaring `assoc_name`, making
+    /// `<T as key>::assoc_name` mean the trait that declared it.
+    pub(super) fn trait_declaring_assoc_type(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        if self.declares_assoc_type(key, assoc_name) {
+            return Some(*key);
+        }
+        self.supertrait_declaring_assoc_type(key, written, assoc_name)
     }
 
     /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
@@ -1914,16 +1950,16 @@ impl TraitEnv {
             .iter()
             .filter_map(&resolve)
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
-            // A bound inherits its supertraits' associated types, so
-            // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
-            // a trait redeclaring the name still wins for itself.
+            // Searched after every direct bound, so a trait redeclaring the
+            // name still wins for itself.
             .or_else(|| {
-                bounds
-                    .iter()
-                    .filter_map(|bound| Some((resolve(bound)?, bound)))
-                    .flat_map(|(decl, bound)| self.supertrait_closure_at(&decl, &bound.type_args))
-                    .find(|inherited| self.declares_assoc_type(&inherited.decl, assoc_name))
-                    .map(|inherited| inherited.decl)
+                bounds.iter().find_map(|bound| {
+                    self.supertrait_declaring_assoc_type(
+                        &resolve(bound)?,
+                        &bound.type_args,
+                        assoc_name,
+                    )
+                })
             })
     }
 
