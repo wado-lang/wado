@@ -12,8 +12,7 @@ pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
 /// What the host handed over, keyed by the file's path under
 /// [`DEV_STDLIB_ROOT`].
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> =
-    std::sync::OnceLock::new();
+static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> = std::sync::OnceLock::new();
 
 /// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
 /// relative to [`DEV_STDLIB_ROOT`], paired with its source. The first install

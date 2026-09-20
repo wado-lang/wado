@@ -513,10 +513,7 @@ mod format_contract_tests {
     #[test]
     fn combined_markdown_output_is_dprint_stable() {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
-        let docs: Vec<(String, _)> = inputs
-            .iter()
-            .map(|i| (i.clone(), stdlib_doc(i)))
-            .collect();
+        let docs: Vec<(String, _)> = inputs.iter().map(|i| (i.clone(), stdlib_doc(i))).collect();
         let opts = DocOptions {
             inputs: inputs.to_vec(),
             format: OutputFormat::Markdown,
