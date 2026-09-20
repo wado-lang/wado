@@ -3504,8 +3504,11 @@ impl Type {
         }
     }
 
-    /// Where a tuple at any depth spreads a second type pack, which leaves the
-    /// boundary between the two packs unwritten.
+    /// Where a tuple this position receives a value into spreads a second type
+    /// pack, which leaves the boundary between the two packs unwritten. A
+    /// function type ends the walk: its parameters and return are that
+    /// function's own positions, and neither settles the packs of the signature
+    /// that names it.
     #[must_use]
     pub fn second_pack_spread(&self) -> Option<Span> {
         match self {
@@ -3529,13 +3532,12 @@ impl Type {
             }
             Type::Generic(g) => g.args.iter().find_map(Type::second_pack_spread),
             Type::NamespacedGeneric(g) => g.args.iter().find_map(Type::second_pack_spread),
-            Type::Function(f) => f
-                .params
-                .iter()
-                .find_map(Type::second_pack_spread)
-                .or_else(|| f.return_type.second_pack_spread()),
             Type::Reference(inner) | Type::MutReference(inner) => inner.second_pack_spread(),
-            Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => None,
+            Type::Function(_)
+            | Type::Named(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => None,
         }
     }
 

@@ -760,6 +760,14 @@ impl Receiver {
         }
     }
 
+    /// Whether this receiver names a declaration, whose type arguments stand
+    /// one per declared parameter. A tuple, a reference or a projection spreads
+    /// its parts over that list instead.
+    #[must_use]
+    pub fn is_declared_type(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_)))
+    }
+
     /// Whether this receiver is one of the binders `names` declares — how a
     /// blanket's receiver is recognized. By spelling, since a declaration list
     /// has no owning block to compare.

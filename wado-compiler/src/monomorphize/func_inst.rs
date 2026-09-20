@@ -1998,19 +1998,19 @@ impl Monomorphizer {
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
-                // A pack fills one slot holding a tuple, and a nominal receiver
-                // (`One<[i32, bool]>`) spells it that way: one argument per
-                // declared parameter. A target that spreads the pack
-                // (`impl<..T> … for [..T]`) hands its elements over flat
-                // instead, and then the pack takes what the scalar parameters
-                // leave — the ones ahead of it keeping their positions.
-                let supplied = generic
-                    .impl_type_params
-                    .iter()
-                    .filter(|p| p.projected_from.is_none())
-                    .count();
+                // A pack fills one slot holding a tuple, and a receiver naming a
+                // declaration (`One<[i32, bool]>`) spells it that way: one
+                // argument per declared parameter, as struct instantiation
+                // reads them. A target that spreads the pack (`impl<..T> … for
+                // [..T]`) hands its elements over flat instead, and then the
+                // pack takes what the scalar parameters leave — the ones ahead
+                // of it keeping their positions.
+                let one_arg_per_param = key
+                    .method_info
+                    .as_ref()
+                    .is_some_and(|info| info.receiver.is_declared_type());
                 let before = param.index as usize;
-                let pack_type = if key.impl_type_args.len() == supplied {
+                let pack_type = if one_arg_per_param {
                     key.impl_type_args
                         .get(before)
                         .copied()
