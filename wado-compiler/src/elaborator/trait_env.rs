@@ -575,11 +575,6 @@ impl DefaultArg {
     }
 }
 
-/// Every `trait` declaration in the program. Membership is the question — is
-/// this declaration a trait? — and the declaration is its own answer, so there
-/// is nothing to store beside it.
-pub(super) type TraitDeclIndex = IndexSet<DefId>;
-
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
 ///
@@ -1308,7 +1303,7 @@ impl TraitEnv {
         }
 
         // Every trait declaration, as the whole-program checks below want it.
-        let decl_index: TraitDeclIndex = trait_decl_headers.keys().copied().collect();
+        let decl_index: IndexSet<DefId> = trait_decl_headers.keys().copied().collect();
 
         // The one answer to "which declaration does this written name mean?",
         // from the writing module's vantage. Every whole-program check below
@@ -2780,7 +2775,7 @@ fn check_inherent_impl_collisions(
 fn check_all_orphan_rules(
     defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    decl_index: &TraitDeclIndex,
+    decl_index: &IndexSet<DefId>,
     type_decl_index: &IndexSet<DefId>,
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {

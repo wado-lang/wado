@@ -447,21 +447,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.trait_env.assoc_type_decl(key, assoc_name)
     }
 
+    /// The written head of `impl Trait for T`, its name, and the declaration it
+    /// names. The head carries its own reference site, so an aliased
+    /// `impl B for T` answers `Base` rather than a spelling two modules share.
+    fn impl_trait_head<'i>(
+        &self,
+        impl_block: &'i ast::ImplBlock,
+    ) -> Option<(&'i ast::Type, String, DefId)> {
+        let trait_type = impl_block.trait_type.as_ref()?;
+        let trait_name = self.get_type_name(trait_type);
+        let decl = head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))?;
+        Some((trait_type, trait_name, decl))
+    }
+
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
     /// impl's bindings (`type X = Concrete`), skipping still-parametric
     /// bindings. Only the bound's trait is checked, not its associated-type
     /// equality constraints (`Iterator<Item = Self::Item>`).
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
-        let Some(trait_type) = &impl_block.trait_type else {
-            return;
-        };
-        let trait_name = self.get_type_name(trait_type);
-        // The header and each bound carry their own reference site, so which
-        // trait either names is the answer the table already recorded for it —
-        // not the spelling, which two modules can share.
-        let Some(trait_decl) =
-            head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))
-        else {
+        let Some((_, _, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
         for binding in &impl_block.associated_types {
@@ -501,15 +505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// closure, not just the direct ones: a supertrait satisfied structurally
     /// has no impl block of its own to carry the rest of the chain.
     pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
-        let Some(trait_type) = &impl_block.trait_type else {
-            return;
-        };
-        let trait_name = self.get_type_name(trait_type);
-        // The header's own site says which trait it names, so an aliased
-        // `impl B for T` enforces `Base`'s supertraits.
-        let Some(trait_decl) =
-            head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))
-        else {
+        let Some((trait_type, trait_name, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
         let written = written_arg_nodes_at_target(trait_type, &impl_block.ty);

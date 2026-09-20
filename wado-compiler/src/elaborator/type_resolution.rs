@@ -319,12 +319,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return projection;
             }
-            // If not found, it's an unknown associated type
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("Self::{}", namespaced.name),
-                span: namespaced.span,
-            });
-            return TypeTable::ERROR;
+            return self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
@@ -388,11 +383,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return projection;
             }
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("{base_name}::{}", namespaced.name),
-                span: namespaced.span,
-            });
-            return TypeTable::ERROR;
+            return self.unknown_namespaced_type(&base_name, &namespaced.name, namespaced.span);
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
@@ -411,11 +402,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_generic_type(namespaced.id, &alias, &namespaced.args, namespaced.span)
             }
         } else {
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("{}::{}", namespaced.namespace, namespaced.name),
-                span: namespaced.span,
-            });
-            TypeTable::ERROR
+            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span)
         }
     }
 
@@ -1098,6 +1085,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
+    /// Report `base::member` as a name that denotes no type.
+    fn unknown_namespaced_type(&mut self, base: &str, member: &str, span: Span) -> TypeId {
+        let _ = self.emit(TypeError::UnknownType {
+            name: format!("{base}::{member}"),
+            span,
+        });
+        TypeTable::ERROR
+    }
+
     /// The projection `base::assoc` as this frame builds it, or `None` when no
     /// bound on `base` declares `assoc`.
     // The single builder, so one written in a signature and one synthesized for
@@ -1115,8 +1111,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::make_frame_projection`] for a caller that already knows which
     /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
     /// the site that dispatched can say which one `a * b` yields.
-    // The one place a projection is built from a trait, so its bounds — part of
-    // what it interns by — can only be the declaration's (WEP 2026-08-12).
+    // The one place a projection is built from a trait. It interns by its
+    // bounds, so those can only be the declaration's (WEP 2026-08-12).
     pub(super) fn make_frame_projection_of_trait(
         &mut self,
         base: TypeId,

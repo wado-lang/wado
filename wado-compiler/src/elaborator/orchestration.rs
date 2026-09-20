@@ -3584,7 +3584,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         // Simple case: `type Item = T` — T is a type param
                         Type::Named(named) => {
                             let Some((idx, _)) = param_at(&named.name) else {
-                                // Not a type param (e.g., a concrete type) — skip
                                 continue;
                             };
                             type_table

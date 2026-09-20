@@ -289,8 +289,8 @@ is never handed a fused spelling no `impl` header writes.
 
 A projection interns by its `bounds` too, so those are read from the declaration
 `owning_trait` names, never from the associated type's bare name. A name-keyed
-index gave every `Output` the first one any trait declared, and two projections
-on one `T::Output` stopped comparing equal.
+index gave every `Output` whichever bounds the first trait declaring that name
+wrote, and two projections on one `T::Output` stopped comparing equal.
 
 A shape no declaration names — a tuple, a reference, a function type, a pack — has
 no `DefId` and needs none; each is already its own variant. Primitives are not
@@ -477,11 +477,10 @@ The list is closed by the type system and the module system, not by a test: no
 mechanism above can be worked around locally, so a new violation needs a new
 API, and adding one is a review decision.
 
-What it does not close is a declaration's _data_ reached by name. Nothing above
-stops an index keyed by an associated type's name from answering with some
-trait's bounds for it, because no identity is minted and no name becomes a
-declaration. The rule that covers it is §6: a fact about a declaration is read
-through the `DefId` that names it.
+Nothing above closes a declaration's _data_ reached by name. An index keyed by
+an associated type's name can still answer with some trait's bounds for it: it
+mints no identity, and it turns no name into a declaration. The rule that covers
+it is §6, that a fact about a declaration is read through the `DefId` naming it.
 
 ### What still turns a name into a declaration
 

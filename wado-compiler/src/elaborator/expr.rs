@@ -3838,10 +3838,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(name, _)| name == &field.name)
                     .map(|(_, type_id)| *type_id);
 
-                // For tuple literals in generic struct fields where the field type
-                // contains type params (e.g., List<T>), skip providing the expected
-                // type so the tuple isn't coerced yet. Instead, resolve as a plain
-                // tuple and defer coercion to after type inference.
+                // A tuple literal under a field type naming a slot (`List<T>`)
+                // resolves as a plain tuple: the coercion needs the argument
+                // these very values are about to fix.
                 let needs_deferred_coercion = is_tuple_literal
                     && expected_field_type
                         .is_some_and(|t| self.tysys.type_table.borrow().contains_type_param(t));
@@ -3851,16 +3850,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected_field_type
                 };
 
-                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
                 let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
 
-                // Track tuple literals whose coercion was deferred because the field
-                // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type (the second pass below records
-                // the coercion via `try_coerce_tuple_to_sequence`; reify replays
-                // it). The test is read from the AST — a spread tuple used to
-                // resolve to a block (never deferred), so only spread-free tuple
-                // literals are deferred here.
+                // Read from the AST, because a spread tuple used to resolve to
+                // a block and so was never deferred.
                 let tuple_is_spread_free = matches!(
                     &field.value,
                     ast::Expr::TupleLiteral(t)
@@ -3878,9 +3871,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     deferred_fields.push(provided_idx);
                 }
 
-                // Check field name exists in struct definition
-                if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                {
+                if struct_fields_known && expected_field_type.is_none() {
                     let _ = self.emit(TypeError::ExtraField {
                         struct_name: display_name.clone(),
                         field_name: field.name.clone(),
@@ -3888,16 +3879,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type.
-                // A field whose coercion was deferred still holds its literal
-                // shape — the sequence coercion has not run — so checking it
+                // A deferred field still holds its literal shape, so checking it
                 // here would compare `[…]` against the sequence it is about to
                 // become. The second pass checks it once coerced.
-                if !check_deferred
-                    && let Some((_, expected_type_id)) =
-                        struct_field_types.iter().find(|(n, _)| n == &field.name)
-                {
-                    self.typecheck(type_id, *expected_type_id, field.value.span());
+                if !check_deferred && let Some(expected_type_id) = expected_field_type {
+                    self.typecheck(type_id, expected_type_id, field.value.span());
                 }
 
                 let decl_idx = struct_field_types
