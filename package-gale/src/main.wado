@@ -364,12 +364,16 @@ fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, 
 /// The `wado run` invocation that would grant `path`'s own directory and name
 /// the file relative to it.
 fn grant_hint<S: AsStrSlice>(path: S) -> String {
-    let dir = match fs::parent(path) {
-        Some(parent) && !parent.is_empty() => parent.to_string(),
-        _ => "/",
+    let Some(name) = fs::file_name(path) else {
+        return `wado run --dir ${path} ...`;
     };
-    let name = fs::file_name(path).map(|n: StrSlice| n.to_string()).unwrap_or("");
-    return `wado run --dir ${dir} ... ${name}`;
+    // A path with one component has no directory part, so the grant is the one
+    // it resolves against: the filesystem root, or where the command runs.
+    let holder = match fs::parent(path) {
+        Some(dir) && !dir.is_empty() => dir.to_string(),
+        _ => if path.starts_with("/") { "/" } else { "." },
+    };
+    return `wado run --dir ${holder} ... ${name}`;
 }
 
 /// Read a file to EOF. The stream's completion future is consumed so a

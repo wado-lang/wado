@@ -430,30 +430,28 @@ test "metadata on a path that names nothing is NotFound" {
     assert fs::metadata(`${dir}/absent`).unwrap_err().kind matches { NotFound };
 }
 
-test "exists answers without an error to discard" {
+test "both spellings of the existence question agree on what is there" {
     let dir = scratch("exists");
     let path = `${dir}/here.txt`;
     assert !fs::exists(&path);
+    assert !fs::try_exists(&path).unwrap();
+
     fs::write(&path, &"here").unwrap();
     assert fs::exists(&path);
+    assert fs::try_exists(&path).unwrap();
     assert fs::exists(&dir);
+    assert fs::try_exists(&dir).unwrap();
+
     fs::remove_file(&path).unwrap();
     assert !fs::exists(&path);
-}
-
-test "try_exists separates absence from what stopped the look" {
-    let dir = scratch("try-exists");
-    let path = `${dir}/here.txt`;
     assert !fs::try_exists(&path).unwrap();
-    fs::write(&path, &"here").unwrap();
-    assert fs::try_exists(&path).unwrap();
-    assert fs::try_exists(&dir).unwrap();
-    // A symlink is what it names, not what it points at, so a dangling one is
-    // still there. `exists` cannot tell that from a missing path.
+
+    // A link is what it names, not what it points at, so a dangling one is
+    // still there rather than absent.
     let link = `${dir}/link`;
     fs::root().unwrap().symlink_at("gone.txt", link).wait().unwrap();
-    assert fs::try_exists(&link).unwrap();
     assert fs::exists(&link);
+    assert fs::try_exists(&link).unwrap();
 }
 
 test "join puts one separator between the two" {

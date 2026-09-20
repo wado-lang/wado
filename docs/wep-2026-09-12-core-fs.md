@@ -141,8 +141,8 @@ changing their signatures.
 path held, as the section below describes. `read` also checks that the path
 names a regular file, because `read_via_stream` traps on anything else, and a
 trap aborts the program instead of returning the `Result` the signature
-promises. Every other operation states
-what it expects in its open flags, so the host makes that check.
+promises. Every other operation states what it expects in its open flags, so
+the host makes that check.
 
 Streaming stays on `wasi:filesystem`. `example/cat.wado` connects a file's read
 stream straight to stdout and never holds the file in memory. This module would
@@ -245,9 +245,9 @@ A rename replaces a symlink rather than following it. That is the one thing
 this shape does that a truncating write could not: it detaches a link where
 `write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a link
 to `AGENTS.md`, so the difference is a file the next `git status` reports. So
-`write` refuses a target that is not a regular file, as far as a check before a
-rename reaches. Every read here already refuses one, and a write is not the
-place to start following links.
+`write` refuses a target that is not a regular file. Every read here already
+refuses one, and a write is not the place to start following links. What that
+refusal promises is in "Time of check, time of use" below.
 
 `write_in_place` keeps the truncating write for the callers that want it: a
 file too large to exist twice, and a directory that should not gain a second
@@ -263,55 +263,58 @@ is the escape hatch this module keeps for exactly this.
 
 ### Time of check, time of use
 
-A path is a name, not a handle, so every call resolves it again and whatever it
-reports describes the moment it ran. That is the price of the decision above,
-and it is paid in three places rather than left implicit.
+A path is a name, not a handle. Every call resolves it again, so what a call
+reports is true of the moment it ran and not of the moment the caller reads it.
+Asking first and acting after is two resolutions with a window between them.
 
-The module's own calls divide in two. `write` and `create_dir_all` read a path
-before acting on it — `write` to refuse a target that is not a regular file,
-`create_dir_all` to find out whether the path the host answered `Exist` for is
-a directory — so each has a window another writer can act in. Every other call
-is one the host settles on its own: one `open_at`, one `rename_at`, one
-`unlink_file_at`. `read` checks that it has a regular file by asking the open
-descriptor, not by resolving the path a second time, so its refusal has no
-window at all. `write`'s temporary file is `Create | Exclusive`, which is the
-host deciding a name rather than this module checking one.
+Two calls here have such a window inside them. `write` reads the path to refuse
+a target that is not a regular file, then renames over it. `create_dir_all`
+reads a component the host answered `Exist` for, to find out whether it is a
+directory. In each, a writer that changes the path inside the window gets the
+action rather than the refusal.
 
-`remove_dir_all` and `walk_dir` are the third shape: they act on a listing, so
-a tree that changes mid-walk answers partly from before and partly from after.
-A `remove_dir_all` whose tree grows under it leaves the root `Io(NotEmpty)`.
+Every other call is one the host settles by itself: one `open_at`, one
+`rename_at`, one `unlink_file_at`. `read` refuses a directory by asking the
+descriptor it opened, not by resolving the path a second time. `write` creates
+its temporary file with `Create | Exclusive`, which is the host deciding a name
+rather than this module checking one.
 
-What none of these windows can do is leave the preopen. Every path opens with
+`remove_dir_all` and `walk_dir` are a third shape. Each acts on a listing, so a
+tree that changes mid-walk answers partly from before and partly from after. A
+`remove_dir_all` whose tree grows under it leaves the root `Io(NotEmpty)`.
+
+None of these windows reaches outside the preopen. Every path opens with
 `PathFlags::none()`, and a directory entry that is a symlink is `Other` rather
-than `Directory`, so the swap that turns `rm -rf` into a way out of a sandbox
-gets `Io(Loop)` or an unlinked link, never a walk through it. That is the one
-property here worth a test rather than a sentence, and it has one.
+than `Directory`. So the swap that turns `rm -rf` into a way out of a sandbox
+gets `Io(Loop)` or unlinks the link instead. A test covers that, because it is
+the one property here a wrong answer would make dangerous.
 
-Closing the two windows is not this module's to do: `wasi:filesystem` has no
-rename that validates its destination, and none of its creates would serve as
-the check. So the doc comments say where each window is, and a caller that
-cannot tolerate one owns the directory it writes in.
+Neither window is this module's to close. `wasi:filesystem` has no rename that
+validates its destination, and none of its creates reports what it found. So
+each doc comment says where its window is, and a caller that cannot tolerate
+one owns the directory it writes in.
 
 ### `exists` answers `false`, `try_exists` answers why
 
-`exists` folds everything that stopped the look into `false`, and `try_exists`
-reports it, with only "nothing is there" answering `false`. Rust splits the same
-pair the same way, down to which one is the short name, and a caller reaching
-for the short one is usually about to act on the answer anyway — where the act
-itself is the better question. So the split is Rust's, and both doc comments
-point at acting instead.
+`exists` folds everything that stopped the look into `false`. `try_exists`
+reports it, and answers `false` only for "nothing is there". Rust splits the
+pair the same way and gives the short name to the folding one, so this does
+too.
+
+A caller reaching for either is usually about to act on the answer, and the act
+is the better question. Both doc comments say so.
 
 ### The `wasi:*` names in these signatures are re-exported
 
-A caller of this module names `Preopens` in every `with` clause it writes, and
-reads `ErrorCode` out of an `Io` error. Importing `wasi:filesystem` for those is
-importing a module the caller was given this one to avoid. So `core:fs`
+A caller of this module writes `Preopens` in every `with` clause and reads
+`ErrorCode` out of an `Io` error. Importing `wasi:filesystem` for those two
+names is importing the module this one exists to replace. So `core:fs`
 re-exports what its own signatures carry: `Preopens`, `Descriptor` and
 `ErrorCode` from `wasi:filesystem`, and `Instant` from `wasi:clocks`.
 
-A file that calls `wasi:filesystem` itself still imports it — `example/cat.wado`
-and `package-gale/src/main.wado` stream and search grants, which this module
-does not do. The re-export is for the caller that only needed the name.
+A file that calls `wasi:filesystem` itself still imports it. `example/cat.wado`
+streams and `package-gale/src/main.wado` searches every grant, and this module
+does neither. The re-export is for the caller that only needed the name.
 
 ### A walk is a list, because an iterator may not perform I/O
 
