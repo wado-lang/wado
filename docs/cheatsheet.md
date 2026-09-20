@@ -1571,6 +1571,8 @@ fs::write("build/out.json", &text)?;             // any AsByteSlice; creates/tru
 fs::create_dir_all("build/reports")?;            // mkdir -p
 fs::create_dir("build/reports/today")?;          // one level; parent must exist
 fs::remove_file("build/stale.txt")?;
+fs::remove_dir("build/empty")?;                  // the directory must be empty
+fs::remove_dir_all("build/site")?;               // rm -rf; a missing path is Ok
 
 for let entry of fs::read_dir("src")? {          // DirEntry { name, type }
     if entry.type matches { Directory } { continue; }

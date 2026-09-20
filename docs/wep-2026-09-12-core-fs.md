@@ -44,6 +44,8 @@ pub fn remove_file(path: &String) -> Result<(), FsError> with Preopens;
 pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens;
 pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens;
 pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens;
+pub fn remove_dir(path: &String) -> Result<(), FsError> with Preopens;
+pub fn remove_dir_all(path: &String) -> Result<(), FsError> with Preopens;
 ```
 
 ### Paths, not descriptors
@@ -128,17 +130,51 @@ on purpose.
 buffer first. A writer that calls `content.bytes().collect()` pays for that
 copy.
 
-Deliberately absent: append, rename, symlink, `remove_dir`, metadata / `stat`,
-file times, permissions, random access, and reading a file that does not fit in
-memory. Each is `wasi:filesystem` through `root()`. They are out because no
-caller in the repository needs them, not because they would not fit.
+Deliberately absent: append, rename, symlink, metadata / `stat`, file times,
+permissions, random access, and reading a file that does not fit in memory.
+Each is `wasi:filesystem` through `root()`. They are out because no caller
+needs them, not because they would not fit.
+
+### A tree comes down the way it went up
+
+`create_dir` and `create_dir_all` build a tree, so `remove_dir` and
+`remove_dir_all` take one down
+([#2061](https://github.com/wado-lang/wado/issues/2061)). Without them a walk
+cannot finish: `read_dir` names the directories and no call removes them, so
+clearing an output tree drops back to `root()` for the one operation in the set
+that is missing.
+
+The names and the split are Rust's. `remove_dir` hands the host's answer back,
+so a directory that still holds an entry is `Io(NotEmpty)`, and
+`remove_dir_all` walks `read_dir` itself, removing an entry that is not a
+directory with `remove_file`. A symlink is `Other` there and is unlinked rather
+than followed, which is what the `PathFlags::none()` of every other operation
+already says.
+
+Two departures from Rust, both from this module's own shape:
+
+- A path that names nothing is not a failure for `remove_dir_all`, as a
+  `create_dir_all` finding the directory already there is not. The postcondition
+  is that the tree is gone, and a caller that clears its output before writing
+  it would otherwise match `NotFound` on every first run. `remove_dir` keeps the
+  strict reading, so the caller that wants to know still has one.
+- `""` and `"."` are `Io(NotPermitted)` for both. They name the preopen, which
+  is the root every path resolves against, and no `wado run --dir` grant is a
+  reason to let a typo empty the working directory. A caller that means it walks
+  `read_dir("")` and removes each entry.
+
+A `recursive: bool = false` parameter on one function would collapse the pair,
+and defaults are trailing so it would fit. It is not taken: Wado has no named
+arguments ([WEP: Default Arguments](./wep-2026-04-11-default-arguments.md)), so
+the call site reads `remove_dir(path, true)` and the flag that decides whether
+a tree survives is spelled as a bare `true`.
 
 ## Roadmap
 
 1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, tested by
    `lib/core/fs_test.wado` beside it: the round trips, `NotFound`, `NotUtf8`,
-   the nested `create_dir_all` / `read_dir` / `remove_file` path, and the empty
-   path. `wado test` preopens the working directory, so each test owns a
+   the nested `create_dir_all` / `read_dir` / `remove_file` path, the removal of
+   a tree, and the empty path. `wado test` preopens the working directory, so each test owns a
    directory under `target/` and reads only what it wrote there. Done when that
    file passes at every optimization level.
 2. The call sites the issue names: `package-gale/tools/rust_corpus.wado`,

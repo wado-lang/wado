@@ -42,7 +42,7 @@ test "a path that names nothing is NotFound" {
 test "create_dir creates one directory, and will not take an occupied path" {
     let dir = scratch(&"create-dir");
     let path = `${dir}/one`;
-    remove_dir(&path);
+    let _ = fs::remove_dir(&path);
     fs::create_dir(&path).unwrap();
     assert fs::read_dir(&path).unwrap().is_empty();
     assert fs::create_dir(&path).unwrap_err().kind matches { Io(Exist) };
@@ -52,13 +52,6 @@ test "create_dir needs the parent to be there" {
     let dir = scratch(&"create-dir-parent");
     let e = fs::create_dir(`${dir}/absent/child`).unwrap_err();
     assert e.kind matches { NotFound };
-}
-
-/// Remove the directory `path` names, which a previous run left behind. The
-/// module does not remove a directory, so this is WASI's own call.
-fn remove_dir(path: &String) with Preopens {
-    let root = fs::root().unwrap();
-    let _ = root.remove_directory_at(*path).wait();
 }
 
 test "create_dir_all creates every parent, and repeating it is not an error" {
@@ -129,6 +122,62 @@ test "remove_file removes it" {
     fs::write(&path, &"doomed").unwrap();
     fs::remove_file(&path).unwrap();
     assert fs::read(&path).is_err();
+}
+
+test "remove_dir removes an empty directory" {
+    let dir = scratch(&"remove-dir");
+    let path = `${dir}/empty`;
+    fs::create_dir_all(&path).unwrap();
+    fs::remove_dir(&path).unwrap();
+    assert fs::read_dir(&path).unwrap_err().kind matches { NotFound };
+}
+
+test "remove_dir leaves a directory that has anything in it" {
+    let dir = scratch(&"remove-dir-not-empty");
+    fs::create_dir_all(`${dir}/full`).unwrap();
+    fs::write(`${dir}/full/leaf.txt`, &"leaf").unwrap();
+    assert fs::remove_dir(`${dir}/full`).unwrap_err().kind matches { Io(NotEmpty) };
+    assert fs::read_to_string(`${dir}/full/leaf.txt`).unwrap() == "leaf";
+}
+
+test "remove_dir on a path that names nothing is NotFound" {
+    let dir = scratch(&"remove-dir-missing");
+    assert fs::remove_dir(`${dir}/absent`).unwrap_err().kind matches { NotFound };
+}
+
+test "remove_dir_all takes the whole tree down" {
+    let dir = scratch(&"remove-dir-all");
+    let root = `${dir}/tree`;
+    fs::create_dir_all(`${root}/a/b/c`).unwrap();
+    fs::write(`${root}/top.txt`, &"top").unwrap();
+    fs::write(`${root}/a/mid.txt`, &"mid").unwrap();
+    fs::write(`${root}/a/b/c/leaf.txt`, &"leaf").unwrap();
+
+    fs::remove_dir_all(&root).unwrap();
+    assert fs::read_dir(&root).unwrap_err().kind matches { NotFound };
+    assert fs::read_dir(&dir).unwrap().is_empty();
+}
+
+test "remove_dir_all on a path that names nothing is not a failure" {
+    let dir = scratch(&"remove-dir-all-missing");
+    fs::remove_dir_all(`${dir}/absent`).unwrap();
+    fs::remove_dir_all(`${dir}/absent/deeper`).unwrap();
+}
+
+test "remove_dir_all is not a way to remove a file" {
+    let dir = scratch(&"remove-dir-all-file");
+    let path = `${dir}/raw.bin`;
+    fs::write(&path, &"not a directory").unwrap();
+    assert fs::remove_dir_all(&path).unwrap_err().kind matches { Io(NotDirectory) };
+    assert fs::read_to_string(&path).unwrap() == "not a directory";
+}
+
+test "neither removal takes the preopened directory itself" {
+    assert fs::remove_dir("").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir(".").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all(".").unwrap_err().kind matches { Io(NotPermitted) };
+    assert !fs::read_dir(".").unwrap().is_empty();
 }
 
 test "root answers the preopened directory" {

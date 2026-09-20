@@ -64,6 +64,22 @@ Write `data` to `path`, creating it or truncating what is there.
 Remove the file `path` names. A directory is not a file: `remove_file` on
 one fails rather than removing it.
 
+### `pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
+
+Remove the directory `path` names, which has to be empty: one that still
+holds an entry is `Io(NotEmpty)`, and [`remove_dir_all`] is the call that
+takes a tree down.
+
+### `pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
+
+Remove the directory `path` names and everything under it.
+
+A path that names nothing is not a failure, as a `create_dir_all` finding
+the directory already there is not: either way the tree is gone when the
+call returns. Rust's `remove_dir_all` reports that case instead. A path
+that names something other than a directory is `Io(NotDirectory)`, and a
+symlink under the tree is removed rather than followed.
+
 ### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 
 Every entry of the directory `path` names, in the order the host lists
