@@ -50,11 +50,11 @@ const STEPS: usize = 32;
 // reaches on this corpus.
 const SAMPLES: usize = 24;
 const TEMPERATURE: f64 = 0.5;
+// Python seeds Mersenne Twister, so this draws different numbers than the original.
 const SEED: u64 = 42;
 
-// Let there be a deterministic source of chaos: `core:prng`'s, so the Wado arm
-// matches — `Seed::from_u64` expands through SplitMix64, `Xoshiro256pp` draws,
-// Box-Muller shapes. Python seeds Mersenne Twister, so the two draw differently.
+// Let there be a deterministic source of chaos. This is `core:prng`'s, which the
+// Wado arm draws from: SplitMix64 expands the seed, then xoshiro256++ runs.
 fn splitmix(state: &mut u64) -> u64 {
     *state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
     let mut z = *state;

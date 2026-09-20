@@ -22,17 +22,18 @@ global STEPS: i32 = 32;
 // reaches on this corpus.
 global SAMPLES: i32 = 24;
 global TEMPERATURE: f64 = 0.5;
+// Python seeds Mersenne Twister, so this draws different numbers than the original.
 global SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos. `core:prng` carries no shape but
-// the uniform one, and only the package owning a type may write it an inherent impl.
-// Python seeds Mersenne Twister, so the two draw different numbers.
-trait Sampling with () {
-    fn gauss(&mut self, std: f64) -> f64;
-    fn choice(&mut self, weights: &List<f64>) -> i32;
-}
+// the uniform one, and a newtype over its engine is local enough to extend.
+type Sampler = Xoshiro256pp;
 
-impl Sampling for Xoshiro256pp {
+impl Sampler {
+    fn new() -> Sampler {
+        return Xoshiro256pp::from_seed(Seed::from_u64(SEED)) as Sampler;
+    }
+
     fn gauss(&mut self, std: f64) -> f64 {
         let mut u = self.random_f64();
         while u <= 0.0 {
@@ -57,10 +58,6 @@ impl Sampling for Xoshiro256pp {
         }
         return weights.len() - 1;
     }
-}
-
-fn new_rng() -> Xoshiro256pp {
-    return Xoshiro256pp::from_seed(Seed::from_u64(SEED));
 }
 
 // Let there be Autograd to recursively apply the chain rule through a
@@ -242,7 +239,7 @@ global BLOCK_SIZE: i32 = 16;
 global N_HEAD: i32 = 4;
 global HEAD_DIM: i32 = N_EMBD / N_HEAD;
 
-fn matrix(g: &mut Graph, rng: &mut Xoshiro256pp, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> {
+fn matrix(g: &mut Graph, rng: &mut Sampler, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> {
     let mut rows: List<List<&mut Value>> = [];
     for let _ of 0..<nout {
         let mut row: List<&mut Value> = [];
@@ -272,7 +269,7 @@ struct StateDict {
 }
 
 impl StateDict {
-    fn new(g: &mut Graph, rng: &mut Xoshiro256pp, vocab_size: i32) -> StateDict {
+    fn new(g: &mut Graph, rng: &mut Sampler, vocab_size: i32) -> StateDict {
         let wte = matrix(g, rng, vocab_size, N_EMBD);
         let wpe = matrix(g, rng, BLOCK_SIZE, N_EMBD);
         let lm_head = matrix(g, rng, vocab_size, N_EMBD);
@@ -484,7 +481,7 @@ global DOCS: List<String> = [
 
 // One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
 fn train(steps: i32) -> f64 {
-    let mut rng = new_rng();
+    let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
     let mut g = Graph::new();
     let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
@@ -506,7 +503,7 @@ fn train(steps: i32) -> f64 {
 
 // Unlike the example's `generate`, this never stops early on a BOS draw: the
 // position count has to be fixed for the throughput figure to mean anything.
-fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Xoshiro256pp) -> String {
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Sampler) -> String {
     let n_params = g.len();
     let mut keys = empty_cache();
     let mut values = empty_cache();
@@ -530,7 +527,7 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Xoshiro
 // Weights steer which token is drawn, never what a position costs, so an
 // untrained model times the same as a trained one and the phase stands alone.
 fn infer(samples: i32) -> String {
-    let mut rng = new_rng();
+    let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
     let mut g = Graph::new();
     let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);

@@ -33,11 +33,11 @@ const STEPS = 32;
 // reaches on this corpus.
 const SAMPLES = 24;
 const TEMPERATURE = 0.5;
+// Python seeds Mersenne Twister, so this draws different numbers than the original.
 const SEED = 42n;
 
-// Let there be a deterministic source of chaos: `core:prng`'s, so the Wado arm
-// matches — `Seed::from_u64` expands through SplitMix64, `Xoshiro256pp` draws,
-// Box-Muller shapes. Python seeds Mersenne Twister, so the two draw differently.
+// Let there be a deterministic source of chaos. This is `core:prng`'s, which the
+// Wado arm draws from: SplitMix64 expands the seed, then xoshiro256++ runs.
 const MASK64 = (1n << 64n) - 1n;
 
 function rotl(x, n) {
