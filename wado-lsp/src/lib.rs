@@ -28,6 +28,7 @@ use wado_compiler::kiln::InvocationIndex;
 use wado_compiler::semantics::Semantics;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, LogLevel};
 
+use crate::host::install_dev_stdlib;
 use crate::query::QueryContext;
 
 pub use definition::DefinitionResult;
@@ -190,6 +191,7 @@ impl Document {
 impl Engine {
     #[must_use]
     pub fn new() -> Self {
+        install_dev_stdlib();
         Self {
             documents: IndexMap::new(),
             position_encoding: PositionEncoding::default(),
