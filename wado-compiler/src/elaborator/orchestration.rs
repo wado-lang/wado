@@ -3278,9 +3278,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Self::resolve_type_static_with_params(ty, type_table, lookup, &[])
     }
 
-    /// Static version of `resolve_type` with type parameters for variant payload resolution.
-    /// This is similar to `resolve_type_static` but also handles type parameters (like T, E)
-    /// that appear in generic variant definitions (like `Result<T, E>`).
+    /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
+    /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,

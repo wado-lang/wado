@@ -662,11 +662,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Resolve a global's declared type to a [`TypeId`] without recording any
-    /// use→def edge; annotate recorded them during its body walk.
-    // Its one caller reads a declaration, whose scope is its module — never the
-    // type parameters of whatever body referenced it.
-    fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
+    /// A global's declared type, resolved without recording a use→def edge;
+    /// annotate recorded them during its body walk.
+    // Read in the declaration's own module scope, never in the type parameters
+    // of whatever body referenced the global.
+    fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
         let resolved = Elaborator::<H>::resolve_type_static(
             ty,
@@ -9170,9 +9170,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
             // type from the AST — the one re-resolution the completeness rule
-            // sanctions (WEP 2026-05-26 §"Reify — mechanical"), and reify's
-            // only `resolve_type` call site.
-            let ty = self.resolve_type(&global_decl.ty);
+            // sanctions (WEP 2026-05-26 §"Reify — mechanical").
+            let ty = self.resolve_global_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),

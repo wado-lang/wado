@@ -3019,9 +3019,9 @@ impl TraitMethodMatch {
 /// One type-parameter slot as a declaration-level resolver sees it: the name
 /// filling it and the bounds that say what `T::Assoc` means.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct ParamSlot {
-    pub(crate) name: String,
-    pub(crate) bounds: Vec<ast::TraitBound>,
+pub(super) struct ParamSlot {
+    pub(super) name: String,
+    pub(super) bounds: Vec<ast::TraitBound>,
 }
 
 impl From<&ast::GenericParam> for ParamSlot {
