@@ -475,12 +475,16 @@ purity gate. It would cover what the in-process engine balks at: recursion beyon
 a base case, `fib(20)`-shaped work, lookup-table generation. The cost is ms per
 call against `niri`'s µs, amortized through a module cache.
 
-Four things stand against it. `wado-compiler` must compile to
-`wasm32-unknown-unknown` and cannot link a runtime, so execution has to leave the
-crate, as Kiln generator execution already does. The host's generator entry point
-is async and the optimizer's fixed-point loop is not. Evaluating a call made
-while compiling needs a compiled module, which is circular. And no module-cache
-lifetime is settled.
+Four things stand against it:
+
+- `wado-compiler` must compile to `wasm32-unknown-unknown` and cannot link a
+  runtime, so execution has to leave the crate, as Kiln generator execution
+  already does.
+- The host's generator entry point is async and the optimizer's fixed-point loop
+  is not.
+- Evaluating a call made while compiling needs a compiled module, which is
+  circular.
+- No module-cache lifetime is settled.
 
 Unowned because the demand is not visible. No benchmark, stdlib path or corpus
 program exhibits recursion over constants, and

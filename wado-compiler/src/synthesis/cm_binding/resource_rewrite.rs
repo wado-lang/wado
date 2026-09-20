@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use crate::ast::{AstId, NamedType, Type};
 use crate::compiler_item::CompilerItem;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
@@ -29,11 +29,13 @@ use crate::synthesis::common::{
 };
 
 use super::synthesize_lift;
-use super::types::{CmStdlibNames, LiftContext, LowerContext, binary_add, type_id_to_ast_type};
+use super::types::{
+    CmStdlibNames, LiftContext, LowerContext, binary_add, cm_layout_i32, type_id_to_ast_type,
+};
 use crate::ast::{GenericType, Visibility};
 use crate::component_model::{
-    classify_future_payload, classify_stream_payload, cm_layout_with_registry,
-    cm_payload_type_from_type_id, is_u8_stream_element, peel_newtypes,
+    classify_future_payload, classify_stream_payload, cm_payload_type_from_type_id,
+    is_u8_stream_element, peel_newtypes,
 };
 use crate::flat_package::FlatPackage;
 use crate::synthesis::cm_binding::lower::{
@@ -310,7 +312,7 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
     let registry = ctx.cm_interface_registry;
     let elem_name = ctx.type_table.borrow().base_type_name(elem_type_id);
     let source = registry
-        .find_binding_struct_source(&elem_name)
+        .find_binding_source(CmTypeKind::Struct, &elem_name)
         .unwrap_or_else(|| {
             panic!(
                 "record `{elem_name}` used as a stream-read element has no defining \
@@ -334,9 +336,8 @@ fn synthesize_record_stream_read_func(elem_type_id: TypeId, ctx: &SynthCtx) -> T
         span: synth_span(),
     });
     let (_, elem_pkg) = cm_package_from_source(&source)
-        .expect("`find_binding_struct_source` yields only bundled-namespace sources");
-    let (elem_size, elem_align) = cm_layout_with_registry(&ast_type, registry);
-    let (elem_size, elem_align) = (elem_size as i32, elem_align as i32);
+        .expect("`find_binding_source` yields only bundled-namespace sources");
+    let (elem_size, elem_align) = cm_layout_i32(&ast_type, registry);
     // The same fallback the other builder of this declaration uses: one
     // declaration renders to one CM name, whichever site reaches it first.
     let cm_record_name = registry
@@ -572,8 +573,8 @@ fn synthesize_stream_write_func(elem_type_id: TypeId, ctx: &SynthCtx) -> TirFunc
         let payload = classify_stream_payload(&tt, elem_type_id);
         let write_name = CanonicalIntrinsic::StreamWrite(payload);
         let elem_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
-        let (size, align) = cm_layout_with_registry(&elem_ast, cm_interface_registry);
-        (func_name, write_name, elem_ast, size as i32, align as i32)
+        let (size, align) = cm_layout_i32(&elem_ast, cm_interface_registry);
+        (func_name, write_name, elem_ast, size, align)
     };
 
     let mut next_local: u32 = 0;
@@ -797,7 +798,7 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
         let write_name = CanonicalIntrinsic::FutureWrite(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
-        let (size, align) = cm_layout_with_registry(&payload_ast, cm_interface_registry);
+        let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
         let awaits_reader = matches!(
             payload,
             CmFuturePayload::Trailers | CmFuturePayload::Transmission(_)
@@ -807,8 +808,8 @@ fn synthesize_future_write_func(payload_type_id: TypeId, ctx: &SynthCtx) -> TirF
             write_name,
             cm_package,
             payload_ast,
-            size as i32,
-            align as i32,
+            size,
+            align,
             awaits_reader,
         )
     };
@@ -1015,15 +1016,8 @@ fn synthesize_future_read_func(
         let read_name = CanonicalIntrinsic::FutureRead(payload.clone());
         let cm_package = future_payload_package(&payload);
         let payload_ast = payload_ast_type(payload_type_id, &tt, cm_interface_registry);
-        let (size, align) = cm_layout_with_registry(&payload_ast, cm_interface_registry);
-        (
-            func_name,
-            read_name,
-            cm_package,
-            payload_ast,
-            size as i32,
-            align as i32,
-        )
+        let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
+        (func_name, read_name, cm_package, payload_ast, size, align)
     };
 
     let mut next_local: u32 = 0;
@@ -1609,8 +1603,8 @@ fn synthesize_stream_read_value_func(elem_type_id: TypeId, ctx: &SynthCtx) -> Ti
         let payload = classify_stream_payload(&tt, elem_type_id);
         let read_name = CanonicalIntrinsic::StreamRead(payload);
         let payload_ast = payload_ast_type(elem_type_id, &tt, cm_interface_registry);
-        let (size, align) = cm_layout_with_registry(&payload_ast, cm_interface_registry);
-        (func_name, read_name, payload_ast, size as i32, align as i32)
+        let (size, align) = cm_layout_i32(&payload_ast, cm_interface_registry);
+        (func_name, read_name, payload_ast, size, align)
     };
 
     synthesize_stream_read_func(

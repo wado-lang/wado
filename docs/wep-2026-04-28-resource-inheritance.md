@@ -734,7 +734,7 @@ An extern-handle would rather be a Wasm GC `externref`: the collector would recl
 
 The Component Model is. Its value types include no reference type; `own` and `borrow` are the only handle types and both carry the obligations §"Why this is hard" describes; and a resource's representation is validated to `i32` or `i64`. Nor is there a side door: `externtype` admits a `core module` import but no `core func`, and a component satisfies an imported module's own imports from its core index spaces, which bottom out at `canon lower` — so host code is reachable only through the canonical ABI. CM-GC changes the representation of `own` / `borrow`, not their semantics.
 
-So nothing inside the component target reaches it. An `externref`-typed host import belongs to a core module, which is how `wasm-bindgen` reaches the same APIs. A core module target costs the CM machinery the web target rides on, including the jco transpile path [Tide](./wep-2026-04-01-tide.md) assumes.
+Nothing inside the component target reaches it. An `externref`-typed host import belongs to a core module, which is how `wasm-bindgen` reaches the same APIs. Targeting a core module would give up the CM machinery the web target rides on, including the jco transpile path [Tide](./wep-2026-04-01-tide.md) assumes.
 
 ## See Also
 

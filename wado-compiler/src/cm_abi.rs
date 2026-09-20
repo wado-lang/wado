@@ -9,7 +9,7 @@
 #[cfg(test)]
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
-use crate::component_model::{CmInterfaceRegistry, CmPrimitiveType, cm_layout_with_registry};
+use crate::component_model::{CmInterfaceRegistry, cm_layout_with_registry};
 #[cfg(test)]
 use crate::token::Span;
 
@@ -75,9 +75,13 @@ impl CmLayout {
     }
 }
 
+/// The case count `option` and `result` lay out with, so their discriminant
+/// takes its width where every other variant's does.
+pub const OPTION_OR_RESULT_CASES: usize = 2;
+
 /// Layout for a tuple. A record lays out the same way, as a tuple of its field
 /// types.
-pub fn layout_tuple(elements: &[Type]) -> CmLayout {
+fn layout_tuple(elements: &[Type]) -> CmLayout {
     layout_fields_by(elements.iter(), plain_size_align)
 }
 
@@ -170,7 +174,7 @@ fn cm_align_generic(generic: &GenericType) -> u32 {
 
 /// Layout for a variant: the discriminant `case_count` calls for, then the
 /// payload-bearing cases at one shared offset. `offsets` is `[disc, payload]`.
-pub fn layout_variant<'a>(case_count: usize, payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
+fn layout_variant<'a>(case_count: usize, payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
     layout_variant_by(case_count, payloads, plain_size_align)
 }
 
@@ -199,13 +203,13 @@ fn layout_variant_by<'a>(
 }
 
 /// Layout for `option<T>`.
-pub fn layout_option(inner: &Type) -> CmLayout {
-    layout_variant(2, std::iter::once(inner))
+fn layout_option(inner: &Type) -> CmLayout {
+    layout_variant(OPTION_OR_RESULT_CASES, std::iter::once(inner))
 }
 
 /// Layout for `result<T, E>`.
-pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
-    layout_variant(2, [ok, err].into_iter())
+fn layout_result(ok: &Type, err: &Type) -> CmLayout {
+    layout_variant(OPTION_OR_RESULT_CASES, [ok, err].into_iter())
 }
 
 /// Registry-aware [`layout_variant`]. A variant whose cases carry no payload
@@ -222,7 +226,7 @@ pub fn layout_variant_with_registry<'a>(
 
 /// Registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry(inner: &Type, registry: &CmInterfaceRegistry) -> CmLayout {
-    layout_variant_with_registry(2, std::iter::once(inner), registry)
+    layout_variant_with_registry(OPTION_OR_RESULT_CASES, std::iter::once(inner), registry)
 }
 
 /// Registry-aware layout for `result<T, E>`.
@@ -231,7 +235,7 @@ pub fn layout_result_with_registry(
     err: &Type,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
-    layout_variant_with_registry(2, [ok, err].into_iter(), registry)
+    layout_variant_with_registry(OPTION_OR_RESULT_CASES, [ok, err].into_iter(), registry)
 }
 
 /// The offset a variant's case payloads start at, for a caller needing no size.
@@ -337,62 +341,6 @@ pub fn join_flat_unions(a: &[CmValType], b: &[CmValType]) -> Vec<CmValType> {
     (0..a.len().max(b.len()))
         .map(|i| CmValType::join(a.get(i).copied(), b.get(i).copied()))
         .collect()
-}
-
-/// For tuple return types, return the list of `CmPrimitiveType`s.
-/// Returns `None` if the type is not a tuple or not all elements are primitives.
-pub fn cm_tuple_primitive_types(ty: &Type) -> Option<Vec<CmPrimitiveType>> {
-    use crate::component_model::CmPrimitiveType;
-    let elements = match ty {
-        Type::Tuple(elems) if !elems.is_empty() => elems,
-        _ => return None,
-    };
-    let mut prims = Vec::new();
-    for elem in elements {
-        match elem {
-            Type::Named(n) => match n.name.as_str() {
-                "i32" => prims.push(CmPrimitiveType::I32),
-                "i64" => prims.push(CmPrimitiveType::I64),
-                "u32" => prims.push(CmPrimitiveType::U32),
-                "u64" => prims.push(CmPrimitiveType::U64),
-                "f32" => prims.push(CmPrimitiveType::F32),
-                "f64" => prims.push(CmPrimitiveType::F64),
-                // Resource types, enums → i32 handle in CM ABI
-                _ => prims.push(CmPrimitiveType::I32),
-            },
-            // Future, Stream, Own, Borrow → i32 handle in CM ABI
-            Type::Generic(g)
-                if matches!(g.name.as_str(), "Future" | "Stream" | "Own" | "Borrow") =>
-            {
-                prims.push(CmPrimitiveType::I32);
-            }
-            _ => return None,
-        }
-    }
-    Some(prims)
-}
-
-/// For result<T, E> return types, return `(ok_is_resource, err_is_enum)`.
-/// Returns `None` if the type is not a Result.
-pub fn cm_result_return_info(ty: &Type) -> Option<(bool, bool)> {
-    let Type::Generic(g) = ty else { return None };
-    if g.name != "Result" || g.args.len() != 2 {
-        return None;
-    }
-    let ok_type = &g.args[0];
-    let err_type = &g.args[1];
-
-    // Both unit → still a result but with no payload
-    let ok_is_resource = matches!(ok_type, Type::Named(n) if !matches!(
-        n.name.as_str(),
-        "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String" | "()"
-    ));
-    let err_is_enum = matches!(err_type, Type::Named(n) if !matches!(
-        n.name.as_str(),
-        "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "f32" | "f64" | "bool" | "char" | "String" | "()"
-    ));
-
-    Some((ok_is_resource, err_is_enum))
 }
 
 /// Helper: create a `Type::Named` with a dummy span. Useful for tests.

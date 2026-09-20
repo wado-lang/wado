@@ -228,9 +228,8 @@ fix to conform; none should be preserved.
     write-back is an `index_assign` to synthesize, and that resolves in the
     elaborator — trait impl, mangled name, recorded dispatch. A lowering pass
     reaching it would repeat trait resolution, which is why the carve-out lists
-    index-element and struct-field separately. Refusing outright is not open,
-    since
-    `normalize_element(&mut alt.elements[ei])` lands.
+    index-element and struct-field separately. Refusing the whole shape is not
+    an option either, since `normalize_element(&mut alt.elements[ei])` lands.
     A `&mut self` receiver takes the same borrow, so it waits on the same
     write-back: `xs[i].m()` is refused where `m` replaces the element, and the
     call the carve-out unblocks is spelled either way.

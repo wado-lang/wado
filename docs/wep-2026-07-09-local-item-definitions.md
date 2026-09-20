@@ -108,8 +108,8 @@ local `impl` needs both.
   `TypeId` is interned _during_ that walk, so its method signatures cannot
   exist before the freeze.
 
-Two further properties bear on it. The orphan rule reads a function-local target
-as foreign, because `type_decl_index` holds module-level declarations only. And a
-`TraitEnv` that reaches a local block while `Signatures` does not is worse than
-the gap: the header resolves where no signature exists, so the diagnostic becomes
-a panic.
+Two things reach past the two registries. The orphan rule reads a function-local
+target as foreign, because `type_decl_index` holds module-level declarations
+only. And a `TraitEnv` that reaches a local block while `Signatures` does not is
+worse than the gap: the header resolves where no signature exists, so the
+diagnostic becomes a panic.

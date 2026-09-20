@@ -8,7 +8,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::Type;
-use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry};
+use crate::component_model::{CmFunctionInfo, CmInterfaceRegistry, CmTypeKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::{DeclName, DeclPath};
@@ -1020,7 +1020,8 @@ fn rewrite_calls_in_expr(
         // Resolve through type aliases (e.g., Headers -> Fields), scoped to the
         // bundled CM namespaces.
         if !adapters.contains_key(&qualified)
-            && let Some(source) = cm_interface_registry.find_binding_newtype_source(&head)
+            && let Some(source) =
+                cm_interface_registry.find_binding_source(CmTypeKind::Newtype, head.as_decl_str())
             && let Some(Type::Named(resolved)) =
                 cm_interface_registry.get_newtype_by_source(source, &head)
         {
@@ -1412,7 +1413,7 @@ impl TirRefVisitor for EffectCallCollector<'_> {
                         self.effects.insert(qualified);
                     } else if let Some(source) = self
                         .cm_interface_registry
-                        .find_binding_newtype_source(&head)
+                        .find_binding_source(CmTypeKind::Newtype, head.as_decl_str())
                         && let Some(Type::Named(resolved)) = self
                             .cm_interface_registry
                             .get_newtype_by_source(source, &head)

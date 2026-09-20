@@ -173,5 +173,5 @@ caller in the repository needs them, not because they would not fit.
   reading one fails with `Loop`. What a link pointing out of the preopen means is
   undecided.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
-  as `path: ErrorCode::Access` rather than as prose. Wording all 40 `ErrorCode`s
-  is wording the ones no caller branches on.
+  as `path: ErrorCode::Access` rather than as prose. Prose would need a message
+  for each of the 40 `ErrorCode`s, most of which no caller branches on.

@@ -71,9 +71,9 @@ What follows:
 ## Known gaps
 
 - A view passed to a function the inliner leaves alone is still materialized.
-  `docs/optimizer.md` lists argument promotion — a callee taking an aggregate by
-  value and only reading its fields taking the fields instead — as not
-  implemented.
+  `docs/optimizer.md` lists argument promotion as not implemented: a callee that
+  takes an aggregate by value and only reads its fields would take the fields
+  instead.
 - `String::push_str_range_unchecked` still takes a `(text, start, end)` triple
   rather than a view, and Kiln's generated parsers call it.
 - A cast between two references whose referents share one representation head

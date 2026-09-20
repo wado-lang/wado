@@ -21,12 +21,11 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
     cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
     flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
@@ -631,9 +630,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
-    let (elem_size, elem_align) =
-        cm_layout_with_registry(&elem_resolved, ctx.cm_interface_registry);
-    let (elem_size, elem_align) = (elem_size as i32, elem_align as i32);
+    let (elem_size, elem_align) = cm_layout_i32(&elem_resolved, ctx.cm_interface_registry);
     // Take the element TypeId from the list's own type arguments — it is the
     // elaborator-registered type (correct module source), unlike a fresh
     // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and

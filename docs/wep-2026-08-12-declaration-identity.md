@@ -749,26 +749,34 @@ any of them is spelled such that the step could answer.
 
 A reference the Component Model boundary synthesizes carries the interface its
 own declaring module registers, so §9's step answers it. Where a reference
-arrives without one, the registry searches for the name instead: one kind of
-declaration at a time, taking the first kind in which the name has exactly one
-registrant.
+arrives without one, the registry searches for the name instead, one kind of
+declaration at a time, over the one fixed order of the six kinds.
 
 That is all three shapes "What a derivation may not be" forbids at once. The
 search spans every interface in reach; each kind's map answers in registration
 order; and a kind that declines because two interfaces spell the name hands the
-question to the next kind, so which kind is asked first is a silent tiebreak.
-`ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
-`wasi:cli/types`, so the variants decline and the enum answers. That holds for
-any module's `ErrorCode`, including one a user wrote.
+question to the next kind. `ErrorCode` is the instance: a variant in four
+`wasi:` interfaces and an enum in `wasi:cli/types`, so the variants decline and
+the enum answers. That holds for any module's `ErrorCode`, including one a user
+wrote.
 
-A reference arrives without a declaring interface in three positions. A world
-body names an export type that no import resolves. Only the world's own
-namespace scopes such a name, and that namespace does not reach a type another
-package declares. A lib-local type is registered under its package's default
-interface, which no CM namespace covers, so only a program-wide unique match
-reaches it. A reference synthesized while emitting a CM instance carries at most
-the interface being emitted, which need not be the one that declares it. That is
-where `ErrorCode` arrives.
+Two kinds answering with different interfaces is a disagreement, and what it
+yields depends on which search asked. A search scoped to a namespace prefix
+takes the first kind that answers, so the order is a silent tiebreak. A search
+over every kind at once refuses instead, so the name resolves to nothing. Which
+of the two a reference meets follows from where it arrived, not from anything it
+says.
+
+A reference arrives without a declaring interface in three positions:
+
+- A world body names an export type that no import resolves. Only the world's
+  own namespace scopes such a name, and that namespace does not reach a type
+  another package declares.
+- A lib-local type is registered under its package's default interface, which no
+  CM namespace covers, so only a program-wide unique match reaches it.
+- A reference synthesized while emitting a CM instance carries at most the
+  interface being emitted, which need not be the one that declares it. That is
+  where `ErrorCode` arrives.
 
 ## Known gap: an abstract qualifier argument is not compared
 

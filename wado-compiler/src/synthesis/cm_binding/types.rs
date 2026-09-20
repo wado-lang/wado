@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{CmDeclKind, CmInterfaceRegistry, cm_layout_with_registry};
+use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::tir::{
@@ -452,7 +452,7 @@ pub(super) fn canonical_cm_package<'a>(
     registry: &'a CmInterfaceRegistry,
     name: &str,
 ) -> Option<(CmNamespace, &'a str)> {
-    for kind in CmDeclKind::ALL {
+    for kind in CmTypeKind::ALL {
         if let Some(source) = registry.bare_name_owner(kind, name)
             && let Some(found) = cm_package_from_source(source)
         {
@@ -847,11 +847,7 @@ pub fn flatten_param_type(
         .collect()
 }
 
-pub use crate::cm_abi::{cm_discriminant_byte_size, cm_flags_byte_size};
-
-/// `option` and `result` are two-case variants, so their discriminant takes its
-/// width from the same place every other variant's does.
-pub(super) const OPTION_OR_RESULT_CASES: usize = 2;
+pub use crate::cm_abi::{OPTION_OR_RESULT_CASES, cm_discriminant_byte_size, cm_flags_byte_size};
 
 /// Core-wasm load op for a CM discriminant of the given byte size.
 /// Discriminants are unsigned, so 1/2-byte widths zero-extend.
@@ -909,6 +905,13 @@ pub(super) fn cm_param_store_plan(
         Type::Generic(_) => vec![(0, "i32_store")],
         _ => vec![(0, "i32_store")],
     }
+}
+
+/// The CM size and alignment of `ty` as the i32 pair a `realloc` argument or a
+/// buffer stride takes.
+pub(super) fn cm_layout_i32(ty: &Type, registry: &CmInterfaceRegistry) -> (i32, i32) {
+    let (size, align) = cm_layout_with_registry(ty, registry);
+    (size as i32, align as i32)
 }
 
 /// The integer store for one flat value of `ty`, at the width its CM layout

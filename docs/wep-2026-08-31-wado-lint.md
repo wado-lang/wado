@@ -163,8 +163,8 @@ internal-implementation-with-public-facade pattern that
 `pub use`. One rule has to tell them apart, and which rule cannot be worked out
 from the shape alone.
 
-What the forwarder-shaped matches over `package-gale` and the standard library
-actually turn out to be has not been looked at.
+Nobody has run the exact check over `package-gale` and the standard library to
+see what the forwarder-shaped matches actually are.
 
 The minimum body size is the same problem. Below some node count every getter
 collides with every other getter, and no measurement says where that is.

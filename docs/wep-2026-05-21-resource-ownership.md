@@ -516,12 +516,12 @@ aggregates pays a copy of each element even when the loop body only reads it.
 Nothing about the copy is required: the same walk written over `&list`, or as an
 index loop in one body, reads the element in place under the read-only share.
 
-Both halves are in one fixpoint: the recognizer does not see the projection
-through the binding and the variant, and the fold reads the materialization into
-that payload as a copy. Neither the inliner nor any NIR pass can stand in. The
-copy is chosen before NIR exists, and `#[inline(always)]` on `next` leaves the
-expanded clone in the caller's loop untouched even with the cloned array provably
-unread.
+Two halves of the one fixpoint miss it. The recognizer does not see the
+projection through the binding and the variant, and the fold reads the
+materialization into that payload as a copy. Neither the inliner nor any NIR
+pass can stand in: the copy is chosen before NIR exists, and
+`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
+untouched even with the cloned array provably unread.
 
 ### Known gap: a declared retention the walk does not confirm
 
