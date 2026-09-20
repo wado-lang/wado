@@ -197,3 +197,4 @@ omission goes in Decision.
 - [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
+- [Loom — Tensor Compilation for Wado](./wep-2026-09-20-loom.md)
