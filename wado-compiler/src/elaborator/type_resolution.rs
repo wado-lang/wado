@@ -9,6 +9,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::TypeError;
+use super::util::bound_param_name;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
@@ -21,44 +22,43 @@ use crate::tir::TraitRef;
 /// `None` for one the frame wrote itself.
 type FrameBound = (TraitBound, Option<DefId>);
 
+/// An AST type with `replace` applied wherever it answers, and every type it
+/// is written over rewritten the same way where it does not.
+pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Option<Type>) -> Type {
+    if let Some(replacement) = replace(ty) {
+        return replacement;
+    }
+    let at = |ty: &Type| substitute_written_type(ty, replace);
+    match ty {
+        Type::Generic(generic) => Type::Generic(GenericType {
+            id: generic.id,
+            name: generic.name.clone(),
+            args: generic.args.iter().map(at).collect(),
+            span: generic.span,
+        }),
+        Type::NamespacedGeneric(namespaced) => {
+            Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                args: namespaced.args.iter().map(at).collect(),
+                ..(**namespaced).clone()
+            }))
+        }
+        Type::Reference(inner) => Type::Reference(Box::new(at(inner))),
+        Type::MutReference(inner) => Type::MutReference(Box::new(at(inner))),
+        Type::Tuple(elems) => Type::Tuple(elems.iter().map(at).collect()),
+        _ => ty.clone(),
+    }
+}
+
 /// Substitute named type parameters in an AST type.
 /// `params[i]` is replaced by `args[i]` throughout the type.
 pub(super) fn substitute_type_params(ty: &Type, params: &[String], args: &[Type]) -> Type {
-    match ty {
-        Type::Named(named) => {
-            if let Some(i) = params.iter().position(|p| p == &named.name) {
-                args[i].clone()
-            } else {
-                ty.clone()
-            }
-        }
-        Type::Generic(generic) => {
-            let new_args = generic
-                .args
-                .iter()
-                .map(|a| substitute_type_params(a, params, args))
-                .collect();
-            Type::Generic(GenericType {
-                id: generic.id,
-                name: generic.name.clone(),
-                args: new_args,
-                span: generic.span,
-            })
-        }
-        Type::Reference(inner) => {
-            Type::Reference(Box::new(substitute_type_params(inner, params, args)))
-        }
-        Type::MutReference(inner) => {
-            Type::MutReference(Box::new(substitute_type_params(inner, params, args)))
-        }
-        Type::Tuple(elems) => Type::Tuple(
-            elems
-                .iter()
-                .map(|e| substitute_type_params(e, params, args))
-                .collect(),
-        ),
-        _ => ty.clone(),
-    }
+    substitute_written_type(ty, &|ty| match ty {
+        Type::Named(named) => params
+            .iter()
+            .position(|param| param == &named.name)
+            .map(|i| args[i].clone()),
+        _ => None,
+    })
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
@@ -309,13 +309,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
             }
-            if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                && matches!(
-                    self.tysys.type_table.borrow().get(self_type),
-                    ResolvedType::TypeParam { .. }
-                )
+            // A parameter standing in for `Self` carries the frame's bounds
+            // under its own name, so the projection is spelled with it: an
+            // inherited `Make<Self::Base>` read at `T: Constrained` asks the
+            // same question `T::Base` asks.
+            let self_param = self.annotate_ctx.trait_ctx.self_type.and_then(|id| {
+                let name = bound_param_name(self.tysys.type_table.borrow().get(id)).cloned();
+                name.map(|name| (id, name))
+            });
+            if let Some((self_type, param_name)) = self_param
                 && let Some(projection) =
-                    self.make_frame_projection(self_type, "Self", &namespaced.name)
+                    self.make_frame_projection(self_type, &param_name, &namespaced.name)
             {
                 return projection;
             }

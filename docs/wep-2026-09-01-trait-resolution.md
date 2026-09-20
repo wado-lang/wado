@@ -507,6 +507,15 @@ match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
 
+### A bound's trait argument reaches an impl only where it is concrete
+
+A call through `T: Make<U>` asks for `Make` at `U` as the bound spells it, and
+the impl that could answer writes `Make<String>`: the two never meet, whatever
+the call settles `U` to. A projection is the same shape, `T: Make<T::Base>`
+asking at `Base`. So a parameterized trait is reachable through a bound only
+where the bound writes the argument out as a type, and a supertrait clause over
+`Self::Assoc` meets this as soon as a generic body calls through it.
+
 ### Scope gates method calls, not the bounds path
 
 A method call is gated: an impl that applies while its trait is unimported is

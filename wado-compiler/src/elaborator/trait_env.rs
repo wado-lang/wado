@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
-use crate::elaborator::type_resolution::substitute_type_params;
+use crate::elaborator::type_resolution::{substitute_type_params, substitute_written_type};
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -2236,6 +2236,30 @@ pub(super) fn bound_at_args(
                 ..a.clone()
             })
             .collect(),
+        ..bound.clone()
+    }
+}
+
+/// A trait reference re-spelled at what an impl block binds its associated
+/// types to: `trait Constrained: Make<Self::Base>` read at an impl writing
+/// `type Base = String` reaches `Make<String>`, the impl that answers it.
+pub(super) fn bound_at_impl_assoc_types(
+    bound: &ast::TraitBound,
+    bindings: &[ast::AssociatedTypeBinding],
+) -> ast::TraitBound {
+    let at = |ty: &ast::Type| {
+        substitute_written_type(ty, &|ty| match ty {
+            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" && ns.args.is_empty() => {
+                bindings
+                    .iter()
+                    .find(|binding| binding.name == ns.name)
+                    .map(|binding| binding.ty.clone())
+            }
+            _ => None,
+        })
+    };
+    ast::TraitBound {
+        type_args: bound.type_args.iter().map(at).collect(),
         ..bound.clone()
     }
 }

@@ -16,7 +16,7 @@ use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::{BinderInScope, Scope, TraitCheckFrame};
 use super::sig::Param;
-use super::trait_env::InheritedBound;
+use super::trait_env::{InheritedBound, bound_at_impl_assoc_types};
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
@@ -514,7 +514,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .supertrait_closure_at(&trait_decl, &written)
             .iter()
-            .map(|b| self.tysys.bound_named_written(&b.bound))
+            .map(|b| bound_at_impl_assoc_types(&b.bound, &impl_block.associated_types))
+            .map(|bound| self.tysys.bound_named_written(&bound))
             .collect();
         if supertraits.is_empty() {
             return;
