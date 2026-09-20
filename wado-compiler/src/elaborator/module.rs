@@ -2,13 +2,13 @@
 
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeTable;
 
 use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, StructFieldInfo,
-    VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamSlot,
+    RealTypeParams, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
@@ -42,19 +42,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
                     }
-                    // Collect TypeIds for struct's own type params in declaration order.
-                    let type_param_type_ids: Vec<TypeId> = struct_decl
-                        .type_params
-                        .iter()
-                        .enumerate()
-                        .map(|(i, param)| {
-                            scope
-                                .tysys
-                                .type_table
-                                .borrow_mut()
-                                .make_type_param(param.name.clone(), i as u32)
-                        })
-                        .collect();
+                    let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+                        &ParamSlot::list(&struct_decl.type_params),
+                        &scope.tysys.type_table,
+                    );
 
                     let module_source = scope.current_module_source.clone();
                     let def = scope.def_of_item(struct_decl.id);
@@ -67,7 +58,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_params: struct_decl.type_params.clone(),
+                            type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         },
                     );
@@ -99,7 +90,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.sem.decls.local_generic_newtypes.insert(
                             self.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
-                                type_params: newtype_decl.type_params.clone(),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
                         );
@@ -113,18 +104,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut scope = self.enter_inherited_type_param_scope();
                     scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.register_generic_params(&variant_decl.type_params, 0);
-                    let type_param_type_ids: Vec<TypeId> = variant_decl
-                        .type_params
-                        .iter()
-                        .filter_map(|p| {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .get(&p.name)
-                                .map(|b| b.type_id)
-                        })
-                        .collect();
+                    let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+                        &ParamSlot::list(&variant_decl.type_params),
+                        &scope.tysys.type_table,
+                    );
 
                     // Collect variant cases with resolved payload types
                     let mut cases = Vec::new();
@@ -152,7 +135,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: variant_decl.name.clone(),
                             module_source: module_source.clone(),
                             defined_at: variant_decl.id,
-                            type_params: variant_decl.type_params.clone(),
+                            type_params: RealTypeParams::of(&variant_decl.type_params),
                             cases,
                             type_param_type_ids,
                         },

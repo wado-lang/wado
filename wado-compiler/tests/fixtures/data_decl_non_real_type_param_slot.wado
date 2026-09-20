@@ -1,0 +1,33 @@
+// An effect parameter holds no position in the dense type-argument space, so a
+// data declaration carrying one must mint no slot for it: a slot no argument
+// can fill reached WIR build as an unregistered instance and panicked it.
+
+struct Holder<effect E, T> {
+    value: T,
+}
+
+variant Maybe<effect E, T> {
+    Just(T),
+    Nothing,
+}
+
+export fn run() {
+    let h = Holder { value: 7 };
+    assert h.value == 7;
+
+    // Held off the power-assert operand path: `Reflect` derivation does not
+    // reach a variant declaring a non-real parameter, which is a gap of its own.
+    let m = Maybe::Just(3);
+    let just_three = m matches { Just(3) };
+    assert just_three;
+
+    struct Local<effect E, U> {
+        item: U,
+    }
+
+    let l = Local { item: "hi" };
+    assert l.item == "hi";
+}
+
+__DATA__
+{}

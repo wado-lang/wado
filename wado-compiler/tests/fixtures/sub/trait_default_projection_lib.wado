@@ -1,0 +1,19 @@
+pub trait Sample with () {
+    type Value;
+
+    fn draw(&self) -> Self::Value;
+}
+
+pub trait Source with () {
+    type Value;
+
+    fn read(&self) -> Self::Value;
+
+    fn read_twice(&self) -> [Self::Value, Self::Value] {
+        return [self.read(), self.read()];
+    }
+
+    fn relay<S: Sample>(&self, from: &S) -> S::Value {
+        return from.draw();
+    }
+}

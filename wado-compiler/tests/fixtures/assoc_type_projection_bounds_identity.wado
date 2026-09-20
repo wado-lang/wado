@@ -1,0 +1,39 @@
+// An associated type's bounds belong to its declaration, so two projections on
+// one `T::Output` intern alike. Reading them from a name-keyed index answered
+// `IndexRef`'s `type Output: Ref` for `Mul`'s bare one, and the signature's
+// `T::Output` stopped matching the body's.
+
+fn scale<T: Mul>(a: T, b: T) -> T::Output {
+    return a.mul(&b);
+}
+
+trait Weigh with () {
+    type Output: Ord;
+
+    fn weigh(&self) -> Self::Output;
+}
+
+fn weight_of<W: Weigh>(w: &W) -> W::Output {
+    return w.weigh();
+}
+
+struct Gram {
+    v: i32,
+}
+
+impl Weigh for Gram {
+    type Output = i32;
+
+    fn weigh(&self) -> Self::Output {
+        return self.v;
+    }
+}
+
+export fn run() {
+    assert scale(3, 4) == 12;
+    assert scale(1.5, 2.0) == 3.0;
+    assert weight_of(&Gram { v: 7 }) == 7;
+}
+
+__DATA__
+{}

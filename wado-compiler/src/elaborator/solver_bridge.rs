@@ -403,15 +403,14 @@ impl Lowering {
             // side names the same shape.
             ResolvedType::Never => decl(DeclKey::Builtin("!".to_string()), vec![]),
             // A projection on a rigid parameter, satisfying what its trait
-            // declares of the associated type. One built under no trait names
-            // nothing the solver can read.
+            // declares of the associated type.
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
                 owning_trait,
                 ..
             } => {
-                let trait_ = self.known_trait((*owning_trait)?)?;
+                let trait_ = self.known_trait(*owning_trait)?;
                 Some(SolverType::Projection {
                     base: Box::new(self.type_id(table, *param_id, param)?),
                     trait_,
@@ -955,7 +954,7 @@ impl SolverBridge {
                 .resolutions
                 .decls_in_scope(module)
                 .into_iter()
-                .filter(|def| tysys.trait_env.decl_index.contains(def))
+                .filter(|def| tysys.trait_env.declares_trait(def))
                 .map(|def| lowering.trait_decl(def))
                 .collect();
             let id = lowering.module(module);

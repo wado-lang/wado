@@ -1,5 +1,9 @@
 global mut heap_offset: i32 = 8;
 
+global PAGE_SIZE: i32 = 65536;
+
+global NEG_ZERO_BITS: i64 = -9223372036854775808;
+
 global POW10: List<u64> = deferred null;
 
 global POW10_FINE: List<u64> = deferred null;
@@ -1470,6 +1474,10 @@ pub struct "Box<fn mut(char)->bool>" {
     value: fn mut(char) -> bool,
 }
 
+pub struct "Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>" {
+    value: fn mut(u8) -> StrUtf8ByteIter,
+}
+
 pub struct "Box<fn mut(u8)->()>" {
     value: fn mut(u8) -> (),
 }
@@ -1482,16 +1490,40 @@ pub struct "Box<fn mut(u8,u8)->core:prelude/traits.wado/Ordering>" {
     value: fn mut(Box<u8>, Box<u8>) -> Ordering,
 }
 
+pub struct "Box<fn mut(char)->core:prelude/string.wado/StrCharIter>" {
+    value: fn mut(char) -> StrCharIter,
+}
+
 pub struct "Box<fn mut(char,char)->char>" {
     value: fn mut(char, char) -> char,
+}
+
+pub struct "Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>" {
+    value: fn mut([i32, char]) -> StrCharIndicesIter,
 }
 
 pub struct "Box<fn mut([i32,char],[i32,char])->[i32,char]>" {
     value: fn mut([i32, char], [i32, char]) -> [i32, char],
 }
 
+pub struct "Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>" {
+    value: fn mut(String) -> StrSplitIter,
+}
+
 pub struct "Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>" {
     value: fn mut(String, String) -> String,
+}
+
+pub struct "Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>" {
+    value: fn mut(String) -> StrSplitNIter,
+}
+
+pub struct "Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>" {
+    value: fn mut(String) -> StrSplitWhitespaceIter,
+}
+
+pub struct "Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>" {
+    value: fn mut(String) -> StrLinesIter,
 }
 
 pub struct "Box<fn(char)->char>" {
@@ -1904,7 +1936,7 @@ pub enum ErrorCode {
 }
 
 fn grow_memory(new_offset: i32) {
-    let current_bytes: i32 = (core::builtin::memory_size() * 65536);
+    let current_bytes: i32 = (core::builtin::memory_size() * core::allocator::PAGE_SIZE);
     let deficit: i32 = (new_offset - current_bytes);
     let sixteen_mb: i32 = 16777216;
     let normal_grow: i32 = if (current_bytes < sixteen_mb) {
@@ -1917,7 +1949,7 @@ fn grow_memory(new_offset: i32) {
     } else {
         normal_grow;
     };
-    let grow_pages: i32 = ((grow_bytes + 65535) / 65536);
+    let grow_pages: i32 = (((grow_bytes + core::allocator::PAGE_SIZE) - 1) / core::allocator::PAGE_SIZE);
     if (core::builtin::memory_grow(grow_pages) < 0) {
         core::builtin::cold_path();
         core::builtin::unreachable();
@@ -1933,7 +1965,7 @@ pub export fn bump_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32) 
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
+    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
         core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
@@ -1950,7 +1982,7 @@ pub export fn debug_realloc(oldptr: i32, oldsize: i32, align: i32, newsize: i32)
     }
     let aligned: i32 = core::builtin::i32_and(((core::allocator::heap_offset + align) - 1), (0 - align));
     let new_offset: i32 = (aligned + newsize);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
+    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
         core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
@@ -2093,7 +2125,7 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
     }
     let block: i32 = core::allocator::heap_offset;
     let new_offset: i32 = (block + size);
-    if (new_offset > (core::builtin::memory_size() * 65536)) {
+    if (new_offset > (core::builtin::memory_size() * core::allocator::PAGE_SIZE)) {
         core::builtin::cold_path();
         core::allocator::grow_memory(new_offset);
     }
@@ -2104,6 +2136,8 @@ pub export fn freelist_realloc(oldptr: i32, _oldsize: i32, _align: i32, newsize:
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2112,11 +2146,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -2126,6 +2164,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2133,6 +2173,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -2790,6 +2836,8 @@ pub fn i32x4_relaxed_dot_i8x16_i7x16_add_s(a: v128, b: v128, c: v128) -> v128;
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2798,11 +2846,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -2812,6 +2864,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2819,6 +2873,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -2934,6 +2994,8 @@ pub fn libm_tanhf(arg0: f32) -> f32;
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2942,11 +3004,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -2956,6 +3022,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -2963,6 +3031,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -3094,6 +3168,8 @@ fn "$test_0"() {
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3102,11 +3178,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -3116,6 +3196,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3123,6 +3205,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -3130,6 +3218,8 @@ pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3138,11 +3228,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -3152,6 +3246,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3159,6 +3255,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -3210,6 +3312,8 @@ pub fn "core:prelude/bytes.wado/ByteSlice^core:prelude/traits.wado/Reflect::wire
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3218,11 +3322,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -3232,6 +3340,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3239,6 +3349,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -3541,6 +3657,8 @@ pub fn "core:prelude/format.wado/Alignment^core:prelude/traits.wado/Reflect::wir
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3549,11 +3667,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -3563,6 +3685,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -3570,6 +3694,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -3785,7 +3915,7 @@ pub fn fixed_width(f: f64, n: i32) -> FormatResult {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/fpfmt.wado", used: 23 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 293 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 296 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed": ", used: 2 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"digits must be <= 18", used: 20 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: n <= 18\n", used: 20 });
@@ -4302,7 +4432,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
-    if (bits == -9223372036854775808) {
+    if (bits == core::prelude/fpfmt.wado::NEG_ZERO_BITS) {
         return [true, true, SpecialKind::Zero];
     }
     let is_neg: bool = (bits < 0);
@@ -4627,6 +4757,8 @@ pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Reflect::wi
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -4635,11 +4767,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -4649,6 +4785,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -4656,6 +4794,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -4713,7 +4857,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 160 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 163 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: self.high != 0\n", used: 27 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"self.high: ", used: 11 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -4766,7 +4910,7 @@ fn "core:prelude/int128.wado/u128::round_to_mantissa"(self: &u128, mant_bits: i3
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 196 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 199 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: a >> (mant_bits - 1) as u64 == 1\n", used: 45 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"a: ", used: 3 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -4834,7 +4978,7 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 247 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 250 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: hi < d\n", used: 19 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"hi: ", used: 4 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -4876,7 +5020,7 @@ fn "core:prelude/int128.wado/u128::div_rem_wide"(hi: u64, lo: u64, d: u64) -> [u
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 268 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 271 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: un21 < dn\n", used: 22 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"un21: ", used: 6 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -4953,7 +5097,7 @@ pub fn "core:prelude/int128.wado/u128::div_rem"(self: &u128, divisor: &u128) -> 
                         $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                         $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                         let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                        Box<i32> { value: 332 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                        Box<i32> { value: 335 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                         $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: q != 0\n", used: 19 });
                         $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"q: ", used: 3 });
                         $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -5088,7 +5232,7 @@ fn "core:prelude/int128.wado/u128::fmt_base"(self: &u128, f: &mut Formatter, bas
                     $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude/int128.wado", used: 24 });
                     $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                     let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                    Box<i32> { value: 445 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                    Box<i32> { value: 448 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                     $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: pos == offset\n", used: 26 });
                     $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"pos: ", used: 5 });
                     $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -5498,6 +5642,8 @@ pub fn "$field_get$core:prelude/int128.wado/i128$i64"(v: &i128, index: i32) -> i
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5506,11 +5652,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -5520,6 +5670,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5527,6 +5679,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -5656,6 +5814,8 @@ pub fn "core:prelude/intparse.wado/FloatErrorKind^core:prelude/traits.wado/Refle
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5664,11 +5824,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -5678,6 +5842,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5685,6 +5851,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -5720,6 +5892,8 @@ pub fn "core:prelude/intparse.wado/FloatErrorKind^core:prelude/traits.wado/Displ
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5728,11 +5902,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -5742,6 +5920,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -5749,6 +5929,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -6993,6 +7179,8 @@ pub fn "bool^core:prelude/traits.wado/Ord::cmp"(self: Box<bool>, other: Box<bool
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7001,11 +7189,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -7015,6 +7207,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7022,6 +7216,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -7090,6 +7290,8 @@ fn "char^core:prelude/range.wado/Step::next_step"(self: Box<char>) -> Option<cha
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7098,11 +7300,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -7112,6 +7318,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7119,6 +7327,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -7126,6 +7340,8 @@ pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7134,11 +7350,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -7148,6 +7368,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -7155,6 +7377,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -8281,6 +8509,8 @@ pub fn "$field_get$core:prelude/string.wado/StrSlice$i32"(v: &StrSlice, index: i
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8289,11 +8519,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -8303,6 +8537,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8310,6 +8546,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -8499,6 +8741,8 @@ pub fn "core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Reflect::wir
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8507,11 +8751,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -8521,6 +8769,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8528,6 +8778,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -8579,6 +8835,8 @@ pub fn "core:prelude/traits.wado/CaseStyle^core:prelude/traits.wado/Display::fmt
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8587,11 +8845,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -8601,6 +8863,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8608,6 +8872,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -8780,6 +9050,8 @@ pub fn "core:prelude/types.wado/Task^core:prelude/traits.wado/Inspect::inspect"(
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8788,11 +9060,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -8802,6 +9078,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -8809,6 +9087,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -9042,6 +9326,8 @@ fn cm_waitable_set_poll(ws: i32) -> Option<WaitEvent> {
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9050,11 +9336,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -9064,6 +9354,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9071,6 +9363,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -9838,6 +10136,8 @@ pub export fn run() {
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9846,11 +10146,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -9860,6 +10164,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9867,6 +10173,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
@@ -9909,6 +10221,8 @@ pub fn "wasi:cli/types.wado/ErrorCode^core:prelude/traits.wado/Reflect::wire_nam
 
 pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
 
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
 pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9917,11 +10231,15 @@ pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<f
 
 pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
 pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
 
 pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
 
 pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
@@ -9931,6 +10249,8 @@ pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspe
 
 pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
 
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
 pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
@@ -9938,6 +10258,12 @@ pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/I
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
 
 pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
 
 pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 

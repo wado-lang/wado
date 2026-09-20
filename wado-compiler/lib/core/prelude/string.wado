@@ -902,7 +902,7 @@ impl String {
     /// Removes and returns the character at the given byte index.
     /// Panics if the index is out of bounds or not on a UTF-8 character boundary.
     pub fn remove(&mut self, byte_index: i32) -> char {
-        assert byte_index >= 0 && byte_index < self.used, "index out of bounds";
+        assert 0 <= byte_index < self.used, "index out of bounds";
         assert self.is_char_boundary(byte_index), "remove index not on UTF-8 character boundary";
         return self.remove_unchecked(byte_index);
     }
@@ -1288,7 +1288,7 @@ impl StrSlice {
     /// Panics if the range is out of bounds or either end is off a character
     /// boundary.
     pub fn sub(&self, start: i32, end: i32) -> StrSlice {
-        assert 0 <= start && start <= end && end <= self.len(), "byte range out of bounds";
+        assert 0 <= start <= end <= self.len(), "byte range out of bounds";
         assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
         return self.sub_unchecked(start, end);
     }

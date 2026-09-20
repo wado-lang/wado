@@ -287,6 +287,11 @@ exist. `AssocTypeProjection::owning_trait` carries a `DefId` for the same reason
 `Newtype` carries the same head/arguments split `Struct` has, so the impl index
 is never handed a fused spelling no `impl` header writes.
 
+A projection interns by its `bounds` too, so those are read from the declaration
+`owning_trait` names, never from the associated type's bare name. A name-keyed
+index gave every `Output` whichever bounds the first trait declaring that name
+wrote, and two projections on one `T::Output` stopped comparing equal.
+
 A shape no declaration names — a tuple, a reference, a function type, a pack — has
 no `DefId` and needs none; each is already its own variant. Primitives are not
 special: `i32`, `()` and `!` are `internal type` declarations in
@@ -472,6 +477,11 @@ The list is closed by the type system and the module system, not by a test: no
 mechanism above can be worked around locally, so a new violation needs a new
 API, and adding one is a review decision.
 
+Nothing above closes a declaration's _data_ reached by name. An index keyed by
+an associated type's name can still answer with some trait's bounds for it: it
+mints no identity, and it turns no name into a declaration. The rule that covers
+it is §6, that a fact about a declaration is read through the `DefId` naming it.
+
 ### What still turns a name into a declaration
 
 What is left, each with the reason. A declaration is whatever _identifies_ one,
@@ -496,7 +506,9 @@ a sited entry point a caller with a reference site reaches instead.
 - `decl_key_or_local`, `TypeLookup::declaration` — for a rendered head
 - `namespace_member` — the `ns$Name` alias a namespace import registers
 - `scoped_trait_decl_key` — filtered to the trait index, for a bound's spelling
-- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name
+- `bound_declaring_assoc_type` — which of a _binder's_ bounds declares a name.
+  One algorithm on `TraitEnv`, reading each bound through the reference site its
+  caller supplies, so a frame and a declaration-level resolver share it.
 
 The same derivation in the `Symbol` currency, which §5's `DefId` columns subsume:
 

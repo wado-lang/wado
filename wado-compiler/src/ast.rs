@@ -458,6 +458,7 @@ pub fn type_head_name(ty: &Type) -> Option<&str> {
     match ty {
         Type::Named(n) => Some(n.name.as_str()),
         Type::Generic(g) => Some(g.name.as_str()),
+        Type::NamespacedGeneric(g) => Some(g.name.as_str()),
         _ => None,
     }
 }
@@ -945,6 +946,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
         Expr::StructLiteral(s) => {
             if let (Some(name_id), Some(name_span)) = (s.name_id, s.name_span) {
                 v.visit_id(name_id, name_span);
+            }
+            for ty in &s.type_args {
+                v.visit_type(ty);
             }
             for field in &s.fields {
                 v.visit_id(field.name_id, field.name_span);
@@ -2858,6 +2862,9 @@ pub struct StructLiteralExpr {
     /// Span of just the type name token.
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
+    /// Turbofish arguments pinning a generic struct's parameters,
+    /// `Box::<i32> { value: 1 }`. Empty where the literal writes none.
+    pub type_args: Vec<Type>,
     pub fields: Vec<StructLiteralField>,
     /// Spread bases (`{ ..a, field: v, ..b }`) in source order, each supplying
     /// the fields the literal does not list explicitly. See WEP: Literal Spread.
@@ -3729,6 +3736,13 @@ impl GenericParam {
     /// reify.
     pub fn is_real_type_param(&self) -> bool {
         !self.is_effect && (self.is_pack || !self.has_fn_bound())
+    }
+
+    /// Whether this parameter of an `impl` head takes an argument position.
+    /// A `fn`-bound one can still be a target argument — `Holder<F>` puts `F`
+    /// at position 0 — so only an effect parameter, which is no type, is out.
+    pub fn fills_impl_slot(&self) -> bool {
+        !self.is_effect
     }
 }
 

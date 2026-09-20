@@ -161,7 +161,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_i64(&mut self, v: i64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 || v < -9007199254740991 {
+        if v > f64::MAX_SAFE_INTEGER as i64 || v < f64::MIN_SAFE_INTEGER as i64 {
             self.buf.push_str(`"${v}"`);
         } else {
             self.buf.push_str(`${v}`);
@@ -175,7 +175,7 @@ impl Serializer for NsdSerializer {
     }
 
     fn serialize_u64(&mut self, v: u64) -> Result<(), SerializeError> {
-        if v > 9007199254740991 {
+        if v > f64::MAX_SAFE_INTEGER as u64 {
             self.buf.push_str(`"${v}"`);
         } else {
             self.buf.push_str(`${v}`);

@@ -38,6 +38,26 @@ name written into the source.
 Whether `ch` has that enumerated property value, without building the
 ranges.
 
+## Effects
+
+### `pub interface Properties`
+
+#### `fn has(property: BinaryProperty, ch: char) -> bool`
+
+`#[cm]` `#[cm_params("property", "ch")]`
+
+#### `fn set(property: BinaryProperty) -> List<[u32, u32]>`
+
+`#[cm]` `#[cm_params("property")]`
+
+#### `fn ranges(property: String, value: Option<String>) -> Option<List<[u32, u32]>>`
+
+`#[cm]` `#[cm_params("property", "value")]`
+
+#### `fn contains(property: String, value: Option<String>, ch: char) -> Option<bool>`
+
+`#[cm]` `#[cm_params("property", "value", "ch")]`
+
 ## Enums
 
 ### `pub enum BinaryProperty`

@@ -568,7 +568,7 @@ primaryNoStruct
     ;
 
 structLiteral
-    : path '{' fieldInitList? '}'
+    : path ('::' typeArgs)? '{' fieldInitList? '}'
     ;
 
 fieldInitList
