@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789875420338,
+  "lastUpdate": 1789899075536,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57257,6 +57257,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/a310fd64b468c9268780d8effd041bdafd406ab7"
         },
         "date": 1789875419639,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e72a0a50d6efe73ee983d63f8ec98a41b5107306",
+          "message": "Merge pull request #2094 from wado-lang/claude/wado-rm-rf-impl-k9qgyb\n\nfeat(core:fs): directory removal, path operations, metadata, a walk, and a write that replaces rather than truncates",
+          "timestamp": "2026-09-20T18:50:50+09:00",
+          "tree_id": "746edc778a57b344597e4ab15ddff4b35807f916",
+          "url": "https://github.com/wado-lang/wado/commit/e72a0a50d6efe73ee983d63f8ec98a41b5107306"
+        },
+        "date": 1789899074750,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
