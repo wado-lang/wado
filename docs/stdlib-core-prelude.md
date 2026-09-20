@@ -3930,6 +3930,16 @@ Build a `String` from an iterable of bytes, validating UTF-8.
 
 Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
 
+#### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String>`
+
+Append the longest prefix of `bytes` that is complete, valid UTF-8, and
+answer how many bytes that was. A trailing sequence cut short is left
+behind rather than rejected, so a caller decoding a stream carries those
+bytes into its next chunk.
+
+`Err` names a sequence no further byte could complete, and leaves this
+string untouched: the prefix is validated before any of it is appended.
+
 #### `pub fn is_valid_utf8(bytes: ByteSlice) -> bool`
 
 Whether `bytes` is well-formed UTF-8.

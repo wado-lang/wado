@@ -971,6 +971,49 @@ impl String {
         });
     }
 
+    /// Append the longest prefix of `bytes` that is complete, valid UTF-8, and
+    /// answer how many bytes that was. A trailing sequence cut short is left
+    /// behind rather than rejected, so a caller decoding a stream carries those
+    /// bytes into its next chunk.
+    ///
+    /// `Err` names a sequence no further byte could complete, and leaves this
+    /// string untouched: the prefix is validated before any of it is appended.
+    pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String> {
+        let slice = bytes.as_byte_slice();
+        let taken = String::utf8_complete_prefix(&slice)?;
+        self.push_bytes_unchecked(&slice.slice(0, taken));
+        return Result::Ok(taken);
+    }
+
+    /// Length of the longest prefix of `bytes` that is complete, valid UTF-8.
+    /// A sequence running past the end is not an error here — more bytes may
+    /// still complete it — but a byte that can lead no sequence is.
+    internal fn utf8_complete_prefix(bytes: &ByteSlice) -> Result<i32, String> {
+        let len = bytes.len();
+        let mut i = 0;
+        while i < len {
+            let b0 = bytes.get_unchecked(i);
+            if b0 < 0x80 {
+                i += 1;
+                continue;
+            }
+            let advance = String::utf8_sequence_len(bytes, i, len);
+            if advance > 0 {
+                i += advance;
+                continue;
+            }
+            builtin::cold_path();
+            // A lead byte whose sequence would run past the end is pending, not
+            // malformed. `utf8_sequence_len` conflates the two because it has
+            // no next chunk to consider; the lead byte alone separates them.
+            if b0 >= 0xC2 && b0 < 0xF5 && i + utf8_seq_len(b0) > len {
+                return Result::Ok(i);
+            }
+            return Result::Err(`invalid UTF-8 at byte ${i}`);
+        }
+        return Result::Ok(len);
+    }
+
     /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
     /// is well-formed. ASCII is tested here, `utf8_sequence_len` being a call.
     internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {

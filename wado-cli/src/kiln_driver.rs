@@ -96,11 +96,8 @@ pub struct InvocationRun {
     /// project-root-relative, normalized (`output_dir` joined with the
     /// generator-relative path and forward-slash-only).
     pub outputs: Vec<OutputHash>,
-    /// What the generator's probe reported for the primary and then each
-    /// input, in the order `primary` and `inputs` are listed above. Empty when
-    /// the generator exports no probe, which means the whole file throughout.
-    /// Kept beside `primary`/`inputs` rather than inside their `FileHash`, so
-    /// that type stays exactly the cache key's ingredients.
+    /// What the probe reported, in `GeneratorRequest::files` order. Empty when
+    /// the generator exports none, which means every file whole.
     pub extents: Vec<Option<u64>>,
 }
 
@@ -407,15 +404,10 @@ fn clamp_to_extents(request: &mut GeneratorRequest, extents: &[Option<u64>]) {
         1 + request.inputs.len(),
         "kiln: probe must answer once per input file"
     );
-    for (file, extent) in std::iter::once(&mut request.primary)
-        .chain(request.inputs.iter_mut())
-        .zip(extents)
-    {
+    for (file, extent) in request.files_mut().zip(extents) {
         if let Some(n) = extent {
-            let n = usize::try_from(*n)
-                .unwrap_or(usize::MAX)
-                .min(file.content.len());
-            file.content.truncate(n);
+            file.content
+                .truncate(usize::try_from(*n).unwrap_or(usize::MAX));
         }
     }
 }

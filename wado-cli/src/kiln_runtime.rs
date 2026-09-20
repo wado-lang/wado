@@ -450,7 +450,7 @@ pub async fn run_probe(
 
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(1 + request.inputs.len());
-        for file in std::iter::once(&request.primary).chain(request.inputs.iter()) {
+        for file in request.files() {
             let state = KilnHostState {
                 diagnostics: diagnostics_inner.clone(),
             };

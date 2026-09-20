@@ -1344,3 +1344,42 @@ test "an empty separator splits at either end" {
     assert "abc".split_once("") matches { Some(p) && p.0 == "" && p.1 == "abc" };
     assert "abc".rsplit_once("") matches { Some(p) && p.0 == "abc" && p.1 == "" };
 }
+
+test "push_utf8 takes a whole well-formed buffer" {
+    let mut s = String::with_capacity(8);
+    assert s.push_utf8(&([0x68, 0x69] as ByteList)) matches { Ok(2) };
+    assert s == "hi";
+    // 2-, 3- and 4-byte sequences all land complete.
+    assert s.push_utf8(&([0xC3, 0xB1, 0xE6, 0x97, 0xA5] as ByteList)) matches { Ok(5) };
+    assert s == "hiñ日";
+}
+
+test "push_utf8 leaves a sequence cut short by the buffer's end" {
+    let mut s = String::with_capacity(8);
+    // `日` is E6 97 A5; only its first two bytes are here.
+    assert s.push_utf8(&([0x61, 0xE6, 0x97] as ByteList)) matches { Ok(1) };
+    assert s == "a";
+    // Feeding the carried bytes with the rest completes it.
+    assert s.push_utf8(&([0xE6, 0x97, 0xA5] as ByteList)) matches { Ok(3) };
+    assert s == "a日";
+}
+
+test "push_utf8 rejects a byte that can lead no sequence" {
+    let mut s = String::with_capacity(8);
+    // 0x80 is a bare continuation byte: no following byte makes it valid.
+    assert s.push_utf8(&([0x61, 0x80] as ByteList)) matches { Err(_) };
+    // A rejected buffer appends nothing, not even the good bytes ahead of it.
+    assert s == "";
+}
+
+test "push_utf8 rejects a surrogate rather than deferring it" {
+    let mut s = String::with_capacity(8);
+    // ED A0 80 is the CESU-8 encoding of a surrogate, complete and illegal.
+    assert s.push_utf8(&([0xED, 0xA0, 0x80] as ByteList)) matches { Err(_) };
+}
+
+test "push_utf8 on an empty buffer takes nothing" {
+    let mut s = String::with_capacity(4);
+    assert s.push_utf8(&([] as ByteList)) matches { Ok(0) };
+    assert s == "";
+}

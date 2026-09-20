@@ -506,6 +506,20 @@ pub struct GeneratorRequest {
     pub options: CanonicalOptions,
 }
 
+impl GeneratorRequest {
+    /// Every input file, primary first. This is the order a probe answers in
+    /// and the order extents are recorded in, so it lives here rather than
+    /// being re-spelled at each site that walks them.
+    pub fn files(&self) -> impl Iterator<Item = &GeneratorInputFile> {
+        std::iter::once(&self.primary).chain(self.inputs.iter())
+    }
+
+    /// [`Self::files`], for a caller that rewrites what it walks.
+    pub fn files_mut(&mut self) -> impl Iterator<Item = &mut GeneratorInputFile> {
+        std::iter::once(&mut self.primary).chain(self.inputs.iter_mut())
+    }
+}
+
 /// One schema file passed to a Kiln generator.
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
