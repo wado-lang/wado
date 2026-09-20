@@ -425,11 +425,12 @@ pub trait CompilerHost: Send + Sync {
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
 
-    /// Save bytes the compiler produced but cannot explain, under `file_name`,
-    /// and answer where they landed. The default keeps none: a host with no
-    /// filesystem has nowhere to put them.
-    fn save_internal_artifact(&self, file_name: &str, bytes: &[u8]) -> Option<String> {
-        let _ = (file_name, bytes);
+    /// Save bytes the compiler produced but cannot explain, under a name of
+    /// the host's choosing carrying `file_stem`, and answer where they landed.
+    /// The default keeps none: a host with no filesystem has nowhere to put
+    /// them.
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        let _ = (file_stem, bytes);
         None
     }
 

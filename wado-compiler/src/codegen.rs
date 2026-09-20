@@ -20,8 +20,8 @@ pub struct InvalidArtifact {
     /// What failed to validate, for the message: `core Wasm module` or
     /// `component`.
     pub subject: &'static str,
-    /// The file name to save the bytes under.
-    pub file_name: &'static str,
+    /// What the host names the saved bytes after.
+    pub file_stem: &'static str,
     pub wasm: Vec<u8>,
     /// Everything known about the failure, ready to print.
     pub report: String,
@@ -63,7 +63,7 @@ fn validate_or_report(
     wasm: &[u8],
     entry_module: &ModuleSource,
     subject: &'static str,
-    file_name: &'static str,
+    file_stem: &'static str,
     describe: impl FnOnce(&[u8], usize) -> Option<String>,
     undescribed: &str,
 ) -> Option<InvalidArtifact> {
@@ -75,7 +75,7 @@ fn validate_or_report(
     let context = context.trim_end();
     Some(InvalidArtifact {
         subject,
-        file_name,
+        file_stem,
         wasm: wasm.to_vec(),
         report: format!(
             "Internal compiler error: WIR pipeline generated an invalid {subject}\n\
@@ -92,7 +92,7 @@ fn validate_core_module(wasm: &[u8], entry_module: &ModuleSource) -> Option<Inva
         wasm,
         entry_module,
         "core Wasm module",
-        "invalid_core.wasm",
+        "invalid-core",
         describe_offending_location,
         "  (could not locate the offending function)",
     )
@@ -235,7 +235,7 @@ fn validate_wasm(wasm: &[u8], entry_module: &ModuleSource) -> Option<InvalidArti
         wasm,
         entry_module,
         "component",
-        "invalid_component.wasm",
+        "invalid-component",
         |wasm, _| describe_component_instances(wasm),
         "  (could not read the component's instances)",
     )

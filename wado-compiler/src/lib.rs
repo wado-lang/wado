@@ -218,7 +218,7 @@ fn report_without_span<H: compiler_host::CompilerHost>(
 /// emits what it cannot validate has no result to return.
 fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifact) -> ! {
     let subject = invalid.subject;
-    let saved = match host.save_internal_artifact(invalid.file_name, &invalid.wasm) {
+    let saved = match host.save_internal_artifact(invalid.file_stem, &invalid.wasm) {
         Some(path) => {
             format!("The full invalid {subject} is at {path} (inspect with `wasm-tools print`).")
         }

@@ -17,13 +17,18 @@ static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> = std::syn
 /// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
 /// relative to [`DEV_STDLIB_ROOT`], paired with its source. The first install
 /// wins, since a run that compiled two versions of a module describes neither.
+///
+/// Every caller installs, and only the first one walks `sources`. Pass a lazy
+/// iterator and the rest read nothing: a host is built per LSP request, and
+/// re-reading the stdlib to discard it would cost that request megabytes.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
-    let installed = sources
-        .into_iter()
-        .map(|(file, source)| (file, &*String::leak(source)))
-        .collect();
-    let _ = INSTALLED.set(installed);
+    INSTALLED.get_or_init(|| {
+        sources
+            .into_iter()
+            .map(|(file, source)| (file, &*String::leak(source)))
+            .collect()
+    });
 }
 
 /// The stdlib as the host installed it, for a caller that has to say which

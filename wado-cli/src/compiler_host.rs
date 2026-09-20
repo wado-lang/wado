@@ -2,6 +2,7 @@
 //! [`wado_lsp::FilesystemCompilerHost`] with CLI decorations: phase-tracking
 //! timestamps, log-level filtering, and stderr printing.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -270,10 +271,17 @@ impl CompilerHost for FilesystemCompilerHost {
     }
 
     /// Saves into the OS temp directory, which exists on every platform the
-    /// CLI runs on and needs no write permission where the sources live.
-    fn save_internal_artifact(&self, file_name: &str, bytes: &[u8]) -> Option<String> {
-        let path = std::env::temp_dir().join(file_name);
-        std::fs::write(&path, bytes).ok()?;
+    /// CLI runs on and needs no write permission where the sources live. The
+    /// name is opaque, so no symlink planted there ahead of us is written
+    /// through.
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        let mut file = tempfile::Builder::new()
+            .prefix(&format!("wado-{file_stem}-"))
+            .suffix(".wasm")
+            .tempfile()
+            .ok()?;
+        file.write_all(bytes).ok()?;
+        let (_, path) = file.keep().ok()?;
         Some(path.display().to_string())
     }
 
