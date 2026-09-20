@@ -802,6 +802,13 @@ fn one_assoc_answer<T: Copy + PartialEq>(
     answers.all(|answer| answer == first).then_some(first)
 }
 
+/// Whether a slot search descends into a projection's base or stops there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Through {
+    Projection,
+    ProjectionStops,
+}
+
 #[derive(Debug, Clone)]
 pub struct TypeTable {
     /// `TypeId` → `ResolvedType`. See [`TypeMap`]; `get` reads this on
@@ -3985,27 +3992,35 @@ impl TypeTable {
     /// of some declaration's own frame, as opposed to an inference variable a
     /// solver still owns.
     pub fn contains_rigid_param(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::Projection)
+    }
+
+    /// Whether `id` mentions a slot a value assigned to it could still fill.
+    /// [`Self::contains_rigid_param`] stopping at a projection: `I::Item`
+    /// mentions a slot without being one, and inference cannot invert it.
+    pub fn contains_fillable_slot(&self, id: TypeId) -> bool {
+        self.mentions_slot(id, Through::ProjectionStops)
+    }
+
+    fn mentions_slot(&self, id: TypeId, through: Through) -> bool {
+        let mentions = |inner: &TypeId| self.mentions_slot(*inner, through);
         match self.get(id) {
             ResolvedType::TypeParam { .. } | ResolvedType::TypePack { .. } => true,
+            ResolvedType::AssocTypeProjection { param_id, .. } => match through {
+                Through::Projection => mentions(param_id),
+                Through::ProjectionStops => false,
+            },
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_rigid_param(*inner),
-            ResolvedType::AssocTypeProjection { param_id, .. } => {
-                self.contains_rigid_param(*param_id)
-            }
+            | ResolvedType::Reactive(inner) => mentions(inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|p| self.contains_rigid_param(*p))
-                    || self.contains_rigid_param(*return_type)
-            }
+            } => params.iter().any(mentions) || mentions(return_type),
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_rigid_param(*t))
-            }
+            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(mentions),
             _ => false,
         }
     }

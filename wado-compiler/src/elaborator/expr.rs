@@ -3821,12 +3821,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_def(use_id, def_id);
         }
 
-        // Resolve field expressions, converting tuple literals to arrays when needed.
-        // For generic structs, tuple-to-sequence coercion may be deferred to a second
-        // pass after type arguments are inferred from field values.
-        // Indexes into `struct_lit.fields`, not into `fields`, which is sorted
-        // into declaration order before the second pass reads it.
-        let mut deferred_coercions: Vec<usize> = Vec::new();
+        // A generic struct's field waits for the second pass, where the type
+        // arguments inferred from the field values are in hand. Indexes into
+        // `struct_lit.fields`, not into `fields`, which is sorted into
+        // declaration order before that pass reads it.
+        let mut deferred_fields: Vec<usize> = Vec::new();
         let fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
@@ -3868,18 +3867,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
                 let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
-                if coercion_deferred {
-                    deferred_coercions.push(provided_idx);
-                }
                 // A field whose declared type names a slot is not a constraint
-                // on the value — the value is what fixes the slot. Fields
+                // on the value; the value is what fixes the slot. Fields
                 // sharing a slot are compared to each other in
-                // `infer_struct_type_args`; comparing one against the
-                // *inferred* argument instead reads back whatever the caller's
-                // expected type put there, not this literal's answer.
+                // `infer_struct_type_args`.
                 let field_names_slot = expected_field_type
                     .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
                 let check_deferred = coercion_deferred || field_names_slot;
+                if check_deferred {
+                    deferred_fields.push(provided_idx);
+                }
 
                 // Check field name exists in struct definition
                 if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
@@ -4067,11 +4064,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
 
-            // Second pass: apply deferred tuple-to-sequence coercion now that
-            // concrete type arguments are known. For example, [10, 20, 30] in
-            // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
-            // but at first pass the field type was List<T> (type param).
-            for &ast_idx in &deferred_coercions {
+            // Second pass: coerce and check what the first pass deferred, now
+            // that the type arguments are known. `[10, 20, 30]` in
+            // `Container<i32> { items: [10, 20, 30] }` needs its `List<i32>`
+            // coercion, which the first pass saw only as `List<T>`. Every
+            // deferred field is revisited, coercion or not: a deferral that
+            // reaches no second pass is no check at all.
+            for &ast_idx in &deferred_fields {
                 let ast_field = &struct_lit.fields[ast_idx];
                 let Some(concrete_type) = struct_field_types
                     .iter()
@@ -4094,22 +4093,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     fields[field_idx].type_id = coerced;
                 }
-                // The check the first pass skipped — but only once the slot is
-                // actually filled. A field type that still names a rigid
-                // parameter is one this literal did not pin, and comparing
-                // against a declaration's own slot is the very thing the first
-                // pass was skipping.
-                if !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_rigid_param(concrete_type)
-                {
-                    self.typecheck(
-                        fields[field_idx].type_id,
-                        concrete_type,
-                        ast_field.value.span(),
-                    );
+                // Either side still naming a slot this literal could fill is
+                // the case the first pass was skipping: comparing it reads back
+                // an inferred argument rather than this literal's answer.
+                let value_type = fields[field_idx].type_id;
+                let settled = {
+                    let table = self.tysys.type_table.borrow();
+                    !table.contains_fillable_slot(concrete_type)
+                        && !table.contains_fillable_slot(value_type)
+                };
+                if settled {
+                    self.typecheck(value_type, concrete_type, ast_field.value.span());
                 }
             }
 

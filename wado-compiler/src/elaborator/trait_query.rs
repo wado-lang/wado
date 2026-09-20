@@ -431,16 +431,11 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The declaration header of the trait `trait_name` names in this frame.
-    pub(super) fn trait_decl_header_in_frame(&self, trait_name: &str) -> Option<&TraitDeclHeader> {
-        self.trait_decl_header_of(&self.decl_key_or_local(trait_name)?)
-    }
-
     /// The declaration header of a trait already identified.
     ///
-    /// Every by-name form here funnels through this one, so a caller holding a
-    /// site answers about the declaration that site resolved to rather than
-    /// re-resolving the spelling in its own frame.
+    /// The only way in, so a caller answers about the declaration its site
+    /// resolved to rather than re-resolving the spelling in its own frame,
+    /// which two modules can share.
     pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
         let loc = self.tysys.trait_env.decl_index.get(key)?;
         self.tysys.trait_env.trait_decl_headers.get(loc)
@@ -450,10 +445,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// when it declares no such type.
     pub(super) fn trait_assoc_type_decl(
         &self,
-        trait_name: &str,
+        key: &DefId,
         assoc_name: &str,
     ) -> Option<&ast::AssociatedTypeDecl> {
-        self.trait_decl_header_in_frame(trait_name)?
+        self.trait_decl_header_of(key)?
             .assoc_types
             .iter()
             .find(|decl| decl.name == assoc_name)
@@ -468,12 +463,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let trait_name = self.get_type_name(trait_type);
+        // The header and each bound carry their own reference site, so which
+        // trait either names is the answer the table already recorded for it —
+        // not the spelling, which two modules can share.
+        let Some(trait_decl) =
+            head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))
+        else {
+            return;
+        };
         for binding in &impl_block.associated_types {
-            // The bound carries its own reference site, so which `Ord` it
-            // means is the answer the table already recorded for it — not the
-            // spelling, which two modules can share.
             let bounds: Vec<(String, Option<FqTraitName>)> = self
-                .trait_assoc_type_decl(&trait_name, &binding.name)
+                .trait_assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.fn_signature.is_none())
@@ -2020,8 +2020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether the trait `key` names declares the associated type `assoc_name`.
     /// Keyed by the declaration, so it answers the same from any module's frame.
     pub(super) fn trait_declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
-        self.trait_decl_header_of(key)
-            .is_some_and(|header| header.assoc_types.iter().any(|d| d.name == assoc_name))
+        self.trait_assoc_type_decl(key, assoc_name).is_some()
     }
 
     /// Whether the trait `key` names declares `method_name`. The cheap form of

@@ -205,16 +205,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        // One bound cannot be a coin toss, and the walk below asks the scope
-        // for every bound's header.
+        // One bound cannot be a coin toss, and the walk below reads every
+        // bound's declaration.
         if bounds.len() < 2 {
             return false;
         }
         let declaring: Vec<&TraitBound> = bounds
             .iter()
             .filter(|bound| {
-                self.trait_assoc_type_decl(&bound.name, assoc_name)
-                    .is_some()
+                self.trait_decl_at(bound.id, &bound.name)
+                    .is_some_and(|decl| self.trait_declares_assoc_type(&decl, assoc_name))
             })
             .collect();
         if declaring.len() < 2 {
@@ -249,20 +249,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<DefId> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
-        if self
-            .trait_assoc_type_decl(self.tysys.trait_env.defs.name(self_trait), assoc_name)
-            .is_some()
-        {
+        if self.trait_declares_assoc_type(&self_trait, assoc_name) {
             return Some(self_trait);
         }
         self.tysys
             .trait_env
             .supertrait_closure_at(&self_trait, &[])
             .iter()
-            .find(|inherited| {
-                self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
-                    .is_some()
-            })
+            .find(|inherited| self.trait_declares_assoc_type(&inherited.decl, assoc_name))
             .map(|inherited| inherited.decl)
     }
 
