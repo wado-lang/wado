@@ -3264,9 +3264,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .iter()
             .enumerate()
             .map(|(i, slot)| {
-                type_table
-                    .borrow_mut()
-                    .make_type_param(slot.name.clone(), i as u32)
+                let mut table = type_table.borrow_mut();
+                if slot.is_pack {
+                    table.make_type_pack(slot.name.clone(), i as u32)
+                } else {
+                    table.make_type_param(slot.name.clone(), i as u32)
+                }
             })
             .collect()
     }

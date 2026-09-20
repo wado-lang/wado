@@ -54,15 +54,20 @@ test "two packs through a forwarding call" {
     assert r.2 == true;
 }
 
-// The elements ahead of the first pack and behind the last keep their
-// positions whatever the packs expand to, so `X` and `Y` are settled by this
-// argument even though the two packs in the middle are not.
-fn head_of<X, ..A, ..B, Y>(a: [..A], b: [..B], t: [X, ..A, ..B, Y]) -> X {
-    return t.0;
+// A produced tuple may hold both packs: the arguments settle them, and the
+// elements ahead of the first pack and behind the last keep their positions
+// whatever the packs expand to.
+fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
+    return [x, ..a, ..b, y];
 }
 
-test "a tuple holding two packs still fixes its ends" {
-    assert head_of([1], [true], [42, 1, true, "tail"]) == 42;
+test "a produced tuple holding two packs fixes its ends" {
+    let r = wrap(42, [1, "a"], [true], "tail");
+    assert r.0 == 42;
+    assert r.1 == 1;
+    assert r.2 == "a";
+    assert r.3 == true;
+    assert r.4 == "tail";
 }
 
 struct Holder<T> {

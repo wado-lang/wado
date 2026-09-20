@@ -1998,19 +1998,37 @@ impl Monomorphizer {
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
-                // Variadic pack: map the pack index to a tuple of the impl-level type args,
-                // excluding non-pack impl params.
-                let pack_args_count = key
-                    .impl_type_args
-                    .len()
-                    .saturating_sub(non_pack_impl_params_count);
-                let pack_args: Vec<TypeId> = key
-                    .impl_type_args
+                // A pack fills one slot holding a tuple, and a nominal receiver
+                // (`One<[i32, bool]>`) spells it that way: one argument per
+                // declared parameter. A target that spreads the pack
+                // (`impl<..T> … for [..T]`) hands its elements over flat
+                // instead, and then the pack takes what the scalar parameters
+                // leave — the ones ahead of it keeping their positions.
+                let supplied = generic
+                    .impl_type_params
                     .iter()
-                    .take(pack_args_count)
-                    .copied()
-                    .collect();
-                let pack_type = type_table.make_tuple(pack_args);
+                    .filter(|p| p.projected_from.is_none())
+                    .count();
+                let before = param.index as usize;
+                let pack_type = if key.impl_type_args.len() == supplied {
+                    key.impl_type_args
+                        .get(before)
+                        .copied()
+                        .unwrap_or_else(|| type_table.make_tuple(vec![]))
+                } else {
+                    let pack_args_count = key
+                        .impl_type_args
+                        .len()
+                        .saturating_sub(non_pack_impl_params_count);
+                    let pack_args: Vec<TypeId> = key
+                        .impl_type_args
+                        .iter()
+                        .skip(before)
+                        .take(pack_args_count)
+                        .copied()
+                        .collect();
+                    type_table.make_tuple(pack_args)
+                };
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.impl_type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);

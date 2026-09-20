@@ -4904,11 +4904,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_type_id = self.resolve_expr(inner, ctx, None);
                 if self.type_contains_pack(spread_type_id) {
-                    // A direct `TypePack` (`[..T::method()]`) or a tuple
-                    // containing one (`[..rest]` where `rest: [..T]`): the
-                    // spread element keeps the spread's own type; monomorphize
-                    // expands it later.
-                    elem_types.push(spread_type_id);
+                    // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
+                    // splices its own elements, so each pack lands directly in
+                    // the literal's type and monomorphize expands it there. A
+                    // bare `TypePack` (`[..T::method()]`) is already one.
+                    if let Some(inner_elems) =
+                        self.tysys.type_table.borrow().as_tuple(spread_type_id)
+                    {
+                        elem_types.extend(inner_elems);
+                    } else {
+                        elem_types.push(spread_type_id);
+                    }
                 } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
                     // Pack-map `..F::method()` whose return type is
                     // pack-independent: a homogeneous pack of the return type,

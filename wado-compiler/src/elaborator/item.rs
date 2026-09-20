@@ -1300,12 +1300,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .return_type
                 .as_ref()
                 .map(|t| frame_scope.resolve_type(t));
-            for param in &method.params {
-                frame_scope.reject_unresolved_annotation(&param.ty);
-            }
-            if let Some(ty) = method.return_type.as_ref() {
-                frame_scope.reject_unresolved_annotation(ty);
-            }
+            frame_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
             let mut type_params: Vec<(String, TypeId)> = frame
                 .impl_type_params
                 .iter()
@@ -1504,7 +1499,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_unresolved_annotation(&field.ty);
+            scope.reject_field_annotation(&field.ty);
             if let Some(serde_default) = field
                 .attrs
                 .iter()
@@ -1712,12 +1707,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .return_type
                 .as_ref()
                 .map(|t| method_scope.resolve_type(t));
-            for param in &method.params {
-                method_scope.reject_unresolved_annotation(&param.ty);
-            }
-            if let Some(ty) = method.return_type.as_ref() {
-                method_scope.reject_unresolved_annotation(ty);
-            }
+            method_scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
 
             let mut type_params = decl_slots.clone();
             type_params.extend(method_slots);
@@ -1914,12 +1904,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 .as_ref()
                 .map(|ty| scope.resolve_type(ty))
                 .unwrap_or(TypeTable::UNIT);
-            for param in &method.params {
-                scope.reject_unresolved_annotation(&param.ty);
-            }
-            if let Some(ty) = method.return_type.as_ref() {
-                scope.reject_unresolved_annotation(ty);
-            }
+            scope.reject_signature_annotations(&method.params, method.return_type.as_ref());
             if method.is_async
                 && scope
                     .tysys
@@ -2304,12 +2289,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let return_type = func.return_type.as_ref().map(|t| scope.resolve_type(t));
         // The frame still holds this function's type parameters, so they are
         // not mistaken for unknown names.
-        for param in &func.params {
-            scope.reject_unresolved_annotation(&param.ty);
-        }
-        if let Some(ty) = func.return_type.as_ref() {
-            scope.reject_unresolved_annotation(ty);
-        }
+        scope.reject_signature_annotations(&func.params, func.return_type.as_ref());
         let effects = scope.resolve_effects(&func.effects, &func.effect_ids);
         drop(scope);
         self.sem

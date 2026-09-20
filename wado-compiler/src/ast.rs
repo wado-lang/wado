@@ -3504,6 +3504,41 @@ impl Type {
         }
     }
 
+    /// Where a tuple at any depth spreads a second type pack, which leaves the
+    /// boundary between the two packs unwritten.
+    #[must_use]
+    pub fn second_pack_spread(&self) -> Option<Span> {
+        match self {
+            Type::Tuple(elems) => {
+                let mut spreads = elems.iter().filter_map(|e| match e {
+                    Type::TypePackSpread(_, span) => Some(*span),
+                    Type::Named(_)
+                    | Type::Generic(_)
+                    | Type::NamespacedGeneric(_)
+                    | Type::Function(_)
+                    | Type::Tuple(_)
+                    | Type::Reference(_)
+                    | Type::MutReference(_)
+                    | Type::Infer(_)
+                    | Type::Error(_) => None,
+                });
+                spreads.next();
+                spreads
+                    .next()
+                    .or_else(|| elems.iter().find_map(Type::second_pack_spread))
+            }
+            Type::Generic(g) => g.args.iter().find_map(Type::second_pack_spread),
+            Type::NamespacedGeneric(g) => g.args.iter().find_map(Type::second_pack_spread),
+            Type::Function(f) => f
+                .params
+                .iter()
+                .find_map(Type::second_pack_spread)
+                .or_else(|| f.return_type.second_pack_spread()),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.second_pack_spread(),
+            Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => None,
+        }
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {

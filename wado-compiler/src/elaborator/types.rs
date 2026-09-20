@@ -844,6 +844,14 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A received type — a parameter or a field — holding two packs in one
+    /// tuple (`[..A, ..B]`). Every split of the value satisfies it, so no value
+    /// reaching it can settle either pack.
+    TwoPacksInReceivedType {
+        position: String,
+        span: Span,
+    },
+
     /// An `impl` type parameter that its target and trait reference do not
     /// mention. Nothing at a use site says what such a parameter is: the
     /// receiver determines the ones the target names and no more, so the rest
@@ -1861,6 +1869,13 @@ impl TypeError {
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
+                *span,
+            ),
+            TypeError::TwoPacksInReceivedType { position, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, and nothing writes the boundary, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
+                ),
                 *span,
             ),
             TypeError::UnconstrainedImplTypeParam { param_name, span } => (
@@ -3027,6 +3042,7 @@ impl TraitMethodMatch {
 pub(super) struct ParamSlot {
     pub(super) name: String,
     pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) is_pack: bool,
 }
 
 impl From<&ast::GenericParam> for ParamSlot {
@@ -3034,6 +3050,7 @@ impl From<&ast::GenericParam> for ParamSlot {
         Self {
             name: param.name.clone(),
             bounds: param.bounds.clone(),
+            is_pack: param.is_pack,
         }
     }
 }

@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_unresolved_annotation(&field.ty);
+            scope.reject_field_annotation(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -357,6 +357,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // builds this declaration's `TirStruct`, from the `local_struct_fields`
         // entry just recorded above (annotate records facts; reify is the
         // sole TIR producer, matching every other declaration kind).
+    }
+
+    /// Report what a signature's written types cannot mean. A parameter also
+    /// receives a value, which is the stricter position.
+    pub(super) fn reject_signature_annotations(
+        &mut self,
+        params: &[ast::Param],
+        return_type: Option<&ast::Type>,
+    ) {
+        for param in params {
+            self.reject_unresolved_annotation(&param.ty);
+            self.reject_received_annotation(&param.ty, "parameter");
+        }
+        if let Some(ty) = return_type {
+            self.reject_unresolved_annotation(ty);
+        }
+    }
+
+    /// Report what a field's written type cannot mean. A field receives the
+    /// value a literal gives it, so it takes the same checks a parameter does.
+    pub(super) fn reject_field_annotation(&mut self, ty: &ast::Type) {
+        self.reject_unresolved_annotation(ty);
+        self.reject_received_annotation(ty, "field");
+    }
+
+    /// Report what a variant case's written payload cannot mean. A payload is
+    /// received from the value the case is constructed with.
+    pub(super) fn reject_payload_annotation(&mut self, ty: &ast::Type) {
+        self.reject_unresolved_annotation(ty);
+        self.reject_received_annotation(ty, "variant payload");
+    }
+
+    /// Report a type that receives a value it cannot be settled by.
+    fn reject_received_annotation(&mut self, ty: &ast::Type, position: &str) {
+        if self.logger.has_errors() {
+            return;
+        }
+        if let Some(span) = ty.second_pack_spread() {
+            let _ = self.emit(TypeError::TwoPacksInReceivedType {
+                position: position.to_string(),
+                span,
+            });
+        }
     }
 
     /// Report a written type position naming a type no declaration answers

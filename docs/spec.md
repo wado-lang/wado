@@ -5320,12 +5320,28 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
 concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 ```
 
-A tuple holding two packs (`[..A, ..B]`) is a legal type, but it determines
-neither pack: matching it against a concrete tuple admits every split. Its ends
-still hold. The elements ahead of the first pack and behind the last keep their
-positions, so `[X, ..A, ..B, Y]` settles `X` and `Y` and nothing else. An
-element between two packs is inferred from no argument, so name it in a
-turbofish.
+A tuple holding two packs (`[..A, ..B]`) determines neither pack: matching it
+against a concrete tuple admits every split. So it is written only where a value
+is produced — a return type, a local annotation — and a position that receives a
+value is a compile error:
+
+```wado
+fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
+    return [x, ..a, ..b, y];   // OK: the parameters settle both packs
+}
+
+// fn split<..A, ..B>(t: [..A, ..B]) { }       // ERROR: a parameter
+// struct Joined<..A, ..B> { both: [..A, ..B] }  // ERROR: a field
+```
+
+The rule covers a parameter, a struct field, and a variant payload, at any depth
+of the written type. To receive both packs, give each a tuple of its own
+(`[[..A], [..B]]`).
+
+Its ends still hold where it is produced. The elements ahead of the first pack
+and behind the last keep their positions, so `[X, ..A, ..B, Y]` settles `X` and
+`Y` and nothing else. An element between two packs is inferred from no argument,
+so name it in a turbofish.
 
 A turbofish spells each pack as its own tuple, since a flat list carries no
 boundary either:

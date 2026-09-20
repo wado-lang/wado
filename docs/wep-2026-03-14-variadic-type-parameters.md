@@ -165,11 +165,17 @@ primary use case is concatenation:
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
 
-Two packs in one tuple (`[..A, ..B]`) is a legal type but determines neither: every split
-of a concrete tuple satisfies it. The ends are another matter. The elements ahead of the
-first pack and behind the last keep their positions whatever the packs expand to, so
-matching `[X, ..A, ..B, Y]` settles `X` and `Y`, and the packs are left to the arguments
-that carry them alone.
+Two packs in one tuple (`[..A, ..B]`) determines neither: every split of a concrete tuple
+satisfies it. So such a tuple is written only where a value is produced — a return type, a
+local annotation — and a position that receives one is rejected at the declaration: a
+parameter, a struct field, or a variant payload, at any depth of the written type. To
+receive both packs, each takes a tuple of its own (`[[..A], [..B]]`). Rejecting the
+declaration puts the message on what cannot be meant, rather than on the argument that
+later fails to match an empty pack.
+
+The ends are another matter. The elements ahead of the first pack and behind the last keep
+their positions whatever the packs expand to, so a produced `[X, ..A, ..B, Y]` places `X`
+and `Y`, and the packs are left to the arguments that carry them alone.
 
 The same holds for a turbofish, which is flat: `f::<i32, bool>()` names a boundary only
 because one pack absorbs everything past the scalars. With two packs each is spelled as
@@ -177,12 +183,9 @@ its own tuple (`concat::<[i32], [bool, String]>(…)`); any other spelling is an
 one argument per pack included, since `<i32, String>` and `<[i32, String], []>` split one
 list two ways.
 
-Two shapes are reported rather than inferred. A signature whose packs reach no parameter
-of their own, such as `fn split<..A, ..B>(t: [..A, ..B])`, settles each pack to the empty
-pack, and the argument then meets `[]`. The message reports that mismatch rather than the
-inference that failed. An element between two packs, as in `[..A, M, ..B]`, is determined
-once the packs are bound, but binding them does not feed the constraint again. `M` is
-reported uninferred, and a turbofish names it.
+An element between two packs, as in a produced `[..A, M, ..B]`, is determined once the
+packs are bound, but binding them does not feed the constraint again. `M` is reported
+uninferred, and a turbofish names it.
 
 When two packs appear in an expansion expression (§8), they must have the same length at
 every call site; this is enforced at monomorphization time. More complex multi-pack
