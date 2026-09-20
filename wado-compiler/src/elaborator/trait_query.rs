@@ -2098,22 +2098,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (declaring, decl) in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<FqTraitName> = decl
-                    .bounds
-                    .iter()
-                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                    .collect();
-                let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_assoc_type_projection(
-                        self_type_id,
-                        *declaring,
-                        decl.name.clone(),
-                        bound_names,
-                        bindings,
-                    )
+                self.make_frame_projection_of_trait(
+                    self_type_id,
+                    &self_name,
+                    *declaring,
+                    &decl.name,
+                )
             });
             answers.push((decl.name.clone(), answer));
         }

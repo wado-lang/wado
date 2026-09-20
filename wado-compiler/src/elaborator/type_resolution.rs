@@ -984,17 +984,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// The bounds `owning_trait` writes on its associated type `assoc_name`.
-    // They belong to the declaration, and a projection interns by them, so
-    // every builder must read them from the same place (WEP 2026-08-12).
-    fn declared_assoc_type_bounds(&self, owning_trait: DefId, assoc_name: &str) -> Vec<TraitBound> {
-        self.tysys
-            .trait_env
-            .assoc_type_decl(&owning_trait, assoc_name)
-            .map(|decl| decl.bounds.clone())
-            .unwrap_or_default()
-    }
-
     /// What this frame knows the projection `base::assoc` to be, where
     /// `base_name` is the name the frame files `base`'s bounds under.
     ///
@@ -1126,6 +1115,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// [`Self::make_frame_projection`] for a caller that already knows which
     /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
     /// the site that dispatched can say which one `a * b` yields.
+    // The one place a projection is built from a trait, so its bounds — part of
+    // what it interns by — can only be the declaration's (WEP 2026-08-12).
     pub(super) fn make_frame_projection_of_trait(
         &mut self,
         base: TypeId,
@@ -1133,7 +1124,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owning_trait: DefId,
         assoc: &str,
     ) -> TypeId {
-        let assoc_bounds = self.declared_assoc_type_bounds(owning_trait, assoc);
+        let assoc_bounds = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_at(b.id, &b.name))
