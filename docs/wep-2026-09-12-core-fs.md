@@ -407,56 +407,25 @@ cannot reach is unowned and sits below.
   from `metadata`, or a sweep a caller asks for — and neither answer is safe
   while another process may be mid-write on the same name.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
-<<<<<<< HEAD
-  descriptor plumbing. It threads nested `Descriptor`s through some twenty
-  sites, and it cannot run here at all without the `vendor/antlr4` submodule, so
-  converting it is a refactor no test in this repository would check.
-- A second preopen is unreachable: a path resolves against the first one, and
-  what an ambiguous path means is undecided. `package-gale/src/main.wado` keeps
-  its own opener for that reason: it searches every grant and names the ones it
-  searched, which is what makes `wado run --dir` legible there.
-||||||| 8a76434ba
-  descriptor plumbing. It threads nested `Descriptor`s through some twenty
-  sites, and it cannot run here at all without the `vendor/antlr4` submodule, so
-  converting it is a refactor no test in this repository would check. Closing it
-  means porting those sites to paths and re-running the vendor extract.
-- A second preopen is unreachable. Closing it means resolving a path against the
-  preopen whose name is its longest matching prefix, and deciding what an
-  ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
-  that reason: it searches every grant and names the ones it searched, which is
-  what makes `wado run --dir` legible there.
-=======
   descriptor plumbing, a shadow copy of some seven functions here. Its helpers
   each take a subdirectory `Descriptor`, which this module cannot express
   because every path resolves against the first preopen, and it opens
   directories with `MutateDirectory`, which this module never requests. It also
   cannot run here at all without the `vendor/antlr4` submodule, so converting it
-  is a refactor no test in this repository would check. Closing it means writing
-  those sites as preopen-relative paths, or giving this module a handle for a
-  directory below the preopen, and then re-running the vendor extract.
-- A second preopen is unreachable. Closing it means resolving a path against the
-  preopen whose name is its longest matching prefix, and deciding what an
-  ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
-  that reason: it searches every grant and names the ones it searched, which is
-  what makes `wado run --dir` legible there.
->>>>>>> origin/main
+  is a refactor no test in this repository would check.
+- A second preopen is unreachable: a path resolves against the first one, and
+  what an ambiguous path means is undecided. `package-gale/src/main.wado` keeps
+  its own opener for that reason: it searches every grant and names the ones it
+  searched, which is what makes `wado run --dir` legible there.
 - No handler can stand in for the filesystem, so a test of a caller still needs
   a real directory. An operation cannot declare an effect (`docs/spec.md`,
   "Beyond a name, parameters and a return type, an operation declares nothing
   else"), which is what an `interface FileSystem` would rest on.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so
-<<<<<<< HEAD
-  reading one fails with `Loop`. What a link pointing out of the preopen means is
-  undecided.
-||||||| 8a76434ba
-  reading one fails with `Loop`. Closing it means passing `SymlinkFollow` and
-  deciding what a link that points out of the preopen does.
-=======
   reading one fails with `Loop` and writing one is refused. `metadata` reports
   the link itself as `Other`, so `exists` and `try_exists` both answer `true`
-  for a path nothing here can read, a dangling link included. Closing it means
-  passing `SymlinkFollow` and deciding what a link out of the preopen does.
->>>>>>> origin/main
+  for a path nothing here can read, a dangling link included. What a link
+  pointing out of the preopen means is undecided.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Prose would need a message
   for each of the 40 `ErrorCode`s, most of which no caller branches on.
