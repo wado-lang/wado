@@ -554,10 +554,10 @@ pub enum ResolvedType {
         param_id: TypeId,
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
-        /// The trait declaring `assoc_name`: `Self::Err` inside
-        /// `trait FromStr` is `<Self as FromStr>::Err`. Part of the identity, so
-        /// a projection built under one module's `FromStr` cannot be answered by
-        /// another's.
+        /// The trait declaring `assoc_name`: `Self::Err` inside `trait FromStr`
+        /// is `<Self as FromStr>::Err`.
+        // Part of the identity, so a projection built under one module's
+        // `FromStr` is never answered by another's.
         owning_trait: DefId,
         /// Trait bounds on this associated type, named by the declarations the
         /// trait's own `type A: Bound` references resolve to. A projection
@@ -2964,11 +2964,10 @@ impl TypeTable {
         }
     }
 
-    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`.
-    /// Falls back to the unqualified rule when the named trait registered
-    /// nothing for this type — a projection built under a bound can name the
-    /// trait that *declared* the associated type while the impl registered it
-    /// under a subtrait.
+    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`,
+    /// falling back to the unqualified rule where that trait registered nothing.
+    // A projection built under a bound can name the trait that *declared* the
+    // associated type while the impl registered it under a subtrait.
     pub fn resolve_assoc_type_qualified(
         &self,
         concrete_id: TypeId,

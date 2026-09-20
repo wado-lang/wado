@@ -1132,8 +1132,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The projection `base::assoc` as this frame builds it, or `None` when no
-    /// bound on `base` declares `assoc`. The single builder, so one written in
-    /// a signature and one synthesized for an expression intern to the same type.
+    /// bound on `base` declares `assoc`.
+    // The single builder, so one written in a signature and one synthesized for
+    // an expression intern to the same type.
     pub(super) fn make_frame_projection(
         &mut self,
         base: TypeId,

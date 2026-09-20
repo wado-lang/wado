@@ -1901,8 +1901,9 @@ impl TraitEnv {
     }
 
     /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
-    /// `<T as ThatTrait>::assoc_name`. `resolve` says which declaration each
-    /// bound names, since only its reader knows the scope it was written in.
+    /// `<T as ThatTrait>::assoc_name`.
+    // `resolve` says which declaration each bound names: only its reader knows
+    // the scope it was written in.
     pub(super) fn bound_declaring_assoc_type(
         &self,
         bounds: &[ast::TraitBound],
