@@ -1,6 +1,9 @@
 //! Standard library sources: `core:*` is the Wado library (`core:cli`'s
 //! `println`, …), `wasi:*` the raw WASI packages keyed by interface.
 
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+use crate::hashmap::IndexMap;
+
 /// The `lib/` directory this crate was compiled from, where a dev build's host
 /// reads the stdlib.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
@@ -9,7 +12,7 @@ pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
 /// What the host handed over, keyed by the file's path under
 /// [`DEV_STDLIB_ROOT`].
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-static INSTALLED: std::sync::OnceLock<crate::hashmap::IndexMap<String, &'static str>> =
+static INSTALLED: std::sync::OnceLock<IndexMap<String, &'static str>> =
     std::sync::OnceLock::new();
 
 /// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
@@ -25,23 +28,20 @@ pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
 }
 
 /// The stdlib as the host installed it, for a caller that has to say which
-/// files this process is compiling against.
+/// files this process is compiling against. Panics where none is installed.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 #[must_use]
 pub fn installed_dev_stdlib() -> Vec<(&'static str, &'static str)> {
-    match INSTALLED.get() {
-        Some(installed) => installed
-            .iter()
-            .map(|(file, source)| (file.as_str(), *source))
-            .collect(),
-        None => Vec::new(),
-    }
+    installed()
+        .iter()
+        .map(|(file, source)| (file.as_str(), *source))
+        .collect()
 }
 
 /// This crate's own unit tests are their own host, and the files are beside
 /// them.
 #[cfg(all(test, debug_assertions, not(target_arch = "wasm32")))]
-fn read_dev_stdlib_beside_us() -> crate::hashmap::IndexMap<String, &'static str> {
+fn read_dev_stdlib_beside_us() -> IndexMap<String, &'static str> {
     dev_stdlib_files()
         .into_iter()
         .map(|file| {
@@ -54,17 +54,21 @@ fn read_dev_stdlib_beside_us() -> crate::hashmap::IndexMap<String, &'static str>
 }
 
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-fn installed_source(file: &str) -> &'static str {
+fn installed() -> &'static IndexMap<String, &'static str> {
     #[cfg(test)]
-    let installed = INSTALLED.get_or_init(read_dev_stdlib_beside_us);
+    return INSTALLED.get_or_init(read_dev_stdlib_beside_us);
     #[cfg(not(test))]
-    let installed = INSTALLED.get().unwrap_or_else(|| {
+    INSTALLED.get().unwrap_or_else(|| {
         panic!(
             "a dev build takes the stdlib from its host: call \
              `wado_compiler::stdlib::install_dev_stdlib` before compiling"
         )
-    });
-    installed
+    })
+}
+
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn installed_source(file: &str) -> &'static str {
+    installed()
         .get(file)
         .unwrap_or_else(|| panic!("the host installed no stdlib source for {file}"))
 }
