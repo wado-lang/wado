@@ -10,7 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use super::util;
 use crate::ast::{RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_field_annotation(&field.ty);
+            scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -367,36 +367,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         return_type: Option<&ast::Type>,
     ) {
         for param in params {
-            self.reject_unresolved_annotation(&param.ty);
-            self.reject_received_annotation(&param.ty, "parameter");
+            self.reject_received_annotation(&param.ty, ReceivedPosition::Parameter);
         }
         if let Some(ty) = return_type {
             self.reject_unresolved_annotation(ty);
         }
     }
 
-    /// Report what a field's written type cannot mean. A field receives the
-    /// value a literal gives it, so it takes the same checks a parameter does.
-    pub(super) fn reject_field_annotation(&mut self, ty: &ast::Type) {
+    /// Report what a written type that receives a value cannot mean: a name no
+    /// declaration answers, then a tuple no value can settle.
+    pub(super) fn reject_received_annotation(
+        &mut self,
+        ty: &ast::Type,
+        position: ReceivedPosition,
+    ) {
         self.reject_unresolved_annotation(ty);
-        self.reject_received_annotation(ty, "field");
-    }
-
-    /// Report what a variant case's written payload cannot mean. A payload is
-    /// received from the value the case is constructed with.
-    pub(super) fn reject_payload_annotation(&mut self, ty: &ast::Type) {
-        self.reject_unresolved_annotation(ty);
-        self.reject_received_annotation(ty, "variant payload");
-    }
-
-    /// Report a type that receives a value it cannot be settled by.
-    fn reject_received_annotation(&mut self, ty: &ast::Type, position: &str) {
         if self.logger.has_errors() {
             return;
         }
         if let Some(span) = ty.second_pack_spread() {
             let _ = self.emit(TypeError::TwoPacksInReceivedType {
-                position: position.to_string(),
+                position: position.name().to_string(),
                 span,
             });
         }

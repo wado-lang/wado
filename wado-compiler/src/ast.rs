@@ -3504,16 +3504,14 @@ impl Type {
         }
     }
 
-    /// Where a tuple this position receives a value into spreads a second type
-    /// pack, which leaves the boundary between the two packs unwritten. A
-    /// function type ends the walk: its parameters and return are that
-    /// function's own positions, and neither settles the packs of the signature
-    /// that names it.
+    /// Where a tuple receiving a value spreads a second type pack, leaving the
+    /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
     #[must_use]
     pub fn second_pack_spread(&self) -> Option<Span> {
         match self {
-            Type::Tuple(elems) => {
-                let mut spreads = elems.iter().filter_map(|e| match e {
+            Type::Tuple(elems) => elems
+                .iter()
+                .filter_map(|e| match e {
                     Type::TypePackSpread(_, span) => Some(*span),
                     Type::Named(_)
                     | Type::Generic(_)
@@ -3524,12 +3522,9 @@ impl Type {
                     | Type::MutReference(_)
                     | Type::Infer(_)
                     | Type::Error(_) => None,
-                });
-                spreads.next();
-                spreads
-                    .next()
-                    .or_else(|| elems.iter().find_map(Type::second_pack_spread))
-            }
+                })
+                .nth(1)
+                .or_else(|| elems.iter().find_map(Type::second_pack_spread)),
             Type::Generic(g) => g.args.iter().find_map(Type::second_pack_spread),
             Type::NamespacedGeneric(g) => g.args.iter().find_map(Type::second_pack_spread),
             Type::Reference(inner) | Type::MutReference(inner) => inner.second_pack_spread(),

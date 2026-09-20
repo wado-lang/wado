@@ -2783,14 +2783,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // trailing pack slot absent. Seed it with its declared, still-unbound
         // form so the projection below can pin it from the owner's bound.
         for (i, param) in params.iter().enumerate().skip(type_args.len()) {
-            let declared = {
-                let mut tt = self.tysys.type_table.borrow_mut();
-                if param.is_pack {
-                    tt.make_type_pack(param.name.clone(), i as u32)
-                } else {
-                    tt.make_type_param(param.name.clone(), i as u32)
-                }
-            };
+            let declared = self.tysys.type_table.borrow_mut().make_declared_param(
+                param.name.clone(),
+                i as u32,
+                param.is_pack,
+            );
             type_args.push(declared);
         }
         self.resolve_assoc_bound_args(params, type_args);
@@ -2958,10 +2955,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .iter()
                 .enumerate()
                 .map(|(i, p)| {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(p.name.clone(), i as u32)
+                    self.tysys.type_table.borrow_mut().make_declared_param(
+                        p.name.clone(),
+                        i as u32,
+                        p.is_pack,
+                    )
                 })
                 .collect();
         }
@@ -3173,7 +3171,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         };
         if packs.next().is_some() {
-            return self.report_unspelled_pack_args(&real, type_args, span);
+            return self.reject_unspelled_pack_args(&real, type_args, span);
         }
         if type_args.len() <= real.len() {
             return false;
@@ -3187,9 +3185,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         false
     }
 
-    /// Report a site that leaves two packs' boundary unwritten, and say whether
-    /// it did: one pack absorbs a flat list, two cannot, at any arity.
-    fn report_unspelled_pack_args(
+    /// Report a site whose type arguments leave two packs' boundary unwritten,
+    /// returning whether it did.
+    fn reject_unspelled_pack_args(
         &mut self,
         real: &[&ast::GenericParam],
         type_args: &[TypeId],
@@ -3205,13 +3203,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if spelled {
             return false;
         }
-        let _ = self.emit(TypeError::InvalidLiteral {
-            message: "with more than one type pack, a flat list of type arguments does not \
-                      say where one pack ends; spell each type pack as a tuple, as in \
-                      `f::<[i32], [bool]>(...)`"
-                .to_string(),
-            span,
-        });
+        let _ = self.emit(TypeError::UnspelledPackBoundary { span });
         true
     }
 

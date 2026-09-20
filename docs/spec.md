@@ -5320,10 +5320,10 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
 concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 ```
 
-A tuple holding two packs (`[..A, ..B]`) determines neither pack: matching it
-against a concrete tuple admits every split. So it is written only where a value
-is produced — a return type, a local annotation — and a position that receives a
-value is a compile error:
+A tuple holding two packs (`[..A, ..B]`) determines neither pack, because
+matching it against a concrete tuple admits every split. It is legal only where a
+value is produced, such as a return type or a local annotation. A position that
+receives a value rejects it:
 
 ```wado
 fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
@@ -5334,26 +5334,27 @@ fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
 // struct Joined<..A, ..B> { both: [..A, ..B] }  // ERROR: a field
 ```
 
-The rule covers a parameter, a struct field, and a variant payload, at any depth
-of the written type. To receive both packs, give each a tuple of its own
-(`[[..A], [..B]]`).
+The rule covers a parameter, a struct field and a variant payload, at any depth
+of the written type. A `fn` type written inside one ends the walk, because its
+parameters and return belong to that function. To receive both packs, give each
+a tuple of its own (`[[..A], [..B]]`).
 
-Its ends still hold where it is produced. The elements ahead of the first pack
-and behind the last keep their positions, so `[X, ..A, ..B, Y]` settles `X` and
-`Y` and nothing else. An element between two packs is inferred from no argument,
-so name it in a turbofish.
+Where the tuple is produced, its ends still place elements. The elements ahead of
+the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
+settles `X` and `Y` and nothing else. An element between two packs is inferred
+from no argument, so name it in a turbofish.
 
-A turbofish spells each pack as its own tuple, since a flat list carries no
-boundary either:
+A turbofish spells each pack as its own tuple. A flat list carries no boundary
+either:
 
 ```wado
 concat::<[i32], [bool, String]>([1], [true, "x"]);
 // concat::<i32, String>(…)  // ERROR: spell each type pack as a tuple
 ```
 
-One argument per pack is refused too. `<i32, String>` and `<[i32, String], []>`
-split the same list, and a flat list does not say which was meant. The flat form
-stays available where one pack absorbs the surplus on its own
+Writing one argument per pack is refused as well: `<i32, String>` and
+`<[i32, String], []>` split the same list, and nothing says which was meant. The
+flat form stays available where a single pack absorbs the surplus on its own
 (`make_defaults::<i32, String>()`).
 
 #### Lexical note

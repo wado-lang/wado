@@ -20,7 +20,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
@@ -1074,24 +1074,16 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             } else {
                 param.bounds.iter().find_map(|b| b.fn_signature.as_ref())
             };
-            let (type_id, consumed_index) = if param.is_pack {
-                (
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(param.name.clone(), idx),
+            let (type_id, consumed_index) = match fn_bound_sig {
+                Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
+                None => (
+                    self.tysys.type_table.borrow_mut().make_declared_param(
+                        param.name.clone(),
+                        idx,
+                        param.is_pack,
+                    ),
                     true,
-                )
-            } else if let Some(sig) = fn_bound_sig {
-                (self.resolve_type(&ast::Type::Function(sig.clone())), false)
-            } else {
-                (
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(param.name.clone(), idx),
-                    true,
-                )
+                ),
             };
             self.annotate_ctx.trait_ctx.type_params.insert(
                 param.name.clone(),
@@ -1499,7 +1491,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_field_annotation(&field.ty);
+            scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
             if let Some(serde_default) = field
                 .attrs
                 .iter()

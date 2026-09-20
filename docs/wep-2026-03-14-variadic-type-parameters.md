@@ -165,17 +165,21 @@ primary use case is concatenation:
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
 
-Two packs in one tuple (`[..A, ..B]`) determines neither: every split of a concrete tuple
-satisfies it. So such a tuple is written only where a value is produced — a return type, a
-local annotation — and a position that receives one is rejected at the declaration: a
-parameter, a struct field, or a variant payload, at any depth of the written type. To
-receive both packs, each takes a tuple of its own (`[[..A], [..B]]`). Rejecting the
-declaration puts the message on what cannot be meant, rather than on the argument that
-later fails to match an empty pack.
+A tuple holding two packs (`[..A, ..B]`) determines neither, because every split of a
+concrete tuple satisfies it. Such a tuple is legal only where a value is produced, such as
+a return type or a local annotation. A position that receives one is rejected at the
+declaration: a parameter, a struct field or a variant payload, at any depth of the written
+type. A `fn` type written inside one ends the walk, since its parameters and return belong
+to that function and settle no pack of the signature naming it. To receive both packs,
+each takes a tuple of its own (`[[..A], [..B]]`).
 
-The ends are another matter. The elements ahead of the first pack and behind the last keep
-their positions whatever the packs expand to, so a produced `[X, ..A, ..B, Y]` places `X`
-and `Y`, and the packs are left to the arguments that carry them alone.
+Rejecting the declaration puts the message on what cannot be meant, rather than on the
+argument that later fails to match an empty pack.
+
+Where such a tuple is produced, its ends still place elements. The elements ahead of the
+first pack and behind the last keep their positions whatever the packs expand to, so
+`[X, ..A, ..B, Y]` places `X` and `Y`, and the packs are left to the arguments that carry
+them alone.
 
 The same holds for a turbofish, which is flat: `f::<i32, bool>()` names a boundary only
 because one pack absorbs everything past the scalars. With two packs each is spelled as

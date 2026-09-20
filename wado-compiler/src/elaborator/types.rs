@@ -844,11 +844,17 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A received type — a parameter or a field — holding two packs in one
-    /// tuple (`[..A, ..B]`). Every split of the value satisfies it, so no value
-    /// reaching it can settle either pack.
+    /// A position that receives a value holding two packs in one tuple
+    /// (`[..A, ..B]`). Every split of the value satisfies it, so nothing
+    /// reaching it settles either pack.
     TwoPacksInReceivedType {
         position: String,
+        span: Span,
+    },
+
+    /// A turbofish spelling more than one type pack's arguments flat, which
+    /// says nothing about where one pack ends and the next begins.
+    UnspelledPackBoundary {
         span: Span,
     },
 
@@ -1874,8 +1880,13 @@ impl TypeError {
             TypeError::TwoPacksInReceivedType { position, span } => (
                 Code::TypeMismatch,
                 format!(
-                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, and nothing writes the boundary, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
+                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
                 ),
+                *span,
+            ),
+            TypeError::UnspelledPackBoundary { span } => (
+                Code::TypeMismatch,
+                "with more than one type pack, a flat list of type arguments does not say where one pack ends; spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`".to_string(),
                 *span,
             ),
             TypeError::UnconstrainedImplTypeParam { param_name, span } => (
@@ -3032,6 +3043,25 @@ impl TraitMethodMatch {
                 MethodOwner::InheritedFrom(link)
             }
             _ => self.method_info.owner,
+        }
+    }
+}
+
+/// A written type position a value arrives at, which is what settles the type
+/// parameters it names.
+#[derive(Clone, Copy)]
+pub(super) enum ReceivedPosition {
+    Parameter,
+    Field,
+    VariantPayload,
+}
+
+impl ReceivedPosition {
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            ReceivedPosition::Parameter => "parameter",
+            ReceivedPosition::Field => "field",
+            ReceivedPosition::VariantPayload => "variant payload",
         }
     }
 }

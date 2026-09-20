@@ -465,24 +465,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             } else {
                 tp.bounds.iter().find_map(|b| b.fn_signature.as_ref())
             };
-            let (type_id, consumed_index) = if tp.is_pack {
-                (
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(tp.name.clone(), idx),
+            let (type_id, consumed_index) = match fn_bound_sig {
+                Some(sig) => (self.resolve_type(&ast::Type::Function(sig.clone())), false),
+                None => (
+                    self.tysys.type_table.borrow_mut().make_declared_param(
+                        tp.name.clone(),
+                        idx,
+                        tp.is_pack,
+                    ),
                     true,
-                )
-            } else if let Some(sig) = fn_bound_sig {
-                (self.resolve_type(&ast::Type::Function(sig.clone())), false)
-            } else {
-                (
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(tp.name.clone(), idx),
-                    true,
-                )
+                ),
             };
             self.annotate_ctx.trait_ctx.type_params.insert(
                 tp.name.clone(),

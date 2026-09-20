@@ -2832,6 +2832,16 @@ impl TypeTable {
         self.intern(ResolvedType::TypeParam { name, index })
     }
 
+    /// The id a declaration's parameter at `index` interns to. A pack holds a
+    /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
+    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+        if is_pack {
+            self.make_type_pack(name, index)
+        } else {
+            self.make_type_param(name, index)
+        }
+    }
+
     /// Create an inference variable (see [`ResolvedType::InferVar`]).
     pub fn make_infer_var(&mut self, id: InferVarId) -> TypeId {
         self.intern(ResolvedType::InferVar(id))
