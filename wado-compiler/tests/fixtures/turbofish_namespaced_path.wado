@@ -1,0 +1,42 @@
+// A turbofish on a namespace-qualified path's prefix, the form a bare name
+// already had. `lib::Wrapper` is the type it pins, so the receiver's name comes
+// from the declaration the path reaches and not from a bare `Wrapper` the call
+// site cannot spell.
+
+use lib from "./sub/turbofish_namespaced_path_lib.wado";
+
+test "a namespaced turbofish pins a static call's parameter" {
+    let w = lib::Wrapper::<i64>::make(3);
+    assert w.value == 3 as i64;
+}
+
+test "a namespaced turbofish pins a payload-less case" {
+    let m = lib::Maybe::<i32>::Nothing;
+    assert m matches { Nothing };
+}
+
+test "a namespaced turbofish pins a struct literal" {
+    let w = lib::Wrapper::<i64> { value: 4 };
+    assert w.value == 4 as i64;
+}
+
+test "the same paths without a turbofish still infer" {
+    let w = lib::Wrapper::make(5);
+    assert w.value == 5;
+    let m: lib::Maybe<i32> = lib::Maybe::Nothing;
+    assert m matches { Nothing };
+}
+
+test "a method's own turbofish rides alongside the path's" {
+    let w = lib::Wrapper::<i64>::tagged::<String>(6, "six");
+    assert w.value == 6 as i64;
+}
+
+test "a namespaced turbofish leaves a slot to inference" {
+    let e = lib::Either::<_, String>::Left(7);
+    assert e matches { Left(7) };
+}
+
+test "a namespaced trait turbofish pins the impl the call dispatches to" {
+    assert lib::Take::<i32>::take(&1, 2) == 3;
+}

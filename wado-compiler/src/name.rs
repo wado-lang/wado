@@ -47,6 +47,13 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
     format!("{namespace}{NAMESPACE_MEMBER_SEP}{member}")
 }
 
+/// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
+/// diagnostic naming a type by the spelling a lookup asked by. Any other name
+/// is already its own spelling.
+pub fn unalias_namespace_member(name: &str) -> String {
+    name.replacen(NAMESPACE_MEMBER_SEP, "::", 1)
+}
+
 /// Separator between a local item's declared name and its disambiguating
 /// `AstId` in the mangled name a function-scoped `struct` / `type` declaration
 /// (`Stmt::Item`) renders to. `@` is not a valid Wado identifier character.

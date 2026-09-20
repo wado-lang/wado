@@ -1713,10 +1713,12 @@ impl<'a> Unparser<'a> {
             Expr::Ident(i) => {
                 // `Maybe::<i32>::Nothing` puts its turbofish on the path's
                 // prefix; appending it to the whole name would re-parse as the
-                // identifier's own (`Maybe::Nothing::<i32>`).
+                // identifier's own (`Maybe::Nothing::<i32>`). The prefix is
+                // everything before the case, so `geo::Maybe::Nothing` splits
+                // at its last `::` and not its first.
                 let split = i
                     .type_args_on_prefix
-                    .then(|| i.name.split_once("::"))
+                    .then(|| i.name.rsplit_once("::"))
                     .flatten();
                 if let Some((prefix, suffix)) = split {
                     self.output.push_str(prefix);
@@ -2155,11 +2157,19 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_static_method_call(&mut self, s: &StaticMethodCallExpr) {
-        // For generic types, use turbofish syntax: Name::<Args>
+        // The target is a path here, not an annotation, so its arguments are a
+        // turbofish: an annotation's `Name<Args>::m()` re-parses as a chain of
+        // comparisons. Both spellings a path can carry one on are written out.
         match &s.target_type {
             Type::Generic(g) => {
                 self.output.push_str(&g.name);
-                self.delimited("::<", ">", &g.args, Unparser::unparse_type);
+                self.unparse_turbofish(&g.args);
+            }
+            Type::NamespacedGeneric(n) => {
+                self.output.push_str(&n.namespace);
+                self.output.push_str("::");
+                self.output.push_str(&n.name);
+                self.unparse_turbofish(&n.args);
             }
             _ => self.unparse_type(&s.target_type),
         }
@@ -3507,7 +3517,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         Expr::Ident(i) => {
             let split = i
                 .type_args_on_prefix
-                .then(|| i.name.split_once("::"))
+                .then(|| i.name.rsplit_once("::"))
                 .flatten();
             if let Some((prefix, suffix)) = split {
                 output.push_str(prefix);

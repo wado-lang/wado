@@ -1,0 +1,14 @@
+// One head carries one turbofish, whichever postfix form consumes it. Before
+// the struct-literal form existed the second list won and the first was dropped.
+
+struct Wrapper<T> {
+    value: T,
+}
+
+test "a second turbofish on the same head is rejected" {
+    let w = Wrapper::<i32>::<i64> { value: 1 };
+    assert w.value == 1;
+}
+
+__DATA__
+{"compile_error": "turbofish type arguments already specified on this identifier"}

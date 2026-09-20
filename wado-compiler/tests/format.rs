@@ -306,6 +306,25 @@ fn test_format_case_path_turbofish_stays_on_the_prefix() {
     assert_eq!(formatted, formatted2, "format should be idempotent");
 }
 
+/// A namespaced case path puts its turbofish on `ns::Type`, so the split is at
+/// the last `::` and not the first — `ns::<T>::Type::Case` is a different path.
+#[test]
+fn test_format_namespaced_case_path_turbofish_stays_on_the_type() {
+    let source = concat!(
+        "use lib from \"./lib.wado\";\n",
+        "\n",
+        "fn run() {\n    let a = lib::Maybe::<String>::Nothing;\n}\n",
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert!(
+        formatted.contains("lib::Maybe::<String>::Nothing"),
+        "expected the turbofish to stay on the type, got:\n{formatted}"
+    );
+    assert_format_preserves_ast(source);
+    let formatted2 = wado_compiler::format(&formatted).expect("reformat failed");
+    assert_eq!(formatted, formatted2, "format should be idempotent");
+}
+
 /// A turbofish before a struct literal's brace (`Wrapper::<i64> { … }`) is the
 /// literal's own, so it stays on the type name rather than being dropped.
 #[test]

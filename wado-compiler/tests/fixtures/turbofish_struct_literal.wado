@@ -71,3 +71,15 @@ test "a spread keeps the turbofish's instance" {
     let w = Wrapper::<i64> { ..base, value: 5 };
     assert w.value == 5 as i64;
 }
+
+test "a turbofish stopping short leaves the rest to the fields" {
+    let p = Pair::<i64> { first: 1, second: "two" };
+    assert p.first == 1 as i64;
+    assert p.second == "two";
+}
+
+test "an underscore pins one slot and infers the other" {
+    let p = Pair::<_, String> { first: 1, second: "two" };
+    assert p.first == 1;
+    assert p.second == "two";
+}
