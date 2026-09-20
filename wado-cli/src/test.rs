@@ -2160,18 +2160,10 @@ async fn run_one_package(
     totals
 }
 
-/// Build the thread-local stdlib snapshot on `parallelism` distinct
-/// blocking-pool worker threads in parallel, ahead of any compile work.
-///
-/// Each worker would otherwise build the snapshot lazily on its first
-/// `semantics_of` call (~120 ms), serialising the cost behind that
-/// task.  A `std::sync::Barrier` keeps every prewarm task running
-/// simultaneously so tokio's blocking pool allocates `parallelism`
-/// distinct threads; those same threads are then reused for the
-/// `spawn_blocking` compile tasks scheduled by [`run_compile_stage`],
-/// turning each first-compile from a cold miss into a cache hit.
+/// Build the thread-local stdlib snapshot on `parallelism` distinct blocking
+/// threads at once, rather than ~120 ms on each worker's first compile.
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
-    let parallelism = parallelism.max(1);
+    assert!(parallelism > 0, "prewarm_workers answers at least one");
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));
     let handles: Vec<_> = (0..parallelism)
         .map(|_| {
@@ -2182,6 +2174,8 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     wado_compiler::prewarm_stdlib_snapshot();
                 }));
+                // Every task running at once is what makes tokio's pool allocate
+                // `parallelism` threads, which run_compile_stage then reuses.
                 barrier.wait();
                 if let Err(panic) = result {
                     std::panic::resume_unwind(panic);
@@ -2191,11 +2185,9 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         .collect();
     for handle in handles {
         // A snapshot the stdlib cannot build is a bug every compile would hit.
+        // Nothing aborts these tasks, so a join error is that panic.
         if let Err(join_err) = handle.await {
-            match join_err.try_into_panic() {
-                Ok(panic) => std::panic::resume_unwind(panic),
-                Err(join_err) => panic!("the stdlib prewarm task ended early: {join_err}"),
-            }
+            std::panic::resume_unwind(join_err.into_panic());
         }
     }
 }
