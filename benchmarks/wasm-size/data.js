@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789909513846,
+  "lastUpdate": 1789911477995,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57389,6 +57389,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/46cbc8a94b7f3c2ef76f39e9c165361122489369"
         },
         "date": 1789909513315,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "675bfcbd254a307fc9891ee723f9268d13d4e865",
+          "message": "Merge pull request #2097 from wado-lang/claude/turbofish-struct-literal-parse-ogkb4p\n\nfix(parser): accept a turbofish before a struct literal and on a namespaced path",
+          "timestamp": "2026-09-20T21:44:54+09:00",
+          "tree_id": "968d3bfb06fb79234cb39c5930d2721036b5c944",
+          "url": "https://github.com/wado-lang/wado/commit/675bfcbd254a307fc9891ee723f9268d13d4e865"
+        },
+        "date": 1789911477390,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
