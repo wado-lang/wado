@@ -458,6 +458,7 @@ pub fn type_head_name(ty: &Type) -> Option<&str> {
     match ty {
         Type::Named(n) => Some(n.name.as_str()),
         Type::Generic(g) => Some(g.name.as_str()),
+        Type::NamespacedGeneric(g) => Some(g.name.as_str()),
         _ => None,
     }
 }

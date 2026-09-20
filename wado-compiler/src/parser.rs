@@ -3955,9 +3955,8 @@ impl Parser {
         Ok(expr)
     }
 
-    /// Speculatively parse `Type::<Args>::method(...)` after `name::` was already
-    /// consumed and `<` is the next token. On any speculative failure, restore the
-    /// parser to `cp` (just before the `::`) and produce a bare `Ident`.
+    /// [`Self::parse_turbofish_path_tail`] on a bare head, with the `Ident` the
+    /// backtrack leaves behind. `cp` sits just before the `::`.
     fn parse_generic_static_method_call_or_backtrack(
         &mut self,
         start_span: Span,
@@ -4012,13 +4011,10 @@ impl Parser {
             spec_ok = self.expect_gt().is_ok();
         }
 
-        // After `Head::<…>`, `::method(…)` continues the static-method-call path
-        // and `::Case` (no call) is a turbofish-qualified path selecting a
-        // payload-less case. A bare `Head::<…>` (used as a value, or before a
-        // struct literal's brace) backtracks so the outer postfix loop sees the
-        // `::<…>` again and either parses it as a turbofish-attached identifier
-        // or rejects a duplicate turbofish. `Head::<A>::<B>` falls into the same
-        // backtrack: the second `<` is not a method identifier.
+        // A value, a struct literal's brace and a second turbofish all follow a
+        // bare `Head::<…>`, and the postfix loop tells them apart — so each
+        // backtracks from here rather than being named again.
+        //
         // The segment may be a contextual keyword — `Type::<T>::from(x)` is the
         // one every `From` impl is called through — so admit whatever
         // `consume_ident` below will accept, not `Ident` alone.
@@ -4062,13 +4058,14 @@ impl Parser {
             });
             segments.push(PathSegment {
                 id: self.alloc_ast_id(),
-                name: method.clone(),
+                name: method,
                 span: method_span,
             });
-            let name = match &head.namespace {
-                None => format!("{}::{method}", head.name),
-                Some((namespace, _)) => format!("{namespace}::{}::{method}", head.name),
-            };
+            let name = segments
+                .iter()
+                .map(|segment| segment.name.as_str())
+                .collect::<Vec<_>>()
+                .join("::");
             return Ok(Some(Expr::Ident(IdentExpr {
                 id: self.alloc_ast_id(),
                 name,

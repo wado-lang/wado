@@ -2717,9 +2717,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
             ast::Expr::StaticMethodCall(smc) => {
                 // The target type heads a turbofish (`Result::<_, MyErr>`), so
-                // its direct args allow `_`; deeper positions are strict. A
-                // namespaced head writes the same turbofish (`ns::Result::<_,
-                // MyErr>`), so it is read off the node the same way.
+                // its direct args allow `_`; deeper positions are strict.
                 match &smc.target_type {
                     Type::Generic(_) | Type::NamespacedGeneric(_) => {
                         for arg in written_arg_nodes(&smc.target_type) {

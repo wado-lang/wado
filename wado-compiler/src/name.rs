@@ -48,8 +48,7 @@ pub fn namespace_member_alias(namespace: &str, member: &str) -> String {
 }
 
 /// Read a `ns$member` alias back as the `ns::member` its author wrote, for a
-/// diagnostic naming a type by the spelling a lookup asked by. Any other name
-/// is already its own spelling.
+/// diagnostic. Any other name is already its own spelling.
 pub fn unalias_namespace_member(name: &str) -> String {
     name.replacen(NAMESPACE_MEMBER_SEP, "::", 1)
 }

@@ -82,10 +82,10 @@ all, and is reported as that rather than as an unknown function.
 
 A namespace qualifies the head, not the argument list. `ns::Take::<i64>::take(…)`
 asks the same questions of the same declaration, reaching it through the
-`ns$Take` alias the import tier keys. The head is read off the written node —
-its site and the spelling a lookup asks by — so a bare name and a namespaced one
-arrive at the same answer instead of the namespaced one falling through to an
-unknown function.
+`ns$Take` alias the import tier keys. So the head is read off the node that wrote
+it: its site, and the spelling a lookup asks by. A bare name and a namespaced one
+then reach the same answer. Reading the head as a bare `Type::Generic` would
+leave the namespaced spelling to fall through to an unknown function.
 
 ### Four outcomes, each meaning one thing
 

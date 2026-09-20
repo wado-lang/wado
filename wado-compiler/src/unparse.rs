@@ -7,15 +7,15 @@ use crate::ast::{
     Attribute, BinaryExpr, BinaryOp, Block, BreakStmt, BuiltinTypeDecl, CallExpr, CastExpr,
     ChainedComparison, ClosureExpr, ComparisonChainExpr, CompoundAssignExpr, CompoundAssignOp,
     Condition, ConditionElement, EnumCase, EnumDecl, Expr, ExprStmt, FieldAccessExpr, FlagsDecl,
-    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IfExpr, IfStmt,
-    ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item, LabeledBlockExpr,
-    LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm, MatchExpr, MatchesExpr,
-    MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind, ResourceDecl, RestClause,
-    ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl, StructField, StructLiteralExpr,
-    StructLiteralField, TaskReturnStmt, TemplateStringExpr, TestDecl, TraitBound, TraitDecl,
-    TraitHead, TupleComprehensionExpr, TupleLiteralExpr, TupleTypeDecl, Type, UnaryExpr, UnaryOp,
-    UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
-    WithHandlerExpr, WorldDecl, WorldExport, written_params,
+    ForOfStmt, ForStmt, Function, FunctionType, GenericParam, GlobalDecl, IdentExpr, IfExpr,
+    IfStmt, ImplBlock, ImportAttributes, IndexExpr, InnerAttribute, InterfaceDecl, Item,
+    LabeledBlockExpr, LabeledBlockStmt, LetStmt, Literal, LiteralMember, LoopStmt, MatchArm,
+    MatchExpr, MatchesExpr, MethodCallExpr, Module, Newtype, Param, Pattern, RangeKind,
+    ResourceDecl, RestClause, ReturnStmt, SelfKind, StaticMethodCallExpr, Stmt, StructDecl,
+    StructField, StructLiteralExpr, StructLiteralField, TaskReturnStmt, TemplateStringExpr,
+    TestDecl, TraitBound, TraitDecl, TraitHead, TupleComprehensionExpr, TupleLiteralExpr,
+    TupleTypeDecl, Type, UnaryExpr, UnaryOp, UseDecl, UseItem, UseItemSimple, VariantCase,
+    VariantDecl, Visibility, WhileStmt, WithHandlerExpr, WorldDecl, WorldExport, written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::escape::{quoted, quoted_char};
@@ -1711,16 +1711,7 @@ impl<'a> Unparser<'a> {
     fn unparse_expr(&mut self, expr: &Expr) {
         match expr {
             Expr::Ident(i) => {
-                // `Maybe::<i32>::Nothing` puts its turbofish on the path's
-                // prefix; appending it to the whole name would re-parse as the
-                // identifier's own (`Maybe::Nothing::<i32>`). The prefix is
-                // everything before the case, so `geo::Maybe::Nothing` splits
-                // at its last `::` and not its first.
-                let split = i
-                    .type_args_on_prefix
-                    .then(|| i.name.rsplit_once("::"))
-                    .flatten();
-                if let Some((prefix, suffix)) = split {
+                if let Some((prefix, suffix)) = prefix_turbofish_split(i) {
                     self.output.push_str(prefix);
                     self.unparse_turbofish(&i.type_args);
                     self.output.push_str("::");
@@ -3493,6 +3484,15 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
     output
 }
 
+/// A case path's turbofish sits on the prefix, so split at the last `::` and
+/// answer `(prefix, case)`. On the whole name it re-parses as the ident's own.
+fn prefix_turbofish_split(ident: &IdentExpr) -> Option<(&str, &str)> {
+    ident
+        .type_args_on_prefix
+        .then(|| ident.name.rsplit_once("::"))
+        .flatten()
+}
+
 /// Emit `::<T1, T2, ...>` turbofish into `output`.
 fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
     if type_args.is_empty() {
@@ -3515,11 +3515,7 @@ fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
 fn unparse_expr_into(expr: &Expr, output: &mut String) {
     match expr {
         Expr::Ident(i) => {
-            let split = i
-                .type_args_on_prefix
-                .then(|| i.name.rsplit_once("::"))
-                .flatten();
-            if let Some((prefix, suffix)) = split {
+            if let Some((prefix, suffix)) = prefix_turbofish_split(i) {
                 output.push_str(prefix);
                 unparse_turbofish_into(&i.type_args, output);
                 output.push_str("::");

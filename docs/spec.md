@@ -2839,7 +2839,7 @@ When both mechanisms are available, forward inference takes precedence for type 
 
 A turbofish on the type name pins the arguments outright. It reaches a parameter
 no field mentions, and it overrides one a field would otherwise settle. It says
-what an annotation naming the same instantiation says, so the two must agree:
+what the matching annotation says, so the two must agree:
 
 ```wado
 struct Tagged<T> { tag: i32 }

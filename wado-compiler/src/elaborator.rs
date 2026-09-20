@@ -120,8 +120,7 @@ use types::{
 };
 
 /// A written type application's head: the site that wrote it, and the spelling
-/// a declaration lookup asks by. `ns::Name` is keyed by the `ns$Name` alias the
-/// import tier scopes, so the namespace is answered here and not at each site.
+/// a declaration lookup asks by — `ns::Name` by its `ns$Name` alias.
 pub(super) struct WrittenHead<'a> {
     pub(super) site: ast::AstId,
     pub(super) name: String,
@@ -431,25 +430,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         canonical_ns_ref(self.namespace_imports_at(node)?, name)
     }
 
-    /// The head a written type application names. `None` for the nodes
-    /// [`trait_env::written_arg_nodes`] answers nothing for, and for a
-    /// projection (`Self::Assoc`, `T::Assoc`), which names no declaration.
+    /// The head a written type application names. `None` where no declaration
+    /// is named: a projection (`Self::Assoc`), or any type that is no application.
     pub(super) fn written_head<'t>(&self, ty: &'t ast::Type) -> Option<WrittenHead<'t>> {
-        match ty {
-            ast::Type::Generic(generic) => Some(WrittenHead {
-                site: generic.id,
-                name: generic.name.clone(),
-                args: &generic.args,
-            }),
-            ast::Type::NamespacedGeneric(ns) => self
-                .namespace_alias_source(&ns.namespace, ns.id)
-                .map(|_| WrittenHead {
-                    site: ns.id,
-                    name: namespace_member_alias(&ns.namespace, &ns.name),
-                    args: &ns.args,
-                }),
-            _ => None,
-        }
+        let (site, name) = match ty {
+            ast::Type::Generic(generic) => (generic.id, generic.name.clone()),
+            ast::Type::NamespacedGeneric(ns) => {
+                self.namespace_alias_source(&ns.namespace, ns.id)?;
+                (ns.id, namespace_member_alias(&ns.namespace, &ns.name))
+            }
+            _ => return None,
+        };
+        Some(WrittenHead {
+            site,
+            name,
+            args: trait_env::written_arg_nodes(ty),
+        })
     }
 
     /// Run `body` in `module`'s perspective, swapping the current module and
@@ -1212,9 +1208,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         )
     }
 
-    /// The declared name of the trait `trait_name` refers to at `site` — the
-    /// same name past a `use … as` alias or a `ns$Trait` namespace alias.
-    /// The declaration indexes answer where the site is not at hand.
+    /// The declared name of the trait `trait_name` refers to at `site`, past a
+    /// `use … as` or `ns$Trait` alias. No site falls back to the decl indexes.
     pub(super) fn declared_trait_name(&self, site: Option<AstId>, trait_name: &str) -> String {
         site.map_or_else(
             || self.decl_key_or_local(trait_name),

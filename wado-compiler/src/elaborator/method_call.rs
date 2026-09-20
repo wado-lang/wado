@@ -37,7 +37,7 @@ use crate::elaborator::trait_env::{
     BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
 };
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
-use crate::name::{DeclName, FqTraitName};
+use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
 use crate::unparse::unparse_type_into;
 use crate::{hashmap, tir};
@@ -1425,7 +1425,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "{}::<…>::{} (one subject type argument, found {})",
-                        head.name,
+                        unalias_namespace_member(&head.name),
                         static_call.method,
                         head.args.len()
                     ),
