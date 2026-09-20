@@ -651,12 +651,13 @@ walker frame rather than a query: both perspective swaps are the callee-scope
 retry a parameter default needs when the caller cannot name the callee's type
 ([`wep-2026-04-11-default-arguments.md`](./wep-2026-04-11-default-arguments.md)),
 and the surviving suppression is the argument-classification probe. Every row
-whose count exceeds its target is a [known gap](#known-gaps).
+whose count exceeds its target is on the [roadmap](#roadmap).
 
-## Known gaps
+## Roadmap
 
-Each gap below is a measurement over the tree, and each says what closing it
-takes. Three rules order them.
+Each item below is a measurement over the tree, and each says what finishing it
+means. An item that waits on another says so. Three rules are what they are
+measured against.
 
 - One list. A set the compiler must keep in step is written once and everything
   else generated from it; a field-by-field copy is a defect that has not fired
@@ -680,7 +681,7 @@ neither the effect parameter nor the declaration that wrote it.
 An `impl` head admits one on the same terms, where it named a slot no argument
 filled until `register_impl_block_params` stopped counting it.
 
-Closing it takes a decision on the language rule: reject the parameter at its
+Finishing it takes a decision on the language rule: reject the parameter at its
 own span when a `struct`, `variant`, newtype or `impl` declares one, and both
 the silent drop and that diagnostic go away. Until then, the slot is filtered
 rather than refused, which is what
@@ -698,7 +699,7 @@ whose consumer would reach the method. No package in the tree hits it:
 `wado check` over the `lib` entry of `package-gale`, `package-jade`,
 `package-marl` and `package-cm-catalog` reports no such warning.
 
-Closing it takes a decision on which rule a declared method follows. The
+Finishing it means a decision on which rule a declared method follows. The
 question behind it is whether liveness roots a package's external surface at all
 once the compile has an entry program, whose world exports are the only roots
 the emitted component keeps. `Item::Impl` leaves the same question open, rooting
@@ -721,8 +722,8 @@ bodyless declarations are gone from the package, and every call to one mints an
 extern stub instead. `CompilerItem` records some of these and nothing records
 the rest.
 
-Closing it takes that list, one entry per entity named after `liveness` runs,
-with the pass that names it stating its trigger. Read the gap below first: it
+Finishing it means that list, one entry per entity named after `liveness` runs,
+with the pass that names it stating its trigger. Read the item below first: it
 tried that on the `lower` side, and says what the list does not settle.
 
 Two things bound the work. The rest of the closure is held by real edges from
@@ -812,7 +813,7 @@ export fn run() with Widget {
 }
 ```
 
-Closing it takes a check over the dispatch a call records, which is the only
+Finishing it means a check over the dispatch a call records, which is the only
 place total over both spellings: `Widget::poke(&w, 3)` records a
 `StaticMethodDispatch` and `w.poke(3)` a `MethodDispatch`, and each carries the
 `method_def` whose parent says the operation is a resource's. `wir_build` cannot
@@ -840,7 +841,7 @@ rest assemble the callee's parameter list themselves, and nothing in a
 signature says which of the two questions — "what does this name declare" and
 "which declaration does this call select" — a given lookup answers.
 
-Closing it: one `check_args(sig, args, spans)` every call path calls, fed by
+Finishing it: one `check_args(sig, args, spans)` every call path calls, fed by
 one lookup that returns a selected signature or says it selected none. The
 selection stays with the overload path, which is the only place that holds the
 arguments.
@@ -861,11 +862,11 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
 rejected the input, so the reify-side read is an `.expect`.
 
-Closing it: a recorded fact per question reify re-asks — the callee's shape on
-a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
-case index on every case identifier and pattern, the resolved effects on the
-written `fn(…) with E` node — after which the two borrowed AST inputs, the
-effect-param name list and `resolve_global_type` have no caller left.
+Finishing it means one recorded fact per question reify re-asks: the callee's
+shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
+owner and case index on every case identifier and pattern, and the resolved
+effects on the written `fn(…) with E` node. The two borrowed AST inputs, the
+effect-param name list and `resolve_global_type` then have no caller left.
 
 ### The same shape is written several times
 
@@ -893,7 +894,7 @@ four places, two of them inside the decl pass's loops with eight empty maps
 declared beside them, where a constructor and a `ModuleDecls::default()` would
 do.
 
-Closing it: each row is a mechanical merge, and none changes what the language
+Finishing it: each row is a mechanical merge, and none changes what the language
 accepts — the e2e corpus is the verification. The operator row is the largest
 single win: `resolve_binary_op` is 789 lines and contains three of the four
 ladders.
@@ -907,7 +908,7 @@ collector that needs namespace imports and again per iteration of the newtype
 fixpoint. So a new declaration fact defaults to a new scan rather than a place
 in an existing walk.
 
-Closing it: one walk the collectors hang off, and `TypeLookup::new(…)` plus a
+Finishing it: one walk the collectors hang off, and `TypeLookup::new(…)` plus a
 hoisted `ModuleDecls::default()` in place of the two literals and their empty
 maps.
 
@@ -925,7 +926,7 @@ interner, invocations, entry module) are still five separate fields threaded
 identically through `module_elaborator` and `Reify::new` rather than one
 `ElabEnv`.
 
-Closing it: move each query that names no walk state onto `TypeSystem`, with
+Finishing it: move each query that names no walk state onto `TypeSystem`, with
 `typecheck.rs`'s three layers (pure function, `TypeSystem` method returning
 data, walker method that emits) as the template; then dissolve
 `AnnotateState`, with `tysys`, `module_semantics`, `liveness` and
@@ -943,7 +944,7 @@ recursion over a handful of `ResolvedType` arms, so it is partial by
 construction wherever the arm list is — it descends no tuple, function type or
 projection, and has five call sites.
 
-Closing it: route both through `TypeTable::substitute_type_params_with` and
+Finishing it: route both through `TypeTable::substitute_type_params_with` and
 delete them. The AST-level one goes when the base type it substitutes into is
 resolved once at its declaration instead of re-resolved per use.
 
@@ -957,7 +958,7 @@ insert / `shift_remove` pair around a call that can return early;
 on drop; `FunctionContext`'s `for_continue_labels` and `compound_hoist_types`
 are saved and restored by hand. None is panic-safe.
 
-Closing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
+Finishing it: `with_scope_field` is the pattern, and `assoc_binding_stack` moves
 onto `Scope` where the membership rule puts it.
 
 ### The hole sweep is still a hand list
@@ -967,7 +968,7 @@ hold a `TypeId` by hand — 16 of the 20 — so a map added to `with_body_facts!
 sweeps only if someone remembers. The four it omits carry none today; nothing
 in the type system says so.
 
-Closing it: a substitution implementation per fact value type and a loop
+Finishing it: a substitution implementation per fact value type and a loop
 generated from the same list, so an omission is a missing impl rather than a
 silent leak of an unsolved variable into reify.
 
@@ -980,7 +981,7 @@ walk, so a check reasoning about a value's type inside a tuple `for-of` body
 sees the first element's. A body binding a resource in one element and a plain
 value in another is checked against one of them.
 
-Closing it: either a cursor that scopes a `Semantics` query to one
+Finishing it: either a cursor that scopes a `Semantics` query to one
 instantiation's walk — which is what reify's overlay stack already is — or
 moving the per-element part of those checks into the annotate walk, where the
 element is the frame being walked. Which of the two is a design question, not a

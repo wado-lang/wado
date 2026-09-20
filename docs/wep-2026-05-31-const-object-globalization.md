@@ -336,8 +336,8 @@ loop, and a pure call building a heap value from literals.
 - Only `core:builtin` answers the bodyless-callee question. A Component Model
   import and a `.wasm` asset export always refuse, however read-only they are,
   because `#[retain]` is not complete on them the way it is on `core:builtin`.
-  Closing it means deciding what an absent clause means on those two, which is a
-  language question rather than a pass one.
+  What an absent clause means on those two is a language question rather than a
+  pass one, and is undecided.
 - `#[immediate(p)]` is read by `const_object_globalization` alone. Any later
   pass that would substitute an argument has to consult it too, and nothing
   makes it. The declarations are complete as of the SIMD lane operands and

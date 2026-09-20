@@ -390,7 +390,6 @@ fn generate_inline_task_return(
     let names = CmStdlibNames::from_type_table(&type_table.borrow());
     let shape_ctx = CmShapeContext {
         cm_interface_registry,
-        cm_package,
         names: &names,
         tir_modules,
         type_table,

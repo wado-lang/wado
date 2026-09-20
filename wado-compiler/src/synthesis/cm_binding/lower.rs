@@ -21,11 +21,11 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LowerContext, binary_add, cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower,
-    field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
+    LowerContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_layout_i32,
+    cm_type_to_type_id, cm_val_type_from_type_id, coerce_flat_lower, disc_store_op, field_access,
+    flatten_param_type, kebab_to_pascal, scalar_store_op, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
 use crate::name::FqTypeName;
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
@@ -143,9 +143,11 @@ pub fn synthesize_lower(
                     TypeTable::UNIT,
                 ))]
             }
-            // Unknown named types: treat as i32 handles (enums, resources)
+            // A declaration the registry can size — an enum, a flags, a
+            // payload-less variant — stores at that width; a resource handle
+            // and anything unresolved keep the 4-byte default.
             _ => vec![expr_stmt(builtin_call(
-                "i32_store",
+                scalar_store_op(ty, ctx.cm_interface_registry, &ctx.names),
                 vec![addr, value],
                 TypeTable::UNIT,
             ))],
@@ -189,11 +191,7 @@ pub(super) fn synthesize_lower_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    );
+    let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
     let mut stmts = Vec::new();
 
     // Element TypeIds come from the tuple's own type arguments — the
@@ -288,7 +286,7 @@ fn synthesize_lower_variant_to_memory(
     stmts.push(let_stmt("$variant_val", value_local, value_type_id, value));
 
     stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
+        disc_store_op(cm_discriminant_byte_size(cases.len())),
         vec![
             addr.clone(),
             disc_of(local_ref(value_local, "$variant_val", value_type_id)),
@@ -296,12 +294,12 @@ fn synthesize_lower_variant_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+    let payload_offset = cm_abi::variant_payload_offset_with_registry(
+        cases.len(),
         cases
             .iter()
             .filter_map(|(_, _, p)| p.as_ref().map(|(ty, _)| ty)),
         ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
     );
     let payload_addr = if payload_offset == 0 {
         addr
@@ -392,18 +390,12 @@ pub(super) fn synthesize_lower_wasi_variant_to_memory(
     ctx: &LowerContext<'_>,
 ) {
     let name = named.name.as_str();
-    let Some(cases) = ctx
+    let cases = ctx
         .cm_interface_registry
         .get_variant_cases_by_source(source, name)
-    else {
-        // Fallback: store as i32
-        stmts.push(expr_stmt(builtin_call(
-            "i32_store8",
-            vec![addr, variant_tag(value)],
-            TypeTable::UNIT,
-        )));
-        return;
-    };
+        .unwrap_or_else(|| {
+            panic!("variant `{name}` resolved to `{source}`, which registers no cases for it")
+        });
     let mem_cases: Vec<CmMemCase> = cases
         .iter()
         .cloned()
@@ -453,11 +445,10 @@ pub(super) fn synthesize_lower_option_to_memory(
     let value_local = alloc_local(next_local, locals, value_type_id);
     stmts.push(let_stmt("$opt_val", value_local, value_type_id, value));
 
-    // Store discriminant byte: variant_test(Some) → 1 = Some, 0 = None.
-    // Use variant_test (ref.test) rather than variant_tag (struct.get)
-    // because variant_tag traps on null refs.
+    // `variant_test` (ref.test) rather than `variant_tag` (struct.get), which
+    // traps on a null ref.
     stmts.push(expr_stmt(builtin_call(
-        "i32_store8",
+        disc_store_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
         vec![
             addr.clone(),
             variant_test(
@@ -469,12 +460,8 @@ pub(super) fn synthesize_lower_option_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::layout_option_with_registry_scoped(
-        inner_type,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    )
-    .offsets[1];
+    let payload_offset =
+        cm_abi::layout_option_with_registry(inner_type, ctx.cm_interface_registry).payload_offset();
 
     let payload_addr = if payload_offset == 0 {
         addr
@@ -643,16 +630,7 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
-    let elem_size = cm_size_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
-    let elem_align = cm_align_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
+    let (elem_size, elem_align) = cm_layout_i32(&elem_resolved, ctx.cm_interface_registry);
     // Take the element TypeId from the list's own type arguments — it is the
     // elaborator-registered type (correct module source), unlike a fresh
     // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
@@ -1603,9 +1581,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // `core:kiln/*` records share one path. Resolution goes through the
             // registry, which also finds a lib-local record — carrying no
             // `source_interface` — under its package's default-interface FQ.
-            let source = ctx
-                .cm_interface_registry
-                .resolve_cm_source_for(n, Some(ctx.wasi_package));
+            let source = ctx.cm_interface_registry.resolve_cm_source_for(n);
             if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)
@@ -1614,10 +1590,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.value_type(ft)))
                     .collect();
-                let offsets = cm_abi::layout_fields_with_registry_scoped(
+                let offsets = cm_abi::layout_fields_with_registry(
                     resolved_fields.iter().map(|(_, ty)| ty),
                     ctx.cm_interface_registry,
-                    Some(ctx.wasi_package),
                 )
                 .offsets;
                 let mut stmts = Vec::new();

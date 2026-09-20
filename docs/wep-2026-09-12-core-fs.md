@@ -399,37 +399,32 @@ cannot reach is unowned and sits below.
   question, which `try_exists` answers for every path this module can reach.
 - `write` and `create_dir_all` each read a path before acting on it, so a
   writer that changes the path inside that window gets the action rather than
-  the refusal. Closing either needs a rename that validates its destination, or
-  a create that reports what it found, and `wasi:filesystem` has neither.
+  the refusal. `wasi:filesystem` has neither a rename that validates its
+  destination nor a create that reports what it found.
 - A temporary file outlives a process that dies between creating it and
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
-  writer owns. Closing it means deciding what makes one stale — an age read
-  from `metadata`, or a sweep a caller asks for — and neither answer is safe
-  while another process may be mid-write on the same name.
+  writer owns. What makes one stale is undecided, and while another process may
+  be mid-write on the same name no answer is safe.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
   descriptor plumbing, a shadow copy of some seven functions here. Its helpers
   each take a subdirectory `Descriptor`, which this module cannot express
   because every path resolves against the first preopen, and it opens
   directories with `MutateDirectory`, which this module never requests. It also
   cannot run here at all without the `vendor/antlr4` submodule, so converting it
-  is a refactor no test in this repository would check. Closing it means writing
-  those sites as preopen-relative paths, or giving this module a handle for a
-  directory below the preopen, and then re-running the vendor extract.
-- A second preopen is unreachable. Closing it means resolving a path against the
-  preopen whose name is its longest matching prefix, and deciding what an
-  ambiguous path does. `package-gale/src/main.wado` keeps its own opener for
-  that reason: it searches every grant and names the ones it searched, which is
-  what makes `wado run --dir` legible there.
+  is a refactor no test in this repository would check.
+- A second preopen is unreachable: a path resolves against the first one, and
+  what an ambiguous path means is undecided. `package-gale/src/main.wado` keeps
+  its own opener for that reason: it searches every grant and names the ones it
+  searched, which is what makes `wado run --dir` legible there.
 - No handler can stand in for the filesystem, so a test of a caller still needs
-  a real directory. Closing it needs an operation to be able to declare an
-  effect (`docs/spec.md`, "Beyond a name, parameters and a return type, an
-  operation declares nothing else"), after which these functions become the
-  defaults of an `interface FileSystem`.
+  a real directory. An operation cannot declare an effect (`docs/spec.md`,
+  "Beyond a name, parameters and a return type, an operation declares nothing
+  else"), which is what an `interface FileSystem` would rest on.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so
   reading one fails with `Loop` and writing one is refused. `metadata` reports
   the link itself as `Other`, so `exists` and `try_exists` both answer `true`
-  for a path nothing here can read, a dangling link included. Closing it means
-  passing `SymlinkFollow` and deciding what a link out of the preopen does.
+  for a path nothing here can read, a dangling link included. What a link
+  pointing out of the preopen means is undecided.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
-  as `path: ErrorCode::Access` rather than as prose. Closing it means a message
-  per `ErrorCode`, which is 40 strings for the codes no caller branches on.
+  as `path: ErrorCode::Access` rather than as prose. Prose would need a message
+  for each of the 40 `ErrorCode`s, most of which no caller branches on.

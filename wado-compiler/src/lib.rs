@@ -909,7 +909,7 @@ fn resource_in_lib_sig<'a>(
         Type::Tuple(elems) => elems.iter().find_map(&mut follow),
         Type::Reference(inner) | Type::MutReference(inner) => follow(inner),
         Type::Named(named) => {
-            if let Some(source) = registry.resolve_cm_source_for(named, None)
+            if let Some(source) = registry.resolve_cm_source_for(named)
                 && let Some(cm) = registry.get_resource_cm_name_by_source(&source, &named.name)
             {
                 return Some(cm);

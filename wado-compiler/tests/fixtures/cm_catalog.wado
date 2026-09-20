@@ -57,6 +57,13 @@ pub flags Perms {
     Execute,
 }
 
+// A variant with no payload-bearing case lays out as its bare discriminant,
+// one byte here, not the handle width an unknown name defaults to.
+pub variant Status {
+    Active,
+    Inactive,
+}
+
 pub type Meters = f64;
 
 // A variant whose cases flatten to the same slot size but different core
@@ -238,6 +245,22 @@ export fn id_list_flags(v: List<Perms>) -> List<Perms> {
     return v;
 }
 export fn id_tuple_flags(v: [Perms, u32]) -> [Perms, u32] {
+    return v;
+}
+
+// --- Payload-less variant nested in aggregates ---
+// Only a composite reads a stride or an offset. `[Status, u8]` is the sharpest:
+// nothing in it forces padding, so a wider discriminant moves the second element.
+export fn id_payload_less_variant(v: Status) -> Status {
+    return v;
+}
+export fn id_option_payload_less_variant(v: Option<Status>) -> Option<Status> {
+    return v;
+}
+export fn id_list_payload_less_variant(v: List<Status>) -> List<Status> {
+    return v;
+}
+export fn id_tuple_payload_less_variant(v: [Status, u8]) -> [Status, u8] {
     return v;
 }
 
@@ -568,6 +591,24 @@ export fn id_tuple_future(v: [Future<u32>, u32]) -> [Future<u32>, u32] {
 }
 export fn id_record_future(v: FutureCell) -> FutureCell {
     return v;
+}
+
+// --- Narrow scalars in the indirect params buffer ---
+// An `Option` param forces an async call onto the one-buffer path. There a
+// scalar stored wider than its CM size writes past its slot, and past the end.
+export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perms, s: Status) -> u32 {
+    let tag: u32 = match c {
+        Red => 1,
+        Green => 2,
+        Blue => 3,
+    };
+    let seen: u32 = match s {
+        Active => 1,
+        Inactive => 2,
+    };
+    // Each field gets a band wider than its own range, so one slot read wrong
+    // cannot land on a total another set of inputs would reach.
+    task return seen + p as u32 * 10 + o.unwrap_or(0) as u32 * 1000 + tag * 1000000;
 }
 
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it

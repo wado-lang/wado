@@ -427,7 +427,5 @@ picked rather than to pick it.
 
 - The identity question resolves twice. `is_static_method_at` runs the whole
   walk and keeps only whether it answered, and the branch it guards then runs it
-  again. Asking the resolution rather than a second index is this WEP's point,
-  so the fix is to remember the answer, not to look it up another way. It has
-  one caller and runs once per static call, never in a loop, and nothing here
-  measures what the repeat costs.
+  again. It has one caller and runs once per static call, never in a loop, and
+  nothing here measures what the repeat costs.

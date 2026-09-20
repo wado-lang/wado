@@ -54,7 +54,8 @@ use type_fixup::{
     collect_effect_calls_in_block, collect_local_type_updates, rewrite_calls_in_block,
 };
 pub use types::{
-    LiftContext, cm_enum_byte_size, cm_flags_byte_size, cm_type_to_type_id, flatten_param_type,
+    LiftContext, cm_discriminant_byte_size, cm_flags_byte_size, cm_type_to_type_id,
+    flatten_param_type,
 };
 use types::{flat_types_from_ast_type, flat_types_from_type_id};
 

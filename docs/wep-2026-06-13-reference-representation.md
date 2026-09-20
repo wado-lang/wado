@@ -218,20 +218,18 @@ fix to conform; none should be preserved.
   namespace, so what it replaces there says nothing about the enclosing slot of
   the same index.
 
-  What still drops, and what closing it takes:
+  What still drops:
 
   - `&mut *p` for every replace type but `variant`. The borrow-site refusal keys
     on a `FieldAccess` / `Index` operand, so a reborrow slips past it. `variant`
-    is covered from the other side by the write-back; the rest need that refusal
-    to match the deref too.
+    is covered from the other side by the write-back; the rest are not.
   - A `variant` element as a call argument, where the callee neither replaces
     nor stores. `&mut xs[i]` lowers to `&mut *xs.index_ref(i)`, so its
     write-back is an `index_assign` to synthesize, and that resolves in the
-    elaborator — trait impl, mangled name, recorded dispatch. Reaching it from a
-    lowering pass means repeating trait resolution, so closing it means
-    desugaring at elaboration time; hence the carve-out lists index-element and
-    struct-field separately. Refusing outright is not open, since
-    `normalize_element(&mut alt.elements[ei])` lands.
+    elaborator — trait impl, mangled name, recorded dispatch. A lowering pass
+    reaching it would repeat trait resolution, which is why the carve-out lists
+    index-element and struct-field separately. Refusing the whole shape is not
+    an option either, since `normalize_element(&mut alt.elements[ei])` lands.
     A `&mut self` receiver takes the same borrow, so it waits on the same
     write-back: `xs[i].m()` is refused where `m` replaces the element, and the
     call the carve-out unblocks is spelled either way.

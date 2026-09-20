@@ -1,4 +1,4 @@
-use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters, Status } from "./sub/cm-catalog.wasm" with { type: "wasm" };
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -79,6 +79,18 @@ test "flags round-trip" {
     assert CmCatalog::id_flags(Perms::Read | Perms::Write) == Perms::Read | Perms::Write;
 }
 
+// A variant with no payload-bearing case lays out as its bare discriminant.
+// Sizing it as a handle moves everything an aggregate places after it.
+test "payload-less variant round-trip" {
+    assert CmCatalog::id_payload_less_variant(Status::Inactive) == Status::Inactive;
+    assert CmCatalog::id_option_payload_less_variant(Option::Some(Status::Inactive))
+        == Option::Some(Status::Inactive);
+    assert CmCatalog::id_list_payload_less_variant([Status::Active, Status::Inactive])
+        == [Status::Active, Status::Inactive];
+    assert CmCatalog::id_tuple_payload_less_variant([Status::Inactive, 200])
+        == [Status::Inactive, 200];
+}
+
 test "tuple round-trip" {
     assert CmCatalog::id_tuple_pair([7, "x"]) == [7, "x"];
     assert CmCatalog::id_tuple_triple([5, true, 'Z']) == [5, true, 'Z'];
@@ -97,10 +109,35 @@ test "nested containers round-trip" {
     assert CmCatalog::id_list_tuple_record([[Point { x: 1.0, y: 2.0 }, 9]]) == [[Point { x: 1.0, y: 2.0 }, 9]];
 }
 
+// An `Option` param puts every param in one buffer, each at the offset the
+// tuple layout gives it. The `wir_expect` below is what pins the store widths.
+test "narrow scalars in the indirect params buffer" {
+    let packed = CmCatalog::narrow_scalars_in_params_buffer(
+        Color::Green,
+        Option::Some(7),
+        Perms::Read | Perms::Execute,
+        Status::Inactive,
+    ).wait();
+    assert packed == 2007052;
+}
+
 // A component operation is pure, so a global initializer may call one. The
 // import binding must reach the initializer as it reaches a function body.
 global CATALOG_ID: u32 = CmCatalog::id_u32(42);
 
 test "component call in a global initializer" {
     assert CATALOG_ID == 42;
+}
+
+__DATA__
+{
+    "test": {},
+    "wir_expect:O0": [
+        "builtin::store_u8($params_buf, c)",
+        "builtin::store_u8($params_buf + 3, p)",
+        "builtin::store_u8($params_buf + 4, $variant_val.discriminant)"
+    ],
+    "wir_not_expect:O0": [
+        "builtin::store_i32($params_buf"
+    ]
 }

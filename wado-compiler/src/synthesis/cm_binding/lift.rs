@@ -23,11 +23,11 @@ use crate::synthesis::common::{
 };
 
 use super::types::{
-    LiftContext, binary_add, cm_enum_byte_size, cm_flags_byte_size, cm_held_type_to_type_id,
-    disc_load_op, kebab_to_pascal,
+    LiftContext, OPTION_OR_RESULT_CASES, binary_add, cm_discriminant_byte_size, cm_flags_byte_size,
+    cm_held_type_to_type_id, disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::component_model::cm_layout_with_registry;
 use crate::tir::StructDef;
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -152,16 +152,8 @@ fn synthesize_lift_inner(
                     TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
                 }
                 _ => {
-                    // CM named types arrive with `source_interface` populated
-                    // either by stdlib bootstrap or by `resolve_cm_source_for`
-                    // (fallback to the unique `wasi:*` registrant, biased by the
-                    // current binding's WASI package, then to `core:kiln/*` for
-                    // generator-world bindings). Non-CM references fall through
-                    // to the i32-handle default.
-                    if let Some(source) = ctx
-                        .cm_interface_registry
-                        .resolve_cm_source_for(named, Some(ctx.cm_package))
-                    {
+                    // A non-CM reference falls through to the i32-handle default.
+                    if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {
                         let source = source.as_str();
                         if let Some(lifted) = try_lift_wasi_variant_or_enum(
                             named,
@@ -204,7 +196,7 @@ fn synthesize_lift_inner(
                             .cm_interface_registry
                             .get_enum_variants_by_source(source, &named.name)
                         {
-                            let load_name = disc_load_op(cm_enum_byte_size(variants.len()));
+                            let load_name = disc_load_op(cm_discriminant_byte_size(variants.len()));
                             return builtin_call(load_name, vec![addr], TypeTable::I32);
                         }
                     }
@@ -262,7 +254,6 @@ pub(super) fn try_lift_wasi_variant_or_enum(
             ctx.type_table.borrow_mut().make_variant(def)
         };
         return Some(synthesize_lift_wasi_variant(
-            &named.name,
             variant_type,
             &cases,
             addr,
@@ -282,7 +273,6 @@ pub(super) fn try_lift_wasi_variant_or_enum(
             ctx.type_table.borrow_mut().make_enum(def)
         };
         return Some(synthesize_lift_wasi_enum(
-            &named.name,
             enum_type,
             &case_names,
             addr,
@@ -316,10 +306,9 @@ fn try_lift_wasi_struct(
         .iter()
         .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.value_type(fty)))
         .collect();
-    let offsets = cm_abi::layout_fields_with_registry_scoped(
+    let offsets = cm_abi::layout_fields_with_registry(
         resolved_fields.iter().map(|(_, ty)| ty),
         ctx.cm_interface_registry,
-        Some(ctx.cm_package),
     )
     .offsets;
 
@@ -394,7 +383,6 @@ fn try_lift_wasi_struct(
 /// Generates an if/else chain: disc==0 → Case0, disc==1 → Case1, ...
 /// Payload cases lift the payload from the appropriate memory offset.
 fn synthesize_lift_wasi_variant(
-    _name: &str,
     variant_type: TypeId,
     cases: &[CmVariantCase],
     addr: TirExpr,
@@ -403,14 +391,38 @@ fn synthesize_lift_wasi_variant(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    // Load discriminant: 1 byte (u8) for variants with ≤ 256 cases
+    let load = disc_load_op(cm_discriminant_byte_size(cases.len()));
+    let disc = builtin_call(load, vec![addr.clone()], TypeTable::I32);
+    lift_variant_from_disc(
+        variant_type,
+        cases,
+        disc,
+        Some(addr),
+        next_local,
+        stmts,
+        locals,
+        ctx,
+    )
+}
+
+/// Build a CM variant's GC value from its discriminant. `payload_base` is the
+/// address the payloads sit after, absent only where no case carries one.
+pub(super) fn lift_variant_from_disc(
+    variant_type: TypeId,
+    cases: &[CmVariantCase],
+    disc: TirExpr,
+    payload_base: Option<TirExpr>,
+    next_local: &mut u32,
+    stmts: &mut Vec<TirStmt>,
+    locals: &mut Vec<TirLocal>,
+    ctx: &LiftContext<'_>,
+) -> TirExpr {
+    assert!(
+        payload_base.is_some() || cases.iter().all(|case| case.payload.is_none()),
+        "a variant carrying a payload needs the address to read it from"
+    );
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    stmts.push(let_stmt(
-        "$vdisc",
-        disc_local,
-        TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
-    ));
+    stmts.push(let_stmt("$vdisc", disc_local, TypeTable::I32, disc));
 
     // Result local (typed as the variant type)
     let result_local = alloc_local(next_local, locals, variant_type);
@@ -421,10 +433,10 @@ fn synthesize_lift_wasi_variant(
         null_expr(variant_type),
     ));
 
-    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+    let payload_offset = cm_abi::variant_payload_offset_with_registry(
+        cases.len(),
         cases.iter().filter_map(|case| case.payload.as_ref()),
         ctx.cm_interface_registry,
-        Some(ctx.cm_package),
     );
 
     // Build if/else chain for each case (last case is the else branch)
@@ -438,7 +450,10 @@ fn synthesize_lift_wasi_variant(
         // Lift payload if present
         let mut case_stmts: Vec<TirStmt> = Vec::new();
         let payload_box = if let Some(payload_ty) = payload_type {
-            let payload_addr = binary_add(addr.clone(), i32_const(payload_offset as i32));
+            let base = payload_base
+                .clone()
+                .expect("the assertion above admits no payload without a base");
+            let payload_addr = binary_add(base, i32_const(payload_offset as i32));
             let lifted = synthesize_lift_inner(
                 payload_ty,
                 payload_addr,
@@ -496,7 +511,6 @@ fn synthesize_lift_wasi_variant(
 /// Lift a WASI enum type from an i32 discriminant.
 /// Same pattern as variant but uses `EnumConstruct`.
 fn synthesize_lift_wasi_enum(
-    _name: &str,
     enum_type: TypeId,
     case_names: &[String],
     addr: TirExpr,
@@ -505,7 +519,7 @@ fn synthesize_lift_wasi_enum(
     locals: &mut Vec<TirLocal>,
 ) -> TirExpr {
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    let load_name = disc_load_op(cm_enum_byte_size(case_names.len()));
+    let load_name = disc_load_op(cm_discriminant_byte_size(case_names.len()));
     stmts.push(let_stmt(
         "$edisc",
         disc_local,
@@ -582,10 +596,7 @@ pub(super) fn synthesize_lift_list(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let elem_size =
-        cm_size_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
-    let elem_align =
-        cm_align_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
+    let (elem_size, elem_align) = cm_layout_with_registry(elem_ty, ctx.cm_interface_registry);
 
     // Resolve TypeIds for `List<ElemType>` and its element, needed to
     // instantiate `List::with_capacity` / `.push()`. When the caller knows the
@@ -758,12 +769,8 @@ fn synthesize_lift_option_inner(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_option_with_registry_scoped(
-        inner_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
-    let payload_offset = layout.offsets[1];
+    let layout = cm_abi::layout_option_with_registry(inner_ty, ctx.cm_interface_registry);
+    let payload_offset = layout.payload_offset();
 
     // Resolve the concrete Option<T> TypeId so the local and null/some exprs
     // use the correct GC reference type.
@@ -779,7 +786,11 @@ fn synthesize_lift_option_inner(
         "$disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
+        builtin_call(
+            disc_load_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
+            vec![addr.clone()],
+            TypeTable::I32,
+        ),
     ));
 
     let result_local = alloc_local(next_local, locals, option_type_id);
@@ -846,21 +857,19 @@ fn synthesize_lift_result_inner(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_result_with_registry_scoped(
-        ok_ty,
-        err_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
-    let payload_offset = layout.offsets[1];
+    let layout = cm_abi::layout_result_with_registry(ok_ty, err_ty, ctx.cm_interface_registry);
+    let payload_offset = layout.payload_offset();
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
-    // Result is a variant with 2 cases; CM spec discriminant is u8 (1 byte).
     stmts.push(let_stmt(
         "$disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
+        builtin_call(
+            disc_load_op(cm_discriminant_byte_size(OPTION_OR_RESULT_CASES)),
+            vec![addr.clone()],
+            TypeTable::I32,
+        ),
     ));
 
     // Determine the proper variant TypeId for Result<ok_ty, err_ty> so that the
@@ -977,11 +986,7 @@ fn synthesize_lift_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
+    let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
     let mut elem_exprs = Vec::new();
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
@@ -1054,11 +1059,7 @@ fn synthesize_free_element(
         Type::Tuple(elems) if !elems.is_empty() => {
             // Registry-aware offsets so a String following a named element
             // (e.g. `[Point, String]`) is freed at its true offset.
-            let layout = cm_abi::layout_tuple_with_registry_scoped(
-                elems,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
+            let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
             let mut free_stmts = Vec::new();
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));

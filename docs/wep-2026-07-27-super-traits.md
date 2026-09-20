@@ -117,16 +117,14 @@ traits, and the stdlib `Fn: FnMut` that
 leaves open.
 
 An associated-type constraint in supertrait position is checked but not used for
-inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved. Closing it
-means feeding the constraint into inference wherever the bound is in scope.
+inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved.
 
 The trait solver states a clause's arguments only where it can name them as
 types. A clause whose argument is the subtrait's own parameter states none
 there, and the solver answers that edge at the supertrait's declared defaults.
 It is lenient rather than wrong — the elaborator, which does carry the argument,
 is what rejects a mismatch — so the two engines disagree on nothing a program
-can reach. Closing it means a solver-side spelling for a trait's own parameter,
-which its type language has no term for today.
+can reach. The solver's type language has no term for a trait's own parameter.
 
 ## Consequences
 

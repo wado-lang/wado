@@ -126,8 +126,8 @@ the entry point.
   named for the unverified bytes it hands back rather than offered as a second
   `verify`.
 - `aud` is a string _or_ an array of strings on the wire. `RegisteredClaims`
-  omits it rather than picking one, and closing this takes an untagged-union
-  deserializer for that field.
+  omits it rather than picking one, and `core:serde` deserializes no untagged
+  union.
 
 ## Security
 

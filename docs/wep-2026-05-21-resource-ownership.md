@@ -516,11 +516,11 @@ aggregates pays a copy of each element even when the loop body only reads it.
 Nothing about the copy is required: the same walk written over `&list`, or as an
 index loop in one body, reads the element in place under the read-only share.
 
-Closing it needs both halves, in the same fixpoint: the recognizer must see the
-projection through the binding and the variant, _and_ the fold must then treat
-the materialization into that payload as a share rather than a copy. Neither the
-inliner nor any NIR pass can substitute — the copy is chosen before NIR exists,
-and `#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
+Two halves of the one fixpoint miss it. The recognizer does not see the
+projection through the binding and the variant, and the fold reads the
+materialization into that payload as a copy. Neither the inliner nor any NIR
+pass can stand in: the copy is chosen before NIR exists, and
+`#[inline(always)]` on `next` leaves the expanded clone in the caller's loop
 untouched even with the cloned array provably unread.
 
 ### Known gap: a declared retention the walk does not confirm
@@ -538,8 +538,8 @@ reference itself. A parameter that only holds one is seeded, through
 `RefCarrying`: the memoized "can a value of this type hold a reference"
 predicate, which is what keeps `List::push(Sink { r: &it })` retaining `it` now
 that no frontend obligation makes the caller declare it. The projection arm is
-still the narrower reading, and closing it is what would let the walk follow a
-reference through an adapter chain rather than lose it at the first projection.
+still the narrower reading: the walk loses a reference at the first projection
+rather than following it through an adapter chain.
 
 ### Known gap: a generic resource a user module declares
 
@@ -788,16 +788,14 @@ Verified against the tree.
 
 A pattern-destructured field's path is marked as borrowing, because the pattern
 carries no type saying whether that field does, and the mark refuses those paths
-a share outright. Closing it means carrying the field's type into the pattern.
-Every WIR golden is byte-identical with the mark removed, so nothing measured
-pays for it.
+a share outright. Every WIR golden is byte-identical with the mark removed, so
+nothing measured pays for it.
 
 ### Known gap: freshness does not read the fold's own wraps
 
-A copy hands its target storage nothing else reaches, but ownedness is computed
-from a local's source before any wrap site is chosen, so the fold does not read
-the wrap it has just decided as the freshness that wrap creates. Closing it means
-feeding the fold's own decisions back into freshness.
+A copy hands its target storage nothing else reaches. Ownedness is computed from
+a local's source before any wrap site is chosen, so a wrap the fold has just
+decided does not count as making its target fresh.
 
 No program reaches the imprecision. For a second read to pay a copy its move must
 be refused, and a copied local aliases nothing, so only a read that is not the

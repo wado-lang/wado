@@ -42,7 +42,7 @@ use super::types::{
 };
 use crate::ast::Visibility;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::component_model::cm_layout_with_registry;
 use crate::name::FqTypeName;
 
 /// Build the export binding function name for a world export.
@@ -181,16 +181,8 @@ fn lower_to_flat_inner(
                 let tt = ctx.type_table.borrow();
                 type_id_to_ast_type(elem_type_id, &tt, ctx.cm_interface_registry)
             };
-            let elem_size = cm_size_with_registry_scoped(
-                &elem_ast_type,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
-            let elem_align = cm_align_with_registry_scoped(
-                &elem_ast_type,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
+            let (elem_size, elem_align) =
+                cm_layout_with_registry(&elem_ast_type, ctx.cm_interface_registry);
 
             // $arr = value
             let arr_local = alloc_local(next_local, locals, type_id);
@@ -1467,7 +1459,6 @@ impl<'a> ExportBindingEnv<'a> {
     fn shape_ctx<'n: 'a>(&self, names: &'n CmStdlibNames) -> CmShapeContext<'a> {
         CmShapeContext {
             cm_interface_registry: self.cm_interface_registry,
-            cm_package: self.cm_package,
             names,
             tir_modules: self.tir_modules,
             type_table: self.type_table,
@@ -1657,10 +1648,7 @@ fn push_sync_return_epilogue(
             call_user,
         ));
 
-        let size =
-            cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
-        let align =
-            cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+        let (size, align) = cm_layout_with_registry(ty, env.cm_interface_registry);
         let ptr_local = alloc_local(next_local, locals, TypeTable::I32);
         body_stmts.push(let_stmt(
             "$ret_ptr",
@@ -1755,8 +1743,7 @@ pub(super) fn synthesize_post_return(
     let addr = local_ref(0, "$ret_ptr", TypeTable::I32);
 
     let mut body = synthesize_free_cm_value(&shape, &addr, &mut next_local, &mut locals);
-    let size = cm_size_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
-    let align = cm_align_with_registry_scoped(ty, env.cm_interface_registry, Some(env.cm_package));
+    let (size, align) = cm_layout_with_registry(ty, env.cm_interface_registry);
     body.push(expr_stmt(builtin_call(
         "realloc",
         vec![
