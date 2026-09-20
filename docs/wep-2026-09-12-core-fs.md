@@ -177,10 +177,19 @@ Two departures from Rust, both from this module's own shape:
   promises is that the tree is gone. Without that, a caller that clears its
   output before writing it matches `NotFound` on every first run. `remove_dir`
   keeps the strict reading, so a caller that wants to know still has one.
-- `""` and `"."` are `Io(NotPermitted)` for both. They name the preopen, which
-  is the root every path resolves against, and a `wado run --dir` grant is not a
-  reason to let a typo empty the working directory. A caller that means it walks
-  `read_dir("")` and removes each entry.
+- A path that resolves to the preopen is `Io(NotPermitted)` for both. The
+  preopen is the root every path resolves against, and a `wado run --dir` grant
+  is not a reason to let a typo empty the working directory. A caller that means
+  it walks `read_dir("")` and removes each entry.
+
+  The guard resolves the path rather than reading it. `""` and `"."` are the
+  obvious spellings, but `"./"`, `"x/.."` and `"./x/../."` all name the preopen
+  too, and `remove_dir_all` reaches its walk before the host ever sees the path
+  — so a guard that compared text would delete every entry in the working
+  directory and only then fail on the final `remove_dir`. `normalize` is the
+  module's own resolver and answers `""` for every such spelling, which is the
+  whole check. It refuses an absolute path and one that climbs out of the
+  preopen on the way, which is the right answer for a removal as well.
 
 One function with a `recursive: bool = false` parameter would collapse the pair,
 and a default is trailing so it would fit. Wado has no named arguments
@@ -216,6 +225,20 @@ A failed write unlinks its temporary file, best effort: the write already
 failed, so a failure to clean up is not a second error to report. A process
 that dies between the create and the rename leaves one behind, which every
 implementation of this pattern leaves behind.
+
+The temporary file is this module's business and never the caller's, so it
+appears in nothing the caller reads. Every error out of `write` is relabelled
+with the path the caller passed, at the one exit that reports one; otherwise a
+rename onto an occupied path reports `build/out.json.wado-tmp`, a file nobody
+asked for.
+
+A rename replaces a symlink rather than following it, which is the one way this
+shape can do something the truncating write could not: it would detach a link
+where `write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a
+link to `AGENTS.md`, so the difference is a file the next `git status` reports.
+`write` therefore refuses a target that is not a regular file, which is what
+every read here already does — the module follows no link anywhere, and the
+write is not the place to start.
 
 `write_in_place` keeps the truncating write for the callers that want it: a
 file too large to exist twice, and a directory that should not gain a second
@@ -264,10 +287,17 @@ Nothing is left for the module to own.
 The third is about what a path means, and it points the other way. The rules
 these functions apply are this module's: a leading `/` resolves against no
 preopen, `""` and `"."` name the preopen itself, and a `..` that climbs out of
-it is the sandbox boundary rather than a string. `create_dir_all` already
-splits a path and rejects a leading `/` to make those calls. A module that did
-not know them would have to restate them, and one that was free of them could
-not answer `normalize` at all.
+it is the sandbox boundary rather than a string. `create_dir_all` splits a path
+and rejects a leading `/` to make those calls, and `remove_dir_all` resolves one
+to find out whether it was handed the preopen. A module that did not know these
+rules would have to restate them, and one that was free of them could not answer
+`normalize` at all.
+
+Which is why the path functions are where a decision about a path gets made.
+`file_name` answers `None` for a component that is `.` or `..`, since neither
+names an entry, and a caller that matches a name against a list never has to
+recognize a traversal. `extension` keeps Rust's answers, `Some("")` for `a/b.`
+among them.
 
 The usual reason to split is to keep a caller that only joins strings away from
 the filesystem. Wado already does that with effects: a path function declares no
@@ -322,8 +352,10 @@ cannot reach is unowned and sits below.
   operation declares nothing else"), after which these functions become the
   defaults of an `interface FileSystem`.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so
-  reading one fails with `Loop`. Closing it means passing `SymlinkFollow` and
-  deciding what a link that points out of the preopen does.
+  reading one fails with `Loop` and writing one is refused. `metadata` reports
+  the link itself as `Other`, and `exists` is therefore `true` for a path
+  nothing here can read. Closing it means passing `SymlinkFollow` and deciding
+  what a link that points out of the preopen does.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Closing it means a message
   per `ErrorCode`, which is 40 strings for the codes no caller branches on.

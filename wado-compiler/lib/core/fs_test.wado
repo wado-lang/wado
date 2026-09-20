@@ -181,6 +181,22 @@ test "neither removal takes the preopened directory itself" {
     assert !fs::read_dir(".").unwrap().is_empty();
 }
 
+test "a removal that spells the preopen another way is refused too" {
+    // Each of these resolves to the preopen, and the guard resolves the path
+    // rather than reading it, so none reaches the walk that would empty it.
+    assert fs::remove_dir_all("./").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("target/..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("./target/../.").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir("./").unwrap_err().kind matches { Io(NotPermitted) };
+    assert !fs::read_dir(".").unwrap().is_empty();
+}
+
+test "a removal that climbs out of the preopen is refused" {
+    assert fs::remove_dir_all("..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir_all("target/../..").unwrap_err().kind matches { Io(NotPermitted) };
+    assert fs::remove_dir("/tmp").unwrap_err().kind matches { Io(NotPermitted) };
+}
+
 test "walk_dir reaches every entry under the path" {
     let dir = scratch("walk");
     fs::create_dir_all(`${dir}/a/b`).unwrap();
@@ -317,6 +333,30 @@ test "a temporary file a dead run left behind does not stop a write" {
     assert fs::read_dir(&dir).unwrap().len() == 2;
 }
 
+test "a write refuses a symlink rather than detaching it" {
+    let dir = scratch("write-symlink");
+    let target = `${dir}/real.txt`;
+    let link = `${dir}/alias.txt`;
+    fs::write(&target, &"original").unwrap();
+    fs::root().unwrap().symlink_at("real.txt", link).wait().unwrap();
+
+    // Every read here declines to follow a link, so no write may replace one.
+    assert fs::read_to_string(&link).unwrap_err().kind matches { Io(Loop) };
+    assert fs::write(&link, &"replaced").unwrap_err().kind matches { Io(Loop) };
+    assert fs::read_to_string(&target).unwrap() == "original";
+    assert fs::metadata(&link).unwrap().type matches { Other };
+    assert fs::read_dir(&dir).unwrap().len() == 2;
+}
+
+test "a write reports the path the caller named, not the temporary file" {
+    let dir = scratch("write-error-path");
+    let path = `${dir}/occupied`;
+    fs::create_dir(&path).unwrap();
+    let e = fs::write(&path, &"never").unwrap_err();
+    assert e.path == path;
+    assert e.kind matches { Io(IsDirectory) };
+}
+
 test "a write does not replace a directory with a file" {
     let dir = scratch("write-onto-dir");
     let path = `${dir}/occupied`;
@@ -400,7 +440,17 @@ test "file_name answers the last component" {
     assert fs::file_name("a/b/").unwrap() == "b";
     assert fs::file_name("") matches { None };
     assert fs::file_name(".") matches { None };
+}
+
+test "a traversal is not a name" {
+    // `.` and `..` move through the tree rather than naming an entry in it,
+    // so a caller matching on a name never has to recognize one.
     assert fs::file_name("a/.") matches { None };
+    assert fs::file_name("a/..") matches { None };
+    assert fs::file_name("..") matches { None };
+    assert fs::file_stem("a/..") matches { None };
+    assert fs::extension("a/..") matches { None };
+    assert fs::parent("a/..").unwrap() == "a";
 }
 
 test "a stem and an extension split at the last dot" {

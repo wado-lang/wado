@@ -58,13 +58,16 @@ The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
 
 ### `pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens`
 
-Put `data` at `path`, replacing whatever is there.
+Put `data` at `path`, replacing the regular file there or making one.
 
 The bytes go to a file beside the target, which is then renamed over it, so
 a reader sees the old file or the new one and a write that fails partway
 leaves the old one. That is atomicity, not durability: nothing here is
 synced, so a host that loses power can still lose a write it reported as
 complete. [`root`] hands over the descriptor for a caller that needs more.
+
+A path that names anything but a regular file is refused, as a read of it
+is: a rename replaces a symlink rather than follows it.
 
 `data` is anything that views as bytes — a `String`, a `ByteList`, a
 `ByteSlice` — and is written through without a copy.
@@ -115,8 +118,8 @@ preopen. One component answers `""`, which is the preopen itself.
 
 ### `pub fn file_name<S: AsStrSlice>(path: S) -> Option<StrSlice>`
 
-The last component of `path`, or `None` where `path` names the preopen.
-A trailing `/` is not a component.
+The last component of `path`, or `None` where `path` names the preopen or
+ends in `.` or `..`, which move through the tree rather than name an entry.
 
 ### `pub fn file_stem<S: AsStrSlice>(path: S) -> Option<StrSlice>`
 
@@ -143,9 +146,8 @@ What the host knows about what `path` names, without opening it.
 
 ### `pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens`
 
-Whether `path` names anything. A host that answers neither way — a
-permission it will not grant, a name it will not read — answers `false`
-here, so a caller that has to tell those apart asks [`metadata`].
+Whether `path` names anything, a symlink no read here follows included.
+[`metadata`] is the call that says what, and reports one as `Other`.
 
 ### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 

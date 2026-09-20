@@ -101,7 +101,13 @@ fn is_excluded_dir(entry: &fs::WalkEntry) -> bool {
 fn resolve_paths(paths: &List<String>) -> Result<List<String>, fs::FsError> with Preopens {
     let mut out: List<String> = [];
     for let path of paths {
-        if !fs::metadata(path)?.type matches { Directory } {
+        // A path the host will not stat is taken as a file, so the loop that
+        // reads each one reports it and the rest are still formatted.
+        let walk = match fs::metadata(path) {
+            Ok(found) => found.type matches { Directory },
+            Err(_) => false,
+        };
+        if !walk {
             out.push(*path);
             continue;
         }
@@ -127,9 +133,11 @@ fn unique_sorted(items: List<String>) -> List<String> {
     return out;
 }
 
-test "a directory that cannot be walked fails the collection" {
-    let paths: List<String> = ["no-such-directory"];
-    assert resolve_paths(&paths).is_err();
+test "a path that names nothing is left for the caller to report" {
+    // The loop that reads each file names the one that is missing, so a single
+    // bad argument no longer aborts a run that also has good ones.
+    let paths: List<String> = ["no-such-directory", "also-missing.md"];
+    assert resolve_paths(&paths).unwrap() == ["also-missing.md", "no-such-directory"];
 }
 
 test "unique_sorted removes duplicates and sorts" {

@@ -164,7 +164,7 @@ pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Pr
     };
 }
 
-/// Put `data` at `path`, replacing whatever is there.
+/// Put `data` at `path`, replacing the regular file there or making one.
 ///
 /// The bytes go to a file beside the target, which is then renamed over it, so
 /// a reader sees the old file or the new one and a write that fails partway
@@ -172,20 +172,49 @@ pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Pr
 /// synced, so a host that loses power can still lose a write it reported as
 /// complete. [`root`] hands over the descriptor for a caller that needs more.
 ///
+/// A path that names anything but a regular file is refused, as a read of it
+/// is: a rename replaces a symlink rather than follows it.
+///
 /// `data` is anything that views as bytes — a `String`, a `ByteList`, a
 /// `ByteSlice` — and is written through without a copy.
 pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens {
     let [file, temp] = open_temp(path)?;
     let placed: Result<(), FsError> = match stream_out(path, file, data) {
-        Ok(_) => rename(&temp, path),
+        Ok(_) => replace_file(&temp, path),
         Err(e) => Result::Err(e),
     };
     if let Err(e) = placed {
         // The write already failed, so a failed cleanup is not a second error.
         let _ = remove_file(&temp);
-        return Result::Err(e);
+        // No caller named the temporary file, so no error may name it either.
+        return Result::Err(FsError { path: path.to_string(), kind: e.kind });
     }
     return Result::Ok(());
+}
+
+/// Rename `temp` over `path`, which has to be a regular file or nothing. A
+/// rename replaces a symlink instead of following it, and this module never
+/// follows one, so it may not silently detach one either.
+fn replace_file<S: AsStrSlice>(temp: &String, path: S) -> Result<(), FsError> with Preopens {
+    match metadata(path) {
+        Ok(found) => {
+            match found.type {
+                File => (),
+                Directory => {
+                    return Result::Err(failure(path, ErrorCode::IsDirectory));
+                },
+                Other => {
+                    return Result::Err(failure(path, ErrorCode::Loop));
+                },
+            }
+        },
+        Err(e) => {
+            if !e.kind matches { NotFound } {
+                return Result::Err(e);
+            }
+        },
+    }
+    return rename(temp, path);
 }
 
 /// Write `data` into the file `path` names, creating it or truncating what is
@@ -278,12 +307,15 @@ pub fn parent<S: AsStrSlice>(path: S) -> Option<StrSlice> {
     return Option::Some(dir);
 }
 
-/// The last component of `path`, or `None` where `path` names the preopen.
-/// A trailing `/` is not a component.
+/// The last component of `path`, or `None` where `path` names the preopen or
+/// ends in `.` or `..`, which move through the tree rather than name an entry.
 pub fn file_name<S: AsStrSlice>(path: S) -> Option<StrSlice> {
     let Some([_, name]) = split_last(path) else {
         return null;
     };
+    if name == "." || name == ".." {
+        return null;
+    }
     return Option::Some(name);
 }
 
@@ -371,9 +403,8 @@ pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preope
     };
 }
 
-/// Whether `path` names anything. A host that answers neither way — a
-/// permission it will not grant, a name it will not read — answers `false`
-/// here, so a caller that has to tell those apart asks [`metadata`].
+/// Whether `path` names anything, a symlink no read here follows included.
+/// [`metadata`] is the call that says what, and reports one as `Other`.
 pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens {
     return metadata(path).is_ok();
 }
@@ -448,14 +479,13 @@ pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     // `normalize` is what refuses an absolute path and one that climbs out;
     // building the tree component by component would otherwise make both.
     let normalized = normalize(path)?;
-    let dir = root()?;
     let mut prefix = String::new();
     for let component of normalized.split("/") {
         if component.is_empty() {
             continue;
         }
         prefix = join(&prefix, &component);
-        ensure_dir(&dir, &prefix)?;
+        ensure_dir(&prefix)?;
     }
     return Result::Ok(());
 }
@@ -474,11 +504,10 @@ fn split_last<S: AsStrSlice>(path: S) -> Option<[StrSlice, StrSlice]> {
     let Some(at) = view.rfind("/") else {
         return Option::Some([view.sub(0, 0), view]);
     };
-    let name = view.sub(at + 1, view.len());
-    if name == "." {
-        return null;
-    }
-    return Option::Some([view.sub(0, at), name]);
+    return Option::Some([
+        view.sub(0, at),
+        view.sub(at + 1, view.len()),
+    ]);
 }
 
 /// Where the extension of `name` starts, or `None` where it has none. A dot
@@ -541,23 +570,23 @@ fn preopen_itself<S: AsStrSlice>(path: S) -> bool {
     return path.is_empty() || path == ".";
 }
 
-/// `NotPermitted` where `path` names the preopen. It is the root every path
-/// here resolves against, and a removal does not take that down.
+/// `NotPermitted` where `path` resolves to the preopen. It is resolved rather
+/// than read, since `"./"` and `"x/.."` name it as surely as `"."` does.
 fn deny_preopen<S: AsStrSlice>(path: S) -> Result<(), FsError> {
-    if preopen_itself(path) {
+    if normalize(path)?.is_empty() {
         return Result::Err(failure(path, ErrorCode::NotPermitted));
     }
     return Result::Ok(());
 }
 
-/// Create the directory `path` names under `dir`. One already there is not a
-/// failure, and anything else there is `NotDirectory`.
-fn ensure_dir<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), FsError> with Preopens {
-    let Err(e) = dir.create_directory_at(path.to_string()).wait() else {
+/// Create the directory `path` names. One already there is not a failure, and
+/// anything else there is `NotDirectory`.
+fn ensure_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
+    let Err(e) = create_dir(path) else {
         return Result::Ok(());
     };
-    if !e matches { Exist } {
-        return Result::Err(failure(path, e));
+    if !e.kind matches { Io(Exist) } {
+        return Result::Err(e);
     }
     // `Exist` says something is at the path, not that it is a directory.
     if metadata(path)?.type matches { Directory } {
