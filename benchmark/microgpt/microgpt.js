@@ -4,6 +4,8 @@
 // Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
+// Python seeds Mersenne Twister, so the numbers here are not the original's.
+//
 // The same program as microgpt.wado: a scalar autograd graph where a node holds
 // its children directly, so both arms measure a GC'd language walking an object
 // graph. Both phases reseed, so the two print the same loss and the same sample
@@ -33,7 +35,6 @@ const STEPS = 32;
 // reaches on this corpus.
 const SAMPLES = 24;
 const TEMPERATURE = 0.5;
-// Python seeds Mersenne Twister, so this draws different numbers than the original.
 const SEED = 42n;
 
 // Let there be a deterministic source of chaos. This is `core:prng`'s, which the

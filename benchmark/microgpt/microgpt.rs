@@ -4,6 +4,8 @@
 // Copyright (c) Andrej Karpathy, MIT License.
 // https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95
 //
+// Python seeds Mersenne Twister, so the numbers here are not the original's.
+//
 // The same program as microgpt.wado, with one forced difference. Wado's
 // `Graph::value` hands back a `&mut Value` into a list that keeps growing, and
 // a node holds those handles as its children. Rust has no way to say that: a
@@ -50,7 +52,6 @@ const STEPS: usize = 32;
 // reaches on this corpus.
 const SAMPLES: usize = 24;
 const TEMPERATURE: f64 = 0.5;
-// Python seeds Mersenne Twister, so this draws different numbers than the original.
 const SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos. This is `core:prng`'s, which the

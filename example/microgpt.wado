@@ -4,6 +4,8 @@
 //! Copyright (c) Andrej Karpathy, MIT License.
 //! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
 //!
+//! Python seeds Mersenne Twister, so the numbers here are not the original's.
+//!
 //!     wado run example/microgpt.wado [num_steps]
 //!
 //! The default 1000 steps take a few minutes; pass a smaller count to shorten
@@ -16,7 +18,6 @@ use fs from "core:fs";
 use { Preopens } from "wasi:filesystem";
 use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
 
-// Python seeds Mersenne Twister, so this draws different numbers than the original.
 global SEED: u64 = 42;
 
 // Let there be a deterministic source of chaos. `core:prng` carries no shape but
