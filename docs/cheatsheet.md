@@ -1559,12 +1559,14 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 
 Whole-file I/O against the first preopened directory (`wado run` grants the
 current one), and the path text that reaches it. `""` and `"."` name that
-directory. See
+directory. Every call resolves its path when it runs, so ask-then-act
+(`exists` and then `read`) races; act and read the error. See
 [`core:fs`](./stdlib-core-fs.md) and
 [WEP: core:fs](./wep-2026-09-12-core-fs.md).
 
 ```wado
 use fs from "core:fs";
+use { Preopens } from "core:fs";                 // the effect, re-exported: no wasi import
 
 let text = fs::read_to_string("docs/spec.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
@@ -1580,6 +1582,7 @@ fs::remove_dir_all("build/site")?;               // rm -rf; a missing path is Ok
                                                  // (a path resolving to the preopen is refused)
 
 if fs::exists("wado.toml") { ... }               // no error to discard
+fs::try_exists("wado.toml")?;                    // absence only; anything else is the error
 let meta = fs::metadata("icon.png")?;            // Metadata { type, size, modified }
 
 for let entry of fs::read_dir("src")? {          // DirEntry { name, type }

@@ -34,6 +34,9 @@ else.
 ```wado
 use fs from "core:fs";
 
+pub use { Preopens, Descriptor, ErrorCode } from "wasi:filesystem";
+pub use { Instant } from "wasi:clocks";
+
 pub fn root() -> Result<Descriptor, FsError> with Preopens;
 
 pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens;
@@ -46,6 +49,7 @@ pub fn rename<F: AsStrSlice, T: AsStrSlice>(from: F, to: T) -> Result<(), FsErro
 
 pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preopens;
 pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens;
+pub fn try_exists<S: AsStrSlice>(path: S) -> Result<bool, FsError> with Preopens;
 
 pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens;
 pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = …) -> Result<List<WalkEntry>, FsError> with Preopens;
@@ -257,20 +261,57 @@ still take a write the host reported as complete. The doc comment says so.
 A caller that needs otherwise syncs the descriptor `root()` hands over, which
 is the escape hatch this module keeps for exactly this.
 
-### What holds against another writer
+### Time of check, time of use
 
-Two steps are atomic because the host makes them so: `Create | Exclusive`
-settles which writer owns a temporary name, and `rename` replaces the target in
-one step. Every refusal that reads the path first is best-effort. `write`
-refuses a target that is not a regular file, and `create_dir_all` accepts a path
-that is already a directory, by asking what is there and then acting on the
-answer; a writer that changes the path in between gets the action rather than
-the refusal.
+A path is a name, not a handle, so every call resolves it again and whatever it
+reports describes the moment it ran. That is the price of the decision above,
+and it is paid in three places rather than left implicit.
 
-That is the whole of it, and it is as far as the primitives reach:
-`wasi:filesystem` has no rename that validates its destination and no create
-that would be the check. A caller that needs more owns the directory it writes
-in.
+The module's own calls divide in two. `write` and `create_dir_all` read a path
+before acting on it — `write` to refuse a target that is not a regular file,
+`create_dir_all` to find out whether the path the host answered `Exist` for is
+a directory — so each has a window another writer can act in. Every other call
+is one the host settles on its own: one `open_at`, one `rename_at`, one
+`unlink_file_at`. `read` checks that it has a regular file by asking the open
+descriptor, not by resolving the path a second time, so its refusal has no
+window at all. `write`'s temporary file is `Create | Exclusive`, which is the
+host deciding a name rather than this module checking one.
+
+`remove_dir_all` and `walk_dir` are the third shape: they act on a listing, so
+a tree that changes mid-walk answers partly from before and partly from after.
+A `remove_dir_all` whose tree grows under it leaves the root `Io(NotEmpty)`.
+
+What none of these windows can do is leave the preopen. Every path opens with
+`PathFlags::none()`, and a directory entry that is a symlink is `Other` rather
+than `Directory`, so the swap that turns `rm -rf` into a way out of a sandbox
+gets `Io(Loop)` or an unlinked link, never a walk through it. That is the one
+property here worth a test rather than a sentence, and it has one.
+
+Closing the two windows is not this module's to do: `wasi:filesystem` has no
+rename that validates its destination, and none of its creates would serve as
+the check. So the doc comments say where each window is, and a caller that
+cannot tolerate one owns the directory it writes in.
+
+### `exists` answers `false`, `try_exists` answers why
+
+`exists` folds everything that stopped the look into `false`, and `try_exists`
+reports it, with only "nothing is there" answering `false`. Rust splits the same
+pair the same way, down to which one is the short name, and a caller reaching
+for the short one is usually about to act on the answer anyway — where the act
+itself is the better question. So the split is Rust's, and both doc comments
+point at acting instead.
+
+### The `wasi:*` names in these signatures are re-exported
+
+A caller of this module names `Preopens` in every `with` clause it writes, and
+reads `ErrorCode` out of an `Io` error. Importing `wasi:filesystem` for those is
+importing a module the caller was given this one to avoid. So `core:fs`
+re-exports what its own signatures carry: `Preopens`, `Descriptor` and
+`ErrorCode` from `wasi:filesystem`, and `Instant` from `wasi:clocks`.
+
+A file that calls `wasi:filesystem` itself still imports it — `example/cat.wado`
+and `package-gale/src/main.wado` stream and search grants, which this module
+does not do. The re-export is for the caller that only needed the name.
 
 ### A walk is a list, because an iterator may not perform I/O
 
@@ -349,15 +390,12 @@ cannot reach is unowned and sits below.
 - A caller that opens its own files still answers "is it there?" by discarding
   an error: `package-gale/src/main.wado` opens each grant in turn and
   `extract_antlr4_descriptors.wado` reads a file to find out whether it exists.
-  Both are blocked by the two gaps below rather than by `metadata`, which
-  answers the question for every path this module can reach.
-- A refusal that reads the path first holds only while no other writer changes
-  the path between the read and the act, so `write` can still replace a symlink
-  that arrives in that window. Closing it needs a rename that validates its
-  destination, which `wasi:filesystem` does not offer.
-- `exists` answers `false` for a path it could not stat, so a directory the
-  preopen grants no search permission on reads as absence. Closing it means a
-  fallible spelling beside it, which is what Rust's `try_exists` is.
+  What blocks them is the second preopen and the shadow copy below, not the
+  question, which `try_exists` answers for every path this module can reach.
+- `write` and `create_dir_all` each read a path before acting on it, so a
+  writer that changes the path inside that window gets the action rather than
+  the refusal. Closing either needs a rename that validates its destination, or
+  a create that reports what it found, and `wasi:filesystem` has neither.
 - A temporary file outlives a process that dies between creating it and
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
   writer owns. Closing it means deciding what makes one stale — an age read
@@ -384,9 +422,9 @@ cannot reach is unowned and sits below.
   defaults of an `interface FileSystem`.
 - A symlink is not followed: every path opens with `PathFlags::none()`, so
   reading one fails with `Loop` and writing one is refused. `metadata` reports
-  the link itself as `Other`, and `exists` is therefore `true` for a path
-  nothing here can read. Closing it means passing `SymlinkFollow` and deciding
-  what a link that points out of the preopen does.
+  the link itself as `Other`, so `exists` and `try_exists` both answer `true`
+  for a path nothing here can read, a dangling link included. Closing it means
+  passing `SymlinkFollow` and deciding what a link out of the preopen does.
 - An unnamed cause renders through `Inspect`, so `Io(ErrorCode::Access)` reads
   as `path: ErrorCode::Access` rather than as prose. Closing it means a message
   per `ErrorCode`, which is 40 strings for the codes no caller branches on.

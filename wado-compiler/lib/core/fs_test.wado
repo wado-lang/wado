@@ -1,5 +1,5 @@
 use fs from "core:fs";
-use { ErrorCode, Preopens } from "wasi:filesystem";
+use { ErrorCode, Preopens } from "core:fs";
 
 // `wado test` preopens the working directory, so each test owns a directory
 // under the gitignored `target/` and reads only what it wrote there. The
@@ -171,6 +171,21 @@ test "remove_dir_all is not a way to remove a file" {
     fs::write(&path, &"not a directory").unwrap();
     assert fs::remove_dir_all(&path).unwrap_err().kind matches { Io(NotDirectory) };
     assert fs::read_to_string(&path).unwrap() == "not a directory";
+}
+
+test "remove_dir_all unlinks a symlink instead of emptying what it points at" {
+    let dir = scratch("remove-dir-all-symlink");
+    let keep = `${dir}/keep`;
+    fs::create_dir(&keep).unwrap();
+    fs::write(`${keep}/survivor.txt`, &"untouched").unwrap();
+
+    let tree = `${dir}/tree`;
+    fs::create_dir(&tree).unwrap();
+    fs::root().unwrap().symlink_at("../keep", `${tree}/escape`).wait().unwrap();
+
+    fs::remove_dir_all(&tree).unwrap();
+    assert !fs::exists(&tree);
+    assert fs::read_to_string(`${keep}/survivor.txt`).unwrap() == "untouched";
 }
 
 test "neither removal takes the preopened directory itself" {
@@ -424,6 +439,21 @@ test "exists answers without an error to discard" {
     assert fs::exists(&dir);
     fs::remove_file(&path).unwrap();
     assert !fs::exists(&path);
+}
+
+test "try_exists separates absence from what stopped the look" {
+    let dir = scratch("try-exists");
+    let path = `${dir}/here.txt`;
+    assert !fs::try_exists(&path).unwrap();
+    fs::write(&path, &"here").unwrap();
+    assert fs::try_exists(&path).unwrap();
+    assert fs::try_exists(&dir).unwrap();
+    // A symlink is what it names, not what it points at, so a dangling one is
+    // still there. `exists` cannot tell that from a missing path.
+    let link = `${dir}/link`;
+    fs::root().unwrap().symlink_at("gone.txt", link).wait().unwrap();
+    assert fs::try_exists(&link).unwrap();
+    assert fs::exists(&link);
 }
 
 test "join puts one separator between the two" {

@@ -38,6 +38,22 @@ out: append, symlink, file times, and permissions. [`root`] hands over the
 descriptor for them. `example/cat.wado` connects a file's read stream to
 stdout that way.
 
+# Time of check, time of use
+
+A path resolves when the call runs, so what any call here reports is what
+was true then. Asking first and acting after — [`exists`] and then
+[`read`] — resolves the path twice and leaves a window between, in which
+another writer can make the answer wrong. Act, and read the error.
+
+Inside the module, [`write`] and [`create_dir_all`] are the two calls that
+read a path before acting on it, and each says where its window is.
+[`remove_dir_all`] and [`walk_dir`] act on a listing, which is a window of
+the same kind. Every other call is one the host settles on its own.
+
+What no window can do is reach outside the preopen: every path here opens
+with `PathFlags::none()`, so a component swapped for a symlink mid-call
+fails rather than resolving through it.
+
 ## Functions
 
 ### `pub fn root() -> Result<Descriptor, FsError> with Preopens`
@@ -51,6 +67,9 @@ owned by the caller, which may pass it to any `wasi:filesystem` method.
 
 The whole content of `path`. A path that names anything but a regular file
 — a directory, a device, a pipe — fails rather than reading.
+
+The kind is read off the open descriptor rather than by resolving the path
+a second time, so nothing can be swapped in between the two.
 
 ### `pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens`
 
@@ -80,6 +99,9 @@ there. [`write`] replaces the file instead, which is what a caller wants
 unless the file is too large to exist twice or its directory must not gain
 a second entry.
 
+One open creates, truncates and refuses a symlink, so unlike [`write`] this
+reads no path before acting and leaves no window to act in.
+
 ### `pub fn rename<F: AsStrSlice, T: AsStrSlice>(from: F, to: T) -> Result<(), FsError> with Preopens`
 
 Move what `from` names to `to`, replacing what `to` names. Both paths
@@ -105,6 +127,12 @@ the directory already there is not: either way the tree is gone when the
 call returns. Rust's `remove_dir_all` reports that case instead. A path
 that names something other than a directory is `Io(NotDirectory)`, and a
 symlink under the tree is removed rather than followed.
+
+The tree is listed a directory at a time and removed by path, so an entry
+that arrives after its directory was listed survives, and the root is then
+`Io(NotEmpty)`. A directory swapped for a symlink in that window fails with
+`Io(Loop)` rather than taking the removal outside the preopen, which is the
+one thing this shape must not do.
 
 ### `pub fn join<A: AsStrSlice, B: AsStrSlice>(base: A, name: B) -> String`
 
@@ -143,12 +171,23 @@ The preopen itself normalizes to `""`.
 
 ### `pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preopens`
 
-What the host knows about what `path` names, without opening it.
+What the host knows about what `path` names, without opening it. The answer
+describes the moment it was read, so a caller that acts on it acts on a
+path that may already have changed.
 
 ### `pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens`
 
-Whether [`metadata`] answers for `path`, a symlink no read here follows
-included. A path it cannot stat at all is `false`, not an error.
+Whether `path` names anything, with everything that stopped the look — a
+directory with no search permission among them — folded into `false`.
+
+[`try_exists`] keeps those apart, and is the one to reach for. Both answer
+for the moment they ran, so a caller that acts on the answer wants the act
+itself: open the file and read the error.
+
+### `pub fn try_exists<S: AsStrSlice>(path: S) -> Result<bool, FsError> with Preopens`
+
+Whether `path` names anything, reporting what stopped the look instead of
+reading it as absence. Only "nothing is there" answers `false`.
 
 ### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 
@@ -170,6 +209,10 @@ caller skips a subtree instead of paying to list it. The directory itself
 is listed either way, and it is asked about the whole path, so a predicate
 that means a name takes [`file_name`] of it.
 
+Each directory is listed once, and the list is what the walk returns, so a
+tree that changes during the walk answers partly from before and partly
+from after.
+
 ### `pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Create the directory `path` names. The parent has to exist and the path
@@ -179,6 +222,10 @@ itself has to be free, so an occupied path is `Io(Exist)`.
 
 Create the directory `path` names, and every parent it needs. A directory
 that already exists is not a failure.
+
+Each component is created, and one the host answers `Exist` for is read
+back to find out whether it is a directory. That look is the window: a
+component replaced inside it is accepted or refused on what it was.
 
 ## Structs
 
