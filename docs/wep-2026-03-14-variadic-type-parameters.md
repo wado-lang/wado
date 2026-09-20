@@ -29,8 +29,8 @@ types that is fixed at each monomorphization site:
 fn process<..T>(values: [..T]) { }
 ```
 
-`..T` is a single parameter that stands for any number of type arguments. Multiple scalar
-generic parameters and at most one type pack may appear together:
+`..T` is a single parameter that stands for any number of type arguments. Scalar
+parameters and packs may appear together, in any number (§6):
 
 ```wado
 fn example<A, B, ..T>(a: A, b: B, rest: [..T]) { }
@@ -157,12 +157,25 @@ and where these two rules sit in it, see
 
 ### 6. Multi-Pack (Limited)
 
-Two packs may appear in the same impl or function only in a type-level position (not in a
-single expansion context). The primary use case is concatenation:
+A generic parameter list may declare more than one pack. Each is settled from the argument
+that carries it alone, so nothing has to find a boundary the source never wrote. The
+primary use case is concatenation:
 
 ```wado
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
+
+Two packs in one tuple (`[..A, ..B]`) is a legal type but determines neither: every split
+of a concrete tuple satisfies it. Such a tuple is a return type, not a source of
+inference, and matching one contributes nothing rather than guessing a split.
+
+The same holds for a turbofish, which is flat: `f::<i32, bool>()` names a boundary only
+because one pack absorbs everything past the scalars. With two packs each is spelled as
+its own tuple (`concat::<[i32], [bool, String]>(…)`), and the flat form is an error.
+
+A signature whose packs reach no parameter of their own — `fn split<..A, ..B>(t: [..A,
+..B])` — is rejected, since each pack settles to the empty pack and the argument then
+meets `[]`. The message reports that mismatch rather than the inference that failed.
 
 When two packs appear in an expansion expression (§8), they must have the same length at
 every call site; this is enforced at monomorphization time. More complex multi-pack
@@ -353,6 +366,7 @@ occurred.
       elements, and a pack under a reference never reaches the impl's
       type-param scope
 - [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [x] More than one pack per generic parameter list (§6)
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 

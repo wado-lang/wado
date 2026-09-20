@@ -1023,7 +1023,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Before anything counts slots, since a pack's arguments are
                 // one per element until they are grouped.
                 let mut written = type_args.clone();
-                self.group_variadic_type_args_of(&mtype_params, &mut written);
+                self.group_variadic_type_args_of(&mtype_params, &mut written, call.span);
                 // An omitted turbofish infers both levels; a partial one keeps
                 // what it named and infers only its `_` slots. The call's own
                 // `type_args` stay as written.
@@ -1857,7 +1857,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
         // one tuple, the per-param shape inference already produces.
-        self.group_variadic_type_args_of(&declared, &mut type_args);
+        self.group_variadic_type_args_of(&declared, &mut type_args, call.span);
 
         if !type_args.is_empty() {
             // Resolve any type parameter that appears only inside another
@@ -3153,20 +3153,37 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Group flat turbofish type args into a variadic pack: `ids::<i32, bool>()`
     /// writes two args for one `..T`, whose slot holds the tuple `[i32, bool]`.
+    ///
+    /// Two packs leave the boundary between them unwritten, so the flat form
+    /// has no meaning there and the site must spell each pack as a tuple.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
+        span: token::Span,
     ) {
         let real = RealTypeParams::borrowed(declared);
-        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
+        let mut packs = real
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.is_pack)
+            .map(|(i, _)| i);
+        let Some(pack_pos) = packs.next() else {
             return;
         };
         if type_args.len() <= real.len() {
             return;
         }
-        // Single pack (guaranteed by the parser): it absorbs every arg past the
-        // non-pack params.
+        if packs.next().is_some() {
+            let _ = self.emit(TypeError::InvalidLiteral {
+                message: "a flat turbofish cannot be split between two type packs; \
+                          spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`"
+                    .to_string(),
+                span,
+            });
+            return;
+        }
+        // One pack: it absorbs every arg past the non-pack params.
         let non_pack = real.len() - 1;
         let pack_count = type_args.len() - non_pack;
         let pack_args: Vec<TypeId> = type_args.drain(pack_pos..pack_pos + pack_count).collect();
@@ -3182,28 +3199,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &mut Vec<TypeId>,
     ) {
         let real = RealTypeParams::borrowed(declared);
-        let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
+        if !real.iter().any(|p| p.is_pack) {
             return;
-        };
-        if type_args.len() == pack_pos {
+        }
+        // A pack slot the site never reached stands for no arguments at all, so
+        // append one empty tuple per trailing pack. A non-pack slot stops the
+        // walk: nothing here can answer for it.
+        while real.get(type_args.len()).is_some_and(|p| p.is_pack) {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
-            return;
         }
         if type_args.len() != real.len() {
             return;
         }
-        let slot = type_args[pack_pos];
-        if !self.is_unbound_type_param(slot) && !self.type_contains_pack(slot) {
+        let unanswered: Vec<usize> = (0..real.len())
+            .filter(|&i| real[i].is_pack)
+            .filter(|&i| {
+                self.is_unbound_type_param(type_args[i]) || self.type_contains_pack(type_args[i])
+            })
+            .collect();
+        if unanswered.is_empty() {
             return;
         }
         // A pack the caller declares interns to the same id as the callee's,
         // so a scope holding one is a forwarding this cannot tell apart.
         let scope = self.scope_type_param_ids();
-        if scope.contains(&slot) || scope.iter().any(|&s| self.type_contains_pack(s)) {
+        if scope.iter().any(|&s| self.type_contains_pack(s)) {
             return;
         }
-        type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+        for pack_pos in unanswered {
+            if scope.contains(&type_args[pack_pos]) {
+                continue;
+            }
+            type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
+        }
     }
 
     /// Look up a generic function (current or imported) and produce a temporary

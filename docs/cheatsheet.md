@@ -967,6 +967,15 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
     return [a, ..rest];  // value spread: splice rest into tuple
 }
 
+// More than one pack: each is settled by the argument carrying it alone, so a
+// turbofish spells each as its own tuple. `[..A, ..B]` determines neither pack,
+// and is a return type rather than a source of inference.
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+concat([1, "x"], [true]);                 // A = [i32, String], B = [bool]
+concat::<[i32], [bool, String]>([1], [true, "x"]);
+
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];
 let b = [..a, true];   // [i32, String, bool]

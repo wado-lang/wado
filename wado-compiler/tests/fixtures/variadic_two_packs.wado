@@ -1,0 +1,86 @@
+//! Two type packs in one generic parameter list. Each is settled by its own
+//! argument, so nothing has to split one flat sequence between them, and the
+//! return type concatenates the two.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+fn between<..A, M, ..B>(a: [..A], m: M, b: [..B]) -> [..A, M, ..B] {
+    return [..a, m, ..b];
+}
+
+test "each pack is settled by its own argument" {
+    let r = concat([1, "hello"], [true, 3.14]);
+    assert r.0 == 1;
+    assert r.1 == "hello";
+    assert r.2 == true;
+    assert r.3 == 3.14;
+}
+
+test "an empty pack on either side" {
+    let left = concat([], [1, "x"]);
+    assert left.0 == 1;
+    assert left.1 == "x";
+
+    let right = concat([1, "x"], []);
+    assert right.0 == 1;
+    assert right.1 == "x";
+
+    let both = concat([], []);
+    assert both.len() == 0;
+}
+
+test "a turbofish spells each pack as a tuple" {
+    let r = concat::<[i32], [bool, String]>([1], [true, "x"]);
+    assert r.0 == 1;
+    assert r.1 == true;
+    assert r.2 == "x";
+}
+
+test "a scalar between two packs keeps its position" {
+    let r = between([1, "a"], 42, [true]);
+    assert r.0 == 1;
+    assert r.1 == "a";
+    assert r.2 == 42;
+    assert r.3 == true;
+}
+
+test "two packs through a forwarding call" {
+    let r = concat(concat([1], ["a"]), [true]);
+    assert r.0 == 1;
+    assert r.1 == "a";
+    assert r.2 == true;
+}
+
+struct Holder<T> {
+    v: T,
+}
+
+impl<T> Holder<T> {
+    fn join<..A, ..B>(&self, a: [..A], b: [..B]) -> [..A, ..B] {
+        return [..a, ..b];
+    }
+}
+
+test "a method declares two packs of its own" {
+    let h: Holder<i32> = Holder { v: 1 };
+    let inferred = h.join([1, "a"], [true]);
+    assert inferred.0 == 1;
+    assert inferred.2 == true;
+
+    let spelled = h.join::<[i32], [bool]>([1], [true]);
+    assert spelled.1 == true;
+}
+
+struct Split<..A, ..B> {
+    a: [..A],
+    b: [..B],
+}
+
+test "a struct declares two packs" {
+    let s: Split<[i32, f64], [bool, String]> = Split { a: [1, 2.0], b: [true, "x"] };
+    assert s.a.0 == 1;
+    assert s.b.1 == "x";
+}

@@ -5298,12 +5298,42 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 Type pack parameters:
 
 - Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
-- At most one type pack parameter is allowed per function
+- May appear more than once per list, each settled on its own (see
+  [Multiple Type Packs](#multiple-type-packs))
 - Cannot be combined with `effect`: `<effect ..T>` is invalid
 - Appear inside tuple types as `[..T]` (type pack spread)
 - Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
 - Type arguments are inferred from tuple argument types at call sites
 - Expansion happens at monomorphization time
+
+#### Multiple Type Packs
+
+A parameter list may declare more than one pack. Each is settled from the
+argument that carries it alone, so nothing has to find a boundary that was
+never written:
+
+```wado
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
+```
+
+A tuple holding two packs (`[..A, ..B]`) is a legal type, but it determines
+neither pack: matching it against a concrete tuple admits every split. It is a
+return type, not a source of inference.
+
+A turbofish spells each pack as its own tuple, since a flat list carries no
+boundary either:
+
+```wado
+concat::<[i32], [bool, String]>([1], [true, "x"]);
+// concat::<i32, bool, String>(…)  // ERROR: spell each type pack as a tuple
+```
+
+The flat form stays available where one pack absorbs the surplus on its own
+(`make_defaults::<i32, String>()`).
 
 #### Lexical note
 

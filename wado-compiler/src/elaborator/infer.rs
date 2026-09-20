@@ -58,10 +58,20 @@ pub(super) fn unify(
                 .iter()
                 .any(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. })) =>
         {
-            let pack_idx = expected_elems
+            let mut packs = expected_elems
                 .iter()
-                .position(|e| matches!(type_table.borrow().get(*e), ResolvedType::TypePack { .. }))
-                .unwrap();
+                .enumerate()
+                .filter(|(_, e)| {
+                    matches!(type_table.borrow().get(**e), ResolvedType::TypePack { .. })
+                })
+                .map(|(i, _)| i);
+            let pack_idx = packs.next().expect("the arm's guard found a pack");
+            // Two packs in one tuple (`[..A, ..B]`) leave the boundary between
+            // them undetermined, so nothing here can be learned. Each is
+            // settled by the argument that carries it alone.
+            if packs.next().is_some() {
+                return;
+            }
 
             let fixed_before = pack_idx;
             let fixed_after = expected_elems.len() - pack_idx - 1;
