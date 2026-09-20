@@ -140,32 +140,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_param_bounds
             .get(param_name)?;
-        bounds
-            .iter()
-            .filter(|bound| {
-                self.trait_assoc_type_decl(&bound.name, assoc_name)
-                    .is_some()
-            })
-            // The bound's own reference site says which trait it names, so an
-            // aliased bound and another module's same-named trait stay apart.
-            .find_map(|bound| self.trait_decl_at(bound.id, &bound.name))
-            // A bound inherits its supertraits' associated types, so
-            // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
-            // a trait redeclaring the name still wins for itself.
-            .or_else(|| {
-                bounds
-                    .iter()
-                    .filter_map(|bound| Some((self.trait_decl_at(bound.id, &bound.name)?, bound)))
-                    .flat_map(|(decl, bound)| {
-                        self.tysys
-                            .trait_env
-                            .supertrait_closure_at(&decl, &bound.type_args)
-                    })
-                    .find(|inherited| {
-                        self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
-                            .is_some()
-                    })
-                    .map(|inherited| inherited.decl)
+        // Each bound is resolved through its own reference site. Asking by the
+        // written name first would answer from this frame, which a default body
+        // materialized for an impl in another module does not share.
+        self.tysys
+            .trait_env
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.trait_decl_at(bound.id, &bound.name)
             })
     }
 
@@ -181,8 +162,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(params) = self
             .tysys
             .trait_env
-            .trait_decl_headers
-            .get(&trait_decl)
+            .decl_header_of(&trait_decl)
             .map(|header| header.type_params.clone())
         else {
             return TraitRef::bare(trait_decl);
@@ -209,16 +189,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return false;
         };
-        // One bound cannot be a coin toss, and the walk below asks the scope
-        // for every bound's header.
+        // One bound cannot be a coin toss, and the walk below reads every
+        // bound's declaration.
         if bounds.len() < 2 {
             return false;
         }
         let declaring: Vec<&TraitBound> = bounds
             .iter()
             .filter(|bound| {
-                self.trait_assoc_type_decl(&bound.name, assoc_name)
-                    .is_some()
+                self.trait_decl_at(bound.id, &bound.name)
+                    .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
             })
             .collect();
         if declaring.len() < 2 {
@@ -253,21 +233,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<DefId> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
-        if self
-            .trait_assoc_type_decl(self.tysys.trait_env.defs.name(self_trait), assoc_name)
-            .is_some()
-        {
-            return Some(self_trait);
-        }
         self.tysys
             .trait_env
-            .supertrait_closure_at(&self_trait, &[])
-            .iter()
-            .find(|inherited| {
-                self.trait_assoc_type_decl(&inherited.bound.name, assoc_name)
-                    .is_some()
-            })
-            .map(|inherited| inherited.decl)
+            .trait_declaring_assoc_type(&self_trait, &[], assoc_name)
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
@@ -346,15 +314,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.type_table.borrow().get(self_type),
                     ResolvedType::TypeParam { .. }
                 )
+                && let Some(projection) =
+                    self.make_frame_projection(self_type, "Self", &namespaced.name)
             {
-                return self.make_frame_projection(self_type, "Self", &namespaced.name);
+                return projection;
             }
-            // If not found, it's an unknown associated type
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("Self::{}", namespaced.name),
-                span: namespaced.span,
-            });
-            return TypeTable::ERROR;
+            return self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope
@@ -413,7 +378,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return direct_type;
             }
-            return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
+            if let Some(projection) =
+                self.make_frame_projection(param_type_id, &base_name, &namespaced.name)
+            {
+                return projection;
+            }
+            return self.unknown_namespaced_type(&base_name, &namespaced.name, namespaced.span);
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
@@ -432,11 +402,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.resolve_generic_type(namespaced.id, &alias, &namespaced.args, namespaced.span)
             }
         } else {
-            let _ = self.emit(TypeError::UnknownType {
-                name: format!("{}::{}", namespaced.namespace, namespaced.name),
-                span: namespaced.span,
-            });
-            TypeTable::ERROR
+            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span)
         }
     }
 
@@ -915,7 +881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A trait head reaches here too (`impl IndexValue<i32> for T`),
                 // and a trait's parameters live on its own declaration, so only
                 // a type declaration's list is a ceiling to exceed.
-                let declared: Option<Vec<ast::GenericParam>> = struct_info
+                let declared = struct_info
                     .as_ref()
                     .map(|info| info.type_params.clone())
                     .or_else(|| {
@@ -1005,23 +971,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Look up the trait bounds on an associated type declaration.
-    /// Given a type parameter `param_id` (e.g., `S: Serializer`), find the trait that
-    /// declares the associated type `assoc_name` and return its full bounds (with assoc types).
-    fn find_assoc_type_bounds(&self, param_id: TypeId, assoc_name: &str) -> Vec<TraitBound> {
-        let param_type = self.tysys.type_table.borrow().get(param_id).clone();
-        if !matches!(param_type, ResolvedType::TypeParam { .. }) {
-            return Vec::new();
-        }
-
-        self.tysys
-            .trait_env
-            .assoc_type_bound_index
-            .get(assoc_name)
-            .cloned()
-            .unwrap_or_default()
-    }
-
     /// What this frame knows the projection `base::assoc` to be, where
     /// `base_name` is the name the frame files `base`'s bounds under.
     ///
@@ -1109,8 +1058,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// name its writer's own type parameters, which a bound cannot supply. Only
     /// `Self` crosses, being the bounded type here.
     fn frame_can_answer(&self, writer: Option<DefId>, ty: &ast::Type) -> bool {
-        let Some(header) = writer.and_then(|w| self.tysys.trait_env.trait_decl_headers.get(&w))
-        else {
+        let Some(header) = writer.and_then(|w| self.tysys.trait_env.decl_header_of(&w)) else {
             return true;
         };
         let mut mentioned = Vec::new();
@@ -1137,30 +1085,46 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The projection `base::assoc` as this frame builds it. The single
-    /// builder, so one written in a signature and one synthesized for an
-    /// expression intern to the same type.
+    /// Report `base::member` as a name that denotes no type.
+    fn unknown_namespaced_type(&mut self, base: &str, member: &str, span: Span) -> TypeId {
+        let _ = self.emit(TypeError::UnknownType {
+            name: format!("{base}::{member}"),
+            span,
+        });
+        TypeTable::ERROR
+    }
+
+    /// The projection `base::assoc` as this frame builds it, or `None` when no
+    /// bound on `base` declares `assoc`.
+    // The single builder, so one written in a signature and one synthesized for
+    // an expression intern to the same type.
     pub(super) fn make_frame_projection(
         &mut self,
         base: TypeId,
         base_name: &str,
         assoc: &str,
-    ) -> TypeId {
-        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
-        self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc)
+    ) -> Option<TypeId> {
+        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc)?;
+        Some(self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc))
     }
 
     /// [`Self::make_frame_projection`] for a caller that already knows which
     /// trait declares `assoc`. `T: Add + Mul` declares `Output` twice, and only
     /// the site that dispatched can say which one `a * b` yields.
+    // The one place a projection is built from a trait. It interns by its
+    // bounds, so those can only be the declaration's (WEP 2026-08-12).
     pub(super) fn make_frame_projection_of_trait(
         &mut self,
         base: TypeId,
         base_name: &str,
-        owning_trait: Option<DefId>,
+        owning_trait: DefId,
         assoc: &str,
     ) -> TypeId {
-        let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
+        let assoc_bounds = self
+            .tysys
+            .trait_env
+            .assoc_type_decl(&owning_trait, assoc)
+            .map_or_else(Vec::new, |decl| decl.bounds.clone());
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_at(b.id, &b.name))
@@ -1169,7 +1133,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .make_assoc_type_projection_of_trait(
+            .make_assoc_type_projection(
                 base,
                 owning_trait,
                 assoc.to_string(),
@@ -1236,7 +1200,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     let built = self.make_frame_projection(base, base_name, &assoc);
                     self.assoc_binding_stack.shift_remove(&key);
-                    Some(built)
+                    built
                 })?;
                 Some((name, answer))
             })

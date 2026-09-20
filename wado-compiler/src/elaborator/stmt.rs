@@ -18,7 +18,9 @@ use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
-use crate::elaborator::types::{GenericNewtypeInfo, ImplMemberKind, StructFieldInfo};
+use crate::elaborator::types::{
+    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
+};
 use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
 use crate::tir::{StructDef, TirTypeParam};
@@ -272,17 +274,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .insert(struct_decl.name.clone(), def);
         // The type parameters are final already — read off the AST, not
         // resolved — so only the fields are left for `resolve_local_struct`.
-        let type_param_type_ids: Vec<TypeId> = struct_decl
-            .type_params
-            .iter()
-            .enumerate()
-            .map(|(i, p)| {
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_type_param(p.name.clone(), i as u32)
-            })
-            .collect();
+        let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+            &ParamSlot::list(&struct_decl.type_params),
+            &self.tysys.type_table,
+        );
         self.sem.decls.local_struct_fields.insert(
             def,
             StructFieldInfo {
@@ -292,7 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
-                type_params: struct_decl.type_params.clone(),
+                type_params: RealTypeParams::of(&struct_decl.type_params),
                 type_param_type_ids,
             },
         );
@@ -416,7 +411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.decls.local_generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
-                    type_params: newtype_decl.type_params.clone(),
+                    type_params: RealTypeParams::of(&newtype_decl.type_params),
                     base_type_ast: newtype_decl.ty.clone(),
                 },
             );

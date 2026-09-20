@@ -184,29 +184,35 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        for (slot, param) in impl_block.type_params.iter().enumerate() {
-            let slot = slot as u32;
-            if !self
-                .annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(&param.name)
-            {
-                let type_id = if param.is_pack {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_pack(param.name.clone(), slot)
-                } else {
-                    self.tysys
-                        .type_table
-                        .borrow_mut()
-                        .make_type_param(param.name.clone(), slot)
-                };
-                self.annotate_ctx.trait_ctx.type_params.insert(
-                    param.name.clone(),
-                    scope::BinderInScope::declared(slot, type_id, param.id),
-                );
+        // `fills_impl_slot` is the numbering the associated-type registration
+        // reads back (`ParamSlot::impl_list`); the two drifting apart gives one
+        // parameter two indices.
+        let mut slot = 0;
+        for param in &impl_block.type_params {
+            if param.fills_impl_slot() {
+                if !self
+                    .annotate_ctx
+                    .trait_ctx
+                    .type_params
+                    .contains_key(&param.name)
+                {
+                    let type_id = if param.is_pack {
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_pack(param.name.clone(), slot)
+                    } else {
+                        self.tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_type_param(param.name.clone(), slot)
+                    };
+                    self.annotate_ctx.trait_ctx.type_params.insert(
+                        param.name.clone(),
+                        scope::BinderInScope::declared(slot, type_id, param.id),
+                    );
+                }
+                slot += 1;
             }
             if !param.bounds.is_empty() {
                 self.annotate_ctx

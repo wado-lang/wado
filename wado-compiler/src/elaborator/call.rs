@@ -34,7 +34,7 @@ use crate::defs::{DefId, DefKind};
 use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::DesugarKind;
 use crate::elaborator::trait_env::ImplMethodEntry;
-use crate::elaborator::types::{ImplMemberKind, VariantCaseData, VariantInfo};
+use crate::elaborator::types::{ImplMemberKind, RealTypeParams, VariantCaseData, VariantInfo};
 use crate::{Span, token};
 
 /// The parameter an associated-type equality binds: a bare parameter
@@ -149,12 +149,6 @@ fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::Tr
 /// for a walk to fill. Annotate walks and reify pads on the same answer.
 pub(super) fn omits_a_default(args_len: usize, params: &[(String, Option<Expr>)]) -> bool {
     matches!(params.get(args_len), Some((_, Some(_))))
-}
-
-/// The parameters a declaration's type arguments are indexed by, per
-/// [`ast::GenericParam::is_real_type_param`].
-fn real_type_params(declared: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
-    declared.iter().filter(|p| p.is_real_type_param()).collect()
 }
 
 /// Pair each declared slot with the type argument filling it, under the name
@@ -1403,28 +1397,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if matching_impl {
                         return self.resolve_from_call(target_type_id, from_type, call.id);
                     }
-                    if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                    ) {
-                        return return_type;
-                    }
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!("{prefix}::{suffix}"),
-                        span: call.span,
-                    });
-                    return TypeTable::ERROR;
-                } else {
-                    if let Some(return_type) = self.resolve_named_type_blanket_static(
-                        prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                    ) {
-                        return return_type;
-                    }
-                    let _ = self.emit(TypeError::UnknownFunction {
-                        name: format!("{prefix}::{suffix}"),
-                        span: call.span,
-                    });
-                    return TypeTable::ERROR;
                 }
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // An operation dispatch, `Stdout::write()` or `ns::Counter::next()`
             // alike. Ahead of the namespace arm below, which reads the
@@ -1436,16 +1410,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // If prefix is a known type (struct/enum/newtype/flags) with no matching
             // static method, emit a compile error.
             else if self.tysys.is_known_type_name(prefix) {
-                if let Some(return_type) = self.resolve_named_type_blanket_static(
-                    prefix, suffix, call.id, &args, &call.args, call.span, ctx,
-                ) {
-                    return return_type;
-                }
-                let _ = self.emit(TypeError::UnknownFunction {
-                    name: format!("{prefix}::{suffix}"),
-                    span: call.span,
-                });
-                return TypeTable::ERROR;
+                return self.blanket_static_or_unknown(prefix, suffix, call, &args, ctx);
             }
             // Namespace import: `use ns from "..."` then `ns::Type::method()`
             // or `ns::VariantType::Case(...)`.
@@ -1880,7 +1845,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if type_args.is_empty() {
             type_args =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
-        } else if turbofish_leaves_slot(&type_args, real_type_params(&declared).len()) {
+        } else if turbofish_leaves_slot(&type_args, RealTypeParams::borrowed(&declared).len()) {
             let inferred =
                 self.infer_fn_type_args(&callee, &call.args, &args, expected_type, call.span);
             merge_turbofish_type_args(&mut type_args, &inferred);
@@ -2648,10 +2613,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // Copy what the signature needs before instantiating: `info`
             // borrows the registry, and minting variables takes `self`.
-            let real_type_params: Vec<String> = info.type_params.clone();
+            let param_names: Vec<String> = info.type_params.clone();
             let decl_param_types: Vec<TypeId> = info.params.iter().map(|(_, t)| *t).collect();
             let decl_return = info.return_type;
-            let param_ids: Vec<TypeId> = real_type_params
+            let param_ids: Vec<TypeId> = param_names
                 .iter()
                 .enumerate()
                 .map(|(i, name)| {
@@ -3035,7 +3000,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: token::Span,
     ) {
         let params = self.lookup_function_type_params(callee);
-        let space = real_type_params(&params);
+        let space = RealTypeParams::borrowed(&params);
         let n = space.len();
         if n == 0 {
             return;
@@ -3193,7 +3158,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        let real = real_type_params(declared);
+        let real = RealTypeParams::borrowed(declared);
         let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
@@ -3216,7 +3181,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
-        let real = real_type_params(declared);
+        let real = RealTypeParams::borrowed(declared);
         let Some(pack_pos) = real.iter().position(|p| p.is_pack) else {
             return;
         };
@@ -3581,6 +3546,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// under the blanket's receiver param and so misses `type_name`'s own
     /// bucket. The variant-case branch owns the `Variant::Name` shape, so it
     /// shares this entry rather than falling through to the known-type one.
+    /// `prefix::suffix` answered by a blanket static, or the diagnostic for a
+    /// name that reaches no function at all.
+    fn blanket_static_or_unknown(
+        &mut self,
+        prefix: &str,
+        suffix: &str,
+        call: &ast::CallExpr,
+        args: &[TypeId],
+        ctx: &mut FunctionContext,
+    ) -> TypeId {
+        if let Some(return_type) = self.resolve_named_type_blanket_static(
+            prefix, suffix, call.id, args, &call.args, call.span, ctx,
+        ) {
+            return return_type;
+        }
+        let _ = self.emit(TypeError::UnknownFunction {
+            name: format!("{prefix}::{suffix}"),
+            span: call.span,
+        });
+        TypeTable::ERROR
+    }
+
     pub(super) fn resolve_named_type_blanket_static(
         &mut self,
         type_name: &str,

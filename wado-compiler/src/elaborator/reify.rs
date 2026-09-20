@@ -353,14 +353,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `ModuleSource` interner. Shared with annotate so cross-pass
     /// references resolve to the same `ModuleSource` identity.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Type-parameter names in scope for the function/method body
-    /// currently being reified (impl params first, then method-level
-    /// params, matching the index layout reify builds in
-    /// `reify_method` / `reify_function`). Empty outside a body walk.
-    /// `resolve_type` consults this so a turbofish type argument naming
-    /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
-    /// method) resolves to its `TypeParam` slot instead of `unknown`.
-    pub(crate) current_type_param_names: Vec<String>,
     /// Names of the effect parameters (`<effect E>`) in scope for the
     /// function / method currently being reified. `reify_effects` and
     /// `apply_function_type_effects` consult this so an effect name that is a
@@ -535,7 +527,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             interner,
-            current_type_param_names: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
@@ -671,25 +662,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Resolve an AST [`ast::Type`] to a [`TypeId`] without recording
-    /// any use→def edge. Reify uses this for type-level resolutions
-    /// (type-param defaults, resource method params, …) — annotate
-    /// already recorded the edges during its body walk.
-    ///
-    /// Delegates to the existing
-    /// [`super::Elaborator::resolve_type_static`] helper, which is
-    /// host-agnostic and operates over the [`TypeLookup`] view above.
-    fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
+    /// A global's declared type, resolved without recording a use→def edge;
+    /// annotate recorded them during its body walk.
+    // Read in the declaration's own module scope, never in the type parameters
+    // of whatever body referenced the global.
+    fn resolve_global_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        // Resolve within the current body's type-parameter scope so a
-        // turbofish argument that names an enclosing type param resolves
-        // to its `TypeParam` slot. Outside a body walk the scope is empty,
-        // so this is identical to the scope-free path.
-        let resolved = Elaborator::<H>::resolve_type_static_with_params(
+        let resolved = Elaborator::<H>::resolve_type_static(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
-            &self.current_type_param_names,
         );
         self.apply_function_type_effects(ty, resolved)
     }
@@ -1354,16 +1336,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Real type params only (effect params and `<F: fn(...)>` bounds
-        // are excluded), so the positional indices stay dense and match
-        // the emitted `type_params` and monomorph's substitution keys.
-        let type_param_names: Vec<String> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .map(|p| p.name.clone())
-            .collect();
-
         // Effect params (`<effect E>`) drive `Param` effect resolution in
         // function-type params; publish them for the body walk.
         let effect_param_names: Vec<String> = func
@@ -1374,10 +1346,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
-        // Publish the body's type-param scope (see `reify_method`).
-        let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names);
 
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
@@ -1418,7 +1386,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the TIR type params `resolve_function`
@@ -1699,35 +1666,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Type-param scope for the method's own param/return types. Every
-        // impl-self-type arg occupies its positional slot, concrete ones
-        // (`String` in `TreeMap<String, V>`) included — monomorph substitutes
-        // those back by identity. Method-level params continue after the impl
-        // param count, the same base `func_inst::instantiate_function` uses.
-        let mut type_param_names: Vec<String> = Vec::new();
-        for p in &impl_type_params {
-            let idx = p.index as usize;
-            if type_param_names.len() <= idx {
-                type_param_names.resize(idx + 1, String::new());
-            }
-            type_param_names[idx].clone_from(&p.name);
-        }
-        let mut next_idx = impl_type_params.len();
-        for p in &func.type_params {
-            // Skip `<F: fn(...)>` bounds: the elaborator realises them
-            // eagerly to the bound's function type (already baked into the
-            // recorded param/return types), so they must not consume a
-            // positional type-param slot or the real method params shift index.
-            if !p.is_real_type_param() || type_param_names.iter().any(|n| n == &p.name) {
-                continue;
-            }
-            if type_param_names.len() <= next_idx {
-                type_param_names.resize(next_idx + 1, String::new());
-            }
-            type_param_names[next_idx].clone_from(&p.name);
-            next_idx += 1;
-        }
-
         // Method-level effect params (`<effect E>`) drive `Param` effect
         // resolution in function-type params; publish them for the method
         // body walk.
@@ -1798,12 +1736,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Publish the body's type-param scope so turbofish args in the
-        // body (`v.serialize::<S>(s)`) resolve against it. Restored before
-        // returning so decl-level resolution stays scope-free.
-        let saved_type_param_names =
-            std::mem::replace(&mut self.current_type_param_names, type_param_names.clone());
-
         // Single source of truth: read the resolved param types
         // `resolve_method` recorded (in `func.params` order, receiver
         // included), rather than re-resolving each here.
@@ -1842,7 +1774,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_names = saved_type_param_names;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the method-level type params
@@ -9290,9 +9221,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             // this branch only fires for a snapshot-rehydrated callee module,
             // which carries no `current_module_globals`. So resolve the declared
             // type from the AST — the one re-resolution the completeness rule
-            // sanctions (WEP 2026-05-26 §"Reify — mechanical"), and reify's
-            // only `resolve_type` call site.
-            let ty = self.resolve_type(&global_decl.ty);
+            // sanctions (WEP 2026-05-26 §"Reify — mechanical").
+            let ty = self.resolve_global_type(&global_decl.ty);
             return TirExpr::new(
                 TirExprKind::GlobalVarGet {
                     module_source: self.current_module_source.clone(),

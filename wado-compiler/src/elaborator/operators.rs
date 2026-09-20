@@ -1914,13 +1914,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_) = self.tysys.trait_env.trait_def_of_fq(found_trait) else {
             return operand_type_id;
         };
-        if self
-            .tysys
-            .trait_env
-            .trait_decl_headers
-            .get(&trait_)
-            .is_none_or(|header| !header.assoc_types.iter().any(|a| a.name == "Output"))
-        {
+        if !self.tysys.trait_env.declares_assoc_type(&trait_, "Output") {
             return operand_type_id;
         }
         let param_name =
@@ -1930,7 +1924,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.frame_projection_of_trait(&name, trait_, "Output")
             .unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(operand_type_id, &name, Some(trait_), "Output")
+                self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
     }
 

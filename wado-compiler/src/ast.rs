@@ -3730,6 +3730,13 @@ impl GenericParam {
     pub fn is_real_type_param(&self) -> bool {
         !self.is_effect && (self.is_pack || !self.has_fn_bound())
     }
+
+    /// Whether this parameter of an `impl` head takes an argument position.
+    /// A `fn`-bound one can still be a target argument — `Holder<F>` puts `F`
+    /// at position 0 — so only an effect parameter, which is no type, is out.
+    pub fn fills_impl_slot(&self) -> bool {
+        !self.is_effect
+    }
 }
 
 #[derive(Debug, Clone)]

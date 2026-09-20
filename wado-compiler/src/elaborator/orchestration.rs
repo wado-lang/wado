@@ -23,8 +23,9 @@ use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
 use super::types::{
-    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList,
-    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
+    EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
+    RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
+    VariantInfo,
 };
 use super::tysys::TypeSystem;
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
@@ -390,6 +391,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Rc::new(Resolutions::build(modules, symbols, defs))
         };
 
+        // Ahead of the type-collection passes, which resolve `T::Assoc` in a
+        // declaration and need the trait declaring it to name the projection.
+        let (trait_env, orphan_violations) = {
+            let _span = logger.span("elaborate/trait_env");
+            TraitEnv::build(
+                modules,
+                &mut interner.borrow_mut(),
+                Some(entry_module_source),
+                &invocations,
+                &resolutions,
+            )
+        };
+
         // Keyed by the declaration, not by a spelling a module has to be
         // standing in to resolve. `TypeLookup` reaches an entry through
         // `Resolutions`, which is the only thing that turns a name into one.
@@ -439,7 +453,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
-                                    type_params: struct_decl.type_params.clone(),
+                                    type_params: RealTypeParams::of(&struct_decl.type_params),
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
                             );
@@ -463,7 +477,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params: variant_decl.type_params.clone(),
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
                                 },
@@ -686,7 +700,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             local_variant_cases: &empty_variant,
                             anon_struct_fields: &empty_anon_struct,
                             fn_local_items: &empty_local_items,
-                            decls: None,
+                            decls: Some(&trait_env),
                         };
                         let base_type_id = Self::resolve_type_static(
                             &newtype_decl.ty,
@@ -703,7 +717,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                type_params: newtype_decl.type_params.clone(),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
                         );
@@ -765,52 +779,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     local_variant_cases: &empty_variant,
                     anon_struct_fields: &empty_anon_struct,
                     fn_local_items: &empty_local_items,
-                    decls: None,
+                    decls: Some(&trait_env),
                 };
                 match item {
                     Item::Struct(struct_decl) => {
                         let mut fields = Vec::new();
                         let mut field_ast_ids = Vec::new();
                         let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
-                        // Extract type parameter names for generic structs
-                        let type_params: Vec<String> = struct_decl
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
+                        let struct_slots = ParamSlot::list(&struct_decl.type_params);
                         for field in &struct_decl.fields {
-                            // Use resolve_type_static_with_params for generic structs
-                            // so that type params like K in Node<K> become TypeParam types
-                            let type_id = if type_params.is_empty() {
-                                Self::resolve_type_static(
-                                    &field.ty,
-                                    &mut type_table.borrow_mut(),
-                                    &lookup,
-                                )
-                            } else {
-                                Self::resolve_type_static_with_params(
-                                    &field.ty,
-                                    &mut type_table.borrow_mut(),
-                                    &lookup,
-                                    &type_params,
-                                )
-                            };
+                            let type_id = Self::resolve_type_static_with_params(
+                                &field.ty,
+                                &mut type_table.borrow_mut(),
+                                &lookup,
+                                &struct_slots,
+                            );
                             fields.push((field.name.clone(), type_id, field.visibility));
                             field_ast_ids.push(field.id);
                             field_defaults.push(field.default.clone());
                         }
-                        // Collect TypeIds for struct's own type params in declaration order.
-                        // This allows infer_struct_type_args to fill phantom type params
-                        // that don't appear in any field (e.g., D in struct DirMap<D, V>).
-                        let type_param_type_ids: Vec<TypeId> = type_params
-                            .iter()
-                            .enumerate()
-                            .map(|(i, name)| {
-                                type_table
-                                    .borrow_mut()
-                                    .make_type_param(name.clone(), i as u32)
-                            })
-                            .collect();
+                        // In declaration order, so `infer_struct_type_args` can fill a
+                        // phantom parameter no field mentions (`D` in `DirMap<D, V>`).
+                        let type_param_type_ids = Self::slot_type_ids(&struct_slots, &type_table);
 
                         // Drop lookup so we can mutate `all_struct_fields`.
 
@@ -825,7 +815,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_params: struct_decl.type_params.clone(),
+                            type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         };
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
@@ -854,7 +844,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         } else {
                             // Generic newtype: store definition for lazy instantiation
                             let info = GenericNewtypeInfo {
-                                type_params: newtype_decl.type_params.clone(),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
                             if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
@@ -863,27 +853,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                     }
                     Item::Variant(variant_decl) => {
-                        // Resolve variant case field types
-                        let type_param_names: Vec<String> = variant_decl
-                            .type_params
-                            .iter()
-                            .map(|p| p.name.clone())
-                            .collect();
+                        let variant_slots = ParamSlot::list(&variant_decl.type_params);
                         let mut cases = Vec::new();
                         for case in &variant_decl.cases {
-                            // Each variant case has exactly one payload type.
-                            // Unit variants have `()` (unit type) payload.
                             let payload = if let Some(payload_ty) = &case.payload {
-                                // Use resolve_type_static_with_params for variant payloads
-                                // so that type params like T in Ok(T) become TypeParam types
                                 Self::resolve_type_static_with_params(
                                     payload_ty,
                                     &mut type_table.borrow_mut(),
                                     &lookup,
-                                    &type_param_names,
+                                    &variant_slots,
                                 )
                             } else {
-                                // Unit variant: payload is unit type
                                 TypeTable::UNIT
                             };
                             cases.push(VariantCaseData {
@@ -892,15 +872,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                 ast_id: case.id,
                             });
                         }
-                        let type_param_type_ids: Vec<TypeId> = type_param_names
-                            .iter()
-                            .enumerate()
-                            .map(|(i, name)| {
-                                type_table
-                                    .borrow_mut()
-                                    .make_type_param(name.clone(), i as u32)
-                            })
-                            .collect();
+                        let type_param_type_ids = Self::slot_type_ids(&variant_slots, &type_table);
                         if let Some(def) = resolutions.defs().of_ast_id(variant_decl.id) {
                             all_variant_cases.insert(
                                 def,
@@ -908,7 +880,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params: variant_decl.type_params.clone(),
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
                                     cases,
                                     type_param_type_ids,
                                 },
@@ -1037,20 +1009,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             registry
         };
 
-        // Build trait lookup indices once for all modules.
-        // This allows find_trait_method_for_type and find_indexing_trait_impl to do O(1)
-        // lookups by type name instead of scanning all items in all modules per method call.
-        // Also runs orphan rule checking; violations are emitted as errors.
-        let (trait_env, orphan_violations) = {
-            let _span = logger.span("elaborate/trait_env");
-            TraitEnv::build(
-                modules,
-                &mut interner.borrow_mut(),
-                Some(entry_module_source),
-                &invocations,
-                &resolutions,
-            )
-        };
         for (module_source, violation) in orphan_violations {
             let _ = logger.error_in(&module_source, violation);
         }
@@ -1362,7 +1320,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         // module is resolved, so resolving module X can look up an associated
         // type from module Y's impl even when Y is processed later. Keyed by
         // the declaring `AstId`, so it must follow the index above.
-        Self::register_all_generic_assoc_type_defs(modules, &type_table, &stdlib_set, &resolutions);
+        Self::register_all_generic_assoc_type_defs(
+            modules,
+            &type_table,
+            &stdlib_set,
+            &resolutions,
+            &trait_env,
+        );
 
         // Seed per-module semantics with the snapshot's pre-resolved stdlib
         // entries so the LSP edges remain consistent and the body walk on
@@ -3281,14 +3245,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         Self::resolve_type_static_with_params(ty, type_table, lookup, &[])
     }
 
-    /// Static version of `resolve_type` with type parameters for variant payload resolution.
-    /// This is similar to `resolve_type_static` but also handles type parameters (like T, E)
-    /// that appear in generic variant definitions (like `Result<T, E>`).
+    /// A `TypeId` per slot, in declaration order, so a slot's position is the
+    /// index [`Self::resolve_type_static_with_params`] gave it.
+    pub(super) fn slot_type_ids(
+        slots: &[ParamSlot],
+        type_table: &RefCell<TypeTable>,
+    ) -> Vec<TypeId> {
+        slots
+            .iter()
+            .enumerate()
+            .map(|(i, slot)| {
+                type_table
+                    .borrow_mut()
+                    .make_type_param(slot.name.clone(), i as u32)
+            })
+            .collect()
+    }
+
+    /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
+    /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,
         lookup: &TypeLookup<'_>,
-        type_params: &[String],
+        type_params: &[ParamSlot],
     ) -> TypeId {
         match ty {
             Type::Named(named) => {
@@ -3300,8 +3280,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return alias_type_id;
                 }
 
-                // Check if it's a type parameter (e.g., T in Result<T, E>)
-                if let Some(index) = type_params.iter().position(|p| p == &named.name) {
+                if let Some(index) = type_params.iter().position(|p| p.name == named.name) {
                     return type_table.make_type_param(named.name.clone(), index as u32);
                 }
 
@@ -3454,12 +3433,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 type_table.make_mut_ref(inner_type)
             }
             Type::NamespacedGeneric(namespaced) => {
-                // Handle T::AssocType where T is a type parameter
-                if let Some(index) = type_params.iter().position(|p| p == &namespaced.namespace) {
+                if let Some(index) = type_params
+                    .iter()
+                    .position(|p| p.name == namespaced.namespace)
+                {
+                    // The declaring trait is part of the projection's identity,
+                    // so a name no bound declares resolves to nothing here and
+                    // the frame resolver reports it against the written span.
+                    let Some(owning_trait) = lookup
+                        .bound_declaring_assoc_type(&type_params[index].bounds, &namespaced.name)
+                    else {
+                        return TypeTable::UNKNOWN;
+                    };
                     let param_id =
                         type_table.make_type_param(namespaced.namespace.clone(), index as u32);
                     return type_table.make_assoc_type_projection(
                         param_id,
+                        owning_trait,
                         namespaced.name.clone(),
                         vec![],
                         vec![],
@@ -3531,7 +3521,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // monomorphizes against `Tuple<unknown>` and never registers at
             // WIR build.
             Type::TypePackSpread(name, _span) => {
-                if let Some(index) = type_params.iter().position(|p| p == name) {
+                if let Some(index) = type_params.iter().position(|p| &p.name == name) {
                     type_table.make_type_pack(name.clone(), index as u32)
                 } else {
                     TypeTable::UNKNOWN
@@ -3554,6 +3544,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_table: &Rc<RefCell<TypeTable>>,
         stdlib_set: &IndexSet<ModuleSource>,
         resolutions: &Resolutions,
+        trait_env: &TraitEnv,
     ) {
         for (module_source, module) in modules {
             if stdlib_set.contains(module_source) {
@@ -3580,45 +3571,47 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     continue;
                 };
 
-                // Build a mapping from type param name to index from the explicit `impl<...>` header.
-                let type_param_idx: IndexMap<String, u32> = impl_block
-                    .type_params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, p)| (p.name.clone(), i as u32))
-                    .collect();
-
                 // Skip impls with no type params (concrete impls are handled differently)
-                if type_param_idx.is_empty() {
+                let param_slots = ParamSlot::impl_list(&impl_block.type_params);
+                if param_slots.is_empty() {
                     continue;
                 }
+                let param_at =
+                    |name: &str| param_slots.iter().enumerate().find(|(_, p)| p.name == name);
 
                 for binding in &impl_block.associated_types {
                     let type_param_id = match &binding.ty {
                         // Simple case: `type Item = T` — T is a type param
                         Type::Named(named) => {
-                            if let Some(&idx) = type_param_idx.get(&named.name) {
-                                type_table
-                                    .borrow_mut()
-                                    .make_type_param(named.name.clone(), idx)
-                            } else {
-                                // Not a type param (e.g., a concrete type) — skip
+                            let Some((idx, _)) = param_at(&named.name) else {
                                 continue;
-                            }
+                            };
+                            type_table
+                                .borrow_mut()
+                                .make_type_param(named.name.clone(), idx as u32)
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
-                            if let Some(&idx) = type_param_idx.get(&ns.namespace) {
-                                let inner_param_id = type_table
-                                    .borrow_mut()
-                                    .make_type_param(ns.namespace.clone(), idx);
-                                type_table.borrow_mut().make_assoc_type_projection_simple(
-                                    inner_param_id,
-                                    ns.name.clone(),
-                                )
-                            } else {
+                            let Some((idx, param)) = param_at(&ns.namespace) else {
                                 continue;
-                            }
+                            };
+                            let Some(owning_trait) = trait_env.bound_declaring_assoc_type(
+                                &param.bounds,
+                                &ns.name,
+                                |bound| resolutions.declared(bound.id),
+                            ) else {
+                                continue;
+                            };
+                            let inner_param_id = type_table
+                                .borrow_mut()
+                                .make_type_param(ns.namespace.clone(), idx as u32);
+                            type_table.borrow_mut().make_assoc_type_projection(
+                                inner_param_id,
+                                owning_trait,
+                                ns.name.clone(),
+                                vec![],
+                                vec![],
+                            )
                         }
                         _ => continue,
                     };
