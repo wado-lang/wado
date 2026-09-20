@@ -990,9 +990,16 @@ fn head<A, ..T>(t: &[A, ..T]) -> A {
 }
 
 // That limit is on reading a value. In type position a pack takes a scalar on
-// either side, and the match splits the tuple type across them.
-fn drop_last<..Rest, Last>(t: &[..Rest, Last]) -> [..Rest] { ... }
-fn drop_ends<First, ..Mid, Last>(t: &[First, ..Mid, Last]) -> [..Mid] { ... }
+// either side, and the match splits the tuple type across them. This shortens
+// a type, never a value: a comprehension keeps the arity it walked, so such a
+// signature is implementable only where the pack rides a container.
+struct Tensor<E, Axes> { data: List<E>, extents: List<i32> }
+fn sum_last<..Rest, Last>(t: &Tensor<f32, [..Rest, Last]>) -> Tensor<f32, [..Rest]> { ... }
+fn drop_ends<First, ..Mid, Last>(t: &Tag<[First, ..Mid, Last]>) -> Tag<[..Mid]> { ... }
+
+// `fn f<..Rest, Last>(t: [..Rest, Last]) -> [..Rest]` declares but cannot be
+// written: returning `t` is a type error, and nothing else builds the shorter
+// tuple.
 
 // A pack bound through another parameter's associated type is projected from
 // it, so the call site names neither.

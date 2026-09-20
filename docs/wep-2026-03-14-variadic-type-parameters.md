@@ -155,18 +155,26 @@ an open world cannot decide whether two bounds can both hold. For the full order
 and where these two rules sit in it, see
 [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
-### 6. Multi-Pack (Limited)
+### 6. Multi-Pack — Not Implemented
 
-Two packs may appear in the same impl or function only in a type-level position (not in a
-single expansion context). The primary use case is concatenation:
+A parameter list carries one pack. A second is a parse error:
 
 ```wado
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
+// error: only one type pack parameter is allowed per generic parameter list
 ```
 
-When two packs appear in an expansion expression (§8), they must have the same length at
-every call site; this is enforced at monomorphization time. More complex multi-pack
-operations (zip, interleave) are out of scope for this WEP.
+The design below is what a second pack was meant to allow, kept because the shape is
+still the one to build if it lands.
+
+Two packs would appear in the same impl or function only in a type-level position, not in
+a single expansion context, the primary use case being concatenation. Where two appeared
+in an expansion expression (§8) they would have to be the same length at every call site,
+enforced at monomorphization. More complex multi-pack operations (zip, interleave) are
+out of scope for this WEP.
+
+The cost of the limit is that an axis list cannot be written `[..Pre, K, ..Post]`, so a
+tuple type cannot name an element in its middle.
 
 ### 7. Compile-Time Tuple Enumeration with Packs
 

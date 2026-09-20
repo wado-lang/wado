@@ -74,6 +74,10 @@ fn check_at(
     // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
     // of a polymorphic signature instantiates its slots into `InferVar`s first,
     // so nothing but itself is ever assignable to it.
+    if pack_arity_conflict(actual, expected, type_table) {
+        return TypeCheckResult::Incompatible;
+    }
+
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -278,6 +282,42 @@ fn check_projections(
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
+/// Two tuple types over one pack differ when their fixed elements differ: the
+/// pack stands for the same arity on both sides, so `[..R, L]` can never be
+/// `[..R]`. Decidable before the pack is expanded, which is the only point
+/// where a body carrying one is checked at all.
+fn pack_arity_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    let (actual_inner, _) = unwrap_ref(actual, type_table);
+    let (expected_inner, _) = unwrap_ref(expected, type_table);
+    let (Some((actual_pack, actual_fixed)), Some((expected_pack, expected_fixed))) = (
+        tuple_pack_and_fixed(actual_inner, type_table),
+        tuple_pack_and_fixed(expected_inner, type_table),
+    ) else {
+        return false;
+    };
+    actual_pack == expected_pack && actual_fixed != expected_fixed
+}
+
+/// The pack element of a tuple type carrying one, and how many fixed elements
+/// sit beside it.
+fn tuple_pack_and_fixed(type_id: TypeId, type_table: &TypeTable) -> Option<(TypeId, usize)> {
+    let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id) else {
+        return None;
+    };
+    if !TypeTable::is_tuple_type(type_table.def_name(*def)) {
+        return None;
+    }
+    let mut packs = type_args
+        .iter()
+        .filter(|&&arg| matches!(type_table.get(arg), ResolvedType::TypePack { .. }));
+    let pack = *packs.next()?;
+    assert!(
+        packs.next().is_none(),
+        "the parser admits one pack per parameter list"
+    );
+    Some((pack, type_args.len() - 1))
+}
+
 fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (*inner, true),
