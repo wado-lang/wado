@@ -2225,29 +2225,36 @@ pub(super) fn bound_at_args(
         names.push(param.name.clone());
         args.push(arg);
     }
-    let at = |ty: &ast::Type| substitute_type_params(ty, &names, &args);
+    bound_with_types(bound, |ty| substitute_type_params(ty, &names, &args))
+}
+
+/// `bound` with `at` applied to every type written in it: its arguments and the
+/// right-hand side of each associated-type constraint.
+fn bound_with_types(
+    bound: &ast::TraitBound,
+    at: impl Fn(&ast::Type) -> ast::Type,
+) -> ast::TraitBound {
     ast::TraitBound {
-        type_args: bound.type_args.iter().map(at).collect(),
+        type_args: bound.type_args.iter().map(&at).collect(),
         assoc_types: bound
             .assoc_types
             .iter()
-            .map(|a| ast::AssocTypeBound {
-                ty: at(&a.ty),
-                ..a.clone()
+            .map(|constraint| ast::AssocTypeBound {
+                ty: at(&constraint.ty),
+                ..constraint.clone()
             })
             .collect(),
         ..bound.clone()
     }
 }
 
-/// A trait reference re-spelled at what an impl block binds its associated
-/// types to: `trait Constrained: Make<Self::Base>` read at an impl writing
-/// `type Base = String` reaches `Make<String>`, the impl that answers it.
+/// A supertrait bound re-spelled at an impl's associated types: an impl writing
+/// `type Base = String` owes `Make<String>` for `Make<Self::Base>`.
 pub(super) fn bound_at_impl_assoc_types(
     bound: &ast::TraitBound,
     bindings: &[ast::AssociatedTypeBinding],
 ) -> ast::TraitBound {
-    let at = |ty: &ast::Type| {
+    bound_with_types(bound, |ty| {
         substitute_written_type(ty, &|ty| match ty {
             ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" && ns.args.is_empty() => {
                 bindings
@@ -2257,11 +2264,7 @@ pub(super) fn bound_at_impl_assoc_types(
             }
             _ => None,
         })
-    };
-    ast::TraitBound {
-        type_args: bound.type_args.iter().map(at).collect(),
-        ..bound.clone()
-    }
+    })
 }
 
 /// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying

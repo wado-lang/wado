@@ -71,11 +71,11 @@ question started from. A position the clause leaves out stands at the
 supertrait's declared default, so a bound inherited through it arrives as a type
 rather than as a parameter no later reader can resolve.
 
-A clause may write `Self::Assoc` as an argument, and `Self` there is the
-implementing type: `trait Constrained: Make<Self::Base>` asks each impl for
-`Make` at the associated type that impl binds, so an impl binding `Base` to
-`String` owes `Make<String>` and one binding it to `i32` owes `Make<i32>`. Read
-through a bound the projection stands, so `T: Constrained` requires
+A clause may write `Self::Assoc` as an argument. `Self` there is the
+implementing type, so `trait Constrained: Make<Self::Base>` asks each impl for
+`Make` at the associated type that impl binds: an impl binding `Base` to
+`String` owes `Make<String>`, and one binding it to `i32` owes `Make<i32>`. A
+bound carries the projection with it, so `T: Constrained` requires
 `T: Make<T::Base>`.
 
 The closure is stored in the declaring trait's parameter space, which is not the
@@ -126,9 +126,9 @@ leaves open.
 An associated-type constraint in supertrait position is checked but not used for
 inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved.
 
-A clause writing an argument that is not a type — the subtrait's own parameter,
-or `Self::Assoc` — binds the impls but carries no call: a body under
-`T: Constrained` cannot reach `Make`'s methods through it
+A clause whose argument is not a type, such as the subtrait's own parameter or
+`Self::Assoc`, is checked against every impl, but no call can be made through
+it. A body under `T: Constrained` cannot reach `Make`'s methods
 ([Trait Resolution](./wep-2026-09-01-trait-resolution.md), known gaps).
 
 The trait solver states a clause's arguments only where it can name them as

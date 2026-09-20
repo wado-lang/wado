@@ -206,9 +206,12 @@ fn mentions_type_pack(ty: &ast::Type) -> bool {
         ast::Type::TypePackSpread(..) => true,
         ast::Type::NamespacedGeneric(ns) => ns.args.iter().any(mentions_type_pack),
         ast::Type::Generic(generic) => generic.args.iter().any(mentions_type_pack),
+        ast::Type::Function(func) => {
+            func.params.iter().any(mentions_type_pack) || mentions_type_pack(&func.return_type)
+        }
         ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_type_pack(inner),
         ast::Type::Tuple(elements) => elements.iter().any(mentions_type_pack),
-        _ => false,
+        ast::Type::Named(_) | ast::Type::Infer(_) | ast::Type::Error(_) => false,
     }
 }
 
@@ -246,23 +249,6 @@ fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
 pub(super) struct SelfBinding {
     pub(super) type_id: TypeId,
     pub(super) declaring_trait: Option<DefId>,
-}
-
-/// Whether an AST type is phrased against `Self` anywhere, and so only means
-/// something where an implementing type is bound.
-fn mentions_self(ty: &ast::Type) -> bool {
-    match ty {
-        ast::Type::Named(named) => named.name == "Self",
-        ast::Type::NamespacedGeneric(ns) => {
-            ns.namespace == "Self" || ns.args.iter().any(mentions_self)
-        }
-        ast::Type::Generic(generic) => {
-            generic.name == "Self" || generic.args.iter().any(mentions_self)
-        }
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_self(inner),
-        ast::Type::Tuple(elements) => elements.iter().any(mentions_self),
-        _ => false,
-    }
 }
 
 /// The recorded declaration facts of the trait `decl` declares, for a caller
@@ -514,8 +500,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .supertrait_closure_at(&trait_decl, &written)
             .iter()
-            .map(|b| bound_at_impl_assoc_types(&b.bound, &impl_block.associated_types))
-            .map(|bound| self.tysys.bound_named_written(&bound))
+            .map(|b| {
+                let bound = bound_at_impl_assoc_types(&b.bound, &impl_block.associated_types);
+                self.tysys.bound_named_written(&bound)
+            })
             .collect();
         if supertraits.is_empty() {
             return;
@@ -1322,7 +1310,7 @@ impl TypeSystem {
                 p.bounds
                     .iter()
                     .flat_map(|b| &b.assoc_types)
-                    .any(|c| mentions_self(&c.ty))
+                    .any(|c| c.ty.mentions("Self"))
             })
     }
 
@@ -2733,10 +2721,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // `collect<C: FromIterator<Elem = Self::Item>>` says what `C`
             // collects. With no receiver to bind it there is nothing to check
             // here; `enforce_impl_assoc_type_bounds` owns those.
-            let binding = self_binding.filter(|_| mentions_self(&constraint.ty));
-            if (binding.is_none() && mentions_self(&constraint.ty))
-                || mentions_type_pack(&constraint.ty)
-            {
+            let mentions_self = constraint.ty.mentions("Self");
+            let binding = self_binding.filter(|_| mentions_self);
+            if (binding.is_none() && mentions_self) || mentions_type_pack(&constraint.ty) {
                 continue;
             }
             // The bound's own site says which trait declares the constraint.

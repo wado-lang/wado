@@ -11,7 +11,7 @@ use super::scope::BinderInScope;
 use super::types::TypeError;
 use super::util::bound_param_name;
 use crate::ast;
-use crate::ast::{NamespacedGenericType, TraitBound};
+use crate::ast::{FunctionType, NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
@@ -22,8 +22,8 @@ use crate::tir::TraitRef;
 /// `None` for one the frame wrote itself.
 type FrameBound = (TraitBound, Option<DefId>);
 
-/// An AST type with `replace` applied wherever it answers, and every type it
-/// is written over rewritten the same way where it does not.
+/// An AST type with `replace` applied at each node it answers for, the walk
+/// descending into the types written under a node it does not.
 pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Option<Type>) -> Type {
     if let Some(replacement) = replace(ty) {
         return replacement;
@@ -42,10 +42,15 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
                 ..(**namespaced).clone()
             }))
         }
+        Type::Function(func) => Type::Function(Box::new(FunctionType {
+            params: func.params.iter().map(at).collect(),
+            return_type: at(&func.return_type),
+            ..(**func).clone()
+        })),
         Type::Reference(inner) => Type::Reference(Box::new(at(inner))),
         Type::MutReference(inner) => Type::MutReference(Box::new(at(inner))),
         Type::Tuple(elems) => Type::Tuple(elems.iter().map(at).collect()),
-        _ => ty.clone(),
+        Type::Named(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => ty.clone(),
     }
 }
 
@@ -309,10 +314,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     return resolved;
                 }
             }
-            // A parameter standing in for `Self` carries the frame's bounds
-            // under its own name, so the projection is spelled with it: an
-            // inherited `Make<Self::Base>` read at `T: Constrained` asks the
-            // same question `T::Base` asks.
+            // A parameter standing in for `Self` carries the frame's bounds under
+            // its own name, so `Self::Base` at `T: Constrained` asks what `T::Base` asks.
             let self_param = self.annotate_ctx.trait_ctx.self_type.and_then(|id| {
                 let name = bound_param_name(self.tysys.type_table.borrow().get(id)).cloned();
                 name.map(|name| (id, name))

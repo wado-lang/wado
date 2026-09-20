@@ -511,10 +511,10 @@ match from each impl the order names, and reports what the order tied.
 
 A call through `T: Make<U>` asks for `Make` at `U` as the bound spells it, and
 the impl that could answer writes `Make<String>`: the two never meet, whatever
-the call settles `U` to. A projection is the same shape, `T: Make<T::Base>`
-asking at `Base`. So a parameterized trait is reachable through a bound only
-where the bound writes the argument out as a type, and a supertrait clause over
-`Self::Assoc` meets this as soon as a generic body calls through it.
+the call settles `U` to. A projection has the same shape: `T: Make<T::Base>`
+asks at `Base`. A parameterized trait is therefore reachable through a bound
+only where the bound writes its argument out as a type. A supertrait clause over
+`Self::Assoc` runs into this as soon as a generic body calls through it.
 
 ### Scope gates method calls, not the bounds path
 
