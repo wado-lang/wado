@@ -1882,6 +1882,11 @@ impl TraitEnv {
         self.decl_header_of(decl_key)
     }
 
+    /// Whether `key` identifies a trait declaration.
+    pub(super) fn is_trait_decl(&self, key: &DefId) -> bool {
+        self.decl_index.contains(key)
+    }
+
     /// The digested declaration `key` identifies, or `None` when it names no
     /// trait.
     pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {

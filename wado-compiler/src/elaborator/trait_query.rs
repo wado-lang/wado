@@ -274,7 +274,7 @@ pub(crate) fn trait_sig_of_with<'a>(
     trait_env: &TraitEnv,
     signatures: &'a sig::Signatures,
 ) -> Option<&'a TraitSig> {
-    if !trait_env.decl_index.contains(&decl) {
+    if !trait_env.is_trait_decl(&decl) {
         return None;
     }
     signatures.trait_sig(decl)
@@ -562,11 +562,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
     /// The declared type parameters of an already-identified trait.
     pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        let loc = self.tysys.trait_env.decl_index.get(key)?;
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .get(loc)
+        self.trait_decl_header_of(key)
             .map(|header| header.type_params.clone())
     }
 
@@ -1050,7 +1046,7 @@ impl TypeSystem {
     /// than a reference site; a caller with a site asks the site instead.
     fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DefId> {
         let key = scope.declaration(name)?;
-        self.trait_env.decl_index.contains(&key).then_some(key)
+        self.trait_env.is_trait_decl(&key).then_some(key)
     }
 
     /// Whether what a bound writes for `trait_`'s own parameters answers
@@ -1116,8 +1112,7 @@ impl TypeSystem {
     ) -> Option<&'a ModuleSource> {
         let def = scope.declaration(trait_name)?;
         self.trait_env
-            .decl_index
-            .contains(&def)
+            .is_trait_decl(&def)
             .then(|| scope.resolutions.defs().module(def))
     }
 
@@ -2009,7 +2004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is no trait at all — a same-named enum case in the prelude.
     pub(super) fn trait_decl_at(&self, site: AstId, written: &str) -> Option<DefId> {
         if let Some(def) = self.tysys.resolutions.declared(site)
-            && self.tysys.trait_env.decl_index.contains(&def)
+            && self.tysys.trait_env.is_trait_decl(&def)
         {
             return Some(def);
         }
@@ -2084,7 +2079,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
     /// second resolution found nothing.
     pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
-        if !self.tysys.trait_env.decl_index.contains(key) {
+        if !self.tysys.trait_env.is_trait_decl(key) {
             return None;
         }
         self.tysys.signatures.trait_sig(*key)

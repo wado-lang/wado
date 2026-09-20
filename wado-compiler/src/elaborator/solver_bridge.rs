@@ -954,7 +954,7 @@ impl SolverBridge {
                 .resolutions
                 .decls_in_scope(module)
                 .into_iter()
-                .filter(|def| tysys.trait_env.decl_index.contains(def))
+                .filter(|def| tysys.trait_env.is_trait_decl(def))
                 .map(|def| lowering.trait_decl(def))
                 .collect();
             let id = lowering.module(module);
