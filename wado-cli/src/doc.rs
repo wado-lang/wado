@@ -7,6 +7,7 @@ use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
     DocVariant, extract_doc_with, extract_stdlib_doc_with,
 };
+use wado_lsp::host::install_dev_stdlib;
 
 use crate::args::{self, CliExit};
 
@@ -197,6 +198,7 @@ fn is_stdlib_module(input: &str) -> bool {
 }
 
 pub fn run(opts: DocOptions) -> Result<(), CliExit> {
+    install_dev_stdlib();
     let docs: Vec<(String, DocModule)> = opts
         .inputs
         .iter()
@@ -353,19 +355,29 @@ fn format_markdown(content: &str) -> String {
 #[cfg(test)]
 mod format_contract_tests {
     use super::*;
-    use wado_compiler::doc::{extract_stdlib_doc, extract_stdlib_doc_with};
+    use wado_compiler::doc::extract_stdlib_doc;
+
+    fn stdlib_doc(module: &str) -> DocModule {
+        install_dev_stdlib();
+        extract_stdlib_doc(module).unwrap_or_else(|| panic!("{module} stdlib doc"))
+    }
+
+    fn stdlib_doc_all(module: &str) -> DocModule {
+        install_dev_stdlib();
+        extract_stdlib_doc_with(module, true).unwrap_or_else(|| panic!("{module} stdlib doc"))
+    }
 
     #[test]
     fn all_view_includes_private_members() {
         // `append_bytes` is a non-`pub` inherent helper on CborDeserializer.
         let default = render_single(
-            &extract_stdlib_doc("core:cbor").expect("doc"),
+            &stdlib_doc("core:cbor"),
             "simple",
             "core:cbor",
             OutputFormat::Simple,
         );
         let all = render_single(
-            &extract_stdlib_doc_with("core:cbor", true).expect("doc"),
+            &stdlib_doc_all("core:cbor"),
             "simple",
             "core:cbor",
             OutputFormat::Simple,
@@ -386,7 +398,7 @@ mod format_contract_tests {
         // `pub use { BinaryProperty } from "./icu.wat"`. The type is named in
         // two signatures, so a reader who cannot see its cases cannot call them.
         let out = render_single(
-            &extract_stdlib_doc("core:icu").expect("core:icu stdlib doc"),
+            &stdlib_doc("core:icu"),
             "markdown",
             "core:icu",
             OutputFormat::Markdown,
@@ -411,14 +423,14 @@ mod format_contract_tests {
 
     #[test]
     fn markdown_output_is_dprint_stable() {
-        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "markdown", "core:cli", OutputFormat::Markdown);
         assert_dprint_stable(&out, "markdown single");
     }
 
     #[test]
     fn simple_output_is_dprint_stable() {
-        let doc = extract_stdlib_doc("core:cli").expect("core:cli stdlib doc");
+        let doc = stdlib_doc("core:cli");
         let out = render_single(&doc, "simple", "core:cli", OutputFormat::Simple);
         assert_dprint_stable(&out, "simple single");
     }
@@ -503,7 +515,7 @@ mod format_contract_tests {
         let inputs = ["core:cli".to_string(), "core:base64".to_string()];
         let docs: Vec<(String, _)> = inputs
             .iter()
-            .map(|i| (i.clone(), extract_stdlib_doc(i).expect("stdlib doc")))
+            .map(|i| (i.clone(), stdlib_doc(i)))
             .collect();
         let opts = DocOptions {
             inputs: inputs.to_vec(),

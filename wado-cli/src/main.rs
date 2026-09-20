@@ -197,11 +197,6 @@ fn main() {
     // the embedded LSP server — shares one configured cache location.
     wado_cli::cache::init_root_from_config();
 
-    // A dev build serves the stdlib from `wado-compiler/lib/`, which the
-    // compiler never opens itself. Before any compile, so every run sees one
-    // set of sources.
-    wado_lsp::host::install_dev_stdlib();
-
     // The compiler is recursive-descent end to end (parser, type resolution,
     // TIR/NIR/WIR walks), so compiling a large generated source — e.g. a Gale
     // parser for a deeply nested grammar — recurses deeply. The default 2 MiB

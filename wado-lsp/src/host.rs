@@ -18,7 +18,8 @@ use discovery::{DependencyEntry, absolutize};
 
 /// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
 /// build serves what is on disk now and the compiler itself reads no file.
-/// Every native embedder calls this before compiling; the first call wins.
+/// Every host installs it when built, since a host is what supplies it; the
+/// first call wins and the rest are one atomic load.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib() {
     use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
@@ -45,6 +46,7 @@ pub struct FilesystemCompilerHost {
 impl FilesystemCompilerHost {
     #[must_use]
     pub fn new(base_path: PathBuf) -> Self {
+        install_dev_stdlib();
         Self {
             base_path,
             diagnostics: Arc::new(Mutex::new(Vec::new())),

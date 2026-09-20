@@ -146,6 +146,9 @@ impl SourceWatch {
     fn observe_dev_stdlib(&self) {
         use wado_compiler::stdlib::{DEV_STDLIB_ROOT, installed_dev_stdlib};
 
+        // A run may be built before any host is, and there is nothing to
+        // observe until the stdlib is installed.
+        wado_lsp::host::install_dev_stdlib();
         let root = Path::new(DEV_STDLIB_ROOT);
         for (file, source) in installed_dev_stdlib() {
             self.observe(&root.join(file), source.as_bytes());
@@ -231,7 +234,6 @@ mod tests {
     fn a_run_watches_the_stdlib_it_compiles_against() {
         use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
 
-        wado_lsp::host::install_dev_stdlib();
         let run = RunCache::default();
         let root = Path::new(DEV_STDLIB_ROOT);
         for file in dev_stdlib_files() {
