@@ -862,10 +862,6 @@ pub struct TraitEnv {
     ///
     /// Rebuilt per load: a re-parse mints a new space.
     space_modules: IndexMap<ast::AstIdSpace, ModuleSource>,
-    /// Associated-type name → the declaring trait's bounds for it, first
-    /// declaration wins (matching the previous whole-program scan order).
-    /// Consumed by `find_assoc_type_bounds` without an AST scan.
-    pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
     /// Blanket impls by the trait they implement, in registration order. The
     /// single classification source for blanket dispatch (module, receiver
     /// kind, param, bounds), and where the monomorphizer finds the home module
@@ -993,8 +989,6 @@ impl TraitEnv {
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
         let mut effect_decl_index: EffectDeclIndex = IndexSet::default();
-        let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
-            IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<DefId, ImplHeader> = IndexMap::default();
@@ -1022,13 +1016,6 @@ impl TraitEnv {
         for (module_source, module) in modules {
             for item in &module.items {
                 match item {
-                    Item::Trait(trait_decl) => {
-                        for assoc in &trait_decl.associated_types {
-                            assoc_type_bound_index
-                                .entry(assoc.name.clone())
-                                .or_insert_with(|| assoc.bounds.clone());
-                        }
-                    }
                     Item::Interface(effect_decl) => {
                         if let Some(def) = defs.of_ast_id(effect_decl.id) {
                             effect_decl_index.insert(def);
@@ -1397,7 +1384,6 @@ impl TraitEnv {
                 decls_by_name,
                 module_namespace_imports,
                 space_modules,
-                assoc_type_bound_index,
                 blanket_impls,
                 impl_method_index,
                 resource_static_method_index,

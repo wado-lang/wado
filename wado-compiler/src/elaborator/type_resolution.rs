@@ -984,20 +984,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })
     }
 
-    /// Look up the trait bounds on an associated type declaration.
-    /// Given a type parameter `param_id` (e.g., `S: Serializer`), find the trait that
-    /// declares the associated type `assoc_name` and return its full bounds (with assoc types).
-    fn find_assoc_type_bounds(&self, param_id: TypeId, assoc_name: &str) -> Vec<TraitBound> {
-        let param_type = self.tysys.type_table.borrow().get(param_id).clone();
-        if !matches!(param_type, ResolvedType::TypeParam { .. }) {
-            return Vec::new();
-        }
-
+    /// The bounds `owning_trait` writes on its associated type `assoc_name`.
+    // They belong to the declaration, and a projection interns by them, so
+    // every builder must read them from the same place (WEP 2026-08-12).
+    fn declared_assoc_type_bounds(&self, owning_trait: DefId, assoc_name: &str) -> Vec<TraitBound> {
         self.tysys
             .trait_env
-            .assoc_type_bound_index
-            .get(assoc_name)
-            .cloned()
+            .assoc_type_decl(&owning_trait, assoc_name)
+            .map(|decl| decl.bounds.clone())
             .unwrap_or_default()
     }
 
@@ -1139,7 +1133,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         owning_trait: DefId,
         assoc: &str,
     ) -> TypeId {
-        let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
+        let assoc_bounds = self.declared_assoc_type_bounds(owning_trait, assoc);
         let bound_names: Vec<FqTraitName> = assoc_bounds
             .iter()
             .map(|b| self.fq_trait_name_at(b.id, &b.name))
