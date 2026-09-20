@@ -25,10 +25,11 @@ pub(super) enum TypeCheckResult {
 }
 
 /// Pure type compatibility check, emitting no errors. Rules apply in order:
-/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; anything
-/// genuinely undecided deferred; reference variance (`&mut T` → `&T` only);
-/// newtypes and flags distinct from their base; `Option`; structural comparison
-/// for function types and generic instances; anything else incompatible.
+/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; a pack-arity
+/// conflict incompatible; anything else genuinely undecided deferred; reference
+/// variance (`&mut T` → `&T` only); newtypes and flags distinct from their base;
+/// `Option`; structural comparison for function types and generic instances;
+/// anything else incompatible.
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
@@ -69,15 +70,16 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    // Defer only what is genuinely undecided: an inference variable awaiting its
-    // solver, a pack awaiting expansion, a projection over one of those, and
-    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
-    // of a polymorphic signature instantiates its slots into `InferVar`s first,
-    // so nothing but itself is ever assignable to it.
     if pack_arity_conflict(actual, expected, type_table) {
         return TypeCheckResult::Incompatible;
     }
 
+    // Defer only what is genuinely undecided: an inference variable awaiting its
+    // solver, a pack awaiting expansion that the rule above did not settle, a
+    // projection over one of those, and `unknown` / `error`. A rigid `TypeParam`
+    // is opaque, not undecided — a use of a polymorphic signature instantiates
+    // its slots into `InferVar`s first, so nothing but itself is ever assignable
+    // to it.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -281,7 +283,6 @@ fn check_projections(
     )
 }
 
-/// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
 /// Two tuple types over one pack differ when their fixed elements differ: the
 /// pack stands for the same arity on both sides, so `[..R, L]` can never be
 /// `[..R]`. Decidable before the pack is expanded, which is the only point
@@ -318,6 +319,7 @@ fn tuple_pack_and_fixed(type_id: TypeId, type_table: &TypeTable) -> Option<(Type
     Some((pack, type_args.len() - 1))
 }
 
+/// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
 fn unwrap_ref(type_id: TypeId, type_table: &TypeTable) -> (TypeId, bool) {
     match type_table.get(type_id) {
         ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => (*inner, true),
