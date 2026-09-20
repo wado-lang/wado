@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789899075536,
+  "lastUpdate": 1789901569461,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57321,6 +57321,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "sqlite_highlight",
             "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "fbe46f0bea9d440e20ffb72de52c2818b0b2fadd",
+          "message": "Merge pull request #2092 from wado-lang/claude/stdlib-named-constants\n\nrefactor(stdlib): name the numbers the stdlib was spelling out, and document a struct's constants",
+          "timestamp": "2026-09-20T19:33:14+09:00",
+          "tree_id": "fb86224a0f9b48740524c342e1d3109d0af903d5",
+          "url": "https://github.com/wado-lang/wado/commit/fbe46f0bea9d440e20ffb72de52c2818b0b2fadd"
+        },
+        "date": 1789901568722,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
             "unit": "bytes"
           }
         ]
