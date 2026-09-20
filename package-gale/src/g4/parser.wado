@@ -51,6 +51,7 @@ use {
     decode_shared_escape,
     INVALID_ESCAPE,
 } from "./lexer.wado";
+use { collect_range } from "../text.wado";
 use { scan_balanced, is_id_continue_char, is_rule_name_upper } from "./scan.wado";
 use {
     clip_to_scalars,
@@ -120,10 +121,8 @@ fn found_desc(tok: &Token) -> String {
     return `got "${tok.text}"`;
 }
 
-/// Whether a block may carry a label. ANTLR4 takes one only on a set — two or
-/// more alternatives, each a single terminal and nothing else — and reports
-/// `error(130)` otherwise. A richer block has no binding slot it will name, so
-/// accepting one compiles a grammar the jar refuses.
+/// Whether a block may carry a label. ANTLR4 takes one only on a set: two or
+/// more alternatives, each a single terminal and nothing else (`error(130)`).
 fn is_labelable_set(g: &GroupElement) -> bool {
     if g.alternatives.len() < 2 || !g.options.is_empty() {
         return false;
@@ -1413,11 +1412,7 @@ fn advance_char(chars: &List<char>, pos: &mut i32) -> char {
 }
 
 /// Code point of the next char-set item, escapes resolved, or
-/// `INVALID_ESCAPE`. Surrogates come back verbatim — `clip_to_scalars` decides
-/// what a range containing one actually admits. A set defines `\-` and `\]`,
-/// which a string literal does not; `\p{…}` is read before this by
-/// `at_property_escape`, so a bare `\p` reaching here is undefined like any
-/// other letter.
+/// `INVALID_ESCAPE`. Surrogates come back verbatim, for `clip_to_scalars`.
 fn resolve_char_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let c = advance_char(chars, pos);
     if c != '\\' {
@@ -1458,19 +1453,21 @@ fn property_range_error(span: Span) -> ParseError {
     );
 }
 
-/// The error for an escape the char-set lexicon does not define. ANTLR4 reports
-/// the same shape (`error(156)`); reading the escape as its bare character
-/// instead would compile a grammar the jar refuses, and say nothing about it.
-fn invalid_escape_error(chars: &List<char>, start: i32, end: i32, class_span: Span) -> ParseError {
-    let mut esc = String::with_capacity(end - start);
-    for let mut i = start; i < end; i += 1 {
-        esc.push(chars[i]);
+/// The next char-set item, or the `error(156)` ANTLR4 reports for an escape
+/// the lexicon does not define. `class_span` places the error in the source.
+fn take_char_code(chars: &List<char>, pos: &mut i32, class_span: Span) -> Result<i32, ParseError> {
+    let start = *pos;
+    let code = resolve_char_code(chars, pos);
+    if code != INVALID_ESCAPE {
+        return Result::<i32, ParseError>::Ok(code);
     }
     let expected: List<String> = ["a defined escape sequence"];
-    return ParseError::new(
-        `invalid escape sequence ${esc}`,
-        Span::new(class_span.start + start, class_span.start + end),
-        expected,
+    return Result::<i32, ParseError>::Err(
+        ParseError::new(
+            `invalid escape sequence ${collect_range(chars, start, *pos)}`,
+            Span::new(class_span.start + start, class_span.start + *pos),
+            expected,
+        ),
     );
 }
 
@@ -1515,21 +1512,13 @@ fn parse_char_class<S: AsStrSlice>(text: S, span: Span) -> Result<CharClass, Par
             continue;
         }
 
-        let lo_start = pos;
-        let c = resolve_char_code(&chars, &mut pos);
-        if c == INVALID_ESCAPE {
-            return Result::<CharClass, ParseError>::Err(invalid_escape_error(&chars, lo_start, pos, span));
-        }
+        let c = take_char_code(&chars, &mut pos, span)?;
         if opens_char_range(&chars, pos, end) {
             advance_char(&chars, &mut pos);
             if at_property_escape(&chars, pos, end) {
                 return Result::<CharClass, ParseError>::Err(property_range_error(span));
             }
-            let hi_start = pos;
-            let c2 = resolve_char_code(&chars, &mut pos);
-            if c2 == INVALID_ESCAPE {
-                return Result::<CharClass, ParseError>::Err(invalid_escape_error(&chars, hi_start, pos, span));
-            }
+            let c2 = take_char_code(&chars, &mut pos, span)?;
             clip_to_scalars(&mut ranges, c, c2);
         } else {
             clip_to_scalars(&mut ranges, c, c);

@@ -83,26 +83,25 @@ test "string literal unicode and control escapes" {
     assert_token(&tokens[2], G4Token::StringLit, control);
 }
 
+fn assert_invalid_escapes(cases: &List<String>) {
+    for let src of cases {
+        let tokens = tokenize(*src);
+        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
+    }
+}
+
 test "an escape ANTLR4 does not define is a token of its own" {
     // Every one of these is `invalid escape sequence` from the jar. Reading
     // them as the bare character would make Gale a silent superset: the
     // grammar compiles here and not upstream, and nothing says so.
-    let cases: List<String> = ["'\\a'", "'\\]'", "'\\-'", "'\\p{Alpha}'", "'\\\"'"];
-    for let src of &cases {
-        let tokens = tokenize(*src);
-        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
-    }
+    assert_invalid_escapes(&["'\\a'", "'\\]'", "'\\-'", "'\\p{Alpha}'", "'\\\"'"]);
     assert G4Token::InvalidEscape.name() == "invalid escape sequence";
 }
 
 test "a malformed unicode escape is invalid, not a shorter one" {
-    // `\u41` is four hex digits short one, not `A`; `\u{}` names no code
-    // point and `\u{110000}` none that exists. The jar rejects each.
-    let cases: List<String> = ["'\\u41'", "'\\u{}'", "'\\u{110000}'", "'\\uZZZZ'", "'\\u{41'"];
-    for let src of &cases {
-        let tokens = tokenize(*src);
-        assert tokens[0].kind == G4Token::InvalidEscape as i32, `${*src}: ${tokens[0].kind}`;
-    }
+    // `\u41` gives two hex digits where four are required, so it is not `A`.
+    // `\u{}` names no code point and `\u{110000}` names none that exists.
+    assert_invalid_escapes(&["'\\u41'", "'\\u{}'", "'\\u{110000}'", "'\\uZZZZ'", "'\\u{41'"]);
 }
 
 test "an invalid escape names itself and the scan resumes past the literal" {

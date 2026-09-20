@@ -264,9 +264,8 @@ test "generate scalar-labeled group `t=(a | b)`" {
 }
 
 test "generate scalar-labeled wildcard repeat `t=.*`" {
-    // The outer `*` keeps the Label inside the Repeat
-    // (Repeat(Label(Wildcard))). The peel applies inside the Repeat body;
-    // the Repeat path itself still pattern-matches on `Element::Repeat`.
+    // A suffix binds outside the label, so this is Repeat(Label(Wildcard)):
+    // the walker peels the Label inside the body, not at the Repeat itself.
     let mut grammar = parse_grammar("grammar T; a : t=.* ; A : 'a' ;", "(test)");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, "any");

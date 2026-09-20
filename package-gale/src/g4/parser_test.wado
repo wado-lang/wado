@@ -2321,9 +2321,10 @@ test "a property escape cannot be a bound of a character range" {
 
 test "a label on a block ANTLR4 calls no set is rejected" {
     // `error(130): label x assigned to a block which is not a set`. A set is
-    // two or more alternatives, each one terminal: anything richer has no
+    // two or more alternatives, each one terminal. Anything richer has no
     // binding slot ANTLR4 names, so `(e)` is not the free wrapper it looks
-    // like. Both label forms, and a suffix on the block saves neither.
+    // like. The rule covers both label forms, and a suffix on the block does
+    // not exempt it.
     let bad: List<String> = [
         "grammar Test;\nr : x=(A) ;", "grammar Test;\nr : x+=(A)+ ;", "grammar Test;\nr : x=(A B)+ ;",
         "grammar Test;\nr : x+=(A*) ;", "grammar Test;\nr : x+=(A B)*? ;", "grammar Test;\nr : x=(A? B)? ;",

@@ -13,8 +13,8 @@ star : ( { false }? A | B )* A ;
 
 nongreedy : ( { false }? A | B )*? A ;
 
-// The label sits on the alternatives rather than on the block: a gated block
-// is no set, and ANTLR4 labels only a set.
+// The label sits on the alternatives: a gated block is no set, and ANTLR4
+// labels only a set.
 list_label : ( { false }? xs += A | xs += B )* A ;
 
 // A predicate inside a single-alternative group guards; it selects nothing,

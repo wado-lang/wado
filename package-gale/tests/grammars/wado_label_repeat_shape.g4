@@ -1,13 +1,12 @@
-// A Repeat supplies its own `List<>` typing, so lower peels a label off the
-// body op. Every decision taken from the surface element has to peel with it,
-// or a labelled repeat is analysed as though its body were not a group at all:
-// the non-greedy exit loses the second-position discriminator, and a
-// shape-lookahead optional loses its enumeration. Each rule below is paired
-// with its label-free twin, and the pair must parse the same inputs the same
-// way.
+// A label inside a repeat's body retypes what it binds and nothing else. Every
+// decision taken from the surface element has to read through it, or the body
+// is analysed as though it were not a group at all: the non-greedy exit loses
+// the second-position discriminator, and the shape-lookahead optional loses its
+// enumeration. Each rule below is paired with its label-free twin, and the pair
+// must parse the same inputs the same way.
 //
-// The label sits on an element of the body rather than on the body: ANTLR4
-// labels a block only when it is a set, so `xs += ( A B )*?` is `error(130)`.
+// The label sits on an element rather than on the block, because ANTLR4 labels
+// a block only when it is a set: `xs += ( A B )*?` is `error(130)`.
 grammar WadoLabelRepeatShape;
 
 options { language = Wado; }

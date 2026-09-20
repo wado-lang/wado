@@ -117,7 +117,7 @@ impl G4Lexer {
         let cp = decode_string_escape(self.chars, &mut p);
         self.pos = p;
         if cp == INVALID_ESCAPE {
-            if !*bad matches { Some(_) } {
+            if *bad matches { None } {
                 *bad = Option::<Span>::Some(Span::new(esc_start, self.pos));
             }
             return;
@@ -290,10 +290,8 @@ fn buf_eq<S: AsStrSlice>(buf: &List<char>, lit: S) -> bool {
 /// is negative, so a caller tells the two apart by sign.
 pub global INVALID_ESCAPE: i32 = -1;
 
-/// Decode one escape body — the chars *after* the `\` — into a code point, or
-/// `INVALID_ESCAPE`. `pos` enters at the escape character and leaves past the
-/// escape. A string literal defines fewer escapes than a char set: `\]` and
-/// `\-` are the set's, and `\'` is this one's.
+/// One escape body — the chars *after* the `\` — as a code point, or
+/// `INVALID_ESCAPE`. `pos` enters at the escape character and leaves past it.
 pub fn decode_string_escape(chars: &List<char>, pos: &mut i32) -> i32 {
     let ec = chars[*pos];
     *pos += 1;
@@ -351,10 +349,7 @@ pub fn scalar_or_replacement(code: i32) -> char {
 global MAX_CODE_POINT: i32 = 0x10FFFF;
 
 /// Raw code point of a `\uXXXX` / `\u{…}` escape body (`pos` enters past the
-/// `u`), or `INVALID_ESCAPE`. The braced form takes at least one hex digit, a
-/// closing brace, and a value Unicode has; the bare form takes exactly four
-/// digits, so `\u41` is short one rather than `A`. Surrogates come back
-/// verbatim; the caller decides what they mean.
+/// `u`), or `INVALID_ESCAPE`. Surrogates come back verbatim.
 pub fn resolve_unicode_escape_code(chars: &List<char>, pos: &mut i32) -> i32 {
     let mut val = 0;
     let mut n = 0;
