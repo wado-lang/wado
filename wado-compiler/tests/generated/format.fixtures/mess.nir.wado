@@ -22,7 +22,7 @@ fn grow_memory(new_offset: i32) {
     } else {
         normal_grow;
     };
-    if (core::builtin::memory_grow(((grow_bytes + 65535) / 65536)) < 0) {
+    if (core::builtin::memory_grow((((grow_bytes + 65536) - 1) / 65536)) < 0) {
         core::builtin::cold_path();
         core::builtin::unreachable();
     }
