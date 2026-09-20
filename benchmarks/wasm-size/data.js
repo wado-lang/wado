@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789911477995,
+  "lastUpdate": 1789913366380,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57433,6 +57433,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/675bfcbd254a307fc9891ee723f9268d13d4e865"
         },
         "date": 1789911477390,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d358fbb7f11721a8083073dc903d25adc5a70d5b",
+          "message": "Merge pull request #2096 from wado-lang/claude/declaration-identity-wep-gap-k1lplu\n\nfix(cm): four kinds of value that lowered to the wrong bytes at the component boundary",
+          "timestamp": "2026-09-20T22:55:04+09:00",
+          "tree_id": "35d7f2f237530b0ba199c157c8047448a8e5cc7a",
+          "url": "https://github.com/wado-lang/wado/commit/d358fbb7f11721a8083073dc903d25adc5a70d5b"
+        },
+        "date": 1789913366117,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
