@@ -102,12 +102,13 @@ takes a tree down. A path that resolves to the preopen is `Io(NotPermitted)`.
 ### `pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Remove the directory `path` names and everything under it. A path that
-names nothing is not a failure, where Rust reports one; a path naming
-something other than a directory is `Io(NotDirectory)`, and one that
-resolves to the preopen is `Io(NotPermitted)`.
+names nothing is not a failure, where Rust reports one; a path naming a
+plain file is `Io(NotDirectory)`, one naming a symlink fails without
+following or unlinking it, and one that resolves to the preopen is
+`Io(NotPermitted)`.
 
 Acts on a listing, so an entry arriving mid-walk leaves the root
-`Io(NotEmpty)`. A symlink is unlinked, never walked through.
+`Io(NotEmpty)`. A symlink under the root is unlinked, never walked through.
 
 ### `pub fn join<A: AsStrSlice, B: AsStrSlice>(base: A, name: B) -> String`
 

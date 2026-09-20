@@ -188,6 +188,20 @@ test "remove_dir_all unlinks a symlink instead of emptying what it points at" {
     assert fs::read_to_string(`${keep}/survivor.txt`).unwrap() == "untouched";
 }
 
+test "remove_dir_all refuses a symlink root rather than emptying it" {
+    let dir = scratch("remove-dir-all-symlink-root");
+    let real = `${dir}/real`;
+    fs::create_dir(&real).unwrap();
+    fs::write(`${real}/survivor.txt`, &"untouched").unwrap();
+
+    let link = `${dir}/link`;
+    fs::root().unwrap().symlink_at("real", link).wait().unwrap();
+
+    assert fs::remove_dir_all(&link).is_err();
+    assert fs::exists(&link);
+    assert fs::read_to_string(`${real}/survivor.txt`).unwrap() == "untouched";
+}
+
 test "neither removal takes the preopened directory itself" {
     assert fs::remove_dir("").unwrap_err().kind matches { Io(NotPermitted) };
     assert fs::remove_dir(".").unwrap_err().kind matches { Io(NotPermitted) };
