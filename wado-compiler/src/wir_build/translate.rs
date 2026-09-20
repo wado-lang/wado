@@ -1072,17 +1072,17 @@ impl FunctionTranslator<'_, '_> {
         if (index as usize) < param_count {
             let type_id = self.tir_func.params[index as usize].type_id;
             self.wir_type(type_id)
-        } else if !self.tir_func.locals.is_empty() {
+        } else {
             // `locals` is indexed absolutely (entries 0..param_count are
             // params, entries param_count.. are non-param locals), matching
             // DeclareLocal generation.
-            if let Some(local) = self.tir_func.locals.get(index as usize) {
-                self.wir_type(local.type_id)
-            } else {
-                WirType::I32
-            }
-        } else {
-            WirType::I32
+            let local = self.tir_func.locals.get(index as usize).unwrap_or_else(|| {
+                panic!(
+                    "[WIR] local {index} read in a function declaring {}",
+                    self.tir_func.locals.len()
+                )
+            });
+            self.wir_type(local.type_id)
         }
     }
 
@@ -1115,20 +1115,30 @@ impl FunctionTranslator<'_, '_> {
         struct_type_id: &WirTypeId,
         field_name: &str,
     ) -> WirType {
-        if let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(struct_type_id.index() as usize)
-            && let Some(f) = st.fields.iter().find(|f| f.name == field_name)
-        {
-            return f.ty.clone();
-        }
-        WirType::I32
+        let Some(WirTypeDef::Struct(st)) = self.ctx.types.get(struct_type_id.index() as usize)
+        else {
+            panic!(
+                "[WIR] field `{field_name}` read from type {}, which is not a registered struct",
+                struct_type_id.index()
+            );
+        };
+        st.fields
+            .iter()
+            .find(|f| f.name == field_name)
+            .unwrap_or_else(|| panic!("[WIR] struct `{}` has no field `{field_name}`", st.name.fq))
+            .ty
+            .clone()
     }
 
     /// Look up the element WIR type of an array type.
     pub(super) fn array_element_wir_type(&self, array_type_id: &WirTypeId) -> WirType {
-        if let Some(WirTypeDef::Array(at)) = self.ctx.types.get(array_type_id.index() as usize) {
-            return at.element_type.clone();
-        }
-        WirType::I32
+        let Some(WirTypeDef::Array(at)) = self.ctx.types.get(array_type_id.index() as usize) else {
+            panic!(
+                "[WIR] element read from type {}, which is not a registered array",
+                array_type_id.index()
+            );
+        };
+        at.element_type.clone()
     }
 
     /// Build a `StructNew` instruction, wrapping each field value with `RefAsNonNull`

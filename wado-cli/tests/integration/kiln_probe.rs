@@ -76,7 +76,6 @@ export fn run() with Stdout {
 /// The payload past the extent never reaches `generate`: the output is built
 /// from the header alone.
 #[test]
-#[ignore = "blocked on the Result<u64, E> loop-payload ICE in the forced-async export adapter"]
 fn generate_sees_the_input_cut_to_its_extent() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
@@ -93,7 +92,6 @@ fn generate_sees_the_input_cut_to_its_extent() {
 /// This is the whole point of the probe: a checkpoint's payload can change
 /// without the generator running again.
 #[test]
-#[ignore = "blocked on the Result<u64, E> loop-payload ICE in the forced-async export adapter"]
 fn only_the_extent_decides_whether_the_generator_reruns() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();

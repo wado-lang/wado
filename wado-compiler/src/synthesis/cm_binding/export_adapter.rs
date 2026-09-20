@@ -2043,7 +2043,10 @@ pub(super) fn synthesize_variant_lower_to_flat(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) {
-    // Set flat[0] = discriminant
+    // Set flat[0] = discriminant. The tag is an i32, but this slot may be wider:
+    // nested in an enclosing variant it is shared with a sibling case, and the
+    // Canonical ABI join takes the wider of the two — `result<u64, error>` gives
+    // the error's tag an i64 slot. Coerce as every other slot assignment does.
     if !flat_locals.is_empty() {
         stmts.push(expr_stmt(assign(
             local_ref(
@@ -2051,7 +2054,11 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+            coerce_flat_lower(
+                variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+                cm_abi::CmValType::I32,
+                flat_types[0],
+            ),
         )));
     }
 
