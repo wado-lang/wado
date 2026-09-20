@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789937451827,
+  "lastUpdate": 1789944714346,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57521,6 +57521,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/673ef2c8dcd0037a7b408a9bcfad5f3032b73474"
         },
         "date": 1789937450909,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f230693f0087483960ad89bd946394741737597f",
+          "message": "Merge pull request #2098 from wado-lang/claude/research-ml-inference-webgpu\n\nfeat(kiln): key a build on the header a generator read, not the whole input",
+          "timestamp": "2026-09-21T07:32:46+09:00",
+          "tree_id": "19306abaef6a32aabd19027dfc3654edfc921fa1",
+          "url": "https://github.com/wado-lang/wado/commit/f230693f0087483960ad89bd946394741737597f"
+        },
+        "date": 1789944713630,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
