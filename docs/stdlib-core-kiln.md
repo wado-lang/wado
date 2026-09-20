@@ -13,6 +13,20 @@ wrapper that generator authors write against.
 See WEP 2026-04-12 (Kiln) §"The generator contract" and §"Options are a
 typed argument in each generator's own world".
 
+## Functions
+
+### `pub fn read_all(content: Stream<u8>) -> ByteList`
+
+Read an input file's content to the end. A generator that needs the whole
+file calls this; one that needs a prefix reads `content` itself and drops
+it early.
+
+### `pub fn read_text(content: Stream<u8>) -> Result<String, String>`
+
+Read an input file's content to the end as text, decoding as it goes so no
+second copy of the file exists. `Err` carries the decode failure, which is a
+malformed input rather than a generator bug.
+
 ## Effects
 
 ### `pub interface KilnHost`
@@ -86,13 +100,13 @@ by consulting `CompilerHost`.
 
 ### `pub struct InputFile`
 
-One schema file the compiler has pre-loaded for the generator.
-The file is always supplied by value so that the initial input
-set is fully determined by the invocation declaration.
+One schema file the compiler opened for the generator. The set of
+files is fixed by the invocation declaration; the content arrives as
+a stream so a generator reads only as far as it needs.
 
 #### `path: String`
 
-#### `content: String`
+#### `content: Stream<u8>`
 
 ### `pub struct OutputFile`
 

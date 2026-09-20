@@ -1882,6 +1882,10 @@ pub struct "Box<core:prelude/types.wado/Option<[i32,char]>>" {
     value: Option<[i32, char]>,
 }
 
+pub struct "Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>" {
+    value: Result<i32, String>,
+}
+
 pub struct "Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>" {
     value: Option<[StrSlice, StrSlice]>,
 }
@@ -8264,7 +8268,7 @@ pub fn "core:prelude/string.wado/String::from_utf8_slice"(bytes: Slice<u8>) -> R
     return Result<String, String>::Ok(String { repr: bytes."core:prelude/slice.wado/Slice<u8>::to_array"() as Array<u8>, used: bytes."core:prelude/slice.wado/Slice<u8>::len"() });
 }
 
-fn "core:prelude/string.wado/String::utf8_error_offset"(bytes: &Slice<u8>) -> i32 {
+fn "core:prelude/string.wado/String::utf8_valid_prefix"(bytes: &Slice<u8>) -> i32 {
     let len: i32 = bytes."core:prelude/slice.wado/Slice<u8>::len"();
     let mut i: i32 = 0;
     loop {
@@ -8274,14 +8278,31 @@ fn "core:prelude/string.wado/String::utf8_error_offset"(bytes: &Slice<u8>) -> i3
         let mut advance: i32 = 1;
         if (bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"(i) >= 128) {
             advance = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_sequence_len"(bytes, i, len);
-            if (advance == 0) {
+            if (advance <= 0) {
                 core::builtin::cold_path();
-                return i;
+                return if (advance < 0) {
+                    i;
+                } else {
+                    (-1 - i);
+                };
             }
         }
         i = (i + advance);
     }
-    return -1;
+    return len;
+}
+
+fn "core:prelude/string.wado/String::utf8_error_offset"(bytes: &Slice<u8>) -> i32 {
+    let prefix: i32 = "core::prelude/string.wado::core:prelude/string.wado/String::utf8_valid_prefix"(bytes);
+    if (prefix == bytes."core:prelude/slice.wado/Slice<u8>::len"()) {
+        return -1;
+    }
+    core::builtin::cold_path();
+    return if (prefix < 0) {
+        (-1 - prefix);
+    } else {
+        prefix;
+    };
 }
 
 fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &Slice<u8>, start: i32, len: i32) -> i32 {
@@ -8293,10 +8314,11 @@ fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &Slice<u8>, start
         core::builtin::cold_path();
         return 0;
     }
+    let available: i32 = (len - start);
     if (b0 < 224) {
-        if ((start + 1) >= len) {
+        if (available < 2) {
             core::builtin::cold_path();
-            return 0;
+            return -1;
         }
         let b1: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 1));
         if ((b1 < 128) || (b1 > 191)) {
@@ -8306,14 +8328,16 @@ fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &Slice<u8>, start
         return 2;
     }
     if (b0 < 240) {
-        if ((start + 2) >= len) {
-            core::builtin::cold_path();
-            return 0;
+        if (available >= 2) {
+            let b1: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 1));
+            if ((((b1 < 128) || (b1 > 191)) || ((b0 == 224) && (b1 < 160))) || ((b0 == 237) && (b1 >= 160))) {
+                core::builtin::cold_path();
+                return 0;
+            }
         }
-        let b1: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 1));
-        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 224) && (b1 < 160))) || ((b0 == 237) && (b1 >= 160))) {
+        if (available < 3) {
             core::builtin::cold_path();
-            return 0;
+            return -1;
         }
         let b2: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 2));
         if ((b2 < 128) || (b2 > 191)) {
@@ -8323,19 +8347,23 @@ fn "core:prelude/string.wado/String::utf8_sequence_len"(bytes: &Slice<u8>, start
         return 3;
     }
     if (b0 < 245) {
-        if ((start + 3) >= len) {
-            core::builtin::cold_path();
-            return 0;
+        if (available >= 2) {
+            let b1: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 1));
+            if ((((b1 < 128) || (b1 > 191)) || ((b0 == 240) && (b1 < 144))) || ((b0 == 244) && (b1 > 143))) {
+                core::builtin::cold_path();
+                return 0;
+            }
         }
-        let b1: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 1));
-        if ((((b1 < 128) || (b1 > 191)) || ((b0 == 240) && (b1 < 144))) || ((b0 == 244) && (b1 > 143))) {
-            core::builtin::cold_path();
-            return 0;
+        if (available >= 3) {
+            let b2: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 2));
+            if ((b2 < 128) || (b2 > 191)) {
+                core::builtin::cold_path();
+                return 0;
+            }
         }
-        let b2: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 2));
-        if ((b2 < 128) || (b2 > 191)) {
+        if (available < 4) {
             core::builtin::cold_path();
-            return 0;
+            return -1;
         }
         let b3: u8 = bytes."core:prelude/slice.wado/Slice<u8>::get_unchecked"((start + 3));
         if ((b3 < 128) || (b3 > 191)) {
@@ -14952,6 +14980,50 @@ pub fn "$variant_tag$core:prelude/types.wado/Result<core:prelude/string.wado/Str
     return $variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>$i32"(v: Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>, index: i32) -> i32 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>$i32"(payload: i32, index: i32) -> Result<i32, String> {
+    return match index {
+        0 => Result<i32, String>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>$core:prelude/string.wado/String"(v: Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>, index: i32) -> String {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>$core:prelude/string.wado/String"(payload: String, index: i32) -> Result<i32, String> {
+    return match index {
+        1 => Result<i32, String>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>$()"(payload: (), index: i32) -> Result<i32, String> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>"(self: Box<core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 #[retain(v)]
 pub fn "$case_extract$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: Box<core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]>>, index: i32) -> [StrSlice, StrSlice] {
     if ($variant_tag(v.value) != index) {
@@ -16438,6 +16510,14 @@ fn "$value_copy$core:prelude/types.wado/Option<[core:prelude/string.wado/StrSlic
 
 fn "$value_copy$[core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice]"(v: [StrSlice, StrSlice]) -> [StrSlice, StrSlice] {
     return [core:prelude/string.wado/StrSlice,core:prelude/string.wado/StrSlice] { 0: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.0), 1: "mess_dirty.wado::$value_copy$core:prelude/string.wado/StrSlice"(v.1) };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<i32,core:prelude/string.wado/String>"(v: Result<i32, String>) -> Result<i32, String> {
+    return match v {
+        Ok($vc_payload_0) => Result<i32, String>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<i32, String>::Err("mess_dirty.wado::$value_copy$core:prelude/string.wado/String"($vc_payload_1)),
+    };
 }
 
 #[retain(v)]

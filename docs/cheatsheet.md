@@ -992,6 +992,18 @@ fn head<A, ..T>(t: &[A, ..T]) -> A {
     // return t.1;       // Error: lands on the pack
 }
 
+// That limit is on reading a value. In type position a pack takes a scalar on
+// either side, and the match splits the tuple type across them. `Tag` here is
+// any type carrying the list as a parameter.
+fn drop_last<..Rest, Last>(t: &Tag<[..Rest, Last]>) -> Tag<[..Rest]> { ... }
+fn drop_ends<First, ..Mid, Last>(t: &Tag<[First, ..Mid, Last]>) -> Tag<[..Mid]> { ... }
+
+// This shortens a type, never a value. Over a bare tuple the same signature is
+// declarable but not implementable: returning the argument is a type error, a
+// comprehension keeps the arity it walked, and nothing else builds the shorter
+// tuple.
+// fn drop_last<..Rest, Last>(t: [..Rest, Last]) -> [..Rest]
+
 // A pack bound through another parameter's associated type is projected from
 // it, so the call site names neither.
 fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
