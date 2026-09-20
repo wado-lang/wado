@@ -10,8 +10,7 @@
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
 use crate::component_model::{
-    CmInterfaceRegistry, CmPrimitiveType, cm_align_with_registry_scoped,
-    cm_size_with_registry_scoped,
+    CmInterfaceRegistry, CmPrimitiveType, cm_align_with_registry, cm_size_with_registry,
 };
 #[cfg(test)]
 use crate::token::Span;
@@ -64,6 +63,12 @@ pub struct CmLayout {
     pub align: u32,
     /// Byte offset of each field/element.
     pub offsets: Vec<u32>,
+}
+
+impl CmLayout {
+    pub fn size_align(&self) -> (u32, u32) {
+        (self.size, self.align)
+    }
 }
 
 /// Compute the layout for a record (struct with named fields).
@@ -139,27 +144,9 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
         // list<T> is (ptr: i32, len: i32)
         "List" => 8,
-        // option<T>: discriminant byte + padding + payload
-        "Option" if generic.args.len() == 1 => {
-            let inner = &generic.args[0];
-            let payload_align = cm_align(inner);
-            let payload_size = cm_size(inner);
-            // discriminant (1 byte) + padding to payload alignment + payload
-            let payload_offset = align_to(1, payload_align);
-            align_to(payload_offset + payload_size, cm_align_option(inner))
-        }
-        // result<T, E>: discriminant (u8, 1 byte) + max(ok_size, err_size)
-        // Result is a variant with 2 cases; CM spec discriminant is u8.
+        "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).size,
         "Result" if generic.args.len() == 2 => {
-            let ok_size = cm_size(&generic.args[0]);
-            let err_size = cm_size(&generic.args[1]);
-            let payload_size = ok_size.max(err_size);
-            let payload_align = cm_align(&generic.args[0]).max(cm_align(&generic.args[1]));
-            let payload_offset = align_to(1, payload_align); // after u8 discriminant
-            align_to(
-                payload_offset + payload_size,
-                cm_align_result(&generic.args[0], &generic.args[1]),
-            )
+            layout_result(&generic.args[0], &generic.args[1]).size
         }
         // Stream<T>, Future<T> are i32 handles
         "Stream" | "Future" => 4,
@@ -173,113 +160,88 @@ fn cm_size_generic(generic: &GenericType) -> u32 {
 fn cm_align_generic(generic: &GenericType) -> u32 {
     match generic.name.as_str() {
         "List" => 4, // (ptr: i32, len: i32) — aligned to i32
-        "Option" if generic.args.len() == 1 => cm_align_option(&generic.args[0]),
-        "Result" if generic.args.len() == 2 => cm_align_result(&generic.args[0], &generic.args[1]),
+        "Option" if generic.args.len() == 1 => layout_option(&generic.args[0]).align,
+        "Result" if generic.args.len() == 2 => {
+            layout_result(&generic.args[0], &generic.args[1]).align
+        }
         "Stream" | "Future" | "Own" | "Borrow" => 4,
         _ => 4,
     }
 }
 
-/// Alignment for option<T>: max(1, align(T))
-fn cm_align_option(inner: &Type) -> u32 {
-    1_u32.max(cm_align(inner))
-}
-
-/// Alignment for result<T, E>: max(1, align(T), align(E))
-/// Result is a variant with 2 cases; discriminant is u8 (1 byte).
-fn cm_align_result(ok: &Type, err: &Type) -> u32 {
-    1_u32.max(cm_align(ok)).max(cm_align(err))
-}
-
-/// Layout for `option<T>`: discriminant offset + payload offset.
-pub fn layout_option(inner: &Type) -> CmLayout {
-    let payload_align = cm_align(inner);
-    let payload_size = cm_size(inner);
-    let overall_align = cm_align_option(inner);
-
-    // discriminant at offset 0 (1 byte)
+/// Layout for a variant: a 1-byte discriminant, then every case's payload at
+/// one shared max-aligned offset. `offsets` is `[discriminant, payload]`.
+pub fn layout_variant<'a>(payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
+    let mut payload_size = 0u32;
+    let mut payload_align = 1u32;
+    for ty in payloads {
+        payload_size = payload_size.max(cm_size(ty));
+        payload_align = payload_align.max(cm_align(ty));
+    }
     let payload_offset = align_to(1, payload_align);
-    let size = align_to(payload_offset + payload_size, overall_align);
-
     CmLayout {
-        size,
-        align: overall_align,
-        offsets: vec![0, payload_offset], // [discriminant, payload]
+        size: align_to(payload_offset + payload_size, payload_align),
+        align: payload_align,
+        offsets: vec![0, payload_offset],
     }
 }
 
-/// Layout for result<T, E>: discriminant (i32) + payload.
+/// Layout for `option<T>`.
+pub fn layout_option(inner: &Type) -> CmLayout {
+    layout_variant(std::iter::once(inner))
+}
+
+/// Layout for `result<T, E>`.
 pub fn layout_result(ok: &Type, err: &Type) -> CmLayout {
-    let payload_align = cm_align(ok).max(cm_align(err));
-    let payload_size = cm_size(ok).max(cm_size(err));
-    let overall_align = cm_align_result(ok, err);
+    layout_variant([ok, err].into_iter())
+}
 
-    // Result is a variant with 2 cases; CM spec discriminant is u8 (1 byte).
-    let disc_size = 1u32;
-    let payload_offset = align_to(disc_size, payload_align);
-    let size = align_to(payload_offset + payload_size, overall_align);
-
+/// Registry-aware layout for a variant: a 1-byte discriminant, then every
+/// case's payload at one shared max-aligned offset. `payloads` iterates the
+/// payload-bearing cases only, and `offsets` is `[discriminant, payload]`.
+pub fn layout_variant_with_registry<'a>(
+    payloads: impl Iterator<Item = &'a Type>,
+    registry: &CmInterfaceRegistry,
+) -> CmLayout {
+    let mut payload_size = 0u32;
+    let mut payload_align = 1u32;
+    for ty in payloads {
+        payload_size = payload_size.max(cm_size_with_registry(ty, registry));
+        payload_align = payload_align.max(cm_align_with_registry(ty, registry));
+    }
+    let payload_offset = align_to(1, payload_align);
     CmLayout {
-        size,
-        align: overall_align,
-        offsets: vec![0, payload_offset], // [discriminant, payload]
+        size: align_to(payload_offset + payload_size, payload_align),
+        align: payload_align,
+        offsets: vec![0, payload_offset],
     }
 }
 
 /// Registry-aware layout for `option<T>`.
 pub fn layout_option_with_registry(inner: &Type, registry: &CmInterfaceRegistry) -> CmLayout {
-    layout_option_with_registry_scoped(inner, registry, None)
+    layout_variant_with_registry(std::iter::once(inner), registry)
 }
 
-/// Package-scoped registry-aware layout for `option<T>`.
-pub fn layout_option_with_registry_scoped(
-    inner: &Type,
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> CmLayout {
-    let payload_align = cm_align_with_registry_scoped(inner, registry, wasi_package);
-    let payload_size = cm_size_with_registry_scoped(inner, registry, wasi_package);
-    let overall_align = 1u32.max(payload_align);
-    let payload_offset = align_to(1, payload_align);
-    let size = align_to(payload_offset + payload_size, overall_align);
-    CmLayout {
-        size,
-        align: overall_align,
-        offsets: vec![0, payload_offset],
-    }
-}
-
-/// Registry-aware layout for a tuple (positional elements).
+/// Registry-aware layout for a tuple. Unlike [`layout_tuple`], element
+/// sizes/alignments resolve through the registry, so a tuple carrying a named
+/// record/variant/newtype lays out at the correct offsets.
 pub fn layout_tuple_with_registry(elements: &[Type], registry: &CmInterfaceRegistry) -> CmLayout {
-    layout_tuple_with_registry_scoped(elements, registry, None)
+    layout_fields_with_registry(elements.iter(), registry)
 }
 
-/// Package-scoped registry-aware layout for a tuple. Unlike [`layout_tuple`],
-/// element sizes/alignments are resolved through the registry, so a tuple
-/// carrying a named record/variant/newtype lays out at the correct offsets.
-pub fn layout_tuple_with_registry_scoped(
-    elements: &[Type],
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> CmLayout {
-    layout_fields_with_registry_scoped(elements.iter(), registry, wasi_package)
-}
-
-/// Package-scoped registry-aware layout over an iterator of field/element type
-/// references. The by-reference core behind [`layout_tuple_with_registry_scoped`]
-/// and [`layout_record_with_registry_scoped`]; callers that already hold the
-/// resolved types pass them without cloning into a `Vec`.
-pub fn layout_fields_with_registry_scoped<'a>(
+/// Registry-aware layout over an iterator of field/element type references. The
+/// by-reference core behind the tuple and record layouts, for a caller that
+/// already holds the resolved types.
+pub fn layout_fields_with_registry<'a>(
     fields: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
 ) -> CmLayout {
     let mut offset: u32 = 0;
     let mut max_align: u32 = 1;
     let mut offsets = Vec::new();
     for ty in fields {
-        let field_align = cm_align_with_registry_scoped(ty, registry, wasi_package);
-        let field_size = cm_size_with_registry_scoped(ty, registry, wasi_package);
+        let field_align = cm_align_with_registry(ty, registry);
+        let field_size = cm_size_with_registry(ty, registry);
         offset = align_to(offset, field_align);
         offsets.push(offset);
         offset += field_size;
@@ -293,29 +255,21 @@ pub fn layout_fields_with_registry_scoped<'a>(
     }
 }
 
-/// Package-scoped registry-aware layout for a record: fields lay out exactly
-/// like a tuple of the field types.
-pub fn layout_record_with_registry_scoped(
+/// Registry-aware layout for a record: fields lay out exactly like a tuple of
+/// the field types.
+pub fn layout_record_with_registry(
     field_types: &[Type],
     registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
 ) -> CmLayout {
-    layout_fields_with_registry_scoped(field_types.iter(), registry, wasi_package)
+    layout_fields_with_registry(field_types.iter(), registry)
 }
 
-/// Package-scoped payload offset for a variant: the payload of every case
-/// starts at `align_to(1, max_payload_align)` after the 1-byte discriminant.
-/// `payloads` iterates the payload types of the payload-bearing cases only.
-pub fn variant_payload_offset_with_registry_scoped<'a>(
+/// The offset every case's payload starts at, for a caller that needs no size.
+pub fn variant_payload_offset_with_registry<'a>(
     payloads: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
 ) -> u32 {
-    let max_payload_align = payloads
-        .map(|ty| cm_align_with_registry_scoped(ty, registry, wasi_package))
-        .max()
-        .unwrap_or(1);
-    align_to(1, max_payload_align)
+    layout_variant_with_registry(payloads, registry).offsets[1]
 }
 
 /// CM Canonical ABI byte size for a flags type given its label count.
@@ -361,29 +315,7 @@ pub fn layout_result_with_registry(
     err: &Type,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
-    layout_result_with_registry_scoped(ok, err, registry, None)
-}
-
-/// Package-scoped registry-aware layout for result<T, E>.
-pub fn layout_result_with_registry_scoped(
-    ok: &Type,
-    err: &Type,
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> CmLayout {
-    let payload_align = cm_align_with_registry_scoped(ok, registry, wasi_package)
-        .max(cm_align_with_registry_scoped(err, registry, wasi_package));
-    let payload_size = cm_size_with_registry_scoped(ok, registry, wasi_package)
-        .max(cm_size_with_registry_scoped(err, registry, wasi_package));
-    let overall_align = 1u32.max(payload_align);
-    let disc_size = 1u32;
-    let payload_offset = align_to(disc_size, payload_align);
-    let size = align_to(payload_offset + payload_size, overall_align);
-    CmLayout {
-        size,
-        align: overall_align,
-        offsets: vec![0, payload_offset],
-    }
+    layout_variant_with_registry([ok, err].into_iter(), registry)
 }
 
 /// Compute the flat (core Wasm) parameter types for a Canonical ABI type.

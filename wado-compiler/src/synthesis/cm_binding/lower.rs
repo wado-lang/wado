@@ -25,7 +25,7 @@ use super::types::{
     field_access, flatten_param_type, kebab_to_pascal, variant_tag, variant_test,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::component_model::{cm_align_with_registry, cm_size_with_registry};
 use crate::name::FqTypeName;
 use crate::synthesis::cm_binding::types::{cm_val_type_to_type_id, cm_zero};
 use crate::tir::TirBlock;
@@ -189,11 +189,7 @@ pub(super) fn synthesize_lower_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LowerContext<'_>,
 ) -> Vec<TirStmt> {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    );
+    let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
     let mut stmts = Vec::new();
 
     // Element TypeIds come from the tuple's own type arguments — the
@@ -296,12 +292,11 @@ fn synthesize_lower_variant_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+    let payload_offset = cm_abi::variant_payload_offset_with_registry(
         cases
             .iter()
             .filter_map(|(_, _, p)| p.as_ref().map(|(ty, _)| ty)),
         ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
     );
     let payload_addr = if payload_offset == 0 {
         addr
@@ -469,12 +464,8 @@ pub(super) fn synthesize_lower_option_to_memory(
         TypeTable::UNIT,
     )));
 
-    let payload_offset = cm_abi::layout_option_with_registry_scoped(
-        inner_type,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    )
-    .offsets[1];
+    let payload_offset =
+        cm_abi::layout_option_with_registry(inner_type, ctx.cm_interface_registry).offsets[1];
 
     let payload_addr = if payload_offset == 0 {
         addr
@@ -643,16 +634,8 @@ pub(super) fn synthesize_lower_list_to_buffer(
     let list_type_id = value.type_id;
     let elem_resolved = ctx.cm_interface_registry.value_type(elem_type);
 
-    let elem_size = cm_size_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
-    let elem_align = cm_align_with_registry_scoped(
-        &elem_resolved,
-        ctx.cm_interface_registry,
-        Some(ctx.wasi_package),
-    ) as i32;
+    let elem_size = cm_size_with_registry(&elem_resolved, ctx.cm_interface_registry) as i32;
+    let elem_align = cm_align_with_registry(&elem_resolved, ctx.cm_interface_registry) as i32;
     // Take the element TypeId from the list's own type arguments — it is the
     // elaborator-registered type (correct module source), unlike a fresh
     // `cm_type_to_type_id`, which can't resolve a lib-local struct's source and
@@ -1612,10 +1595,9 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
                     .iter()
                     .map(|(wn, _, ft)| (wn.clone(), ctx.cm_interface_registry.value_type(ft)))
                     .collect();
-                let offsets = cm_abi::layout_fields_with_registry_scoped(
+                let offsets = cm_abi::layout_fields_with_registry(
                     resolved_fields.iter().map(|(_, ty)| ty),
                     ctx.cm_interface_registry,
-                    Some(ctx.wasi_package),
                 )
                 .offsets;
                 let mut stmts = Vec::new();

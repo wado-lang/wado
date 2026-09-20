@@ -9,8 +9,7 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{
-    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_align_with_registry_scoped,
-    cm_size_with_registry_scoped,
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_align_with_registry, cm_size_with_registry,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -30,7 +29,6 @@ use super::types::{
 /// flat slots rather than out of a GC object, so it never lowers an expression.
 pub(super) struct CmShapeContext<'a> {
     pub cm_interface_registry: &'a CmInterfaceRegistry,
-    pub cm_package: &'a str,
     pub names: &'a CmStdlibNames,
     pub tir_modules: &'a IndexMap<ModuleSource, TirModule>,
     pub type_table: &'a RefCell<TypeTable>,
@@ -102,20 +100,16 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
             CmShape::List(Box::new(field_of(&g.args[0], 0, ctx)))
         }
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            let payload_offset = cm_abi::layout_option_with_registry_scoped(
-                &g.args[0],
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            )
-            .offsets[1];
+            let payload_offset =
+                cm_abi::layout_option_with_registry(&g.args[0], ctx.cm_interface_registry).offsets
+                    [1];
             CmShape::Variant(vec![None, payload_case(&g.args[0], payload_offset, ctx)])
         }
         Type::Generic(g) if g.name == names.result && g.args.len() == 2 => {
-            let payload_offset = cm_abi::layout_result_with_registry_scoped(
+            let payload_offset = cm_abi::layout_result_with_registry(
                 &g.args[0],
                 &g.args[1],
                 ctx.cm_interface_registry,
-                Some(ctx.cm_package),
             )
             .offsets[1];
             CmShape::Variant(vec![
@@ -154,10 +148,9 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
         .get_variant_cases_by_source(&source, &named.name)
     {
         let payloads: Vec<Option<Type>> = cases.iter().map(|c| c.payload.clone()).collect();
-        let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+        let payload_offset = cm_abi::variant_payload_offset_with_registry(
             payloads.iter().flatten(),
             ctx.cm_interface_registry,
-            Some(ctx.cm_package),
         );
         return CmShape::Variant(
             payloads
@@ -174,12 +167,8 @@ fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
 }
 
 fn field_list(types: &[Type], ctx: &CmShapeContext<'_>) -> Vec<CmField> {
-    let offsets = cm_abi::layout_fields_with_registry_scoped(
-        types.iter(),
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    )
-    .offsets;
+    let offsets =
+        cm_abi::layout_fields_with_registry(types.iter(), ctx.cm_interface_registry).offsets;
     types
         .iter()
         .zip(offsets)
@@ -191,8 +180,8 @@ fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
     CmField {
         shape: cm_shape(ty, ctx),
         offset,
-        size: cm_size_with_registry_scoped(ty, ctx.cm_interface_registry, Some(ctx.cm_package)),
-        align: cm_align_with_registry_scoped(ty, ctx.cm_interface_registry, Some(ctx.cm_package)),
+        size: cm_size_with_registry(ty, ctx.cm_interface_registry),
+        align: cm_align_with_registry(ty, ctx.cm_interface_registry),
         flat_slots: flat_slot_count(ty, ctx),
     }
 }

@@ -27,7 +27,7 @@ use super::types::{
     disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry_scoped, cm_size_with_registry_scoped};
+use crate::component_model::{cm_align_with_registry, cm_size_with_registry};
 use crate::tir::StructDef;
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -308,10 +308,9 @@ fn try_lift_wasi_struct(
         .iter()
         .map(|(fname, fty)| (fname.clone(), ctx.cm_interface_registry.value_type(fty)))
         .collect();
-    let offsets = cm_abi::layout_fields_with_registry_scoped(
+    let offsets = cm_abi::layout_fields_with_registry(
         resolved_fields.iter().map(|(_, ty)| ty),
         ctx.cm_interface_registry,
-        Some(ctx.cm_package),
     )
     .offsets;
 
@@ -413,10 +412,9 @@ fn synthesize_lift_wasi_variant(
         null_expr(variant_type),
     ));
 
-    let payload_offset = cm_abi::variant_payload_offset_with_registry_scoped(
+    let payload_offset = cm_abi::variant_payload_offset_with_registry(
         cases.iter().filter_map(|case| case.payload.as_ref()),
         ctx.cm_interface_registry,
-        Some(ctx.cm_package),
     );
 
     // Build if/else chain for each case (last case is the else branch)
@@ -574,10 +572,8 @@ pub(super) fn synthesize_lift_list(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let elem_size =
-        cm_size_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
-    let elem_align =
-        cm_align_with_registry_scoped(elem_ty, ctx.cm_interface_registry, Some(ctx.cm_package));
+    let elem_size = cm_size_with_registry(elem_ty, ctx.cm_interface_registry);
+    let elem_align = cm_align_with_registry(elem_ty, ctx.cm_interface_registry);
 
     // Resolve TypeIds for `List<ElemType>` and its element, needed to
     // instantiate `List::with_capacity` / `.push()`. When the caller knows the
@@ -750,11 +746,7 @@ fn synthesize_lift_option_inner(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_option_with_registry_scoped(
-        inner_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
+    let layout = cm_abi::layout_option_with_registry(inner_ty, ctx.cm_interface_registry);
     let payload_offset = layout.offsets[1];
 
     // Resolve the concrete Option<T> TypeId so the local and null/some exprs
@@ -838,12 +830,7 @@ fn synthesize_lift_result_inner(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_result_with_registry_scoped(
-        ok_ty,
-        err_ty,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
+    let layout = cm_abi::layout_result_with_registry(ok_ty, err_ty, ctx.cm_interface_registry);
     let payload_offset = layout.offsets[1];
 
     let disc_local = alloc_local(next_local, locals, TypeTable::I32);
@@ -969,11 +956,7 @@ fn synthesize_lift_tuple(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let layout = cm_abi::layout_tuple_with_registry_scoped(
-        elems,
-        ctx.cm_interface_registry,
-        Some(ctx.cm_package),
-    );
+    let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
     let mut elem_exprs = Vec::new();
     for (i, elem_ty) in elems.iter().enumerate() {
         let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));
@@ -1046,11 +1029,7 @@ fn synthesize_free_element(
         Type::Tuple(elems) if !elems.is_empty() => {
             // Registry-aware offsets so a String following a named element
             // (e.g. `[Point, String]`) is freed at its true offset.
-            let layout = cm_abi::layout_tuple_with_registry_scoped(
-                elems,
-                ctx.cm_interface_registry,
-                Some(ctx.cm_package),
-            );
+            let layout = cm_abi::layout_tuple_with_registry(elems, ctx.cm_interface_registry);
             let mut free_stmts = Vec::new();
             for (i, elem_ty) in elems.iter().enumerate() {
                 let elem_addr = binary_add(addr.clone(), i32_const(layout.offsets[i] as i32));

@@ -748,8 +748,8 @@ any of them is spelled such that the step could answer.
 ## Known gap: a CM name still reaches a declaration by search
 
 A reference the Component Model boundary synthesizes carries the interface its
-own declaring module registers, so §9's step answers it. Resolving a reference
-that arrives without one still searches for the name instead: one kind of
+own declaring module registers, so §9's step answers it. Where a reference
+arrives without one, the registry searches for the name instead: one kind of
 declaration at a time, taking the first kind in which the name has exactly one
 registrant.
 
@@ -761,14 +761,14 @@ question to the next kind, so which kind is asked first is a silent tiebreak.
 `wasi:cli/types`, so the variants decline and the enum answers. That holds for
 any module's `ErrorCode`, including one a user wrote.
 
-Three positions arrive without a declaring interface. A world body names an
-export type with no import to resolve, and is scoped only by the world's own
-namespace, which does not reach a type another package declares. A lib-local
-type is registered under its package's default interface, which no CM namespace
-covers, so only a program-wide unique match reaches it. A reference synthesized
-while emitting a CM instance carries at most the interface being emitted, which
-need not be the one that declares it. That is the position `ErrorCode` arrives
-in.
+A reference arrives without a declaring interface in three positions. A world
+body names an export type that no import resolves, and the world's own
+namespace, which is all that scopes it, does not reach a type another package
+declares. A lib-local type is registered under its package's default interface,
+which no CM namespace covers, so only a program-wide unique match reaches it.
+A reference synthesized while emitting a CM instance carries at most the
+interface being emitted, which need not be the one that declares it. That is
+where `ErrorCode` arrives.
 
 ## Known gap: an abstract qualifier argument is not compared
 

@@ -17,8 +17,9 @@ use crate::ast::{
 };
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
-    CmValType, align_to, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size,
-    cm_size, layout_record_with_registry_scoped, layout_tuple_with_registry_scoped,
+    CmValType, cm_align, cm_enum_byte_size, cm_flags_byte_align, cm_flags_byte_size, cm_size,
+    layout_option_with_registry, layout_record_with_registry, layout_result_with_registry,
+    layout_tuple_with_registry, layout_variant_with_registry,
 };
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
@@ -1229,15 +1230,6 @@ fn find_unique_source_in<'a, V>(
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
 /// loader identity (`wasi:http/types.wado`) and its CM registration key
 /// (`wasi:http/types@0.3.0`) reduce to the same stem.
-/// The `wasi:<package>/...` package segment of a CM interface FQ, e.g.
-/// `"filesystem"` from `"wasi:filesystem/types@0.3.0"`. `None` for a
-/// non-`wasi:` source.
-fn wasi_package_from_source(source: &str) -> Option<&str> {
-    let after_scheme = source.strip_prefix("wasi:")?;
-    let without_version = after_scheme.split('@').next().unwrap_or(after_scheme);
-    without_version.split('/').next()
-}
-
 fn interface_stem(source: &str) -> &str {
     let source = source.strip_suffix(".wado").unwrap_or(source);
     source.split_once('@').map_or(source, |(base, _)| base)
@@ -2997,14 +2989,11 @@ impl CmInterfaceRegistry {
         self.lib_local_type_sources.get(name)
     }
 
-    /// Resolve a named type to its source interface across all CM namespaces
-    /// (`wasi:*` and `core:kiln/*`). The Kiln-specific lookup is only
-    /// consulted when the WASI lookup misses, preserving the strict
-    /// cross-namespace scoping the rest of the binding pipeline relies on.
+    /// The source interface of a named type: its own where the reference
+    /// carries one, else the interface a name search reaches. The search is the
+    /// known gap in [WEP: Declaration Identity].
     ///
-    /// Used by the flat-param lift path when the binding is for a
-    /// `core:kiln/generator` world export and the parameter happens to be a
-    /// `core:kiln/types` record such as `OutputFile`.
+    /// [WEP: Declaration Identity]: ../../docs/wep-2026-08-12-declaration-identity.md
     pub fn resolve_cm_source_for(&self, named: &NamedType) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
             return Some(s);
@@ -3090,14 +3079,9 @@ impl CmInterfaceRegistry {
         interface_hint: Option<&str>,
     ) -> Option<String> {
         let name = &named.name;
-        let declared_at_hint = interface_hint.and_then(|hint| {
-            let declared = self.get_resource_cm_name_by_source(hint, name).is_some()
-                || self.get_variant_cases_by_source(hint, name).is_some()
-                || self.get_struct_fields_by_source(hint, name).is_some()
-                || self.get_enum_variants_by_source(hint, name).is_some()
-                || self.get_flags_members_by_source(hint, name).is_some();
-            declared.then(|| hint.to_string())
-        });
+        let declared_at_hint = interface_hint
+            .filter(|hint| self.declares_wado_name(hint, name))
+            .map(str::to_string);
         self.source_interface(named)
             .filter(|source| self.is_cm_source(source))
             .or(declared_at_hint)
@@ -3138,17 +3122,23 @@ impl CmInterfaceRegistry {
         self.interface_declaring(source, name).is_some()
     }
 
+    /// Whether `interface_fq` declares `name`, in any of the kinds a reference
+    /// at the CM boundary can name.
+    pub fn declares_wado_name(&self, interface_fq: &str, name: &str) -> bool {
+        let key = (interface_fq.to_string(), name.to_string());
+        self.resources.contains_key(&key)
+            || self.structs.contains_key(&key)
+            || self.variants.contains_key(&key)
+            || self.enums.contains_key(&key)
+            || self.flags.contains_key(&key)
+    }
+
     /// The interface declaring `name` among those `source` registers. Keying by
     /// the module is what keeps a bundled interface spelling `name` out of it.
     pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
-        self.module_interfaces(source).into_iter().find(|fq| {
-            let key = ((*fq).to_string(), name.to_string());
-            self.resources.contains_key(&key)
-                || self.structs.contains_key(&key)
-                || self.variants.contains_key(&key)
-                || self.enums.contains_key(&key)
-                || self.flags.contains_key(&key)
-        })
+        self.module_interfaces(source)
+            .into_iter()
+            .find(|fq| self.declares_wado_name(fq, name))
     }
 
     /// The interface exporting `cm_name` among those `module` registers, for a
@@ -4895,209 +4885,80 @@ pub fn cm_return_needs_outptr(ty: &Type, registry: &CmInterfaceRegistry) -> bool
     registry.cm_flatten(ty).len() > MAX_FLAT_RESULTS
 }
 
-/// Registry-aware CM canonical ABI size for a type.
+/// Compute the CM canonical-ABI size and alignment for a WASI variant type.
 ///
-/// Resolves WASI structs (records), enums, flags, and variants through the registry
-/// to compute their true CM layout size, instead of defaulting to 4 (i32 handle).
+/// Returns `None` if the type is not a known WASI variant with payload cases.
+fn cm_variant_size_align(named: &NamedType, registry: &CmInterfaceRegistry) -> Option<(u32, u32)> {
+    let source = registry.resolve_cm_source_for(named)?;
+    let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
+    let payloads = || cases.iter().filter_map(|case| case.payload.as_ref());
+    if payloads().next().is_none() {
+        return None;
+    }
+    Some(layout_variant_with_registry(payloads(), registry).size_align())
+}
+
+/// Registry-aware CM canonical ABI size and alignment for a type. A struct,
+/// enum, flags or variant resolves through the registry to its true CM layout,
+/// rather than defaulting to the 4-byte i32 handle.
+pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u32, u32) {
+    let unregistered = || (cm_size(ty), cm_align(ty));
+    match ty {
+        Type::Named(named) => {
+            let Some(source) = registry.resolve_cm_source_for(named) else {
+                return unregistered();
+            };
+            if let Some(resolved) =
+                registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
+            {
+                return cm_layout_with_registry(resolved, registry);
+            }
+            if let Some(fields) = registry.get_struct_fields_by_source(&source, &named.name) {
+                let resolved_fields: Vec<Type> = fields
+                    .iter()
+                    .map(|(_, ty)| registry.resolve_type(ty))
+                    .collect();
+                return layout_record_with_registry(&resolved_fields, registry).size_align();
+            }
+            if let Some(sa) = cm_variant_size_align(named, registry) {
+                return sa;
+            }
+            if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
+                let disc = cm_enum_byte_size(variants.len());
+                return (disc, disc);
+            }
+            if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
+                return (
+                    cm_flags_byte_size(members.len()),
+                    cm_flags_byte_align(members.len()),
+                );
+            }
+            unregistered()
+        }
+        Type::Generic(g) => match g.name.as_str() {
+            "Option" if g.args.len() == 1 => {
+                layout_option_with_registry(&g.args[0], registry).size_align()
+            }
+            "Result" if g.args.len() == 2 => {
+                layout_result_with_registry(&g.args[0], &g.args[1], registry).size_align()
+            }
+            _ => unregistered(),
+        },
+        Type::Tuple(elems) if !elems.is_empty() => {
+            layout_tuple_with_registry(elems, registry).size_align()
+        }
+        _ => unregistered(),
+    }
+}
+
+/// Registry-aware CM canonical ABI size for a type.
 pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    cm_size_with_registry_scoped(ty, registry, None)
+    cm_layout_with_registry(ty, registry).0
 }
 
 /// Registry-aware CM canonical ABI alignment for a type.
 pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    cm_align_with_registry_scoped(ty, registry, None)
-}
-
-/// Compute the CM canonical-ABI size and alignment for a WASI variant type.
-///
-/// Returns `None` if the type is not a known WASI variant with payload cases.
-///
-/// Layout (Canonical ABI):
-/// - discriminant: 1 byte (u8) for variants with ≤ 256 cases
-/// - payload: at `align_to(1, max_payload_align)`
-/// - total: `align_to(payload_offset + max_payload_size, max_payload_align)`
-pub fn cm_variant_size_align(
-    named: &NamedType,
-    registry: &CmInterfaceRegistry,
-) -> Option<(u32, u32)> {
-    cm_variant_size_align_scoped(named, registry, None)
-}
-
-/// Package-scoped variant of `cm_variant_size_align`.
-///
-/// When the reference's `source_interface` is populated (stdlib bootstrap or a
-/// component import) that exact source is used; otherwise the name is resolved
-/// through the registry, biased by `wasi_package`.
-pub fn cm_variant_size_align_scoped(
-    named: &NamedType,
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> Option<(u32, u32)> {
-    let source = registry.resolve_cm_source_for(named)?;
-    let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
-    if !cases.iter().any(|case| case.payload.is_some()) {
-        return None; // no payload cases — not outptr
-    }
-    // Payload type names are written in the variant's own defining interface,
-    // so anchor the payload recursion to the variant's package, not the
-    // caller's hint — otherwise a bare name shared across packages could
-    // resolve to the caller's package instead of the variant's.
-    let payload_package = wasi_package_from_source(&source).or(wasi_package);
-    let mut max_payload_size = 0u32;
-    let mut max_payload_align = 1u32;
-    for case in cases {
-        if let Some(ty) = &case.payload {
-            max_payload_size =
-                max_payload_size.max(cm_size_with_registry_scoped(ty, registry, payload_package));
-            max_payload_align =
-                max_payload_align.max(cm_align_with_registry_scoped(ty, registry, payload_package));
-        }
-    }
-    let disc_size = 1u32; // u8 for n ≤ 256 cases
-    let payload_offset = align_to(disc_size, max_payload_align);
-    let overall_align = max_payload_align; // max(disc_align=1, payload_align)
-    let size = align_to(payload_offset + max_payload_size, overall_align);
-    Some((size, overall_align))
-}
-
-/// Package-scoped CM canonical ABI size for a type.
-///
-/// Like `cm_size_with_registry`, but uses `wasi_package` to disambiguate types
-/// with the same name across different WASI packages.
-pub fn cm_size_with_registry_scoped(
-    ty: &Type,
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> u32 {
-    match ty {
-        Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named) else {
-                return cm_size(ty);
-            };
-            if let Some(resolved) =
-                registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
-            {
-                return cm_size_with_registry_scoped(resolved, registry, wasi_package);
-            }
-            if let Some(fields) = registry.get_struct_fields_by_source(&source, &named.name) {
-                let resolved_fields: Vec<Type> = fields
-                    .iter()
-                    .map(|(_, ty)| registry.resolve_type(ty))
-                    .collect();
-                return layout_record_with_registry_scoped(
-                    &resolved_fields,
-                    registry,
-                    wasi_package,
-                )
-                .size;
-            }
-            if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
-                return sa.0;
-            }
-            if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
-                return cm_enum_byte_size(variants.len());
-            }
-            if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
-                return cm_flags_byte_size(members.len());
-            }
-            cm_size(ty)
-        }
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => {
-                let inner = &g.args[0];
-                let payload_align = cm_align_with_registry_scoped(inner, registry, wasi_package);
-                let payload_size = cm_size_with_registry_scoped(inner, registry, wasi_package);
-                let payload_offset = align_to(1, payload_align);
-                let overall_align = 1u32.max(payload_align);
-                align_to(payload_offset + payload_size, overall_align)
-            }
-            "Result" if g.args.len() == 2 => {
-                let ok_size = cm_size_with_registry_scoped(&g.args[0], registry, wasi_package);
-                let err_size = cm_size_with_registry_scoped(&g.args[1], registry, wasi_package);
-                let payload_size = ok_size.max(err_size);
-                let payload_align =
-                    cm_align_with_registry_scoped(&g.args[0], registry, wasi_package).max(
-                        cm_align_with_registry_scoped(&g.args[1], registry, wasi_package),
-                    );
-                let payload_offset = align_to(1, payload_align);
-                let overall_align = 1u32.max(payload_align);
-                align_to(payload_offset + payload_size, overall_align)
-            }
-            _ => cm_size(ty),
-        },
-        Type::Tuple(elems) if !elems.is_empty() => {
-            layout_tuple_with_registry_scoped(elems, registry, wasi_package).size
-        }
-        _ => cm_size(ty),
-    }
-}
-
-/// Package-scoped CM canonical ABI alignment for a type.
-pub fn cm_align_with_registry_scoped(
-    ty: &Type,
-    registry: &CmInterfaceRegistry,
-    wasi_package: Option<&str>,
-) -> u32 {
-    match ty {
-        Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named) else {
-                return cm_align(ty);
-            };
-            if let Some(resolved) =
-                registry.get_newtype_by_source(&source, &DeclName::new(&named.name))
-            {
-                return cm_align_with_registry_scoped(resolved, registry, wasi_package);
-            }
-            if let Some(fields) = registry.get_struct_fields_by_source(&source, &named.name) {
-                // Single-source the record layout with the size arm above:
-                // both go through the same `layout_record` helper so alignment
-                // and size can never diverge.
-                let resolved_fields: Vec<Type> = fields
-                    .iter()
-                    .map(|(_, ty)| registry.resolve_type(ty))
-                    .collect();
-                return layout_record_with_registry_scoped(
-                    &resolved_fields,
-                    registry,
-                    wasi_package,
-                )
-                .align;
-            }
-            if let Some(sa) = cm_variant_size_align_scoped(named, registry, wasi_package) {
-                return sa.1;
-            }
-            if let Some(variants) = registry.get_enum_variants_by_source(&source, &named.name) {
-                return cm_enum_byte_size(variants.len());
-            }
-            if let Some(members) = registry.get_flags_members_by_source(&source, &named.name) {
-                return cm_flags_byte_align(members.len());
-            }
-            cm_align(ty)
-        }
-        Type::Generic(g) => match g.name.as_str() {
-            "Option" if g.args.len() == 1 => 1u32.max(cm_align_with_registry_scoped(
-                &g.args[0],
-                registry,
-                wasi_package,
-            )),
-            "Result" if g.args.len() == 2 => 1u32
-                .max(cm_align_with_registry_scoped(
-                    &g.args[0],
-                    registry,
-                    wasi_package,
-                ))
-                .max(cm_align_with_registry_scoped(
-                    &g.args[1],
-                    registry,
-                    wasi_package,
-                )),
-            _ => cm_align(ty),
-        },
-        Type::Tuple(elems) if !elems.is_empty() => {
-            layout_tuple_with_registry_scoped(elems, registry, wasi_package).align
-        }
-        _ => cm_align(ty),
-    }
+    cm_layout_with_registry(ty, registry).1
 }
 
 /// Primitive type for CM tuple return handling

@@ -36,11 +36,10 @@ use super::types::{
     needs_flat_result_lifting,
 };
 use crate::ast::Visibility;
-use crate::cm_abi::{CmValType, layout_tuple_with_registry_scoped};
+use crate::cm_abi::{CmValType, layout_tuple_with_registry};
 use crate::compiler_item::CompilerItem;
 use crate::component_model::{
-    cm_align_with_registry_scoped, cm_return_needs_outptr, cm_size_with_registry_scoped,
-    cm_variant_size_align_scoped,
+    cm_align_with_registry, cm_layout_with_registry, cm_return_needs_outptr, cm_size_with_registry,
 };
 use crate::name::{FqTypeName, cm_wrap_async_func_name};
 use crate::tir;
@@ -750,26 +749,6 @@ struct OutptrBuffer {
     align: u32,
 }
 
-/// CM Canonical ABI (size, align) of an import's return type, using the
-/// registry-computed layout for named WASI variants (their generic `cm_size`
-/// would be wrong) and registry-aware layout for structs and other complex
-/// types.
-fn cm_return_size_align(
-    return_type: &Type,
-    registry: &CmInterfaceRegistry,
-    pkg: Option<&str>,
-) -> (u32, u32) {
-    if let Type::Named(named) = return_type
-        && let Some(sa) = cm_variant_size_align_scoped(named, registry, pkg)
-    {
-        return sa;
-    }
-    (
-        cm_size_with_registry_scoped(return_type, registry, pkg),
-        cm_align_with_registry_scoped(return_type, registry, pkg),
-    )
-}
-
 fn params_buf_addr(params_buf_local: u32, offset: u32) -> TirExpr {
     let base = local_ref(params_buf_local, "$params_buf", TypeTable::I32);
     if offset == 0 {
@@ -1052,12 +1031,8 @@ impl<'a> AdapterBuilder<'a> {
     /// buffer and pass (base, len) as flat args.
     fn emit_list_buffer(&mut self, param_name: &str, param_local: u32, elem_type: &Type) {
         let registry = self.lower_ctx.cm_interface_registry;
-        let pkg = Some(self.func_info.package.as_str());
-        // Use registry-aware layout so named WASI struct/variant/enum/flags
-        // element types walk at their true CM stride/alignment instead of
-        // the i32-handle fallback in `cm_abi::cm_size`/`cm_align`.
-        let elem_size = cm_size_with_registry_scoped(elem_type, registry, pkg) as i32;
-        let elem_align = cm_align_with_registry_scoped(elem_type, registry, pkg) as i32;
+        let elem_size = cm_size_with_registry(elem_type, registry) as i32;
+        let elem_align = cm_align_with_registry(elem_type, registry) as i32;
 
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();
@@ -1254,11 +1229,8 @@ impl<'a> AdapterBuilder<'a> {
     /// buffer layout.
     fn alloc_async_outptr(&mut self) -> Option<OutptrBuffer> {
         let return_type = self.func_info.return_type.as_ref()?;
-        let (size, align) = cm_return_size_align(
-            return_type,
-            self.lower_ctx.cm_interface_registry,
-            Some(self.func_info.package.as_str()),
-        );
+        let (size, align) =
+            cm_layout_with_registry(return_type, self.lower_ctx.cm_interface_registry);
         let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
             "$async_outptr",
@@ -1291,17 +1263,10 @@ impl<'a> AdapterBuilder<'a> {
     ) {
         let registry = self.lower_ctx.cm_interface_registry;
 
-        // Size the buffer with the same package-scoped layout the writes below
-        // use (via `self.lower_ctx`), so a same-named type resolved under the
-        // package hint cannot make the allocation disagree with the bytes
-        // written. `layout_tuple_*` lays a param sequence out exactly like the
-        // buffer: each param aligned then placed, padded to the max align.
+        // A param sequence lays out exactly like a tuple of the param types, so
+        // this is the layout the writes below assume.
         let param_types: Vec<Type> = plans.iter().map(|plan| plan.ty.clone()).collect();
-        let layout = layout_tuple_with_registry_scoped(
-            &param_types,
-            registry,
-            Some(self.lower_ctx.wasi_package),
-        );
+        let layout = layout_tuple_with_registry(&param_types, registry);
         let param_offsets = layout.offsets;
         let buf_max_align = layout.align;
         let buf_total_size = layout.size;
@@ -1397,11 +1362,8 @@ impl<'a> AdapterBuilder<'a> {
         if !cm_return_needs_outptr(return_type, self.lower_ctx.cm_interface_registry) {
             return None;
         }
-        let (size, align) = cm_return_size_align(
-            return_type,
-            self.lower_ctx.cm_interface_registry,
-            Some(self.func_info.package.as_str()),
-        );
+        let (size, align) =
+            cm_layout_with_registry(return_type, self.lower_ctx.cm_interface_registry);
         let local = alloc_local(&mut self.next_local, &mut self.locals, TypeTable::I32);
         self.body_stmts.push(let_stmt(
             "$outptr",

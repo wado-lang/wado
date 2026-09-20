@@ -17,10 +17,7 @@ use crate::tir::{
     TirVariantDecl, TypeId, TypeTable,
 };
 
-use crate::cm_abi::align_to;
-use crate::component_model::{
-    cm_align_with_registry, future_payload_rejection, stream_payload_rejection,
-};
+use crate::component_model::{future_payload_rejection, stream_payload_rejection};
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
 use crate::synthesis::common::{binary, builtin_call, cast, i32_const, i64_const, synth_span};
@@ -931,9 +928,8 @@ pub(super) fn cm_param_store_plan(
         Type::Reference(_) | Type::MutReference(_) => vec![(0, "i32_store")],
         Type::Generic(g) if g.name == names.array => vec![(0, "i32_store"), (4, "i32_store")],
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
-            // option<T>: disc (u8) at offset 0, payload at align_to(1, align(T))
-            let inner_align = cm_align_with_registry(&g.args[0], cm_interface_registry);
-            let payload_offset = align_to(1, inner_align);
+            let payload_offset =
+                cm_abi::layout_option_with_registry(&g.args[0], cm_interface_registry).offsets[1];
             let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
             let mut stores = vec![(0, "i32_store8")]; // discriminant
             for (sub_offset, store_name) in inner_store {
@@ -1378,17 +1374,6 @@ pub(super) fn cm_zero(vt: cm_abi::CmValType) -> TirExpr {
     }
 }
 
-/// The interface `module` registers `name` under, as an owned FQ.
-fn declaring_interface(
-    registry: &CmInterfaceRegistry,
-    module: &ModuleSource,
-    name: &str,
-) -> Option<String> {
-    registry
-        .interface_declaring(module, name)
-        .map(str::to_string)
-}
-
 /// Reconstruct a minimal AST `Type` from a TIR `TypeId`, for callers that need
 /// to re-enter the AST-shaped match arms. Only the top-level name and immediate
 /// type args are filled in; deeper structure is looked up lazily. A named type
@@ -1407,16 +1392,19 @@ pub(super) fn type_id_to_ast_type(
     // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let asks_registry = match ms {
+        let searchable = match ms {
             ModuleSource::Binding { .. } => true,
             ModuleSource::Core { name: core } => core == "kiln" || core.starts_with("kiln/"),
             _ => false,
         };
-        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| {
-            asks_registry
-                .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
-                .flatten()
-        });
+        let source = cm_interface_registry
+            .interface_declaring(ms, name)
+            .map(str::to_string)
+            .or_else(|| {
+                searchable
+                    .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
+                    .flatten()
+            });
         if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
         }
