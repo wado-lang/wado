@@ -1559,8 +1559,9 @@ if let Some(home) = env("HOME") { println(`HOME=${home}`); }
 
 Whole-file I/O against the first preopened directory (`wado run` grants the
 current one), and the path text that reaches it. `""` and `"."` name that
-directory. Every call resolves its path when it runs, so ask-then-act
-(`exists` and then `read`) races; act and read the error. See
+directory. Every call that reaches the filesystem resolves its path when it
+runs, so ask-then-act (`exists` and then `read`) races; act and read the
+error. The path functions resolve nothing. See
 [`core:fs`](./stdlib-core-fs.md) and
 [WEP: core:fs](./wep-2026-09-12-core-fs.md).
 

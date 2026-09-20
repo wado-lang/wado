@@ -40,8 +40,9 @@ stdout that way.
 
 # Time of check, time of use
 
-A path resolves when the call runs. Asking first and acting after, such as
-[`exists`] and then [`read`], races: act, and read the error.
+Every call that reaches the filesystem resolves its path when it runs, so
+asking first and acting after, such as [`exists`] and then [`read`], races:
+act, and read the error. The path functions above resolve nothing.
 
 [`write`] and [`create_dir_all`] read a path before acting on it, and
 [`remove_dir_all`] and [`walk_dir`] act on a listing; each says so. Every
@@ -96,13 +97,14 @@ one fails rather than removing it.
 
 Remove the directory `path` names, which has to be empty: one that still
 holds an entry is `Io(NotEmpty)`, and [`remove_dir_all`] is the call that
-takes a tree down.
+takes a tree down. A path that resolves to the preopen is `Io(NotPermitted)`.
 
 ### `pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
 Remove the directory `path` names and everything under it. A path that
 names nothing is not a failure, where Rust reports one; a path naming
-something other than a directory is `Io(NotDirectory)`.
+something other than a directory is `Io(NotDirectory)`, and one that
+resolves to the preopen is `Io(NotPermitted)`.
 
 Acts on a listing, so an entry arriving mid-walk leaves the root
 `Io(NotEmpty)`. A symlink is unlinked, never walked through.

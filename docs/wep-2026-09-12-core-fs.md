@@ -263,9 +263,11 @@ is the escape hatch this module keeps for exactly this.
 
 ### Time of check, time of use
 
-A path is a name, not a handle. Every call resolves it again, so what a call
-reports is true of the moment it ran and not of the moment the caller reads it.
-Asking first and acting after is two resolutions with a window between them.
+A path is a name, not a handle. Every call that reaches the filesystem resolves
+it again, so what such a call reports is true of the moment it ran and not of
+the moment the caller reads it. Asking first and acting after is two
+resolutions with a window between them. The path functions are outside all of
+this: they declare no effect and open nothing, so they have nothing to race.
 
 Two calls here have such a window inside them. `write` reads the path to refuse
 a target that is not a regular file, then renames over it. `create_dir_all`
