@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789860290989,
+  "lastUpdate": 1789870574138,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57125,6 +57125,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/8a76434bac5bde29ad6b01893cf6f2f7e2c5f229"
         },
         "date": 1789860290381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c5d3a298e913151b56dc5ac63e8cfef4e91abc5",
+          "message": "Merge pull request #2089 from wado-lang/claude/package-gale-todo-review-vrip5m\n\nfix(gale): reject the escapes and labelled blocks ANTLR4 rejects, with a span on each",
+          "timestamp": "2026-09-20T10:54:59+09:00",
+          "tree_id": "61632702133a4147c30dfac045b51bb3301451b6",
+          "url": "https://github.com/wado-lang/wado/commit/3c5d3a298e913151b56dc5ac63e8cfef4e91abc5"
+        },
+        "date": 1789870573507,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
