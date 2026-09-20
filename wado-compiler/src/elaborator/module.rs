@@ -2,7 +2,7 @@
 
 use crate::ast::{self, Item, Module, Type};
 use crate::compiler_host::CompilerHost;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::TypeTable;
 
 use super::Elaborator;
 use super::scope::BinderInScope;
@@ -104,18 +104,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut scope = self.enter_inherited_type_param_scope();
                     scope.annotate_ctx.trait_ctx.type_params.clear();
                     scope.register_generic_params(&variant_decl.type_params, 0);
-                    let type_param_type_ids: Vec<TypeId> = variant_decl
-                        .type_params
-                        .iter()
-                        .filter_map(|p| {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_params
-                                .get(&p.name)
-                                .map(|b| b.type_id)
-                        })
-                        .collect();
+                    let type_param_type_ids = Elaborator::<H>::slot_type_ids(
+                        &ParamSlot::list(&variant_decl.type_params),
+                        &scope.tysys.type_table,
+                    );
 
                     // Collect variant cases with resolved payload types
                     let mut cases = Vec::new();

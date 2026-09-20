@@ -3072,6 +3072,17 @@ impl ParamSlot {
             .map(Self::from)
             .collect()
     }
+
+    /// An `impl` head's parameters as slots, which
+    /// [`ast::GenericParam::fills_impl_slot`] numbers by argument position
+    /// rather than by the dense space a data declaration uses.
+    pub(super) fn impl_list(params: &[ast::GenericParam]) -> Vec<Self> {
+        params
+            .iter()
+            .filter(|param| param.fills_impl_slot())
+            .map(Self::from)
+            .collect()
+    }
 }
 
 /// Read-only view resolving a type name from a module's perspective without

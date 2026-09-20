@@ -184,11 +184,12 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        // An effect parameter is no type, so it fills no argument position and
-        // takes no slot: counting one shifts every parameter written after it.
+        // `fills_impl_slot` is the numbering the associated-type registration
+        // reads back (`ParamSlot::impl_list`); the two drifting apart gives one
+        // parameter two indices.
         let mut slot = 0;
         for param in &impl_block.type_params {
-            if !param.is_effect {
+            if param.fills_impl_slot() {
                 if !self
                     .annotate_ctx
                     .trait_ctx

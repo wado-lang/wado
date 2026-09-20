@@ -3572,7 +3572,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
 
                 // Skip impls with no type params (concrete impls are handled differently)
-                let param_slots = ParamSlot::list(&impl_block.type_params);
+                let param_slots = ParamSlot::impl_list(&impl_block.type_params);
                 if param_slots.is_empty() {
                     continue;
                 }
