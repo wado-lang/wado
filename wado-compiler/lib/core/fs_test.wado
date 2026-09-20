@@ -2,9 +2,11 @@ use fs from "core:fs";
 use { ErrorCode, Preopens } from "wasi:filesystem";
 
 // `wado test` preopens the working directory, so each test owns a directory
-// under the gitignored `target/` and reads only what it wrote there.
+// under the gitignored `target/` and reads only what it wrote there. The
+// directory is emptied first, so what a previous run left is not an input.
 fn scratch(case: &String) -> String with Preopens {
     let dir = `target/core-fs-test/${*case}`;
+    fs::remove_dir_all(&dir).unwrap();
     fs::create_dir_all(&dir).unwrap();
     return dir;
 }
@@ -42,7 +44,6 @@ test "a path that names nothing is NotFound" {
 test "create_dir creates one directory, and will not take an occupied path" {
     let dir = scratch(&"create-dir");
     let path = `${dir}/one`;
-    let _ = fs::remove_dir(&path);
     fs::create_dir(&path).unwrap();
     assert fs::read_dir(&path).unwrap().is_empty();
     assert fs::create_dir(&path).unwrap_err().kind matches { Io(Exist) };
@@ -147,14 +148,14 @@ test "remove_dir on a path that names nothing is NotFound" {
 
 test "remove_dir_all takes the whole tree down" {
     let dir = scratch(&"remove-dir-all");
-    let root = `${dir}/tree`;
-    fs::create_dir_all(`${root}/a/b/c`).unwrap();
-    fs::write(`${root}/top.txt`, &"top").unwrap();
-    fs::write(`${root}/a/mid.txt`, &"mid").unwrap();
-    fs::write(`${root}/a/b/c/leaf.txt`, &"leaf").unwrap();
+    let tree = `${dir}/tree`;
+    fs::create_dir_all(`${tree}/a/b/c`).unwrap();
+    fs::write(`${tree}/top.txt`, &"top").unwrap();
+    fs::write(`${tree}/a/mid.txt`, &"mid").unwrap();
+    fs::write(`${tree}/a/b/c/leaf.txt`, &"leaf").unwrap();
 
-    fs::remove_dir_all(&root).unwrap();
-    assert fs::read_dir(&root).unwrap_err().kind matches { NotFound };
+    fs::remove_dir_all(&tree).unwrap();
+    assert fs::read_dir(&tree).unwrap_err().kind matches { NotFound };
     assert fs::read_dir(&dir).unwrap().is_empty();
 }
 

@@ -162,21 +162,16 @@ pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsE
 /// one fails rather than removing it.
 pub fn remove_file<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
     let dir = root()?;
-    return match dir.unlink_file_at(path.to_string()).wait() {
-        Ok(_) => Result::Ok(()),
-        Err(e) => Result::Err(failure(path, e)),
-    };
+    return settle(path, dir.unlink_file_at(path.to_string()).wait());
 }
 
 /// Remove the directory `path` names, which has to be empty: one that still
 /// holds an entry is `Io(NotEmpty)`, and [`remove_dir_all`] is the call that
 /// takes a tree down.
 pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
-    let dir = root_for_removal(path)?;
-    return match dir.remove_directory_at(path.to_string()).wait() {
-        Ok(_) => Result::Ok(()),
-        Err(e) => Result::Err(failure(path, e)),
-    };
+    deny_preopen(path)?;
+    let dir = root()?;
+    return settle(path, dir.remove_directory_at(path.to_string()).wait());
 }
 
 /// Remove the directory `path` names and everything under it.
@@ -187,7 +182,7 @@ pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
 /// that names something other than a directory is `Io(NotDirectory)`, and a
 /// symlink under the tree is removed rather than followed.
 pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
-    root_for_removal(path)?;
+    deny_preopen(path)?;
     let entries = match read_dir(path) {
         Ok(entries) => entries,
         Err(e) => {
@@ -209,14 +204,13 @@ pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     return remove_dir(path);
 }
 
-/// The directory a removal resolves against, or `NotPermitted` where `path`
-/// names that directory itself: the preopen is the root of every path here,
-/// and taking it down is not one of the things this module does.
-fn root_for_removal<S: AsStrSlice>(path: S) -> Result<Descriptor, FsError> with Preopens {
+/// `NotPermitted` where `path` names the preopen. It is the root every path
+/// here resolves against, and a removal does not take that down.
+fn deny_preopen<S: AsStrSlice>(path: S) -> Result<(), FsError> {
     if path.is_empty() || path == "." {
         return Result::Err(failure(path, ErrorCode::NotPermitted));
     }
-    return root();
+    return Result::Ok(());
 }
 
 /// Every entry of the directory `path` names, in the order the host lists
@@ -238,10 +232,7 @@ pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with 
 /// itself has to be free, so an occupied path is `Io(Exist)`.
 pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
     let dir = root()?;
-    return match dir.create_directory_at(path.to_string()).wait() {
-        Ok(_) => Result::Ok(()),
-        Err(e) => Result::Err(failure(path, e)),
-    };
+    return settle(path, dir.create_directory_at(path.to_string()).wait());
 }
 
 /// Create the directory `path` names, and every parent it needs. A directory
@@ -317,6 +308,14 @@ fn finish<S: AsStrSlice>(path: S, done: Future<Result<(), ErrorCode>>) -> Result
         return Result::Err(failure(path, e));
     }
     return Result::Ok(());
+}
+
+/// What a one-shot `wasi:filesystem` call answered, as this module's result.
+fn settle<S: AsStrSlice>(path: S, answer: Result<(), ErrorCode>) -> Result<(), FsError> {
+    return match answer {
+        Ok(_) => Result::Ok(()),
+        Err(e) => Result::Err(failure(path, e)),
+    };
 }
 
 fn failure<S: AsStrSlice>(path: S, code: ErrorCode) -> FsError {
