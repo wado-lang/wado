@@ -63,6 +63,9 @@ pub struct u128 {
 }
 
 impl u128 {
+    pub const MAX: u128 = 340282366920938463463374607431768211455;
+    pub const MIN: u128 = 0;
+
     /// Create a u128 from a u64 value (zero-extended)
     #[compiler_item("u128_from_u64")]
     pub fn from_u64(value: u64) -> u128 {
@@ -831,6 +834,9 @@ pub struct i128 {
 }
 
 impl i128 {
+    pub const MAX: i128 = 170141183460469231731687303715884105727;
+    pub const MIN: i128 = -170141183460469231731687303715884105728;
+
     /// Create an i128 from an i64 value (sign-extended)
     #[compiler_item("i128_from_i64")]
     pub fn from_i64(value: i64) -> i128 {
@@ -865,10 +871,8 @@ impl i128 {
                 return Result::Err(ParseIntError::new(k));
             },
         };
-        // i128::MAX = (u64::MAX, i64::MAX as u64) in (low, high).
-        // |i128::MIN| = 2^127 = (0, 1 << 63).
-        let max_pos = u128::from_pair(u64::MAX, i64::MAX as u64);
-        let max_neg_abs = u128::from_pair(0, 9223372036854775808);
+        let max_pos = i128::MAX as u128;
+        let max_neg_abs = max_pos + u128::from_u64(1);
         return match parse_u128_digits(&digits, radix) {
             Ok(v) => if is_negative {
                 if v > max_neg_abs {

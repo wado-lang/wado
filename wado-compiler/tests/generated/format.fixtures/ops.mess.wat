@@ -44,9 +44,11 @@
         (i32.lt_s
           (memory.grow
             (i32.div_s
-              (i32.add
-                (local.get 4)
-                (i32.const 65535))
+              (i32.sub
+                (i32.add
+                  (local.get 4)
+                  (i32.const 65536))
+                (i32.const 1))
               (i32.const 65536)))
           (i32.const 0))
         (@metadata.code.branch_hint "\00")
