@@ -498,9 +498,9 @@ pub struct GeneratorRequest {
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
     pub path: String,
-    /// UTF-8 content of the file. Kiln schemas are text (proto,
-    /// graphql, g4, wit, ...), so string is the natural wire form.
-    pub content: String,
+    /// Raw bytes of the file. A checkpoint is not text, and the generator
+    /// receives these as a `stream<u8>` it reads only as far as it needs.
+    pub content: Vec<u8>,
 }
 
 /// Response returned by a Kiln generator.
@@ -701,7 +701,7 @@ mod tests {
                 let req = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: "syntax = \"proto3\";".to_string(),
+                        content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
                     options: CanonicalOptions::default(),

@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use wasmtime::component::types::Type;
-use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, Val};
+use wasmtime::component::{Component, Func, HasSelf, Instance, Linker, StreamReader, Val};
 use wasmtime::{Engine, Store};
 
 use wado_compiler::kiln::{CanonicalOptions, CanonicalValue};
@@ -107,12 +107,21 @@ fn find_generate<T>(
     ))
 }
 
-/// Build an `input-file` record `Val` (`{ path, content }`).
-fn input_file_val(f: &GeneratorInputFile) -> Val {
-    Val::Record(vec![
+/// Build an `input-file` record `Val` (`{ path, content }`), the content as a
+/// host-produced `stream<u8>` the generator reads at its own pace.
+fn input_file_val<T: Send + 'static>(
+    store: &mut Store<T>,
+    f: &GeneratorInputFile,
+) -> Result<Val, GeneratorRunnerError> {
+    let stream = StreamReader::new(&mut *store, f.content.clone())
+        .and_then(|s| s.try_into_stream_any(&mut *store))
+        .map_err(|e| {
+            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", f.path))
+        })?;
+    Ok(Val::Record(vec![
         ("path".to_string(), Val::String(f.path.clone())),
-        ("content".to_string(), Val::String(f.content.clone())),
-    ])
+        ("content".to_string(), Val::Stream(stream)),
+    ]))
 }
 
 /// Lift a `response` record payload (`{ files: list<output-file> }`) into the
@@ -372,10 +381,12 @@ pub async fn run_generator(
         // present only when the generator declares a non-empty `Options`.
         let options_ty = generate.ty(&store).params().nth(2).map(|(_, t)| t);
         let mut args: Vec<Val> = Vec::with_capacity(3);
-        args.push(input_file_val(&request.primary));
-        args.push(Val::List(
-            request.inputs.iter().map(input_file_val).collect(),
-        ));
+        args.push(input_file_val(&mut store, &request.primary)?);
+        let mut inputs = Vec::with_capacity(request.inputs.len());
+        for f in &request.inputs {
+            inputs.push(input_file_val(&mut store, f)?);
+        }
+        args.push(Val::List(inputs));
         if let Some(ty) = &options_ty {
             let val = options_to_val(&request.options, ty)
                 .map_err(|e| GeneratorRunnerError::Host(format!("options: {e}")))?;
@@ -549,7 +560,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         let request = GeneratorRequest {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
-                content: "hello".to_string(),
+                content: b"hello".to_vec(),
             },
             inputs: vec![],
             options,
@@ -640,7 +651,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         let request = GeneratorRequest {
             primary: GeneratorInputFile {
                 path: "schema.txt".to_string(),
-                content: "hello".to_string(),
+                content: b"hello".to_vec(),
             },
             inputs: vec![],
             options,

@@ -1109,10 +1109,18 @@ fn emit_kiln_world_types(
     let mut next_idx: u32 = 0;
 
     // input-file
+    instance_type
+        .ty()
+        .defined_type()
+        .stream(Some(ComponentValType::Primitive(PrimitiveValType::U8)));
+    let content_stream_local = alloc(&mut next_idx);
     let input_file_local = emit_record(
         &mut instance_type,
         &mut next_idx,
-        &[("path", string_vt), ("content", string_vt)],
+        &[
+            ("path", string_vt),
+            ("content", ComponentValType::Type(content_stream_local)),
+        ],
     );
     emit_export(
         &mut instance_type,

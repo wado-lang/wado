@@ -219,12 +219,12 @@ pub async fn execute_with_mode<H: CompilerHost>(
     mode: ExecuteMode,
 ) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
-    let primary_hash = file_hash(&invocation.from, primary.content.as_bytes());
+    let primary_hash = file_hash(&invocation.from, &primary.content);
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
     let mut input_hashes = Vec::with_capacity(invocation.inputs.len());
     for p in &invocation.inputs {
         let file = load_input(host, p).await?;
-        input_hashes.push(file_hash(p, file.content.as_bytes()));
+        input_hashes.push(file_hash(p, &file.content));
         inputs.push(file);
     }
 
@@ -647,16 +647,9 @@ async fn load_input<H: CompilerHost>(
                 path: path.as_str().to_string(),
                 source,
             })?;
-    let content = String::from_utf8(bytes).map_err(|e| ExecuteError::LoadInput {
-        path: path.as_str().to_string(),
-        source: SourceError::IoError {
-            path: path.as_str().to_string(),
-            message: format!("not UTF-8: {e}"),
-        },
-    })?;
     Ok(GeneratorInputFile {
         path: path.as_str().to_string(),
-        content,
+        content: bytes,
     })
 }
 

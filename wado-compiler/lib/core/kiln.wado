@@ -16,6 +16,35 @@ pub use { KilnHost, Diagnostic, DiagnosticLevel, SourceSpan } from "core:kiln/ki
 
 pub use { InputFile, OutputFile, Response, Error } from "core:kiln/types.wado";
 
+/// How many bytes each `read` asks for while draining an input. Large enough
+/// that a schema-sized file costs a handful of reads, small enough that the
+/// guest never holds a second copy of anything big.
+global READ_CHUNK: i32 = 65536;
+
+/// Read an input file's content to the end. A generator that needs the whole
+/// file calls this; one that needs a prefix reads `content` itself and drops
+/// it early.
+pub fn read_all(content: Stream<u8>) -> ByteList {
+    let mut out: List<u8> = [];
+    loop {
+        let chunk = content.read(READ_CHUNK);
+        for let b of chunk.items {
+            out.push(b);
+        }
+        if chunk.result != CopyResult::Completed {
+            break;
+        }
+    }
+    content.drop();
+    return out as ByteList;
+}
+
+/// Read an input file's content to the end as text. `Err` carries the decode
+/// failure, which is a malformed input rather than a generator bug.
+pub fn read_text(content: Stream<u8>) -> Result<String, String> {
+    return String::from_utf8(read_all(content) as List<u8>);
+}
+
 /// The options type of a generator that takes no configuration. It is the
 /// default type argument of `Request`, so a generator with no `Options`
 /// struct writes `fn generate(req: Request)` and never mentions options.

@@ -17,7 +17,16 @@
 //! so the body below sees `Request<Options>` unchanged. See WEP
 //! 2026-04-12 §"Authoring a generator".
 
-use { Request, Response, Error, OutputFile, KilnHost, Diagnostic as KilnDiagnostic, DiagnosticLevel } from "core:kiln";
+use {
+    Request,
+    Response,
+    Error,
+    OutputFile,
+    KilnHost,
+    Diagnostic as KilnDiagnostic,
+    DiagnosticLevel,
+    read_text,
+} from "core:kiln";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { generate as codegen_generate, GenerateOptions } from "./codegen.wado";
 use { parse_highlight_query, HighlightRule } from "./highlight_query.wado";
@@ -57,15 +66,32 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     // Route supplementary inputs by extension: `.scm` files are highlight
     // queries (compiled into the highlighter), everything else is a `.g4`
     // grammar half merged into the primary.
+    let primary_text = match read_text(req.primary.content) {
+        Ok(t) => t,
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(
+                `gale: grammar '${req.primary.path}' is not UTF-8: ${e}`,
+            ));
+        },
+    };
     let mut inputs: List<[String, String]> = [
-        [req.primary.path, req.primary.content],
+        [req.primary.path, primary_text],
     ];
     let mut scm_inputs: List<[String, String]> = [];
-    for let supp of &req.inputs {
-        if supp.path.ends_with(".scm") {
-            scm_inputs.push([supp.path, supp.content]);
+    for let supp of req.inputs {
+        let path = supp.path;
+        let text = match read_text(supp.content) {
+            Ok(t) => t,
+            Err(e) => {
+                return Result::Err(Error::InvalidSchema(
+                    `gale: input '${path}' is not UTF-8: ${e}`,
+                ));
+            },
+        };
+        if path.ends_with(".scm") {
+            scm_inputs.push([path, text]);
         } else {
-            inputs.push([supp.path, supp.content]);
+            inputs.push([path, text]);
         }
     }
     let mut grammar = match assemble_grammar(&inputs) {
