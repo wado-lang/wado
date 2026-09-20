@@ -4,7 +4,8 @@ use serde::Serialize;
 use crate::ast::{
     AssociatedConst, AstId, Attribute, EnumDecl, FlagsDecl, Function, GenericParam, GlobalDecl,
     ImplBlock, InterfaceDecl, Item, Module, Newtype, Param, ResourceDecl, SelfKind, StructDecl,
-    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, written_params,
+    StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
+    written_params,
 };
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::loader::resolve_wasm_asset_path;
@@ -1000,12 +1001,7 @@ fn collect_impl_methods_for_type(
     let mut trait_impls = Vec::new();
 
     for i in impls {
-        let target_name = match &i.ty {
-            Type::Named(n) => &n.name,
-            Type::Generic(g) => &g.name,
-            _ => continue,
-        };
-        if target_name != type_name {
+        if type_head_name(&i.ty) != Some(type_name) {
             continue;
         }
 
@@ -1045,12 +1041,7 @@ fn collect_impl_constants_for_type(
 ) -> Vec<DocFunction> {
     let mut constants = Vec::new();
     for i in impls {
-        let target_name = match &i.ty {
-            Type::Named(n) => n.name.as_str(),
-            Type::Generic(g) => g.name.as_str(),
-            _ => continue,
-        };
-        if target_name != type_name || i.trait_type.is_some() {
+        if type_head_name(&i.ty) != Some(type_name) || i.trait_type.is_some() {
             continue;
         }
         for c in &i.constants {

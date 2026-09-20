@@ -431,8 +431,7 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
-    /// A `pub const` is part of the type's API wherever it is declared, but
-    /// only a primitive's impl rendered one; a struct's impl dropped it.
+    /// A `pub const` is part of the type's API wherever it is declared.
     #[test]
     fn a_struct_documents_its_associated_constants() {
         let out = markdown_of(
@@ -1235,7 +1234,7 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
                 .unwrap_or(&s.signature)
                 .strip_prefix("struct ")
                 .and_then(|rest| rest.split([' ', '<', '{']).next())
-                .unwrap_or("?");
+                .expect("a struct signature names its type");
             writeln!(out, "\nimpl {type_name} {{").unwrap();
             for c in &s.constants {
                 writeln!(out, "    {};", c.signature).unwrap();
