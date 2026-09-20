@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789901569461,
+  "lastUpdate": 1789909513846,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57345,6 +57345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/fbe46f0bea9d440e20ffb72de52c2818b0b2fadd"
         },
         "date": 1789901568722,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "46cbc8a94b7f3c2ef76f39e9c165361122489369",
+          "message": "Merge pull request #2095 from wado-lang/claude/trait-default-signature-substitution\n\nfix(elaborator): a projection names its declaring trait, and a type parameter its dense slot",
+          "timestamp": "2026-09-20T21:44:38+09:00",
+          "tree_id": "95fd8e96a70d9f7a8fafc7a3f6ac54a54d5704be",
+          "url": "https://github.com/wado-lang/wado/commit/46cbc8a94b7f3c2ef76f39e9c165361122489369"
+        },
+        "date": 1789909513315,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
