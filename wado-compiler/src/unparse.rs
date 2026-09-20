@@ -1725,9 +1725,7 @@ impl<'a> Unparser<'a> {
                     self.output.push_str(suffix);
                 } else {
                     self.output.push_str(&i.name);
-                    if !i.type_args.is_empty() {
-                        self.unparse_turbofish(&i.type_args);
-                    }
+                    self.unparse_turbofish(&i.type_args);
                 }
             }
             Expr::Literal(l) => self.unparse_literal(&l.value),
@@ -2579,9 +2577,7 @@ impl<'a> Unparser<'a> {
     fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
         if let Some(name) = &s.name {
             self.output.push_str(name);
-            if !s.type_args.is_empty() {
-                self.unparse_turbofish(&s.type_args);
-            }
+            self.unparse_turbofish(&s.type_args);
             self.output.push(' ');
         }
 
@@ -3489,6 +3485,9 @@ pub fn unparse_expr_simple(expr: &Expr) -> String {
 
 /// Emit `::<T1, T2, ...>` turbofish into `output`.
 fn unparse_turbofish_into(type_args: &[Type], output: &mut String) {
+    if type_args.is_empty() {
+        return;
+    }
     output.push_str("::<");
     for (idx, ty) in type_args.iter().enumerate() {
         if idx > 0 {
@@ -3517,9 +3516,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
                 output.push_str(suffix);
             } else {
                 output.push_str(&i.name);
-                if !i.type_args.is_empty() {
-                    unparse_turbofish_into(&i.type_args, output);
-                }
+                unparse_turbofish_into(&i.type_args, output);
             }
         }
         Expr::Literal(l) => unparse_literal_into(&l.value, output),
@@ -3621,9 +3618,7 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         Expr::StructLiteral(s) => {
             if let Some(name) = &s.name {
                 output.push_str(name);
-                if !s.type_args.is_empty() {
-                    unparse_turbofish_into(&s.type_args, output);
-                }
+                unparse_turbofish_into(&s.type_args, output);
                 output.push(' ');
             }
             if s.fields.is_empty() {

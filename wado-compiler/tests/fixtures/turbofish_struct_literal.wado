@@ -1,6 +1,5 @@
 // A turbofish before a struct literal's brace (`Box::<i32> { … }`) says what
-// the annotation `let b: Box<i32> = Box { … }` says, in the one place a
-// literal's fields cannot reach a phantom parameter. Issue #2093.
+// the annotation `let b: Box<i32> = Box { … }` says. Issue #2093.
 
 struct Wrapper<T> {
     value: T,
@@ -13,6 +12,11 @@ struct Pair<A, B> {
 
 struct Tagged<T> {
     tag: i32,
+}
+
+struct Defaulted<T> {
+    value: T,
+    count: i32 = 2,
 }
 
 struct Sorted<T: Ord> {
@@ -45,10 +49,16 @@ test "a bounded parameter is checked through the turbofish" {
     assert s.value == 1;
 }
 
-test "the turbofish carries through shorthand and defaults" {
+test "the turbofish carries through field shorthand" {
     let value = 3;
     let w = Wrapper::<i32> { value };
     assert w.value == 3;
+}
+
+test "the turbofish settles the parameters an omitted field's default sees" {
+    let d = Defaulted::<i64> { value: 1 };
+    assert d.value == 1 as i64;
+    assert d.count == 2;
 }
 
 test "the turbofish reaches a nested literal" {

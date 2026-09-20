@@ -403,7 +403,7 @@ let p = Point { x: 10, y: 20 };
 let b = Pair { first: 0, second: 1 };  // F and S are inferred as i32
 
 // Turbofish, where the fields do not settle the parameters
-let c = Pair::<i64, String> { first: 0, second: "one" };
+let q = Pair::<i64, String> { first: 0, second: "one" };
 
 // Functional update: `..base` (leading, single) fills unlisted fields from a
 // same-type value; listed fields override, base is evaluated once, unchanged.

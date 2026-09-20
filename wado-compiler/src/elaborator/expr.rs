@@ -3718,14 +3718,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|def| self.tysys.resolutions.defs().name(def).to_string())
             .unwrap_or_else(|| struct_name.clone());
 
-        // `Box::<i32> { value: 1 }` says what `let b: Box<i32> = …` says, so
-        // the turbofish resolves as that annotation and takes its place —
-        // arity and bound checks on the arguments included.
-        let expected_type = match (struct_lit.name_id, name.as_deref()) {
-            (Some(site), Some(written)) if !struct_lit.type_args.is_empty() => Some(
-                self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span),
-            ),
-            _ => expected_type,
+        // `Box::<i32> { … }` says what `let b: Box<i32> = …` says, so it
+        // resolves as that annotation and takes its place, arity and bound
+        // checks included.
+        let expected_type = if struct_lit.type_args.is_empty() {
+            expected_type
+        } else {
+            let (site, written) = struct_lit
+                .name_id
+                .zip(name.as_deref())
+                .expect("only a named literal parses a turbofish");
+            Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
         };
 
         // Get expected field types using (name, module_source) lookup.

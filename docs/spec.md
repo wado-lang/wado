@@ -2837,10 +2837,9 @@ let ok: Result<i32, String> = Result::Ok(42);
 
 When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
 
-A turbofish on the type name pins the arguments where neither mechanism reaches
-— a parameter no field mentions, or one a field would settle on the wrong way.
-It says what an annotation naming the same instantiation says, so the two must
-agree:
+A turbofish on the type name pins the arguments outright. It reaches a parameter
+no field mentions, and it overrides one a field would otherwise settle. It says
+what an annotation naming the same instantiation says, so the two must agree:
 
 ```wado
 struct Tagged<T> { tag: i32 }

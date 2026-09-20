@@ -3738,13 +3738,11 @@ impl Parser {
                             && self.looks_like_struct_literal_content()
                             && let Expr::Ident(ident) = &expr
                         {
-                            // `Box::<i32> { value: 1 }`: the turbofish pins the
-                            // struct's parameters where a literal's fields
-                            // cannot. A bare `Name` and a `ns::Name` path both
-                            // reach here as one identifier — the primary parser
-                            // leaves the `::<…>` to this loop either way.
-                            let name = ident.name.clone();
-                            expr = self.parse_struct_literal(Some(name), type_args, callee_span)?;
+                            // `Box::<i32> { value: 1 }`. The primary parser
+                            // leaves the `::<…>` to this loop for a bare `Name`
+                            // and a `ns::Name` path alike, so both arrive here.
+                            let head = (ident.name.clone(), type_args);
+                            expr = self.parse_struct_literal(Some(head), callee_span)?;
                         } else if let Expr::Ident(ident) = &mut expr {
                             // Bare turbofish on an identifier: `foo::<T>` as a value.
                             // Attach the type args to the identifier and let the
@@ -4098,7 +4096,7 @@ impl Parser {
             && !self.restrict_struct_literals
             && self.looks_like_struct_literal_content()
         {
-            return self.parse_struct_literal(Some(qualified_name), Vec::new(), path_span);
+            return self.parse_struct_literal(Some((qualified_name, Vec::new())), path_span);
         }
         Ok(Expr::Ident(IdentExpr {
             id: self.alloc_ast_id(),
@@ -4153,7 +4151,7 @@ impl Parser {
                 // Detected by looking at content inside braces, not naming convention.
                 // Restricted in contexts where a block follows the expression
                 // (e.g., if/while/match conditions) to avoid ambiguity.
-                return self.parse_struct_literal(Some(name), Vec::new(), start_span);
+                return self.parse_struct_literal(Some((name, Vec::new())), start_span);
             }
             return Ok(Expr::Ident(IdentExpr {
                 id: self.alloc_ast_id(),
@@ -4293,14 +4291,14 @@ impl Parser {
                 TokenKind::Colon | TokenKind::Comma | TokenKind::RBrace
             )
         {
-            return self.parse_struct_literal(None, Vec::new(), start_span);
+            return self.parse_struct_literal(None, start_span);
         }
 
         // `{ "field" :` — string literal field name
         if let TokenKind::StringLit(_) = self.peek_kind()
             && matches!(self.peek_nth(1).kind, TokenKind::Colon)
         {
-            return self.parse_struct_literal(None, Vec::new(), start_span);
+            return self.parse_struct_literal(None, start_span);
         }
 
         // `{ true: ... }` — keyword used as field name; route through struct
@@ -4310,17 +4308,17 @@ impl Parser {
             TokenKind::True | TokenKind::False | TokenKind::Null
         ) && matches!(self.peek_nth(1).kind, TokenKind::Colon)
         {
-            return self.parse_struct_literal(None, Vec::new(), start_span);
+            return self.parse_struct_literal(None, start_span);
         }
 
         // Empty struct literal `{}`.
         if self.check(&TokenKind::RBrace) {
-            return self.parse_struct_literal(None, Vec::new(), start_span);
+            return self.parse_struct_literal(None, start_span);
         }
 
         // Leading spread: `{ ..base, "k": v }`
         if self.check(&TokenKind::DotDot) {
-            return self.parse_struct_literal(None, Vec::new(), start_span);
+            return self.parse_struct_literal(None, start_span);
         }
 
         Err(ParseError {
@@ -6355,13 +6353,14 @@ impl Parser {
     }
 
     /// Parse struct literal: `Point { x: 10, y: 20 }` or `Point { x, y }` (shorthand)
-    /// Also handles implicit struct literals `{ x: 10, y: 20 }` where name is None.
+    /// Also handles implicit struct literals `{ x: 10, y: 20 }`, whose `head` is None.
     fn parse_struct_literal(
         &mut self,
-        name: Option<String>,
-        type_args: Vec<Type>,
+        head: Option<(String, Vec<Type>)>,
         start_span: Span,
     ) -> ParseResult<Expr> {
+        let (name, type_args) = head.map_or((None, Vec::new()), |(n, a)| (Some(n), a));
+
         // For named struct literals, the `{` comes after the name
         // For implicit struct literals, the `{` is already consumed
         if name.is_some() {
