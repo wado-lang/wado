@@ -35,21 +35,39 @@ const SAMPLES = 24;
 const TEMPERATURE = 0.5;
 const SEED = 42n;
 
-// Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
-// Python seeds Mersenne Twister, so the two draw different numbers.
+// Let there be a deterministic source of chaos: `core:prng`'s, so the Wado arm
+// matches — `Seed::from_u64` expands through SplitMix64, `Xoshiro256pp` draws,
+// Box-Muller shapes. Python seeds Mersenne Twister, so the two draw differently.
 const MASK64 = (1n << 64n) - 1n;
+
+function rotl(x, n) {
+  return ((x << n) | (x >> (64n - n))) & MASK64;
+}
 
 class Rng {
   constructor(seed) {
-    this.state = seed & MASK64;
+    let state = seed & MASK64;
+    const splitmix = () => {
+      state = (state + 0x9e3779b97f4a7c15n) & MASK64;
+      let z = state;
+      z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & MASK64;
+      z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & MASK64;
+      return (z ^ (z >> 31n)) & MASK64;
+    };
+    this.s = [splitmix(), splitmix(), splitmix(), splitmix()];
   }
 
   nextU64() {
-    this.state = (this.state + 0x9e3779b97f4a7c15n) & MASK64;
-    let z = this.state;
-    z = ((z ^ (z >> 30n)) * 0xbf58476d1ce4e5b9n) & MASK64;
-    z = ((z ^ (z >> 27n)) * 0x94d049bb133111ebn) & MASK64;
-    return (z ^ (z >> 31n)) & MASK64;
+    const s = this.s;
+    const result = (rotl((s[0] + s[3]) & MASK64, 23n) + s[0]) & MASK64;
+    const t = (s[1] << 17n) & MASK64;
+    s[2] ^= s[0];
+    s[3] ^= s[1];
+    s[1] ^= s[2];
+    s[0] ^= s[3];
+    s[2] ^= t;
+    s[3] = rotl(s[3], 45n);
+    return result;
   }
 
   // 53 bits, the mantissa of a double, scaled into [0, 1).
