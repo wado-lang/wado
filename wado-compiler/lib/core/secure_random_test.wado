@@ -262,15 +262,32 @@ test "with_buffered installs a block for the body" {
     assert host.calls == 1;
 }
 
+interface Tally {
+    fn bump() -> i32;
+}
+
+struct Counter {
+    n: i32 = 0,
+}
+
+impl Tally for Counter {
+    fn bump(&mut self) -> i32 {
+        self.n += 1;
+        resume self.n;
+    }
+}
+
 test "with_buffered passes the body's own effects through" {
     let mut host = CountingRandom {};
-    let mut seen = 0;
-    with Random => &mut host do {
+    let mut tally = Counter {};
+    let last = with Tally => &mut tally, Random => &mut host do {
         with_buffered(|| {
-            seen += bytes(4).len();
+            assert bytes(4).len() == 4;
+            return Tally::bump();
         });
     };
-    assert seen == 4;
+    assert last == 1;
+    assert tally.n == 1;
 }
 
 test "a BufferedRandom block can be sized" {

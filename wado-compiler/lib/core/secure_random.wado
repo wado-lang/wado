@@ -1,12 +1,11 @@
 #![stdlib("core:secure_random")]
-//! Randomness no one can predict, drawn from `wasi:random`. A secret comes
-//! from here — a key, a salt, a nonce, a session token. Nothing here is
-//! seedable or reproducible; for a stream that replays, see `core:prng`.
+//! Randomness no one can predict, drawn from `wasi:random`. A key, a salt, a
+//! nonce or a session token comes from here. Nothing here is seedable or
+//! reproducible; a stream that replays is `core:prng`.
 //!
 //! A host call costs about the same for 16 bytes as for 4096, so drawing many
-//! small values pays that fixed cost over and over. `BufferedRandom` draws in
-//! blocks and serves reads from one, and [`with_buffered`] installs it around
-//! a body.
+//! small values pays that fixed cost over and over. [`with_buffered`] draws in
+//! blocks and serves the reads inside its body from one.
 //!
 //! Compare a token against an expected one with `eq_constant_time`, never
 //! `==`.
@@ -32,9 +31,8 @@ pub fn seed() -> Seed with Random {
     return Seed::from_bytes(&bytes(SEED_BYTES));
 }
 
-/// Exactly `n` unpredictable bytes — the raw material of a key, a salt or a
-/// nonce. `wasi:random` may hand back fewer than asked, so this draws until it
-/// has them all.
+/// Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
+/// nonce. A short read from `wasi:random` is absorbed here, never passed on.
 pub fn bytes(n: i32) -> ByteList with Random {
     assert n >= 0;
     let mut out = Random::get_random_bytes(n as u64) as ByteList;
@@ -46,45 +44,44 @@ pub fn bytes(n: i32) -> ByteList with Random {
     return out;
 }
 
-/// A token as lowercase hexadecimal, two digits per byte. The default 32 bytes
-/// is 256 bits, which is enough for anything a token is asked to resist.
+/// A token of `n` bytes as lowercase hexadecimal, two digits per byte. The
+/// default is 256 bits, past what any search can reach.
 pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random {
     return bytes(n).to_hex();
 }
 
-/// A token as URL-safe unpadded Base64, ready for a URL, a cookie or a header.
-/// The default 32 bytes is 256 bits.
+/// A token of `n` bytes as URL-safe unpadded Base64, for a URL, a cookie or a
+/// header. The default is 256 bits.
 pub fn token_base64url(n: i32 = TOKEN_BYTES) -> String with Random {
     return encode_url(&bytes(n));
 }
 
-/// A token of `len` characters drawn from `alphabet`, each one uniform over
-/// it. For a one-time code, an invite code, or anything a person reads aloud
-/// and so wants a restricted alphabet for.
+/// A token of `len` characters, each drawn uniformly from `alphabet`. For a
+/// one-time code or an invite code, where the alphabet has to be readable.
 ///
-/// The alphabet is ASCII and at most 256 bytes; a repeated byte weights the
-/// draw towards it.
+/// The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
 pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random {
     let chars = alphabet.as_byte_slice();
+    let n = chars.len();
     assert len >= 0;
-    assert chars.len() > 0, "an alphabet to draw from cannot be empty";
-    assert chars.len() <= BYTE_VALUES, "an alphabet cannot exceed 256 bytes";
-    for let mut i = 0; i < chars.len(); i += 1 {
-        assert chars[i] < 0x80, "an alphabet to draw from must be ASCII";
+    assert n > 0, "an alphabet to draw from cannot be empty";
+    assert n <= BYTE_VALUES, "an alphabet cannot exceed 256 bytes";
+    for let c of chars {
+        assert c < 0x80, "an alphabet to draw from must be ASCII";
     }
 
-    // Folding a byte onto an alphabet that does not divide 256 would favour the
-    // letters at the front, so the bytes above the last whole repeat go back.
-    let limit = BYTE_VALUES / chars.len() * chars.len();
+    // Folding every byte onto the alphabet would favour the letters at the
+    // front, so a draw past the last whole repeat is discarded instead.
+    let limit = BYTE_VALUES / n * n;
     let mut out = String::with_capacity(len);
     let mut made = 0;
     while made < len {
         for let draw of bytes(len - made) {
-            if draw as i32 >= limit {
-                continue;
+            let value = draw as i32;
+            if value < limit {
+                out.push(chars[value % n] as char);
+                made += 1;
             }
-            out.push(chars[draw as i32 % chars.len()] as char);
-            made += 1;
         }
     }
     return out;

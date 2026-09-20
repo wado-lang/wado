@@ -299,6 +299,8 @@ fn with_variant(byte: u8) -> u8 {
 
 /// Collect exactly `n` random bytes, looping to tolerate short reads (the
 /// `Random` contract allows returning fewer bytes than requested).
+// Not `core:secure_random::bytes`, which this duplicates: that module imports
+// `core:base64`, whose module initializer would then run in every UUID user.
 fn fill_random(n: i32) -> ByteList with Random {
     let mut out = Random::get_random_bytes(n as u64) as ByteList;
     while out.len() < n {

@@ -3,14 +3,13 @@
 
 # core:secure_random
 
-Randomness no one can predict, drawn from `wasi:random`. A secret comes
-from here — a key, a salt, a nonce, a session token. Nothing here is
-seedable or reproducible; for a stream that replays, see `core:prng`.
+Randomness no one can predict, drawn from `wasi:random`. A key, a salt, a
+nonce or a session token comes from here. Nothing here is seedable or
+reproducible; a stream that replays is `core:prng`.
 
 A host call costs about the same for 16 bytes as for 4096, so drawing many
-small values pays that fixed cost over and over. `BufferedRandom` draws in
-blocks and serves reads from one, and [`with_buffered`] installs it around
-a body.
+small values pays that fixed cost over and over. [`with_buffered`] draws in
+blocks and serves the reads inside its body from one.
 
 Compare a token against an expected one with `eq_constant_time`, never
 `==`.
@@ -37,28 +36,25 @@ from unpredictable randomness into a reproducible stream.
 
 ### `pub fn bytes(n: i32) -> ByteList with Random`
 
-Exactly `n` unpredictable bytes — the raw material of a key, a salt or a
-nonce. `wasi:random` may hand back fewer than asked, so this draws until it
-has them all.
+Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
+nonce. A short read from `wasi:random` is absorbed here, never passed on.
 
 ### `pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random`
 
-A token as lowercase hexadecimal, two digits per byte. The default 32 bytes
-is 256 bits, which is enough for anything a token is asked to resist.
+A token of `n` bytes as lowercase hexadecimal, two digits per byte. The
+default is 256 bits, past what any search can reach.
 
 ### `pub fn token_base64url(n: i32 = TOKEN_BYTES) -> String with Random`
 
-A token as URL-safe unpadded Base64, ready for a URL, a cookie or a header.
-The default 32 bytes is 256 bits.
+A token of `n` bytes as URL-safe unpadded Base64, for a URL, a cookie or a
+header. The default is 256 bits.
 
 ### `pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random`
 
-A token of `len` characters drawn from `alphabet`, each one uniform over
-it. For a one-time code, an invite code, or anything a person reads aloud
-and so wants a restricted alphabet for.
+A token of `len` characters, each drawn uniformly from `alphabet`. For a
+one-time code or an invite code, where the alphabet has to be readable.
 
-The alphabet is ASCII and at most 256 bytes; a repeated byte weights the
-draw towards it.
+The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
 
 ### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E)`
 
