@@ -4744,9 +4744,15 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled(*inner, unboxed)
                 .with_reference(RefKind::Mut),
-            // Shapes that name no declaration — assoc-type projections, packs,
-            // `Unknown`. They carry no module, so the rendered spelling is
-            // already their whole identity.
+            // Structural, so substituting the base reaches it: the base is what
+            // a monomorphized call answers, and the projection follows.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                ..
+            } => FqTypeName::projection(self.fq_type_name_spelled(*param_id, unboxed), assoc_name),
+            // Shapes that name no declaration — packs, `Unknown`. They carry no
+            // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
         }
     }

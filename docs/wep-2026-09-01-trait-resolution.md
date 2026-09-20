@@ -59,6 +59,19 @@ dispatch paths select without it:
 
 These paths do not yet follow this order: see Known gaps.
 
+### A bound's trait arguments
+
+A bound writes its trait's arguments in the body's own parameter space, so what
+they name is settled at the instantiation, not where they are written. `T:
+Make<U>` reaches `impl Make<String>` once the call settles `U` to `String`, and
+`T: Make<T::Base>` reaches it once `T = UserName` makes `T::Base` the `String`
+that impl binds. A call through the bound therefore lands on the same impl the
+bound check held the type to.
+
+The arguments travel as part of the trait's name, which carries a projection as
+a base and a member rather than as a spelling. A spelling would have to be split
+back apart to substitute the base, and no split is correct in general.
+
 ### The candidates
 
 A call's candidates come from three places.
@@ -506,15 +519,6 @@ Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
-
-### A bound's trait argument reaches an impl only where it is concrete
-
-A call through `T: Make<U>` asks for `Make` at `U` as the bound spells it, and
-the impl that could answer writes `Make<String>`: the two never meet, whatever
-the call settles `U` to. A projection has the same shape: `T: Make<T::Base>`
-asks at `Base`. A parameterized trait is therefore reachable through a bound
-only where the bound writes its argument out as a type. A supertrait clause over
-`Self::Assoc` runs into this as soon as a generic body calls through it.
 
 ### Scope gates method calls, not the bounds path
 

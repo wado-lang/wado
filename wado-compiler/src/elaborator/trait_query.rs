@@ -2353,6 +2353,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bound_slots(&bound, decl, self_type_id);
+        let fq_trait_name = self.trait_named_off_self(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2676,6 +2677,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             span,
             unmet: BoundUnmet(()),
         });
+    }
+
+    /// A bound's argument written against `Self` names no type by its spelling,
+    /// so it is named from what the frame resolved it to: `Make<Self::Base>`
+    /// read at `T: Constrained` reaches `Make<T::Base>`.
+    fn trait_named_off_self(
+        &self,
+        fq: FqTraitName,
+        bound: &ast::TraitBound,
+        slots: &IndexMap<u32, TypeId>,
+    ) -> FqTraitName {
+        if !bound.type_args.iter().any(|ty| ty.mentions("Self")) {
+            return fq;
+        }
+        let table = self.tysys.type_table.borrow();
+        let args: Vec<FqTypeName> = fq
+            .args()
+            .iter()
+            .enumerate()
+            .map(|(i, written)| match bound.type_args.get(i) {
+                Some(ty) if ty.mentions("Self") => slots
+                    .get(&(1 + i as u32))
+                    .map_or_else(|| written.clone(), |&slot| table.fq_type_name(slot)),
+                _ => written.clone(),
+            })
+            .collect();
+        fq.with_args(args)
     }
 
     /// What a bound binds `decl`'s slots to: slot 0 is `Self`, and the trait's

@@ -2325,6 +2325,14 @@ impl Monomorphizer {
                     && !substitution.is_empty()
                     && let Some(info) = call_func.method_info.clone()
                 {
+                    // Only a receiver the substitution answers carries its
+                    // trait's arguments with it; every other instance keeps the
+                    // template's spelling, which is what defines it.
+                    let info = if info.is_type_param_receiver {
+                        self.trait_named_at_instance(info, substitution, type_table)
+                    } else {
+                        info
+                    };
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
@@ -3352,7 +3360,8 @@ impl Monomorphizer {
     }
 
     /// The name with the template's type parameters replaced in the trait's
-    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`.
+    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, and
+    /// `T^Make<T::Base>::make` under `T = UserName` names `Make<String>`.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
@@ -3365,14 +3374,40 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let asked = self
-            .current_param_substitution_key
+        let bound = |name: &str| -> Option<TypeId> {
+            let key = self.current_param_substitution_key.get(name)?;
+            substitution.get(key).copied()
+        };
+        let args: Vec<FqTypeName> = trait_name
+            .args()
             .iter()
-            .filter_map(|(name, key)| Some((name, *substitution.get(key)?)))
-            .fold(trait_name.clone(), |trait_, (name, tid)| {
-                trait_.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
-            });
-        info.with_trait_type_args(asked.args())
+            .map(|arg| self.trait_arg_at_instance(arg, &bound, type_table))
+            .collect();
+        info.with_trait_type_args(&args)
+    }
+
+    /// One trait argument re-spelled at the instance: a projection off a
+    /// parameter is answered by the associated type its binding carries, and
+    /// anything else has its binders replaced.
+    fn trait_arg_at_instance(
+        &self,
+        arg: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> FqTypeName {
+        if let Some((base, assoc)) = arg.projected()
+            && let Some(base_name) = base.binder_name()
+            && let Some(base_id) = bound(base_name)
+            && let Some(answer) = type_table.resolve_assoc_type(base_id, assoc)
+        {
+            return type_table.fq_type_name(answer);
+        }
+        self.current_param_substitution_key
+            .keys()
+            .filter_map(|name| Some((name, bound(name)?)))
+            .fold(arg.clone(), |arg, (name, tid)| {
+                arg.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
+            })
     }
 
     /// The name with the trait's arguments cut back to what the answering impl

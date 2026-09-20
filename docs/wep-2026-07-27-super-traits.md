@@ -76,7 +76,8 @@ implementing type, so `trait Constrained: Make<Self::Base>` asks each impl for
 `Make` at the associated type that impl binds: an impl binding `Base` to
 `String` owes `Make<String>`, and one binding it to `i32` owes `Make<i32>`. A
 bound carries the projection with it, so `T: Constrained` requires
-`T: Make<T::Base>`.
+`T: Make<T::Base>`, and a call through it lands on the impl the projection
+names ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
 
 The closure is stored in the declaring trait's parameter space, which is not the
 reading site's. The index therefore hands out nothing raw: a reader names the
@@ -125,11 +126,6 @@ leaves open.
 
 An associated-type constraint in supertrait position is checked but not used for
 inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved.
-
-A clause whose argument is not a type, such as the subtrait's own parameter or
-`Self::Assoc`, is checked against every impl, but no call can be made through
-it. A body under `T: Constrained` cannot reach `Make`'s methods
-([Trait Resolution](./wep-2026-09-01-trait-resolution.md), known gaps).
 
 The trait solver states a clause's arguments only where it can name them as
 types. A clause whose argument is the subtrait's own parameter states none

@@ -778,6 +778,7 @@ impl Receiver {
                 | TypeHead::Shape { .. }
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
+                | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
             Receiver::Ref(_) | Receiver::Projection { .. } => None,
@@ -2585,6 +2586,13 @@ pub enum TypeHead {
     /// `Head<a,b>` like every other instantiated shape, which is what a
     /// `Builtin("[]")` carrying arguments would render as.
     Tuple,
+    /// An associated type of another name (`T::Base`). Its own head, so
+    /// substituting the base reaches it and the projection answers a type once
+    /// the base is concrete.
+    Projection {
+        base: Box<FqTypeName>,
+        assoc: String,
+    },
 }
 
 impl TypeHead {
@@ -2609,13 +2617,15 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
 
     /// The spelling a mangle embeds — the head alone. What a binder's owner and
-    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds.
+    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
+    /// a projection's base.
     #[must_use]
     pub fn rendered(&self) -> &str {
         match self {
@@ -2623,7 +2633,8 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2638,6 +2649,7 @@ impl TypeHead {
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Binder { .. }
+            | Self::Projection { .. }
             | Self::Tuple => None,
         }
     }
@@ -2648,7 +2660,7 @@ impl TypeHead {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
-            Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
+            Self::Builtin(_) | Self::Binder { .. } | Self::Projection { .. } | Self::Tuple => None,
         }
     }
 }
@@ -2719,6 +2731,15 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
+        })
+    }
+
+    /// The associated type `assoc` of `base` (`T::Base`).
+    #[must_use]
+    pub fn projection(base: FqTypeName, assoc: &str) -> Self {
+        Self::of_head_kind(TypeHead::Projection {
+            base: Box::new(base),
+            assoc: assoc.to_string(),
         })
     }
 
@@ -2814,8 +2835,31 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        matches!(self.head, TypeHead::Binder { .. })
-            || self.args.iter().any(FqTypeName::mentions_binder)
+        let head = match &self.head {
+            TypeHead::Binder { .. } => true,
+            TypeHead::Projection { base, .. } => base.mentions_binder(),
+            _ => false,
+        };
+        head || self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
+    /// The base and associated-type name this projects off, `None` for any
+    /// other shape.
+    #[must_use]
+    pub fn projected(&self) -> Option<(&FqTypeName, &str)> {
+        match &self.head {
+            TypeHead::Projection { base, assoc } => Some((base, assoc)),
+            _ => None,
+        }
+    }
+
+    /// The binder this name is, `None` for a name that is not one.
+    #[must_use]
+    pub fn binder_name(&self) -> Option<&str> {
+        match &self.head {
+            TypeHead::Binder { name, .. } => Some(name),
+            _ => None,
+        }
     }
 
     /// The mangled spelling embedded in a mangled method name.
@@ -2845,6 +2889,9 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
+            TypeHead::Projection { base, assoc } => {
+                out.push_str(&format!("{}::{assoc}", base.to_mangled()));
+            }
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -2880,9 +2927,16 @@ impl FqTypeName {
             };
             return pointee.substitute(old, new).with_reference(*outer);
         }
+        let head = match &self.head {
+            TypeHead::Projection { base, assoc } => TypeHead::Projection {
+                base: Box::new(base.substitute(old, new)),
+                assoc: assoc.clone(),
+            },
+            head => head.clone(),
+        };
         FqTypeName {
             reference: Vec::new(),
-            head: self.head.clone(),
+            head,
             args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
         }
     }
@@ -2901,7 +2955,11 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-        out.push_str(self.head.name());
+        if let TypeHead::Projection { base, assoc } = &self.head {
+            out.push_str(&format!("{}::{assoc}", base.to_display()));
+        } else {
+            out.push_str(self.head.name());
+        }
         if !args.is_empty() {
             out.push('<');
             out.push_str(&args.join(","));

@@ -1,5 +1,5 @@
-// The projection resolves, so the supertrait clause is not a type error, but
-// the call through it reaches no impl (WEP: Trait Resolution, known gaps).
+// A call through the supertrait reaches the impl: `T: Constrained` requires
+// `Make<T::Base>`, and `type Base = String` is what makes that `Make<String>`.
 
 trait Make<T> with () {
     fn make(v: T) -> Self;
@@ -33,13 +33,6 @@ fn build<T: Constrained>(b: T::Base) -> T {
     return T::make(b);
 }
 
-test "a supertrait argument off Self::Assoc carries no call" {
+test "a static call reaches the impl the supertrait projects to" {
     assert build::<UserName>("gfx").value == "gfx";
-}
-
-__DATA__
-{
-    "test": {},
-    "compile_error": "type `UserName` does not implement trait `Make<Base>`",
-    "compile_errors_not_contains": ["unknown type 'Self::Base'"]
 }
