@@ -1,0 +1,15 @@
+// The turbofish decides the literal's instance, so an annotation naming a
+// different one is the mismatch — reported against the literal, not silently
+// overridden by either side.
+
+struct Wrapper<T> {
+    value: T,
+}
+
+test "a turbofish disagreeing with the annotation is a type mismatch" {
+    let w: Wrapper<i32> = Wrapper::<i64> { value: 1 };
+    assert w.value == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected 'Wrapper<i32>', found 'Wrapper<i64>'"}

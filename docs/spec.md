@@ -2837,6 +2837,18 @@ let ok: Result<i32, String> = Result::Ok(42);
 
 When both mechanisms are available, forward inference takes precedence for type parameters that appear in the payload, and backward inference fills in any remaining parameters.
 
+A turbofish on the type name pins the arguments where neither mechanism reaches
+— a parameter no field mentions, or one a field would settle on the wrong way.
+It says what an annotation naming the same instantiation says, so the two must
+agree:
+
+```wado
+struct Tagged<T> { tag: i32 }
+let b = Box::<i64> { value: 1 };        // T=i64, not the i32 the literal infers
+let t = Tagged::<String> { tag: 7 };    // T names no field
+let n: Box<i32> = Box::<i64> { … };     // error: the annotation disagrees
+```
+
 #### Scope of inference
 
 | Constructor kind       | Forward | Backward | Status              |

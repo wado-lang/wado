@@ -2579,6 +2579,9 @@ impl<'a> Unparser<'a> {
     fn unparse_struct_literal(&mut self, s: &StructLiteralExpr) {
         if let Some(name) = &s.name {
             self.output.push_str(name);
+            if !s.type_args.is_empty() {
+                self.unparse_turbofish(&s.type_args);
+            }
             self.output.push(' ');
         }
 
@@ -3618,6 +3621,9 @@ fn unparse_expr_into(expr: &Expr, output: &mut String) {
         Expr::StructLiteral(s) => {
             if let Some(name) = &s.name {
                 output.push_str(name);
+                if !s.type_args.is_empty() {
+                    unparse_turbofish_into(&s.type_args, output);
+                }
                 output.push(' ');
             }
             if s.fields.is_empty() {

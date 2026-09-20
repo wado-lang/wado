@@ -946,6 +946,9 @@ pub fn walk_expr<V: AstVisitor>(v: &mut V, expr: &Expr) {
             if let (Some(name_id), Some(name_span)) = (s.name_id, s.name_span) {
                 v.visit_id(name_id, name_span);
             }
+            for ty in &s.type_args {
+                v.visit_type(ty);
+            }
             for field in &s.fields {
                 v.visit_id(field.name_id, field.name_span);
                 v.visit_expr(&field.value);
@@ -2858,6 +2861,9 @@ pub struct StructLiteralExpr {
     /// Span of just the type name token.
     /// Always `Some` iff `name` is `Some`.
     pub name_span: Option<Span>,
+    /// Turbofish arguments pinning a generic struct's parameters,
+    /// `Box::<i32> { value: 1 }`. Empty where the literal writes none.
+    pub type_args: Vec<Type>,
     pub fields: Vec<StructLiteralField>,
     /// Spread bases (`{ ..a, field: v, ..b }`) in source order, each supplying
     /// the fields the literal does not list explicitly. See WEP: Literal Spread.

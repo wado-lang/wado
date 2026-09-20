@@ -1,0 +1,14 @@
+// A turbofish before a struct literal's brace is checked where it is written,
+// the way the equivalent annotation is (`error_type_args_on_non_generic_struct`).
+
+struct Wrapper<T> {
+    value: T,
+}
+
+test "a turbofish supplying too many arguments is rejected at the literal" {
+    let w = Wrapper::<i32, i64> { value: 1 };
+    assert w.value == 1;
+}
+
+__DATA__
+{"compile_error": "`Wrapper` takes 1 type argument, but 2 were supplied"}
