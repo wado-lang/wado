@@ -399,13 +399,12 @@ cannot reach is unowned and sits below.
   question, which `try_exists` answers for every path this module can reach.
 - `write` and `create_dir_all` each read a path before acting on it, so a
   writer that changes the path inside that window gets the action rather than
-  the refusal. Closing either needs a rename that validates its destination, or
-  a create that reports what it found, and `wasi:filesystem` has neither.
+  the refusal. `wasi:filesystem` has neither a rename that validates its
+  destination nor a create that reports what it found.
 - A temporary file outlives a process that dies between creating it and
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
-  writer owns. Closing it means deciding what makes one stale — an age read
-  from `metadata`, or a sweep a caller asks for — and neither answer is safe
-  while another process may be mid-write on the same name.
+  writer owns. What makes one stale is undecided, and while another process may
+  be mid-write on the same name no answer is safe.
 - `package-gale/scripts/extract_antlr4_descriptors.wado` keeps its own
   descriptor plumbing, a shadow copy of some seven functions here. Its helpers
   each take a subdirectory `Descriptor`, which this module cannot express
