@@ -33,7 +33,7 @@ them.
 
 ## 1. Summary
 
-Six findings, in order of how much they move the design space.
+The findings, in order of how much they move the design space.
 
 - **The bottleneck on WebGPU is dispatch count, not kernel quality.** At batch
   size 1 the per-dispatch cost dominates, and it does not depend on the data

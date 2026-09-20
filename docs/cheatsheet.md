@@ -998,10 +998,10 @@ fn head<A, ..T>(t: &[A, ..T]) -> A {
 fn drop_last<..Rest, Last>(t: &Tag<[..Rest, Last]>) -> Tag<[..Rest]> { ... }
 fn drop_ends<First, ..Mid, Last>(t: &Tag<[First, ..Mid, Last]>) -> Tag<[..Mid]> { ... }
 
-// This shortens a type, never a value. Written over a bare tuple the same
-// signature declares but cannot be implemented: returning the argument is a
-// type error, a comprehension keeps the arity it walked, and nothing else
-// builds the shorter tuple.
+// This shortens a type, never a value. Over a bare tuple the same signature is
+// declarable but not implementable: returning the argument is a type error, a
+// comprehension keeps the arity it walked, and nothing else builds the shorter
+// tuple.
 // fn drop_last<..Rest, Last>(t: [..Rest, Last]) -> [..Rest]
 
 // A pack bound through another parameter's associated type is projected from

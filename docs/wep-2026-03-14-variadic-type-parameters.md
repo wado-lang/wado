@@ -164,17 +164,14 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 // error: only one type pack parameter is allowed per generic parameter list
 ```
 
-What a second pack was meant to allow is below, since that is still the shape to build
-if it lands.
+The shape a second pack would take is kept here, because it is what to build if it lands.
+Two packs appear in one impl or function only in type position, never in a single
+expansion context, and concatenation is what they are for. Two meeting in an expansion
+expression (§8) would have to be the same length at every call site, which
+monomorphization would enforce. Zip and interleave need more than that shape gives.
 
-Two packs would appear in the same impl or function only in a type-level position, not in
-a single expansion context, the primary use case being concatenation. Where two appeared
-in an expansion expression (§8) they would have to be the same length at every call site,
-enforced at monomorphization. More complex multi-pack operations (zip, interleave) are
-out of scope for this WEP.
-
-The cost of the limit is that an axis list cannot be written `[..Pre, K, ..Post]`, so a
-tuple type cannot name an element in its middle.
+The limit costs `[..Pre, K, ..Post]`, so a tuple type cannot name an element in its
+middle.
 
 ### 7. Compile-Time Tuple Enumeration with Packs
 

@@ -1764,9 +1764,10 @@ impl FunctionTranslator<'_, '_> {
         instrs
     }
 
-    /// Scan statements recursively to discover Let declarations and emit `DeclareLocal`.
-    /// Used when `locals` is empty (for functions from library modules).
+    /// Recover each `let`'s local from the statements, as a `DeclareLocal` and
+    /// as its type. Used when `locals` is empty, as a library module's are.
     fn declare_locals_from_stmts(&mut self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
+        let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
         for stmt_id in stmts {
             match &self.body.stmts[*stmt_id].kind {
                 StmtKind::Let {
@@ -1774,8 +1775,7 @@ impl FunctionTranslator<'_, '_> {
                     type_id,
                     ..
                 } => {
-                    // Skip params (they are already declared via param_names)
-                    let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
+                    // Params are already declared via param_names.
                     if *local_index >= param_count {
                         // `locals` has no entry to answer a read of it.
                         self.discovered_local_types.insert(*local_index, *type_id);

@@ -1,7 +1,7 @@
-// A tuple's fixed elements compare invariantly, as rule 8 compares a generic
-// instance's arguments. Compared at the surrounding position instead, `Node`
-// satisfied `EventTarget` through resource subtyping, the pack left the check
-// deferred, and nothing asked again once it expanded.
+// A tuple is invariant in each element (WEP 2026-04-28 § "Container and
+// aggregate types"), and a pack ahead of one does not relax that. Compared at
+// the surrounding position instead, `Node` satisfied `EventTarget` by resource
+// subtyping, the unexpanded pack deferred, and codegen got an invalid module.
 
 #[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
 resource EventTarget {}
