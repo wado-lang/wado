@@ -2822,6 +2822,22 @@ Current indentation level for the alternate (`#`) `Inspect`
 
 Reference to the output buffer
 
+#### `pub const NO_WIDTH: i32`
+
+No width given: every padding path is a no-op.
+
+#### `pub const PRECISION_DEFAULT: i32`
+
+No precision given: sequence Inspect uses `DEFAULT_SEQ_LIMIT`, others ignore.
+
+#### `pub const PRECISION_INFINITE: i32`
+
+Render uncapped: sequence Inspect skips truncation.
+
+#### `pub const DEFAULT_SEQ_LIMIT: i32`
+
+Default sequence Inspect cap: chars for `String`, elements for `List`.
+
 #### `pub fn resolved_seq_limit(&self) -> i32`
 
 The element/char cap a sequence Inspect should apply: the explicit
@@ -2910,6 +2926,10 @@ Unsigned 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63) and high (bits 64-127)
 
 _Fields are private._
+
+#### `pub const MAX: u128`
+
+#### `pub const MIN: u128`
 
 #### `pub fn from_u64(value: u64) -> u128`
 
@@ -3126,6 +3146,10 @@ Signed 128-bit integer
 Stored as two 64-bit parts: low (bits 0-63, unsigned) and high (bits 64-127, signed)
 
 _Fields are private._
+
+#### `pub const MAX: i128`
+
+#### `pub const MIN: i128`
 
 #### `pub fn from_i64(value: i64) -> i128`
 

@@ -274,7 +274,7 @@ pub(crate) fn trait_sig_of_with<'a>(
     trait_env: &TraitEnv,
     signatures: &'a sig::Signatures,
 ) -> Option<&'a TraitSig> {
-    if !trait_env.decl_index.contains(&decl) {
+    if !trait_env.declares_trait(&decl) {
         return None;
     }
     signatures.trait_sig(decl)
@@ -431,32 +431,33 @@ impl TypeSystem {
 }
 
 impl<H: CompilerHost> Elaborator<'_, H> {
-    /// The declaration header of the trait `trait_name` names in this frame.
-    pub(super) fn trait_decl_header_in_frame(&self, trait_name: &str) -> Option<&TraitDeclHeader> {
-        self.trait_decl_header_of(&self.decl_key_or_local(trait_name)?)
-    }
-
-    /// The declaration header of a trait already identified.
-    ///
-    /// Every by-name form here funnels through this one, so a caller holding a
-    /// site answers about the declaration that site resolved to rather than
-    /// re-resolving the spelling in its own frame.
+    /// The declaration header of a trait already identified, so a caller
+    /// answers about the declaration its site resolved to, not a spelling.
     pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
-        let loc = self.tysys.trait_env.decl_index.get(key)?;
-        self.tysys.trait_env.trait_decl_headers.get(loc)
+        self.tysys.trait_env.decl_header_of(key)
     }
 
     /// The trait's declaration of the associated type `assoc_name`, or `None`
     /// when it declares no such type.
     pub(super) fn trait_assoc_type_decl(
         &self,
-        trait_name: &str,
+        key: &DefId,
         assoc_name: &str,
     ) -> Option<&ast::AssociatedTypeDecl> {
-        self.trait_decl_header_in_frame(trait_name)?
-            .assoc_types
-            .iter()
-            .find(|decl| decl.name == assoc_name)
+        self.tysys.trait_env.assoc_type_decl(key, assoc_name)
+    }
+
+    /// The written head of `impl Trait for T`, its name, and the declaration it
+    /// names. The head carries its own reference site, so an aliased
+    /// `impl B for T` answers `Base` rather than a spelling two modules share.
+    fn impl_trait_head<'i>(
+        &self,
+        impl_block: &'i ast::ImplBlock,
+    ) -> Option<(&'i ast::Type, String, DefId)> {
+        let trait_type = impl_block.trait_type.as_ref()?;
+        let trait_name = self.get_type_name(trait_type);
+        let decl = head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))?;
+        Some((trait_type, trait_name, decl))
     }
 
     /// Enforce a trait's associated-type bounds (`type X: Bound`) against an
@@ -464,16 +465,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// bindings. Only the bound's trait is checked, not its associated-type
     /// equality constraints (`Iterator<Item = Self::Item>`).
     pub(super) fn enforce_impl_assoc_type_bounds(&mut self, impl_block: &ast::ImplBlock) {
-        let Some(trait_type) = &impl_block.trait_type else {
+        let Some((_, _, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
-        let trait_name = self.get_type_name(trait_type);
         for binding in &impl_block.associated_types {
-            // The bound carries its own reference site, so which `Ord` it
-            // means is the answer the table already recorded for it — not the
-            // spelling, which two modules can share.
             let bounds: Vec<(String, Option<FqTraitName>)> = self
-                .trait_assoc_type_decl(&trait_name, &binding.name)
+                .trait_assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
                 .filter(|bound| bound.fn_signature.is_none())
@@ -508,15 +505,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// closure, not just the direct ones: a supertrait satisfied structurally
     /// has no impl block of its own to carry the rest of the chain.
     pub(super) fn enforce_impl_supertraits(&mut self, impl_block: &ast::ImplBlock) {
-        let Some(trait_type) = &impl_block.trait_type else {
-            return;
-        };
-        let trait_name = self.get_type_name(trait_type);
-        // The header's own site says which trait it names, so an aliased
-        // `impl B for T` enforces `Base`'s supertraits.
-        let Some(trait_decl) =
-            head_site(trait_type).and_then(|site| self.decl_key_at(site, &trait_name))
-        else {
+        let Some((trait_type, trait_name, trait_decl)) = self.impl_trait_head(impl_block) else {
             return;
         };
         let written = written_arg_nodes_at_target(trait_type, &impl_block.ty);
@@ -560,14 +549,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Find a trait declaration's type parameters (e.g., `<T, U>` in `trait Foo<T, U>`).
-    /// The declared type parameters of an already-identified trait.
+    /// The declared type parameters of an already-identified trait: the
+    /// `<T, U>` of `trait Foo<T, U>`.
     pub(super) fn trait_decl_type_params_of(&self, key: &DefId) -> Option<Vec<ast::GenericParam>> {
-        let loc = self.tysys.trait_env.decl_index.get(key)?;
-        self.tysys
-            .trait_env
-            .trait_decl_headers
-            .get(loc)
+        self.trait_decl_header_of(key)
             .map(|header| header.type_params.clone())
     }
 
@@ -583,9 +568,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return Some(params);
         }
-        // Only the current-module scan can add anything the key lookup did not:
-        // a trait declared here whose canonical key missed the decl index.
-        // (`trait_decl_headers` covers every loaded module, this one included.)
+        // The same headers, reached by module and name, for a trait declared
+        // here that the name resolved to no key at all.
         let defs = self.tysys.resolutions.defs();
         self.tysys
             .trait_env
@@ -1051,7 +1035,7 @@ impl TypeSystem {
     /// than a reference site; a caller with a site asks the site instead.
     fn scoped_trait_decl_key(&self, scope: &TypeLookup, name: &str) -> Option<DefId> {
         let key = scope.declaration(name)?;
-        self.trait_env.decl_index.contains(&key).then_some(key)
+        self.trait_env.declares_trait(&key).then_some(key)
     }
 
     /// Whether what a bound writes for `trait_`'s own parameters answers
@@ -1117,8 +1101,7 @@ impl TypeSystem {
     ) -> Option<&'a ModuleSource> {
         let def = scope.declaration(trait_name)?;
         self.trait_env
-            .decl_index
-            .contains(&def)
+            .declares_trait(&def)
             .then(|| scope.resolutions.defs().module(def))
     }
 
@@ -1679,7 +1662,7 @@ impl TypeSystem {
         let Some(decl) = header.trait_def() else {
             return true;
         };
-        let Some(decl_header) = self.trait_env.trait_decl_headers.get(&decl) else {
+        let Some(decl_header) = self.trait_env.decl_header_of(&decl) else {
             return true;
         };
         header_answers_bound_args(
@@ -2010,7 +1993,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// is no trait at all — a same-named enum case in the prelude.
     pub(super) fn trait_decl_at(&self, site: AstId, written: &str) -> Option<DefId> {
         if let Some(def) = self.tysys.resolutions.declared(site)
-            && self.tysys.trait_env.decl_index.contains(&def)
+            && self.tysys.trait_env.declares_trait(&def)
         {
             return Some(def);
         }
@@ -2085,7 +2068,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// head: the module imported `Alpha as Ay` and never `Alpha`, so the
     /// second resolution found nothing.
     pub(super) fn trait_sig_of(&self, key: &DefId) -> Option<&TraitSig> {
-        if !self.tysys.trait_env.decl_index.contains(key) {
+        if !self.tysys.trait_env.declares_trait(key) {
             return None;
         }
         self.tysys.signatures.trait_sig(*key)
@@ -2111,22 +2094,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (declaring, decl) in assoc_types {
             let known = self.frame_projection(self_type_id, &self_name, &decl.name);
             let answer = known.unwrap_or_else(|| {
-                let bound_names: Vec<FqTraitName> = decl
-                    .bounds
-                    .iter()
-                    .map(|b| self.fq_trait_name_at(b.id, &b.name))
-                    .collect();
-                let bindings = self.frame_assoc_bindings(self_type_id, &self_name, &decl.bounds);
-                self.tysys
-                    .type_table
-                    .borrow_mut()
-                    .make_assoc_type_projection_of_trait(
-                        self_type_id,
-                        Some(*declaring),
-                        decl.name.clone(),
-                        bound_names,
-                        bindings,
-                    )
+                self.make_frame_projection_of_trait(
+                    self_type_id,
+                    &self_name,
+                    *declaring,
+                    &decl.name,
+                )
             });
             answers.push((decl.name.clone(), answer));
         }

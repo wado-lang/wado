@@ -283,14 +283,14 @@ unrelated `impl`'s `type Item = …` answers for a type parameter's, and
 recursion through the right-hand side has no fixpoint. An unanswered name
 stays abstract.
 
-### Name-keyed facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
+### AST-shaped facts belong to `TraitEnv`, `TypeId`-level facts to `Signatures`
 
 Both are declaration facts, and the phase that asks decides which structure
 can answer. `TraitEnv::build` runs before any decl pass; `Signatures` is
 assembled after all of them. So a fact the decl pass needs _about itself_ —
 which trait declares `Self::X`, asked while resolving that trait's own method
-signatures — can only live on `TraitEnv`, alongside `assoc_type_bound_index`.
-Filing it in the digest type-checks and silently answers `None`.
+signatures — can only live on `TraitEnv`, alongside `TraitDeclHeader`. Filing
+it in the digest type-checks and silently answers `None`.
 
 ### One place per question
 
@@ -596,9 +596,8 @@ A method reached through a generic bound instantiates the recorded
   bound (`I: IntoIterator<Item = u8>` answers `I::Item`) or from a
   projection receiver's own bindings. Use-site data, so it enters as
   `SlotProjections`, never as a re-resolution.
-- The `ast::TraitBound` lists behind both. Declaration facts, but name-keyed
-  and AST-shaped, so they stay on `TraitEnv` — `assoc_type_bound_index` and
-  `TraitDeclHeader::assoc_types`.
+- The `ast::TraitBound` lists behind both. Declaration facts, but AST-shaped,
+  so they stay on `TraitEnv` as `TraitDeclHeader::assoc_types`.
 
 The query writes no walk state: no scope to enter, no `self_type` to set, no
 `assoc_type_bindings` to seed and restore.
@@ -667,6 +666,27 @@ measured against.
   the partial ones are deleted rather than wrapped.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
+
+### A data declaration admits an effect parameter it then ignores
+
+`struct Holder<effect E, T>` and `variant Maybe<effect E, T>` parse and compile.
+The dense type-argument space holds no position for `E` (`RealTypeParams`), so
+the parameter names nothing a use site can fill and nothing a body can read. A
+declaration whose parameter means nothing is a declaration the language should
+not admit. Derivation sees the same shape and stops short of it: at `-O0`,
+`Maybe::Just(3)` on the power-assert operand path reports
+`Maybe<i32> does not implement ReflectVariant` from `core:prelude`, which names
+neither the effect parameter nor the declaration that wrote it.
+
+An `impl` head admits one on the same terms, where it named a slot no argument
+filled until `register_impl_block_params` stopped counting it.
+
+Closing it takes a decision on the language rule: reject the parameter at its
+own span when a `struct`, `variant`, newtype or `impl` declares one, and both
+the silent drop and that diagnostic go away. Until then, the slot is filtered
+rather than refused, which is what
+`tests/fixtures/data_decl_non_real_type_param_slot.wado` and
+`tests/fixtures/impl_assoc_type_non_real_param_slot.wado` pin.
 
 ### A trait's default body answers to no package boundary
 
@@ -830,9 +850,10 @@ arguments.
 
 The completeness rule holds for the facts that exist; what is left is the
 facts that do not. Reify carries `symbols` and `loaded_modules` for 7 reads,
-runs `type_lookup()` at 14 sites, and keeps `current_type_param_names` and
-`current_effect_param_names` so its one surviving `resolve_type` has a scope —
-in a phase whose contract is that it resolves no names.
+runs `type_lookup()` at 14 sites, and keeps `current_effect_param_names` so an
+effect name that is a parameter resolves — in a phase whose contract is that it
+resolves no names. Its one surviving resolution, `resolve_global_type`, reads a
+global's declared type in that global's own module scope.
 
 The reads that remain are also fail-safe where the contract is fail-loud: 84
 `unwrap_or*` defaults against 48 `.expect`s. Most are legitimately optional
@@ -841,11 +862,25 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
 rejected the input, so the reify-side read is an `.expect`.
 
+<<<<<<< HEAD
 Finishing it means one recorded fact per question reify re-asks: the callee's
 shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
 owner and case index on every case identifier and pattern, and the resolved
 effects on the written `fn(…) with E` node. The two borrowed AST inputs, the two
 type-param name lists and the surviving `resolve_type` then have no caller left.
+||||||| e72a0a50d
+Closing it: a recorded fact per question reify re-asks — the callee's shape on
+a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
+case index on every case identifier and pattern, the resolved effects on the
+written `fn(…) with E` node — after which the two borrowed AST inputs, the two
+type-param name lists and the surviving `resolve_type` have no caller left.
+=======
+Closing it: a recorded fact per question reify re-asks — the callee's shape on
+a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
+case index on every case identifier and pattern, the resolved effects on the
+written `fn(…) with E` node — after which the two borrowed AST inputs, the
+effect-param name list and `resolve_global_type` have no caller left.
+>>>>>>> origin/main
 
 ### The same shape is written several times
 

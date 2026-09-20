@@ -37,7 +37,9 @@ use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
 use crate::elaborator::trait_env::written_type_arg;
-use crate::elaborator::types::{ImplMemberKind, StructFieldInfo, newtype_member_owner};
+use crate::elaborator::types::{
+    ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
+};
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::tir::{AnonStructId, PrimitiveType, StructDef};
@@ -3718,6 +3720,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .map(|def| self.tysys.resolutions.defs().name(def).to_string())
             .unwrap_or_else(|| struct_name.clone());
 
+        // `Box::<i32> { … }` says what `let b: Box<i32> = …` says, so it
+        // resolves as that annotation and takes its place, arity and bound
+        // checks included.
+        let expected_type = if struct_lit.type_args.is_empty() {
+            expected_type
+        } else {
+            let (site, written) = struct_lit
+                .name_id
+                .zip(name.as_deref())
+                .expect("only a named literal parses a turbofish");
+            Some(self.resolve_generic_type(site, written, &struct_lit.type_args, struct_lit.span))
+        };
+
         // Get expected field types using (name, module_source) lookup.
         //
         // An annotation naming this struct's instantiation pins the declared
@@ -3821,12 +3836,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.record_reference_to_def(use_id, def_id);
         }
 
-        // Resolve field expressions, converting tuple literals to arrays when needed.
-        // For generic structs, tuple-to-sequence coercion may be deferred to a second
-        // pass after type arguments are inferred from field values.
-        // Indexes into `struct_lit.fields`, not into `fields`, which is sorted
-        // into declaration order before the second pass reads it.
-        let mut deferred_coercions: Vec<usize> = Vec::new();
+        // A generic struct's field waits for the second pass, where the type
+        // arguments inferred from the field values are in hand. Indexes into
+        // `struct_lit.fields`, not into `fields`, which is sorted into
+        // declaration order before that pass reads it.
+        let mut deferred_fields: Vec<usize> = Vec::new();
         let fields: Vec<ResolvedField> = struct_lit
             .fields
             .iter()
@@ -3839,10 +3853,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .find(|(name, _)| name == &field.name)
                     .map(|(_, type_id)| *type_id);
 
-                // For tuple literals in generic struct fields where the field type
-                // contains type params (e.g., List<T>), skip providing the expected
-                // type so the tuple isn't coerced yet. Instead, resolve as a plain
-                // tuple and defer coercion to after type inference.
+                // A tuple literal under a field type naming a slot (`List<T>`)
+                // resolves as a plain tuple: the coercion needs the argument
+                // these very values are about to fix.
                 let needs_deferred_coercion = is_tuple_literal
                     && expected_field_type
                         .is_some_and(|t| self.tysys.type_table.borrow().contains_type_param(t));
@@ -3852,38 +3865,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     expected_field_type
                 };
 
-                // Use expected type for literal coercion (e.g., 0 -> u64 when field is u64)
                 let type_id = self.resolve_expr(&field.value, ctx, effective_expected);
 
-                // Track tuple literals whose coercion was deferred because the field
-                // type had unresolved type parameters. After type inference, we'll
-                // re-coerce with the concrete type (the second pass below records
-                // the coercion via `try_coerce_tuple_to_sequence`; reify replays
-                // it). The test is read from the AST — a spread tuple used to
-                // resolve to a block (never deferred), so only spread-free tuple
-                // literals are deferred here.
+                // Read from the AST, because a spread tuple used to resolve to
+                // a block and so was never deferred.
                 let tuple_is_spread_free = matches!(
                     &field.value,
                     ast::Expr::TupleLiteral(t)
                         if !t.elements.iter().any(|e| matches!(e, Expr::Spread(..)))
                 );
                 let coercion_deferred = needs_deferred_coercion && tuple_is_spread_free;
-                if coercion_deferred {
-                    deferred_coercions.push(provided_idx);
-                }
                 // A field whose declared type names a slot is not a constraint
-                // on the value — the value is what fixes the slot. Fields
+                // on the value; the value is what fixes the slot. Fields
                 // sharing a slot are compared to each other in
-                // `infer_struct_type_args`; comparing one against the
-                // *inferred* argument instead reads back whatever the caller's
-                // expected type put there, not this literal's answer.
+                // `infer_struct_type_args`.
                 let field_names_slot = expected_field_type
                     .is_some_and(|t| self.tysys.type_table.borrow().contains_rigid_param(t));
                 let check_deferred = coercion_deferred || field_names_slot;
+                if check_deferred {
+                    deferred_fields.push(provided_idx);
+                }
 
-                // Check field name exists in struct definition
-                if struct_fields_known && !struct_field_types.iter().any(|(n, _)| n == &field.name)
-                {
+                if struct_fields_known && expected_field_type.is_none() {
                     let _ = self.emit(TypeError::ExtraField {
                         struct_name: display_name.clone(),
                         field_name: field.name.clone(),
@@ -3891,16 +3894,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     });
                 }
 
-                // Check field value type against declared struct field type.
-                // A field whose coercion was deferred still holds its literal
-                // shape — the sequence coercion has not run — so checking it
+                // A deferred field still holds its literal shape, so checking it
                 // here would compare `[…]` against the sequence it is about to
                 // become. The second pass checks it once coerced.
-                if !check_deferred
-                    && let Some((_, expected_type_id)) =
-                        struct_field_types.iter().find(|(n, _)| n == &field.name)
-                {
-                    self.typecheck(type_id, *expected_type_id, field.value.span());
+                if !check_deferred && let Some(expected_type_id) = expected_field_type {
+                    self.typecheck(type_id, expected_type_id, field.value.span());
                 }
 
                 let decl_idx = struct_field_types
@@ -4067,11 +4065,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .collect()
             };
 
-            // Second pass: apply deferred tuple-to-sequence coercion now that
-            // concrete type arguments are known. For example, [10, 20, 30] in
-            // `Container<i32> { items: [10, 20, 30] }` needs List<i32> coercion,
-            // but at first pass the field type was List<T> (type param).
-            for &ast_idx in &deferred_coercions {
+            // Second pass: coerce and check what the first pass deferred, now
+            // that the type arguments are known. `[10, 20, 30]` in
+            // `Container<i32> { items: [10, 20, 30] }` needs its `List<i32>`
+            // coercion, which the first pass saw only as `List<T>`. Every
+            // deferred field is revisited, coercion or not: a deferral that
+            // reaches no second pass is no check at all.
+            for &ast_idx in &deferred_fields {
                 let ast_field = &struct_lit.fields[ast_idx];
                 let Some(concrete_type) = struct_field_types
                     .iter()
@@ -4094,22 +4094,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     fields[field_idx].type_id = coerced;
                 }
-                // The check the first pass skipped — but only once the slot is
-                // actually filled. A field type that still names a rigid
-                // parameter is one this literal did not pin, and comparing
-                // against a declaration's own slot is the very thing the first
-                // pass was skipping.
-                if !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_rigid_param(concrete_type)
-                {
-                    self.typecheck(
-                        fields[field_idx].type_id,
-                        concrete_type,
-                        ast_field.value.span(),
-                    );
+                // Either side still naming a slot this literal could fill is
+                // the case the first pass was skipping: comparing it reads back
+                // an inferred argument rather than this literal's answer.
+                let value_type = fields[field_idx].type_id;
+                let settled = {
+                    let table = self.tysys.type_table.borrow();
+                    !table.contains_fillable_slot(concrete_type)
+                        && !table.contains_fillable_slot(value_type)
+                };
+                if settled {
+                    self.typecheck(value_type, concrete_type, ast_field.value.span());
                 }
             }
 
@@ -4469,7 +4464,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            type_params: Vec::new(),
+            type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);

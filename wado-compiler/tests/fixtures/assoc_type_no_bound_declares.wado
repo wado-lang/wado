@@ -1,0 +1,17 @@
+// `T::Assoc` names a trait's associated type, so a name none of `T`'s bounds
+// declares is an unknown type rather than a projection with no owner.
+
+trait Producer with () {
+    type Output;
+
+    fn produce(&self) -> i32;
+}
+
+fn take<T: Producer>(p: &T) -> T::Missing {
+    return p.produce();
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown type 'T::Missing'"}

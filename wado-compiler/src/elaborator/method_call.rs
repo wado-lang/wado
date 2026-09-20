@@ -1,6 +1,6 @@
 //! Method call and static method call resolution.
 
-use super::trait_env::ImplTargetKey;
+use super::trait_env::{ImplTargetKey, written_arg_nodes};
 use crate::ast::{self, AstId};
 use crate::compiler_host::CompilerHost;
 use crate::defs::DefId;
@@ -37,7 +37,7 @@ use crate::elaborator::trait_env::{
     BlanketBound, BlanketReceiver, ImplHeader, get_type_name_static,
 };
 use crate::elaborator::types::{ImplMemberKind, RequiredTrait};
-use crate::name::{DeclName, FqTraitName};
+use crate::name::{DeclName, FqTraitName, unalias_namespace_member};
 use crate::resolve::Resolution;
 use crate::unparse::unparse_type_into;
 use crate::{hashmap, tir};
@@ -1195,20 +1195,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Whether `Trait::method` names a trait's instance method, making a call
-    /// on it the trait-qualified (UFCS) form `Trait::method(recv, args…)`
-    /// (WEP 2026-07-31). A trait's *static* method is not included: it has no
-    /// receiver argument to bind `Self` from.
-    pub(super) fn is_trait_instance_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
-            kind != ast::SelfKind::None
-        })
-    }
-
-    /// [`Self::is_trait_instance_method`] asked of the site that wrote the
-    /// trait's name. A namespaced spelling (`ns::Trait::method`) reaches its
-    /// declaration through the `ns$Trait` alias the resolve walk recorded,
-    /// where the importing module can name no `Trait` of its own.
+    /// Whether the trait named at `head_site` declares `method_name` with a
+    /// receiver, making a call on it the trait-qualified (UFCS) form
+    /// `Trait::method(recv, args…)` (WEP 2026-07-31).
     pub(super) fn is_trait_instance_method_at(
         &self,
         head_site: AstId,
@@ -1222,13 +1211,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// [`Self::is_trait_instance_method`] for the receiver-less kind — what
+    /// [`Self::is_trait_instance_method_at`] for the receiver-less kind — what
     /// `Trait::<T>::method(…)` binds `Self` for, since it has no receiver
     /// argument to pin it.
-    pub(super) fn is_trait_static_method(&self, trait_name: &str, method_name: &str) -> bool {
-        self.trait_declares_method(self.decl_key_or_local(trait_name), method_name, |kind| {
-            kind == ast::SelfKind::None
-        })
+    pub(super) fn is_trait_static_method_at(
+        &self,
+        head_site: AstId,
+        trait_name: &str,
+        method_name: &str,
+    ) -> bool {
+        self.trait_declares_method(
+            self.decl_key_at(head_site, trait_name),
+            method_name,
+            |kind| kind == ast::SelfKind::None,
+        )
     }
 
     fn trait_declares_method(
@@ -1266,7 +1262,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys.resolutions.get(site)
             }),
             args: None,
-            display: self.declared_trait_name(trait_name),
+            display: self.declared_trait_name(head_site, trait_name),
         };
         let type_args: Vec<TypeId> = self.resolve_turbofish_args(&call.type_args);
         // The edge for jump-to-definition is recorded against the method name,
@@ -1421,16 +1417,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // resolve: intercept and route to `T`'s synthesized `T^Trait::method`.
         // It is the only spelling — a bare `T::members()` never resolves, so
         // type namespaces stay the author's.
-        if let ast::Type::Generic(g) = &static_call.target_type
-            && let Some(dispatch) = self.reflect_dispatch_of(&g.name, &static_call.method)
+        let head = self.written_head(&static_call.target_type);
+        if let Some(head) = &head
+            && let Some(dispatch) = self.reflect_dispatch_of(&head.name, &static_call.method)
         {
-            let [self_ty_ast] = g.args.as_slice() else {
+            let [self_ty_ast] = head.args else {
                 let _ = self.emit(TypeError::UnknownFunction {
                     name: format!(
                         "{}::<…>::{} (one subject type argument, found {})",
-                        g.name,
+                        unalias_namespace_member(&head.name),
                         static_call.method,
-                        g.args.len()
+                        head.args.len()
                     ),
                     span: static_call.span,
                 });
@@ -1462,9 +1459,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Tag::<Point>::tag()` where `Tag` is a trait resolves to no type;
         // unreported it types `unknown` and lowering builds an invalid module.
         if target_type_id == TypeTable::UNKNOWN
-            && let ast::Type::Generic(g) = &static_call.target_type
+            && let Some(head) = &head
             && self
-                .decl_key_at(g.id, &g.name)
+                .decl_key_at(head.site, &head.name)
                 .is_some_and(|key| self.tysys.trait_env.declares_trait(&key))
         {
             // `Take::<A>::take(recv, …)` — the trait-turbofish qualified call
@@ -1476,18 +1473,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // zero-parameter trait the turbofish cannot be trait arguments
             // (`Shape::<Sq>::area` writes the receiver — a pre-existing
             // misuse), so that shape keeps its unknown-function error.
-            if self.is_trait_instance_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_some_and(|params| !params.is_empty() && params.len() == g.args.len())
+            let trait_params = self
+                .decl_key_at(head.site, &head.name)
+                .and_then(|key| self.trait_decl_type_params_of(&key))
+                .unwrap_or_default();
+            if self.is_trait_instance_method_at(head.site, &head.name, &static_call.method)
+                && !trait_params.is_empty()
+                && trait_params.len() == head.args.len()
             {
-                let declared_head = self.declared_trait_name(&g.name);
-                let trait_args: Vec<TypeId> = g.args.iter().map(|a| self.resolve_type(a)).collect();
-                let args_spelled: Vec<String> =
-                    g.args.iter().map(|a| self.get_type_name_full(a)).collect();
+                let declared_head = self.declared_trait_name(Some(head.site), &head.name);
+                let trait_args: Vec<TypeId> =
+                    head.args.iter().map(|a| self.resolve_type(a)).collect();
+                let args_spelled: Vec<String> = head
+                    .args
+                    .iter()
+                    .map(|a| self.get_type_name_full(a))
+                    .collect();
                 let required = RequiredTrait {
-                    decl: self.tysys.resolutions.get(g.id),
+                    decl: self.tysys.resolutions.get(head.site),
                     args: Some(trait_args),
                     display: format!("{declared_head}<{}>", args_spelled.join(", ")),
                 };
@@ -1511,12 +1514,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // where the trait declares no parameters of its own: the branch
             // above claims the turbofish for a trait that does, and there is
             // then nowhere left to write `Self`.
-            if let [self_ty_ast] = g.args.as_slice()
-                && self.is_trait_static_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_none_or(|params| params.is_empty())
+            if let [self_ty_ast] = head.args
+                && self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
+                && trait_params.is_empty()
                 && self.resolve_type(self_ty_ast) != TypeTable::UNKNOWN
             {
                 let mut on_self = static_call.clone();
@@ -1524,20 +1524,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Restricted to the named trait: the rewritten spelling reads
                 // as `V::tag(…)`, and without it a case or an inherent static
                 // `V` declares of that name answers in the trait's place.
-                let required = self.tysys.resolutions.declared(g.id);
+                let required = self.tysys.resolutions.declared(head.site);
                 return self.resolve_static_method_call_of_trait(&on_self, required, ctx);
             }
             // The same spelling on a trait that does declare parameters: the
             // turbofish is already spoken for, so say that rather than let the
             // call read as an unknown function.
-            if self.is_trait_static_method(&g.name, &static_call.method)
-                && self
-                    .decl_key_at(g.id, &g.name)
-                    .and_then(|key| self.trait_decl_type_params_of(&key))
-                    .is_some_and(|params| !params.is_empty())
+            if self.is_trait_static_method_at(head.site, &head.name, &static_call.method)
+                && !trait_params.is_empty()
             {
                 let _ = self.emit(TypeError::StaticNeedsWrittenReceiver {
-                    trait_name: self.declared_trait_name(&g.name),
+                    trait_name: self.declared_trait_name(Some(head.site), &head.name),
                     method: static_call.method.clone(),
                     span: static_call.span,
                 });
@@ -1699,16 +1696,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Not folded into `lookup_static_method_param_types`: variant
         // constructors need its answer to stay empty.
         {
-            let has_type_args = matches!(&static_call.target_type, ast::Type::Generic(_))
-                || !method_type_args.is_empty();
+            // `ns::Wrapper<T>` supplies the target's arguments as `Wrapper<T>`
+            // does; the namespace is the head's question, not the list's.
+            let declaring_args: Vec<TypeId> = written_arg_nodes(&static_call.target_type)
+                .iter()
+                .map(|t| self.resolve_type(t))
+                .collect();
+            let has_type_args = !declaring_args.is_empty() || !method_type_args.is_empty();
             if has_type_args
                 && !param_types.is_empty()
                 && let Some(sig) = callee_sig.as_ref()
             {
-                let declaring_args: Vec<TypeId> = match &static_call.target_type {
-                    ast::Type::Generic(g) => g.args.iter().map(|t| self.resolve_type(t)).collect(),
-                    _ => vec![],
-                };
                 // `TreeMap::<String, i32>` spells the *target's* arguments;
                 // `impl … for TreeMap<String, V>` numbers only `V`. The
                 // declaring block is what aligns the two.
@@ -2400,12 +2398,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
         }
 
+        // The receiver as the match above resolved it, which carries the
+        // declaring module. Re-deriving it from `struct_name` asks the call
+        // site's own scope, where `geo::Wrapper::<i64>::make(…)` has no bare
+        // `Wrapper` to find and mints a shape head under the wrong module.
+        let receiver_name = mangled_struct_name.head_only();
+
         // Build monomorph_info for generic instantiations
         let monomorph_info = if struct_type_args.is_empty() && method_type_args.is_empty() {
             None
         } else {
             let generic_name = MethodName::format_local(
-                &self.qualified_receiver_name(&struct_name),
+                &receiver_name,
                 trait_name_opt.as_ref(),
                 &static_call.method,
             );
@@ -2427,12 +2431,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect();
 
         // Build method_info with base struct name and trait name (if applicable)
-        let mut method_info = LocalMethodName::new(
-            self.qualified_receiver_name(&struct_name),
-            trait_name_opt,
-            static_call.method.clone(),
-        )
-        .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
+        let mut method_info =
+            LocalMethodName::new(receiver_name, trait_name_opt, static_call.method.clone())
+                .with_type_args(&impl_only_type_arg_names, &method_type_arg_names);
 
         // The `#[cm("...")]` import the callee binds, off the signature this
         // call resolved to, at the receiver it resolved at.

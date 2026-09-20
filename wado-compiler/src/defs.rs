@@ -55,6 +55,14 @@ impl std::fmt::Debug for DefId {
     }
 }
 
+#[cfg(test)]
+impl DefId {
+    /// A distinct identity for a unit test that needs one without a [`Defs`].
+    pub(crate) fn for_test(raw: u32) -> Self {
+        Self(raw)
+    }
+}
+
 /// What a declaration declares.
 ///
 /// The question "is this name a trait / an effect / a resource" is asked of the

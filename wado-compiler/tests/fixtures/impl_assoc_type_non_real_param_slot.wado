@@ -1,0 +1,56 @@
+// An impl's type parameters name slots by position in the dense type-argument
+// space. Counting an effect parameter shifted every slot written after it, so
+// `type First = A` recorded B's index: the projection resolved to the wrong
+// type and reached codegen as invalid Wasm, or as no type at all.
+
+trait Pair with () {
+    type First;
+    fn first(&self) -> Self::First;
+}
+
+trait Second with () {
+    type Last;
+    fn last(&self) -> Self::Last;
+}
+
+struct Two<A, B> {
+    a: A,
+    b: B,
+}
+
+impl<effect E, A, B> Pair for Two<A, B> {
+    type First = A;
+
+    fn first(&self) -> Self::First {
+        return self.a;
+    }
+}
+
+impl<effect E, A, B> Second for Two<A, B> {
+    type Last = B;
+
+    fn last(&self) -> Self::Last {
+        return self.b;
+    }
+}
+
+fn take_first<P: Pair>(p: &P) -> P::First {
+    return p.first();
+}
+
+fn take_last<S: Second>(s: &S) -> S::Last {
+    return s.last();
+}
+
+export fn run() {
+    let t = Two { a: 7, b: "hi" };
+
+    let f: i32 = take_first(&t);
+    assert f == 7;
+
+    let l: String = take_last(&t);
+    assert l == "hi";
+}
+
+__DATA__
+{}

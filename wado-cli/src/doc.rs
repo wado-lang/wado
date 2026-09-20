@@ -431,6 +431,38 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    fn simple_all_of(source: &str) -> String {
+        let parsed = wado_compiler::parse(source)
+            .into_fail_fast()
+            .expect("parse");
+        let doc = extract_doc_with(&parsed.ast, &parsed.trivia, source, "demo", true);
+        render_single(&doc, "simple", "demo.wado", OutputFormat::Simple)
+    }
+
+    /// `--all` documents a struct at every visibility.
+    #[test]
+    fn an_internal_struct_heads_its_impl_block_with_its_own_name() {
+        let out = simple_all_of(
+            "//! Demo.\n\ninternal struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n}\n",
+        );
+        assert!(
+            out.contains("impl Limit {"),
+            "an internal struct's impl block must name the struct:\n{out}"
+        );
+    }
+
+    /// A `pub const` is part of the type's API wherever it is declared.
+    #[test]
+    fn a_struct_documents_its_associated_constants() {
+        let out = markdown_of(
+            "//! Demo.\n\npub struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n\n    pub fn get(&self) -> i32 {\n        return self.value;\n    }\n}\n",
+        );
+        assert!(
+            out.contains("pub const MAX: i32"),
+            "a struct's associated constant must be documented:\n{out}"
+        );
+    }
+
     #[test]
     fn a_type_parameter_renders_its_default() {
         let out = markdown_of(
@@ -757,6 +789,9 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     }
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
+    }
+    for c in &s.constants {
+        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
     }
     for m in &s.methods {
         render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
@@ -1212,15 +1247,11 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
     for s in &doc.structs {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
-        if !s.methods.is_empty() {
-            let type_name = s
-                .signature
-                .strip_prefix("pub ")
-                .unwrap_or(&s.signature)
-                .strip_prefix("struct ")
-                .and_then(|rest| rest.split([' ', '<', '{']).next())
-                .unwrap_or("?");
-            writeln!(out, "\nimpl {type_name} {{").unwrap();
+        if !s.constants.is_empty() || !s.methods.is_empty() {
+            writeln!(out, "\nimpl {} {{", s.name).unwrap();
+            for c in &s.constants {
+                writeln!(out, "    {};", c.signature).unwrap();
+            }
             for m in &s.methods {
                 writeln!(out, "    {};", m.signature).unwrap();
             }

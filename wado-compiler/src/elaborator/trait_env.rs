@@ -575,11 +575,6 @@ impl DefaultArg {
     }
 }
 
-/// Every `trait` declaration in the program. Membership is the question — is
-/// this declaration a trait? — and the declaration is its own answer, so there
-/// is nothing to store beside it.
-pub(super) type TraitDeclIndex = IndexSet<DefId>;
-
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
 ///
@@ -812,8 +807,6 @@ pub struct TraitEnv {
     /// on that path.
     by_receiver: ReceiverImplIndex,
     all_by_receiver: ReceiverImplIndex,
-    /// Trait name → trait declaration location.
-    pub(super) decl_index: TraitDeclIndex,
     /// Every declaration in the program. Held here so a query keyed by an
     /// identity can render one for a diagnostic without every caller threading
     /// the table.
@@ -864,10 +857,6 @@ pub struct TraitEnv {
     ///
     /// Rebuilt per load: a re-parse mints a new space.
     space_modules: IndexMap<ast::AstIdSpace, ModuleSource>,
-    /// Associated-type name → the declaring trait's bounds for it, first
-    /// declaration wins (matching the previous whole-program scan order).
-    /// Consumed by `find_assoc_type_bounds` without an AST scan.
-    pub(super) assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>>,
     /// Blanket impls by the trait they implement, in registration order. The
     /// single classification source for blanket dispatch (module, receiver
     /// kind, param, bounds), and where the monomorphizer finds the home module
@@ -994,10 +983,7 @@ impl TraitEnv {
         }
         let mut impl_index: TraitImplIndex = IndexMap::default();
         let mut all_impl_index: TraitImplIndex = IndexMap::default();
-        let mut decl_index: TraitDeclIndex = IndexSet::default();
         let mut effect_decl_index: EffectDeclIndex = IndexSet::default();
-        let mut assoc_type_bound_index: IndexMap<String, Vec<ast::TraitBound>> =
-            IndexMap::default();
         let mut resource_decl_index: ResourceDeclIndex = IndexSet::default();
         let mut blanket_impls: IndexMap<DefId, Vec<BlanketImpl>> = IndexMap::default();
         let mut impl_headers: IndexMap<DefId, ImplHeader> = IndexMap::default();
@@ -1025,20 +1011,6 @@ impl TraitEnv {
         for (module_source, module) in modules {
             for item in &module.items {
                 match item {
-                    Item::Trait(trait_decl) => {
-                        // Keyed by the declaration, so two modules declaring a
-                        // same-named trait cannot share an entry. The previous
-                        // bare-name key first-wrote-wins and silently routed
-                        // both declarations to the same one.
-                        if let Some(def) = defs.of_ast_id(trait_decl.id) {
-                            decl_index.insert(def);
-                        }
-                        for assoc in &trait_decl.associated_types {
-                            assoc_type_bound_index
-                                .entry(assoc.name.clone())
-                                .or_insert_with(|| assoc.bounds.clone());
-                        }
-                    }
                     Item::Interface(effect_decl) => {
                         if let Some(def) = defs.of_ast_id(effect_decl.id) {
                             effect_decl_index.insert(def);
@@ -1330,6 +1302,9 @@ impl TraitEnv {
             }
         }
 
+        // Every trait declaration, as the whole-program checks below want it.
+        let decl_index: IndexSet<DefId> = trait_decl_headers.keys().copied().collect();
+
         // The one answer to "which declaration does this written name mean?",
         // from the writing module's vantage. Every whole-program check below
         // takes it rather than reading a head off the AST, so no check can
@@ -1385,7 +1360,6 @@ impl TraitEnv {
                 all_by_receiver: index_by_receiver(&all_impl_index, defs),
                 impl_index,
                 all_impl_index,
-                decl_index,
                 defs: resolutions.defs().clone(),
                 effect_decl_index,
                 resource_decl_index,
@@ -1405,7 +1379,6 @@ impl TraitEnv {
                 decls_by_name,
                 module_namespace_imports,
                 space_modules,
-                assoc_type_bound_index,
                 blanket_impls,
                 impl_method_index,
                 resource_static_method_index,
@@ -1529,7 +1502,7 @@ impl TraitEnv {
 
     /// Whether `key` names a trait declaration.
     pub(crate) fn declares_trait(&self, key: &DefId) -> bool {
-        self.decl_index.contains(key)
+        self.trait_decl_headers.contains_key(key)
     }
 
     /// Every declaration written under `name`, whichever module declares it.
@@ -1563,7 +1536,7 @@ impl TraitEnv {
         let written = args_at_impl_target(fq.args().to_vec(), target, resolutions);
         let Some(params) = fq
             .canonical()
-            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .and_then(|decl| self.decl_header_of(&decl))
             .map(|header| &header.type_params)
         else {
             return fq.with_args(written);
@@ -1585,7 +1558,7 @@ impl TraitEnv {
         }
         let Some(params) = fq
             .canonical()
-            .and_then(|decl| self.trait_decl_headers.get(&decl))
+            .and_then(|decl| self.decl_header_of(&decl))
             .map(|header| &header.type_params)
         else {
             return fq;
@@ -1621,8 +1594,7 @@ impl TraitEnv {
     /// The type parameters `trait_` declares, empty for one that declares none
     /// and for a name reaching no declaration.
     pub(super) fn trait_decl_params(&self, trait_: DefId) -> &[ast::GenericParam] {
-        self.trait_decl_headers
-            .get(&trait_)
+        self.decl_header_of(&trait_)
             .map_or(&[], |header| header.type_params.as_slice())
     }
 
@@ -1634,7 +1606,7 @@ impl TraitEnv {
         trait_: DefId,
         wanted: &[name::FqTypeName],
     ) -> Option<usize> {
-        let defaults = &self.trait_decl_headers.get(&trait_)?.default_args;
+        let defaults = &self.decl_header_of(&trait_)?.default_args;
         self.entries_by_receiver(receiver).find_map(|entry| {
             let header = self.impl_headers.get(&entry)?;
             if header.trait_def() != Some(trait_) {
@@ -1713,7 +1685,7 @@ impl TraitEnv {
     /// `key` itself when it declares a trait, else `None` — the question the
     /// callers actually ask, phrased as the identity they then compare.
     pub(crate) fn trait_def(&self, key: &DefId) -> Option<DefId> {
-        self.decl_index.contains(key).then_some(*key)
+        self.declares_trait(key).then_some(*key)
     }
 
     /// The trait an [`crate::name::FqTraitName`] names, when it names a trait
@@ -1867,8 +1839,8 @@ impl TraitEnv {
     /// stdlib trait, so this is its identity — and a user trait sharing the
     /// name is a different declaration, not an exemption to special-case.
     pub(super) fn stdlib_trait_decl_key(&self, name: &str) -> Option<ImplTargetKey> {
-        self.decl_index
-            .iter()
+        self.trait_decl_headers
+            .keys()
             .find(|def| self.defs.name(**def) == name && !is_user_local(self.defs.module(**def)))
             .map(|def| ImplTargetKey::Decl(*def))
     }
@@ -1879,8 +1851,87 @@ impl TraitEnv {
         let ImplTargetKey::Decl(decl_key) = key else {
             return None;
         };
-        let loc = self.decl_index.get(decl_key)?;
-        self.trait_decl_headers.get(loc)
+        self.decl_header_of(decl_key)
+    }
+
+    /// The digested declaration `key` identifies, or `None` when it names no
+    /// trait.
+    pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
+        self.trait_decl_headers.get(key)
+    }
+
+    /// The trait's declaration of the associated type `assoc_name`, or `None`
+    /// when `key` names no trait or that trait declares no such type.
+    pub(super) fn assoc_type_decl(
+        &self,
+        key: &DefId,
+        assoc_name: &str,
+    ) -> Option<&ast::AssociatedTypeDecl> {
+        self.decl_header_of(key)?
+            .assoc_types
+            .iter()
+            .find(|decl| decl.name == assoc_name)
+    }
+
+    /// Whether the trait `key` identifies declares `assoc_name`.
+    pub(super) fn declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
+        self.assoc_type_decl(key, assoc_name).is_some()
+    }
+
+    /// The supertrait of `key` declaring `assoc_name`, re-spelled at `written`.
+    /// A trait inherits its supertraits' associated types, so `T: Ord` answers
+    /// for `Eq`'s.
+    pub(super) fn supertrait_declaring_assoc_type(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        self.supertrait_closure_at(key, written)
+            .into_iter()
+            .find(|inherited| self.declares_assoc_type(&inherited.decl, assoc_name))
+            .map(|inherited| inherited.decl)
+    }
+
+    /// `key` or the supertrait of it declaring `assoc_name`, making
+    /// `<T as key>::assoc_name` mean the trait that declared it.
+    pub(super) fn trait_declaring_assoc_type(
+        &self,
+        key: &DefId,
+        written: &[ast::Type],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        if self.declares_assoc_type(key, assoc_name) {
+            return Some(*key);
+        }
+        self.supertrait_declaring_assoc_type(key, written, assoc_name)
+    }
+
+    /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
+    /// `<T as ThatTrait>::assoc_name`.
+    // `resolve` says which declaration each bound names: only its reader knows
+    // the scope it was written in.
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        bounds: &[ast::TraitBound],
+        assoc_name: &str,
+        resolve: impl Fn(&ast::TraitBound) -> Option<DefId>,
+    ) -> Option<DefId> {
+        bounds
+            .iter()
+            .filter_map(&resolve)
+            .find(|decl| self.declares_assoc_type(decl, assoc_name))
+            // Searched after every direct bound, so a trait redeclaring the
+            // name still wins for itself.
+            .or_else(|| {
+                bounds.iter().find_map(|bound| {
+                    self.supertrait_declaring_assoc_type(
+                        &resolve(bound)?,
+                        &bound.type_args,
+                        assoc_name,
+                    )
+                })
+            })
     }
 
     /// Produce a new `TraitEnv` carrying the synthesis-layer impls — every
@@ -2724,7 +2775,7 @@ fn check_inherent_impl_collisions(
 fn check_all_orphan_rules(
     defs: &DefTable,
     impl_headers: &IndexMap<DefId, ImplHeader>,
-    decl_index: &TraitDeclIndex,
+    decl_index: &IndexSet<DefId>,
     type_decl_index: &IndexSet<DefId>,
     resolve: ResolveWritten<'_>,
 ) -> Vec<(ModuleSource, TypeError)> {

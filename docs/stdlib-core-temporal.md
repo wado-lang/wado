@@ -85,6 +85,10 @@ Sub-second component, always in `0..<1_000_000_000`. Incrementing
 `Instant { seconds: -1, nanoseconds: 999_999_999 }`). Use `Instant::new`
 to normalize an arbitrary count into this range; the accessors assume it.
 
+#### `pub const EPOCH: Instant`
+
+The Unix epoch itself, 1970-01-01T00:00:00Z.
+
 #### `pub fn new(seconds: i64, nanoseconds: i64) -> Instant`
 
 Construct an instant `nanoseconds` after `seconds` since the Unix epoch,

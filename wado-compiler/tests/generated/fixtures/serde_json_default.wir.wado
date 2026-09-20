@@ -1954,7 +1954,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0"(low, high) {
     offset_31 = 0 + 61;
     builtin::array_copy<u8>(self_30, offset_31, global:core:json::$const_obj_41, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(927, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(930, $local_5.buf);
     new_used_41 = $local_4.used + 29;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -2128,7 +2128,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(low, high) {
     offset_31 = 0 + 61;
     builtin::array_copy<u8>(self_30, offset_31, global:core:json::$const_obj_41, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(927, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(930, $local_5.buf);
     new_used_41 = $local_4.used + 29;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -2844,35 +2844,35 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
     let code: u32;
     let i: i32;
     let c_4: char;
-    let $licm_pos_12: i32;
-    let $licm_input_13: ref "core:prelude/slice.wado//Slice<u8>";
-    let $licm_repr_14: ref Array<u8>;
-    let $licm_start_15: i32;
-    let $av_18: i32;
+    let $licm_pos_16: i32;
+    let $licm_input_17: ref "core:prelude/slice.wado//Slice<u8>";
+    let $licm_repr_18: ref Array<u8>;
+    let $licm_start_19: i32;
+    let $av_22: i32;
     start = self.pos;
-    $av_18 = self.pos;
-    if @unlikely(($av_18 + 4) > (self.input.end - self.input.start)) {
+    $av_22 = self.pos;
+    if @unlikely(($av_22 + 4) > (self.input.end - self.input.start)) {
         cold_path;
-        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_18));
+        return 1, 0, "core:serde/core:serde/DeserializeError::eof"(builtin::i64_extend_i32_s($av_22));
     }
     code = 0;
     i = 0;
-    $licm_pos_12 = self.pos;
-    $licm_input_13 = self.input;
-    $licm_repr_14 = $licm_input_13.repr;
-    $licm_start_15 = $licm_input_13.start;
+    $licm_pos_16 = self.pos;
+    $licm_input_17 = self.input;
+    $licm_repr_18 = $licm_input_17.repr;
+    $licm_start_19 = $licm_input_17.start;
     b245: block {
         l246: loop {
             break_if b245 i >= 4;
-            c_4 = builtin::array_get_value<u8>($licm_repr_14, $licm_start_15 + ($licm_pos_12 + i));
+            c_4 = builtin::array_get_value<u8>($licm_repr_18, $licm_start_19 + ($licm_pos_16 + i));
             if @unlikely((if (if (c_4 - 48) <u 10 -> i32 {
                 1;
             } else {
-                select i32(c_4 >=u 97, c_4 <=u 102, 0);
+                (97 <=u c_4) & (c_4 <=u 102);
             }) -> i32 {
                 1;
             } else {
-                select i32(c_4 >=u 65, c_4 <=u 70, 0);
+                (65 <=u c_4) & (c_4 <=u 70);
             }) == 0) {
                 cold_path;
                 return 1, 0, "core:serde/core:serde/DeserializeError::malformed<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("invalid unicode escape"), used: 22 }, builtin::i64_extend_i32_s(start));
@@ -2881,10 +2881,10 @@ fn "core:json/core:json/JsonDeserializer::read_hex4"(self) {
                 if @likely((c_4 - 48) <u 10) {
                     break $inline_char__hex_digit_value_scalar_3: c_4 - 48;
                 }
-                if @likely(select i32(c_4 >=u 97, c_4 <=u 102, 0)) {
+                if @likely((97 <=u c_4) & (c_4 <=u 102)) {
                     break $inline_char__hex_digit_value_scalar_3: (c_4 - 97) + 10;
                 }
-                if @likely(select i32(c_4 >=u 65, c_4 <=u 70, 0)) {
+                if @likely((65 <=u c_4) & (c_4 <=u 70)) {
                     break $inline_char__hex_digit_value_scalar_3: (c_4 - 65) + 10;
                 }
                 cold_path;
