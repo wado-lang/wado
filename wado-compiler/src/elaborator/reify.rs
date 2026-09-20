@@ -28,7 +28,7 @@ use super::coercion::{
     numeric_literal_pair_order, range_endpoint_order,
 };
 use super::sem::ModuleSemantics;
-use super::types::{FunctionContext, ParamSlot, TypeLookup};
+use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
@@ -353,14 +353,6 @@ pub(crate) struct Reify<'a, H: CompilerHost> {
     /// `ModuleSource` interner. Shared with annotate so cross-pass
     /// references resolve to the same `ModuleSource` identity.
     pub(crate) interner: Rc<RefCell<ModuleSourceInterner>>,
-    /// Type-parameter names in scope for the function/method body
-    /// currently being reified (impl params first, then method-level
-    /// params, matching the index layout reify builds in
-    /// `reify_method` / `reify_function`). Empty outside a body walk.
-    /// `resolve_type` consults this so a turbofish type argument naming
-    /// an enclosing type param (`v.serialize::<S>(s)` inside a generic
-    /// method) resolves to its `TypeParam` slot instead of `unknown`.
-    pub(crate) current_type_param_slots: Vec<ParamSlot>,
     /// Names of the effect parameters (`<effect E>`) in scope for the
     /// function / method currently being reified. `reify_effects` and
     /// `apply_function_type_effects` consult this so an effect name that is a
@@ -535,7 +527,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             current_module_source: ModuleSource::entry_point_uninitialized(),
             current_module_items: &[],
             interner,
-            current_type_param_slots: Vec::new(),
             current_effect_param_names: Vec::new(),
             tuple_overlay_stack: Vec::new(),
             tuple_overlay_visits: IndexMap::default(),
@@ -671,25 +662,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect()
     }
 
-    /// Resolve an AST [`ast::Type`] to a [`TypeId`] without recording
-    /// any use→def edge. Reify uses this for type-level resolutions
-    /// (type-param defaults, resource method params, …) — annotate
-    /// already recorded the edges during its body walk.
-    ///
-    /// Delegates to the existing
-    /// [`super::Elaborator::resolve_type_static`] helper, which is
-    /// host-agnostic and operates over the [`TypeLookup`] view above.
+    /// Resolve a global's declared type to a [`TypeId`] without recording any
+    /// use→def edge; annotate recorded them during its body walk.
+    // Its one caller reads a declaration, whose scope is its module — never the
+    // type parameters of whatever body referenced it.
     fn resolve_type(&mut self, ty: &ast::Type) -> TypeId {
         let lookup = self.type_lookup();
-        // Resolve within the current body's type-parameter scope so a
-        // turbofish argument that names an enclosing type param resolves
-        // to its `TypeParam` slot. Outside a body walk the scope is empty,
-        // so this is identical to the scope-free path.
-        let resolved = Elaborator::<H>::resolve_type_static_with_params(
+        let resolved = Elaborator::<H>::resolve_type_static(
             ty,
             &mut self.tysys.type_table.borrow_mut(),
             &lookup,
-            &self.current_type_param_slots,
         );
         self.apply_function_type_effects(ty, resolved)
     }
@@ -1354,16 +1336,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Real type params only (effect params and `<F: fn(...)>` bounds
-        // are excluded), so the positional indices stay dense and match
-        // the emitted `type_params` and monomorph's substitution keys.
-        let type_param_slots: Vec<ParamSlot> = func
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .map(ParamSlot::from)
-            .collect();
-
         // Effect params (`<effect E>`) drive `Param` effect resolution in
         // function-type params; publish them for the body walk.
         let effect_param_names: Vec<String> = func
@@ -1374,10 +1346,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .collect();
         let saved_effect_param_names =
             std::mem::replace(&mut self.current_effect_param_names, effect_param_names);
-
-        // Publish the body's type-param scope (see `reify_method`).
-        let saved_type_param_slots =
-            std::mem::replace(&mut self.current_type_param_slots, type_param_slots);
 
         // Single source of truth: read the resolved param types
         // `resolve_function` recorded (in `func.params` order, with `<F: fn>`
@@ -1418,7 +1386,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_slots = saved_type_param_slots;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the TIR type params `resolve_function`
@@ -1697,37 +1664,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                  impl method reify emits",
             );
 
-        // Type-param scope for the method's own param/return types. Every
-        // impl-self-type arg occupies its positional slot, concrete ones
-        // (`String` in `TreeMap<String, V>`) included — monomorph substitutes
-        // those back by identity. Method-level params continue after the impl
-        // param count, the same base `func_inst::instantiate_function` uses.
-        // An impl-level bound is recorded by name only, so its slot carries
-        // none: a `T::Assoc` there names no declaration the resolver can read.
-        let mut type_param_slots: Vec<ParamSlot> = Vec::new();
-        for p in &impl_type_params {
-            let idx = p.index as usize;
-            if type_param_slots.len() <= idx {
-                type_param_slots.resize(idx + 1, ParamSlot::default());
-            }
-            type_param_slots[idx].name.clone_from(&p.name);
-        }
-        let mut next_idx = impl_type_params.len();
-        for p in &func.type_params {
-            // Skip `<F: fn(...)>` bounds: the elaborator realises them
-            // eagerly to the bound's function type (already baked into the
-            // recorded param/return types), so they must not consume a
-            // positional type-param slot or the real method params shift index.
-            if !p.is_real_type_param() || type_param_slots.iter().any(|s| s.name == p.name) {
-                continue;
-            }
-            if type_param_slots.len() <= next_idx {
-                type_param_slots.resize(next_idx + 1, ParamSlot::default());
-            }
-            type_param_slots[next_idx] = ParamSlot::from(p);
-            next_idx += 1;
-        }
-
         // Method-level effect params (`<effect E>`) drive `Param` effect
         // resolution in function-type params; publish them for the method
         // body walk.
@@ -1798,12 +1734,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             ctx.task_return_type = self.declared_task_return(func, return_type);
         }
 
-        // Publish the body's type-param scope so turbofish args in the
-        // body (`v.serialize::<S>(s)`) resolve against it. Restored before
-        // returning so decl-level resolution stays scope-free.
-        let saved_type_param_slots =
-            std::mem::replace(&mut self.current_type_param_slots, type_param_slots.clone());
-
         // Single source of truth: read the resolved param types
         // `resolve_method` recorded (in `func.params` order, receiver
         // included), rather than re-resolving each here.
@@ -1842,7 +1772,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .as_ref()
             .map(|b| self.reify_block(b, &mut ctx, None));
 
-        self.current_type_param_slots = saved_type_param_slots;
         self.current_effect_param_names = saved_effect_param_names;
 
         // Single source of truth: read the method-level type params
