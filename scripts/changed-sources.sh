@@ -20,4 +20,4 @@ base="${1:-$(git merge-base origin/main HEAD)}"
 } | git check-attr -z --stdin linguist-generated |
     # One NUL-separated `path attr value` triple per file. `unspecified` is the
     # value for a path no rule names; any other means a rule marked it.
-    tr '\0' '\n' | paste - - - | grep -P '\tunspecified$' | cut -f1
+    tr '\0' '\n' | paste - - - | grep -e $'\tunspecified$' | cut -f1

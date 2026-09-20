@@ -384,6 +384,7 @@ global ENOUGH_LENS: i32 = 852;
 global ENOUGH_DISTS: i32 = 592;
 global ENOUGH: i32 = 1444;  // ENOUGH_LENS + ENOUGH_DISTS
 global MAXBITS: i32 = 15;
+global STORED_MAX: i32 = 65535;  // largest DEFLATE stored block, bounded by the 16-bit LEN field
 
 // Length and distance code tables shared by the deflate functions.
 // These reproduce the two tables in RFC 1951 section 3.2.5: length codes
@@ -1428,12 +1429,12 @@ pub fn inflate_zlib(input: &ByteList) -> Result<ByteList, ZlibError> {
 /// Compresses data into raw DEFLATE stored blocks (no actual compression).
 pub fn deflate_stored(input: &ByteList) -> ByteList {
     let total = input.len();
-    let mut output = ByteList::with_capacity(total + (total / 65535 + 1) * 5);
+    let mut output = ByteList::with_capacity(total + (total / STORED_MAX + 1) * 5);
 
     // Empty input still needs a BFINAL block, so the body runs at least once.
     let mut pos = 0;
     loop {
-        let block_len = i32::min(total - pos, 65535);
+        let block_len = i32::min(total - pos, STORED_MAX);
         let is_last = pos + block_len >= total;
 
         // Block header: BFINAL (1 bit) + BTYPE=00 (2 bits) = stored
@@ -2794,7 +2795,7 @@ pub fn deflate_with_level(input: &ByteList, level: i32, strategy: i32) -> ByteLi
 
     let plan = plan_dynamic_block(&lit_freq, &mut dist_freq);
     let dynamic_bits = plan.bits;
-    let stored_bits = input_len * 8 + (input_len / 65535 + 1) * 40 + 3;
+    let stored_bits = input_len * 8 + (input_len / STORED_MAX + 1) * 40 + 3;
 
     let mut bw = BitWriter::new();
 

@@ -373,6 +373,7 @@ impl LenientFromStr for bool {
         if text.eq_ignore_ascii_case("false") || text == "0" {
             return Result::Ok(false);
         }
+        builtin::cold_path();
         return Result::Err(LenientParseError::new("invalid boolean string"));
     }
 }
@@ -505,7 +506,7 @@ impl char {
     /// Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
     pub fn is_hexdigit(&self) -> bool {
         let c = *self;
-        return c.is_ascii_digit() || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
+        return c.is_ascii_digit() || 'a' <= c <= 'f' || 'A' <= c <= 'F';
     }
 
     /// Returns the numeric value of an ASCII hexadecimal digit (0–15).
@@ -515,10 +516,10 @@ impl char {
         if c.is_ascii_digit() {
             return c as i32 - '0' as i32;
         }
-        if c >= 'a' && c <= 'f' {
+        if 'a' <= c <= 'f' {
             return c as i32 - 'a' as i32 + 10;
         }
-        if c >= 'A' && c <= 'F' {
+        if 'A' <= c <= 'F' {
             return c as i32 - 'A' as i32 + 10;
         }
         panic("char::hex_digit_value: not a hex digit");
@@ -573,9 +574,11 @@ impl LenientFromStr for char {
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError> {
         let mut iter = s.as_str_slice().chars();
         let Some(first) = iter.next() else {
+            builtin::cold_path();
             return Result::Err(LenientParseError::new("expected exactly one character, got none"));
         };
         if iter.next() matches { Some(_) } {
+            builtin::cold_path();
             return Result::Err(LenientParseError::new("expected exactly one character, got more"));
         }
         return Result::Ok(first);
@@ -616,7 +619,7 @@ impl i8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 127, 128) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -627,7 +630,7 @@ impl FromStr for i8 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(s, 10, 127, 128) {
+        return match parse_i64_radix(s, 10, i8::MAX as i64, i8::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i8),
             Err(e) => Result::Err(e),
         };
@@ -737,7 +740,7 @@ impl u8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 255) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -748,7 +751,7 @@ impl FromStr for u8 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(s, 10, 255) {
+        return match parse_u64_radix(s, 10, u8::MAX as u64) {
             Ok(v) => Result::Ok(v as u8),
             Err(e) => Result::Err(e),
         };
@@ -806,7 +809,7 @@ impl i16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 32767, 32768) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -817,7 +820,7 @@ impl FromStr for i16 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(s, 10, 32767, 32768) {
+        return match parse_i64_radix(s, 10, i16::MAX as i64, i16::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i16),
             Err(e) => Result::Err(e),
         };
@@ -875,7 +878,7 @@ impl u16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 65535) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -886,7 +889,7 @@ impl FromStr for u16 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(s, 10, 65535) {
+        return match parse_u64_radix(s, 10, u16::MAX as u64) {
             Ok(v) => Result::Ok(v as u16),
             Err(e) => Result::Err(e),
         };
@@ -967,7 +970,7 @@ impl i32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, 2147483647, 2147483648) {
+        return match parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -978,7 +981,7 @@ impl FromStr for i32 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(s, 10, 2147483647, 2147483648) {
+        return match parse_i64_radix(s, 10, i32::MAX as i64, i32::MAX as u64 + 1) {
             Ok(v) => Result::Ok(v as i32),
             Err(e) => Result::Err(e),
         };
@@ -1043,7 +1046,7 @@ impl u32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, 4294967295) {
+        return match parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -1054,7 +1057,7 @@ impl FromStr for u32 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(s, 10, 4294967295) {
+        return match parse_u64_radix(s, 10, u32::MAX as u64) {
             Ok(v) => Result::Ok(v as u32),
             Err(e) => Result::Err(e),
         };
@@ -1136,7 +1139,7 @@ impl i64 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(&s.as_str_slice(), radix, 9223372036854775807, 9223372036854775808);
+        return parse_i64_radix(&s.as_str_slice(), radix, i64::MAX, i64::MAX as u64 + 1);
     }
 }
 
@@ -1144,7 +1147,7 @@ impl FromStr for i64 {
     type Err = ParseIntError;
 
     fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(s, 10, 9223372036854775807, 9223372036854775808);
+        return parse_i64_radix(s, 10, i64::MAX, i64::MAX as u64 + 1);
     }
 }
 
@@ -2939,6 +2942,7 @@ impl TryFrom<i64> for i32 {
 
     pub fn try_from(value: i64) -> Result<i32, ConvertError> {
         if value < i32::MIN as i64 || value > i32::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i32`));
         }
         return Result::Ok(value as i32);
@@ -2950,6 +2954,7 @@ impl TryFrom<i64> for i16 {
 
     pub fn try_from(value: i64) -> Result<i16, ConvertError> {
         if value < i16::MIN as i64 || value > i16::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i16`));
         }
         return Result::Ok(value as i16);
@@ -2961,6 +2966,7 @@ impl TryFrom<i64> for i8 {
 
     pub fn try_from(value: i64) -> Result<i8, ConvertError> {
         if value < i8::MIN as i64 || value > i8::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -2972,6 +2978,7 @@ impl TryFrom<i32> for i16 {
 
     pub fn try_from(value: i32) -> Result<i16, ConvertError> {
         if value < i16::MIN as i32 || value > i16::MAX as i32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i16`));
         }
         return Result::Ok(value as i16);
@@ -2983,6 +2990,7 @@ impl TryFrom<i32> for i8 {
 
     pub fn try_from(value: i32) -> Result<i8, ConvertError> {
         if value < i8::MIN as i32 || value > i8::MAX as i32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -2994,6 +3002,7 @@ impl TryFrom<i16> for i8 {
 
     pub fn try_from(value: i16) -> Result<i8, ConvertError> {
         if value < i8::MIN as i16 || value > i8::MAX as i16 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i8`));
         }
         return Result::Ok(value as i8);
@@ -3005,6 +3014,7 @@ impl TryFrom<i32> for u32 {
 
     pub fn try_from(value: i32) -> Result<u32, ConvertError> {
         if value < 0 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3016,6 +3026,7 @@ impl TryFrom<i64> for u64 {
 
     pub fn try_from(value: i64) -> Result<u64, ConvertError> {
         if value < 0 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u64`));
         }
         return Result::Ok(value as u64);
@@ -3027,6 +3038,7 @@ impl TryFrom<i64> for u32 {
 
     pub fn try_from(value: i64) -> Result<u32, ConvertError> {
         if value < 0 || value > u32::MAX as i64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3038,6 +3050,7 @@ impl TryFrom<u64> for i64 {
 
     pub fn try_from(value: u64) -> Result<i64, ConvertError> {
         if value > i64::MAX as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for i64`));
         }
         return Result::Ok(value as i64);
@@ -3049,6 +3062,7 @@ impl TryFrom<u64> for u32 {
 
     pub fn try_from(value: u64) -> Result<u32, ConvertError> {
         if value > u32::MAX as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u32`));
         }
         return Result::Ok(value as u32);
@@ -3060,6 +3074,7 @@ impl TryFrom<u32> for u16 {
 
     pub fn try_from(value: u32) -> Result<u16, ConvertError> {
         if value > u16::MAX as u32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u16`));
         }
         return Result::Ok(value as u16);
@@ -3071,6 +3086,7 @@ impl TryFrom<u32> for u8 {
 
     pub fn try_from(value: u32) -> Result<u8, ConvertError> {
         if value > u8::MAX as u32 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u8`));
         }
         return Result::Ok(value as u8);
@@ -3082,6 +3098,7 @@ impl TryFrom<u16> for u8 {
 
     pub fn try_from(value: u16) -> Result<u8, ConvertError> {
         if value > u8::MAX as u16 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} out of range for u8`));
         }
         return Result::Ok(value as u8);
@@ -3094,6 +3111,7 @@ impl TryFrom<i64> for f32 {
     pub fn try_from(value: i64) -> Result<f32, ConvertError> {
         let f = value as f32;
         if f as i64 != value {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
         }
         return Result::Ok(f);
@@ -3106,6 +3124,7 @@ impl TryFrom<i64> for f64 {
     pub fn try_from(value: i64) -> Result<f64, ConvertError> {
         let f = value as f64;
         if f as i64 != value {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
         }
         return Result::Ok(f);
@@ -3117,6 +3136,7 @@ impl TryFrom<u64> for f64 {
 
     pub fn try_from(value: u64) -> Result<f64, ConvertError> {
         if value > 9007199254740992 as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f64`));
         }
         return Result::Ok(value as f64);
@@ -3128,6 +3148,7 @@ impl TryFrom<u64> for f32 {
 
     pub fn try_from(value: u64) -> Result<f32, ConvertError> {
         if value > 16777216 as u64 {
+            builtin::cold_path();
             return Result::Err(ConvertError::new(`${value} cannot be exactly represented as f32`));
         }
         return Result::Ok(value as f32);

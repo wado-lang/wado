@@ -17,6 +17,9 @@ use { List } from "core:prelude/list.wado";
 use { Option } from "core:prelude/types.wado";
 
 
+// The f64 bit pattern of -0.0: the sign bit alone.
+global NEG_ZERO_BITS: i64 = 0x8000000000000000 as i64;
+
 // Powers of 10 from 10^0 to 10^19
 global POW10: List<u64> = [
     1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000, 100000000000, 1000000000000,
@@ -856,7 +859,7 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
     if bits == 0 {
         return [true, false, SpecialKind::Zero];
     }
-    if bits == 0x8000000000000000 as i64 {
+    if bits == NEG_ZERO_BITS {
         return [true, true, SpecialKind::Zero];
     }
 

@@ -715,7 +715,7 @@ impl<T: Serialize, E: Serialize> Serialize for Result<T, E> {
 impl Deserialize for i8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i8, DeserializeError> {
         let v = d.deserialize_i32()?;
-        if v < -128 || v > 127 {
+        if v < i8::MIN as i32 || v > i8::MAX as i32 {
             return Result::Err(DeserializeError::overflow("value out of range for i8", -1));
         }
         return Result::Ok(v as i8);
@@ -725,7 +725,7 @@ impl Deserialize for i8 {
 impl Deserialize for i16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<i16, DeserializeError> {
         let v = d.deserialize_i32()?;
-        if v < -32768 || v > 32767 {
+        if v < i16::MIN as i32 || v > i16::MAX as i32 {
             return Result::Err(
                 DeserializeError::overflow("value out of range for i16", -1),
             );
@@ -749,7 +749,7 @@ impl Deserialize for i64 {
 impl Deserialize for u8 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u8, DeserializeError> {
         let v = d.deserialize_u32()?;
-        if v > 255 {
+        if v > u8::MAX as u32 {
             return Result::Err(DeserializeError::overflow("value out of range for u8", -1));
         }
         return Result::Ok(v as u8);
@@ -759,7 +759,7 @@ impl Deserialize for u8 {
 impl Deserialize for u16 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<u16, DeserializeError> {
         let v = d.deserialize_u32()?;
-        if v > 65535 {
+        if v > u16::MAX as u32 {
             return Result::Err(
                 DeserializeError::overflow("value out of range for u16", -1),
             );

@@ -15,6 +15,9 @@ use {
     DeserializeErrorKind,
 } from "core:serde";
 
+// The largest port a URL may name (WHATWG URL Standard, "port state").
+global PORT_MAX: i32 = 65535;
+
 #[synopsis]
 test {
     assert Url::parse("https://wado.dev/docs?q=synopsis") matches { Ok(url) && url.scheme == "https"
@@ -330,7 +333,7 @@ fn parse_port_str<S: AsStrSlice>(s: S) -> Result<u16, ParseError> {
             return Result::Err(ParseError::InvalidPort);
         }
         val = val * 10 + (c as i32 - '0' as i32);
-        if val > 65535 {
+        if val > PORT_MAX {
             return Result::Err(ParseError::InvalidPort);
         }
     }
