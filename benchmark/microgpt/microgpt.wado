@@ -4,6 +4,8 @@
 //! Andrej Karpathy, MIT License.
 //! <https://gist.github.com/karpathy/8627fe009c40f57531cb18360106ce95>
 //!
+//! Python seeds Mersenne Twister, so the numbers here are not the original's.
+//!
 //! Two phases: `train` is forward, backward and Adam; `infer` is the forward
 //! path alone, over the full attention window. The JS and Rust arms are the
 //! same program, and both phases reseed, so all three print the same numbers.
@@ -14,6 +16,7 @@ use { println, Stdout } from "core:cli";
 use { TreeSet } from "core:collections";
 use { MonotonicClock } from "wasi:clocks";
 use { Benchmark } from "core:benchmark";
+use { Seed, Seedable, Rng, Xoshiro256pp } from "core:prng";
 
 // One step per document, so a measured iteration is one pass over the corpus.
 global STEPS: i32 = 32;
@@ -23,36 +26,21 @@ global SAMPLES: i32 = 24;
 global TEMPERATURE: f64 = 0.5;
 global SEED: u64 = 42;
 
-// Let there be a deterministic source of chaos: SplitMix64 plus Box-Muller.
-// Python seeds Mersenne Twister, so the two draw different numbers.
-struct Rng {
-    state: u64,
-}
+// Let there be a deterministic source of chaos. `core:prng` carries no shape but
+// the uniform one, and a newtype over its engine is local enough to extend.
+type Sampler = Xoshiro256pp;
 
-impl Rng {
-    fn new(seed: u64) -> Rng {
-        return Rng { state: seed };
-    }
-
-    fn next_u64(&mut self) -> u64 {
-        self.state = self.state + 0x9E3779B97F4A7C15;
-        let mut z = self.state;
-        z = (z ^ z >> 30) * 0xBF58476D1CE4E5B9;
-        z = (z ^ z >> 27) * 0x94D049BB133111EB;
-        return z ^ z >> 31;
-    }
-
-    // 53 bits, the mantissa of an f64, scaled into [0, 1).
-    fn random(&mut self) -> f64 {
-        return (self.next_u64() >> 11) as f64 / 9007199254740992.0;
+impl Sampler {
+    fn new() -> Sampler {
+        return Xoshiro256pp::from_seed(Seed::from_u64(SEED)) as Sampler;
     }
 
     fn gauss(&mut self, std: f64) -> f64 {
-        let mut u = self.random();
+        let mut u = self.random_f64();
         while u <= 0.0 {
-            u = self.random();
+            u = self.random_f64();
         }
-        let v = self.random();
+        let v = self.random_f64();
         return std * f64::sqrt(-2.0 * f64::ln(u)) * f64::cos(2.0 * f64::PI * v);
     }
 
@@ -62,7 +50,7 @@ impl Rng {
         for let w of weights {
             total += *w;
         }
-        let mut r = self.random() * total;
+        let mut r = self.random_f64() * total;
         for let [i, w] of weights.into_iter().enumerate() {
             r -= *w;
             if r < 0.0 {
@@ -252,7 +240,7 @@ global BLOCK_SIZE: i32 = 16;
 global N_HEAD: i32 = 4;
 global HEAD_DIM: i32 = N_EMBD / N_HEAD;
 
-fn matrix(g: &mut Graph, rng: &mut Rng, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> {
+fn matrix(g: &mut Graph, rng: &mut Sampler, nout: i32, nin: i32, std: f64 = 0.08) -> List<List<&mut Value>> {
     let mut rows: List<List<&mut Value>> = [];
     for let _ of 0..<nout {
         let mut row: List<&mut Value> = [];
@@ -282,7 +270,7 @@ struct StateDict {
 }
 
 impl StateDict {
-    fn new(g: &mut Graph, rng: &mut Rng, vocab_size: i32) -> StateDict {
+    fn new(g: &mut Graph, rng: &mut Sampler, vocab_size: i32) -> StateDict {
         let wte = matrix(g, rng, vocab_size, N_EMBD);
         let wpe = matrix(g, rng, BLOCK_SIZE, N_EMBD);
         let lm_head = matrix(g, rng, vocab_size, N_EMBD);
@@ -494,7 +482,7 @@ global DOCS: List<String> = [
 
 // One measured iteration: a fresh model, then `steps` of forward, backward, Adam.
 fn train(steps: i32) -> f64 {
-    let mut rng = Rng::new(SEED);
+    let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
     let mut g = Graph::new();
     let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
@@ -516,7 +504,7 @@ fn train(steps: i32) -> f64 {
 
 // Unlike the example's `generate`, this never stops early on a BOS draw: the
 // position count has to be fixed for the throughput figure to mean anything.
-fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) -> String {
+fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Sampler) -> String {
     let n_params = g.len();
     let mut keys = empty_cache();
     let mut values = empty_cache();
@@ -540,7 +528,7 @@ fn generate(g: &mut Graph, state: &StateDict, tok: &Tokenizer, rng: &mut Rng) ->
 // Weights steer which token is drawn, never what a position costs, so an
 // untrained model times the same as a trained one and the phase stands alone.
 fn infer(samples: i32) -> String {
-    let mut rng = Rng::new(SEED);
+    let mut rng = Sampler::new();
     let tok = Tokenizer::new(&DOCS);
     let mut g = Graph::new();
     let state = StateDict::new(&mut g, &mut rng, tok.vocab_size);
