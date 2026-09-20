@@ -8,7 +8,7 @@ use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamSlot,
-    StructFieldInfo, VariantCaseData, VariantInfo, real_type_params,
+    RealTypeParams, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
@@ -58,7 +58,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_params: real_type_params(&struct_decl.type_params),
+                            type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         },
                     );
@@ -90,7 +90,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.sem.decls.local_generic_newtypes.insert(
                             self.def_of_item(newtype_decl.id),
                             GenericNewtypeInfo {
-                                type_params: real_type_params(&newtype_decl.type_params),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
                         );
@@ -143,7 +143,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             name: variant_decl.name.clone(),
                             module_source: module_source.clone(),
                             defined_at: variant_decl.id,
-                            type_params: real_type_params(&variant_decl.type_params),
+                            type_params: RealTypeParams::of(&variant_decl.type_params),
                             cases,
                             type_param_type_ids,
                         },

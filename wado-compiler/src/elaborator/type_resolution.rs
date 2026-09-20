@@ -881,7 +881,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // A trait head reaches here too (`impl IndexValue<i32> for T`),
                 // and a trait's parameters live on its own declaration, so only
                 // a type declaration's list is a ceiling to exceed.
-                let declared: Option<Vec<ast::GenericParam>> = struct_info
+                let declared = struct_info
                     .as_ref()
                     .map(|info| info.type_params.clone())
                     .or_else(|| {

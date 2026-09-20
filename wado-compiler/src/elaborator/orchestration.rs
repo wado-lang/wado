@@ -24,8 +24,8 @@ use crate::world_registry::WorldRegistry;
 use super::Elaborator;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
-    ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData, VariantInfo,
-    real_type_params,
+    RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
+    VariantInfo,
 };
 use super::tysys::TypeSystem;
 use crate::ast::{CmImport, GenericType, NamedType, UseItem, cm_import_of};
@@ -453,7 +453,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
-                                    type_params: real_type_params(&struct_decl.type_params),
+                                    type_params: RealTypeParams::of(&struct_decl.type_params),
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
                             );
@@ -477,7 +477,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params: real_type_params(&variant_decl.type_params),
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
                                     cases: Vec::new(),
                                     type_param_type_ids: Vec::new(),
                                 },
@@ -717,7 +717,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         all_generic_newtypes.insert(
                             def,
                             GenericNewtypeInfo {
-                                type_params: real_type_params(&newtype_decl.type_params),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             },
                         );
@@ -815,7 +815,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
-                            type_params: real_type_params(&struct_decl.type_params),
+                            type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         };
                         if let Some(def) = resolutions.defs().of_ast_id(struct_decl.id) {
@@ -844,7 +844,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         } else {
                             // Generic newtype: store definition for lazy instantiation
                             let info = GenericNewtypeInfo {
-                                type_params: real_type_params(&newtype_decl.type_params),
+                                type_params: RealTypeParams::of(&newtype_decl.type_params),
                                 base_type_ast: newtype_decl.ty.clone(),
                             };
                             if let Some(def) = resolutions.defs().of_ast_id(newtype_decl.id) {
@@ -880,7 +880,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     name: variant_decl.name.clone(),
                                     module_source: module_source.clone(),
                                     defined_at: variant_decl.id,
-                                    type_params: real_type_params(&variant_decl.type_params),
+                                    type_params: RealTypeParams::of(&variant_decl.type_params),
                                     cases,
                                     type_param_type_ids,
                                 },
@@ -3572,16 +3572,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 };
 
                 // Skip impls with no type params (concrete impls are handled differently)
-                if impl_block.type_params.is_empty() {
+                let param_slots = ParamSlot::list(&impl_block.type_params);
+                if param_slots.is_empty() {
                     continue;
                 }
-                let param_at = |name: &str| {
-                    impl_block
-                        .type_params
-                        .iter()
-                        .enumerate()
-                        .find(|(_, p)| p.name == name)
-                };
+                let param_at =
+                    |name: &str| param_slots.iter().enumerate().find(|(_, p)| p.name == name);
 
                 for binding in &impl_block.associated_types {
                     let type_param_id = match &binding.ty {

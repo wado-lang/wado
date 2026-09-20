@@ -1,6 +1,7 @@
 //! Type definitions used across the elaborator phase.
 
 use std::cell::RefCell;
+use std::ops::Deref;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
@@ -42,9 +43,9 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
-    /// The declaration's type parameters as written. Bounds, defaults and arity
-    /// are all read from here, never from a projection of it.
-    pub(super) type_params: Vec<ast::GenericParam>,
+    /// The declaration's real type parameters. Bounds, defaults and arity are
+    /// all read from here, never from a projection of it.
+    pub(super) type_params: RealTypeParams,
     /// `TypeIds` of the struct's own type parameters in declaration order.
     /// Used by `infer_struct_type_args` to fill phantom type params
     /// (e.g., `D` in `struct DirMap<D, V>` where D doesn't appear in any field).
@@ -147,9 +148,9 @@ pub(crate) struct VariantInfo {
     pub(crate) module_source: ModuleSource,
     /// `AstId` of the `variant` declaration (`VariantDecl::id`).
     pub(super) defined_at: AstId,
-    /// The declaration's type parameters as written, like
+    /// The declaration's real type parameters, like
     /// [`StructFieldInfo::type_params`].
-    pub(super) type_params: Vec<ast::GenericParam>,
+    pub(super) type_params: RealTypeParams,
     /// Per-case data. `pub(crate)` so the Semantics-based effect checker can
     /// follow resources nested in variant case payloads.
     pub(crate) cases: Vec<VariantCaseData>,
@@ -233,9 +234,9 @@ pub(crate) struct ResourceInfo {
 /// Generic newtype definition: `type Foo<T> = Bar<T>`
 #[derive(Clone)]
 pub(crate) struct GenericNewtypeInfo {
-    /// The declaration's type parameters as written, like
+    /// The declaration's real type parameters, like
     /// [`StructFieldInfo::type_params`].
-    pub(super) type_params: Vec<ast::GenericParam>,
+    pub(super) type_params: RealTypeParams,
     pub(super) base_type_ast: ast::Type,
 }
 
@@ -3035,21 +3036,41 @@ impl From<&ast::GenericParam> for ParamSlot {
 
 /// A declaration's type parameters as the dense type-argument space holds
 /// them: a position here is the index an argument fills.
-// An effect or `fn`-bound parameter holds no position there, so counting one
-// leaves a slot no argument can fill, and WIR build meets an instance whose
-// arguments never arrived.
-pub(super) fn real_type_params(params: &[ast::GenericParam]) -> Vec<ast::GenericParam> {
-    params
-        .iter()
-        .filter(|param| param.is_real_type_param())
-        .cloned()
-        .collect()
+#[derive(Clone, Default)]
+pub(crate) struct RealTypeParams(Vec<ast::GenericParam>);
+
+impl RealTypeParams {
+    // An effect or `fn`-bound parameter holds no position in that space, so
+    // counting one leaves a slot no argument can fill (`register_generic_params`).
+    pub(super) fn of(params: &[ast::GenericParam]) -> Self {
+        Self(Self::borrowed(params).into_iter().cloned().collect())
+    }
+
+    /// The same parameters borrowed, for a caller that only counts them or
+    /// looks for the pack among them.
+    pub(super) fn borrowed(params: &[ast::GenericParam]) -> Vec<&ast::GenericParam> {
+        params
+            .iter()
+            .filter(|param| param.is_real_type_param())
+            .collect()
+    }
+}
+
+impl Deref for RealTypeParams {
+    type Target = [ast::GenericParam];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl ParamSlot {
-    /// A declaration's parameter list as slots, in declaration order.
+    /// A declaration's real parameters as slots, in declaration order.
     pub(super) fn list(params: &[ast::GenericParam]) -> Vec<Self> {
-        real_type_params(params).iter().map(Self::from).collect()
+        RealTypeParams::borrowed(params)
+            .into_iter()
+            .map(Self::from)
+            .collect()
     }
 }
 
@@ -3155,8 +3176,8 @@ impl<'a> TypeLookup<'a> {
         (!info.type_param_type_ids.is_empty()).then_some(&*info.type_param_type_ids)
     }
 
-    /// `def`'s type parameters exactly as the declaration wrote them, for the
-    /// one declaration of the three kinds that takes any.
+    /// `def`'s real type parameters, for the one declaration of the three kinds
+    /// that takes any.
     ///
     /// The one source for its bounds, defaults and arity, so a consumer cannot
     /// answer from a projection that dropped a bound, a pack or a default.

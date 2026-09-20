@@ -37,7 +37,9 @@ use crate::elaborator::sem::types::{
     AssignPlace, DesugarKind, FromCallFacts, GenericInstantiation, OperatorDispatch,
 };
 use crate::elaborator::trait_env::written_type_arg;
-use crate::elaborator::types::{ImplMemberKind, StructFieldInfo, newtype_member_owner};
+use crate::elaborator::types::{
+    ImplMemberKind, RealTypeParams, StructFieldInfo, newtype_member_owner,
+};
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
 use crate::tir::{AnonStructId, PrimitiveType, StructDef};
@@ -4449,7 +4451,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
-            type_params: Vec::new(),
+            type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };
         self.sem.decls.anon_struct_fields.insert(shape, field_info);

@@ -666,6 +666,27 @@ takes. Three rules order them.
 - One home. A fact is recorded where it is decided and read where it is
   recorded; a phase recomputing a fact it could have read is re-deciding.
 
+### A data declaration admits an effect parameter it then ignores
+
+`struct Holder<effect E, T>` and `variant Maybe<effect E, T>` parse and compile.
+The dense type-argument space holds no position for `E` (`RealTypeParams`), so
+the parameter names nothing a use site can fill and nothing a body can read. A
+declaration whose parameter means nothing is a declaration the language should
+not admit. Derivation sees the same shape and stops short of it: at `-O0`,
+`Maybe::Just(3)` on the power-assert operand path reports
+`Maybe<i32> does not implement ReflectVariant` from `core:prelude`, which names
+neither the effect parameter nor the declaration that wrote it.
+
+An `impl` head admits one on the same terms, where it named a slot no argument
+filled until `register_impl_block_params` stopped counting it.
+
+Closing it takes a decision on the language rule: reject the parameter at its
+own span when a `struct`, `variant`, newtype or `impl` declares one, and both
+the silent drop and that diagnostic go away. Until then, the slot is filtered
+rather than refused, which is what
+`tests/fixtures/data_decl_non_real_type_param_slot.wado` and
+`tests/fixtures/impl_assoc_type_non_real_param_slot.wado` pin.
+
 ### A trait's default body answers to no package boundary
 
 Two rules meet here. A `pub` free function is a root, being the package's

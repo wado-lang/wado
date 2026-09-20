@@ -19,7 +19,7 @@ use crate::elaborator::expr::MemberOwner;
 use crate::elaborator::sem::types::{BodyFacts, DesugarKind, ForOfIteratorInfo};
 use crate::elaborator::synth::ArgClass;
 use crate::elaborator::types::{
-    GenericNewtypeInfo, ImplMemberKind, ParamSlot, StructFieldInfo, real_type_params,
+    GenericNewtypeInfo, ImplMemberKind, ParamSlot, RealTypeParams, StructFieldInfo,
 };
 use crate::name::{mangle_local_item_name, namespace_member_alias};
 use crate::symbol_notation::render;
@@ -287,7 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
-                type_params: real_type_params(&struct_decl.type_params),
+                type_params: RealTypeParams::of(&struct_decl.type_params),
                 type_param_type_ids,
             },
         );
@@ -411,7 +411,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             self.sem.decls.local_generic_newtypes.insert(
                 def,
                 GenericNewtypeInfo {
-                    type_params: real_type_params(&newtype_decl.type_params),
+                    type_params: RealTypeParams::of(&newtype_decl.type_params),
                     base_type_ast: newtype_decl.ty.clone(),
                 },
             );
