@@ -1,4 +1,4 @@
-use { BufferedRandom, seed } from "core:secure_random";
+use { BufferedRandom, bytes, seed, token_base64url, token_from, token_hex, with_buffered } from "core:secure_random";
 use { Seedable, Rng, Xoshiro256pp } from "core:prng";
 use { Random } from "wasi:random";
 
@@ -164,4 +164,124 @@ test "seed draws 32 bytes and starts a stream" {
 
     // Outside the handler, so the crossing is where `Random` ends.
     assert Xoshiro256pp::from_seed(first).next_u64() != Xoshiro256pp::from_seed(other).next_u64();
+}
+
+// Serves a fixed byte sequence, cycling, so a draw that must be rejected can
+// be placed exactly where the test wants it.
+struct ScriptedRandom {
+    script: List<u8> = [],
+    pos: i32 = 0,
+}
+
+impl Random for ScriptedRandom {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(self.script[self.pos]);
+            self.pos = (self.pos + 1) % self.script.len();
+        }
+        resume out;
+    }
+
+    ..trap
+}
+
+test "bytes returns exactly what was asked for" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        assert bytes(0).is_empty();
+        assert bytes(16).len() == 16;
+        assert bytes(100).len() == 100;
+    };
+}
+
+test "bytes loops over a short read" {
+    let mut host = CountingRandom { chunk: 10 };
+    with Random => &mut host do {
+        let out = bytes(25);
+        assert out.len() == 25;
+        // The host's stream, unbroken across the three calls it took.
+        for let mut i = 0; i < 25; i += 1 {
+            assert out[i] == i as u8;
+        }
+    };
+    assert host.calls == 3;
+}
+
+test "token_hex is two hex digits per byte" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        assert token_hex(4) == "00010203";
+        assert token_hex().len() == 64;
+    };
+}
+
+test "token_base64url is url-safe and unpadded" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        let t = token_base64url();
+        assert t.len() == 43;
+        for let c of t.chars() {
+            assert c.is_ascii_alphanumeric() || c == '-' || c == '_';
+        }
+    };
+}
+
+test "token_from draws from the alphabet" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        // The host counts up, so each byte lands on the next digit.
+        assert token_from(&b"0123456789", 12) == "012345678901";
+        assert token_from(&"abc", 0) == "";
+    };
+}
+
+test "token_from rejects the bytes that would bias it" {
+    // An alphabet of six: 256 is not a multiple of it, so 252..=255 must be
+    // thrown away rather than folded back onto the first four letters.
+    let mut host = ScriptedRandom {
+        script: [250, 251, 252, 253, 254, 255, 0],
+    };
+    with Random => &mut host do {
+        assert token_from(&b"abcdef", 3) == "efa";
+    };
+}
+
+test "with_buffered installs a block for the body" {
+    let mut host = CountingRandom {};
+    let n = with Random => &mut host do {
+        with_buffered(|| {
+            let mut total = 0;
+            for let mut i = 0; i < 50; i += 1 {
+                total += bytes(16).len();
+            }
+            return total;
+        });
+    };
+    assert n == 800;
+    assert host.calls == 1;
+}
+
+test "with_buffered passes the body's own effects through" {
+    let mut host = CountingRandom {};
+    let mut seen = 0;
+    with Random => &mut host do {
+        with_buffered(|| {
+            seen += bytes(4).len();
+        });
+    };
+    assert seen == 4;
+}
+
+test "a BufferedRandom block can be sized" {
+    let mut host = CountingRandom {};
+    with Random => &mut host do {
+        let mut rng = BufferedRandom::new(32);
+        with Random => &mut rng do {
+            for let mut i = 0; i < 8; i += 1 {
+                assert Random::get_random_bytes(16).len() == 16;
+            }
+        };
+    };
+    assert host.calls == 4;
 }

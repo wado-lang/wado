@@ -3,20 +3,29 @@
 
 # core:secure_random
 
-Randomness no one can predict, drawn from `wasi:random`. Nothing here is
-seedable or reproducible.
+Randomness no one can predict, drawn from `wasi:random`. A secret comes
+from here — a key, a salt, a nonce, a session token. Nothing here is
+seedable or reproducible; for a stream that replays, see `core:prng`.
 
 A host call costs about the same for 16 bytes as for 4096, so drawing many
 small values pays that fixed cost over and over. `BufferedRandom` draws in
-blocks and serves reads from one.
+blocks and serves reads from one, and [`with_buffered`] installs it around
+a body.
+
+Compare a token against an expected one with `eq_constant_time`, never
+`==`.
 
 ## Synopsis
 
 ```wado
-let mut rng = BufferedRandom {};
-with Random => &mut rng do {
-    assert Random::get_random_bytes(16).len() == 16;
-};
+assert token_base64url().len() == 43;
+assert token_hex().len() == 64;
+assert token_from(&b"0123456789", 6).len() == 6;
+
+// One host call serves every draw inside the body.
+with_buffered(|| {
+    assert bytes(16).len() == 16;
+});
 ```
 
 ## Functions
@@ -26,6 +35,36 @@ with Random => &mut rng do {
 Draw a `core:prng` seed from the host's entropy. This is the one crossing
 from unpredictable randomness into a reproducible stream.
 
+### `pub fn bytes(n: i32) -> ByteList with Random`
+
+Exactly `n` unpredictable bytes — the raw material of a key, a salt or a
+nonce. `wasi:random` may hand back fewer than asked, so this draws until it
+has them all.
+
+### `pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random`
+
+A token as lowercase hexadecimal, two digits per byte. The default 32 bytes
+is 256 bits, which is enough for anything a token is asked to resist.
+
+### `pub fn token_base64url(n: i32 = TOKEN_BYTES) -> String with Random`
+
+A token as URL-safe unpadded Base64, ready for a URL, a cookie or a header.
+The default 32 bytes is 256 bits.
+
+### `pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random`
+
+A token of `len` characters drawn from `alphabet`, each one uniform over
+it. For a one-time code, an invite code, or anything a person reads aloud
+and so wants a restricted alphabet for.
+
+The alphabet is ASCII and at most 256 bytes; a repeated byte weights the
+draw towards it.
+
+### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E)`
+
+Run `body` with a [`BufferedRandom`] installed, so the draws inside it come
+from one block rather than one host call apiece.
+
 ## Structs
 
 ### `pub struct BufferedRandom`
@@ -34,6 +73,10 @@ A `Random` handler that draws entropy in blocks. Install it around the work
 that consumes randomness; its block lives in guest memory until consumed.
 
 _Fields are private._
+
+#### `pub fn new(pool_bytes: i32) -> BufferedRandom`
+
+A handler whose block is `pool_bytes` rather than the default 4096.
 
 #### `impl Random for BufferedRandom`
 
