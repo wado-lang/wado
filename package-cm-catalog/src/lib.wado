@@ -606,7 +606,9 @@ export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perm
         Active => 1,
         Inactive => 2,
     };
-    task return tag * 1000 + o.unwrap_or(0) as u32 * 10 + p as u32 * 100 + seen;
+    // Each field gets a band wider than its own range, so one slot read wrong
+    // cannot land on a total another set of inputs would reach.
+    task return seen + p as u32 * 10 + o.unwrap_or(0) as u32 * 1000 + tag * 1000000;
 }
 
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it
