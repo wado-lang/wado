@@ -681,7 +681,7 @@ neither the effect parameter nor the declaration that wrote it.
 An `impl` head admits one on the same terms, where it named a slot no argument
 filled until `register_impl_block_params` stopped counting it.
 
-Closing it takes a decision on the language rule: reject the parameter at its
+Finishing it takes a decision on the language rule: reject the parameter at its
 own span when a `struct`, `variant`, newtype or `impl` declares one, and both
 the silent drop and that diagnostic go away. Until then, the slot is filtered
 rather than refused, which is what
@@ -862,25 +862,11 @@ emitted TIR — an unknown field name writes field 0, a malformed literal emits
 `0` — and `unescape_checked` is the model for that group: the body walk already
 rejected the input, so the reify-side read is an `.expect`.
 
-<<<<<<< HEAD
 Finishing it means one recorded fact per question reify re-asks: the callee's
 shape on a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the
 owner and case index on every case identifier and pattern, and the resolved
-effects on the written `fn(…) with E` node. The two borrowed AST inputs, the two
-type-param name lists and the surviving `resolve_type` then have no caller left.
-||||||| e72a0a50d
-Closing it: a recorded fact per question reify re-asks — the callee's shape on
-a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
-case index on every case identifier and pattern, the resolved effects on the
-written `fn(…) with E` node — after which the two borrowed AST inputs, the two
-type-param name lists and the surviving `resolve_type` have no caller left.
-=======
-Closing it: a recorded fact per question reify re-asks — the callee's shape on
-a `CallExpr`, the field's index and type on a `FieldAccessExpr`, the owner and
-case index on every case identifier and pattern, the resolved effects on the
-written `fn(…) with E` node — after which the two borrowed AST inputs, the
-effect-param name list and `resolve_global_type` have no caller left.
->>>>>>> origin/main
+effects on the written `fn(…) with E` node. The two borrowed AST inputs, the
+effect-param name list and `resolve_global_type` then have no caller left.
 
 ### The same shape is written several times
 
