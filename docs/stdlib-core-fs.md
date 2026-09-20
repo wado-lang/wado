@@ -28,11 +28,15 @@ for let entry of fs::read_dir("src")? {
 }
 ```
 
-A file is read into memory and written in one call. Streaming a file
-without holding it stays on `wasi:filesystem`, and so do the operations
-this module leaves out: append, rename, symlink, times, and metadata.
-[`root`] hands over the descriptor for them. `example/cat.wado` connects a
-file's read stream to stdout that way.
+[`join`], [`parent`] and the rest read a path as text. They declare no
+effect, so a caller that only builds paths imports no filesystem.
+
+A file is read into memory and written in one call, and a write replaces
+the file rather than truncating it. Streaming a file without holding it
+stays on `wasi:filesystem`, and so do the operations this module leaves
+out: append, symlink, file times, and permissions. [`root`] hands over the
+descriptor for them. `example/cat.wado` connects a file's read stream to
+stdout that way.
 
 ## Functions
 
@@ -54,10 +58,28 @@ The whole content of `path` as text, or `NotUtf8` if it is not UTF-8.
 
 ### `pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens`
 
-Write `data` to `path`, creating it or truncating what is there.
+Put `data` at `path`, replacing whatever is there.
+
+The bytes go to a file beside the target, which is then renamed over it, so
+a reader sees the old file or the new one and a write that fails partway
+leaves the old one. That is atomicity, not durability: nothing here is
+synced, so a host that loses power can still lose a write it reported as
+complete. [`root`] hands over the descriptor for a caller that needs more.
 
 `data` is anything that views as bytes — a `String`, a `ByteList`, a
 `ByteSlice` — and is written through without a copy.
+
+### `pub fn write_in_place<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens`
+
+Write `data` into the file `path` names, creating it or truncating what is
+there. [`write`] replaces the file instead, which is what a caller wants
+unless the file is too large to exist twice or its directory must not gain
+a second entry.
+
+### `pub fn rename<F: AsStrSlice, T: AsStrSlice>(from: F, to: T) -> Result<(), FsError> with Preopens`
+
+Move what `from` names to `to`, replacing what `to` names. Both paths
+resolve against the preopen, so the move never crosses a filesystem.
 
 ### `pub fn remove_file<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
@@ -80,10 +102,69 @@ call returns. Rust's `remove_dir_all` reports that case instead. A path
 that names something other than a directory is `Io(NotDirectory)`, and a
 symlink under the tree is removed rather than followed.
 
+### `pub fn join<A: AsStrSlice, B: AsStrSlice>(base: A, name: B) -> String`
+
+`base` and `name` with one `/` between them. An empty side answers the
+other, and a `name` that starts with `/` replaces `base`, as it does in
+Rust.
+
+### `pub fn parent<S: AsStrSlice>(path: S) -> Option<StrSlice>`
+
+`path` without its last component, or `None` where `path` names the
+preopen. One component answers `""`, which is the preopen itself.
+
+### `pub fn file_name<S: AsStrSlice>(path: S) -> Option<StrSlice>`
+
+The last component of `path`, or `None` where `path` names the preopen.
+A trailing `/` is not a component.
+
+### `pub fn file_stem<S: AsStrSlice>(path: S) -> Option<StrSlice>`
+
+The last component of `path` up to its extension. A name that is all
+extension, such as `.gitignore`, is all stem.
+
+### `pub fn extension<S: AsStrSlice>(path: S) -> Option<StrSlice>`
+
+The last component of `path` after its final `.`, or `None` where the name
+carries no extension.
+
+### `pub fn normalize<S: AsStrSlice>(path: S) -> Result<String, FsError>`
+
+`path` with its `.` components dropped and its `..` components applied, as
+text: nothing is opened, so a component that names nothing is not an error.
+
+An absolute path and one that climbs past the preopen are both
+`Io(NotPermitted)`, because neither names anything this module can reach.
+The preopen itself normalizes to `""`.
+
+### `pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preopens`
+
+What the host knows about what `path` names, without opening it.
+
+### `pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens`
+
+Whether `path` names anything. A host that answers neither way — a
+permission it will not grant, a name it will not read — answers `false`
+here, so a caller that has to tell those apart asks [`metadata`].
+
 ### `pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens`
 
 Every entry of the directory `path` names, in the order the host lists
 them. `""` and `"."` name the preopened directory itself.
+
+### `pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = enter_every_directory) -> Result<List<WalkEntry>, FsError> with Preopens`
+
+Every entry under the directory `path` names, and every entry under those,
+with a directory listed before what it holds.
+
+A `WalkEntry` carries the path to reach it, not just its name, so a caller
+reads or removes what it finds without rebuilding the path. The whole tree
+is listed before the call returns; a walk too large to hold is
+[`read_dir`] and a recursion of the caller's own.
+
+`descend` is asked about each directory before the walk enters it, so a
+caller skips a subtree instead of paying to list it. The directory itself
+is listed either way.
 
 ### `pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 
@@ -112,6 +193,25 @@ each site. `Display` renders the pair:
 #### `impl Display for FsError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct Metadata`
+
+What a path names, as the host reports it. `modified` is `None` where the
+platform keeps no modification time.
+
+#### `type: FileType`
+
+#### `size: u64`
+
+#### `modified: Option<Instant>`
+
+### `pub struct WalkEntry`
+
+One entry a walk found, and the path that reaches it from the preopen.
+
+#### `path: String`
+
+#### `type: FileType`
 
 ### `pub struct DirEntry`
 

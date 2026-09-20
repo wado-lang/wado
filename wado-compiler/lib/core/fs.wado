@@ -24,11 +24,15 @@
 //! }
 //! ```
 //!
-//! A file is read into memory and written in one call. Streaming a file
-//! without holding it stays on `wasi:filesystem`, and so do the operations
-//! this module leaves out: append, rename, symlink, times, and metadata.
-//! [`root`] hands over the descriptor for them. `example/cat.wado` connects a
-//! file's read stream to stdout that way.
+//! [`join`], [`parent`] and the rest read a path as text. They declare no
+//! effect, so a caller that only builds paths imports no filesystem.
+//!
+//! A file is read into memory and written in one call, and a write replaces
+//! the file rather than truncating it. Streaming a file without holding it
+//! stays on `wasi:filesystem`, and so do the operations this module leaves
+//! out: append, symlink, file times, and permissions. [`root`] hands over the
+//! descriptor for them. `example/cat.wado` connects a file's read stream to
+//! stdout that way.
 
 use {
     Preopens,
@@ -40,6 +44,7 @@ use {
     OpenFlags,
     PathFlags,
 } from "wasi:filesystem";
+use { Instant } from "wasi:clocks";
 
 /// Why a filesystem operation failed, and the path it failed on.
 ///
@@ -82,6 +87,20 @@ impl FsErrorKind {
             Io(code) => `${code:?}`,
         };
     }
+}
+
+/// What a path names, as the host reports it. `modified` is `None` where the
+/// platform keeps no modification time.
+pub struct Metadata {
+    pub type: FileType,
+    pub size: u64,
+    pub modified: Option<Instant>,
+}
+
+/// One entry a walk found, and the path that reaches it from the preopen.
+pub struct WalkEntry {
+    pub path: String,
+    pub type: FileType,
 }
 
 /// One entry of a directory.
@@ -145,17 +164,45 @@ pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Pr
     };
 }
 
-/// Write `data` to `path`, creating it or truncating what is there.
+/// Put `data` at `path`, replacing whatever is there.
+///
+/// The bytes go to a file beside the target, which is then renamed over it, so
+/// a reader sees the old file or the new one and a write that fails partway
+/// leaves the old one. That is atomicity, not durability: nothing here is
+/// synced, so a host that loses power can still lose a write it reported as
+/// complete. [`root`] hands over the descriptor for a caller that needs more.
 ///
 /// `data` is anything that views as bytes — a `String`, a `ByteList`, a
 /// `ByteSlice` — and is written through without a copy.
 pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens {
+    let [file, temp] = open_temp(path)?;
+    let placed: Result<(), FsError> = match stream_out(path, file, data) {
+        Ok(_) => rename(&temp, path),
+        Err(e) => Result::Err(e),
+    };
+    if let Err(e) = placed {
+        // The write already failed, so a failed cleanup is not a second error.
+        let _ = remove_file(&temp);
+        return Result::Err(e);
+    }
+    return Result::Ok(());
+}
+
+/// Write `data` into the file `path` names, creating it or truncating what is
+/// there. [`write`] replaces the file instead, which is what a caller wants
+/// unless the file is too large to exist twice or its directory must not gain
+/// a second entry.
+pub fn write_in_place<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens {
     let file = open(path, OpenFlags::Create | OpenFlags::Truncate, DescriptorFlags::Write)?;
-    let [rx, tx] = Stream::<u8>::new();
-    let done = file.write_via_stream(rx, 0 as Filesize);
-    tx.write_raw_all(data.as_byte_slice() as Slice<u8>);
-    tx.drop();
-    return finish(path, done);
+    return stream_out(path, file, data);
+}
+
+/// Move what `from` names to `to`, replacing what `to` names. Both paths
+/// resolve against the preopen, so the move never crosses a filesystem.
+pub fn rename<F: AsStrSlice, T: AsStrSlice>(from: F, to: T) -> Result<(), FsError> with Preopens {
+    let dir = root()?;
+    let moved = dir.rename_at(from.to_string(), &dir, to.to_string()).wait();
+    return settle(from, moved);
 }
 
 /// Remove the file `path` names. A directory is not a file: `remove_file` on
@@ -194,7 +241,7 @@ pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     };
     let base = path.to_string();
     for let entry of entries {
-        let child = `${base}/${entry.name}`;
+        let child = join(&base, &entry.name);
         if entry.type matches { Directory } {
             remove_dir_all(&child)?;
         } else {
@@ -204,13 +251,131 @@ pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preope
     return remove_dir(path);
 }
 
-/// `NotPermitted` where `path` names the preopen. It is the root every path
-/// here resolves against, and a removal does not take that down.
-fn deny_preopen<S: AsStrSlice>(path: S) -> Result<(), FsError> {
-    if path.is_empty() || path == "." {
+/// `base` and `name` with one `/` between them. An empty side answers the
+/// other, and a `name` that starts with `/` replaces `base`, as it does in
+/// Rust.
+pub fn join<A: AsStrSlice, B: AsStrSlice>(base: A, name: B) -> String {
+    if base.is_empty() || name.starts_with("/") {
+        return name.to_string();
+    }
+    if name.is_empty() {
+        return base.to_string();
+    }
+    let mut out = base.to_string();
+    if !out.ends_with("/") {
+        out.push('/');
+    }
+    out.push_str(name);
+    return out;
+}
+
+/// `path` without its last component, or `None` where `path` names the
+/// preopen. One component answers `""`, which is the preopen itself.
+pub fn parent<S: AsStrSlice>(path: S) -> Option<StrSlice> {
+    let Some([dir, _]) = split_last(path) else {
+        return null;
+    };
+    return Option::Some(dir);
+}
+
+/// The last component of `path`, or `None` where `path` names the preopen.
+/// A trailing `/` is not a component.
+pub fn file_name<S: AsStrSlice>(path: S) -> Option<StrSlice> {
+    let Some([_, name]) = split_last(path) else {
+        return null;
+    };
+    return Option::Some(name);
+}
+
+/// The last component of `path` up to its extension. A name that is all
+/// extension, such as `.gitignore`, is all stem.
+pub fn file_stem<S: AsStrSlice>(path: S) -> Option<StrSlice> {
+    let Some(name) = file_name(path) else {
+        return null;
+    };
+    let Some(at) = extension_dot(&name) else {
+        return Option::Some(name);
+    };
+    return Option::Some(name.sub(0, at));
+}
+
+/// The last component of `path` after its final `.`, or `None` where the name
+/// carries no extension.
+pub fn extension<S: AsStrSlice>(path: S) -> Option<StrSlice> {
+    let Some(name) = file_name(path) else {
+        return null;
+    };
+    let Some(at) = extension_dot(&name) else {
+        return null;
+    };
+    return Option::Some(name.sub(at + 1, name.len()));
+}
+
+/// `path` with its `.` components dropped and its `..` components applied, as
+/// text: nothing is opened, so a component that names nothing is not an error.
+///
+/// An absolute path and one that climbs past the preopen are both
+/// `Io(NotPermitted)`, because neither names anything this module can reach.
+/// The preopen itself normalizes to `""`.
+pub fn normalize<S: AsStrSlice>(path: S) -> Result<String, FsError> {
+    if path.starts_with("/") {
         return Result::Err(failure(path, ErrorCode::NotPermitted));
     }
-    return Result::Ok(());
+    let view = path.as_str_slice();
+    let mut kept: List<StrSlice> = [];
+    let mut start = 0;
+    while start <= view.len() {
+        let rest = view.sub(start, view.len());
+        let end = match rest.find("/") {
+            Some(at) => start + at,
+            None => view.len(),
+        };
+        let part = view.sub(start, end);
+        start = end + 1;
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            if kept.is_empty() {
+                return Result::Err(failure(path, ErrorCode::NotPermitted));
+            }
+            kept.pop();
+            continue;
+        }
+        kept.push(part);
+    }
+    let mut out = String::new();
+    for let part of kept {
+        if !out.is_empty() {
+            out.push('/');
+        }
+        out.push_str(part);
+    }
+    return Result::Ok(out);
+}
+
+/// What the host knows about what `path` names, without opening it.
+pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preopens {
+    let dir = root()?;
+    let stat = match preopen_itself(path) {
+        true => dir.stat().wait(),
+        false => dir.stat_at(PathFlags::none(), path.to_string()).wait(),
+    };
+    return match stat {
+        Ok(found) => Result::Ok(Metadata {
+            type: file_type(found.type),
+            size: found.size as u64,
+            modified: found.data_modification_timestamp,
+        }),
+        Err(e) => Result::Err(failure(path, e)),
+    };
+}
+
+/// Whether `path` names anything. A host that answers neither way — a
+/// permission it will not grant, a name it will not read — answers `false`
+/// here, so a caller that has to tell those apart asks [`metadata`].
+pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens {
+    return metadata(path).is_ok();
 }
 
 /// Every entry of the directory `path` names, in the order the host lists
@@ -228,6 +393,48 @@ pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with 
     return Result::Ok(out);
 }
 
+/// Every entry under the directory `path` names, and every entry under those,
+/// with a directory listed before what it holds.
+///
+/// A `WalkEntry` carries the path to reach it, not just its name, so a caller
+/// reads or removes what it finds without rebuilding the path. The whole tree
+/// is listed before the call returns; a walk too large to hold is
+/// [`read_dir`] and a recursion of the caller's own.
+///
+/// `descend` is asked about each directory before the walk enters it, so a
+/// caller skips a subtree instead of paying to list it. The directory itself
+/// is listed either way.
+pub fn walk_dir<S: AsStrSlice>(
+    path: S,
+    descend: fn(&WalkEntry) -> bool = enter_every_directory,
+) -> Result<List<WalkEntry>, FsError> with Preopens {
+    let mut found: List<WalkEntry> = [];
+    walk_into(path.to_string(), descend, &mut found)?;
+    return Result::Ok(found);
+}
+
+fn enter_every_directory(entry: &WalkEntry) -> bool {
+    return true;
+}
+
+/// Append everything under `path` to `found`, depth first.
+fn walk_into(
+    path: String,
+    descend: fn(&WalkEntry) -> bool,
+    found: &mut List<WalkEntry>,
+) -> Result<(), FsError> with Preopens {
+    for let entry of read_dir(&path)? {
+        let here = WalkEntry { path: join(&path, &entry.name), type: entry.type };
+        let enter = entry.type matches { Directory } && descend(&here);
+        let child = here.path;
+        found.push(here);
+        if enter {
+            walk_into(child, descend, found)?;
+        }
+    }
+    return Result::Ok(());
+}
+
 /// Create the directory `path` names. The parent has to exist and the path
 /// itself has to be free, so an occupied path is `Io(Exist)`.
 pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
@@ -238,29 +445,114 @@ pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
 /// Create the directory `path` names, and every parent it needs. A directory
 /// that already exists is not a failure.
 pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens {
-    // The loop below skips an empty component, so a leading `/` would build
-    // the tree inside the preopen rather than failing as it does elsewhere.
-    if path.starts_with("/") {
-        return Result::Err(failure(path, ErrorCode::NotPermitted));
-    }
+    // `normalize` is what refuses an absolute path and one that climbs out;
+    // building the tree component by component would otherwise make both.
+    let normalized = normalize(path)?;
     let dir = root()?;
     let mut prefix = String::new();
-    for let component of path.split("/") {
-        if component.is_empty() || component == "." {
+    for let component of normalized.split("/") {
+        if component.is_empty() {
             continue;
         }
-        if !prefix.is_empty() {
-            prefix.push('/');
-        }
-        prefix.push_str(&component);
+        prefix = join(&prefix, &component);
         ensure_dir(&dir, &prefix)?;
+    }
+    return Result::Ok(());
+}
+
+/// `path` as its parent and its last component, or `None` where `path` names
+/// the preopen. Every split this module makes comes from here, so no two of
+/// them can disagree. A trailing `/` is not a component.
+fn split_last<S: AsStrSlice>(path: S) -> Option<[StrSlice, StrSlice]> {
+    let mut view = path.as_str_slice();
+    while view.len() > 1 && view.ends_with("/") {
+        view = view.sub(0, view.len() - 1);
+    }
+    if view.is_empty() || view == "." || view == "/" {
+        return null;
+    }
+    let Some(at) = view.rfind("/") else {
+        return Option::Some([view.sub(0, 0), view]);
+    };
+    let name = view.sub(at + 1, view.len());
+    if name == "." {
+        return null;
+    }
+    return Option::Some([view.sub(0, at), name]);
+}
+
+/// Where the extension of `name` starts, or `None` where it has none. A dot
+/// that opens the name starts no extension: `.gitignore` is a name.
+fn extension_dot(name: &StrSlice) -> Option<i32> {
+    let Some(at) = name.rfind(".") else {
+        return null;
+    };
+    if at == 0 {
+        return null;
+    }
+    return Option::Some(at);
+}
+
+/// A new file beside `target`, and the path it is at. `Exclusive` makes the
+/// host decide the name, so no two writers can hold one name and no
+/// randomness is needed to say so.
+fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> with Preopens {
+    let dir = root()?;
+    let base = `${target.to_string()}.wado-tmp`;
+    let mut taken = 0;
+    loop {
+        let candidate = match taken {
+            0 => base,
+            n => `${base}.${n}`,
+        };
+        taken += 1;
+        let opened = dir.open_at(
+            PathFlags::none(),
+            candidate,
+            OpenFlags::Create | OpenFlags::Exclusive,
+            DescriptorFlags::Write,
+        ).wait();
+        match opened {
+            Ok(file) => {
+                return Result::Ok([file, candidate]);
+            },
+            Err(e) => {
+                // `Exist` says another writer holds the name; take the next.
+                if !e matches { Exist } {
+                    return Result::Err(failure(target, e));
+                }
+            },
+        }
+    }
+}
+
+/// Write `data` into `file`, which `path` names, and report what the transfer
+/// answered rather than what the first call did.
+fn stream_out<T: AsByteSlice, S: AsStrSlice>(path: S, file: Descriptor, data: &T) -> Result<(), FsError> {
+    let [rx, tx] = Stream::<u8>::new();
+    let done = file.write_via_stream(rx, 0 as Filesize);
+    tx.write_raw_all(data.as_byte_slice() as Slice<u8>);
+    tx.drop();
+    return finish(path, done);
+}
+
+/// Whether `path` names the preopen rather than something under it.
+fn preopen_itself<S: AsStrSlice>(path: S) -> bool {
+    return path.is_empty() || path == ".";
+}
+
+/// `NotPermitted` where `path` names the preopen. It is the root every path
+/// here resolves against, and a removal does not take that down.
+fn deny_preopen<S: AsStrSlice>(path: S) -> Result<(), FsError> {
+    if preopen_itself(path) {
+        return Result::Err(failure(path, ErrorCode::NotPermitted));
     }
     return Result::Ok(());
 }
 
 /// Create the directory `path` names under `dir`. One already there is not a
 /// failure, and anything else there is `NotDirectory`.
-fn ensure_dir<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), FsError> {
+fn ensure_dir<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), FsError> with Preopens {
     let Err(e) = dir.create_directory_at(path.to_string()).wait() else {
         return Result::Ok(());
     };
@@ -268,20 +560,14 @@ fn ensure_dir<S: AsStrSlice>(dir: &Descriptor, path: S) -> Result<(), FsError> {
         return Result::Err(failure(path, e));
     }
     // `Exist` says something is at the path, not that it is a directory.
-    let found = match dir.stat_at(PathFlags::none(), path.to_string()).wait() {
-        Ok(stat) => stat.type,
-        Err(e) => {
-            return Result::Err(failure(path, e));
-        },
-    };
-    if found matches { Directory } {
+    if metadata(path)?.type matches { Directory } {
         return Result::Ok(());
     }
     return Result::Err(failure(path, ErrorCode::NotDirectory));
 }
 
 fn open_dir<S: AsStrSlice>(path: S) -> Result<Descriptor, FsError> with Preopens {
-    if path.is_empty() || path == "." {
+    if preopen_itself(path) {
         return root();
     }
     return open(path, OpenFlags::Directory, DescriptorFlags::Read);

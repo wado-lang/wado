@@ -36,17 +36,35 @@ use fs from "core:fs";
 
 pub fn root() -> Result<Descriptor, FsError> with Preopens;
 
-pub fn read(path: &String) -> Result<ByteList, FsError> with Preopens;
-pub fn read_to_string(path: &String) -> Result<String, FsError> with Preopens;
-pub fn write<T: AsByteSlice>(path: &String, data: &T) -> Result<(), FsError> with Preopens;
-pub fn remove_file(path: &String) -> Result<(), FsError> with Preopens;
+pub fn read<S: AsStrSlice>(path: S) -> Result<ByteList, FsError> with Preopens;
+pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Preopens;
+pub fn write<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens;
+pub fn remove_file<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
 
-pub fn read_dir(path: &String) -> Result<List<DirEntry>, FsError> with Preopens;
-pub fn create_dir(path: &String) -> Result<(), FsError> with Preopens;
-pub fn create_dir_all(path: &String) -> Result<(), FsError> with Preopens;
-pub fn remove_dir(path: &String) -> Result<(), FsError> with Preopens;
-pub fn remove_dir_all(path: &String) -> Result<(), FsError> with Preopens;
+pub fn write_in_place<T: AsByteSlice, S: AsStrSlice>(path: S, data: &T) -> Result<(), FsError> with Preopens;
+pub fn rename<F: AsStrSlice, T: AsStrSlice>(from: F, to: T) -> Result<(), FsError> with Preopens;
+
+pub fn metadata<S: AsStrSlice>(path: S) -> Result<Metadata, FsError> with Preopens;
+pub fn exists<S: AsStrSlice>(path: S) -> bool with Preopens;
+
+pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with Preopens;
+pub fn walk_dir<S: AsStrSlice>(path: S, descend: fn(&WalkEntry) -> bool = …) -> Result<List<WalkEntry>, FsError> with Preopens;
+pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
+pub fn create_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
+pub fn remove_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
+pub fn remove_dir_all<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens;
+
+pub fn join<A: AsStrSlice, B: AsStrSlice>(base: A, name: B) -> String;
+pub fn parent<S: AsStrSlice>(path: S) -> Option<StrSlice>;
+pub fn file_name<S: AsStrSlice>(path: S) -> Option<StrSlice>;
+pub fn file_stem<S: AsStrSlice>(path: S) -> Option<StrSlice>;
+pub fn extension<S: AsStrSlice>(path: S) -> Option<StrSlice>;
+pub fn normalize<S: AsStrSlice>(path: S) -> Result<String, FsError>;
 ```
+
+A path is whatever views as text — a `String`, a reference to one, or a
+`StrSlice` — so a caller splits a path and passes the halves back without
+copying either.
 
 ### Paths, not descriptors
 
@@ -60,11 +78,13 @@ recursive walk therefore needs no descriptor either: `read_dir("a/b")` replaces
 The empty path and `"."` name the preopen itself, so a walk has a root case. An
 absolute path resolves against no preopen and fails. The host answers that for
 every operation but `create_dir_all`, which splits the path rather than handing
-it over, so it makes the same check itself.
+it over; it runs the path through `normalize` first, which makes the same check
+and settles `.` and `..` before any directory is made.
 
 `create_dir_all` makes one more check the host cannot: `Exist` reports whatever
-occupies a component, so it stats the entry and accepts only a directory. A
-regular file there is `NotDirectory`, not a directory that was already made.
+occupies a component, so it reads the entry's `metadata` and accepts only a
+directory. A regular file there is `NotDirectory`, not a directory that was
+already made.
 `create_dir` makes one directory and needs no such check, since it passes the
 host's answer straight back, as Rust's `create_dir` does.
 
@@ -136,7 +156,6 @@ and reading a file that does not fit in memory. Each is `wasi:filesystem`
 through `root()`. They are out because nothing calls them, here or in a module
 written against this one. A caller that needs one is a reason to move the line,
 as [#2061](https://github.com/wado-lang/wado/issues/2061) was for `remove_dir`.
-The roadmap carries the ones a caller has already reached for.
 
 ### Removing a directory
 
@@ -184,14 +203,14 @@ no temporary directory to reach for in the first place: the preopen tree is
 all there is. The same reason puts Rust's `NamedTempFile::new_in` and Go's
 `os.CreateTemp(filepath.Dir(dst))` next to their targets.
 
-The name is `<target>.wado-tmp`, then `.1`, `.2` and on. The file is created
-with `Create | Exclusive`, so the host decides uniqueness atomically and a
-second writer that loses the race takes the next name. That is what makes a
-random name unnecessary, and a random name is what would otherwise put
-`Random` in the signature of every function that writes a file and
-`wasi:random` in its component's imports. An unpredictable name defends a
-shared `/tmp` against a symlink planted by another user, a threat this tree
-does not have.
+The name is `<target>.wado-tmp`, then `.1`, `.2` and on, counted from zero on
+each write. The file is created with `Create | Exclusive`, so the host decides
+uniqueness atomically and a second writer that loses the race takes the next
+name. A random name would decide
+the same thing at a price: `Random` in the signature of every function that
+writes a file, and `wasi:random` in its component's imports. What randomness
+buys elsewhere is a defence of a shared `/tmp` against a symlink planted by
+another user, and this tree has no shared `/tmp`.
 
 A failed write unlinks its temporary file, best effort: the write already
 failed, so a failure to clean up is not a second error to report. A process
@@ -209,6 +228,23 @@ calls `sync_data` on the file or `sync` on the directory, so power loss can
 still take a write the host reported as complete. The doc comment says so.
 A caller that needs otherwise syncs the descriptor `root()` hands over, which
 is the escape hatch this module keeps for exactly this.
+
+### A walk is a list, because an iterator may not perform I/O
+
+`walk_dir` lists a whole tree before it returns. The shape that suggests itself
+is an iterator, and it is not available: every standard library trait declares
+`with ()`, `Iterator` included, so a `next` that reads a directory is a design
+error rather than a slow path. A walk too large to hold is `read_dir` and a
+recursion of the caller's own, which is what `example/tree.wado` keeps.
+
+The cost that shape would have saved is pruning, so `walk_dir` takes the
+predicate instead: `descend` is asked about a directory before the walk enters
+it, and the directory is listed either way. Without it the callers that skip
+`.git` and `node_modules` would pay to list them.
+
+An entry carries the path that reaches it rather than its name alone. A walk's
+answer is read, removed or opened, and rebuilding the path from a name is the
+step a caller would get wrong.
 
 ### Path operations live here, not in a `core:path`
 
@@ -250,63 +286,17 @@ If a caller with no filesystem at all appears, the pure half can move out and
 
 ## Roadmap
 
-1. `lib/core/fs.wado`, registered in `src/stdlib.rs`, tested by
-   `lib/core/fs_test.wado` beside it: the round trips, `NotFound`, `NotUtf8`,
-   the nested `create_dir_all` / `read_dir` / `remove_file` path, the removal of
-   a tree, and the empty path. `wado test` preopens the working directory, so
-   each test owns a directory under `target/` and reads only what it wrote
-   there. Done when that file passes at every optimization level.
-2. The call sites the issue names: `package-gale/tools/rust_corpus.wado`,
-   `rust_corpus_check.wado`, `rust_inline_paths.wado`, and
-   `package-gale-highlight-wado/tools/{corpus,corpus_check,highlight_dump}.wado`.
-   Done when `scripts/check-rust-paths.sh --check` and
-   `scripts/check-highlight.sh` pass, which read the whole corpus through
-   `core:fs`.
-3. The rest of the whole-file readers and writers: `package-marl/src/main.wado`,
-   `package-gale/src/highlight/facade.wado`, the ten `benchmark/*` copies,
-   `example/tree.wado`, the four `package-gale/scripts/*.wado` that only read or
-   write, and `package-gale/src/highlight_gen.wado`, which emits the boilerplate
-   rather than running it. Done when each package's tests pass,
-   `expand_action_templates_in_place.wado` reports its corpus unchanged, and the
-   regenerated highlighters carry the shorter `run`.
-4. Path operations: `join`, `parent`, `file_name`, `file_stem`, `extension`,
-   and `normalize`. Everything but `normalize` is pure string work over
-   `AsStrSlice`, and `normalize` applies the preopen rules above, so it answers
-   a `Result`. The views come back as `StrSlice`, so taking a parent or an
-   extension copies nothing. This goes first because the call sites of 5 and 7
-   name a file and test its extension. Done when the four helpers that do this
-   by hand are gone — `join_path` in `package-marl/src/main.wado` and
-   `example/tree.wado`, which are byte-identical, `parent_of` in
-   `package-gale/src/highlight/facade.wado`, and `grant_hint` in
-   `package-gale/src/main.wado` — the two `substr_bytes(0, len - 4)` extension
-   strips in `package-gale/scripts/extract_antlr4_descriptors.wado` read
-   `file_stem`, and `create_dir_all` and `remove_dir_all` call the public
-   functions instead of splitting and joining themselves.
-5. `metadata`: the type, the size, and the modification time of what a path
-   names, plus the `exists` that reads from it. Thirteen places answer "is it
-   there?" by discarding the error of a call made for another purpose, and
-   `package-marl/src/main.wado` decides file-or-directory from the `.md` suffix
-   because no call answers it. `stat_at` is already here, privately, inside
-   `ensure_dir`. Done when those sites ask instead, and `ensure_dir` asks
-   through the public function.
-6. `rename`, and the replacing `write` above that is built on it, with
-   `write_in_place` carrying what `write` does today. Nine writes truncate a
-   file the user already has, among them the markdown formatter rewriting a
-   `.md` and the two scripts that rewrite committed `.g4` and baseline files,
-   and `extract_antlr4_descriptors.wado` already builds a two-file rollback out
-   of `remove_file` for want of this. Done when a test shows the target
-   unchanged after a write that fails partway, no temporary file is left behind
-   on that path, and the nine callers are replacing rather than truncating
-   without having been edited.
-7. `walk_dir`: every entry under a path, depth-first, as an iterator of the
-   path and its type. `read_dir` lists one level, so four places write the
-   recursion themselves, one of them chunking the raw directory stream 64
-   entries at a time. It needs no WASI surface this module does not already
-   use. Done when `package-marl/src/main.wado` and `example/tree.wado` walk
-   through it and their own recursion is gone.
+Nothing is pending. The module answers what the Decision describes, and the
+callers in this repository read, write and walk through it. What it still
+cannot reach is unowned and sits below.
 
 ## Known gaps
 
+- A caller that opens its own files still answers "is it there?" by discarding
+  an error: `package-gale/src/main.wado` opens each grant in turn and
+  `extract_antlr4_descriptors.wado` reads a file to find out whether it exists.
+  Both are blocked by the two gaps below rather than by `metadata`, which
+  answers the question for every path this module can reach.
 - A temporary file outlives a process that dies between creating it and
   renaming it, so a directory can collect `<name>.wado-tmp*` entries that no
   writer owns. Closing it means deciding what makes one stale — an age read

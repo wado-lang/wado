@@ -43,10 +43,10 @@ export fn run() with (Stdout, Stderr, Environment, Preopens, Exit) {
         if !category.type matches { Directory } {
             continue;
         }
-        let dir = `${GRAMMARS_ROOT}/${category.name}`;
+        let dir = fs::join(&GRAMMARS_ROOT, &category.name);
         for let name of grammar_names(&dir) {
             total += 1;
-            let path = `${dir}/${name}`;
+            let path = fs::join(&dir, &name);
             let text = match fs::read_to_string(&path) {
                 Ok(s) => s,
                 Err(e) => {

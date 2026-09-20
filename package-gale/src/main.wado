@@ -2,6 +2,9 @@ use { args, print, eprintln, exit, Stdout, Stderr, Environment, Exit } from "cor
 use { Deserialize } from "core:serde";
 use { parse, ArgsError } from "core:args";
 use { Preopens, Descriptor, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
+// Only the path functions, which perform no I/O: this file opens its own files
+// because it searches every grant, which `core:fs` does not.
+use fs from "core:fs";
 use { assemble_grammar, AssembleError } from "./g4/parser.wado";
 use { Grammar } from "./ir.wado";
 use {
@@ -361,9 +364,11 @@ fn create_granted<S: AsStrSlice>(path: S) -> Descriptor with (Stderr, Preopens, 
 /// The `wado run` invocation that would grant `path`'s own directory and name
 /// the file relative to it.
 fn grant_hint<S: AsStrSlice>(path: S) -> String {
-    let cut = path.rfind("/").unwrap();
-    let dir = if cut == 0 { "/" } else { path.substr_bytes(0, cut) };
-    let name = path.substr_bytes(cut + 1, path.len());
+    let dir = match fs::parent(path) {
+        Some(parent) && !parent.is_empty() => parent.to_string(),
+        _ => "/",
+    };
+    let name = fs::file_name(path).map(|n: StrSlice| n.to_string()).unwrap_or("");
     return `wado run --dir ${dir} ... ${name}`;
 }
 
