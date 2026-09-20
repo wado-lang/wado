@@ -32,33 +32,37 @@ global URL_SAFE_TABLE: ByteList = [
     b'5', b'6', b'7', b'8', b'9', b'-', b'_',
 ];
 
-fn build_decode_table(lenient: bool) -> ByteList {
-    let mut table = ByteList::filled(256, 255);
-
-    for let mut i = 0; i < 26; i += 1 {
-        table['A' as i32 + i] = i as u8;
-    }
-    for let mut i = 0; i < 26; i += 1 {
-        table['a' as i32 + i] = (26 + i) as u8;
-    }
-    for let mut i = 0; i < 10; i += 1 {
-        table['0' as i32 + i] = (52 + i) as u8;
-    }
-    table['-' as i32] = 62;
-    table['_' as i32] = 63;
-    if lenient {
-        table['+' as i32] = 62;
-        table['/' as i32] = 63;
-        table['=' as i32] = 254;
-    }
-
-    return table;
-}
-
-global DECODE_TABLE: ByteList = build_decode_table(true);
+// Written out rather than built in a loop so the initializer is a Wasm
+// constant and a module that never decodes drops both tables. The rules the
+// entries follow are stated, and checked, in the test at the end of the file.
+global DECODE_TABLE: ByteList = [
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62, 255, 62, 255,
+    63, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 255, 255, 255, 254, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 255, 63, 255, 26, 27, 28, 29, 30, 31, 32, 33,
+    34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255,
+];
 
 // The URL-safe alphabet alone, so a canonical decode rejects `+`, `/` and `=`.
-global URL_DECODE_TABLE: ByteList = build_decode_table(false);
+global URL_DECODE_TABLE: ByteList = [
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62,
+    255, 255, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 255, 255, 255, 255, 255, 255, 255, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 255, 255, 255, 255, 63, 255, 26, 27, 28, 29, 30, 31,
+    32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+];
 
 fn encode_impl(data: ByteSlice, table: &ByteList, pad: bool) -> String {
     let len = data.len();
@@ -213,4 +217,28 @@ pub fn decode<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
 #[inline]
 pub fn decode_url_strict<S: AsByteSlice>(encoded: &S) -> Option<ByteList> {
     return decode_impl(encoded.as_byte_slice(), &URL_DECODE_TABLE, true);
+}
+
+test "the decode tables spell out the alphabets they accept" {
+    let by_rule = |lenient: bool| {
+        let mut table = ByteList::filled(256, 255);
+        for let mut i = 0; i < 26; i += 1 {
+            table['A' as i32 + i] = i as u8;
+            table['a' as i32 + i] = (26 + i) as u8;
+        }
+        for let mut i = 0; i < 10; i += 1 {
+            table['0' as i32 + i] = (52 + i) as u8;
+        }
+        table['-' as i32] = 62;
+        table['_' as i32] = 63;
+        if lenient {
+            table['+' as i32] = 62;
+            table['/' as i32] = 63;
+            table['=' as i32] = 254;
+        }
+        return table;
+    };
+
+    assert DECODE_TABLE == by_rule(true);
+    assert URL_DECODE_TABLE == by_rule(false);
 }
