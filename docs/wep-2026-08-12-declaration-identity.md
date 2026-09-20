@@ -761,11 +761,14 @@ question to the next kind, so which kind is asked first is a silent tiebreak.
 `wasi:cli/types`, so the variants decline and the enum answers. That holds for
 any module's `ErrorCode`, including one a user wrote.
 
-Two positions arrive without a declaring interface. A world body names an export
-type with no import to resolve, and is scoped only by the world's own namespace,
-which does not reach a type another package declares. A lib-local type is
-registered under its package's default interface, which no CM namespace covers,
-so only a program-wide unique match reaches it.
+Three positions arrive without a declaring interface. A world body names an
+export type with no import to resolve, and is scoped only by the world's own
+namespace, which does not reach a type another package declares. A lib-local
+type is registered under its package's default interface, which no CM namespace
+covers, so only a program-wide unique match reaches it. A reference synthesized
+while emitting a CM instance carries at most the interface being emitted, which
+need not be the one that declares it. That is the position `ErrorCode` arrives
+in.
 
 ## Known gap: an abstract qualifier argument is not compared
 
