@@ -314,7 +314,7 @@ pub fn cm_payload_type_from_ast(
             if let Some(scalar) = cm_scalar_from_ast_name(&n.name) {
                 return Some(CmPayloadType::Scalar(scalar));
             }
-            let src = registry.resolve_cm_source_for(n, None)?;
+            let src = registry.resolve_cm_source_for(n)?;
             let declared = |cm: &str| {
                 let def = cm_decl_in_interface(type_table, registry, &src, &n.name)?;
                 Some(CmDecl::new(type_table.defs(), def, cm))
@@ -436,7 +436,7 @@ fn wasi_error_code_decl_from_ast(
     let ast::Type::Named(n) = &registry.resolve_type(ty) else {
         return None;
     };
-    let source = registry.resolve_cm_source_for(n, None)?;
+    let source = registry.resolve_cm_source_for(n)?;
     if !source.starts_with("wasi:") {
         return None;
     }
@@ -467,7 +467,7 @@ fn is_trailers_payload_from_ast(resolved: &ast::Type, registry: &CmInterfaceRegi
         return false;
     };
     registry
-        .resolve_cm_source_for(inner, None)
+        .resolve_cm_source_for(inner)
         .and_then(|source| {
             registry
                 .get_resource_cm_name_by_source(&source, &inner.name)
@@ -1183,13 +1183,6 @@ fn find_unique_source_with_prefix<'a, V>(
     name: &str,
 ) -> Option<&'a str> {
     find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
-}
-
-/// The package a bundled CM source interface names: `wasi:filesystem/types`
-/// gives `"filesystem"`. `None` outside [`CmNamespace`].
-fn binding_package(source: &str) -> Option<&str> {
-    let (_, rest) = CmNamespace::split_specifier(source)?;
-    rest.split('/').next()
 }
 
 /// The unique source interface registering `name` across every bundled CM
@@ -2941,46 +2934,6 @@ impl CmInterfaceRegistry {
             .or_else(|| find_unique_source_with_prefix(&self.newtypes, prefix, name))
     }
 
-    /// The unique source registering `name` among those `is_member` admits,
-    /// across every type kind in the order the CM boundary resolves them.
-    fn find_unique_source_by_kind(
-        &self,
-        name: &str,
-        is_member: &dyn Fn(&str) -> bool,
-    ) -> Option<&str> {
-        find_unique_source_in_set(&self.newtypes, name, is_member)
-            .or_else(|| find_unique_source_in_set(&self.resources, name, is_member))
-            .or_else(|| find_unique_source_in_set(&self.structs, name, is_member))
-            .or_else(|| find_unique_source_in_set(&self.variants, name, is_member))
-            .or_else(|| find_unique_source_in_set(&self.enums, name, is_member))
-            .or_else(|| find_unique_source_in_set(&self.flags, name, is_member))
-    }
-
-    /// Resolve the bundled-namespace source interface for a `NamedType`. The
-    /// reference's own `source_interface` answers when bootstrap filled it. A
-    /// reference synthesized at lower time has none, so every kind is searched,
-    /// preferring the hinted package — which separates the `ErrorCode` of
-    /// filesystem, http and sockets — else taking the unique registrant across
-    /// all of [`CmNamespace`].
-    pub fn resolve_binding_source_for(
-        &self,
-        named: &NamedType,
-        package_hint: Option<&str>,
-    ) -> Option<String> {
-        if let Some(s) = self.source_interface(named) {
-            return CmNamespace::split_specifier(&s).is_some().then_some(s);
-        }
-        let in_binding = |src: &str| CmNamespace::split_specifier(src).is_some();
-        package_hint
-            .and_then(|pkg| {
-                self.find_unique_source_by_kind(&named.name, &|src| {
-                    binding_package(src) == Some(pkg)
-                })
-            })
-            .or_else(|| self.find_unique_source_by_kind(&named.name, &in_binding))
-            .map(str::to_string)
-    }
-
     /// The `ModuleSource` a CM interface FQ was registered under — the entry
     /// module for a `--lib` local, or the dependency `ModuleSource::Wasm` for a
     /// component import. `None` for a WASI/core interface (whose source is
@@ -3052,15 +3005,8 @@ impl CmInterfaceRegistry {
     /// Used by the flat-param lift path when the binding is for a
     /// `core:kiln/generator` world export and the parameter happens to be a
     /// `core:kiln/types` record such as `OutputFile`.
-    pub fn resolve_cm_source_for(
-        &self,
-        named: &NamedType,
-        wasi_package_hint: Option<&str>,
-    ) -> Option<String> {
+    pub fn resolve_cm_source_for(&self, named: &NamedType) -> Option<String> {
         if let Some(s) = self.source_interface(named) {
-            return Some(s);
-        }
-        if let Some(s) = self.resolve_binding_source_for(named, wasi_package_hint) {
             return Some(s);
         }
         self.find_kiln_struct_source(&named.name)
@@ -3197,7 +3143,8 @@ impl CmInterfaceRegistry {
     pub fn interface_declaring(&self, source: &ModuleSource, name: &str) -> Option<&str> {
         self.module_interfaces(source).into_iter().find(|fq| {
             let key = ((*fq).to_string(), name.to_string());
-            self.structs.contains_key(&key)
+            self.resources.contains_key(&key)
+                || self.structs.contains_key(&key)
                 || self.variants.contains_key(&key)
                 || self.enums.contains_key(&key)
                 || self.flags.contains_key(&key)
@@ -3632,7 +3579,7 @@ impl CmInterfaceRegistry {
                 }
                 "()" => {}
                 name => {
-                    if let Some(source) = self.resolve_cm_source_for(named, None) {
+                    if let Some(source) = self.resolve_cm_source_for(named) {
                         if let Some(fields) = self
                             .get_struct_fields_by_source(&source, name)
                             .map(<[(String, Type)]>::to_vec)
@@ -4986,7 +4933,7 @@ pub fn cm_variant_size_align_scoped(
     registry: &CmInterfaceRegistry,
     wasi_package: Option<&str>,
 ) -> Option<(u32, u32)> {
-    let source = registry.resolve_cm_source_for(named, wasi_package)?;
+    let source = registry.resolve_cm_source_for(named)?;
     let cases = registry.get_variant_cases_by_source(&source, &named.name)?;
     if !cases.iter().any(|case| case.payload.is_some()) {
         return None; // no payload cases — not outptr
@@ -5024,7 +4971,7 @@ pub fn cm_size_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
+            let Some(source) = registry.resolve_cm_source_for(named) else {
                 return cm_size(ty);
             };
             if let Some(resolved) =
@@ -5093,7 +5040,7 @@ pub fn cm_align_with_registry_scoped(
 ) -> u32 {
     match ty {
         Type::Named(named) => {
-            let Some(source) = registry.resolve_cm_source_for(named, wasi_package) else {
+            let Some(source) = registry.resolve_cm_source_for(named) else {
                 return cm_align(ty);
             };
             if let Some(resolved) =

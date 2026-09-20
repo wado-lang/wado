@@ -152,16 +152,8 @@ fn synthesize_lift_inner(
                     TirExpr::new(TirExprKind::Unit, TypeTable::UNIT, synth_span())
                 }
                 _ => {
-                    // CM named types arrive with `source_interface` populated
-                    // either by stdlib bootstrap or by `resolve_cm_source_for`
-                    // (fallback to the unique `wasi:*` registrant, biased by the
-                    // current binding's WASI package, then to `core:kiln/*` for
-                    // generator-world bindings). Non-CM references fall through
-                    // to the i32-handle default.
-                    if let Some(source) = ctx
-                        .cm_interface_registry
-                        .resolve_cm_source_for(named, Some(ctx.cm_package))
-                    {
+                    // A non-CM reference falls through to the i32-handle default.
+                    if let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) {
                         let source = source.as_str();
                         if let Some(lifted) = try_lift_wasi_variant_or_enum(
                             named,

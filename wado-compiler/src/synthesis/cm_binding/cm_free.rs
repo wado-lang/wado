@@ -136,10 +136,7 @@ pub(super) fn cm_shape(ty: &Type, ctx: &CmShapeContext<'_>) -> CmShape {
 
 /// A registry record, a registry variant, or a fixed-width leaf.
 fn named_shape(named: &NamedType, ctx: &CmShapeContext<'_>) -> CmShape {
-    let Some(source) = ctx
-        .cm_interface_registry
-        .resolve_cm_source_for(named, Some(ctx.cm_package))
-    else {
+    let Some(source) = ctx.cm_interface_registry.resolve_cm_source_for(named) else {
         return CmShape::Scalar;
     };
     if let Some(fields) = ctx

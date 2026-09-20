@@ -381,7 +381,7 @@ fn resolve_cm_export_type(
                     })
                     .map(str::to_string)
             })
-            .or_else(|| cm_interface_registry.resolve_cm_source_for(named, None))
+            .or_else(|| cm_interface_registry.resolve_cm_source_for(named))
             .unwrap_or_else(|| {
                 panic!(
                     "world export type `{}` has no source interface — neither the \
@@ -586,8 +586,9 @@ mod tests {
         use resolver_helpers::*;
         let (registry, _) = CmInterfaceRegistry::build_from_stdlib();
 
-        // `Request` is a resource declared in `wasi:http/types`.
-        match resolve_cm_export_type(&named("Request"), &registry, None) {
+        // `Request` is a resource declared in `wasi:http/types`, reached under
+        // the prefix its own world carries — the one production always passes.
+        match resolve_cm_export_type(&named("Request"), &registry, Some("wasi:http/")) {
             CmExportType::Named {
                 interface_fq,
                 cm_name,

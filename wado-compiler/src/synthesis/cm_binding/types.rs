@@ -153,7 +153,7 @@ impl LiftContext<'_> {
     pub(super) fn cm_type_id(&self, ty: &Type, tt: &mut TypeTable) -> TypeId {
         match ty {
             Type::Named(n) => {
-                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n, None)
+                if let Some(src) = self.cm_interface_registry.resolve_cm_source_for(n)
                     && self
                         .cm_interface_registry
                         .cm_interface_module_source_of(&src)
@@ -319,7 +319,7 @@ pub fn cm_type_to_type_id(
                 // signature, and its package is one flat module (`web:dom`),
                 // not a module per interface.
                 .or_else(|| {
-                    let source = registry.resolve_cm_source_for(named, Some(wasi_package))?;
+                    let source = registry.resolve_cm_source_for(named)?;
                     if !registry.is_unrestricted_resource(&source, &named.name) {
                         return None;
                     }
@@ -330,13 +330,11 @@ pub fn cm_type_to_type_id(
                 // registered GC type. Anything else without a TypeId would
                 // miscompile (e.g. FieldAccess on an i32), so fail loudly.
                 .unwrap_or_else(|| {
-                    let is_resource = registry
-                        .resolve_cm_source_for(named, Some(wasi_package))
-                        .is_some_and(|s| {
-                            registry
-                                .get_resource_cm_name_by_source(&s, &named.name)
-                                .is_some()
-                        });
+                    let is_resource = registry.resolve_cm_source_for(named).is_some_and(|s| {
+                        registry
+                            .get_resource_cm_name_by_source(&s, &named.name)
+                            .is_some()
+                    });
                     if is_resource {
                         TypeTable::I32
                     } else {
@@ -1409,14 +1407,15 @@ pub(super) fn type_id_to_ast_type(
     // another module's `ErrorCode` and lift a record as its enum.
     let cm_named = |name: &str, ms: &ModuleSource| {
         let nt = NamedType::new(AstId::fresh(), name.to_string(), span);
-        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| match ms {
-            ModuleSource::Binding { interface, .. } => {
-                cm_interface_registry.resolve_cm_source_for(&nt, interface.split('/').next())
-            }
-            ModuleSource::Core { name: core } if core == "kiln" || core.starts_with("kiln/") => {
-                cm_interface_registry.resolve_cm_source_for(&nt, None)
-            }
-            _ => None,
+        let asks_registry = match ms {
+            ModuleSource::Binding { .. } => true,
+            ModuleSource::Core { name: core } => core == "kiln" || core.starts_with("kiln/"),
+            _ => false,
+        };
+        let source = declaring_interface(cm_interface_registry, ms, name).or_else(|| {
+            asks_registry
+                .then(|| cm_interface_registry.resolve_cm_source_for(&nt))
+                .flatten()
         });
         if let Some(source) = source {
             cm_interface_registry.set_source_interface(nt.id, source);
@@ -1437,7 +1436,9 @@ pub(super) fn type_id_to_ast_type(
                 .expect("a nominal type names a declaration");
             cm_named(&name, &module_source)
         }
-        ResolvedType::Resource { def } => named_no_source(type_table.def_name(*def)),
+        ResolvedType::Resource { def } => {
+            cm_named(type_table.def_name(*def), type_table.def_module(*def))
+        }
         ResolvedType::GenericInstance { def, type_args } => {
             let name = &type_table.def_name(*def).to_string();
 

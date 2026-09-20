@@ -748,21 +748,24 @@ any of them is spelled such that the step could answer.
 ## Known gap: a CM name still reaches a declaration by search
 
 A reference the Component Model boundary synthesizes carries the interface its
-own declaring module registers, so §9's step answers it. Where one arrives
-without that interface, the registry searches for the name instead: one kind of
-declaration at a time, over every bundled interface, taking the first kind in
-which the name has exactly one registrant.
+own declaring module registers, so §9's step answers it. Resolving a reference
+that arrives without one still searches for the name instead: one kind of
+declaration at a time, taking the first kind in which the name has exactly one
+registrant.
 
 That is all three shapes "What a derivation may not be" forbids at once. The
-search spans the whole program; each kind's map answers in registration order;
-and a kind that declines because two interfaces spell the name hands the
+search spans every interface in reach; each kind's map answers in registration
+order; and a kind that declines because two interfaces spell the name hands the
 question to the next kind, so which kind is asked first is a silent tiebreak.
 `ErrorCode` is the instance: a variant in four `wasi:` interfaces and an enum in
 `wasi:cli/types`, so the variants decline and the enum answers. That holds for
 any module's `ErrorCode`, including one a user wrote.
 
-Which references still arrive without their declaring interface is not
-established.
+Two positions arrive without a declaring interface. A world body names an export
+type with no import to resolve, and is scoped only by the world's own namespace,
+which does not reach a type another package declares. A lib-local type is
+registered under its package's default interface, which no CM namespace covers,
+so only a program-wide unique match reaches it.
 
 ## Known gap: an abstract qualifier argument is not compared
 

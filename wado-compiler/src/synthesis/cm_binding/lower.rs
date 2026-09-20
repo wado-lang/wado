@@ -1603,9 +1603,7 @@ pub(super) fn synthesize_lower_wasi_type_to_memory(
             // `core:kiln/*` records share one path. Resolution goes through the
             // registry, which also finds a lib-local record — carrying no
             // `source_interface` — under its package's default-interface FQ.
-            let source = ctx
-                .cm_interface_registry
-                .resolve_cm_source_for(n, Some(ctx.wasi_package));
+            let source = ctx.cm_interface_registry.resolve_cm_source_for(n);
             if let Some(fields) = source.as_deref().and_then(|s| {
                 ctx.cm_interface_registry
                     .get_struct_fields_with_wado_names_by_source(s, &n.name)

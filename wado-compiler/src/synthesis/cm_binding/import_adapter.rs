@@ -1590,7 +1590,7 @@ impl<'a> AdapterBuilder<'a> {
         let is_flat_struct = return_flat.len() == 1
             && matches!(&resolved, Type::Named(n)
             if registry
-                .resolve_cm_source_for(n, Some(self.func_info.package.as_str()))
+                .resolve_cm_source_for(n)
                 .is_some_and(|s| {
                     registry.get_struct_fields_by_source(&s, &n.name).is_some()
                 }));
