@@ -431,6 +431,19 @@ mod format_contract_tests {
         render_single(&doc, "markdown", "demo.wado", OutputFormat::Markdown)
     }
 
+    /// A `pub const` is part of the type's API wherever it is declared, but
+    /// only a primitive's impl rendered one; a struct's impl dropped it.
+    #[test]
+    fn a_struct_documents_its_associated_constants() {
+        let out = markdown_of(
+            "//! Demo.\n\npub struct Limit {\n    value: i32,\n}\n\nimpl Limit {\n    pub const MAX: i32 = 99;\n\n    pub fn get(&self) -> i32 {\n        return self.value;\n    }\n}\n",
+        );
+        assert!(
+            out.contains("pub const MAX: i32"),
+            "a struct's associated constant must be documented:\n{out}"
+        );
+    }
+
     #[test]
     fn a_type_parameter_renders_its_default() {
         let out = markdown_of(
@@ -757,6 +770,9 @@ fn render_md_struct(out: &mut String, s: &DocStruct, h3: &str, h4: &str) {
     }
     for f in &s.fields {
         render_md_entity(out, &format!("{}: {}", f.name, f.ty), f.doc.as_deref(), h4);
+    }
+    for c in &s.constants {
+        render_md_member(out, &c.signature, &c.attrs, c.doc.as_deref(), h4);
     }
     for m in &s.methods {
         render_md_member(out, &m.signature, &m.attrs, m.doc.as_deref(), h4);
@@ -1212,7 +1228,7 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
     for s in &doc.structs {
         out.push_str("\n```wado\n");
         render_simple_struct(out, s);
-        if !s.methods.is_empty() {
+        if !s.constants.is_empty() || !s.methods.is_empty() {
             let type_name = s
                 .signature
                 .strip_prefix("pub ")
@@ -1221,6 +1237,9 @@ fn render_simple_structs_section(out: &mut String, doc: &DocModule, h2: &str) {
                 .and_then(|rest| rest.split([' ', '<', '{']).next())
                 .unwrap_or("?");
             writeln!(out, "\nimpl {type_name} {{").unwrap();
+            for c in &s.constants {
+                writeln!(out, "    {};", c.signature).unwrap();
+            }
             for m in &s.methods {
                 writeln!(out, "    {};", m.signature).unwrap();
             }

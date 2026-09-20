@@ -80,6 +80,8 @@ pub struct DocStruct {
     pub fields: Vec<DocField>,
     pub has_private_fields: bool,
     #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub constants: Vec<DocFunction>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub methods: Vec<DocFunction>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub trait_impls: Vec<DocTraitImpl>,
@@ -385,12 +387,14 @@ fn build_doc_struct(
 
     let (methods, trait_impls) =
         collect_impl_methods_for_type(&s.name, impls, trivia, include_private);
+    let constants = collect_impl_constants_for_type(&s.name, impls, trivia, include_private);
 
     DocStruct {
         signature: unparse_struct_signature(s, !include_private),
         doc: extract_doc_comment_with_attrs(trivia, s.id, &s.span, &s.attrs),
         fields,
         has_private_fields,
+        constants,
         methods,
         trait_impls,
     }
@@ -1032,6 +1036,32 @@ fn collect_impl_methods_for_type(
     (inherent_methods, trait_impls)
 }
 
+/// The associated constants of the inherent `impl` blocks on `type_name`.
+fn collect_impl_constants_for_type(
+    type_name: &str,
+    impls: &[&ImplBlock],
+    trivia: &TriviaMap,
+    include_private: bool,
+) -> Vec<DocFunction> {
+    let mut constants = Vec::new();
+    for i in impls {
+        let target_name = match &i.ty {
+            Type::Named(n) => n.name.as_str(),
+            Type::Generic(g) => g.name.as_str(),
+            _ => continue,
+        };
+        if target_name != type_name || i.trait_type.is_some() {
+            continue;
+        }
+        for c in &i.constants {
+            if include_private || c.visibility.is_public() {
+                constants.push(build_doc_const(c, trivia));
+            }
+        }
+    }
+    constants
+}
+
 const PRIMITIVE_TYPE_NAMES: &[&str] = &[
     "bool", "char", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64",
 ];
@@ -1086,23 +1116,7 @@ fn collect_primitive_types_from_module(
         let (methods, trait_impls) =
             collect_impl_methods_for_type(prim_name, &impls, trivia, include_private);
 
-        // Also collect associated constants
-        let mut constants = Vec::new();
-        for i in &impls {
-            let target_name = match &i.ty {
-                Type::Named(n) => n.name.as_str(),
-                Type::Generic(g) => g.name.as_str(),
-                _ => continue,
-            };
-            if target_name != prim_name || i.trait_type.is_some() {
-                continue;
-            }
-            for c in &i.constants {
-                if include_private || c.visibility.is_public() {
-                    constants.push(build_doc_const(c, trivia));
-                }
-            }
-        }
+        let constants = collect_impl_constants_for_type(prim_name, &impls, trivia, include_private);
 
         if constants.is_empty() && methods.is_empty() && trait_impls.is_empty() {
             continue;
