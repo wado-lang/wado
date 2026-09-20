@@ -118,6 +118,7 @@ fn found_desc(tok: &Token) -> String {
     if tok.kind == G4Token::UnexpectedChar as i32 {
         return `unexpected character "${tok.text}"`;
     }
+    assert tok.kind < G4Token::UnterminatedString as i32, `kind ${tok.kind} is one the lexer could not form, and those are the trailing kinds — it must name its problem above rather than reach the raw text`;
     return `got "${tok.text}"`;
 }
 

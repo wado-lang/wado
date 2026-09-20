@@ -2,13 +2,15 @@
 
 /// `chars[start..end]` as its own `String`.
 pub fn collect_range(chars: &List<char>, start: i32, end: i32) -> String {
-    let mut s = String::with_capacity(if end > start { end - start } else { 0 });
+    assert end >= start, `collect_range: ${start}..${end} runs backwards`;
+    let mut s = String::with_capacity(end - start);
     push_range(&mut s, chars, start, end);
     return s;
 }
 
 /// Append `chars[start..end]` to `out`.
 pub fn push_range(out: &mut String, chars: &List<char>, start: i32, end: i32) {
+    assert end >= start, `push_range: ${start}..${end} runs backwards`;
     for let mut i = start; i < end; i += 1 {
         out.push(chars[i]);
     }
