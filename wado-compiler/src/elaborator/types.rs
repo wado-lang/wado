@@ -19,7 +19,7 @@ use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
-use crate::name::{FqTraitName, FqTypeName};
+use crate::name::{FqTraitName, FqTypeName, unalias_namespace_member};
 use crate::resolve::{Resolution, Resolutions};
 use crate::tir::{AnonStructId, StructDef, TirLocal, TypeId, TypeTable};
 use crate::token::Span;
@@ -1283,11 +1283,14 @@ impl TypeError {
                 span,
             } => (
                 Code::TypeMismatch,
-                format!(
-                    "missing type arguments for `{name}`: expected {expected} type argument{}; \
-                     supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
-                    if *expected == 1 { "" } else { "s" },
-                ),
+                {
+                    let name = unalias_namespace_member(name);
+                    format!(
+                        "missing type arguments for `{name}`: expected {expected} type argument{}; \
+                         supply them (e.g. `{name}<...>`) or drop the annotation to infer from the initializer",
+                        if *expected == 1 { "" } else { "s" },
+                    )
+                },
                 *span,
             ),
             TypeError::SurplusTypeArguments {
@@ -1301,6 +1304,7 @@ impl TypeError {
                     // Surplus, so a declared parameter puts `found` at two or
                     // more and only the `expected == 0` wording needs "was".
                     debug_assert!(found > expected);
+                    let name = unalias_namespace_member(name);
                     if *expected == 0 {
                         format!(
                             "`{name}` takes no type arguments, but {found} {} supplied",

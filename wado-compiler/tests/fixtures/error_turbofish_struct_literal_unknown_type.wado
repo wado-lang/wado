@@ -1,0 +1,14 @@
+// A literal's turbofish names types the way every other turbofish does, so an
+// unknown name in it is reported rather than resolved to `unknown`.
+
+struct Wrapper<T> {
+    value: T,
+}
+
+test "an unknown type in the literal's turbofish is reported" {
+    let w = Wrapper::<Bogus> { value: 1 };
+    assert w.value == 1;
+}
+
+__DATA__
+{"compile_error": "unknown type 'Bogus'"}

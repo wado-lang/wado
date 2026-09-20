@@ -44,7 +44,7 @@ use crate::elaborator::reify::Reify;
 use crate::elaborator::sem::ModuleSemantics;
 use crate::elaborator::solver_bridge::SolverBridge;
 use crate::elaborator::trait_env::{
-    ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of,
+    ImplHeader, ImplTargetKey, TraitEnv, is_user_local, namespace_imports_of, written_arg_nodes,
 };
 use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, sig};
 use crate::hashmap;
@@ -2683,8 +2683,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // The target type heads a turbofish (`Result::<_, MyErr>`), so
                 // its direct args allow `_`; deeper positions are strict.
                 match &smc.target_type {
-                    Type::Generic(g) => {
-                        for arg in &g.args {
+                    Type::Generic(_) | Type::NamespacedGeneric(_) => {
+                        for arg in written_arg_nodes(&smc.target_type) {
                             Self::validate_turbofish_type_arg(
                                 arg,
                                 known_type_names,
@@ -2901,6 +2901,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
             }
             ast::Expr::StructLiteral(sl) => {
+                for ty in &sl.type_args {
+                    Self::validate_turbofish_type_arg(
+                        ty,
+                        known_type_names,
+                        resource_type_names,
+                        type_params,
+                        logger,
+                    )?;
+                }
                 for field in &sl.fields {
                     Self::validate_expr_type_names(
                         &field.value,

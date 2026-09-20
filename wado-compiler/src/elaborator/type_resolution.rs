@@ -544,7 +544,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Report an application writing more type arguments than `params` declares,
-    /// and say whether it did. Fewer is [`Self::type_args_of_application`]'s.
+    /// and say whether it did. Fewer is [`Self::type_args_of_application`]'s: a
+    /// turbofish may stop short, and the slots it does not name are inferred.
     fn reject_surplus_type_args(
         &mut self,
         name: &str,

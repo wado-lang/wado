@@ -1,0 +1,85 @@
+// A turbofish before a struct literal's brace (`Box::<i32> { … }`) says what
+// the annotation `let b: Box<i32> = Box { … }` says. Issue #2093.
+
+struct Wrapper<T> {
+    value: T,
+}
+
+struct Pair<A, B> {
+    first: A,
+    second: B,
+}
+
+struct Tagged<T> {
+    tag: i32,
+}
+
+struct Defaulted<T> {
+    value: T,
+    count: i32 = 2,
+}
+
+struct Sorted<T: Ord> {
+    value: T,
+}
+
+test "the turbofish pins the parameter a literal would infer" {
+    let w = Wrapper::<i64> { value: 1 };
+    assert w.value == 1 as i64;
+}
+
+test "the turbofish pins every parameter" {
+    let p = Pair::<i64, String> { first: 2, second: "two" };
+    assert p.first == 2 as i64;
+    assert p.second == "two";
+}
+
+test "the turbofish fills a parameter no field mentions" {
+    let t = Tagged::<String> { tag: 7 };
+    assert t.tag == 7;
+}
+
+test "the turbofish agrees with an annotation naming the same instance" {
+    let w: Wrapper<f64> = Wrapper::<f64> { value: 2.5 };
+    assert w.value == 2.5;
+}
+
+test "a bounded parameter is checked through the turbofish" {
+    let s = Sorted::<i32> { value: 1 };
+    assert s.value == 1;
+}
+
+test "the turbofish carries through field shorthand" {
+    let value = 3;
+    let w = Wrapper::<i32> { value };
+    assert w.value == 3;
+}
+
+test "the turbofish settles the parameters an omitted field's default sees" {
+    let d = Defaulted::<i64> { value: 1 };
+    assert d.value == 1 as i64;
+    assert d.count == 2;
+}
+
+test "the turbofish reaches a nested literal" {
+    let outer = Wrapper::<Wrapper<i64>> { value: Wrapper::<i64> { value: 9 } };
+    assert outer.value.value == 9 as i64;
+}
+
+test "a spread keeps the turbofish's instance" {
+    let base = Wrapper::<i64> { value: 1 };
+    let w = Wrapper::<i64> { ..base, value: 5 };
+    assert w.value == 5 as i64;
+}
+
+test "a turbofish stopping short leaves the rest to the fields" {
+    let p = Pair::<i64> { first: 1, second: "two" };
+    assert p.first == 1 as i64;
+    assert p.second == "two";
+}
+
+test "an underscore pins one slot and infers the other" {
+    let p = Pair::<_, String> { first: 1, second: "two" };
+    assert p.first == 1;
+    assert p.second == "two";
+}

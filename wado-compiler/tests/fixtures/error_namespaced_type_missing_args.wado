@@ -1,0 +1,12 @@
+// A diagnostic names a type the way its author wrote it. `ns::Name` resolves
+// through a `ns$Name` alias, which no source can spell.
+
+use lib from "./sub/turbofish_namespaced_path_lib.wado";
+
+test "an arity error names the namespaced type as written" {
+    let w: lib::Wrapper = lib::Wrapper { value: 1 };
+    assert w.value == 1;
+}
+
+__DATA__
+{"compile_error": "missing type arguments for `lib::Wrapper`"}

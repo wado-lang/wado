@@ -1,0 +1,17 @@
+// An `impl` head names its type through a namespace as readily as bare, so the
+// name the diagnostic qualifies is the same one either way.
+
+use c from "./sub/error_unavailable_ns_impl_head_cell.wado";
+
+impl c::Cell {
+    #[unavailable("read `a` instead")]
+    pub fn get(&self);
+}
+
+test "the unavailable name carries its type" {
+    let cell = c::Cell { a: 1 };
+    assert cell.get() == 1;
+}
+
+__DATA__
+{"compile_error": "`Cell::get` is unavailable: read `a` instead"}
