@@ -164,8 +164,8 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 // error: only one type pack parameter is allowed per generic parameter list
 ```
 
-The design below is what a second pack was meant to allow, kept because the shape is
-still the one to build if it lands.
+What a second pack was meant to allow is below, since that is still the shape to build
+if it lands.
 
 Two packs would appear in the same impl or function only in a type-level position, not in
 a single expansion context, the primary use case being concatenation. Where two appeared

@@ -257,12 +257,10 @@ pub async fn execute_with_mode<H: CompilerHost>(
 
     let output_dir_abs = manifest_root.join(invocation.output_dir.as_str());
     let by = generator_identity(&invocation.module);
-    let mut sources: Vec<&InvocationPath> = Vec::with_capacity(1 + invocation.inputs.len());
-    sources.push(&invocation.from);
-    for p in &invocation.inputs {
-        sources.push(p);
-    }
-    let source_paths: Vec<InvocationPath> = sources.iter().map(|p| (*p).clone()).collect();
+    let source_paths: Vec<InvocationPath> = std::iter::once(&invocation.from)
+        .chain(&invocation.inputs)
+        .cloned()
+        .collect();
     let header = GeneratedHeader::emit_with_paths(&by, &source_paths);
 
     let mut outputs = Vec::with_capacity(response.files.len());
@@ -393,8 +391,8 @@ fn to_meta_file_hash(f: &FileHash, extent: Option<u64>) -> MetaFileHash {
 }
 
 /// Cut each input down to the extent its probe reported, and answer the extents
-/// as they will be recorded. An empty `extents` — no probe — leaves every input
-/// whole.
+/// as they will be recorded. With no probe `extents` is empty and every input
+/// stays whole.
 ///
 /// An extent reaching the end of the file records as `None`, the whole file. A
 /// probe stopped by EOF was stopped by the file's length rather than by its

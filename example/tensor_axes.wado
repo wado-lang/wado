@@ -33,13 +33,18 @@ impl<E, Axes> Tensor<E, Axes> {
     }
 }
 
-fn zeros<Axes>(extents: List<i32>) -> Tensor<f32, Axes> {
+fn element_count(extents: &List<i32>) -> i32 {
     let mut count = 1;
-    for let e of extents {
+    for let e of *extents {
         assert e > 0;
         count *= e;
     }
-    return Tensor { data: List::filled(count, 0.0), extents };
+    return count;
+}
+
+fn zeros<Axes>(extents: List<i32>) -> Tensor<f32, Axes> {
+    let data = List::<f32>::filled(element_count(&extents), 0.0);
+    return Tensor { data, extents };
 }
 
 /// Contract the shared axis `K`. `matmul(&w, &x)` where `x` supplies `K` on
@@ -133,12 +138,7 @@ fn forward(m: &Mlp, x: &Tensor<f32, [Batch, In]>) -> Tensor<f32, [Batch, Out]> {
 }
 
 fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
-    let mut count = 1;
-    for let e of extents {
-        assert e > 0;
-        count *= e;
-    }
-    assert count == data.len();
+    assert element_count(&extents) == data.len();
     return Tensor { data, extents };
 }
 

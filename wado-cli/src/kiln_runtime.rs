@@ -106,16 +106,6 @@ fn find_export<T>(
     None
 }
 
-fn find_generate<T>(
-    component: &Component,
-    engine: &Engine,
-    instance: &Instance,
-    store: &mut Store<T>,
-) -> Result<Func, GeneratorRunnerError> {
-    find_export(component, engine, instance, store, "generate")
-        .ok_or_else(|| GeneratorRunnerError::Host("generator exports no `generate`".to_string()))
-}
-
 /// A fresh store and instance for one generator call. The kiln determinism
 /// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
 /// to `core:kiln/kiln-host` alone: the compiler elides the panic-path stderr at
@@ -149,8 +139,8 @@ async fn instantiate(
 
 /// A file's content as a host-produced `stream<u8>`, which the generator reads
 /// at its own pace.
-fn content_stream<T: Send + 'static>(
-    store: &mut Store<T>,
+fn content_stream(
+    store: &mut Store<KilnHostState>,
     f: &GeneratorInputFile,
 ) -> Result<Val, GeneratorRunnerError> {
     StreamReader::new(&mut *store, f.content.clone())
@@ -162,8 +152,8 @@ fn content_stream<T: Send + 'static>(
 }
 
 /// Build an `input-file` record `Val` (`{ path, content }`).
-fn input_file_val<T: Send + 'static>(
-    store: &mut Store<T>,
+fn input_file_val(
+    store: &mut Store<KilnHostState>,
     f: &GeneratorInputFile,
 ) -> Result<Val, GeneratorRunnerError> {
     let content = content_stream(store, f)?;
@@ -399,7 +389,10 @@ pub async fn run_generator(
         let (mut store, instance) =
             instantiate(engine, component, policy, diagnostics_inner).await?;
 
-        let generate = find_generate(component, engine, &instance, &mut store)?;
+        let generate = find_export(component, engine, &instance, &mut store, "generate")
+            .ok_or_else(|| {
+                GeneratorRunnerError::Host("generator exports no `generate`".to_string())
+            })?;
 
         // `generate(primary, inputs[, options])`: the options parameter is
         // present only when the generator declares a non-empty `Options`.
