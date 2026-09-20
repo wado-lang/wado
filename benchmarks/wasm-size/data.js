@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789870574138,
+  "lastUpdate": 1789873068767,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57169,6 +57169,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/3c5d3a298e913151b56dc5ac63e8cfef4e91abc5"
         },
         "date": 1789870573507,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "41a4d6dcab11887b9d5f75c0beda913b85e7a8af",
+          "message": "Merge pull request #2091 from wado-lang/claude/lucid-brahmagupta-qkrqj3\n\nrefactor(example, benchmark): draw from core:prng instead of hand-rolling a PRNG",
+          "timestamp": "2026-09-20T11:29:36+09:00",
+          "tree_id": "0ec798f8f45a204ba3abe1916e6d36f5735c287d",
+          "url": "https://github.com/wado-lang/wado/commit/41a4d6dcab11887b9d5f75c0beda913b85e7a8af"
+        },
+        "date": 1789873067907,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
