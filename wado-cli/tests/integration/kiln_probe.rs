@@ -23,12 +23,11 @@ export fn probe(path: String, content: Stream<u8>) -> Result<u64, Error> {
     let mut n: u64 = 0;
     loop {
         let chunk = content.read(1);
-        if chunk.items.len() == 0 {
-            break;
-        }
-        n += 1;
-        if chunk.items[0] == b'\n' {
-            break;
+        if chunk.items.len() > 0 {
+            n += 1;
+            if chunk.items[0] == b'\n' {
+                break;
+            }
         }
         if chunk.result != CopyResult::Completed {
             break;
@@ -137,6 +136,36 @@ fn only_the_extent_decides_whether_the_generator_reruns() {
         .assert()
         .success()
         .stdout(predicate::str::contains("9"));
+}
+
+/// A probe stopped by the end of the file was stopped by the file's length, not
+/// by anything in it. Recording that extent would let any longer file sharing
+/// the prefix hit the cache, so it is recorded as the whole file instead.
+#[test]
+fn an_extent_that_ran_to_the_end_keys_on_the_whole_file() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    // No newline, so the probe's scan ends only when the bytes run out.
+    write_project(root, "7");
+
+    wado_in(root)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("7"));
+    assert!(
+        recorded_metadata(root)["primary"]["extent"].is_null(),
+        "an EOF-terminated extent must record as the whole file"
+    );
+
+    // Appending past the old end must be seen. Keyed on the old extent of 1,
+    // this was a hit and the build kept emitting 7.
+    fs::write(root.join("src/schema.bin"), "77\nPAYLOAD\n").unwrap();
+    wado_in(root)
+        .args(["run", "src/main.wado"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("77"));
 }
 
 fn recorded_metadata(root: &std::path::Path) -> serde_json::Value {

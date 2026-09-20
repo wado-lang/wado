@@ -980,61 +980,56 @@ impl String {
     /// string untouched: the prefix is validated before any of it is appended.
     pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String> {
         let slice = bytes.as_byte_slice();
-        let taken = String::utf8_complete_prefix(&slice)?;
+        let taken = String::utf8_valid_prefix(&slice);
+        if taken < 0 {
+            builtin::cold_path();
+            return Result::Err(`invalid UTF-8 at byte ${-1 - taken}`);
+        }
         self.push_bytes_unchecked(&slice.slice(0, taken));
         return Result::Ok(taken);
     }
 
-    /// Length of the longest prefix of `bytes` that is complete, valid UTF-8.
-    /// A sequence running past the end is not an error here — more bytes may
-    /// still complete it — but a byte that can lead no sequence is.
-    internal fn utf8_complete_prefix(bytes: &ByteSlice) -> Result<i32, String> {
-        let len = bytes.len();
-        let mut i = 0;
-        while i < len {
-            let b0 = bytes.get_unchecked(i);
-            if b0 < 0x80 {
-                i += 1;
-                continue;
-            }
-            let advance = String::utf8_sequence_len(bytes, i, len);
-            if advance > 0 {
-                i += advance;
-                continue;
-            }
-            builtin::cold_path();
-            // A lead byte whose sequence would run past the end is pending, not
-            // malformed. `utf8_sequence_len` conflates the two because it has
-            // no next chunk to consider; the lead byte alone separates them.
-            if b0 >= 0xC2 && b0 < 0xF5 && i + utf8_seq_len(b0) > len {
-                return Result::Ok(i);
-            }
-            return Result::Err(`invalid UTF-8 at byte ${i}`);
-        }
-        return Result::Ok(len);
-    }
-
-    /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
-    /// is well-formed. ASCII is tested here, `utf8_sequence_len` being a call.
-    internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
+    /// Length of the longest prefix of `bytes` that is complete, valid UTF-8,
+    /// or `-1 - i` where `i` is the offset of a sequence no further byte could
+    /// complete. ASCII is tested here, `utf8_sequence_len` being a call.
+    internal fn utf8_valid_prefix(bytes: &ByteSlice) -> i32 {
         let len = bytes.len();
         let mut i = 0;
         while i < len {
             let mut advance = 1;
             if bytes.get_unchecked(i) >= 0x80 {
                 advance = String::utf8_sequence_len(bytes, i, len);
-                if advance == 0 {
+                if advance <= 0 {
                     builtin::cold_path();
-                    return i;
+                    // A short sequence ends the prefix; a malformed one is an
+                    // offset only the sign distinguishes.
+                    return if advance < 0 { i } else { -1 - i };
                 }
             }
             i += advance;
         }
-        return -1;
+        return len;
     }
 
-    /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, or 0 when
-    /// it is malformed. The validating half of `decode_utf8_scalar`.
+    /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
+    /// is well-formed. `bytes` is the whole input, so a sequence merely cut
+    /// short at its end is malformed too.
+    internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
+        let prefix = String::utf8_valid_prefix(bytes);
+        if prefix == bytes.len() {
+            return -1;
+        }
+        builtin::cold_path();
+        return if prefix < 0 { -1 - prefix } else { prefix };
+    }
+
+    /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, `0` when
+    /// it is malformed, and `-1` when it is merely cut short by `len`.
+    ///
+    /// `0` and `-1` are separate because only the caller knows whether more
+    /// bytes can arrive. Each continuation byte present is checked before the
+    /// length is, so a sequence no further byte could rescue answers `0` even
+    /// when short.
     internal fn utf8_sequence_len(bytes: &ByteSlice, start: i32, len: i32) -> i32 {
         let b0 = bytes.get_unchecked(start);
         if b0 < 0x80 {
@@ -1045,10 +1040,11 @@ impl String {
             builtin::cold_path();
             return 0;
         }
+        let available = len - start;
         if b0 < 0xE0 {
-            if start + 1 >= len {
+            if available < 2 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
             let b1 = bytes.get_unchecked(start + 1);
             if b1 < 0x80 || b1 > 0xBF {
@@ -1058,15 +1054,17 @@ impl String {
             return 2;
         }
         if b0 < 0xF0 {
-            if start + 2 >= len {
-                builtin::cold_path();
-                return 0;
+            if available >= 2 {
+                let b1 = bytes.get_unchecked(start + 1);
+                // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
+                if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
+                    builtin::cold_path();
+                    return 0;
+                }
             }
-            let b1 = bytes.get_unchecked(start + 1);
-            // Reject bad continuation, overlong (E0 < A0), and surrogates (ED >= A0)
-            if b1 < 0x80 || b1 > 0xBF || b0 == 0xE0 && b1 < 0xA0 || b0 == 0xED && b1 >= 0xA0 {
+            if available < 3 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
             let b2 = bytes.get_unchecked(start + 2);
             if b2 < 0x80 || b2 > 0xBF {
@@ -1076,20 +1074,24 @@ impl String {
             return 3;
         }
         if b0 < 0xF5 {
-            if start + 3 >= len {
-                builtin::cold_path();
-                return 0;
+            if available >= 2 {
+                let b1 = bytes.get_unchecked(start + 1);
+                // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
+                if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
+                    builtin::cold_path();
+                    return 0;
+                }
             }
-            let b1 = bytes.get_unchecked(start + 1);
-            // Reject bad continuation, overlong (F0 < 90), and out-of-range (F4 > 8F)
-            if b1 < 0x80 || b1 > 0xBF || b0 == 0xF0 && b1 < 0x90 || b0 == 0xF4 && b1 > 0x8F {
-                builtin::cold_path();
-                return 0;
+            if available >= 3 {
+                let b2 = bytes.get_unchecked(start + 2);
+                if b2 < 0x80 || b2 > 0xBF {
+                    builtin::cold_path();
+                    return 0;
+                }
             }
-            let b2 = bytes.get_unchecked(start + 2);
-            if b2 < 0x80 || b2 > 0xBF {
+            if available < 4 {
                 builtin::cold_path();
-                return 0;
+                return -1;
             }
             let b3 = bytes.get_unchecked(start + 3);
             if b3 < 0x80 || b3 > 0xBF {

@@ -1383,3 +1383,23 @@ test "push_utf8 on an empty buffer takes nothing" {
     assert s.push_utf8(&([] as ByteList)) matches { Ok(0) };
     assert s == "";
 }
+
+test "push_utf8 rejects a short tail no further byte could rescue" {
+    let mut s = String::with_capacity(8);
+    // E6 leads a 3-byte sequence and 0x41 is not a continuation byte, so the
+    // pair is already wrong however many bytes follow.
+    assert s.push_utf8(&([0xE6, 0x41] as ByteList)) matches { Err(_) };
+    // E0 80 is overlong: E0 admits only A0..BF second bytes.
+    assert s.push_utf8(&([0xE0, 0x80] as ByteList)) matches { Err(_) };
+    // F4 90 is past U+10FFFF.
+    assert s.push_utf8(&([0xF4, 0x90] as ByteList)) matches { Err(_) };
+    // A short tail whose bytes are all valid so far is still pending.
+    assert s.push_utf8(&([0xE6, 0x97] as ByteList)) matches { Ok(0) };
+}
+
+test "a whole buffer ending mid-character is malformed, not pending" {
+    // `from_utf8` holds the entire input, so there is no later chunk to wait
+    // for and a cut-short sequence is an error.
+    assert String::from_utf8([0xE6, 0x97] as List<u8>) matches { Err(_) };
+    assert String::from_utf8([0xC3] as List<u8>) matches { Err(_) };
+}

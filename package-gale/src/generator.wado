@@ -60,34 +60,28 @@ impl Deserialize for Options;
 /// `bind_request` shape during
 /// `kiln::import_check::inject_kiln_request_adapter` (runs before
 /// analyze).
+fn decode_input(path: &String, content: Stream<u8>) -> Result<String, Error> {
+    return match read_text(content) {
+        Ok(text) => Result::Ok(text),
+        Err(e) => Result::Err(Error::InvalidSchema(`gale: '${path}' is not UTF-8: ${e}`)),
+    };
+}
+
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     // Stamp the real Kiln paths; otherwise the generated header's
     // `sources = [...]` fabricates a nonexistent `<GrammarName>.g4`.
     // Route supplementary inputs by extension: `.scm` files are highlight
     // queries (compiled into the highlighter), everything else is a `.g4`
     // grammar half merged into the primary.
-    let primary_text = match read_text(req.primary.content) {
-        Ok(t) => t,
-        Err(e) => {
-            return Result::Err(Error::InvalidSchema(
-                `gale: grammar '${req.primary.path}' is not UTF-8: ${e}`,
-            ));
-        },
-    };
+    let primary_path = req.primary.path;
+    let primary_text = decode_input(&primary_path, req.primary.content)?;
     let mut inputs: List<[String, String]> = [
-        [req.primary.path, primary_text],
+        [primary_path, primary_text],
     ];
     let mut scm_inputs: List<[String, String]> = [];
     for let supp of req.inputs {
         let path = supp.path;
-        let text = match read_text(supp.content) {
-            Ok(t) => t,
-            Err(e) => {
-                return Result::Err(Error::InvalidSchema(
-                    `gale: input '${path}' is not UTF-8: ${e}`,
-                ));
-            },
-        };
+        let text = decode_input(&path, supp.content)?;
         if path.ends_with(".scm") {
             scm_inputs.push([path, text]);
         } else {

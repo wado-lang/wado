@@ -1167,7 +1167,10 @@ impl JsonDeserializer {
                 continue;
             }
             let advance = String::utf8_sequence_len(&self.input, pos, len);
-            if advance == 0 {
+            // The document ends at `len`, so a sequence short there is as
+            // invalid as a malformed one — and stepping by a negative would
+            // walk the scan backwards.
+            if advance <= 0 {
                 builtin::cold_path();
                 valid = false;
                 pos += 1;

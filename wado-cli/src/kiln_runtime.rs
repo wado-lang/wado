@@ -46,7 +46,7 @@ use self::core::kiln::kiln_host;
 /// 1 GiB initial pick tripped on `SQLite`. WEP 2026-04-12 (Kiln)
 /// open-question #10 tracks exposing this as a `wado.toml` knob and
 /// pairing it with a wall-clock deadline.
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct KilnRunPolicy {
     pub fuel: u64,
 }
@@ -116,20 +116,60 @@ fn find_generate<T>(
         .ok_or_else(|| GeneratorRunnerError::Host("generator exports no `generate`".to_string()))
 }
 
-/// Build an `input-file` record `Val` (`{ path, content }`), the content as a
-/// host-produced `stream<u8>` the generator reads at its own pace.
+/// A fresh store and instance for one generator call. The kiln determinism
+/// guarantee (WEP 2026-04-12 §"Design principles" #1) is what keeps the linker
+/// to `core:kiln/kiln-host` alone: the compiler elides the panic-path stderr at
+/// codegen time, so the component never imports WASI to begin with.
+async fn instantiate(
+    engine: &Engine,
+    component: &Component,
+    policy: KilnRunPolicy,
+    diagnostics: Arc<Mutex<Vec<GeneratorDiagnostic>>>,
+) -> Result<(Store<KilnHostState>, Instance), GeneratorRunnerError> {
+    let mut linker: Linker<KilnHostState> = Linker::new(engine);
+    kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
+        .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
+
+    let mut store = Store::new(engine, KilnHostState { diagnostics });
+    let fuel = if policy.fuel == 0 {
+        u64::MAX
+    } else {
+        policy.fuel
+    };
+    store
+        .set_fuel(fuel)
+        .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
+
+    let instance = linker
+        .instantiate_async(&mut store, component)
+        .await
+        .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+    Ok((store, instance))
+}
+
+/// A file's content as a host-produced `stream<u8>`, which the generator reads
+/// at its own pace.
+fn content_stream<T: Send + 'static>(
+    store: &mut Store<T>,
+    f: &GeneratorInputFile,
+) -> Result<Val, GeneratorRunnerError> {
+    StreamReader::new(&mut *store, f.content.clone())
+        .and_then(|s| s.try_into_stream_any(&mut *store))
+        .map(Val::Stream)
+        .map_err(|e| {
+            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", f.path))
+        })
+}
+
+/// Build an `input-file` record `Val` (`{ path, content }`).
 fn input_file_val<T: Send + 'static>(
     store: &mut Store<T>,
     f: &GeneratorInputFile,
 ) -> Result<Val, GeneratorRunnerError> {
-    let stream = StreamReader::new(&mut *store, f.content.clone())
-        .and_then(|s| s.try_into_stream_any(&mut *store))
-        .map_err(|e| {
-            GeneratorRunnerError::Host(format!("input `{}`: host stream create: {e:#}", f.path))
-        })?;
+    let content = content_stream(store, f)?;
     Ok(Val::Record(vec![
         ("path".to_string(), Val::String(f.path.clone())),
-        ("content".to_string(), Val::Stream(stream)),
+        ("content".to_string(), content),
     ]))
 }
 
@@ -356,33 +396,8 @@ pub async fn run_generator(
     // is the caller's job — see `FilesystemCompilerHost::run_generator`.
     let diagnostics_inner = diagnostics.clone();
     let outcome: Result<GeneratorResponse, GeneratorRunnerError> = async move {
-        let state = KilnHostState {
-            diagnostics: diagnostics_inner,
-        };
-
-        // The kiln determinism guarantee (WEP 2026-04-12 §"Design
-        // principles" #1) says the linker exposes only `core:kiln/kiln-
-        // host`. The compiler handles the panic-path stderr elision
-        // at codegen time so the generator component never imports WASI
-        // in the first place.
-        let mut linker: Linker<KilnHostState> = Linker::new(engine);
-        kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-            .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
-
-        let mut store = Store::new(engine, state);
-        let fuel = if policy.fuel == 0 {
-            u64::MAX
-        } else {
-            policy.fuel
-        };
-        store
-            .set_fuel(fuel)
-            .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
-
-        let instance = linker
-            .instantiate_async(&mut store, component)
-            .await
-            .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+        let (mut store, instance) =
+            instantiate(engine, component, policy, diagnostics_inner).await?;
 
         let generate = find_generate(component, engine, &instance, &mut store)?;
 
@@ -451,27 +466,8 @@ pub async fn run_probe(
     let outcome: Result<Vec<Option<u64>>, GeneratorRunnerError> = async move {
         let mut extents = Vec::with_capacity(1 + request.inputs.len());
         for file in request.files() {
-            let state = KilnHostState {
-                diagnostics: diagnostics_inner.clone(),
-            };
-            let mut linker: Linker<KilnHostState> = Linker::new(engine);
-            kiln_host::add_to_linker::<_, HasSelf<_>>(&mut linker, |s| s)
-                .map_err(|e| GeneratorRunnerError::Host(format!("linker setup: {e}")))?;
-
-            let mut store = Store::new(engine, state);
-            let fuel = if policy.fuel == 0 {
-                u64::MAX
-            } else {
-                policy.fuel
-            };
-            store
-                .set_fuel(fuel)
-                .map_err(|e| GeneratorRunnerError::Host(format!("set fuel: {e}")))?;
-
-            let instance = linker
-                .instantiate_async(&mut store, component)
-                .await
-                .map_err(|e| GeneratorRunnerError::Host(format!("instantiate: {e}")))?;
+            let (mut store, instance) =
+                instantiate(engine, component, policy, diagnostics_inner.clone()).await?;
 
             let Some(probe) = find_export(component, engine, &instance, &mut store, "probe") else {
                 return Ok(Vec::new());
@@ -481,15 +477,8 @@ pub async fn run_probe(
             // options parameter is present only when the generator declares a
             // non-empty `Options`.
             let options_ty = probe.ty(&store).params().nth(2).map(|(_, t)| t);
-            let stream = StreamReader::new(&mut store, file.content.clone())
-                .and_then(|s| s.try_into_stream_any(&mut store))
-                .map_err(|e| {
-                    GeneratorRunnerError::Host(format!(
-                        "input `{}`: host stream create: {e:#}",
-                        file.path
-                    ))
-                })?;
-            let mut args = vec![Val::String(file.path.clone()), Val::Stream(stream)];
+            let content = content_stream(&mut store, file)?;
+            let mut args = vec![Val::String(file.path.clone()), content];
             if let Some(ty) = &options_ty {
                 args.push(
                     options_to_val(&request.options, ty)

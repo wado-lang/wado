@@ -236,11 +236,11 @@ pub async fn execute_with_mode<H: CompilerHost>(
     // The probe reports how much of each input determines the output, and the
     // clamp below enforces that claim: a generator that reads past its own
     // extent sees EOF rather than bytes the cache key does not cover.
-    let extents = host
+    let probed = host
         .probe_generator(component_wasm, &request)
         .await
         .map_err(ExecuteError::Runner)?;
-    clamp_to_extents(&mut request, &extents);
+    let extents = settle_extents(&mut request, probed);
 
     let primary_hash = file_hash(&invocation.from, &request.primary.content);
     let input_hashes: Vec<_> = invocation
@@ -392,24 +392,35 @@ fn to_meta_file_hash(f: &FileHash, extent: Option<u64>) -> MetaFileHash {
     }
 }
 
-/// Cut each input down to the extent its probe reported, so what the generator
-/// reads is exactly what the cache key covers. An empty `extents` — no probe —
-/// leaves every input whole.
-fn clamp_to_extents(request: &mut GeneratorRequest, extents: &[Option<u64>]) {
+/// Cut each input down to the extent its probe reported, and answer the extents
+/// as they will be recorded. An empty `extents` — no probe — leaves every input
+/// whole.
+///
+/// An extent reaching the end of the file records as `None`, the whole file. A
+/// probe stopped by EOF was stopped by the file's length rather than by its
+/// contents, so recording that length would let a longer file sharing the
+/// prefix hash equal and hit the cache.
+fn settle_extents(request: &mut GeneratorRequest, extents: Vec<Option<u64>>) -> Vec<Option<u64>> {
     if extents.is_empty() {
-        return;
+        return extents;
     }
     assert_eq!(
         extents.len(),
         1 + request.inputs.len(),
         "kiln: probe must answer once per input file"
     );
-    for (file, extent) in request.files_mut().zip(extents) {
-        if let Some(n) = extent {
-            file.content
-                .truncate(usize::try_from(*n).unwrap_or(usize::MAX));
-        }
-    }
+    request
+        .files_mut()
+        .zip(extents)
+        .map(|(file, extent)| {
+            let n = usize::try_from(extent?).unwrap_or(usize::MAX);
+            if n >= file.content.len() {
+                return None;
+            }
+            file.content.truncate(n);
+            Some(n as u64)
+        })
+        .collect()
 }
 
 /// Point every module that declared `invocation` at the generated entry it

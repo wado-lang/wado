@@ -70,7 +70,7 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    if pack_arity_conflict(actual, expected, type_table) {
+    if pack_shape_conflict(actual, expected, type_table, position) {
         return TypeCheckResult::Incompatible;
     }
 
@@ -283,40 +283,68 @@ fn check_projections(
     )
 }
 
-/// Two tuple types over one pack differ when their fixed elements differ: the
-/// pack stands for the same arity on both sides, so `[..R, L]` can never be
-/// `[..R]`. Decidable before the pack is expanded, which is the only point
-/// where a body carrying one is checked at all.
-fn pack_arity_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+/// Two tuple types over one pack are the same type only when their fixed
+/// elements line up. The pack stands for the same arity on both sides, so the
+/// elements before it and after it each have a settled offset: `[..R, L]` is
+/// never `[..R]`, and never `[L, ..R]` either. Decidable before the pack is
+/// expanded, which is the only point where a body carrying one is checked.
+fn pack_shape_conflict(
+    actual: TypeId,
+    expected: TypeId,
+    type_table: &TypeTable,
+    position: Position,
+) -> bool {
     let (actual_inner, _) = unwrap_ref(actual, type_table);
     let (expected_inner, _) = unwrap_ref(expected, type_table);
-    let (Some((actual_pack, actual_fixed)), Some((expected_pack, expected_fixed))) = (
-        tuple_pack_and_fixed(actual_inner, type_table),
-        tuple_pack_and_fixed(expected_inner, type_table),
+    let (Some(actual_shape), Some(expected_shape)) = (
+        tuple_pack_shape(actual_inner, type_table),
+        tuple_pack_shape(expected_inner, type_table),
     ) else {
         return false;
     };
-    actual_pack == expected_pack && actual_fixed != expected_fixed
+    if actual_shape.pack != expected_shape.pack {
+        return false;
+    }
+    if actual_shape.before.len() != expected_shape.before.len()
+        || actual_shape.after.len() != expected_shape.after.len()
+    {
+        return true;
+    }
+    // Only an element the checker can already settle counts as a conflict; one
+    // that is still undecided defers with everything else.
+    actual_shape
+        .before
+        .iter()
+        .zip(expected_shape.before)
+        .chain(actual_shape.after.iter().zip(expected_shape.after))
+        .any(|(&a, &e)| check_at(a, e, type_table, position) == TypeCheckResult::Incompatible)
 }
 
-/// The pack element of a tuple type carrying one, and how many fixed elements
-/// sit beside it.
-fn tuple_pack_and_fixed(type_id: TypeId, type_table: &TypeTable) -> Option<(TypeId, usize)> {
+/// A tuple type's pack and the fixed elements on either side of it.
+struct PackShape<'a> {
+    pack: TypeId,
+    before: &'a [TypeId],
+    after: &'a [TypeId],
+}
+
+fn tuple_pack_shape(type_id: TypeId, type_table: &TypeTable) -> Option<PackShape<'_>> {
     let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id) else {
         return None;
     };
     if !TypeTable::is_tuple_type(type_table.def_name(*def)) {
         return None;
     }
-    let mut packs = type_args
-        .iter()
-        .filter(|&&arg| matches!(type_table.get(arg), ResolvedType::TypePack { .. }));
-    let pack = *packs.next()?;
+    let is_pack = |&arg: &TypeId| matches!(type_table.get(arg), ResolvedType::TypePack { .. });
+    let at = type_args.iter().position(is_pack)?;
     assert!(
-        packs.next().is_none(),
+        !type_args[at + 1..].iter().any(is_pack),
         "the parser admits one pack per parameter list"
     );
-    Some((pack, type_args.len() - 1))
+    Some(PackShape {
+        pack: type_args[at],
+        before: &type_args[..at],
+        after: &type_args[at + 1..],
+    })
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
