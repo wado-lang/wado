@@ -16,6 +16,26 @@ pub mod prefetch;
 
 use discovery::{DependencyEntry, absolutize};
 
+/// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
+/// build serves what is on disk now and the compiler itself reads no file.
+/// Every native embedder calls this before compiling; the first call wins.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+pub fn install_dev_stdlib() {
+    use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
+
+    let root = Path::new(DEV_STDLIB_ROOT);
+    install_dev_stdlib(dev_stdlib_files().into_iter().map(|file| {
+        let path = root.join(file);
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading the stdlib at {}: {e}", path.display()));
+        (file.to_string(), source)
+    }));
+}
+
+/// A release or `wasm32` build embeds the stdlib, so there is nothing to read.
+#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+pub fn install_dev_stdlib() {}
+
 #[derive(Debug)]
 pub struct FilesystemCompilerHost {
     base_path: PathBuf,

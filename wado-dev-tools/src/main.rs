@@ -12,6 +12,7 @@ use lexopt::Arg::{Long, Short, Value};
 use wado_compiler::OptLevel;
 
 fn main() {
+    wado_lsp::host::install_dev_stdlib();
     let mut parser = lexopt::Parser::from_env();
     let cmd = match parser.next().expect("failed to parse args") {
         Some(Value(v)) => v.to_string_lossy().into_owned(),

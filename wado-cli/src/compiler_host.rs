@@ -269,6 +269,14 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.source_exists(path).await
     }
 
+    /// Into the OS temp directory, which exists on every platform the CLI
+    /// runs on and needs no write permission where the sources live.
+    fn save_internal_artifact(&self, file_name: &str, bytes: &[u8]) -> Option<String> {
+        let path = std::env::temp_dir().join(file_name);
+        std::fs::write(&path, bytes).ok()?;
+        Some(path.display().to_string())
+    }
+
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         if self.print_diagnostics && self.should_log(diagnostic.severity) {
             let formatted = self.format_diagnostic(&diagnostic);

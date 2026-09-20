@@ -425,6 +425,14 @@ pub trait CompilerHost: Send + Sync {
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
 
+    /// Save bytes the compiler produced but cannot explain, under `file_name`,
+    /// and answer where they landed. The default keeps none: a host with no
+    /// filesystem has nowhere to put them.
+    fn save_internal_artifact(&self, file_name: &str, bytes: &[u8]) -> Option<String> {
+        let _ = (file_name, bytes);
+        None
+    }
+
     /// Execute a Kiln generator component and return its response. The host
     /// instantiates `component_wasm` and links `core:kiln/host` so
     /// `emit-diagnostic` forwards back into itself. The default `Unsupported`

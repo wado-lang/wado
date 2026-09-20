@@ -90,6 +90,7 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
+pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
@@ -211,6 +212,19 @@ fn report_without_span<H: compiler_host::CompilerHost>(
         message,
         span: None,
     });
+}
+
+/// Hand the invalid binary to the host to save, then stop: a pipeline that
+/// emits what it cannot validate has no result to return.
+fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifact) -> ! {
+    let subject = invalid.subject;
+    let saved = match host.save_internal_artifact(invalid.file_name, &invalid.wasm) {
+        Some(where_) => {
+            format!("The full invalid {subject} is at {where_} (inspect with `wasm-tools print`).")
+        }
+        None => format!("The invalid {subject} was not saved: this host keeps no files."),
+    };
+    panic!("{}\n{saved}", invalid.report);
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
@@ -1897,7 +1911,10 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package, &options.providers)
+        match codegen::emit_wasm(&nir, &wir_package, &options.providers) {
+            Ok(wasm) => wasm,
+            Err(invalid) => panic_on_invalid_artifact(logger.host(), &invalid),
+        }
     };
 
     // Return the entry AST for tooling

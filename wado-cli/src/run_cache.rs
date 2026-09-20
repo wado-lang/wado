@@ -22,11 +22,22 @@ use crate::kiln_driver::ResolvedGenerator;
 use crate::sync::lock;
 
 /// Everything one CLI run shares across the files it processes.
-#[derive(Default)]
 pub struct RunCache {
     components: KilnComponentCache,
     generators: GeneratorCache,
     inputs: SourceWatch,
+}
+
+impl Default for RunCache {
+    fn default() -> Self {
+        let cache = Self {
+            components: KilnComponentCache::default(),
+            generators: GeneratorCache::default(),
+            inputs: SourceWatch::default(),
+        };
+        cache.inputs.observe_dev_stdlib();
+        cache
+    }
 }
 
 impl std::fmt::Debug for RunCache {
@@ -127,6 +138,31 @@ impl SourceWatch {
         }
     }
 
+    /// Record the stdlib this process compiles against. A dev build takes it
+    /// from disk once and pins it, so an edit afterwards leaves the run
+    /// describing a tree that is no longer there — the same report every other
+    /// source gets.
+    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    fn observe_dev_stdlib(&self) {
+        use wado_compiler::stdlib::{DEV_STDLIB_ROOT, installed_dev_stdlib};
+
+        let root = Path::new(DEV_STDLIB_ROOT);
+        for (file, source) in installed_dev_stdlib() {
+            self.observe(&root.join(file), source.as_bytes());
+        }
+    }
+
+    /// A release or `wasm32` build embeds the stdlib, so no file backs it.
+    #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+    fn observe_dev_stdlib(&self) {}
+
+    /// Whether this run has read `path`, so a later edit to it would be
+    /// reported.
+    #[must_use]
+    pub fn is_watching(&self, path: &Path) -> bool {
+        lock(&self.seen).contains_key(path)
+    }
+
     /// Declare `dir` a Kiln output directory, whose files this run writes.
     pub fn mark_generated_dir(&self, dir: PathBuf) {
         let mut dirs = lock(&self.generated_dirs);
@@ -186,6 +222,22 @@ mod tests {
 
     fn write(path: &Path, contents: &str) {
         std::fs::write(path, contents).expect("write");
+    }
+
+    /// The stdlib is an input like any other: a run that compiled against one
+    /// version and finished after another landed describes neither tree.
+    #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+    #[test]
+    fn a_run_watches_the_stdlib_it_compiles_against() {
+        use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
+
+        wado_lsp::host::install_dev_stdlib();
+        let run = RunCache::default();
+        let root = Path::new(DEV_STDLIB_ROOT);
+        for file in dev_stdlib_files() {
+            assert!(run.inputs().is_watching(&root.join(file)), "{file}");
+        }
+        assert!(run.inputs().changed().is_empty());
     }
 
     #[test]

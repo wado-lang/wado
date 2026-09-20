@@ -1,30 +1,91 @@
 //! Standard library sources: `core:*` is the Wado library (`core:cli`'s
 //! `println`, …), `wasi:*` the raw WASI packages keyed by interface.
 
-/// The `lib/` directory this crate was compiled from.
+/// The `lib/` directory this crate was compiled from, where a dev build's host
+/// reads the stdlib.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-const STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
+pub const DEV_STDLIB_ROOT: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/lib");
 
+/// What the host handed over, keyed by the file's path under
+/// [`DEV_STDLIB_ROOT`].
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-fn read_stdlib_module(file: &str) -> &'static str {
-    let path = std::path::Path::new(STDLIB_ROOT).join(file);
-    let source = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("dev build reads the stdlib from {}: {e}", path.display()));
-    String::leak(source)
+static INSTALLED: std::sync::OnceLock<crate::hashmap::IndexMap<String, &'static str>> =
+    std::sync::OnceLock::new();
+
+/// Hand a dev build the stdlib: each file of [`dev_stdlib_files`], named
+/// relative to [`DEV_STDLIB_ROOT`], paired with its source. The first install
+/// wins, since a run that compiled two versions of a module describes neither.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+pub fn install_dev_stdlib(sources: impl IntoIterator<Item = (String, String)>) {
+    let installed = sources
+        .into_iter()
+        .map(|(file, source)| (file, &*String::leak(source)))
+        .collect();
+    let _ = INSTALLED.set(installed);
 }
 
-/// Declares a stdlib table, and the paths alone, from one list of
-/// `(import path, file)` pairs. A dev build reads the files, so editing a
-/// module needs no rebuild. A release build embeds them, as does `wasm32`,
-/// which has no filesystem.
+/// The stdlib as the host installed it, for a caller that has to say which
+/// files this process is compiling against.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[must_use]
+pub fn installed_dev_stdlib() -> Vec<(&'static str, &'static str)> {
+    match INSTALLED.get() {
+        Some(installed) => installed
+            .iter()
+            .map(|(file, source)| (file.as_str(), *source))
+            .collect(),
+        None => Vec::new(),
+    }
+}
+
+/// This crate's own unit tests are their own host, and the files are beside
+/// them.
+#[cfg(all(test, debug_assertions, not(target_arch = "wasm32")))]
+fn read_dev_stdlib_beside_us() -> crate::hashmap::IndexMap<String, &'static str> {
+    dev_stdlib_files()
+        .into_iter()
+        .map(|file| {
+            let path = std::path::Path::new(DEV_STDLIB_ROOT).join(file);
+            let source = std::fs::read_to_string(&path)
+                .unwrap_or_else(|e| panic!("reading {}: {e}", path.display()));
+            (file.to_string(), &*String::leak(source))
+        })
+        .collect()
+}
+
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+fn installed_source(file: &str) -> &'static str {
+    #[cfg(test)]
+    let installed = INSTALLED.get_or_init(read_dev_stdlib_beside_us);
+    #[cfg(not(test))]
+    let installed = INSTALLED.get().unwrap_or_else(|| {
+        panic!(
+            "a dev build takes the stdlib from its host: call \
+             `wado_compiler::stdlib::install_dev_stdlib` before compiling"
+        )
+    });
+    installed
+        .get(file)
+        .unwrap_or_else(|| panic!("the host installed no stdlib source for {file}"))
+}
+
+/// Declares a stdlib table, and the paths and files alone, from one list of
+/// `(import path, file)` pairs. A dev build takes the sources from its host, so
+/// editing a module needs no rebuild. A release build embeds them, as does
+/// `wasm32`, which has no filesystem.
 macro_rules! stdlib_table {
     (
         $(#[$meta:meta])* $vis:vis fn $name:ident;
         $(#[$pmeta:meta])* const $paths:ident;
+        $(#[$fmeta:meta])* const $files:ident;
         $($import:literal => $file:literal,)*
     ) => {
         $(#[$pmeta])*
         $vis const $paths: &[&str] = &[$($import,)*];
+
+        $(#[$fmeta])*
+        #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+        $vis const $files: &[&str] = &[$($file,)*];
 
         $(#[$meta])*
         #[cfg(any(not(debug_assertions), target_arch = "wasm32"))]
@@ -39,7 +100,7 @@ macro_rules! stdlib_table {
         $vis fn $name() -> &'static [(&'static str, &'static str)] {
             static TABLE: std::sync::OnceLock<Vec<(&'static str, &'static str)>> =
                 std::sync::OnceLock::new();
-            TABLE.get_or_init(|| vec![$(($import, read_stdlib_module($file)),)*])
+            TABLE.get_or_init(|| vec![$(($import, installed_source($file)),)*])
         }
     };
 }
@@ -50,6 +111,8 @@ stdlib_table! {
     pub fn all_core_modules;
     /// The same set, named without its sources.
     const CORE_MODULE_PATHS;
+    /// The same set as files under [`DEV_STDLIB_ROOT`].
+    const CORE_MODULE_FILES;
     "core:allocator" => "core/allocator.wado",
     "core:builtin" => "core/builtin.wado",
     "core:cli" => "core/cli.wado",
@@ -104,6 +167,8 @@ stdlib_table! {
     pub fn all_binding_modules;
     /// The same set, named without its sources.
     const BINDING_MODULE_PATHS;
+    /// The same set as files under [`DEV_STDLIB_ROOT`].
+    const BINDING_MODULE_FILES;
     "wasi:cli" => "wasi/cli.wado",
     "wasi:filesystem" => "wasi/filesystem.wado",
     "wasi:clocks" => "wasi/clocks.wado",
@@ -151,6 +216,18 @@ stdlib_table! {
     "wasi:webgpu/worlds.wado" => "wasi/webgpu/worlds.wado",
     // Web platform bindings, generated from the WebIDL snapshot beside them.
     "web:dom" => "web/dom.wado",
+}
+
+/// Every file [`install_dev_stdlib`] has to cover, relative to
+/// [`DEV_STDLIB_ROOT`].
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+#[must_use]
+pub fn dev_stdlib_files() -> Vec<&'static str> {
+    CORE_MODULE_FILES
+        .iter()
+        .chain(BINDING_MODULE_FILES)
+        .copied()
+        .collect()
 }
 
 /// Always embedded: generated bytes, not source anyone edits.
@@ -263,7 +340,7 @@ mod tests {
         }
 
         for (import, _) in all_core_modules().iter().chain(all_binding_modules()) {
-            let path = std::path::Path::new(STDLIB_ROOT).join(file_of(import));
+            let path = std::path::Path::new(DEV_STDLIB_ROOT).join(file_of(import));
             let on_disk = std::fs::read_to_string(&path).expect(import);
             assert_eq!(
                 get_stdlib_module(import).expect(import),
