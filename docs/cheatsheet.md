@@ -989,6 +989,11 @@ fn head<A, ..T>(t: &[A, ..T]) -> A {
     // return t.1;       // Error: lands on the pack
 }
 
+// That limit is on reading a value. In type position a pack takes a scalar on
+// either side, and the match splits the tuple type across them.
+fn drop_last<..Rest, Last>(t: &[..Rest, Last]) -> [..Rest] { ... }
+fn drop_ends<First, ..Mid, Last>(t: &[First, ..Mid, Last]) -> [..Mid] { ... }
+
 // A pack bound through another parameter's associated type is projected from
 // it, so the call site names neither.
 fn arity<T: Parts<Items = [..P]>, ..P>(t: &T) -> i32 { ... }
