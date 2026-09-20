@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789873068767,
+  "lastUpdate": 1789875420338,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57213,6 +57213,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/41a4d6dcab11887b9d5f75c0beda913b85e7a8af"
         },
         "date": 1789873067907,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1865,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6434,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19635,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300952,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a310fd64b468c9268780d8effd041bdafd406ab7",
+          "message": "Merge pull request #2090 from wado-lang/claude/passthrough-shareable\n\nfix(optimize): globalize a constant that reaches a callee through a pass-through",
+          "timestamp": "2026-09-20T12:14:06+09:00",
+          "tree_id": "a7b4810fcd9280f244bf3cd5a5b19460a14da79b",
+          "url": "https://github.com/wado-lang/wado/commit/a310fd64b468c9268780d8effd041bdafd406ab7"
+        },
+        "date": 1789875419639,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
