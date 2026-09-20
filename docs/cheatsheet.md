@@ -1569,6 +1569,7 @@ use fs from "core:fs";
 let text = fs::read_to_string("docs/spec.md")?;  // Result<String, FsError>
 let bytes = fs::read("icon.png")?;               // Result<ByteList, FsError>
 fs::write("build/out.json", &text)?;             // any AsByteSlice; replaces via rename
+                                                 // (a non-regular file is refused)
 fs::write_in_place("big.bin", &bytes)?;          // truncates instead of replacing
 fs::rename("build/a.txt", "build/b.txt")?;       // replaces what b.txt named
 fs::create_dir_all("build/reports")?;            // mkdir -p
@@ -1576,6 +1577,7 @@ fs::create_dir("build/reports/today")?;          // one level; parent must exist
 fs::remove_file("build/stale.txt")?;
 fs::remove_dir("build/empty")?;                  // the directory must be empty
 fs::remove_dir_all("build/site")?;               // rm -rf; a missing path is Ok
+                                                 // (a path resolving to the preopen is refused)
 
 if fs::exists("wado.toml") { ... }               // no error to discard
 let meta = fs::metadata("icon.png")?;            // Metadata { type, size, modified }
@@ -1591,7 +1593,7 @@ fs::walk_dir(".", |e| e.path != ".git")?;        // asked per directory; skips i
 // Path text, no I/O: `/`-separated and preopen-relative, never URL rules
 fs::join("build", "out.json");                   // "build/out.json"
 fs::parent("a/b/c");                             // Some("a/b")
-fs::file_name("a/b.txt");                        // Some("b.txt")
+fs::file_name("a/b.txt");                        // Some("b.txt"); None on `.` or `..`
 fs::file_stem("a/b.txt");                        // Some("b")
 fs::extension("a/b.txt");                        // Some("txt")
 fs::normalize("a/./b/../c")?;                    // "a/c"; ".." past the preopen fails

@@ -389,6 +389,9 @@ test "metadata answers a directory as one" {
     assert fs::metadata(&dir).unwrap().type matches { Directory };
     assert fs::metadata("").unwrap().type matches { Directory };
     assert fs::metadata(".").unwrap().type matches { Directory };
+    // The preopen under its other spellings, which resolve to the same place.
+    assert fs::metadata("./").unwrap().type matches { Directory };
+    assert fs::metadata("target/..").unwrap().type matches { Directory };
 }
 
 test "metadata on a path that names nothing is NotFound" {

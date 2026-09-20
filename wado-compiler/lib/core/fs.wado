@@ -565,13 +565,14 @@ fn stream_out<T: AsByteSlice, S: AsStrSlice>(path: S, file: Descriptor, data: &T
     return finish(path, done);
 }
 
-/// Whether `path` names the preopen rather than something under it.
+/// Whether `path` resolves to the preopen rather than to something under it.
+/// A path that resolves to nothing reachable is neither, so it is `false`.
 fn preopen_itself<S: AsStrSlice>(path: S) -> bool {
-    return path.is_empty() || path == ".";
+    return normalize(path).map(|resolved: String| resolved.is_empty()).unwrap_or(false);
 }
 
-/// `NotPermitted` where `path` resolves to the preopen. It is resolved rather
-/// than read, since `"./"` and `"x/.."` name it as surely as `"."` does.
+/// `NotPermitted` where `path` resolves to the preopen, which is the root every
+/// path here resolves against and not something a removal takes down.
 fn deny_preopen<S: AsStrSlice>(path: S) -> Result<(), FsError> {
     if normalize(path)?.is_empty() {
         return Result::Err(failure(path, ErrorCode::NotPermitted));

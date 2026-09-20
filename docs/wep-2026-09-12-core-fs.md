@@ -183,13 +183,13 @@ Two departures from Rust, both from this module's own shape:
   it walks `read_dir("")` and removes each entry.
 
   The guard resolves the path rather than reading it. `""` and `"."` are the
-  obvious spellings, but `"./"`, `"x/.."` and `"./x/../."` all name the preopen
-  too, and `remove_dir_all` reaches its walk before the host ever sees the path
-  — so a guard that compared text would delete every entry in the working
-  directory and only then fail on the final `remove_dir`. `normalize` is the
-  module's own resolver and answers `""` for every such spelling, which is the
-  whole check. It refuses an absolute path and one that climbs out of the
-  preopen on the way, which is the right answer for a removal as well.
+  obvious spellings. `"./"`, `"x/.."` and `"./x/../."` name it too. A guard that
+  compared text would pass all three, and `remove_dir_all` starts its walk
+  before the host ever sees the path, so it would empty the working directory
+  and only then fail on the final `remove_dir`. `normalize` is the module's own
+  resolver and answers `""` for every such spelling, so running the path through
+  it is the whole check. It also refuses an absolute path and one that climbs
+  out of the preopen, which a removal should refuse anyway.
 
 One function with a `recursive: bool = false` parameter would collapse the pair,
 and a default is trailing so it would fit. Wado has no named arguments
@@ -215,30 +215,28 @@ all there is. The same reason puts Rust's `NamedTempFile::new_in` and Go's
 The name is `<target>.wado-tmp`, then `.1`, `.2` and on, counted from zero on
 each write. The file is created with `Create | Exclusive`, so the host decides
 uniqueness atomically and a second writer that loses the race takes the next
-name. A random name would decide
-the same thing at a price: `Random` in the signature of every function that
-writes a file, and `wasi:random` in its component's imports. What randomness
-buys elsewhere is a defence of a shared `/tmp` against a symlink planted by
-another user, and this tree has no shared `/tmp`.
+name. A random name would settle the
+same question, and cost `Random` in the signature of every function that writes
+a file and `wasi:random` in its component's imports. Elsewhere a random name
+defends a shared `/tmp` against a symlink another user planted. This tree has
+no shared `/tmp`.
 
 A failed write unlinks its temporary file, best effort: the write already
 failed, so a failure to clean up is not a second error to report. A process
 that dies between the create and the rename leaves one behind, which every
 implementation of this pattern leaves behind.
 
-The temporary file is this module's business and never the caller's, so it
-appears in nothing the caller reads. Every error out of `write` is relabelled
-with the path the caller passed, at the one exit that reports one; otherwise a
-rename onto an occupied path reports `build/out.json.wado-tmp`, a file nobody
-asked for.
+No error names the temporary file. `write` has one exit that reports a failure,
+and it puts the path the caller passed on whatever comes back. Without that, a
+rename onto an occupied path reports `build/out.json.wado-tmp`, a file the
+caller never wrote.
 
-A rename replaces a symlink rather than following it, which is the one way this
-shape can do something the truncating write could not: it would detach a link
-where `write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a
-link to `AGENTS.md`, so the difference is a file the next `git status` reports.
-`write` therefore refuses a target that is not a regular file, which is what
-every read here already does — the module follows no link anywhere, and the
-write is not the place to start.
+A rename replaces a symlink rather than following it. That is the one thing
+this shape does that a truncating write could not: it detaches a link where
+`write_in_place` refused with `Loop`. In this repository `CLAUDE.md` is a link
+to `AGENTS.md`, so the difference is a file the next `git status` reports. So
+`write` refuses a target that is not a regular file. Every read here already
+does, and a write is not the place to start following links.
 
 `write_in_place` keeps the truncating write for the callers that want it: a
 file too large to exist twice, and a directory that should not gain a second
@@ -293,11 +291,10 @@ to find out whether it was handed the preopen. A module that did not know these
 rules would have to restate them, and one that was free of them could not answer
 `normalize` at all.
 
-Which is why the path functions are where a decision about a path gets made.
-`file_name` answers `None` for a component that is `.` or `..`, since neither
-names an entry, and a caller that matches a name against a list never has to
-recognize a traversal. `extension` keeps Rust's answers, `Some("")` for `a/b.`
-among them.
+So the path functions are where these rules are applied, once. `file_name`
+answers `None` for a component that is `.` or `..`, since neither names an
+entry, and a caller matching a name against a list never has to recognize a
+traversal. `extension` keeps Rust's answers, `Some("")` for `a/b.` among them.
 
 The usual reason to split is to keep a caller that only joins strings away from
 the filesystem. Wado already does that with effects: a path function declares no
