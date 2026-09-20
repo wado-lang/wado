@@ -762,12 +762,12 @@ question to the next kind, so which kind is asked first is a silent tiebreak.
 any module's `ErrorCode`, including one a user wrote.
 
 A reference arrives without a declaring interface in three positions. A world
-body names an export type that no import resolves, and the world's own
-namespace, which is all that scopes it, does not reach a type another package
-declares. A lib-local type is registered under its package's default interface,
-which no CM namespace covers, so only a program-wide unique match reaches it.
-A reference synthesized while emitting a CM instance carries at most the
-interface being emitted, which need not be the one that declares it. That is
+body names an export type that no import resolves. Only the world's own
+namespace scopes such a name, and that namespace does not reach a type another
+package declares. A lib-local type is registered under its package's default
+interface, which no CM namespace covers, so only a program-wide unique match
+reaches it. A reference synthesized while emitting a CM instance carries at most
+the interface being emitted, which need not be the one that declares it. That is
 where `ErrorCode` arrives.
 
 ## Known gap: an abstract qualifier argument is not compared

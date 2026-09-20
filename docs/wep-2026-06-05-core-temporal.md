@@ -326,9 +326,9 @@ downstream of it.
 months, or weeks, because those have no length without a calendar position, and
 `Duration` has no ordering at all for the same reason — `Temporal.Duration`'s
 `compare` also demands an anchor. Temporal's answer is a `relativeTo` argument
-that turns the calendar components into exact time before measuring; Wado has no
-counterpart, and what an anchor would accept — a `PlainDate`, a `ZonedDateTime`,
-or either — is undecided.
+that turns the calendar components into exact time before measuring. Wado has no
+counterpart, and what an anchor would accept is undecided: a `PlainDate`, a
+`ZonedDateTime`, or either.
 
 ### The system time zone
 

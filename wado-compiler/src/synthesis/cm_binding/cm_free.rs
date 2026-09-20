@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use crate::ast::{NamedType, Type};
 use crate::cm_abi;
 use crate::component_model::{
-    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_align_with_registry, cm_size_with_registry,
+    CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY, cm_layout_with_registry,
 };
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
@@ -22,7 +22,8 @@ use crate::synthesis::common::{
 
 use super::export_adapter::FlatLocal;
 use super::types::{
-    CmStdlibNames, binary_add, cm_val_type_to_type_id, coerce_flat_lift, flat_types_from_ast_type,
+    CmStdlibNames, binary_add, cm_discriminant_byte_size, cm_val_type_to_type_id, coerce_flat_lift,
+    disc_load_op, flat_types_from_ast_type,
 };
 
 /// Lighter than `LowerContext`: freeing reads the value out of memory or out of
@@ -178,11 +179,12 @@ fn field_list(types: &[Type], ctx: &CmShapeContext<'_>) -> Vec<CmField> {
 }
 
 fn field_of(ty: &Type, offset: u32, ctx: &CmShapeContext<'_>) -> CmField {
+    let (size, align) = cm_layout_with_registry(ty, ctx.cm_interface_registry);
     CmField {
         shape: cm_shape(ty, ctx),
         offset,
-        size: cm_size_with_registry(ty, ctx.cm_interface_registry),
-        align: cm_align_with_registry(ty, ctx.cm_interface_registry),
+        size,
+        align,
         flat_slots: flat_slot_count(ty, ctx),
     }
 }
@@ -465,8 +467,8 @@ fn free_elements(
     ]
 }
 
-/// Load the one-byte discriminant the lowering side stored at offset 0 and free
-/// the active case's payload. Cases owning no memory contribute no branch.
+/// Load the discriminant the lowering side stored at offset 0 and free the
+/// active case's payload. Cases owning no memory contribute no branch.
 fn free_variant_in_memory(
     cases: &[Option<CmField>],
     addr: &TirExpr,
@@ -483,7 +485,11 @@ fn free_variant_in_memory(
         "$free_disc",
         disc_local,
         TypeTable::I32,
-        builtin_call("i32_load8_u", vec![addr.clone()], TypeTable::I32),
+        builtin_call(
+            disc_load_op(cm_discriminant_byte_size(cases.len())),
+            vec![addr.clone()],
+            TypeTable::I32,
+        ),
     )];
     for (index, field) in owning {
         let payload = synthesize_free_cm_value(

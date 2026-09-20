@@ -40,9 +40,7 @@ use super::types::{
 use crate::ast::Visibility;
 use crate::cm_abi::{CmValType, layout_tuple_with_registry};
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{
-    cm_align_with_registry, cm_layout_with_registry, cm_return_needs_outptr, cm_size_with_registry,
-};
+use crate::component_model::{cm_layout_with_registry, cm_return_needs_outptr};
 use crate::name::{FqTypeName, cm_wrap_async_func_name};
 use crate::tir;
 
@@ -1033,8 +1031,8 @@ impl<'a> AdapterBuilder<'a> {
     /// buffer and pass (base, len) as flat args.
     fn emit_list_buffer(&mut self, param_name: &str, param_local: u32, elem_type: &Type) {
         let registry = self.lower_ctx.cm_interface_registry;
-        let elem_size = cm_size_with_registry(elem_type, registry) as i32;
-        let elem_align = cm_align_with_registry(elem_type, registry) as i32;
+        let (elem_size, elem_align) = cm_layout_with_registry(elem_type, registry);
+        let (elem_size, elem_align) = (elem_size as i32, elem_align as i32);
 
         let (elem_type_id, array_type_id) = {
             let mut tt = self.lower_ctx.type_table.borrow_mut();

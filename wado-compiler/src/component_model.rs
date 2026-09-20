@@ -18,7 +18,7 @@ use crate::ast::{
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
     CmValType, cm_align, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
-    cm_size, layout_option_with_registry, layout_record_with_registry, layout_result_with_registry,
+    cm_size, layout_fields_with_registry, layout_option_with_registry, layout_result_with_registry,
     layout_tuple_with_registry, layout_variant_with_registry,
 };
 use crate::defs::DefId;
@@ -4901,7 +4901,7 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
                     .iter()
                     .map(|(_, ty)| registry.resolve_type(ty))
                     .collect();
-                return layout_record_with_registry(&resolved_fields, registry).size_align();
+                return layout_fields_with_registry(resolved_fields.iter(), registry).size_align();
             }
             if let Some(sa) = cm_variant_size_align(named, registry) {
                 return sa;
@@ -4932,16 +4932,6 @@ pub fn cm_layout_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> (u3
         }
         _ => unregistered(),
     }
-}
-
-/// Registry-aware CM canonical ABI size for a type.
-pub fn cm_size_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    cm_layout_with_registry(ty, registry).0
-}
-
-/// Registry-aware CM canonical ABI alignment for a type.
-pub fn cm_align_with_registry(ty: &Type, registry: &CmInterfaceRegistry) -> u32 {
-    cm_layout_with_registry(ty, registry).1
 }
 
 /// Primitive type for CM tuple return handling

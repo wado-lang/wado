@@ -27,7 +27,7 @@ use super::types::{
     cm_held_type_to_type_id, disc_load_op, kebab_to_pascal,
 };
 use crate::compiler_item::CompilerItem;
-use crate::component_model::{cm_align_with_registry, cm_size_with_registry};
+use crate::component_model::cm_layout_with_registry;
 use crate::tir::StructDef;
 
 /// Synthesize a TIR expression that loads a CM value from linear memory.
@@ -596,8 +596,7 @@ pub(super) fn synthesize_lift_list(
     locals: &mut Vec<TirLocal>,
     ctx: &LiftContext<'_>,
 ) -> TirExpr {
-    let elem_size = cm_size_with_registry(elem_ty, ctx.cm_interface_registry);
-    let elem_align = cm_align_with_registry(elem_ty, ctx.cm_interface_registry);
+    let (elem_size, elem_align) = cm_layout_with_registry(elem_ty, ctx.cm_interface_registry);
 
     // Resolve TypeIds for `List<ElemType>` and its element, needed to
     // instantiate `List::with_capacity` / `.push()`. When the caller knows the

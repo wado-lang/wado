@@ -518,7 +518,7 @@ index loop in one body, reads the element in place under the read-only share.
 
 Both halves are in one fixpoint: the recognizer does not see the projection
 through the binding and the variant, and the fold reads the materialization into
-that payload as a copy. Neither the inliner nor any NIR pass can stand in — the
+that payload as a copy. Neither the inliner nor any NIR pass can stand in. The
 copy is chosen before NIR exists, and `#[inline(always)]` on `next` leaves the
 expanded clone in the caller's loop untouched even with the cloned array provably
 unread.

@@ -9,9 +9,7 @@
 #[cfg(test)]
 use crate::ast::{AstId, NamedType};
 use crate::ast::{GenericType, Type};
-use crate::component_model::{
-    CmInterfaceRegistry, CmPrimitiveType, cm_align_with_registry, cm_size_with_registry,
-};
+use crate::component_model::{CmInterfaceRegistry, CmPrimitiveType, cm_layout_with_registry};
 #[cfg(test)]
 use crate::token::Span;
 
@@ -71,41 +69,36 @@ impl CmLayout {
     }
 }
 
-/// Compute the layout for a record (struct with named fields).
-pub fn layout_record(fields: &[(&str, &Type)]) -> CmLayout {
-    let types: Vec<&Type> = fields.iter().map(|(_, ty)| *ty).collect();
-    compute_layout(&types)
-}
-
-/// Compute the layout for a tuple (positional elements).
+/// Layout for a tuple. A record lays out the same way, as a tuple of its field
+/// types.
 pub fn layout_tuple(elements: &[Type]) -> CmLayout {
-    let types: Vec<&Type> = elements.iter().collect();
-    compute_layout(&types)
+    layout_fields_by(elements.iter(), plain_size_align)
 }
 
-/// Core layout computation: given a list of field types, compute offsets.
-fn compute_layout(types: &[&Type]) -> CmLayout {
+/// The size and alignment of a type read without a registry, so a named
+/// declaration falls back to the 4-byte handle.
+fn plain_size_align(ty: &Type) -> (u32, u32) {
+    (cm_size(ty), cm_align(ty))
+}
+
+/// Lay fields out in order, each at its own alignment, the whole padded to the
+/// widest. `size_align` is what reads a field's own size and alignment.
+fn layout_fields_by<'a>(
+    fields: impl Iterator<Item = &'a Type>,
+    mut size_align: impl FnMut(&Type) -> (u32, u32),
+) -> CmLayout {
     let mut offset: u32 = 0;
     let mut max_align: u32 = 1;
-    let mut offsets = Vec::with_capacity(types.len());
-
-    for ty in types {
-        let field_align = cm_align(ty);
-        let field_size = cm_size(ty);
-
-        // Align offset for this field
+    let mut offsets = Vec::new();
+    for ty in fields {
+        let (field_size, field_align) = size_align(ty);
         offset = align_to(offset, field_align);
         offsets.push(offset);
-
         offset += field_size;
         max_align = max_align.max(field_align);
     }
-
-    // Trailing padding to satisfy overall alignment
-    let size = align_to(offset, max_align);
-
     CmLayout {
-        size,
+        size: align_to(offset, max_align),
         align: max_align,
         offsets,
     }
@@ -172,22 +165,24 @@ fn cm_align_generic(generic: &GenericType) -> u32 {
 /// Layout for a variant: the discriminant `case_count` calls for, then the
 /// payload-bearing cases at one shared offset. `offsets` is `[disc, payload]`.
 pub fn layout_variant<'a>(case_count: usize, payloads: impl Iterator<Item = &'a Type>) -> CmLayout {
+    layout_variant_by(case_count, payloads, plain_size_align)
+}
+
+/// Lay a variant out: the discriminant at offset 0, then every payload at one
+/// shared offset after it. `size_align` is what reads a payload's own pair.
+fn layout_variant_by<'a>(
+    case_count: usize,
+    payloads: impl Iterator<Item = &'a Type>,
+    mut size_align: impl FnMut(&Type) -> (u32, u32),
+) -> CmLayout {
     let mut payload_size = 0u32;
     let mut payload_align = 1u32;
     for ty in payloads {
-        payload_size = payload_size.max(cm_size(ty));
-        payload_align = payload_align.max(cm_align(ty));
+        let (size, align) = size_align(ty);
+        payload_size = payload_size.max(size);
+        payload_align = payload_align.max(align);
     }
-    variant_layout(
-        cm_discriminant_byte_size(case_count),
-        payload_size,
-        payload_align,
-    )
-}
-
-/// The shared tail of both variant layouts: the discriminant at offset 0, the
-/// payload after it at its own alignment, padded to the wider of the two.
-fn variant_layout(disc: u32, payload_size: u32, payload_align: u32) -> CmLayout {
+    let disc = cm_discriminant_byte_size(case_count);
     let align = disc.max(payload_align);
     let payload_offset = align_to(disc, payload_align);
     CmLayout {
@@ -214,17 +209,9 @@ pub fn layout_variant_with_registry<'a>(
     payloads: impl Iterator<Item = &'a Type>,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
-    let mut payload_size = 0u32;
-    let mut payload_align = 1u32;
-    for ty in payloads {
-        payload_size = payload_size.max(cm_size_with_registry(ty, registry));
-        payload_align = payload_align.max(cm_align_with_registry(ty, registry));
-    }
-    variant_layout(
-        cm_discriminant_byte_size(case_count),
-        payload_size,
-        payload_align,
-    )
+    layout_variant_by(case_count, payloads, |ty| {
+        cm_layout_with_registry(ty, registry)
+    })
 }
 
 /// Registry-aware layout for `option<T>`.
@@ -232,46 +219,13 @@ pub fn layout_option_with_registry(inner: &Type, registry: &CmInterfaceRegistry)
     layout_variant_with_registry(2, std::iter::once(inner), registry)
 }
 
-/// Registry-aware layout for a tuple. Unlike [`layout_tuple`], element
-/// sizes/alignments resolve through the registry, so a tuple carrying a named
-/// record/variant/newtype lays out at the correct offsets.
-pub fn layout_tuple_with_registry(elements: &[Type], registry: &CmInterfaceRegistry) -> CmLayout {
-    layout_fields_with_registry(elements.iter(), registry)
-}
-
-/// Registry-aware layout over an iterator of field/element type references. The
-/// by-reference core behind the tuple and record layouts, for a caller that
-/// already holds the resolved types.
-pub fn layout_fields_with_registry<'a>(
-    fields: impl Iterator<Item = &'a Type>,
+/// Registry-aware layout for `result<T, E>`.
+pub fn layout_result_with_registry(
+    ok: &Type,
+    err: &Type,
     registry: &CmInterfaceRegistry,
 ) -> CmLayout {
-    let mut offset: u32 = 0;
-    let mut max_align: u32 = 1;
-    let mut offsets = Vec::new();
-    for ty in fields {
-        let field_align = cm_align_with_registry(ty, registry);
-        let field_size = cm_size_with_registry(ty, registry);
-        offset = align_to(offset, field_align);
-        offsets.push(offset);
-        offset += field_size;
-        max_align = max_align.max(field_align);
-    }
-    let size = align_to(offset, max_align);
-    CmLayout {
-        size,
-        align: max_align,
-        offsets,
-    }
-}
-
-/// Registry-aware layout for a record: fields lay out exactly like a tuple of
-/// the field types.
-pub fn layout_record_with_registry(
-    field_types: &[Type],
-    registry: &CmInterfaceRegistry,
-) -> CmLayout {
-    layout_fields_with_registry(field_types.iter(), registry)
+    layout_variant_with_registry(2, [ok, err].into_iter(), registry)
 }
 
 /// The offset a variant's case payloads start at, for a caller needing no size.
@@ -281,6 +235,20 @@ pub fn variant_payload_offset_with_registry<'a>(
     registry: &CmInterfaceRegistry,
 ) -> u32 {
     layout_variant_with_registry(case_count, payloads, registry).offsets[1]
+}
+
+/// Registry-aware [`layout_tuple`], resolving each element through the
+/// registry so a named record, variant or newtype lands at its true offset.
+pub fn layout_tuple_with_registry(elements: &[Type], registry: &CmInterfaceRegistry) -> CmLayout {
+    layout_fields_with_registry(elements.iter(), registry)
+}
+
+/// Registry-aware layout over field types the caller already holds.
+pub fn layout_fields_with_registry<'a>(
+    fields: impl Iterator<Item = &'a Type>,
+    registry: &CmInterfaceRegistry,
+) -> CmLayout {
+    layout_fields_by(fields, |ty| cm_layout_with_registry(ty, registry))
 }
 
 /// CM Canonical ABI byte size for a flags type given its label count.
@@ -318,15 +286,6 @@ pub fn cm_discriminant_byte_size(count: usize) -> u32 {
     } else {
         4
     }
-}
-
-/// Registry-aware layout for result<T, E>.
-pub fn layout_result_with_registry(
-    ok: &Type,
-    err: &Type,
-    registry: &CmInterfaceRegistry,
-) -> CmLayout {
-    layout_variant_with_registry(2, [ok, err].into_iter(), registry)
 }
 
 /// Compute the flat (core Wasm) parameter types for a Canonical ABI type.
@@ -537,6 +496,28 @@ mod tests {
         assert_eq!(align_to(9, 8), 16);
     }
 
+    /// Every discriminant the compiler loads, stores or lays out takes its
+    /// width from here, so a boundary that slips moves all four at once.
+    #[test]
+    fn a_discriminant_widens_at_the_spec_boundaries() {
+        assert_eq!(cm_discriminant_byte_size(0), 1);
+        assert_eq!(cm_discriminant_byte_size(256), 1);
+        assert_eq!(cm_discriminant_byte_size(257), 2);
+        assert_eq!(cm_discriminant_byte_size(65536), 2);
+        assert_eq!(cm_discriminant_byte_size(65537), 4);
+    }
+
+    /// A variant past 256 cases carries a two-byte discriminant, which also
+    /// pushes its payload to the offset that width calls for.
+    #[test]
+    fn a_wide_discriminant_moves_the_payload() {
+        let payload = named_type("i32");
+        let layout = layout_variant(257, std::iter::once(&payload));
+        assert_eq!(layout.align, 4);
+        assert_eq!(layout.offsets, vec![0, 4]);
+        assert_eq!(layout.size, 8);
+    }
+
     #[test]
     fn test_option_i32() {
         // option<i32>: disc(1 byte) + 3 padding + i32(4 bytes) = 8 bytes, align 4
@@ -726,7 +707,7 @@ mod tests {
     #[test]
     fn test_record_simple() {
         // record { x: i32, y: i32 }
-        let layout = layout_record(&[("x", &named_type("i32")), ("y", &named_type("i32"))]);
+        let layout = layout_tuple(&[named_type("i32"), named_type("i32")]);
         assert_eq!(layout.size, 8);
         assert_eq!(layout.align, 4);
         assert_eq!(layout.offsets, vec![0, 4]);
@@ -736,9 +717,7 @@ mod tests {
     fn test_record_mixed_alignment() {
         // record { flag: bool, value: i64 }
         // flag(1) + 7 padding + i64(8) = 16 bytes, align 8
-        let bool_ty = named_type("bool");
-        let i64_ty = named_type("i64");
-        let layout = layout_record(&[("flag", &bool_ty), ("value", &i64_ty)]);
+        let layout = layout_tuple(&[named_type("bool"), named_type("i64")]);
         assert_eq!(layout.size, 16);
         assert_eq!(layout.align, 8);
         assert_eq!(layout.offsets, vec![0, 8]);
@@ -748,9 +727,7 @@ mod tests {
     fn test_record_with_string() {
         // record { name: string, age: i32 }
         // string(8) + i32(4) = 12 bytes, align 4
-        let str_ty = named_type("String");
-        let i32_ty = named_type("i32");
-        let layout = layout_record(&[("name", &str_ty), ("age", &i32_ty)]);
+        let layout = layout_tuple(&[named_type("String"), named_type("i32")]);
         assert_eq!(layout.size, 12);
         assert_eq!(layout.align, 4);
         assert_eq!(layout.offsets, vec![0, 8]);

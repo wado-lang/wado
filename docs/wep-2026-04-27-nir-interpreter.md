@@ -497,8 +497,8 @@ runtime trap inside an unfolded body stays observable.
 
 The census counts 13. The frame cannot say where such a write lands, so it
 refuses the region rather than carry it out. A frame's places cover locals only,
-and how the 13 divide among the roots a local does not cover — a global, a call
-result — is not counted.
+and the roots it leaves out — a global, a call result — have not been counted
+against the 13.
 
 ### Comparing two literal strings as a guard
 
