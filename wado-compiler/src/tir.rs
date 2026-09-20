@@ -152,13 +152,11 @@ impl SubstitutionContext {
                 // declaring the same associated-type name on one implementor
                 // stay apart (WEP-2026-08-12). The name-keyed chain below gives
                 // up on exactly that case, so it must not be reached first.
-                if let Some(trait_key) = &owning_trait
-                    && let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
-                        concrete_id,
-                        trait_key,
-                        &assoc_name,
-                    )
-                {
+                if let Some(resolved) = type_table.resolve_trait_assoc_type_of_instance(
+                    concrete_id,
+                    &owning_trait,
+                    &assoc_name,
+                ) {
                     return resolved;
                 }
                 if let Some(resolved) =
@@ -557,11 +555,10 @@ pub enum ResolvedType {
         /// Name of the associated type (e.g., `"Value"` in `T::Value`)
         assoc_name: String,
         /// The trait declaring `assoc_name`: `Self::Err` inside
-        /// `trait FromStr` is `<Self as FromStr>::Err`. An identity, so a
-        /// projection built under one module's `FromStr` cannot be answered by
-        /// another's. `None` where the builder had no trait, which makes
-        /// resolution require the name to be unambiguous.
-        owning_trait: Option<DefId>,
+        /// `trait FromStr` is `<Self as FromStr>::Err`. Part of the identity, so
+        /// a projection built under one module's `FromStr` cannot be answered by
+        /// another's.
+        owning_trait: DefId,
         /// Trait bounds on this associated type, named by the declarations the
         /// trait's own `type A: Bound` references resolve to. A projection
         /// outlives the frame that built it, so a spelling here would be read
@@ -2879,45 +2876,12 @@ impl TypeTable {
         })
     }
 
-    /// Create a simple associated type projection `T::X` with no bounds or bindings.
-    /// Used in pre-pass registration of generic impl associated types.
-    pub fn make_assoc_type_projection_simple(
-        &mut self,
-        param_id: TypeId,
-        assoc_name: String,
-    ) -> TypeId {
-        self.intern(ResolvedType::AssocTypeProjection {
-            param_id,
-            assoc_name,
-            owning_trait: None,
-            bounds: vec![],
-            assoc_type_bindings: vec![],
-        })
-    }
-
-    /// Create an associated type projection: `T::X` where T is a type parameter.
+    /// Create an associated type projection `<T as Trait>::X`. The declaring
+    /// trait is required: without it the projection has no identity to compare.
     pub fn make_assoc_type_projection(
         &mut self,
         param_id: TypeId,
-        assoc_name: String,
-        bounds: Vec<FqTraitName>,
-        assoc_type_bindings: Vec<(String, TypeId)>,
-    ) -> TypeId {
-        self.make_assoc_type_projection_of_trait(
-            param_id,
-            None,
-            assoc_name,
-            bounds,
-            assoc_type_bindings,
-        )
-    }
-
-    /// [`Self::make_assoc_type_projection`] for a builder that knows which
-    /// trait declares the associated type.
-    pub fn make_assoc_type_projection_of_trait(
-        &mut self,
-        param_id: TypeId,
-        owning_trait: Option<DefId>,
+        owning_trait: DefId,
         assoc_name: String,
         bounds: Vec<FqTraitName>,
         assoc_type_bindings: Vec<(String, TypeId)>,
@@ -3000,20 +2964,19 @@ impl TypeTable {
         }
     }
 
-    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`
-    /// when the caller has one. Falls back to the unqualified rule when it
-    /// does not, or when the named trait registered nothing for this type —
-    /// a projection built under a bound can name the trait that *declared*
-    /// the associated type while the impl registered it under a subtrait.
+    /// Resolve `assoc_name` on `concrete_id`, qualified by `owning_trait`.
+    /// Falls back to the unqualified rule when the named trait registered
+    /// nothing for this type — a projection built under a bound can name the
+    /// trait that *declared* the associated type while the impl registered it
+    /// under a subtrait.
     pub fn resolve_assoc_type_qualified(
         &self,
         concrete_id: TypeId,
-        owning_trait: &Option<DefId>,
+        owning_trait: &DefId,
         assoc_name: &str,
     ) -> Option<TypeId> {
-        if let Some(trait_key) = owning_trait
-            && let Some(resolved) =
-                self.resolve_assoc_type_of_trait(concrete_id, trait_key, assoc_name)
+        if let Some(resolved) =
+            self.resolve_assoc_type_of_trait(concrete_id, owning_trait, assoc_name)
         {
             return Some(resolved);
         }
@@ -3540,13 +3503,11 @@ impl TypeTable {
                     // same associated-type name on one implementor stay apart
                     // (WEP-2026-08-12). The name-keyed forms below give up on
                     // that case rather than choosing.
-                    if let Some(trait_key) = &owning_trait
-                        && let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
-                            concrete,
-                            trait_key,
-                            &assoc_name,
-                        )
-                    {
+                    if let Some(resolved) = self.resolve_trait_assoc_type_of_instance(
+                        concrete,
+                        &owning_trait,
+                        &assoc_name,
+                    ) {
                         return resolved;
                     }
                     if let Some(resolved) =
@@ -3578,7 +3539,7 @@ impl TypeTable {
                 if substituted_base == param_id && new_bindings == assoc_type_bindings {
                     type_id
                 } else {
-                    self.make_assoc_type_projection_of_trait(
+                    self.make_assoc_type_projection(
                         substituted_base,
                         owning_trait,
                         assoc_name,
@@ -4355,8 +4316,8 @@ impl TypeTable {
                 let base = type_name(*param_id);
                 // The owning trait is part of a projection's identity, so two
                 // that differ only there render the same without it.
-                if let (true, Some(def)) = (qualified, owning_trait) {
-                    let owner = self.head_name(*def, true);
+                if qualified {
+                    let owner = self.head_name(*owning_trait, true);
                     format!("<{base} as {owner}>::{assoc_name}")
                 } else {
                     format!("{base}::{assoc_name}")
@@ -7112,6 +7073,16 @@ mod tests {
         let _ = table.type_id_of_decl(unregistered);
     }
 
+    fn projection(table: &mut TypeTable, base: TypeId, assoc: &str) -> TypeId {
+        table.make_assoc_type_projection(
+            base,
+            DefId::for_test(0),
+            assoc.to_string(),
+            vec![],
+            vec![],
+        )
+    }
+
     /// Substituting a projection's base rewrites the projection even when the
     /// replacement is itself a parameter. `Self::Item` under `Self := I` is
     /// `I::Item`, not `Self::Item` — a trait signature instantiated for an
@@ -7120,7 +7091,7 @@ mod tests {
     fn substitute_rewrites_projection_base_to_another_param() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substitution = IndexMap::from_iter([(0, receiver)]);
@@ -7145,7 +7116,7 @@ mod tests {
     fn a_projection_answer_replaces_the_projection() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = projection(&mut table, self_param, "Item");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let projections =
@@ -7166,7 +7137,7 @@ mod tests {
     fn an_unanswered_projection_stays_abstract() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Iter".to_string());
+        let projection = projection(&mut table, self_param, "Iter");
 
         let receiver = table.make_type_param("I".to_string(), 1);
         let substituted = table.substitute_type_params_with(
@@ -7188,7 +7159,7 @@ mod tests {
     fn substitute_leaves_unrelated_projection_untouched() {
         let mut table = TypeTable::new();
         let self_param = table.make_type_param("Self".to_string(), 0);
-        let projection = table.make_assoc_type_projection_simple(self_param, "Item".to_string());
+        let projection = projection(&mut table, self_param, "Item");
 
         let substitution = IndexMap::from_iter([(7, TypeTable::I32)]);
         assert_eq!(

@@ -78,9 +78,6 @@ fn check_at(
         return TypeCheckResult::Deferred;
     }
 
-    assert_projection_owned(actual, type_table);
-    assert_projection_owned(expected, type_table);
-
     // Unwrap references for inner type comparison
     let (actual_inner, actual_is_ref) = unwrap_ref(actual, type_table);
     let (expected_inner, expected_is_ref) = unwrap_ref(expected, type_table);
@@ -237,22 +234,6 @@ fn check_at(
     }
 
     TypeCheckResult::Compatible
-}
-
-/// The owning trait is part of a projection's identity, so one built without it
-/// compares wrong against the same projection built where the trait is in scope.
-fn assert_projection_owned(type_id: TypeId, type_table: &TypeTable) {
-    if let ResolvedType::AssocTypeProjection {
-        assoc_name,
-        owning_trait,
-        ..
-    } = type_table.get(type_id)
-    {
-        assert!(
-            owning_trait.is_some(),
-            "[elaborator] the projection `::{assoc_name}` names no owning trait"
-        );
-    }
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).

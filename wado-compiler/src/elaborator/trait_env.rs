@@ -1879,8 +1879,46 @@ impl TraitEnv {
         let ImplTargetKey::Decl(decl_key) = key else {
             return None;
         };
-        let loc = self.decl_index.get(decl_key)?;
+        self.decl_header_of(decl_key)
+    }
+
+    /// The digested declaration `key` identifies, or `None` when it names no
+    /// trait.
+    pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
+        let loc = self.decl_index.get(key)?;
         self.trait_decl_headers.get(loc)
+    }
+
+    /// Whether the trait `key` identifies declares `assoc_name`.
+    pub(super) fn declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
+        self.decl_header_of(key)
+            .is_some_and(|header| header.assoc_types.iter().any(|d| d.name == assoc_name))
+    }
+
+    /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
+    /// `<T as ThatTrait>::assoc_name`. `resolve` says which declaration each
+    /// bound names, since only its reader knows the scope it was written in.
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        bounds: &[ast::TraitBound],
+        assoc_name: &str,
+        resolve: impl Fn(&ast::TraitBound) -> Option<DefId>,
+    ) -> Option<DefId> {
+        bounds
+            .iter()
+            .filter_map(&resolve)
+            .find(|decl| self.declares_assoc_type(decl, assoc_name))
+            // A bound inherits its supertraits' associated types, so
+            // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
+            // a trait redeclaring the name still wins for itself.
+            .or_else(|| {
+                bounds
+                    .iter()
+                    .filter_map(|bound| Some((resolve(bound)?, bound)))
+                    .flat_map(|(decl, bound)| self.supertrait_closure_at(&decl, &bound.type_args))
+                    .find(|inherited| self.declares_assoc_type(&inherited.decl, assoc_name))
+                    .map(|inherited| inherited.decl)
+            })
     }
 
     /// Produce a new `TraitEnv` carrying the synthesis-layer impls — every

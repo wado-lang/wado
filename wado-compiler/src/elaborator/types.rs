@@ -3016,6 +3016,23 @@ impl TraitMethodMatch {
     }
 }
 
+/// One type-parameter slot as a declaration-level resolver sees it: the name
+/// filling it and the bounds that say what `T::Assoc` means.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct ParamSlot {
+    pub(crate) name: String,
+    pub(crate) bounds: Vec<ast::TraitBound>,
+}
+
+impl From<&ast::GenericParam> for ParamSlot {
+    fn from(param: &ast::GenericParam) -> Self {
+        Self {
+            name: param.name.clone(),
+            bounds: param.bounds.clone(),
+        }
+    }
+}
+
 /// Read-only view resolving a type name from a module's perspective without
 /// cloning per-module maps. Precedence, highest first: local additions found
 /// during resolution, the current module's own definitions, then its imports
@@ -3274,6 +3291,19 @@ impl<'a> TypeLookup<'a> {
             .get(&def)
             .or_else(|| self.all_newtypes.get(&def))
             .copied()
+    }
+
+    /// Which of `bounds` declares `assoc_name`. `None` where the declaration
+    /// indexes are absent, since no bound can be asked what it declares then.
+    pub(super) fn bound_declaring_assoc_type(
+        &self,
+        bounds: &[ast::TraitBound],
+        assoc_name: &str,
+    ) -> Option<DefId> {
+        self.decls?
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.declaration_at(Some(bound.id), &bound.name)
+            })
     }
 
     /// The declaration a type reference names.

@@ -140,28 +140,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_ctx
             .type_param_bounds
             .get(param_name)?;
-        // Resolve each bound through its own reference site, then ask that
-        // declaration what it declares. Asking by the written name first would
-        // answer from this frame, which a default body materialized for an impl
-        // in another module does not share.
-        bounds
-            .iter()
-            .filter_map(|bound| self.trait_decl_at(bound.id, &bound.name))
-            .find(|decl| self.trait_declares_assoc_type(decl, assoc_name))
-            // A bound inherits its supertraits' associated types, so
-            // `T: Ord` answers for `Eq`'s. Searched after the direct bounds so
-            // a trait redeclaring the name still wins for itself.
-            .or_else(|| {
-                bounds
-                    .iter()
-                    .filter_map(|bound| Some((self.trait_decl_at(bound.id, &bound.name)?, bound)))
-                    .flat_map(|(decl, bound)| {
-                        self.tysys
-                            .trait_env
-                            .supertrait_closure_at(&decl, &bound.type_args)
-                    })
-                    .find(|inherited| self.trait_declares_assoc_type(&inherited.decl, assoc_name))
-                    .map(|inherited| inherited.decl)
+        // Each bound is resolved through its own reference site. Asking by the
+        // written name first would answer from this frame, which a default body
+        // materialized for an impl in another module does not share.
+        self.tysys
+            .trait_env
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.trait_decl_at(bound.id, &bound.name)
             })
     }
 
@@ -214,7 +199,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .filter(|bound| {
                 self.trait_decl_at(bound.id, &bound.name)
-                    .is_some_and(|decl| self.trait_declares_assoc_type(&decl, assoc_name))
+                    .is_some_and(|decl| self.tysys.trait_env.declares_assoc_type(&decl, assoc_name))
             })
             .collect();
         if declaring.len() < 2 {
@@ -249,14 +234,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// the trait it names, or the supertrait the name is inherited from.
     fn self_trait_declaring_assoc_type(&self, assoc_name: &str) -> Option<DefId> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
-        if self.trait_declares_assoc_type(&self_trait, assoc_name) {
+        if self
+            .tysys
+            .trait_env
+            .declares_assoc_type(&self_trait, assoc_name)
+        {
             return Some(self_trait);
         }
         self.tysys
             .trait_env
             .supertrait_closure_at(&self_trait, &[])
             .iter()
-            .find(|inherited| self.trait_declares_assoc_type(&inherited.decl, assoc_name))
+            .find(|inherited| {
+                self.tysys
+                    .trait_env
+                    .declares_assoc_type(&inherited.decl, assoc_name)
+            })
             .map(|inherited| inherited.decl)
     }
 
@@ -336,8 +329,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.tysys.type_table.borrow().get(self_type),
                     ResolvedType::TypeParam { .. }
                 )
+                && let Some(projection) =
+                    self.make_frame_projection(self_type, "Self", &namespaced.name)
             {
-                return self.make_frame_projection(self_type, "Self", &namespaced.name);
+                return projection;
             }
             // If not found, it's an unknown associated type
             let _ = self.emit(TypeError::UnknownType {
@@ -403,7 +398,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             {
                 return direct_type;
             }
-            return self.make_frame_projection(param_type_id, &base_name, &namespaced.name);
+            if let Some(projection) =
+                self.make_frame_projection(param_type_id, &base_name, &namespaced.name)
+            {
+                return projection;
+            }
+            let _ = self.emit(TypeError::UnknownType {
+                name: format!("{base_name}::{}", namespaced.name),
+                span: namespaced.span,
+            });
+            return TypeTable::ERROR;
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
@@ -1127,17 +1131,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .collect()
     }
 
-    /// The projection `base::assoc` as this frame builds it. The single
-    /// builder, so one written in a signature and one synthesized for an
-    /// expression intern to the same type.
+    /// The projection `base::assoc` as this frame builds it, or `None` when no
+    /// bound on `base` declares `assoc`. The single builder, so one written in
+    /// a signature and one synthesized for an expression intern to the same type.
     pub(super) fn make_frame_projection(
         &mut self,
         base: TypeId,
         base_name: &str,
         assoc: &str,
-    ) -> TypeId {
-        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc);
-        self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc)
+    ) -> Option<TypeId> {
+        let owning_trait = self.bound_declaring_assoc_type(base_name, assoc)?;
+        Some(self.make_frame_projection_of_trait(base, base_name, owning_trait, assoc))
     }
 
     /// [`Self::make_frame_projection`] for a caller that already knows which
@@ -1147,7 +1151,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         base: TypeId,
         base_name: &str,
-        owning_trait: Option<DefId>,
+        owning_trait: DefId,
         assoc: &str,
     ) -> TypeId {
         let assoc_bounds = self.find_assoc_type_bounds(base, assoc);
@@ -1159,7 +1163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys
             .type_table
             .borrow_mut()
-            .make_assoc_type_projection_of_trait(
+            .make_assoc_type_projection(
                 base,
                 owning_trait,
                 assoc.to_string(),
@@ -1226,7 +1230,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     }
                     let built = self.make_frame_projection(base, base_name, &assoc);
                     self.assoc_binding_stack.shift_remove(&key);
-                    Some(built)
+                    built
                 })?;
                 Some((name, answer))
             })

@@ -1930,7 +1930,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         self.frame_projection_of_trait(&name, trait_, "Output")
             .unwrap_or_else(|| {
-                self.make_frame_projection_of_trait(operand_type_id, &name, Some(trait_), "Output")
+                self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
     }
 

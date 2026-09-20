@@ -437,8 +437,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolved to rather than re-resolving the spelling in its own frame,
     /// which two modules can share.
     pub(super) fn trait_decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {
-        let loc = self.tysys.trait_env.decl_index.get(key)?;
-        self.tysys.trait_env.trait_decl_headers.get(loc)
+        self.tysys.trait_env.decl_header_of(key)
     }
 
     /// The trait's declaration of the associated type `assoc_name`, or `None`
@@ -2017,12 +2016,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.decl_key_or_local(written)
     }
 
-    /// Whether the trait `key` names declares the associated type `assoc_name`.
-    /// Keyed by the declaration, so it answers the same from any module's frame.
-    pub(super) fn trait_declares_assoc_type(&self, key: &DefId, assoc_name: &str) -> bool {
-        self.trait_assoc_type_decl(key, assoc_name).is_some()
-    }
-
     /// Whether the trait `key` names declares `method_name`. The cheap form of
     /// [`Self::trait_method_of`], for counting candidates without cloning each
     /// one's declaration.
@@ -2126,9 +2119,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 self.tysys
                     .type_table
                     .borrow_mut()
-                    .make_assoc_type_projection_of_trait(
+                    .make_assoc_type_projection(
                         self_type_id,
-                        Some(*declaring),
+                        *declaring,
                         decl.name.clone(),
                         bound_names,
                         bindings,
