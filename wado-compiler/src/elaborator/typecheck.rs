@@ -70,7 +70,7 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
-    if pack_shape_conflict(actual, expected, type_table, position) {
+    if pack_shape_conflict(actual, expected, type_table) {
         return TypeCheckResult::Incompatible;
     }
 
@@ -247,12 +247,7 @@ fn check_at(
 /// elements before it and after it each have a settled offset: `[..R, L]` is
 /// never `[..R]`, and never `[L, ..R]` either. Decidable before the pack is
 /// expanded, which is the only point where a body carrying one is checked.
-fn pack_shape_conflict(
-    actual: TypeId,
-    expected: TypeId,
-    type_table: &TypeTable,
-    position: Position,
-) -> bool {
+fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     let (actual_inner, _) = unwrap_ref(actual, type_table);
     let (expected_inner, _) = unwrap_ref(expected, type_table);
     let (Some(actual_shape), Some(expected_shape)) = (
@@ -269,14 +264,16 @@ fn pack_shape_conflict(
     {
         return true;
     }
-    // Only an element the checker can already settle counts as a conflict; one
-    // that is still undecided defers with everything else.
+    // Invariant, as rule 8 compares a generic instance's arguments. Only a
+    // settled element conflicts; an undecided one defers with everything else.
     actual_shape
         .before
         .iter()
         .zip(expected_shape.before)
         .chain(actual_shape.after.iter().zip(expected_shape.after))
-        .any(|(&a, &e)| check_at(a, e, type_table, position) == TypeCheckResult::Incompatible)
+        .any(|(&a, &e)| {
+            check_at(a, e, type_table, Position::Invariant) == TypeCheckResult::Incompatible
+        })
 }
 
 /// A tuple type's pack and the fixed elements on either side of it.

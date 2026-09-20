@@ -981,6 +981,7 @@ pub fn translate_function_bodies(ctx: &mut WirContext<'_>) {
                     },
                     multi_value_results_taken: false,
                     force_fixed_string_repr: false,
+                    discovered_local_types: IndexMap::default(),
                 };
                 translator.translate_block(body.root)
             };
@@ -1047,6 +1048,9 @@ pub(super) struct FunctionTranslator<'a, 'b> {
     /// Saved/restored around the `GlobalVarSet` case, so it never leaks into
     /// a sibling literal.
     pub(super) force_fixed_string_repr: bool,
+    /// Local types read off the body's `Let` statements, for a function that
+    /// reaches here without the lower phase's local allocation.
+    discovered_local_types: IndexMap<u32, TypeId>,
 }
 
 impl FunctionTranslator<'_, '_> {
@@ -1076,13 +1080,14 @@ impl FunctionTranslator<'_, '_> {
             // `locals` is indexed absolutely (entries 0..param_count are
             // params, entries param_count.. are non-param locals), matching
             // DeclareLocal generation.
-            let local = self.tir_func.locals.get(index as usize).unwrap_or_else(|| {
-                panic!(
-                    "[WIR] local {index} read in a function declaring {}",
-                    self.tir_func.locals.len()
-                )
-            });
-            self.wir_type(local.type_id)
+            let type_id = self
+                .tir_func
+                .locals
+                .get(index as usize)
+                .map(|local| local.type_id)
+                .or_else(|| self.discovered_local_types.get(&index).copied())
+                .unwrap_or_else(|| panic!("[WIR] local {index} is read but no `let` declared it"));
+            self.wir_type(type_id)
         }
     }
 
@@ -1760,8 +1765,8 @@ impl FunctionTranslator<'_, '_> {
     }
 
     /// Scan statements recursively to discover Let declarations and emit `DeclareLocal`.
-    /// Used when `local_types` is empty (for functions from library modules).
-    fn declare_locals_from_stmts(&self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
+    /// Used when `locals` is empty (for functions from library modules).
+    fn declare_locals_from_stmts(&mut self, instrs: &mut Vec<WirInstr>, stmts: &[StmtId]) {
         for stmt_id in stmts {
             match &self.body.stmts[*stmt_id].kind {
                 StmtKind::Let {
@@ -1772,6 +1777,8 @@ impl FunctionTranslator<'_, '_> {
                     // Skip params (they are already declared via param_names)
                     let param_count = u32::try_from(self.tir_func.params.len()).unwrap();
                     if *local_index >= param_count {
+                        // `locals` has no entry to answer a read of it.
+                        self.discovered_local_types.insert(*local_index, *type_id);
                         let wir_type = self.ctx.type_id_to_wir_type(self.type_table, *type_id);
                         // Skip unit-type locals (unit has no Wasm representation)
                         if !matches!(wir_type, WirType::Unit) {
@@ -2941,11 +2948,7 @@ impl FunctionTranslator<'_, '_> {
                     }
                 } else {
                     // A plain `enum` lowers to a bare i32 discriminant (see
-                    // `EnumConstruct` below), so the value already *is* the
-                    // tag — pass it through. The previous `I32Const(0)` stub
-                    // silently mis-tagged every plain enum (the case never
-                    // arose until enums began flowing through CM-import
-                    // binding synthesis via `variant_tag`).
+                    // `EnumConstruct` below), so the value already is the tag.
                     val
                 }
             }

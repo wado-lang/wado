@@ -1,0 +1,22 @@
+// A tuple's fixed elements compare invariantly, as rule 8 compares a generic
+// instance's arguments. Compared at the surrounding position instead, `Node`
+// satisfied `EventTarget` through resource subtyping, the pack left the check
+// deferred, and nothing asked again once it expanded.
+
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+resource EventTarget {}
+
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+resource Node extends EventTarget {}
+
+fn widen<..Rest>(t: [..Rest, Node]) -> [..Rest, EventTarget] {
+    return t;
+}
+
+export fn run() with EventTarget {
+    let n = 1 as Node;
+    let _ = widen([7, n]);
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[..Rest, EventTarget]', found '[..Rest, Node]'"}
