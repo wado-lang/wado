@@ -2177,22 +2177,11 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         .map(|_| {
             let barrier = Arc::clone(&barrier);
             tokio::task::spawn_blocking(move || {
-                // Catch any panic from the snapshot build (the only
-                // place this can fail is the `expect` in
-                // `build_snapshot`, which would indicate a stdlib bug)
-                // so that **every** task reaches the barrier.  If one
-                // task panicked before the barrier the remaining
-                // `parallelism - 1` tasks would block forever waiting
-                // for a party count that can never be met,
-                // deadlocking the test runner.  Re-raise after the
-                // barrier so the original panic still propagates
-                // through `handle.await`.
+                // A task that panicked before the barrier would leave the rest
+                // waiting on a party count that can never be met.
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     wado_compiler::prewarm_stdlib_snapshot();
                 }));
-                // Block until every prewarm task is concurrently
-                // running so the blocking pool cannot satisfy all
-                // tasks with a single thread.
                 barrier.wait();
                 if let Err(panic) = result {
                     std::panic::resume_unwind(panic);
@@ -2201,7 +2190,13 @@ async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
         })
         .collect();
     for handle in handles {
-        let _ = handle.await;
+        // A snapshot the stdlib cannot build is a bug every compile would hit.
+        if let Err(join_err) = handle.await {
+            match join_err.try_into_panic() {
+                Ok(panic) => std::panic::resume_unwind(panic),
+                Err(join_err) => panic!("the stdlib prewarm task ended early: {join_err}"),
+            }
+        }
     }
 }
 

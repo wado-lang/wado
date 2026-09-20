@@ -7,7 +7,6 @@ use wado_compiler::doc::{
     DocEffect, DocEnum, DocFlags, DocModule, DocPrimitiveType, DocResource, DocStruct, DocTrait,
     DocVariant, extract_doc_with, extract_stdlib_doc_with,
 };
-use wado_lsp::host::install_dev_stdlib;
 
 use crate::args::{self, CliExit};
 
@@ -198,7 +197,6 @@ fn is_stdlib_module(input: &str) -> bool {
 }
 
 pub fn run(opts: DocOptions) -> Result<(), CliExit> {
-    install_dev_stdlib();
     let docs: Vec<(String, DocModule)> = opts
         .inputs
         .iter()
@@ -356,6 +354,7 @@ fn format_markdown(content: &str) -> String {
 mod format_contract_tests {
     use super::*;
     use wado_compiler::doc::extract_stdlib_doc;
+    use wado_lsp::host::install_dev_stdlib;
 
     fn stdlib_doc(module: &str) -> DocModule {
         install_dev_stdlib();

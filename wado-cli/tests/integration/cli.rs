@@ -632,6 +632,17 @@ fn test_test_passing() {
 }
 
 #[test]
+fn test_test_reaches_no_stdlib_before_the_run_installs_it() {
+    // A dev build takes the stdlib from its host, and the prewarm workers
+    // reached it first: one swallowed panic per worker (issue #2102).
+    wado()
+        .args(["test", "wado-compiler/tests/fixtures/test_decl.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("panicked").not());
+}
+
+#[test]
 fn test_test_failing() {
     wado()
         .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
