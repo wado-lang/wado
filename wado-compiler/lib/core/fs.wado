@@ -434,7 +434,8 @@ pub fn read_dir<S: AsStrSlice>(path: S) -> Result<List<DirEntry>, FsError> with 
 ///
 /// `descend` is asked about each directory before the walk enters it, so a
 /// caller skips a subtree instead of paying to list it. The directory itself
-/// is listed either way.
+/// is listed either way, and it is asked about the whole path, so a predicate
+/// that means a name takes [`file_name`] of it.
 pub fn walk_dir<S: AsStrSlice>(
     path: S,
     descend: fn(&WalkEntry) -> bool = enter_every_directory,
@@ -527,7 +528,8 @@ fn extension_dot(name: &StrSlice) -> Option<i32> {
 /// randomness is needed to say so.
 fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> with Preopens {
     let dir = root()?;
-    let base = `${target.to_string()}.wado-tmp`;
+    let mut base = `${target.to_string()}.wado-tmp`;
+    let mut named_after_target = true;
     let mut taken = 0;
     loop {
         let candidate = match taken {
@@ -547,7 +549,16 @@ fn open_temp<S: AsStrSlice>(target: S) -> Result<[Descriptor, String], FsError> 
             },
             Err(e) => {
                 // `Exist` says another writer holds the name; take the next.
-                if !e matches { Exist } {
+                // `NameTooLong` says the suffix outgrew what the host accepts,
+                // so the next name drops the target's and keeps its directory.
+                if e matches { NameTooLong } && named_after_target {
+                    named_after_target = false;
+                    base = match parent(target) {
+                        Some(holder) => join(holder, ".wado-tmp"),
+                        None => ".wado-tmp",
+                    };
+                    taken = 0;
+                } else if !e matches { Exist } {
                     return Result::Err(failure(target, e));
                 }
             },

@@ -215,7 +215,13 @@ all there is. The same reason puts Rust's `NamedTempFile::new_in` and Go's
 The name is `<target>.wado-tmp`, then `.1`, `.2` and on, counted from zero on
 each write. The file is created with `Create | Exclusive`, so the host decides
 uniqueness atomically and a second writer that loses the race takes the next
-name. A random name would settle the
+name.
+
+A name at the host's length limit cannot take that suffix, and a target whose
+own name fits is a file `write` has to be able to write. So `NameTooLong` on
+the temporary file drops the target's name and keeps its directory: the next
+candidate is `<dir>/.wado-tmp`, which is nine bytes whatever the target is
+called. That happens once per write, and `Exclusive` settles the rest. A random name would settle the
 same question, and cost `Random` in the signature of every function that writes
 a file and `wasi:random` in its component's imports. Elsewhere a random name
 defends a shared `/tmp` against a symlink another user planted. This tree has
@@ -266,6 +272,11 @@ it, and the directory is listed either way. Without it the callers that skip
 An entry carries the path that reaches it rather than its name alone. A walk's
 answer is read, removed or opened, and rebuilding the path from a name is the
 step a caller would get wrong.
+
+`descend` is handed that same path, so a predicate meaning a name takes
+`file_name` of it. Comparing the path against a bare name matches only when the
+walk started at the root the name sits in, which is why the pruning callers here
+go through `file_name`.
 
 ### Path operations live here, not in a `core:path`
 

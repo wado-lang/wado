@@ -166,7 +166,8 @@ is listed before the call returns; a walk too large to hold is
 
 `descend` is asked about each directory before the walk enters it, so a
 caller skips a subtree instead of paying to list it. The directory itself
-is listed either way.
+is listed either way, and it is asked about the whole path, so a predicate
+that means a name takes [`file_name`] of it.
 
 ### `pub fn create_dir<S: AsStrSlice>(path: S) -> Result<(), FsError> with Preopens`
 

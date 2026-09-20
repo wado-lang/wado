@@ -239,8 +239,10 @@ test "a walk skips the subtree it is told not to enter" {
     fs::write(`${dir}/keep/leaf.txt`, &"leaf").unwrap();
     fs::write(`${dir}/skip/hidden.txt`, &"hidden").unwrap();
 
+    // `e.path` reaches the entry from the walk's root, so a predicate that
+    // means a name takes the name.
     let mut names: List<String> = [];
-    for let entry of fs::walk_dir(&dir, |e| !e.path.ends_with("/skip")).unwrap() {
+    for let entry of fs::walk_dir(&dir, |e| fs::file_name(&e.path).unwrap() != "skip").unwrap() {
         names.push(entry.path);
     }
     names.sort();
@@ -319,6 +321,20 @@ test "a write that cannot place its file leaves the target alone" {
     let e = fs::write(`${path}/child.txt`, &"never").unwrap_err();
     assert e.kind matches { Io(NotDirectory) };
     assert fs::read_to_string(&path).unwrap() == "kept";
+    assert fs::read_dir(&dir).unwrap().len() == 1;
+}
+
+test "a name too long to take the suffix is still written" {
+    let dir = scratch("write-long-name");
+    let mut long = String::new();
+    for let _ of 0..<250 {
+        long.push('a');
+    }
+    // The name fits the host's limit but `<name>.wado-tmp` does not, so the
+    // temporary file keeps the directory and drops the target's name.
+    let path = `${dir}/${long}.txt`;
+    fs::write(&path, &"written").unwrap();
+    assert fs::read_to_string(&path).unwrap() == "written";
     assert fs::read_dir(&dir).unwrap().len() == 1;
 }
 
