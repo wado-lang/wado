@@ -369,9 +369,7 @@ fn resolve_cm_export_type(
         // World bodies (`lib/wasi/**/worlds.wado`, `lib/core/kiln/worlds.wado`)
         // reference type names like `Response` / `OutputFile` directly without
         // a `use { ... } from "..."` import, so `populate_named_type_sources`
-        // leaves `source_interface = None`. `CmInterfaceRegistry::resolve_cm_source_for`
-        // already chains the `wasi:*` and `core:kiln/*` by-name lookups for
-        // exactly this case — re-use it instead of duplicating the chain.
+        // leaves `source_interface = None`, and only a by-name scan resolves it.
         let interface_fq = cm_interface_registry
             .source_interface(named)
             .or_else(|| {

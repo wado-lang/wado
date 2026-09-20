@@ -1153,14 +1153,41 @@ fn wado_name_under_cm_name<'a>(
         .map(|((_, wado_name), _)| wado_name.as_str())
 }
 
-/// The first name a `(source_interface, name)`-keyed map holds under
-/// `iface_fq`, which says that some module already declares into it.
-fn first_name_in_interface<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+/// A kind of declaration a CM reference can name. Every search over the kinds
+/// walks [`Self::ALL`], so a kind added here reaches all of them at once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CmDeclKind {
+    Newtype,
+    Resource,
+    Struct,
+    Variant,
+    Enum,
+    Flags,
+}
+
+impl CmDeclKind {
+    /// The order a bare-name search asks the kinds in. Which kind answers first
+    /// is the tiebreak [WEP: Declaration Identity] records as unowned; it is
+    /// written once here so the answer does not vary by call site.
+    ///
+    /// [WEP: Declaration Identity]: ../../docs/wep-2026-08-12-declaration-identity.md
+    pub const ALL: [Self; 6] = [
+        Self::Newtype,
+        Self::Resource,
+        Self::Struct,
+        Self::Variant,
+        Self::Enum,
+        Self::Flags,
+    ];
+}
+
+/// The first name a `(source_interface, name)` key set holds under `iface_fq`,
+/// which says that some module already declares into it.
+fn first_name_in_interface<'a>(
+    mut keys: impl Iterator<Item = &'a (String, String)>,
     iface_fq: &str,
 ) -> Option<&'a str> {
-    map.keys()
-        .find(|(source, _)| source == iface_fq)
+    keys.find(|(source, _)| source == iface_fq)
         .map(|(_, name)| name.as_str())
 }
 
@@ -1178,35 +1205,35 @@ fn spells_cm_name<V>(
 
 /// Return the `source_interface` when `name` has exactly one registrant under
 /// `prefix`.
-fn find_unique_source_with_prefix<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+fn find_unique_source_with_prefix<'a>(
+    keys: impl Iterator<Item = &'a (String, String)>,
     prefix: &str,
     name: &str,
 ) -> Option<&'a str> {
-    find_unique_source_in_set(map, name, &|src| src.starts_with(prefix))
+    find_unique_source_in_set(keys, name, &|src| src.starts_with(prefix))
 }
 
 /// The unique source interface registering `name` across every bundled CM
 /// namespace. A name declared by two of them is ambiguous — `None` — never
 /// silently the `wasi:` one.
-fn find_unique_source_in_binding<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+fn find_unique_source_in_binding<'a>(
+    keys: impl Iterator<Item = &'a (String, String)>,
     name: &str,
 ) -> Option<&'a str> {
-    find_unique_source_in_set(map, name, &|src| {
+    find_unique_source_in_set(keys, name, &|src| {
         CmNamespace::split_specifier(src).is_some()
     })
 }
 
 /// The unique source interface registering `name` among sources for which
 /// `is_member` holds, or `None` when there is no or more than one match.
-fn find_unique_source_in_set<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+fn find_unique_source_in_set<'a>(
+    keys: impl Iterator<Item = &'a (String, String)>,
     name: &str,
     is_member: &dyn Fn(&str) -> bool,
 ) -> Option<&'a str> {
     let mut found: Option<&str> = None;
-    for ((src, n), _) in map {
+    for (src, n) in keys {
         if n != name || !is_member(src) {
             continue;
         }
@@ -1220,11 +1247,11 @@ fn find_unique_source_in_set<'a, V>(
 
 /// Return the `source_interface` when `name` has exactly one registrant,
 /// ignoring empty source strings.
-fn find_unique_source_in<'a, V>(
-    map: &'a IndexMap<(String, String), V>,
+fn find_unique_source_in<'a>(
+    keys: impl Iterator<Item = &'a (String, String)>,
     name: &str,
 ) -> Option<&'a str> {
-    find_unique_source_in_set(map, name, &|src| !src.is_empty())
+    find_unique_source_in_set(keys, name, &|src| !src.is_empty())
 }
 
 /// A source string without a trailing `.wado` suffix or `@version` tag, so a
@@ -1754,49 +1781,10 @@ impl CmInterfaceRegistry {
     }
 
     /// The canonical source interface owning `(kind, name)` — the `#[cm("…")]`
-    /// fragment before the `#`, e.g. `"wasi:filesystem/types@0.3.0"`. `kind` is
-    /// `"variants"`, `"enums"`, `"resources"`, `"structs"`, `"flags"` or
-    /// `"newtypes"`. `Some` only when exactly one WASI interface declares the
-    /// bare name; for an ambiguous one use `get_variant_cases_by_source`.
-    pub fn bare_name_owner(&self, kind: &str, name: &str) -> Option<&str> {
-        let candidates: Vec<&str> = match kind {
-            "variants" => self
-                .variants
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            "enums" => self
-                .enums
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            "resources" => self
-                .resources
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            "structs" => self
-                .structs
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            "flags" => self
-                .flags
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            "newtypes" => self
-                .newtypes
-                .keys()
-                .filter_map(|(src, n)| (n == name && !src.is_empty()).then_some(src.as_str()))
-                .collect(),
-            _ => return None,
-        };
-        if candidates.len() == 1 {
-            Some(candidates[0])
-        } else {
-            None
-        }
+    /// fragment before the `#`, e.g. `"wasi:filesystem/types@0.3.0"`. `Some`
+    /// only when exactly one interface declares the bare name under `kind`.
+    pub fn bare_name_owner(&self, kind: CmDeclKind, name: &str) -> Option<&str> {
+        find_unique_source_in(self.decl_keys(kind), name)
     }
 
     /// Extract the source interface (the part before the `#` fragment,
@@ -2749,10 +2737,57 @@ impl CmInterfaceRegistry {
     // `None`, which the caller must propagate. Kiln and other non-binding
     // namespaces are intentionally excluded from this search.
 
+    /// The `(source_interface, name)` keys `kind` registers.
+    fn decl_keys(&self, kind: CmDeclKind) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
+        match kind {
+            CmDeclKind::Newtype => Box::new(self.newtypes.keys()),
+            CmDeclKind::Resource => Box::new(self.resources.keys()),
+            CmDeclKind::Struct => Box::new(self.structs.keys()),
+            CmDeclKind::Variant => Box::new(self.variants.keys()),
+            CmDeclKind::Enum => Box::new(self.enums.keys()),
+            CmDeclKind::Flags => Box::new(self.flags.keys()),
+        }
+    }
+
+    /// Whether `kind` registers `name` under `interface_fq`.
+    fn declares_kind(&self, kind: CmDeclKind, interface_fq: &str, name: &str) -> bool {
+        let key = (interface_fq.to_string(), name.to_string());
+        match kind {
+            CmDeclKind::Newtype => self.newtypes.contains_key(&key),
+            CmDeclKind::Resource => self.resources.contains_key(&key),
+            CmDeclKind::Struct => self.structs.contains_key(&key),
+            CmDeclKind::Variant => self.variants.contains_key(&key),
+            CmDeclKind::Enum => self.enums.contains_key(&key),
+            CmDeclKind::Flags => self.flags.contains_key(&key),
+        }
+    }
+
+    /// The unique source interface registering `name` across every kind, among
+    /// those `is_member` admits. Two kinds answering different sources is an
+    /// ambiguity, not a race the first kind wins.
+    fn find_unique_source_across_kinds(
+        &self,
+        name: &str,
+        is_member: &dyn Fn(&str) -> bool,
+    ) -> Option<&str> {
+        let mut found: Option<&str> = None;
+        for kind in CmDeclKind::ALL {
+            let Some(src) = find_unique_source_in_set(self.decl_keys(kind), name, is_member) else {
+                continue;
+            };
+            match found {
+                None => found = Some(src),
+                Some(prev) if prev != src => return None,
+                Some(_) => {}
+            }
+        }
+        found
+    }
+
     /// Find the source interface of a struct declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_struct_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(&self.structs, name)
+        find_unique_source_in_binding(self.structs.keys(), name)
     }
 
     /// Find the source interface of a struct declared in `core:kiln/*` by its
@@ -2763,49 +2798,43 @@ impl CmInterfaceRegistry {
     /// `wasi:http/types::Response` vs. `core:kiln/types::Response`
     /// disambiguation.
     pub fn find_kiln_struct_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.structs, "core:kiln/", name)
+        find_unique_source_with_prefix(self.structs.keys(), "core:kiln/", name)
     }
 
     /// Find the source interface of a variant declared in `core:kiln/*` by its
     /// Wado name, when exactly one kiln interface registers the name. Sibling
     /// to [`Self::find_kiln_struct_source`].
     pub fn find_kiln_variant_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.variants, "core:kiln/", name)
+        find_unique_source_with_prefix(self.variants.keys(), "core:kiln/", name)
     }
 
     /// Find the source interface of an enum declared in `core:kiln/*`.
     pub fn find_kiln_enum_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_with_prefix(&self.enums, "core:kiln/", name)
+        find_unique_source_with_prefix(self.enums.keys(), "core:kiln/", name)
     }
 
     /// Find the source interface of a newtype declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_newtype_source(&self, name: &DeclName) -> Option<&str> {
-        find_unique_source_in_binding(&self.newtypes, name.as_decl_str())
+        find_unique_source_in_binding(self.newtypes.keys(), name.as_decl_str())
     }
 
     /// Find the source interface of a resource declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_resource_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(&self.resources, name)
+        find_unique_source_in_binding(self.resources.keys(), name)
     }
 
     /// Find the source interface of a variant declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_variant_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(&self.variants, name)
-    }
-
-    /// Find the source interface of an enum declared in a bundled CM
-    /// namespace, when exactly one such interface registers the name.
-    pub fn find_binding_enum_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(&self.enums, name)
+        find_unique_source_in_binding(self.variants.keys(), name)
     }
 
     /// Find the source interface of a flags type declared in a bundled CM
     /// namespace, when exactly one such interface registers the name.
     pub fn find_binding_flags_source(&self, name: &str) -> Option<&str> {
-        find_unique_source_in_binding(&self.flags, name)
+        find_unique_source_in_binding(self.flags.keys(), name)
     }
 
     /// The interface declaring the resource `wado_name`, asking `emitting`
@@ -2814,7 +2843,7 @@ impl CmInterfaceRegistry {
     /// emitter that knows which interface it is describing must say so.
     pub fn resource_source_in(&self, emitting: Option<&str>, wado_name: &str) -> Option<&str> {
         declaring_source(&self.resources, emitting, wado_name)
-            .or_else(|| find_unique_source_in(&self.resources, wado_name))
+            .or_else(|| find_unique_source_in(self.resources.keys(), wado_name))
             .or_else(|| self.find_binding_resource_source(wado_name))
     }
 
@@ -2894,23 +2923,7 @@ impl CmInterfaceRegistry {
     /// kinds — so a struct in one dependency and an enum in another are
     /// ambiguous, not silently resolved to the first kind.
     pub fn find_component_type_source(&self, name: &str) -> Option<&str> {
-        let member = |s: &str| self.component_interfaces.contains(s);
-        let candidates = [
-            find_unique_source_in_set(&self.structs, name, &member),
-            find_unique_source_in_set(&self.variants, name, &member),
-            find_unique_source_in_set(&self.enums, name, &member),
-            find_unique_source_in_set(&self.flags, name, &member),
-            find_unique_source_in_set(&self.newtypes, name, &member),
-        ];
-        let mut found: Option<&str> = None;
-        for src in candidates.into_iter().flatten() {
-            match found {
-                None => found = Some(src),
-                Some(prev) if prev != src => return None,
-                Some(_) => {}
-            }
-        }
-        found
+        self.find_unique_source_across_kinds(name, &|s| self.component_interfaces.contains(s))
     }
 
     /// The `ModuleSource` a CM interface FQ was registered under — the entry
@@ -2961,12 +2974,9 @@ impl CmInterfaceRegistry {
     /// map alone reports the whole stdlib as unowned; what the keyspaces hold is
     /// the fact itself.
     fn existing_cm_decl(&self, iface_fq: &str) -> Option<&str> {
-        first_name_in_interface(&self.newtypes, iface_fq)
-            .or_else(|| first_name_in_interface(&self.resources, iface_fq))
-            .or_else(|| first_name_in_interface(&self.flags, iface_fq))
-            .or_else(|| first_name_in_interface(&self.enums, iface_fq))
-            .or_else(|| first_name_in_interface(&self.variants, iface_fq))
-            .or_else(|| first_name_in_interface(&self.structs, iface_fq))
+        CmDeclKind::ALL
+            .into_iter()
+            .find_map(|kind| first_name_in_interface(self.decl_keys(kind), iface_fq))
     }
 
     /// The module that defines a lib-local named type, when known. Locates a
@@ -2992,10 +3002,7 @@ impl CmInterfaceRegistry {
             // under the package's default-interface FQ (neither `wasi:` nor
             // `core:`), so the prefix-scoped lookups above miss them. A bare
             // by-name scan resolves them when the name is unambiguous.
-            .or_else(|| find_unique_source_in(&self.structs, &named.name))
-            .or_else(|| find_unique_source_in(&self.variants, &named.name))
-            .or_else(|| find_unique_source_in(&self.enums, &named.name))
-            .or_else(|| find_unique_source_in(&self.flags, &named.name))
+            .or_else(|| self.find_unique_source_across_kinds(&named.name, &|src| !src.is_empty()))
             .map(str::to_string)
     }
 
@@ -3012,18 +3019,9 @@ impl CmInterfaceRegistry {
         if namespace_prefix.is_empty() {
             return None;
         }
-        find_unique_source_with_prefix(&self.newtypes, namespace_prefix, &named.name)
-            .or_else(|| {
-                find_unique_source_with_prefix(&self.resources, namespace_prefix, &named.name)
-            })
-            .or_else(|| {
-                find_unique_source_with_prefix(&self.structs, namespace_prefix, &named.name)
-            })
-            .or_else(|| {
-                find_unique_source_with_prefix(&self.variants, namespace_prefix, &named.name)
-            })
-            .or_else(|| find_unique_source_with_prefix(&self.enums, namespace_prefix, &named.name))
-            .or_else(|| find_unique_source_with_prefix(&self.flags, namespace_prefix, &named.name))
+        CmDeclKind::ALL.into_iter().find_map(|kind| {
+            find_unique_source_with_prefix(self.decl_keys(kind), namespace_prefix, &named.name)
+        })
     }
 
     /// Resolve a newtype *reference* to its aliased base type by its declaring
@@ -3073,12 +3071,10 @@ impl CmInterfaceRegistry {
             .filter(|source| self.is_cm_source(source))
             .or(declared_at_hint)
             .or_else(|| {
-                self.find_binding_resource_source(name)
-                    .or_else(|| self.find_binding_variant_source(name))
-                    .or_else(|| self.find_binding_struct_source(name))
-                    .or_else(|| self.find_binding_enum_source(name))
-                    .or_else(|| self.find_binding_flags_source(name))
-                    .map(str::to_string)
+                self.find_unique_source_across_kinds(name, &|src| {
+                    CmNamespace::split_specifier(src).is_some()
+                })
+                .map(str::to_string)
             })
             .or_else(|| self.find_component_type_source(name).map(str::to_string))
     }
@@ -3112,12 +3108,9 @@ impl CmInterfaceRegistry {
     /// Whether `interface_fq` declares `name`, in any of the kinds a reference
     /// at the CM boundary can name.
     pub fn declares_wado_name(&self, interface_fq: &str, name: &str) -> bool {
-        let key = (interface_fq.to_string(), name.to_string());
-        self.resources.contains_key(&key)
-            || self.structs.contains_key(&key)
-            || self.variants.contains_key(&key)
-            || self.enums.contains_key(&key)
-            || self.flags.contains_key(&key)
+        CmDeclKind::ALL
+            .into_iter()
+            .any(|kind| self.declares_kind(kind, interface_fq, name))
     }
 
     /// The interface declaring `name` among those `source` registers. Keying by
@@ -5429,6 +5422,113 @@ mod tests {
         let Type::Named(n) = &ty else { unreachable!() };
         registry.set_source_interface(n.id, source.to_string());
         ty
+    }
+
+    /// Register one declaration of `kind`, the smallest shape each map admits.
+    fn register_decl(
+        registry: &mut CmInterfaceRegistry,
+        kind: CmDeclKind,
+        source: &str,
+        name: &str,
+    ) {
+        let key = (source.to_string(), name.to_string());
+        let cm = name.to_lowercase();
+        match kind {
+            CmDeclKind::Newtype => {
+                registry.newtypes.insert(key, named("u64"));
+            }
+            CmDeclKind::Resource => {
+                registry.resources.insert(key, cm);
+            }
+            CmDeclKind::Struct => {
+                registry.structs.insert(key, (cm, vec![], vec![]));
+            }
+            CmDeclKind::Variant => {
+                registry.variants.insert(key, (cm, vec![]));
+            }
+            CmDeclKind::Enum => {
+                registry.enums.insert(key, (cm, vec![]));
+            }
+            CmDeclKind::Flags => {
+                registry.flags.insert(key, (cm, vec![]));
+            }
+        }
+    }
+
+    /// One list drives every search over the kinds, so a declaration of any
+    /// kind answers all of them. A kind one search misses resolves to nothing.
+    // Spelled out rather than read from `ALL`, so a kind dropped from `ALL`
+    // fails here; `register_decl` matches exhaustively, so a new kind will not
+    // compile until it is listed.
+    #[test]
+    fn every_decl_kind_answers_every_kind_search() {
+        let fq = "wasi:probe/types@0.3.0";
+        for kind in [
+            CmDeclKind::Newtype,
+            CmDeclKind::Resource,
+            CmDeclKind::Struct,
+            CmDeclKind::Variant,
+            CmDeclKind::Enum,
+            CmDeclKind::Flags,
+        ] {
+            assert!(
+                CmDeclKind::ALL.contains(&kind),
+                "{kind:?} is absent from ALL"
+            );
+            let mut registry = CmInterfaceRegistry::new();
+            register_decl(&mut registry, kind, fq, "Probe");
+            registry.component_interfaces.insert(fq.to_string());
+            let ty = named("Probe");
+            let Type::Named(reference) = &ty else {
+                unreachable!()
+            };
+
+            assert!(registry.declares_wado_name(fq, "Probe"), "{kind:?}");
+            assert_eq!(registry.existing_cm_decl(fq), Some("Probe"), "{kind:?}");
+            assert_eq!(
+                registry.bare_name_owner(kind, "Probe"),
+                Some(fq),
+                "{kind:?}"
+            );
+            assert_eq!(
+                registry.resolve_cm_source_for(reference).as_deref(),
+                Some(fq),
+                "{kind:?}"
+            );
+            assert_eq!(
+                registry.resolve_cm_source_with_prefix(reference, "wasi:"),
+                Some(fq),
+                "{kind:?}"
+            );
+            assert_eq!(
+                registry.find_component_type_source("Probe"),
+                Some(fq),
+                "{kind:?}"
+            );
+            assert_eq!(
+                registry.cm_source_of_named_type(reference, None).as_deref(),
+                Some(fq),
+                "{kind:?}"
+            );
+        }
+    }
+
+    /// A newtype reference carrying no source resolves by name, so its base
+    /// type's width reaches the layout rather than the 4-byte handle default.
+    #[test]
+    fn a_bundled_newtype_sizes_as_its_base() {
+        let mut registry = CmInterfaceRegistry::new();
+        registry.newtypes.insert(
+            ("wasi:filesystem/types@0.3.0".into(), "Filesize".into()),
+            named("u64"),
+        );
+
+        let filesize = named("Filesize");
+        assert_eq!(cm_layout_with_registry(&filesize, &registry), (8, 8));
+        assert_eq!(
+            layout_tuple_with_registry(&[filesize, named("u8")], &registry).size,
+            16
+        );
     }
 
     #[test]

@@ -699,13 +699,6 @@ mod tests {
     use crate::ast::{Item, cm_import_of};
     use crate::component_model::CmInterfaceRegistry;
 
-    /// The fixture component is built by this workspace, so its package version
-    /// is this crate's — a literal here breaks on every unrelated rebuild.
-    const CATALOG_FQ: &str = concat!(
-        "wado-lang:cm-catalog/cm-catalog@",
-        env!("CARGO_PKG_VERSION")
-    );
-
     fn decode_fixture() -> (Resolve, WorldId) {
         let bytes = std::fs::read("tests/fixtures/sub/cm-catalog.wasm").unwrap();
         match wit_component::decode(&bytes).unwrap() {
@@ -714,13 +707,27 @@ mod tests {
         }
     }
 
+    /// The fixture's own interface FQ, read from the component. The binary is
+    /// committed, so a version taken from anywhere else drifts from it.
+    fn catalog_fq(resolve: &Resolve) -> String {
+        let name = resolve
+            .packages
+            .iter()
+            .map(|(_, package)| &package.name)
+            .find(|name| name.name == "cm-catalog")
+            .expect("the fixture declares the cm-catalog package");
+        let version = name.version.as_ref().expect("the fixture is versioned");
+        format!("{}:{}/cm-catalog@{version}", name.namespace, name.name)
+    }
+
     #[test]
     fn builds_catalog_bindings() {
         let (resolve, world) = decode_fixture();
         let b = build_bindings(&resolve, world).expect("build bindings");
+        let catalog_fq = catalog_fq(&resolve);
         let registry = CmInterfaceRegistry::new();
         registry.extend_source_interfaces(b.source_interfaces.clone());
-        assert_eq!(b.interface_fqs, vec![CATALOG_FQ]);
+        assert_eq!(b.interface_fqs, vec![catalog_fq.clone()]);
         // cm-catalog performs no I/O, so the ambient panic path imports nothing
         // (`log_stderr` rides an existing stderr import or traps — see
         // `provides_ambient_stdio_sink`). Its one host-leaf import is
@@ -751,7 +758,7 @@ mod tests {
         // A primitive identity and a named-type identity, with cm metadata.
         let id_u32 = iface.methods.iter().find(|m| m.name == "id_u32").unwrap();
         let cm = cm_import_of(&id_u32.attrs).unwrap();
-        assert_eq!(cm.interface_path(), CATALOG_FQ);
+        assert_eq!(cm.interface_path(), catalog_fq);
         assert_eq!(cm.function.as_deref(), Some("id-u32"));
 
         let id_record = iface
@@ -762,7 +769,10 @@ mod tests {
         match &id_record.params[0].ty {
             Type::Named(n) => {
                 assert_eq!(n.name, "Point");
-                assert_eq!(registry.source_interface(n).as_deref(), Some(CATALOG_FQ));
+                assert_eq!(
+                    registry.source_interface(n).as_deref(),
+                    Some(catalog_fq.as_str())
+                );
             }
             other => panic!("expected Named Point, got {other:?}"),
         }
@@ -781,7 +791,10 @@ mod tests {
         match &id_newtype.params[0].ty {
             Type::Named(n) => {
                 assert_eq!(n.name, "Meters");
-                assert_eq!(registry.source_interface(n).as_deref(), Some(CATALOG_FQ));
+                assert_eq!(
+                    registry.source_interface(n).as_deref(),
+                    Some(catalog_fq.as_str())
+                );
             }
             other => panic!("expected Named Meters, got {other:?}"),
         }

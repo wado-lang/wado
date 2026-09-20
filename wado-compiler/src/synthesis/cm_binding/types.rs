@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use crate::ast::{AstId, GenericType, NamedType, Type};
 use crate::cm_abi;
 use crate::compiler_item::CompilerItem;
-use crate::component_model::CmInterfaceRegistry;
+use crate::component_model::{CmDeclKind, CmInterfaceRegistry, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::tir::{
@@ -452,14 +452,7 @@ pub(super) fn canonical_cm_package<'a>(
     registry: &'a CmInterfaceRegistry,
     name: &str,
 ) -> Option<(CmNamespace, &'a str)> {
-    for kind in [
-        "variants",
-        "enums",
-        "resources",
-        "structs",
-        "flags",
-        "newtypes",
-    ] {
+    for kind in CmDeclKind::ALL {
         if let Some(source) = registry.bare_name_owner(kind, name)
             && let Some(found) = cm_package_from_source(source)
         {
@@ -886,42 +879,10 @@ pub(super) fn cm_param_store_plan(
         if named.name == names.string {
             return vec![(0, "i32_store"), (4, "i32_store")];
         }
-        let source = cm_interface_registry
-            .source_interface(named)
-            .filter(|s| s.starts_with("wasi:"));
-        // Check WASI flags types.
-        if let Some(members) = source
-            .as_deref()
-            .and_then(|s| cm_interface_registry.get_flags_members_by_source(s, &named.name))
-        {
-            let store = match cm_flags_byte_size(members.len()) {
-                0 => return vec![],
-                size @ (1 | 2 | 4) => disc_store_op(size),
-                size => panic!(
-                    "flags `{}` with {} members ({size} bytes) exceeds the single-i32 store plan",
-                    named.name,
-                    members.len()
-                ),
-            };
-            return vec![(0, store)];
-        }
-        // Check WASI enum types.
-        if let Some(variants) = source
-            .as_deref()
-            .and_then(|s| cm_interface_registry.get_enum_variants_by_source(s, &named.name))
-        {
-            let store = disc_store_op(cm_discriminant_byte_size(variants.len()));
-            return vec![(0, store)];
-        }
-        // Standard named types
         return match named.name.as_str() {
-            "bool" | "u8" | "i8" => vec![(0, "i32_store8")],
-            "u16" | "i16" => vec![(0, "i32_store16")],
-            "i64" | "u64" => vec![(0, "i64_store")],
             "f32" => vec![(0, "f32_store")],
             "f64" => vec![(0, "f64_store")],
-            // i32, u32, char, resource handles
-            _ => vec![(0, "i32_store")],
+            _ => vec![(0, scalar_store_op(ty, cm_interface_registry, names))],
         };
     }
     match ty {
@@ -931,7 +892,7 @@ pub(super) fn cm_param_store_plan(
             let payload_offset =
                 cm_abi::layout_option_with_registry(&g.args[0], cm_interface_registry).offsets[1];
             let inner_store = cm_param_store_plan(&g.args[0], cm_interface_registry, names);
-            let mut stores = vec![(0, "i32_store8")]; // discriminant
+            let mut stores = vec![(0, disc_store_op(cm_discriminant_byte_size(2)))];
             for (sub_offset, store_name) in inner_store {
                 stores.push((payload_offset + sub_offset, store_name));
             }
@@ -939,6 +900,25 @@ pub(super) fn cm_param_store_plan(
         }
         Type::Generic(_) => vec![(0, "i32_store")],
         _ => vec![(0, "i32_store")],
+    }
+}
+
+/// The integer store for one flat value of `ty`, at the width its CM layout
+/// gives it. A type arriving as several values is not one store.
+fn scalar_store_op(
+    ty: &Type,
+    cm_interface_registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> &'static str {
+    if flatten_param_type(ty, cm_interface_registry, names).len() != 1 {
+        return "i32_store";
+    }
+    match cm_layout_with_registry(ty, cm_interface_registry).0 {
+        1 => "i32_store8",
+        2 => "i32_store16",
+        4 => "i32_store",
+        8 => "i64_store",
+        other => panic!("a one-value CM type cannot be {other} bytes wide: {ty:?}"),
     }
 }
 
