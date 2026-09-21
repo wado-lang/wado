@@ -995,7 +995,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `T: Uses<T::Item>` asks for it again. The closure cannot answer
         // itself: the re-entrant ask gets nothing, and `T::Item` stays the
         // abstract projection its instantiation settles.
-        let binder = self.annotate_ctx.trait_ctx.type_params.get(base_name)?.type_id;
+        let binder = self
+            .annotate_ctx
+            .trait_ctx
+            .type_params
+            .get(base_name)?
+            .type_id;
         if !self.bound_closure_stack.insert(binder) {
             return None;
         }
