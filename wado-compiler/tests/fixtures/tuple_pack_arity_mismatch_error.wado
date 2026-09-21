@@ -1,0 +1,14 @@
+// Returning a tuple over the same pack at a different fixed arity. Regression:
+// both types contained an unexpanded pack, so the assignability check deferred
+// and nothing asked again once it expanded, and the invalid module reached
+// codegen as an ICE.
+fn drop_last<..Rest, Last>(t: [..Rest, Last]) -> [..Rest] {
+    return t;
+}
+
+export fn run() {
+    let y: [i32, i32] = drop_last([1, 2, 3]);
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[..Rest]', found '[..Rest, Last]'"}

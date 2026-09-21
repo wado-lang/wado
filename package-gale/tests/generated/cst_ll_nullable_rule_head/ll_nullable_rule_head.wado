@@ -1319,7 +1319,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_PROG: NodeKind = 0;
 pub global RK_MEMBER: NodeKind = 1;
-pub global RK_FNDECL: NodeKind = 2;
+pub global RK_FN_DECL: NodeKind = 2;
 pub global RK_MODS: NodeKind = 3;
 
 global RULE_NAMES: List<String> = ["prog", "member", "fnDecl", "mods"];
@@ -1719,7 +1719,7 @@ fn _parse_fn_decl__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_fn_decl(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_FNDECL, _start);
+    p.b.start_node(RK_FN_DECL, _start);
     _parse_fn_decl__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {

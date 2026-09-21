@@ -10,7 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::types::{FunctionContext, TypeError};
+use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use super::util;
 use crate::ast::{RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_unresolved_annotation(&field.ty);
+            scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -357,6 +357,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // builds this declaration's `TirStruct`, from the `local_struct_fields`
         // entry just recorded above (annotate records facts; reify is the
         // sole TIR producer, matching every other declaration kind).
+    }
+
+    /// Report what a signature's written types cannot mean. A parameter also
+    /// receives a value, which is the stricter position.
+    pub(super) fn reject_signature_annotations(
+        &mut self,
+        params: &[ast::Param],
+        return_type: Option<&ast::Type>,
+    ) {
+        for param in params {
+            self.reject_received_annotation(&param.ty, ReceivedPosition::Parameter);
+        }
+        if let Some(ty) = return_type {
+            self.reject_unresolved_annotation(ty);
+            self.reject_non_pack_spreads(ty);
+        }
+    }
+
+    /// Report what a written type that receives a value cannot mean: a name no
+    /// declaration answers, then a tuple no value can settle.
+    pub(super) fn reject_received_annotation(
+        &mut self,
+        ty: &ast::Type,
+        position: ReceivedPosition,
+    ) {
+        self.reject_unresolved_annotation(ty);
+        self.reject_non_pack_spreads(ty);
+        let second = ty.second_pack_spread(&|name| self.binds_type_pack(name));
+        if let Some(span) = second {
+            let _ = self.emit(TypeError::TwoPacksInReceivedType {
+                position: position.name().to_string(),
+                span,
+            });
+        }
+    }
+
+    /// Report every `..X` in a written type whose `X` no type parameter list
+    /// declares a pack.
+    pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
+        let bad: Vec<(String, Span)> = ty
+            .pack_spreads()
+            .into_iter()
+            .filter(|(name, _)| !self.binds_type_pack(name))
+            .map(|(name, span)| (name.to_string(), span))
+            .collect();
+        for (name, span) in bad {
+            let _ = self.emit(TypeError::SpreadOfNonPack { name, span });
+        }
+    }
+
+    /// Whether `name` is a type pack the enclosing declaration declares. A
+    /// scalar parameter spread in a tuple stands for one position, not a run.
+    pub(super) fn binds_type_pack(&self, name: &str) -> bool {
+        let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
+            return false;
+        };
+        self.tysys.type_table.borrow().is_type_pack(binder.type_id)
     }
 
     /// Report a written type position naming a type no declaration answers
@@ -2235,9 +2292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_table
                 .as_tuple_through_ref(iterable_type_id)
                 .map(|(elems, by_ref)| {
-                    let has_type_pack = elems
-                        .iter()
-                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                    let has_type_pack = elems.iter().any(|e| type_table.is_type_pack(*e));
                     (elems, has_type_pack, by_ref)
                 })
         };
@@ -2351,10 +2406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .as_tuple_through_ref(iterable)
                     .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
                 // Prefer a direct TypePack element
-                if let Some(tp) = elems
-                    .iter()
-                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                {
+                if let Some(tp) = elems.iter().find(|e| type_table.is_type_pack(**e)) {
                     // A mapped pack `..F::method()` binds the loop variable to
                     // the (pack-independent) return type, not the pack itself.
                     match type_table.get(*tp) {
@@ -2425,8 +2477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let Pattern::Ident {
                     id,

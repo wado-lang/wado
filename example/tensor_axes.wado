@@ -1,0 +1,199 @@
+//! Tensor axes as types: a shape error is a compile error.
+//!
+//! An axis is a marker type, and a tensor carries its axis list as one type
+//! parameter. A signature that names the same axis variable twice makes the
+//! two positions agree, so `matmul` checks its contraction axis and `add`
+//! checks that both operands have the same rank and axes. The extents stay
+//! runtime values, since a length cannot be carried in a type here.
+//!
+//! The rejected calls are in the doc comment on each function, because a file
+//! holding one would not compile.
+//!
+//!     wado run example/tensor_axes.wado
+
+use { println, Stdout } from "core:cli";
+
+struct Batch {
+}
+struct In {
+}
+struct Hidden {
+}
+struct Out {
+}
+
+struct Tensor<E, Axes> {
+    data: List<E>,
+    extents: List<i32>,
+}
+
+impl<E, Axes> Tensor<E, Axes> {
+    fn rank(&self) -> i32 {
+        return self.extents.len();
+    }
+}
+
+fn element_count(extents: &List<i32>) -> i32 {
+    let mut count = 1;
+    for let e of *extents {
+        assert e > 0;
+        count *= e;
+    }
+    return count;
+}
+
+fn zeros<Axes>(extents: List<i32>) -> Tensor<f32, Axes> {
+    let data = List::<f32>::filled(element_count(&extents), 0.0);
+    return Tensor { data, extents };
+}
+
+/// Contract the shared axis `K`. `matmul(&w, &x)` where `x` supplies `K` on
+/// the wrong side is a compile error naming the axis it expected.
+fn matmul<M, K, N>(a: &Tensor<f32, [M, K]>, b: &Tensor<f32, [K, N]>) -> Tensor<f32, [M, N]> {
+    assert a.extents[1] == b.extents[0];
+    let rows = a.extents[0];
+    let inner = a.extents[1];
+    let cols = b.extents[1];
+
+    let mut out = List::<f32>::filled(rows * cols, 0.0);
+    for let mut r = 0; r < rows; r += 1 {
+        for let mut k = 0; k < inner; k += 1 {
+            let lhs = a.data[r * inner + k];
+            for let mut c = 0; c < cols; c += 1 {
+                out[r * cols + c] += lhs * b.data[k * cols + c];
+            }
+        }
+    }
+    return Tensor {
+        data: out,
+        extents: [rows, cols],
+    };
+}
+
+/// Both operands share one axis list, so `add(&a, &b)` at different ranks or
+/// different axes is a compile error.
+fn add<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>) -> Tensor<f32, Axes> {
+    assert a.extents == b.extents;
+    let mut out = List::<f32>::with_capacity(a.data.len());
+    for let [i, v] of a.data.into_iter().enumerate() {
+        out.push(v + b.data[i]);
+    }
+    return Tensor { data: out, extents: a.extents };
+}
+
+fn relu<Axes>(t: &Tensor<f32, Axes>) -> Tensor<f32, Axes> {
+    let mut out = List::<f32>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(f32::max(v, 0.0));
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+/// Swap a rank-2 tensor's axes. The return type swaps them too, so the result
+/// only satisfies an annotation written the other way round.
+fn transpose<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
+    let rows = t.extents[0];
+    let cols = t.extents[1];
+    let mut out = List::<f32>::filled(rows * cols, 0.0);
+    for let mut r = 0; r < rows; r += 1 {
+        for let mut c = 0; c < cols; c += 1 {
+            out[c * rows + r] = t.data[r * cols + c];
+        }
+    }
+    return Tensor {
+        data: out,
+        extents: [cols, rows],
+    };
+}
+
+/// Reduce the trailing axis away. The pack `..Rest` holds what survives, so
+/// annotating the result with the wrong remainder is a compile error.
+fn sum_last<..Rest, Last>(t: &Tensor<f32, [..Rest, Last]>) -> Tensor<f32, [..Rest]> {
+    let last = t.extents[t.extents.len() - 1];
+    let groups = t.data.len() / last;
+
+    let mut out = List::<f32>::filled(groups, 0.0);
+    for let mut g = 0; g < groups; g += 1 {
+        for let mut i = 0; i < last; i += 1 {
+            out[g] += t.data[g * last + i];
+        }
+    }
+
+    let mut rest: List<i32> = [];
+    for let mut i = 0; i < t.extents.len() - 1; i += 1 {
+        rest.push(t.extents[i]);
+    }
+    return Tensor { data: out, extents: rest };
+}
+
+struct Mlp {
+    w1: Tensor<f32, [In, Hidden]>,
+    w2: Tensor<f32, [Hidden, Out]>,
+    b2: Tensor<f32, [Batch, Out]>,
+}
+
+fn forward(m: &Mlp, x: &Tensor<f32, [Batch, In]>) -> Tensor<f32, [Batch, Out]> {
+    let h = relu(&matmul(x, &m.w1));
+    return add(&matmul(&h, &m.w2), &m.b2);
+}
+
+fn tensor<Axes>(extents: List<i32>, data: List<f32>) -> Tensor<f32, Axes> {
+    assert element_count(&extents) == data.len();
+    return Tensor { data, extents };
+}
+
+export fn run() with Stdout {
+    let x: Tensor<f32, [Batch, In]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let m = Mlp {
+        w1: tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]),
+        w2: tensor([2, 2], [1.0, 0.0, 1.0, 1.0]),
+        b2: zeros([2, 2]),
+    };
+
+    let y = forward(&m, &x);
+    println(`y rank ${y.rank()}, extents ${y.extents[0]}x${y.extents[1]}`);
+
+    let totals: Tensor<f32, [Batch]> = sum_last(&y);
+    println(`row totals: ${totals.data[0]}, ${totals.data[1]}`);
+
+    let xt: Tensor<f32, [In, Batch]> = transpose(&x);
+    println(`transposed extents ${xt.extents[0]}x${xt.extents[1]}`);
+}
+
+test "matmul contracts the shared axis" {
+    let a: Tensor<f32, [Batch, In]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let b: Tensor<f32, [In, Out]> = tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]);
+
+    let c: Tensor<f32, [Batch, Out]> = matmul(&a, &b);
+    assert c.extents == [2, 2] as List<i32>;
+    assert c.data == [4.0, 5.0, 10.0, 11.0] as List<f32>;
+}
+
+test "transpose swaps the axis list" {
+    let a: Tensor<f32, [Batch, In]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let t: Tensor<f32, [In, Batch]> = transpose(&a);
+
+    assert t.extents == [3, 2] as List<i32>;
+    assert t.data == [1.0, 4.0, 2.0, 5.0, 3.0, 6.0] as List<f32>;
+}
+
+test "the trailing axis reduces away" {
+    let a: Tensor<f32, [Batch, In]> = tensor([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]);
+    let s: Tensor<f32, [Batch]> = sum_last(&a);
+
+    assert s.extents == [2] as List<i32>;
+    assert s.data == [6.0, 15.0] as List<f32>;
+}
+
+test "the forward pass keeps its axes" {
+    let x: Tensor<f32, [Batch, In]> = tensor([1, 3], [1.0, 1.0, 1.0]);
+    let m = Mlp {
+        w1: tensor([3, 2], [1.0, 0.0, 0.0, 1.0, 1.0, 1.0]),
+        w2: tensor([2, 2], [1.0, 0.0, 0.0, 1.0]),
+        b2: tensor([1, 2], [0.5, 0.5]),
+    };
+
+    let y = forward(&m, &x);
+    assert y.extents == [1, 2] as List<i32>;
+    assert y.data == [2.5, 2.5] as List<f32>;
+}

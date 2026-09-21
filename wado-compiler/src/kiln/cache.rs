@@ -28,7 +28,7 @@ fn hex(bytes: &[u8; 32]) -> String {
 
 /// Magic + version prefix. Bump whenever the canonical layout below
 /// changes, so every recorded key is invalidated.
-const MAGIC: &[u8] = b"kiln-cache-key-v6\0";
+const MAGIC: &[u8] = b"kiln-cache-key-v7\0";
 
 /// The core:kiln world version the generator was built against. Part of the
 /// cache key so a future world-version bump invalidates every cached entry.

@@ -1,0 +1,29 @@
+//! An axis's length as stage 0 knows it, and the one question stage 0 asks of
+//! two of them.
+
+/// A length the checkpoint states, or a name standing for one only the run
+/// knows. See WEP 2026-09-20 § "Axis Identity Is a Type, Extents Are Values".
+pub variant Extent {
+    Static(i32),
+    Symbol(String),
+}
+
+impl Extent {
+    /// Whether stage 0 can prove these are the same length. A symbol proves
+    /// nothing about a number, and nothing about another symbol's value.
+    pub fn agrees(&self, other: &Extent) -> bool {
+        return match self {
+            Static(a) => other matches { Static(b) && *b == *a },
+            Symbol(a) => other matches { Symbol(b) && *b == *a },
+        };
+    }
+}
+
+impl Display for Extent {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Static(n) => f.write_str(`${n}`),
+            Symbol(name) => f.write_str(name),
+        }
+    }
+}

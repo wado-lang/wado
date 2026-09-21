@@ -8,8 +8,8 @@
 //!   correlation.
 //!
 //! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-//! Generating in bulk, install `core:secure_random`'s `BufferedRandom` so the
-//! host call is drawn once per block rather than once per UUID.
+//! Generating in bulk, run it under `core:secure_random`'s `with_buffered` so
+//! the host call is drawn once per block rather than once per UUID.
 //!
 //! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 //! and `Inspect` render the canonical hyphenated form, as does `Serialize` for
@@ -31,6 +31,7 @@ use {
     DeserializeMap,
     Visitor,
 } from "core:serde";
+use { bytes as random_bytes } from "core:secure_random";
 use { Random } from "wasi:random";
 use { SystemClock } from "wasi:clocks";
 
@@ -74,7 +75,7 @@ impl Uuid {
     /// Generate a version-4 (random) UUID: 122 bits from `Random`, with the
     /// RFC 9562 version and variant bits forced into place.
     pub fn v4() -> Uuid with Random {
-        let mut b = fill_random(16);
+        let mut b = random_bytes(16);
         b[6] = (b[6] as i32 & 0x0F | 0x40) as u8;
         b[8] = with_variant(b[8]);
         return from_byte_list(&b);
@@ -88,7 +89,7 @@ impl Uuid {
         let ms = now.seconds * 1000 + now.nanoseconds as i64 / 1_000_000;
         let sub_ms = now.nanoseconds as i64 % 1_000_000 * SUB_MS_TICKS / 1_000_000;
         // Bytes 0..=7 are all clock, so only the trailing 8 need entropy.
-        let r = fill_random(8);
+        let r = random_bytes(8);
         let mut b = ByteList::with_capacity(16);
         b.push((ms >> 40 & 0xFF) as u8);
         b.push((ms >> 32 & 0xFF) as u8);
@@ -295,22 +296,6 @@ impl Default for Uuid {
 /// Byte 8 with the RFC 9562 variant forced into its top two bits.
 fn with_variant(byte: u8) -> u8 {
     return (byte as i32 & 0x3F | 0x80) as u8;
-}
-
-/// Collect exactly `n` random bytes, looping to tolerate short reads (the
-/// `Random` contract allows returning fewer bytes than requested).
-fn fill_random(n: i32) -> ByteList with Random {
-    let mut out = Random::get_random_bytes(n as u64) as ByteList;
-    while out.len() < n {
-        let chunk = Random::get_random_bytes((n - out.len()) as u64);
-        if chunk.is_empty() {
-            panic("Random::get_random_bytes returned no data");
-        }
-        for let byte of chunk {
-            out.push(byte);
-        }
-    }
-    return out;
 }
 
 fn from_byte_list(b: &ByteList) -> Uuid {

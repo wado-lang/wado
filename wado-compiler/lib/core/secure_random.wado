@@ -1,11 +1,16 @@
 #![stdlib("core:secure_random")]
-//! Randomness no one can predict, drawn from `wasi:random`. Nothing here is
-//! seedable or reproducible.
+//! Randomness no one can predict, drawn from `wasi:random`. A key, a salt, a
+//! nonce or a session token comes from here. Nothing here is seedable or
+//! reproducible; a stream that replays is `core:prng`.
 //!
 //! A host call costs about the same for 16 bytes as for 4096, so drawing many
-//! small values pays that fixed cost over and over. `BufferedRandom` draws in
-//! blocks and serves reads from one.
+//! small values pays that fixed cost over and over. [`with_buffered`] draws in
+//! blocks, so the small reads inside its body can share a host call.
+//!
+//! Compare a token against an expected one with `eq_constant_time`, never
+//! `==`.
 
+use { encode_url } from "core:base64";
 use { Seed } from "core:prng";
 use { Random } from "wasi:random";
 
@@ -13,32 +18,111 @@ global POOL_BYTES: i32 = 4096;
 
 global SEED_BYTES: i32 = 32;
 
+global TOKEN_BYTES: i32 = 32;
+
+global BYTE_VALUES: i32 = 256;
+
 /// Draw a `core:prng` seed from the host's entropy. This is the one crossing
 /// from unpredictable randomness into a reproducible stream.
 pub fn seed() -> Seed with Random {
-    let bytes = Random::get_random_bytes(SEED_BYTES as u64) as ByteList;
-    assert bytes.len() == SEED_BYTES, "wasi:random returned a short read";
-    return Seed::from_bytes(&bytes);
+    return Seed::from_bytes(&bytes(SEED_BYTES));
+}
+
+/// Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
+/// nonce. Whatever length the installed `Random` hands back is absorbed here,
+/// never passed on.
+pub fn bytes(n: i32) -> ByteList with Random {
+    assert n >= 0;
+    let mut out = Random::get_random_bytes(n as u64) as ByteList;
+    while out.len() < n {
+        let chunk = Random::get_random_bytes((n - out.len()) as u64) as ByteList;
+        assert chunk.len() > 0, "the installed Random returned no data";
+        out.extend(&chunk);
+    }
+    out.truncate(n);
+    return out;
+}
+
+/// A token of `n` bytes as lowercase hexadecimal, two digits per byte. The
+/// default is 256 bits, past what any search can reach.
+pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random {
+    return bytes(n).to_hex();
+}
+
+/// A token of `n` bytes as URL-safe unpadded Base64, for a URL, a cookie or a
+/// header. The default is 256 bits.
+pub fn token_base64url(n: i32 = TOKEN_BYTES) -> String with Random {
+    return encode_url(&bytes(n));
+}
+
+/// A token of `len` characters, each drawn uniformly from `alphabet`. For a
+/// one-time code or an invite code, where the alphabet has to be readable.
+///
+/// The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
+pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random {
+    let chars = alphabet.as_byte_slice();
+    let n = chars.len();
+    assert len >= 0;
+    assert n > 0, "an alphabet to draw from cannot be empty";
+    assert n <= BYTE_VALUES, "an alphabet cannot exceed 256 bytes";
+    for let c of chars {
+        assert c < 0x80, "an alphabet to draw from must be ASCII";
+    }
+
+    // Folding every byte onto the alphabet would favour the letters at the
+    // front, so a draw past the last whole repeat is discarded instead.
+    let limit = BYTE_VALUES / n * n;
+    let mut out = String::with_capacity(len);
+    let mut made = 0;
+    while made < len {
+        for let draw of bytes(len - made) {
+            let value = draw as i32;
+            if value < limit {
+                out.push(chars[value % n] as char);
+                made += 1;
+            }
+        }
+    }
+    return out;
+}
+
+/// Run `body` with a [`BufferedRandom`] of `pool_bytes` installed, so the small
+/// draws inside it can share a host call. A draw larger than the block, or than
+/// what a short block held, reaches the host again.
+pub fn with_buffered<T, effect E>(
+    mut body: fn mut() -> T with (Random, E),
+    pool_bytes: i32 = POOL_BYTES,
+) -> T with (Random, E) {
+    assert pool_bytes > 0;
+    let mut rng = BufferedRandom { pool_bytes };
+    return with Random => &mut rng do {
+        body();
+    };
 }
 
 #[synopsis]
 test {
-    let mut rng = BufferedRandom {};
-    with Random => &mut rng do {
-        assert Random::get_random_bytes(16).len() == 16;
-    };
+    assert token_base64url().len() == 43;
+    assert token_hex().len() == 64;
+    assert token_from(&b"0123456789", 6).len() == 6;
+
+    // The small draws inside the body can share a host call.
+    with_buffered(|| {
+        assert bytes(16).len() == 16;
+    });
 }
 
 /// A `Random` handler that draws entropy in blocks. Install it around the work
 /// that consumes randomness; its block lives in guest memory until consumed.
 pub struct BufferedRandom {
+    pool_bytes: i32 = POOL_BYTES,
     buf: List<u8> = [],
     pos: i32 = 0,
 }
 
 impl Random for BufferedRandom {
     fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
-        if max_len > POOL_BYTES as u64 {
+        if max_len > self.pool_bytes as u64 {
             resume Random::get_random_bytes(max_len);
         }
         let n = max_len as i32;
@@ -73,9 +157,9 @@ impl BufferedRandom {
 
     fn refill(&mut self) with Random {
         self.buf = self.take(self.available());
-        self.buf.extend(&Random::get_random_bytes(POOL_BYTES as u64));
+        self.buf.extend(&Random::get_random_bytes(self.pool_bytes as u64));
         self.pos = 0;
-        assert self.buf.len() > 0, "wasi:random returned no data";
+        assert self.buf.len() > 0, "the installed Random returned no data";
     }
 
     fn take(&mut self, n: i32) -> List<u8> {

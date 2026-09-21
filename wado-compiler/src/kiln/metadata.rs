@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Schema version of the `<primary>.kiln.json` file. Bump on any
 /// incompatible change; a file at a different version is treated as a
 /// cache miss rather than migrated.
-pub const METADATA_VERSION: u32 = 3;
+pub const METADATA_VERSION: u32 = 4;
 
 /// Suffix appended to the primary input's basename to form the metadata
 /// filename. Lives in `<manifest_root>/<output_dir>/`.
@@ -40,10 +40,18 @@ pub struct Metadata {
     pub outputs: Vec<OutputEntry>,
 }
 
+/// One input's recorded identity: how much of it the output depended on, and
+/// the hash of exactly that much.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FileHash {
     pub path: String,
     pub hash: String,
+    /// Leading bytes the generator's probe reported as determining the output.
+    /// Absent means the whole file, which is what a generator exporting no
+    /// probe gets. Recording it is what lets a later build hash that range and
+    /// decide without instantiating the generator.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extent: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -88,6 +96,7 @@ mod tests {
             primary: FileHash {
                 path: "schemas/x.proto".to_string(),
                 hash: "sha256:aa".to_string(),
+                extent: Some(4096),
             },
             inputs: vec![],
             options_hash: "sha256:cc".to_string(),

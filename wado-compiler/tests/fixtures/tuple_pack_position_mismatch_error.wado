@@ -1,0 +1,14 @@
+// Returning a tuple over the same pack at the same arity but a different
+// order. The arity check alone accepted this, and the fixed elements were then
+// read at each other's offsets: `swap_ends([7, true])` returned `7` as a bool
+// and `true` as an i32, with no diagnostic anywhere.
+fn swap_ends<..Rest, Last>(t: [..Rest, Last]) -> [Last, ..Rest] {
+    return t;
+}
+
+export fn run() {
+    let y: [bool, i32] = swap_ends([7, true]);
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[Last, ..Rest]', found '[..Rest, Last]'"}

@@ -143,6 +143,81 @@ Returns a reference to the value stored under text equal to `key`.
 
 ##### `pub fn default() -> TreeMap<K, V>`
 
+### `pub struct TreeSetRefIter<T>`
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> TreeSetValueIter<T>`
+
+#### `impl Iterator for TreeSetRefIter<T>`
+
+##### `fn next(&mut self) -> Option<&T>`
+
+### `pub struct TreeSetValueIter<T>`
+
+_Fields are private._
+
+#### `impl Iterator for TreeSetValueIter<T>`
+
+##### `fn next(&mut self) -> Option<T>`
+
+### `pub struct TreeMapKeysRefIter<K, V>`
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> TreeMapKeysValueIter<K, V>`
+
+#### `impl Iterator for TreeMapKeysRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<&K>`
+
+### `pub struct TreeMapKeysValueIter<K, V>`
+
+_Fields are private._
+
+#### `impl Iterator for TreeMapKeysValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<K>`
+
+### `pub struct TreeMapValuesRefIter<K, V>`
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> TreeMapValuesValueIter<K, V>`
+
+#### `impl Iterator for TreeMapValuesRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<&V>`
+
+### `pub struct TreeMapValuesValueIter<K, V>`
+
+The doubled word is the axis meeting a projection already named `values`:
+the map's _values_, yielded by _value_.
+
+_Fields are private._
+
+#### `impl Iterator for TreeMapValuesValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<V>`
+
+### `pub struct TreeMapEntriesRefIter<K, V>`
+
+_Fields are private._
+
+#### `pub fn iter_value(&self) -> TreeMapEntriesValueIter<K, V>`
+
+#### `impl Iterator for TreeMapEntriesRefIter<K, V>`
+
+##### `fn next(&mut self) -> Option<[&K, &V]>`
+
+### `pub struct TreeMapEntriesValueIter<K, V>`
+
+_Fields are private._
+
+#### `impl Iterator for TreeMapEntriesValueIter<K, V>`
+
+##### `fn next(&mut self) -> Option<[K, V]>`
+
 ### `pub struct TreeSet<T>`
 
 A set that iterates in insertion order.

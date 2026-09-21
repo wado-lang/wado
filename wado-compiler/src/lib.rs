@@ -54,6 +54,7 @@ pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
 pub mod semantics;
+pub mod signature_reach;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;
@@ -90,6 +91,7 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
+pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
@@ -211,6 +213,19 @@ fn report_without_span<H: compiler_host::CompilerHost>(
         message,
         span: None,
     });
+}
+
+/// Hand the invalid binary to the host to save, then stop: a pipeline that
+/// emits what it cannot validate has no result to return.
+fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifact) -> ! {
+    let subject = invalid.subject;
+    let saved = match host.save_internal_artifact(invalid.file_stem, &invalid.wasm) {
+        Some(path) => {
+            format!("The full invalid {subject} is at {path} (inspect with `wasm-tools print`).")
+        }
+        None => format!("The invalid {subject} was not saved: this host keeps no files."),
+    };
+    panic!("{}\n{saved}", invalid.report);
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
@@ -1310,18 +1325,23 @@ fn compile_after_load<H: CompilerHost>(
         .lib_world
         .clone()
         .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
-    // A kiln generator's `generate` lives in the entry module; only a real
-    // `--lib` package spreads its API (and the types it exposes) across
-    // submodules. Captured here (owned) so it outlives the `sem` destructure
-    // below and can be registered into the CM interface registry.
-    let lib_surface = if options.lib_world.is_some() {
-        collect_lib_surface(&sem.entry_module_source, &sem.modules)
-    } else {
-        LibSurface {
+    // Captured here (owned) so it outlives the `sem` destructure below and can
+    // be registered into the CM interface registry. A kiln generator keeps only
+    // the types: its world is `generate`, but that record's fields may name a
+    // type the generator shares with its own library, in another module.
+    let lib_surface = match (options.lib_world.is_some(), is_kiln_generator) {
+        (true, _) => collect_lib_surface(&sem.entry_module_source, &sem.modules),
+        (false, true) => LibSurface {
+            submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
+                .submodule_type_decls,
+            submodule_exports: Vec::new(),
+            submodule_interfaces: Vec::new(),
+        },
+        (false, false) => LibSurface {
             submodule_exports: Vec::new(),
             submodule_type_decls: Vec::new(),
             submodule_interfaces: Vec::new(),
-        }
+        },
     };
 
     let entry_type_names: Vec<String> = sem
@@ -1351,7 +1371,10 @@ fn compile_after_load<H: CompilerHost>(
             })
         });
 
-    if options.lib_world.is_some() {
+    // Every published type reaches the registry under one interface FQ, which
+    // registers each name once, so the check belongs to whoever synthesizes a
+    // world rather than to `--lib` alone.
+    if synth_world_fq.is_some() {
         let all_names: Vec<String> = entry_type_names
             .iter()
             .cloned()
@@ -1367,8 +1390,8 @@ fn compile_after_load<H: CompilerHost>(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "library type `{dup}` is defined in more than one module; a \
-                     library's public types must have distinct names"
+                    "public type `{dup}` is defined in more than one module; the \
+                     types a component publishes must have distinct names"
                 ),
             ));
         }
@@ -1419,10 +1442,12 @@ fn compile_after_load<H: CompilerHost>(
         && let Some(kiln_registry) = cm_registry
         && let Some(world) = lib_world_info.as_mut()
     {
-        // Only `generate` is the generator world's contract; a helper
-        // `export fn` beside it is not a world export and must not be
-        // force-routed through the async binding below.
-        world.exports.retain(|e| e.name == "generate");
+        // `generate` and the optional `probe` are the generator world's
+        // contract; a helper `export fn` beside them is not a world export and
+        // must not be force-routed through the async binding below.
+        world
+            .exports
+            .retain(|e| e.name == "generate" || e.name == "probe");
         let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
             .iter()
             .map(|s| (*s).to_string())
@@ -1892,7 +1917,10 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package, &options.providers)
+        match codegen::emit_wasm(&nir, &wir_package, &options.providers) {
+            Ok(wasm) => wasm,
+            Err(invalid) => panic_on_invalid_artifact(logger.host(), &invalid),
+        }
     };
 
     // Return the entry AST for tooling

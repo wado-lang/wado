@@ -30,6 +30,7 @@ use indexmap::IndexMap;
 use wado_compiler::{CompilerHost, Diagnostic as CompilerDiagnostic, SourceError};
 
 use crate::Engine;
+use crate::host::install_dev_stdlib;
 
 /// Path a single-file fixture is analysed under.
 pub const TEST_PATH: &str = "/test.wado";
@@ -88,6 +89,7 @@ impl MapHost {
     /// [`SourceError::NotFound`].
     #[must_use]
     pub fn empty() -> Self {
+        install_dev_stdlib();
         Self {
             sources: IndexMap::new(),
             emitted: Mutex::new(Vec::new()),
@@ -104,6 +106,7 @@ impl MapHost {
     /// same path overwrite earlier ones (matches `IndexMap::insert`).
     #[must_use]
     pub fn with_files(files: &[(&str, &str)]) -> Self {
+        install_dev_stdlib();
         let mut sources = IndexMap::new();
         for (path, body) in files {
             sources.insert((*path).to_string(), body.as_bytes().to_vec());

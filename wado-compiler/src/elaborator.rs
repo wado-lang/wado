@@ -204,17 +204,11 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                     .type_params
                     .contains_key(&param.name)
                 {
-                    let type_id = if param.is_pack {
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_pack(param.name.clone(), slot)
-                    } else {
-                        self.tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), slot)
-                    };
+                    let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                        param.name.clone(),
+                        slot,
+                        param.is_pack,
+                    );
                     self.annotate_ctx.trait_ctx.type_params.insert(
                         param.name.clone(),
                         scope::BinderInScope::declared(slot, type_id, param.id),

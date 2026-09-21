@@ -246,6 +246,10 @@ pub struct SymbolTable {
     /// by one module is not visible to another, so same-named imports in
     /// different modules cannot collide.
     imports: IndexMap<ModuleSource, IndexMap<String, AstId>>,
+    /// Builtin type names declared anywhere in the prelude's implementation,
+    /// each with its declaring node. They are read without an import, so the
+    /// prelude tier takes them and [`Self::is_prelude_type`] reserves them.
+    prelude_builtin_types: IndexMap<String, AstId>,
 }
 
 impl SymbolTable {
@@ -304,6 +308,9 @@ impl SymbolTable {
             visibility,
             span,
         };
+        if matches!(symbol.kind, SymbolKind::BuiltinType) && module_source.is_prelude() {
+            self.prelude_builtin_types.insert(name.to_string(), ast_id);
+        }
         self.symbols.insert(ast_id, symbol);
 
         let module = self.modules.entry(module_source.clone()).or_default();
@@ -555,11 +562,8 @@ impl SymbolTable {
         None
     }
 
-    /// Check if a type name is re-exported by `core:prelude`.
-    ///
-    /// Only types explicitly `pub use`d from `core:prelude` are considered
-    /// prelude types. Internal types in prelude sub-modules that are not
-    /// re-exported (e.g. `UnpackResult` in fpfmt.wado) are not checked.
+    /// Whether `name` names a type every module reads without importing it:
+    /// what `core:prelude` declares or `pub use`s, plus the builtin types.
     pub fn is_prelude_type(&self, name: &str) -> bool {
         let prelude = ModuleSource::prelude();
         if let Some(symbol) = self.lookup_in_module(&prelude, name) {
@@ -574,7 +578,15 @@ impl SymbolTable {
                     | SymbolKind::BuiltinType
             );
         }
-        false
+        self.prelude_builtin_types.contains_key(name)
+    }
+
+    /// The builtin type names in scope in every module, with their declaring
+    /// nodes.
+    pub fn prelude_builtin_types(&self) -> impl Iterator<Item = (&str, AstId)> {
+        self.prelude_builtin_types
+            .iter()
+            .map(|(name, id)| (name.as_str(), *id))
     }
 
     /// Get a symbol by its canonical key.

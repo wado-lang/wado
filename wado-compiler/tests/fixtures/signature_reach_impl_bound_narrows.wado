@@ -1,0 +1,29 @@
+// A bound on an impl's own type parameter is a gate, not a leak: nothing that
+// cannot name `Hidden` can satisfy it, so the impl's members reach no further
+// than `Hidden` does and may name it freely.
+trait Hidden with () {
+    fn n(&self) -> i32;
+}
+
+pub struct Wrap<T> {
+    pub v: T,
+}
+
+struct Local {}
+
+impl Hidden for Local {
+    fn n(&self) -> i32 {
+        return 7;
+    }
+}
+
+impl<T: Hidden> Wrap<T> {
+    pub fn peek(&self) -> i32 {
+        return self.v.n();
+    }
+}
+
+test "a private bound confines the impl instead of rejecting it" {
+    let w = Wrap { v: Local {} };
+    assert w.peek() == 7;
+}

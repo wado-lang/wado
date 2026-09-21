@@ -1,0 +1,25 @@
+// An impl's members reach no further than its head: a caller has to be able to
+// write the head to name one. So a `pub` trait's method on a file-private type
+// may name that type, and the trait's own reach does not widen it.
+struct Local {
+    v: i32,
+}
+
+impl Add for Local {
+    type Output = Local;
+
+    fn add(&self, rhs: &Local) -> Local {
+        return Local { v: self.v + rhs.v };
+    }
+}
+
+impl Local {
+    pub fn doubled(&self) -> Local {
+        return Local { v: self.v * 2 };
+    }
+}
+
+test "an impl on a private type may name it" {
+    let sum = Local { v: 3 } + Local { v: 4 };
+    assert sum.doubled().v == 14;
+}

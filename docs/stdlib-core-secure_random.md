@@ -3,20 +3,28 @@
 
 # core:secure_random
 
-Randomness no one can predict, drawn from `wasi:random`. Nothing here is
-seedable or reproducible.
+Randomness no one can predict, drawn from `wasi:random`. A key, a salt, a
+nonce or a session token comes from here. Nothing here is seedable or
+reproducible; a stream that replays is `core:prng`.
 
 A host call costs about the same for 16 bytes as for 4096, so drawing many
-small values pays that fixed cost over and over. `BufferedRandom` draws in
-blocks and serves reads from one.
+small values pays that fixed cost over and over. [`with_buffered`] draws in
+blocks, so the small reads inside its body can share a host call.
+
+Compare a token against an expected one with `eq_constant_time`, never
+`==`.
 
 ## Synopsis
 
 ```wado
-let mut rng = BufferedRandom {};
-with Random => &mut rng do {
-    assert Random::get_random_bytes(16).len() == 16;
-};
+assert token_base64url().len() == 43;
+assert token_hex().len() == 64;
+assert token_from(&b"0123456789", 6).len() == 6;
+
+// The small draws inside the body can share a host call.
+with_buffered(|| {
+    assert bytes(16).len() == 16;
+});
 ```
 
 ## Functions
@@ -25,6 +33,35 @@ with Random => &mut rng do {
 
 Draw a `core:prng` seed from the host's entropy. This is the one crossing
 from unpredictable randomness into a reproducible stream.
+
+### `pub fn bytes(n: i32) -> ByteList with Random`
+
+Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
+nonce. Whatever length the installed `Random` hands back is absorbed here,
+never passed on.
+
+### `pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random`
+
+A token of `n` bytes as lowercase hexadecimal, two digits per byte. The
+default is 256 bits, past what any search can reach.
+
+### `pub fn token_base64url(n: i32 = TOKEN_BYTES) -> String with Random`
+
+A token of `n` bytes as URL-safe unpadded Base64, for a URL, a cookie or a
+header. The default is 256 bits.
+
+### `pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random`
+
+A token of `len` characters, each drawn uniformly from `alphabet`. For a
+one-time code or an invite code, where the alphabet has to be readable.
+
+The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
+
+### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E), pool_bytes: i32 = POOL_BYTES) -> T with (Random, E)`
+
+Run `body` with a [`BufferedRandom`] of `pool_bytes` installed, so the small
+draws inside it can share a host call. A draw larger than the block, or than
+what a short block held, reaches the host again.
 
 ## Structs
 

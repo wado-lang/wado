@@ -23,13 +23,13 @@ use predicates::prelude::*;
 /// makes a cross-read (reading the wrong sibling) observable as a wrong return
 /// value. It cannot show a *missing* redirect, though: the loader then parses
 /// the grammar as Wado and gets the same result.
-const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+const PASSTHROUGH_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: req.primary.content,
+            content: read_text(req.primary.content).unwrap(),
             is_entry: true,
         }],
     });
@@ -126,13 +126,13 @@ fn two_modules_sharing_one_schema_both_redirect() {
     fs::create_dir_all(root.join("src")).unwrap();
     fs::write(
         root.join("src/gen.wado"),
-        r#"use { Request, Response, OutputFile, Error } from "core:kiln";
+        r#"use { Request, Response, OutputFile, Error, read_text } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {
     return Result::Ok(Response {
         files: [OutputFile {
             path: "out.wado",
-            content: `pub fn hello() -> i32 { return ${req.primary.content.trim()}; }`,
+            content: `pub fn hello() -> i32 { return ${read_text(req.primary.content).unwrap().trim()}; }`,
             is_entry: true,
         }],
     });

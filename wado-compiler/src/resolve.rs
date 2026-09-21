@@ -13,7 +13,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::{SymbolKind, SymbolTable};
+use crate::symbol::SymbolTable;
 use crate::token::Span;
 
 /// What a reference site refers to.
@@ -191,14 +191,10 @@ impl Scopes {
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
-        // names the same thing in a module that imports nothing, `#![no_prelude]`
-        // included.
-        for (id, sym) in symbols.iter() {
-            if matches!(sym.kind, SymbolKind::BuiltinType)
-                && is_prelude_module(sym.module_source())
-                && let Some(def) = defs.of_ast_id(*id)
-            {
-                surface.entry(sym.name.clone()).or_insert(def);
+        // names the same thing in a module that imports nothing.
+        for (name, id) in symbols.prelude_builtin_types() {
+            if let Some(def) = defs.of_ast_id(id) {
+                surface.entry(name.to_string()).or_insert(def);
             }
         }
         out.prelude = surface;
@@ -403,11 +399,6 @@ impl Resolutions {
 
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
-
-fn is_prelude_module(module: &ModuleSource) -> bool {
-    matches!(module, ModuleSource::Core { name } if name.as_str() == "prelude"
-        || name.as_str().starts_with("prelude/"))
-}
 
 /// A module's declaration scope: the one implementation of "what does this name
 /// mean here", and the only place a name becomes a [`DefId`].
@@ -857,15 +848,6 @@ impl AstVisitor for Resolver<'_> {
         ast::walk_pattern(self, pat);
     }
 
-    fn visit_generic_params(&mut self, params: &[GenericParam]) {
-        for p in params {
-            self.visit_trait_bounds(&p.bounds);
-            if let Some(default) = &p.default {
-                self.visit_type(default);
-            }
-        }
-    }
-
     /// A bound is a reference to a trait, and its associated-type bindings are
     /// references to that trait's members. Every bound position routes here —
     /// `<T: Trait>`, `trait Sub: Super`, `type A: Trait` — so an inherited
@@ -874,17 +856,16 @@ impl AstVisitor for Resolver<'_> {
         for bound in bounds {
             let answer = self.resolve_name(&bound.name);
             self.record(bound.id, answer);
-            for arg in &bound.type_args {
-                self.visit_type(arg);
-            }
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
                 // consumer that knows the trait.
                 self.record(assoc.id, Resolution::Unresolved);
-                self.visit_type(&assoc.ty);
             }
         }
+        // The types a bound carries are reached structurally, so a shape the
+        // walker knows is never one this pass forgets to answer for.
+        ast::walk_trait_bounds(self, bounds);
     }
 
     /// A qualified path names declarations with the segments before its last:

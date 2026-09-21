@@ -315,7 +315,7 @@ fn string_and_list_and_option_map_to_wit() {
 fn newtype_emits_alias_to_base_not_itself() {
     // Regression: a newtype must alias its base type, never `type x = x`.
     let text = emit(
-        "type Meters = f64;\n\
+        "pub type Meters = f64;\n\
          export fn id(v: Meters) -> Meters { return v; }",
     );
     assert!(text.contains("type meters = f64;"), "\n{text}");

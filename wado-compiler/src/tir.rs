@@ -457,6 +457,14 @@ impl StructDef {
     }
 }
 
+/// One position in a tuple's layout: a pack standing for a run of positions,
+/// or a single slot holding one type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TupleSlot {
+    Fixed,
+    Pack(String),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ResolvedType {
     Primitive(PrimitiveType),
@@ -2363,6 +2371,26 @@ impl TypeTable {
         )
     }
 
+    /// Whether a type is a declared type pack, as opposed to one of the
+    /// tuples a pack stands for.
+    pub fn is_type_pack(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::TypePack { .. })
+    }
+
+    /// How a tuple's positions divide into packs and single slots, or `None`
+    /// where `id` is no tuple. Equal layouts are the same shape for a value.
+    pub fn tuple_layout(&self, id: TypeId) -> Option<Vec<TupleSlot>> {
+        Some(
+            self.as_tuple(id)?
+                .into_iter()
+                .map(|e| match self.get(e) {
+                    ResolvedType::TypePack { name, .. } => TupleSlot::Pack(name.clone()),
+                    _ => TupleSlot::Fixed,
+                })
+                .collect(),
+        )
+    }
+
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
     /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
     /// together with a `by_ref` flag that is `true` when the tuple was reached
@@ -2392,6 +2420,12 @@ impl TypeTable {
         } else {
             None
         }
+    }
+
+    /// The element types `id` stands for: a tuple's own, and otherwise the one
+    /// type itself. This is what a spread splices into the tuple holding it.
+    pub fn elem_types_or_self(&self, id: TypeId) -> Vec<TypeId> {
+        self.as_tuple(id).unwrap_or_else(|| vec![id])
     }
 
     pub fn make_function(
@@ -2830,6 +2864,16 @@ impl TypeTable {
     /// Create a type parameter (e.g., `T` in `struct Box<T>`)
     pub fn make_type_param(&mut self, name: String, index: u32) -> TypeId {
         self.intern(ResolvedType::TypeParam { name, index })
+    }
+
+    /// The id a declaration's parameter at `index` interns to. A pack holds a
+    /// tuple in its one slot, so it is a `TypePack` and not a `TypeParam`.
+    pub fn make_declared_param(&mut self, name: String, index: u32, is_pack: bool) -> TypeId {
+        if is_pack {
+            self.make_type_pack(name, index)
+        } else {
+            self.make_type_param(name, index)
+        }
     }
 
     /// Create an inference variable (see [`ResolvedType::InferVar`]).
@@ -3400,9 +3444,7 @@ impl TypeTable {
                                         // a pack-independent `..F::method()`
                                         // repeats its return type `|F|` times.
                                         Some(elem) => {
-                                            let pack_elems = self
-                                                .as_tuple(pack_type)
-                                                .unwrap_or_else(|| vec![pack_type]);
+                                            let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {
                                                 let mut elem_substitution = substitution.clone();
                                                 elem_substitution.insert(index, pe);
@@ -3904,31 +3946,80 @@ impl TypeTable {
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
+        self.contains_hole(id, true)
+    }
+
+    /// [`Self::contains_undecided`] without the packs. A pack is decided
+    /// wherever its own declaration is in scope, so a rule about shape must not
+    /// read it as the hole an `InferVar` is.
+    pub fn awaits_inference(&self, id: TypeId) -> bool {
+        self.contains_hole(id, false)
+    }
+
+    /// The walk both of the above are, differing only in whether a declared
+    /// pack counts as a hole.
+    fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
+        let holds = |&t: &TypeId| self.contains_hole(t, packs_count);
         match self.get(id) {
-            ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            ResolvedType::TypePack { .. } => packs_count,
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
+            | ResolvedType::Reactive(inner) => holds(inner),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => params.iter().any(holds) || holds(return_type),
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(holds),
+            _ => false,
+        }
+    }
+
+    /// The name of every type pack `id` mentions, so a caller can ask whose
+    /// declaration they belong to.
+    pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_pack_names(id, &mut out);
+        out
+    }
+
+    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+        match self.get(id) {
+            ResolvedType::TypePack {
+                name, mapped_elem, ..
+            } => {
+                out.push(name.clone());
+                if let Some(elem) = mapped_elem {
+                    self.collect_pack_names(*elem, out);
+                }
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.collect_pack_names(*inner, out),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
             } => {
-                params.iter().any(|p| self.contains_undecided(*p))
-                    || self.contains_undecided(*return_type)
+                for p in params {
+                    self.collect_pack_names(*p, out);
+                }
+                self.collect_pack_names(*return_type, out);
             }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_undecided(*t))
+                for t in type_args {
+                    self.collect_pack_names(*t, out);
+                }
             }
-            _ => false,
+            _ => {}
         }
     }
 
@@ -6920,7 +7011,8 @@ pub struct TirImport {
 
 /// Tracks a requested instantiation of a generic item.
 /// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
-/// `method_info` is auxiliary metadata for name formatting.
+/// `method_info` names an instance but never decides one: it is left out of
+/// both, so read a declaration's own `method_info` for anything else.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// The generic declaration being instantiated, where the site holds one.

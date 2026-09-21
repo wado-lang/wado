@@ -29,8 +29,8 @@ types that is fixed at each monomorphization site:
 fn process<..T>(values: [..T]) { }
 ```
 
-`..T` is a single parameter that stands for any number of type arguments. Multiple scalar
-generic parameters and at most one type pack may appear together:
+`..T` is a single parameter that stands for any number of type arguments. Scalar
+parameters and packs may appear together, in any number (§6):
 
 ```wado
 fn example<A, B, ..T>(a: A, b: B, rest: [..T]) { }
@@ -155,18 +155,50 @@ an open world cannot decide whether two bounds can both hold. For the full order
 and where these two rules sit in it, see
 [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
-### 6. Multi-Pack (Limited)
+### 6. Multi-Pack
 
-Two packs may appear in the same impl or function only in a type-level position (not in a
-single expansion context). The primary use case is concatenation:
+A generic parameter list may declare more than one pack. Each is settled from the argument
+that carries it alone, so nothing has to find a boundary the source never wrote. The
+primary use case is concatenation:
 
 ```wado
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
 
-When two packs appear in an expansion expression (§8), they must have the same length at
-every call site; this is enforced at monomorphization time. More complex multi-pack
-operations (zip, interleave) are out of scope for this WEP.
+A tuple holding two packs (`[..A, ..B]`) determines neither, because every split of a
+concrete tuple satisfies it. Such a tuple is legal only where a value is produced, such as
+a return type or a local annotation. A position that receives one is rejected at the
+declaration: a parameter, a struct field or a variant payload, at any depth of the written
+type. A `fn` type written inside one ends the walk, since its parameters and return belong
+to that function and settle no pack of the signature naming it. To receive both packs,
+each takes a tuple of its own (`[[..A], [..B]]`).
+
+Rejecting the declaration puts the message on what cannot be meant, rather than on the
+argument that later fails to match an empty pack.
+
+Where such a tuple is produced, its ends still place elements. The elements ahead of the
+first pack and behind the last keep their positions whatever the packs expand to, so
+`[X, ..A, ..B, Y]` places `X` and `Y`, and the packs are left to the arguments that carry
+them alone.
+
+The same holds for a turbofish, which is flat: `f::<i32, bool>()` names a boundary only
+because one pack absorbs everything past the scalars. With two packs each is spelled as
+its own tuple (`concat::<[i32], [bool, String]>(…)`); any other spelling is an error,
+one argument per pack included, since `<i32, String>` and `<[i32, String], []>` split one
+list two ways.
+
+An element between two packs, as in a produced `[..A, M, ..B]`, is determined once the
+packs are bound, but binding them does not feed the constraint again. `M` is reported
+uninferred, and a turbofish names it.
+
+Inside the body that declares them, packs are rigid, as scalar parameters are. A value
+matches a pack-carrying tuple by layout: the same fixed positions, and the same packs in
+the same order. So `[..B, ..A]` does not accept an `[..A, ..B]` value, and `[i32, ..A]`
+does not accept an `[..A]` one. Naming the same packs is not enough.
+
+`zip` and interleave transpose their operands, so their rows must be equally long. Two
+distinct packs are never known to be. Both are therefore out of scope for this WEP, and
+the compiler rejects such a `zip` where it is written.
 
 ### 7. Compile-Time Tuple Enumeration with Packs
 
@@ -353,6 +385,7 @@ occurred.
       elements, and a pack under a reference never reaches the impl's
       type-param scope
 - [x] Pack binding: parse `T: Trait<Assoc = [..F]>` and extract `F`
+- [x] More than one pack per generic parameter list (§6)
 - [ ] Error messages: show call site, element index, and body location
 - [ ] Standard library: add a variadic impl for `Default`
 

@@ -1263,11 +1263,11 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_IFSTATEMENT: NodeKind = 0;
-pub global RK_ELSEIFSTATEMENT: NodeKind = 1;
+pub global RK_IF_STATEMENT: NodeKind = 0;
+pub global RK_ELSE_IF_STATEMENT: NodeKind = 1;
 pub global RK_EXPRESSION: NodeKind = 2;
-pub global RK_EXECUTABLESTATEMENT: NodeKind = 3;
-pub global RK_ELSESTATEMENT: NodeKind = 4;
+pub global RK_EXECUTABLE_STATEMENT: NodeKind = 3;
+pub global RK_ELSE_STATEMENT: NodeKind = 4;
 
 global RULE_NAMES: List<String> = ["ifStatement", "elseIfStatement", "expression", "executableStatement", "elseStatement"];
 
@@ -1831,7 +1831,7 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
 fn _parse_if_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_IFSTATEMENT, _start);
+    p.b.start_node(RK_IF_STATEMENT, _start);
     _parse_if_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -1879,7 +1879,7 @@ fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_else_if_statement(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ELSEIFSTATEMENT, _start);
+    p.b.start_node(RK_ELSE_IF_STATEMENT, _start);
     _parse_else_if_statement__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -1911,7 +1911,7 @@ fn _parse_executable_statement__inner(p: &mut Parser) -> () {
 fn _parse_executable_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_EXECUTABLESTATEMENT, _start);
+    p.b.start_node(RK_EXECUTABLE_STATEMENT, _start);
     _parse_executable_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -1927,7 +1927,7 @@ fn _parse_else_statement__inner(p: &mut Parser) -> () {
 fn _parse_else_statement(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ELSESTATEMENT, _start);
+    p.b.start_node(RK_ELSE_STATEMENT, _start);
     _parse_else_statement__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

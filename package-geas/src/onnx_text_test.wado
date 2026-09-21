@@ -1,0 +1,180 @@
+//! What the ONNX textual grammar accepts, on the forms a real model carries.
+
+use onnx from "../grammar/Onnx.g4"
+    with {
+        generator: { module: "../../package-gale/src/generator.wado" },
+    };
+
+fn parse_ok<S: AsStrSlice>(input: S) {
+    let result = onnx::parse(input);
+    if !result.ok() {
+        let d = &result.diagnostics[0];
+        assert false, `${d.line}:${d.col}: ${d.message}`;
+    }
+}
+
+fn parse_fails<S: AsStrSlice>(input: S) {
+    assert !onnx::parse(input).ok();
+}
+
+test "the model from the ONNX syntax documentation" {
+    parse_ok(
+        `<ir_version: 7, opset_import: [ "" : 10 ]>
+        agraph (float[N, 128] X, float[128, 10] W, float[10] B) => (float[N, 10] C) {
+            T = MatMul(X, W)
+            S = Add(T, B)
+            C = Softmax(S)
+        }`,
+    );
+}
+
+test "a graph stands alone without model metadata" {
+    parse_ok(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Relu(X)
+        }`,
+    );
+}
+
+test "an initializer takes its data from the checkpoint, not the text" {
+    parse_ok(
+        `agraph (float[N, 128] X) => (float[N, 10] Y)
+        <float[128, 10] W, float[10] B>
+        {
+            T = MatMul(X, W)
+            Y = Add(T, B)
+        }`,
+    );
+}
+
+test "an initializer may carry its values inline" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = {1.0, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    );
+}
+
+test "an exporter's names are quoted because they carry slashes and dots" {
+    parse_ok(
+        `agraph (float[N, 128] "input.1") => (float[N, 10] "output")
+        <float[128, 10] "model.layers.0.mlp.weight">
+        {
+            "/model/layers.0/MatMul_output_0" = MatMul("input.1", "model.layers.0.mlp.weight")
+            "output" = Relu("/model/layers.0/MatMul_output_0")
+        }`,
+    );
+}
+
+test "a node carries attributes, typed and untyped" {
+    parse_ok(
+        `agraph (float[1, 3, 8, 8] X, float[4, 3, 3, 3] W) => (float[1, 4, 8, 8] Y) {
+            Y = Conv <kernel_shape = [3, 3], strides = [1, 1], alpha: float = 1.0> (X, W)
+        }`,
+    );
+}
+
+test "a node carries its attributes after the input list too" {
+    parse_ok(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X) <perm = [1, 0]>
+        }`,
+    );
+}
+
+test "a node carrying attributes on both sides does not parse" {
+    parse_fails(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose<perm = [1, 0]>(X) <other = [0, 1]>
+        }`,
+    );
+}
+
+test "an initializer's data may live in a file the text names" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = ["location": "weights.bin", "offset": "0"]>
+        {
+            Y = Add(X, W)
+        }`,
+    );
+}
+
+test "a dimension is static, symbolic, or unknown" {
+    parse_ok(
+        `agraph (float[N, ?, 128] X) => (float[N, ?, 128] Y) {
+            Y = Relu(X)
+        }`,
+    );
+}
+
+test "a scalar has no brackets and a tensor of unknown rank has empty ones" {
+    parse_ok(
+        `agraph (float X, float[] Z) => (float Y) {
+            Y = Add(X, Z)
+        }`,
+    );
+}
+
+test "a node may produce several outputs and carry a label" {
+    parse_ok(
+        `agraph (float[6] X) => (float[3] A, float[3] B) {
+            [split_it] A, B = Split <num_outputs = 2> (X)
+        }`,
+    );
+}
+
+test "an operator may be qualified by its domain" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = com.microsoft.Gelu(X)
+        }`,
+    );
+}
+
+test "a comment runs to the end of the line" {
+    parse_ok(
+        `# the whole model
+        agraph (float[2] X) => (float[2] Y) {
+            Y = Relu(X)   # elementwise
+        }`,
+    );
+}
+
+test "an element type is an identifier, so a tensor named float parses" {
+    parse_ok(
+        `agraph (float[2] float) => (float[2] Y) {
+            Y = Relu(float)
+        }`,
+    );
+}
+
+test "float16 and bfloat16 name themselves" {
+    parse_ok(
+        `agraph (float16[2] X, bfloat16[2] W) => (float16[2] Y) {
+            Y = Add(X, W)
+        }`,
+    );
+}
+
+test "an exponent needs no decimal point" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = LayerNormalization <epsilon = 1e-5> (X)
+        }`,
+    );
+}
+
+test "a graph with no node list does not parse" {
+    parse_fails("agraph (float[2] X) => (float[2] Y)");
+}
+
+test "a node without an operator does not parse" {
+    parse_fails(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = (X)
+        }`,
+    );
+}
