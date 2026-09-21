@@ -16,7 +16,7 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
-use crate::kiln_driver::{PipelineError, PipelineOutcome};
+use crate::kiln_driver::{ExecuteMode, PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
@@ -604,14 +604,49 @@ pub(crate) struct KilnSetup {
 /// Shared by [`maybe_run_pipeline`] (which runs them) and `wado check` (which
 /// dry-runs them and byte-compares), so both tiers resolve generators through
 /// one identical setup.
+/// What a Kiln pipeline inherits from the run it belongs to: the project it
+/// resolves a specifier against, whether it writes, and the generator chain it
+/// continues. A nested pipeline differs from the entry's only in its entry, so
+/// it is handed this rather than building one of its own.
+#[derive(Debug, Clone)]
+pub(crate) struct KilnRun {
+    pub project: Option<manifest::ProjectManifest>,
+    pub mode: ExecuteMode,
+    pub no_cache: bool,
+    /// The generators being compiled, outermost first. A generator whose source
+    /// reaches itself has no order to run in, so finding it here is the cycle.
+    pub active: Arc<Mutex<Vec<String>>>,
+}
+
+impl KilnRun {
+    pub(crate) fn entry(project: Option<manifest::ProjectManifest>, no_cache: bool) -> Self {
+        Self {
+            project,
+            mode: ExecuteMode::WriteAndWarnOnOverwrite,
+            no_cache,
+            active: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn dry_run(mut self) -> Self {
+        self.mode = ExecuteMode::DryRun;
+        self
+    }
+}
+
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
     entry_key: Option<&str>,
     host: &FilesystemCompilerHost,
-    no_cache: bool,
-    project: Option<manifest::ProjectManifest>,
-    active: Arc<Mutex<Vec<String>>>,
+    run: &KilnRun,
 ) -> Result<Option<KilnSetup>, PipelineError> {
+    let KilnRun {
+        project,
+        no_cache,
+        active,
+        ..
+    } = run.clone();
     let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
         entry_file
             .parent()
@@ -664,6 +699,7 @@ pub(crate) async fn prepare_kiln(
         .with_run_cache(host.run_cache())
         .with_no_cache(no_cache)
         .with_active(active)
+        .with_run(run.clone())
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
@@ -711,15 +747,8 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let Some(mut kiln) = prepare_kiln(
-        entry_file,
-        None,
-        host,
-        no_cache,
-        project,
-        Arc::new(Mutex::new(Vec::new())),
-    )
-    .await?
+    let Some(mut kiln) =
+        prepare_kiln(entry_file, None, host, &KilnRun::entry(project, no_cache)).await?
     else {
         return Ok(PipelineOutcome::default());
     };
@@ -737,32 +766,54 @@ pub(crate) async fn maybe_run_pipeline(
 }
 
 /// Resolve the Kiln invocations a generator's own source carries, so the
-/// compile that follows sees generated modules where it wrote schemas.
-/// `active` is the chain this generator is already on, which is what makes a
-/// cycle visible. Answers an empty index when the generator declares none.
-pub async fn run_nested_pipeline(
+/// compile that follows sees generated modules where it wrote schemas. Runs in
+/// `run`, the context the outer pipeline is already in, so a nested clause
+/// resolves a specifier and honours `wado check` exactly as the entry's does.
+/// Answers an empty index when the generator declares none.
+pub(crate) async fn run_nested_pipeline(
     entry_file: &Path,
     entry_key: &str,
     host: &FilesystemCompilerHost,
-    no_cache: bool,
-    active: Arc<Mutex<Vec<String>>>,
+    run: &KilnRun,
 ) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
-    let Some(mut kiln) =
-        prepare_kiln(entry_file, Some(entry_key), host, no_cache, None, active).await?
-    else {
+    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_key), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
-    let mut outcome = kiln_driver::run_pipeline(
-        &kiln.manifest,
-        &kiln.manifest_root,
-        &kiln.host,
-        &kiln.provider,
-        std::mem::take(&mut kiln.invocations),
-        no_cache,
-    )
-    .await?;
-    kiln.remap_conflicts(&mut outcome.invocations, host)?;
-    Ok(outcome.invocations)
+    let inline = std::mem::take(&mut kiln.invocations);
+    let mut invocations = match run.mode {
+        ExecuteMode::WriteAndWarnOnOverwrite => {
+            kiln_driver::run_pipeline(
+                &kiln.manifest,
+                &kiln.manifest_root,
+                &kiln.host,
+                &kiln.provider,
+                inline,
+                run.no_cache,
+            )
+            .await?
+            .invocations
+        }
+        ExecuteMode::DryRun => {
+            let outcome = kiln_driver::check_pipeline(
+                &kiln.manifest,
+                &kiln.manifest_root,
+                &kiln.host,
+                &kiln.provider,
+                inline,
+            )
+            .await?;
+            // `check` byte-compares rather than writing, and a generator built
+            // from a file that no longer matches its source is the drift the
+            // run exists to report.
+            let drift = outcome.stale.len() + outcome.missing.len();
+            if drift > 0 {
+                return Err(PipelineError::NestedDrift(drift));
+            }
+            outcome.invocations
+        }
+    };
+    kiln.remap_conflicts(&mut invocations, host)?;
+    Ok(invocations)
 }
 
 /// Rewrite each inline invocation whose `module` is a `[build-dependencies]`

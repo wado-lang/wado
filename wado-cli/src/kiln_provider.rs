@@ -58,7 +58,7 @@ use crate::build_dep::{
     GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
 };
 use crate::cache::{generator_path, write_atomic};
-use crate::compile::run_nested_pipeline;
+use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::kiln_driver::{GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator};
 use crate::kiln_wit::options_descriptor_from_component;
@@ -129,6 +129,10 @@ pub struct CliGeneratorProvider {
     /// providers their own invocations run through. A generator whose source
     /// reaches itself has no order to run in, so finding it here is the cycle.
     active: Arc<Mutex<Vec<String>>>,
+    /// The context a nested pipeline runs in, so a generator's own invocations
+    /// see the project and the write mode the entry's did. Absent for a
+    /// provider built outside a pipeline, whose generators nest no further.
+    kiln_run: Option<KilnRun>,
 }
 
 impl CliGeneratorProvider {
@@ -141,6 +145,7 @@ impl CliGeneratorProvider {
             no_cache: false,
             registry: RegistryContext::default(),
             active: Arc::new(Mutex::new(Vec::new())),
+            kiln_run: None,
         }
     }
 
@@ -149,6 +154,13 @@ impl CliGeneratorProvider {
     #[must_use]
     pub fn with_active(mut self, active: Arc<Mutex<Vec<String>>>) -> Self {
         self.active = active;
+        self
+    }
+
+    /// Run a generator's own invocations in the context the entry's ran in.
+    #[must_use]
+    pub(crate) fn with_run(mut self, run: KilnRun) -> Self {
+        self.kiln_run = Some(run);
         self
     }
 
@@ -341,7 +353,18 @@ impl CliGeneratorProvider {
     ) -> Result<wado_compiler::kiln::InvocationIndex, ProviderError> {
         let (entry, base) = (abs.to_path_buf(), base_path.to_path_buf());
         let entry_key = entry_name.to_string();
-        let (no_cache, active) = (self.no_cache, self.active.clone());
+        // A provider with no run context was not built by a pipeline, so the
+        // generator it resolves has no outer invocation to nest under.
+        let Some(mut run) = self.kiln_run.clone() else {
+            return Ok(wado_compiler::kiln::InvocationIndex::default());
+        };
+        run.active = self.active.clone();
+        // A generator's own clauses are harvested as identities anchored on its
+        // directory, so that directory is the root they resolve against. The
+        // project's is a different anchor, and carrying it here would leave a
+        // clause naming a `[build-dependencies]` specifier unresolvable.
+        run.project = None;
+        let shared_cache = self.run.clone();
         let failed = |e: PipelineError| ProviderError::Internal {
             message: format!(
                 "kiln: generator `{}` declares an invocation that failed: {e}",
@@ -352,7 +375,13 @@ impl CliGeneratorProvider {
         // and for the same reason: the pipeline holds a `Logger` whose future
         // is `!Send`, and the driver's runtime is multi-threaded.
         let started = tokio::task::spawn_blocking(move || {
-            let host = FilesystemCompilerHost::with_log_level(base, LogLevel::Warn);
+            let mut host = FilesystemCompilerHost::with_log_level(base, LogLevel::Warn);
+            // The run's own cache, so the generated modules this produces are
+            // marked as its output rather than read as a tree moving under it,
+            // and so the AOT components the outer run holds are reused.
+            if let Some(cache) = shared_cache {
+                host = host.with_shared_run_cache(cache);
+            }
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
@@ -361,9 +390,7 @@ impl CliGeneratorProvider {
                         "kiln: failed to start inner runtime for a nested generator: {e}"
                     ),
                 })?;
-            Ok(rt.block_on(run_nested_pipeline(
-                &entry, &entry_key, &host, no_cache, active,
-            )))
+            Ok(rt.block_on(run_nested_pipeline(&entry, &entry_key, &host, &run)))
         })
         .await
         .map_err(|e| ProviderError::Internal {

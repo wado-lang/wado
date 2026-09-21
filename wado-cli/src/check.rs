@@ -8,14 +8,15 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
 
 use crate::args::{self, CliExit};
 use crate::build;
-use crate::compile::{attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln};
+use crate::compile::{
+    KilnRun, attach_manifest_and_component_deps, load_nearest_manifest, prepare_kiln,
+};
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
 use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
@@ -201,9 +202,7 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
         path,
         None,
         &host,
-        opts.knobs.no_cache,
-        manifest_pair,
-        Arc::new(Mutex::new(Vec::new())),
+        &KilnRun::entry(manifest_pair, opts.knobs.no_cache).dry_run(),
     )
     .await
     .map_err(silent_or_reported)?;

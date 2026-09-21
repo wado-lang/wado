@@ -171,8 +171,8 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
     return Result::Ok(shapes);
 }
 
-/// The graph's own output declaration is a condition like any other. A `?`
-/// claims nothing, so it discharges against whatever the nodes produced.
+/// Merge the graph's own output declaration into what the nodes produced, as
+/// ONNX's `mergeInDimensionInfo` does: only two static extents can conflict.
 fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
         return Result::Ok(());
@@ -186,17 +186,21 @@ fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
         }));
     }
     for let mut i = 0; i < dims.len(); i += 1 {
-        if dims[i] matches { Unknown } {
+        // A `dim_param` names the axis in the model author's words and `?`
+        // names nothing, so neither can disagree with the schema's own name.
+        let Static(declared) = dims[i] else {
             continue;
-        }
+        };
         let axis = &produced.axes[i];
-        let declared = extent_of(&dims[i], &axis.name);
-        if !declared.agrees(&axis.extent) {
+        let Static(produced_extent) = axis.extent else {
+            continue;
+        };
+        if declared != produced_extent {
             builtin::cold_path();
             return Result::Err(InferError::Declared(DeclaredConflict {
                 tensor: vi.name,
                 axis: axis.name,
-                declared,
+                declared: Extent::Static(declared),
                 produced: axis.extent,
             }));
         }

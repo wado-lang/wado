@@ -2347,6 +2347,9 @@ impl CmInterfaceRegistry {
         self.cm_interface_module_sources
             .insert(iface_fq.to_string(), entry_source.clone());
 
+        // Every entry type is registered, not just the `pub` ones: a type an
+        // `export fn` names crosses the boundary whether or not it is marked,
+        // and nothing here computes that reachability.
         let local_names = local_type_names(module.items.iter(), iface_fq);
         for item in &module.items {
             self.register_lib_local_item(item, iface_fq, &entry_source, &local_names);

@@ -77,6 +77,42 @@ fn editing_the_innermost_input_rebuilds_the_generator() {
     );
 }
 
+/// `wado check` dry-runs and byte-compares rather than writing, and a nested
+/// invocation owes the same answer: drift is reported, never repaired.
+#[test]
+fn check_reports_a_stale_nested_generated_file_rather_than_rewriting_it() {
+    let project = fixture("kiln_nested");
+    assert!(run_project(project.path()).status.success(), "first build");
+
+    let generated = std::fs::read_dir(project.path().join("src/build/kiln"))
+        .expect("the nested generator wrote its output")
+        .filter_map(|e| {
+            let dir = e.ok()?.path();
+            std::fs::read_to_string(dir.join("value.wado"))
+                .ok()
+                .map(|text| (dir, text))
+        })
+        .next()
+        .expect("value.wado among the nested outputs");
+
+    std::fs::write(project.path().join("src/value.txt"), "7\n").unwrap();
+
+    let out = wado_in(project.path())
+        .args(["check", "src/main.wado"])
+        .output()
+        .expect("wado check");
+    assert!(
+        !out.status.success(),
+        "a stale nested generated file must fail the check, got:\n{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    assert_eq!(
+        std::fs::read_to_string(generated.0.join("value.wado")).unwrap(),
+        generated.1,
+        "check must not rewrite what it reports as out of date"
+    );
+}
+
 #[test]
 fn a_generator_cycle_is_reported_naming_the_invocations() {
     let project = fixture("kiln_nested_cycle");
