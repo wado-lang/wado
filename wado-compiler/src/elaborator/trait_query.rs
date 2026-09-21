@@ -499,16 +499,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .tysys
             .trait_env
             .supertrait_closure_at(&trait_decl, &written)
-            .iter()
-            .map(|b| b.bound.clone())
+            .into_iter()
+            .map(|inherited| inherited.bound)
             .collect();
         if bounds.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
+        // Each clause is named at the target, not at this block: reading the
+        // block would answer only a clause it writes the binding for, leaving
+        // one inherited through another trait unanswered.
         let supertraits: Vec<(String, Option<FqTraitName>)> = bounds
             .iter()
-            .map(|bound| self.supertrait_named_at_self(bound))
+            .map(|bound| {
+                let (name, fq) = self.tysys.bound_named_written(bound);
+                let fq = fq.map(|fq| self.trait_named_with_resolved_args(fq, bound, names_no_type));
+                (name, fq)
+            })
             .collect();
         for (supertrait, supertrait_trait) in supertraits {
             let Some(supertrait_trait) = supertrait_trait else {
@@ -537,23 +544,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: impl_block.span,
             });
         }
-    }
-
-    /// A supertrait clause named at the impl under check, with each projecting
-    /// argument resolved rather than spelled: `Make<Self::Base>` owed by
-    /// `UserName` is `Make<String>`, whichever of that type's impls writes the
-    /// binding, and `Make<X::Item>` at `Constrained<Feed>` is what `Feed` binds.
-    ///
-    /// Reading the block under check instead would answer only where that block
-    /// writes the binding itself, so an inherited clause reached through
-    /// another trait would go unanswered.
-    fn supertrait_named_at_self(
-        &mut self,
-        bound: &ast::TraitBound,
-    ) -> (String, Option<FqTraitName>) {
-        let (name, fq) = self.tysys.bound_named_written(bound);
-        let fq = fq.map(|fq| self.trait_named_with_resolved_args(fq, bound, names_no_type));
-        (name, fq)
     }
 
     /// `fq` with each argument `pick` selects resolved in this frame rather
@@ -2391,7 +2381,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
         let slots = self.bound_slots(&bound, decl, self_type_id);
-        let fq_trait_name = self.trait_named_off_self(fq_trait_name, &bound, &slots);
+        let fq_trait_name = self.trait_named_from_slots(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2727,7 +2717,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// named from what the frame resolved it to: `Make<Self::Base>` read at
     /// `T: Constrained` reaches `Make<T::Base>`, and `Make<X::Item>` read at
     /// `T: Constrained<Feed>` reaches what `Feed` binds `Item` to.
-    fn trait_named_off_self(
+    fn trait_named_from_slots(
         &self,
         fq: FqTraitName,
         bound: &ast::TraitBound,

@@ -310,14 +310,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.register_module_assoc_types(module);
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                // The scope is inherited so the caller's context survives, but
-                // an impl block's parameters are its own: whatever the enclosing
-                // one bound must not answer a name inside this block.
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-                scope.register_impl_block_params(impl_block);
+                let mut scope = self.enter_impl_scope(impl_block);
 
                 if impl_block.trait_type.is_some() {
                     // Also binds `Self` to the target, which a clause writing

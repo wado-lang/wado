@@ -2841,12 +2841,12 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        let head = match &self.head {
+        let head_mentions = match &self.head {
             TypeHead::Binder { .. } => true,
             TypeHead::Projection { base, .. } => base.mentions_binder(),
             _ => false,
         };
-        head || self.args.iter().any(FqTypeName::mentions_binder)
+        head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
     }
 
     /// The base, associated-type name, and declaring trait this projects off,
@@ -2940,10 +2940,9 @@ impl FqTypeName {
         self.descend(&|inner| inner.substitute(old, new))
     }
 
-    /// This name with `at` applied at every position a type stands in: the name
-    /// itself, each type argument, and a projection's base, recursively. A
-    /// position `at` answers for is replaced whole and not descended into, and
-    /// `at` sees it stripped of any `&` prefix, which is then put back.
+    /// This name with `at` applied at every position a type stands in. A
+    /// position `at` answers for is replaced whole, and `at` sees it stripped
+    /// of any `&` prefix, which is then put back.
     #[must_use]
     pub fn rewrite(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> FqTypeName {
         if let Some((outer, inner)) = self.reference.split_first() {
@@ -2960,9 +2959,8 @@ impl FqTypeName {
         }
     }
 
-    /// This name rebuilt with `at` applied to each name it holds — its type
-    /// arguments and a projection's base. The head's own spelling is not one of
-    /// them, so a walk that stops here terminates.
+    /// This name rebuilt with `at` applied to each name it holds: its type
+    /// arguments and a projection's base, never the head's own spelling.
     fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
         let head = match &self.head {
             TypeHead::Projection {

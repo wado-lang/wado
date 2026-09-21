@@ -279,28 +279,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return type_id;
             }
             if let Some(self_type) = self.annotate_ctx.trait_ctx.self_type
-                && !self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .contains_type_param(self_type)
+                && let Some(resolved) = self.assoc_bound_by_type(self_type, &namespaced.name)
             {
-                if let Some(resolved) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .resolve_assoc_type(self_type, &namespaced.name)
-                {
-                    return resolved;
-                }
-                if let Some(resolved) = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .resolve_generic_assoc_type_mono(self_type, &namespaced.name)
-                {
-                    return resolved;
-                }
+                return resolved;
             }
             // `Self` is a generic instance (`Cell<T>` elaborating a default body
             // it does not override), so the concrete-keyed lookup above is
@@ -391,6 +372,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// What a concrete `base` itself binds `assoc` to. A base still carrying a
+    /// type parameter binds nothing yet, so the frame's bounds answer instead.
+    fn assoc_bound_by_type(&mut self, base: TypeId, assoc: &str) -> Option<TypeId> {
+        if self.tysys.type_table.borrow().contains_type_param(base) {
+            return None;
+        }
+        self.tysys
+            .type_table
+            .borrow_mut()
+            .resolve_assoc_type_of_instance(base, assoc)
+    }
+
     /// The associated type `namespaced` names, projected off `base_type_id`.
     /// `base_name` is the name the frame files that base under, and a base the
     /// frame binds under no name answers only from what the type itself knows.
@@ -400,31 +393,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         base_name: Option<String>,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
-        // A base bound to a concrete type is answered by the type: what the
-        // impls registered, then what a generic impl's definition derives for
-        // this instance (`ListIter<i32>` binding `Item` to its own argument).
-        if !self
-            .tysys
-            .type_table
-            .borrow()
-            .contains_type_param(base_type_id)
-        {
-            if let Some(resolved) = self
-                .tysys
-                .type_table
-                .borrow()
-                .resolve_assoc_type(base_type_id, &namespaced.name)
-            {
-                return resolved;
-            }
-            if let Some(resolved) = self
-                .tysys
-                .type_table
-                .borrow_mut()
-                .resolve_generic_assoc_type_mono(base_type_id, &namespaced.name)
-            {
-                return resolved;
-            }
+        if let Some(resolved) = self.assoc_bound_by_type(base_type_id, &namespaced.name) {
+            return resolved;
         }
         let Some(base_name) = base_name else {
             let spelled = self.tysys.type_id_to_string(base_type_id);

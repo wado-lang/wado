@@ -69,10 +69,10 @@ that impl binds. A call through the bound therefore lands on the same impl the
 bound check held the type to.
 
 The arguments travel as part of the trait's name, which carries a projection as
-a base, a member, and the trait declaring it, rather than as a spelling. A
-spelling would have to be split back apart to substitute the base, and no split
-is correct in general; and the declaring trait is what tells two traits binding
-one member name on one type apart
+a base, a member, and the trait declaring it, rather than as a spelling.
+Substituting the base of a spelling would mean splitting the spelling back
+apart, and no split is correct in general. The declaring trait is there because
+two traits may bind one member name on one type
 ([Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
 
 Substitution reaches every position a type stands in, so a projection nested

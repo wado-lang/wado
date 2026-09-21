@@ -67,7 +67,7 @@ use crate::name::{
 use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
-use crate::tir::{ResolvedType, StructDef, TraitRef};
+use crate::tir::{ResolvedType, StructDef};
 use crate::token::Span;
 
 /// Build a function-name → item-index map for a module's items. Used
@@ -2255,24 +2255,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if impl_block.trait_type.is_none() || impl_block.is_synthesize_request {
                 continue;
             }
-            let mut scope = self.enter_inherited_type_param_scope();
-            scope.annotate_ctx.trait_ctx.type_params.clear();
-            scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-            scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-            scope.register_impl_block_params(impl_block);
+            let mut scope = self.enter_impl_scope(impl_block);
             let trait_name = scope.impl_block_trait_name(impl_block);
             scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
         }
     }
 
-    /// Bind this impl's associated types and register them against the target,
-    /// so `T::Assoc` is answered by the type rather than by the block that
-    /// happens to be in scope. Also sets `Self` to the target, which
-    /// `type Output = Self;` reads.
-    ///
-    /// Idempotent: the module pre-pass runs it before any signature is
-    /// collected, and the body walk runs it again over a scope that cleared
-    /// the bindings.
+    /// Bind this impl's associated types against the target and `Self` to it,
+    /// so `T::Assoc` is answered by the type rather than by the block in scope.
+    /// Idempotent: the module pre-pass and the body walk each run it.
     pub(super) fn register_impl_assoc_types(
         &mut self,
         impl_block: &ast::ImplBlock,
@@ -2287,14 +2278,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .contains_type_param(target_type_id);
         // The header names one instantiation whatever it binds, so the
         // arguments are resolved once rather than per associated type.
-        let impl_trait_ref = trait_name
-            .and_then(FqTraitName::canonical)
-            .map(|trait_key| {
-                impl_block.trait_type.as_ref().map_or_else(
-                    || TraitRef::bare(trait_key),
-                    |t| self.impl_trait_ref(t, &impl_block.ty, trait_key),
-                )
-            });
+        let impl_trait_ref = impl_block
+            .trait_type
+            .as_ref()
+            .zip(trait_name.and_then(FqTraitName::canonical))
+            .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
 
         for binding in &impl_block.associated_types {
             let type_id = self.resolve_type(&binding.ty);

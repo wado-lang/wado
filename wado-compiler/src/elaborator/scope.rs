@@ -201,6 +201,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// A scope holding `impl_block`'s own parameters and nothing the caller
+    /// brought: an impl block names its parameters in `impl<...>` and inherits
+    /// none.
+    pub(super) fn enter_impl_scope(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        scope.register_impl_block_params(impl_block);
+        scope
+    }
+
     /// Run `body` with `names` bound to `args` and no other type parameter in
     /// scope, for resolving a type the declaration wrote against its arguments.
     ///
