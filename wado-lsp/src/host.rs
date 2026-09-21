@@ -19,7 +19,7 @@ use discovery::{DependencyEntry, absolutize};
 /// Read the stdlib `wado-compiler` was built beside and hand it over, so a dev
 /// build serves what is on disk now and the compiler itself reads no file.
 /// Called wherever a dev build first reaches the stdlib: every host as it is
-/// built, [`crate::Engine::new`], and the commands that read it without a host.
+/// built, [`crate::Engine::new`], and the `wado` binary before it dispatches.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
 pub fn install_dev_stdlib() {
     use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files, install_dev_stdlib};
