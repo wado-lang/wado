@@ -9,7 +9,7 @@ reproducible; a stream that replays is `core:prng`.
 
 A host call costs about the same for 16 bytes as for 4096, so drawing many
 small values pays that fixed cost over and over. [`with_buffered`] draws in
-blocks, so the small reads inside its body share a host call.
+blocks, so the small reads inside its body can share a host call.
 
 Compare a token against an expected one with `eq_constant_time`, never
 `==`.
@@ -21,7 +21,7 @@ assert token_base64url().len() == 43;
 assert token_hex().len() == 64;
 assert token_from(&b"0123456789", 6).len() == 6;
 
-// The small draws inside the body share a host call.
+// The small draws inside the body can share a host call.
 with_buffered(|| {
     assert bytes(16).len() == 16;
 });
@@ -60,7 +60,8 @@ The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
 ### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E)`
 
 Run `body` with a [`BufferedRandom`] installed, so the small draws inside it
-share a host call. A draw past the block size goes to the host on its own.
+can share a host call. A draw past the block size, or past what a short
+block held, reaches the host again.
 
 ## Structs
 
@@ -73,7 +74,8 @@ _Fields are private._
 
 #### `pub fn new(pool_bytes: i32) -> BufferedRandom`
 
-A handler whose block is `pool_bytes` rather than the default 4096.
+A handler whose block is `pool_bytes` rather than the default 4096. The
+caller owes a positive size.
 
 #### `impl Random for BufferedRandom`
 
