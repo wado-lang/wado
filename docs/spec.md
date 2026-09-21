@@ -5369,10 +5369,10 @@ concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 ```
 
 A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
-it against a concrete tuple admits every split. Such a tuple is legal anywhere;
-what it cannot do is be the only thing naming a pack. Something else must settle
-each one — another parameter, a turbofish, or an annotation — and then the tuple
-is checked against the arity they fix:
+it against a concrete tuple admits every split. Such a tuple is legal anywhere.
+It just cannot be the only thing naming a pack: something else must settle each
+one — another parameter, a turbofish, or an annotation — and then the tuple is
+checked against the arity they fix.
 
 ```wado
 fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
@@ -5388,9 +5388,9 @@ middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles th
 middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `Post`
 ```
 
-A pack nothing settles is reported at the use site, as an uninferred type
-parameter, the way a scalar parameter no argument reaches is. To settle both
-packs from one value, give each a tuple of its own (`[[..A], [..B]]`).
+A pack nothing settles is reported at the use site as an uninferred type
+parameter, as a scalar parameter no argument reaches is. To settle both packs
+from one value, give each a tuple of its own (`[[..A], [..B]]`).
 
 Where such a tuple is produced, its ends still place elements. The elements ahead
 of the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`

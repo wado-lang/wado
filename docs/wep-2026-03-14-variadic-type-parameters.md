@@ -166,11 +166,11 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
 
 A tuple holding two packs (`[..A, ..B]`) settles neither, because every split of a
-concrete tuple satisfies it. The rule is therefore about settling rather than about where
-the tuple is written: such a tuple is legal anywhere, and each pack it names must be
-settled by something else — another parameter, a turbofish, or an annotation. Once they
-are, the tuple is checked against the arity they fix, so a surplus element is a type
-mismatch rather than something a split silently absorbs.
+concrete tuple satisfies it. The rule therefore keys on settling, not on where the tuple
+is written: such a tuple is legal anywhere, and each pack it names must be settled by
+something else — another parameter, a turbofish, or an annotation. Once they are, the
+tuple is checked against the arity they fix, so a surplus element is a type mismatch
+rather than something a split silently absorbs.
 
 ```wado
 fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { ... }
