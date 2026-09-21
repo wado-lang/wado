@@ -202,4 +202,3 @@ omission goes in Decision.
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
 - [Geas — Tensor Compilation for Wado](./wep-2026-09-20-geas.md)
-- [Private Types in a Public Signature](./wep-2026-09-21-private-in-public.md)

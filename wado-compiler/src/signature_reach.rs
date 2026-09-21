@@ -1,6 +1,6 @@
 //! An item reaches no further than the declarations its signature names.
 //!
-//! See [WEP: Private Types in a Public Signature](../../docs/wep-2026-09-21-private-in-public.md).
+//! See `docs/spec.md`, "Signature reach".
 
 use crate::ast::{
     AstId, Function, GenericParam, Item, Module, SelfKind, StructField, TraitBound, Type,
