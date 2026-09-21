@@ -713,147 +713,156 @@ struct FnAliases {
 /// and a `&`/`&mut local.field` of a non-GC field. Direct call arguments are
 /// excluded — the call's write-back/re-read bounds the alias to that call.
 fn collect_function_aliases(body: &Body, type_table: &TypeTable) -> FnAliases {
-    let mut out = FnAliases {
-        locals: IndexSet::default(),
-        fields: IndexSet::default(),
+    let mut scan = AliasScan {
+        type_table,
+        in_call_arg: false,
+        out: FnAliases {
+            locals: IndexSet::default(),
+            fields: IndexSet::default(),
+        },
     };
-    collect_alias_node(body, NodeRef::Block(body.root), false, type_table, &mut out);
-    out
+    scan.visit_node(body, NodeRef::Block(body.root));
+    scan.out
 }
 
-/// One-pass alias scan. `in_call_arg` propagates exactly one level (a call →
-/// its receiver/args); every other position resets it, so neutral shapes
-/// delegate descent to `for_each_child`.
-fn collect_alias_node(
-    body: &Body,
-    node: NodeRef,
+/// The one-pass alias scan. Descent is [`NirRefVisitor`]'s, so a shape with no
+/// arm here is still walked; the arms name only what publishes a handle.
+struct AliasScan<'a> {
+    type_table: &'a TypeTable,
+    /// Set on the node a call hands its receiver or one argument to, and taken
+    /// as that node is entered, so it reaches exactly one level: a `&x` there
+    /// is bounded by the call's own write-back / re-read.
     in_call_arg: bool,
-    type_table: &TypeTable,
-    out: &mut FnAliases,
-) {
-    // The name a copy binds to. Its source is marked below, from every binding
-    // shape — a store into `x.f` publishes the object with no local to pair.
-    if let Some((dst, value)) = copy_edge(body, node)
-        && let Some(ve) = value.as_expr()
-    {
-        mark_gc_alias_pair(body, Some(dst), ve, type_table, &mut out.locals);
-    }
-    match node {
-        NodeRef::Stmt(s) => {
-            if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
-                &body.stmts[s].kind
-                && let Some(ve) = value.as_expr()
-            {
-                mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
-            }
+    out: FnAliases,
+}
+
+impl AliasScan<'_> {
+    fn visit_call_arg(&mut self, body: &Body, op: Operand) {
+        if let Some(e) = op.as_expr() {
+            self.in_call_arg = true;
+            self.visit_node(body, NodeRef::Expr(e));
         }
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { value, .. } => {
-                if let Some(ve) = value.as_expr() {
-                    mark_gc_alias_pair(body, None, ve, type_table, &mut out.locals);
+    }
+
+    /// A GC local stored bare into an object being built: the object now holds
+    /// a second handle on it, and a write through that handle bypasses the
+    /// scalar. Every allocating expression kind takes its operands this way, so
+    /// each has an arm below. A closure's by-reference capture is one — the
+    /// captured local's `Box` rides the env struct, so the call that writes it
+    /// names no `&mut` to scan. A value copy arrives wrapped in
+    /// `$value_copy$…(x)`, which does not match, so a copied field keeps its
+    /// candidacy.
+    fn mark_published(&mut self, body: &Body, op: Operand) {
+        if let Some(e) = op.as_expr()
+            && let Some(src) = gc_alias_source(body, e, self.type_table)
+        {
+            self.out.locals.insert(src);
+        }
+    }
+}
+
+impl NirRefVisitor for AliasScan<'_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        let in_call_arg = std::mem::take(&mut self.in_call_arg);
+        // The name a copy binds to. Its source is marked below, from every
+        // binding shape — a store into `x.f` publishes the object with no
+        // local to pair.
+        if let Some((dst, value)) = copy_edge(body, node)
+            && let Some(ve) = value.as_expr()
+        {
+            mark_gc_alias_pair(body, Some(dst), ve, self.type_table, &mut self.out.locals);
+        }
+        match node {
+            NodeRef::Stmt(s) => {
+                if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
+                    &body.stmts[s].kind
+                    && let Some(ve) = value.as_expr()
+                {
+                    mark_gc_alias_pair(body, None, ve, self.type_table, &mut self.out.locals);
                 }
             }
-            ExprKind::Unary {
-                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-                expr: inner,
-            } => {
-                if let Some(ie) = inner.as_expr() {
-                    match &body.exprs[ie].kind {
-                        // `&local` / `&mut local`: the inner `Local` is the
-                        // place we take the address of, not a value read.
-                        ExprKind::Local { index, .. } => {
-                            if !in_call_arg && is_gc_heap_type(body.exprs[ie].type_id, type_table) {
-                                out.locals.insert(*index);
-                            }
-                            return;
-                        }
-                        ExprKind::FieldAccess {
-                            expr: base,
-                            field_index,
-                            ..
-                        } => {
-                            if !in_call_arg
-                                && !is_gc_heap_type(body.exprs[ie].type_id, type_table)
-                                && let Some(be) = base.as_expr()
-                                && let ExprKind::Local { index, .. } = &body.exprs[be].kind
-                            {
-                                out.fields.insert((*index, *field_index));
-                            }
-                        }
-                        _ => {}
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Assign { value, .. } => {
+                    if let Some(ve) = value.as_expr() {
+                        mark_gc_alias_pair(body, None, ve, self.type_table, &mut self.out.locals);
                     }
                 }
-            }
-            ExprKind::Call { args, .. } => {
-                for a in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    collect_alias_operand(body, a, true, type_table, out);
+                ExprKind::Unary {
+                    op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                    expr: inner,
+                } => {
+                    if let Some(ie) = inner.as_expr() {
+                        match &body.exprs[ie].kind {
+                            // `&local` / `&mut local`: the inner `Local` is the
+                            // place we take the address of, not a value read.
+                            ExprKind::Local { index, .. } => {
+                                if !in_call_arg
+                                    && is_gc_heap_type(body.exprs[ie].type_id, self.type_table)
+                                {
+                                    self.out.locals.insert(*index);
+                                }
+                                return;
+                            }
+                            ExprKind::FieldAccess {
+                                expr: base,
+                                field_index,
+                                ..
+                            } => {
+                                if !in_call_arg
+                                    && !is_gc_heap_type(body.exprs[ie].type_id, self.type_table)
+                                    && let Some(be) = base.as_expr()
+                                    && let ExprKind::Local { index, .. } = &body.exprs[be].kind
+                                {
+                                    self.out.fields.insert((*index, *field_index));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-                return;
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                for a in args.clone() {
-                    collect_alias_operand(body, a, true, type_table, out);
+                ExprKind::Call { args, .. } => {
+                    for op in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                        self.visit_call_arg(body, op);
+                    }
+                    return;
                 }
-                return;
-            }
-            ExprKind::IndirectCall { callee, args, .. } => {
-                let callee = *callee;
-                let arg_ops = args.clone();
-                collect_alias_operand(body, callee, false, type_table, out);
-                for a in arg_ops {
-                    collect_alias_operand(body, a, true, type_table, out);
+                ExprKind::CmRawCall { args, .. } => {
+                    for op in args.clone() {
+                        self.visit_call_arg(body, op);
+                    }
+                    return;
                 }
-                return;
-            }
-            ExprKind::StructLiteral { fields, .. } => {
-                for op in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
-                    mark_published_operand(body, op, type_table, out);
+                ExprKind::IndirectCall { callee, args, .. } => {
+                    let callee = *callee;
+                    let arg_ops = args.clone();
+                    if let Some(ce) = callee.as_expr() {
+                        self.visit_node(body, NodeRef::Expr(ce));
+                    }
+                    for op in arg_ops {
+                        self.visit_call_arg(body, op);
+                    }
+                    return;
                 }
-            }
-            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
-                for op in elements.clone() {
-                    mark_published_operand(body, op, type_table, out);
+                ExprKind::StructLiteral { fields, .. } => {
+                    for op in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
+                        self.mark_published(body, op);
+                    }
                 }
-            }
-            ExprKind::VariantConstruct { payload, .. } => {
-                if let Some(op) = *payload {
-                    mark_published_operand(body, op, type_table, out);
+                ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                    for op in elements.clone() {
+                        self.mark_published(body, op);
+                    }
                 }
-            }
-            _ => {}
-        },
-        NodeRef::Block(_) | NodeRef::Pat(_) => {}
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_alias_node(body, c, false, type_table, out);
-    }
-}
-
-/// Mark a GC local stored bare into a fresh object: the object now holds a
-/// second handle on it, and a write through that handle bypasses the scalar.
-/// A closure's by-reference capture is this shape — the captured local's `Box`
-/// rides the env struct, so the call that writes it names no `&mut` to scan.
-/// A value copy reaches here wrapped in `$value_copy$…(x)`, which does not
-/// match, so a copied field keeps its candidacy.
-fn mark_published_operand(body: &Body, op: Operand, type_table: &TypeTable, out: &mut FnAliases) {
-    if let Some(e) = op.as_expr()
-        && let Some(src) = gc_alias_source(body, e, type_table)
-    {
-        out.locals.insert(src);
-    }
-}
-
-fn collect_alias_operand(
-    body: &Body,
-    op: Operand,
-    in_call_arg: bool,
-    type_table: &TypeTable,
-    out: &mut FnAliases,
-) {
-    if let Some(e) = op.as_expr() {
-        collect_alias_node(body, NodeRef::Expr(e), in_call_arg, type_table, out);
+                ExprKind::VariantConstruct { payload, .. } => {
+                    if let Some(op) = *payload {
+                        self.mark_published(body, op);
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+        }
+        self.walk_node(body, node);
     }
 }
 
