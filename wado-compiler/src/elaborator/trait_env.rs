@@ -3088,7 +3088,11 @@ fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
         ast::Type::NamespacedGeneric(ns) => {
-            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
+            let base = match &ns.base {
+                Some(base) => written_type_source(base),
+                None => ns.written_namespace().to_string(),
+            };
+            format!("{base}::{}<{}>", ns.name, list(&ns.args))
         }
         ast::Type::Function(ft) => {
             let m = if ft.is_mut { " mut" } else { "" };

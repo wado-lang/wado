@@ -3444,7 +3444,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Type::NamespacedGeneric(namespaced) => {
                 if let Some(index) = type_params
                     .iter()
-                    .position(|p| p.name == namespaced.namespace)
+                    .position(|p| p.name == namespaced.written_namespace())
                 {
                     // The declaring trait is part of the projection's identity,
                     // so a name no bound declares resolves to nothing here and
@@ -3454,8 +3454,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     else {
                         return TypeTable::UNKNOWN;
                     };
-                    let param_id =
-                        type_table.make_type_param(namespaced.namespace.clone(), index as u32);
+                    let param_id = type_table
+                        .make_type_param(namespaced.written_namespace().to_string(), index as u32);
                     return type_table.make_assoc_type_projection(
                         param_id,
                         owning_trait,
@@ -3470,9 +3470,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // Mirrors the dynamic resolver's namespace-alias branch.
                 if lookup
                     .namespace_imports
-                    .contains_key(namespaced.namespace.as_str())
+                    .contains_key(namespaced.written_namespace())
                 {
-                    let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
+                    let alias =
+                        namespace_member_alias(namespaced.written_namespace(), &namespaced.name);
                     let aliased = if namespaced.args.is_empty() {
                         Type::Named(NamedType::new(namespaced.id, alias, namespaced.span))
                     } else {
@@ -3601,7 +3602,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
-                            let Some((idx, param)) = param_at(&ns.namespace) else {
+                            let Some((idx, param)) = param_at(ns.written_namespace()) else {
                                 continue;
                             };
                             let Some(owning_trait) = trait_env.bound_declaring_assoc_type(
@@ -3613,7 +3614,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             let inner_param_id = type_table
                                 .borrow_mut()
-                                .make_type_param(ns.namespace.clone(), idx as u32);
+                                .make_type_param(ns.written_namespace().to_string(), idx as u32);
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,

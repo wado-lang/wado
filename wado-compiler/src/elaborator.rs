@@ -442,8 +442,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (site, name) = match ty {
             ast::Type::Generic(generic) => (generic.id, generic.name.clone()),
             ast::Type::NamespacedGeneric(ns) => {
-                self.namespace_alias_source(&ns.namespace, ns.id)?;
-                (ns.id, namespace_member_alias(&ns.namespace, &ns.name))
+                // A substituted node stands on a type, which no `use ns` names.
+                let namespace = ns.spelled_namespace()?;
+                self.namespace_alias_source(namespace, ns.id)?;
+                (ns.id, namespace_member_alias(namespace, &ns.name))
             }
             _ => return None,
         };

@@ -744,8 +744,6 @@ pub enum Receiver {
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
-    /// An associated-type projection `Base::Assoc` (`S::SeqSerializer`).
-    Projection { base: String, assoc: String },
 }
 
 impl Receiver {
@@ -756,7 +754,6 @@ impl Receiver {
         match self {
             Receiver::Type(n) => MangledName::new(n.to_mangled()),
             Receiver::Ref(k) => MangledName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => MangledName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -781,7 +778,7 @@ impl Receiver {
                 | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
-            Receiver::Ref(_) | Receiver::Projection { .. } => None,
+            Receiver::Ref(_) => None,
         }
     }
 
@@ -819,7 +816,6 @@ impl Receiver {
         match self {
             Receiver::Type(n) => n.decl_name(),
             Receiver::Ref(k) => DeclName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => DeclName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -850,12 +846,6 @@ impl Receiver {
             Receiver::Ref(k) => Some(*k),
             _ => None,
         }
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn is_assoc_projection(&self) -> bool {
-        matches!(self, Receiver::Projection { .. })
     }
 }
 
@@ -925,12 +915,8 @@ impl LocalMethodName {
     pub fn fq_base_struct_name(&self) -> FqTypeName {
         match &self.receiver {
             Receiver::Type(fq) => fq.clone(),
-            // A `&` / `&mut` head and a projection name no declaration, so no
-            // module qualifies them.
+            // A `&` / `&mut` head names no declaration, so no module qualifies it.
             Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
-            Receiver::Projection { base, assoc } => {
-                FqTypeName::builtin(&format!("{base}::{assoc}"))
-            }
         }
     }
 
@@ -972,12 +958,6 @@ impl LocalMethodName {
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {
         self.receiver.ref_kind()
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn receiver_is_assoc_projection(&self) -> bool {
-        self.receiver.is_assoc_projection()
     }
 
     /// Create a new `LocalMethodName` directly from components.

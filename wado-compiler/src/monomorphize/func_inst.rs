@@ -218,10 +218,6 @@ struct SubstitutedCall {
     /// The pre-substitution mangled name, still the blanket-template key for a
     /// bare-`T` blanket dispatch.
     original_name: String,
-    /// Whether the *pre-substitution* receiver was an associated-type projection
-    /// (`S::SeqSerializer`) — read from the original method info's metadata, since
-    /// substitution rewrites the receiver into a plain concrete name.
-    receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
     /// Substituted method-level type args, in declaration order. Non-empty for
@@ -3576,7 +3572,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: info.receiver_is_assoc_projection(),
             type_args,
             method_type_args: sub_method_type_args,
             module_source,
@@ -3639,7 +3634,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection,
             type_args,
             method_type_args,
             module_source,
@@ -3719,9 +3713,7 @@ impl Monomorphizer {
                 blanket_impl_args(&self.functions.trait_env, b, recv_inner, type_table)
             });
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
-            let blanket_name = if receiver_is_assoc_projection {
-                new_func_name.clone()
-            } else if let Some(b) = blanket.as_ref() {
+            let blanket_name = if let Some(b) = blanket.as_ref() {
                 blanket_template_name(b, &new_info, type_table)
             } else {
                 old_func_name
@@ -3773,7 +3765,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: _,
             type_args,
             method_type_args: _,
             module_source,

@@ -36,10 +36,10 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
             span: generic.span,
         }),
         Type::NamespacedGeneric(namespaced) => {
-            Type::NamespacedGeneric(Box::new(NamespacedGenericType {
-                base: substituted_base(namespaced, replace),
-                args: namespaced.args.iter().map(at).collect(),
-                ..(**namespaced).clone()
+            let args = namespaced.args.iter().map(at).collect();
+            Type::NamespacedGeneric(Box::new(match substituted_base(namespaced, replace) {
+                Some(base) => namespaced.projecting_off(base, args),
+                None => namespaced.with_args(args),
             }))
         }
         Type::Function(func) => Type::Function(Box::new(FunctionType {
@@ -66,7 +66,7 @@ fn substituted_base(
     }
     let written = Type::Named(NamedType::new(
         AstId::fresh(),
-        namespaced.namespace.clone(),
+        namespaced.written_namespace().to_string(),
         namespaced.span,
     ));
     replace(&written)
@@ -275,7 +275,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
 
         // Handle Self::AssociatedType
-        if namespaced.namespace.as_str() == "Self" {
+        if namespaced.written_namespace() == "Self" {
             // Look up the associated type binding
             if let Some(&type_id) = self
                 .annotate_ctx
@@ -345,29 +345,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .annotate_ctx
             .trait_ctx
             .type_params
-            .get(&namespaced.namespace)
+            .get(namespaced.written_namespace())
         {
-            let base_name = namespaced.namespace.clone();
+            let base_name = namespaced.written_namespace().to_string();
             return self.project_off(param_type_id, Some(base_name), namespaced);
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
         // travelled expression spells `ns::Type` reads its author's `use ns`.
         if self
-            .namespace_alias_source(&namespaced.namespace, namespaced.id)
+            .namespace_alias_source(namespaced.written_namespace(), namespaced.id)
             .is_some()
         {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
-            let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
+            let alias = namespace_member_alias(namespaced.written_namespace(), &namespaced.name);
             if namespaced.args.is_empty() {
                 self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)
             } else {
                 self.resolve_generic_type(namespaced.id, &alias, &namespaced.args, namespaced.span)
             }
         } else {
-            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span)
+            self.unknown_namespaced_type(
+                namespaced.written_namespace(),
+                &namespaced.name,
+                namespaced.span,
+            )
         }
     }
 

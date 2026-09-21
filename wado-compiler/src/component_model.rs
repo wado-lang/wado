@@ -3751,15 +3751,14 @@ impl CmInterfaceRegistry {
                     .iter()
                     .map(|arg| self.resolve_type_impl(arg, preserve_local, keep_handles))
                     .collect();
-                Type::NamespacedGeneric(Box::new(NamespacedGenericType {
-                    base: None,
-                    id: ng.id,
-                    namespace: ng.namespace.clone(),
-                    name: ng.name.clone(),
-                    name_span: ng.name_span,
-                    args: resolved_args,
-                    span: ng.span,
-                }))
+                Type::NamespacedGeneric(Box::new(NamespacedGenericType::written(
+                    ng.id,
+                    ng.written_namespace().to_string(),
+                    ng.name.clone(),
+                    ng.name_span,
+                    resolved_args,
+                    ng.span,
+                )))
             }
             // TypePackSpread is only valid inside tuple types — pass through
             Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => ty.clone(),

@@ -3620,8 +3620,10 @@ pub struct GenericType {
 #[derive(Debug, Clone)]
 pub struct NamespacedGenericType {
     pub id: AstId,
-    /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`)
-    pub namespace: String,
+    /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`).
+    /// Private: once [`Self::base`] stands there it names nothing, so a reader
+    /// goes through [`Self::spelled_namespace`] or [`Self::written_namespace`].
+    namespace: String,
     /// The type a substitution put where [`Self::namespace`] was written. Only
     /// a substitution sets it, since no spelling denotes a projection off a type.
     pub base: Option<Type>,
@@ -3636,11 +3638,63 @@ pub struct NamespacedGenericType {
 }
 
 impl NamespacedGenericType {
+    /// `ns::Name<args>` as written, carrying no base: what a parser builds.
+    #[must_use]
+    pub fn written(
+        id: AstId,
+        namespace: String,
+        name: String,
+        name_span: Span,
+        args: Vec<Type>,
+        span: Span,
+    ) -> Self {
+        Self {
+            id,
+            namespace,
+            base: None,
+            name,
+            name_span,
+            args,
+            span,
+        }
+    }
+
+    /// This node standing on `base` instead of the namespace it was written
+    /// with, which the substitution that supplied `base` has made meaningless.
+    #[must_use]
+    pub fn projecting_off(&self, base: Type, args: Vec<Type>) -> Self {
+        Self {
+            base: Some(base),
+            args,
+            ..self.clone()
+        }
+    }
+
+    /// This node with its type arguments replaced, standing where it stood.
+    #[must_use]
+    pub fn with_args(&self, args: Vec<Type>) -> Self {
+        Self {
+            args,
+            ..self.clone()
+        }
+    }
+
     /// The namespace as the spelling names it, `None` once [`Self::base`]
     /// stands there and the spelling names nothing.
     #[must_use]
     pub fn spelled_namespace(&self) -> Option<&str> {
         self.base.is_none().then_some(self.namespace.as_str())
+    }
+
+    /// The namespace as source wrote it, for a reader that only ever sees a
+    /// node straight from the parser.
+    #[must_use]
+    pub fn written_namespace(&self) -> &str {
+        debug_assert!(
+            self.base.is_none(),
+            "a substituted node stands on a type, so its namespace names nothing"
+        );
+        &self.namespace
     }
 }
 
