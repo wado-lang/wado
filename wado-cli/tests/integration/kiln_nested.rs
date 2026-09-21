@@ -117,6 +117,39 @@ fn a_nested_clause_resolves_against_the_generators_own_package() {
     );
 }
 
+/// Every invocation is anchored at the package root, whether the pipeline was
+/// reached for the entry or for a generator's own source. A second anchor would
+/// give one schema two identities, two output trees, and a generated file only
+/// one of the two routes can satisfy.
+#[test]
+fn a_nested_invocation_writes_into_the_one_package_tree() {
+    let project = fixture("kiln_nested");
+    assert!(run_project(project.path()).status.success(), "first build");
+
+    let mut trees = Vec::new();
+    collect_kiln_trees(project.path(), project.path(), &mut trees);
+    assert_eq!(trees, ["build/kiln"], "one anchor, one tree");
+}
+
+fn collect_kiln_trees(root: &Path, dir: &Path, out: &mut Vec<String>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.ends_with("build/kiln") {
+            out.push(
+                path.strip_prefix(root)
+                    .unwrap()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            continue;
+        }
+        collect_kiln_trees(root, &path, out);
+    }
+}
+
 /// `wado check` dry-runs and byte-compares rather than writing, and a nested
 /// invocation owes the same answer: drift is reported, never repaired.
 #[test]
@@ -124,15 +157,16 @@ fn check_reports_a_stale_nested_generated_file_rather_than_rewriting_it() {
     let project = fixture("kiln_nested");
     assert!(run_project(project.path()).status.success(), "first build");
 
-    let generated = std::fs::read_dir(project.path().join("src/build/kiln"))
+    // A nested invocation is anchored at the package root like any other, so
+    // its output shares the one `build/kiln` tree.
+    let generated = std::fs::read_dir(project.path().join("build/kiln"))
         .expect("the nested generator wrote its output")
-        .filter_map(|e| {
+        .find_map(|e| {
             let dir = e.ok()?.path();
             std::fs::read_to_string(dir.join("value.wado"))
                 .ok()
                 .map(|text| (dir, text))
         })
-        .next()
         .expect("value.wado among the nested outputs");
 
     std::fs::write(project.path().join("src/value.txt"), "7\n").unwrap();

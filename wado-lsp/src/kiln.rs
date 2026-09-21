@@ -43,10 +43,15 @@ pub async fn prepare_invocations<H: CompilerHost>(
 
     // The entry's tree comes from the editor buffer; every module it imports is
     // read through the host, under the identity the loader will read it by.
-    let harvest = harvest_module_graph(entry_filename, entry_ast.clone(), async |identity| {
-        let bytes = host.load_source(identity).await.ok()?;
-        String::from_utf8(bytes).ok()
-    })
+    let harvest = harvest_module_graph(
+        entry_filename,
+        entry_filename,
+        entry_ast.clone(),
+        async |identity| {
+            let bytes = host.load_source(identity).await.ok()?;
+            String::from_utf8(bytes).ok()
+        },
+    )
     .await;
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
