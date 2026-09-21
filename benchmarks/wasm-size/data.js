@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789970560555,
+  "lastUpdate": 1789974299458,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57653,6 +57653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9b41a2df2166a3f33579e405313f63756f4cdfbc"
         },
         "date": 1789970559760,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9552903a82d5ec298ce6b9e83e8982be7fa36d8e",
+          "message": "Merge pull request #2104 from wado-lang/claude/secure-random-utilities-oydnep\n\nfeat(stdlib): token generators in core:secure_random, and a UUID 67 bytes smaller",
+          "timestamp": "2026-09-21T14:42:50+09:00",
+          "tree_id": "8cc0add840c7d21aaba80df0da0f65234bdc4416",
+          "url": "https://github.com/wado-lang/wado/commit/9552903a82d5ec298ce6b9e83e8982be7fa36d8e"
+        },
+        "date": 1789974299147,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
