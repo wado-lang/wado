@@ -639,8 +639,7 @@ Each is a grep:
 | `TirTypeParam { … }` literals                                 | 1      | 8   |
 | `is_real_type_param` re-spelled inline                        | 0      | 2   |
 | Name-keyed AST predicates                                     | 0      | 1   |
-| AST-level type-param substitution helpers                     | 0      | 1   |
-| `substitute_type_params_by_map` call sites                    | 0      | 5   |
+| AST-level type-param substitution helpers                     | 0      | 0   |
 | `mem::replace` / `mem::take` on walk state outside `scope.rs` | 0      | 29  |
 | `with_module_perspective_for` call sites                      | 2      | 2   |
 | `with_reference_recording_suppressed` call sites              | 1      | 1   |
@@ -932,21 +931,6 @@ data, walker method that emits) as the template; then dissolve
 `AnnotateState`, with `tysys`, `module_semantics`, `liveness` and
 `world_registry` landing on `Semantics` and the rest becoming driver locals or
 `ElabEnv` fields.
-
-### Type-parameter substitution has five implementations
-
-`TypeTable::substitute_type_params` and `substitute_type_params_with` are the
-one implementation and its empty case. `TypeSystem::substitute_type_params` is
-a positional adapter over them. The other two are not:
-`type_resolution.rs::substitute_type_params` replaces parameters by _name_ over
-an `ast::Type`, and `expr.rs::substitute_type_params_by_map` is a hand-rolled
-recursion over a handful of `ResolvedType` arms, so it is partial by
-construction wherever the arm list is — it descends no tuple, function type or
-projection, and has five call sites.
-
-Finishing it: route both through `TypeTable::substitute_type_params_with` and
-delete them. The AST-level one goes when the base type it substitutes into is
-resolved once at its declaration instead of re-resolved per use.
 
 ### Transient walk state without guards
 

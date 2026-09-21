@@ -1,5 +1,9 @@
 // AST definitions for Wado
 
+use crate::attribute::{
+    ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
+    WASM_MODULE,
+};
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -1152,19 +1156,19 @@ impl Module {
 
     /// Returns true if the module has the `#![no_prelude]` attribute.
     pub fn has_no_prelude(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "no_prelude")
+        self.inner_attributes.iter().any(|a| a.name == NO_PRELUDE)
     }
 
     /// Returns true if the module has the `#![TODO]` attribute.
     /// All tests in a TODO module must fail; passing tests become failures.
     pub fn has_todo(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "TODO")
+        self.inner_attributes.iter().any(|a| a.name == TODO)
     }
 
     /// Returns true if the module has the `#![generated]` attribute.
     /// Indicates machine-generated code (e.g. wado-from-idl, gale).
     pub fn has_generated(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "generated")
+        self.inner_attributes.iter().any(|a| a.name == GENERATED)
     }
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
@@ -1177,9 +1181,7 @@ impl Module {
     /// The attribute itself, for a diagnostic's span.
     #[must_use]
     pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes
-            .iter()
-            .find(|a| a.name == "wasm_module")
+        self.inner_attributes.iter().find(|a| a.name == WASM_MODULE)
     }
 
     /// Returns the canonical bundled-stdlib import path declared by
@@ -1200,7 +1202,7 @@ impl Module {
     /// The attribute itself: a malformed one has no identity, but has a span.
     #[must_use]
     pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes.iter().find(|a| a.name == "stdlib")
+        self.inner_attributes.iter().find(|a| a.name == STDLIB)
     }
 
     /// Returns the value of a scalar `key = "value"` argument on any
@@ -1213,7 +1215,7 @@ impl Module {
     pub fn generated_meta(&self, key: &str) -> Option<&str> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_value(key))
     }
 
@@ -1225,7 +1227,7 @@ impl Module {
     pub fn generated_meta_array(&self, key: &str) -> Option<&[String]> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_array(key))
     }
 
@@ -1360,7 +1362,8 @@ impl Item {
         }
     }
 
-    /// The attributes written before the item.
+    /// The attributes written before the item. Exhaustive on purpose: a new
+    /// item kind that carries attributes must name them here to be read at all.
     pub fn attrs(&self) -> &[Attribute] {
         match self {
             Item::Function(d) => &d.attrs,
@@ -1372,14 +1375,14 @@ impl Item {
             Item::Interface(d) => &d.attrs,
             Item::Resource(d) => &d.attrs,
             Item::TupleTypeDecl(d) => &d.attrs,
+            Item::BuiltinTypeDecl(d) => &d.attrs,
+            Item::Use(d) => &d.attrs,
+            Item::Impl(d) => &d.attrs,
+            Item::World(d) => &d.attrs,
+            Item::Test(d) => &d.attributes,
             Item::Global(d) => &d.attributes,
             Item::Flags(d) => d.attributes.as_deref().unwrap_or_default(),
-            Item::BuiltinTypeDecl(_)
-            | Item::Use(_)
-            | Item::Impl(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Error(_) => &[],
+            Item::Error(_) => &[],
         }
     }
 }
@@ -1419,11 +1422,11 @@ impl TestDecl {
     /// `#[synopsis]` attributes. `module_is_todo` folds in a module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
         TestMetadata {
-            expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
-            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
-            is_synopsis: self.attributes.iter().any(|a| a.name == "synopsis"),
+            expect_trap: self.attributes.iter().any(|a| a.name == EXPECT_TRAP),
+            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == TODO),
+            is_synopsis: self.attributes.iter().any(|a| a.name == SYNOPSIS),
             timeout_ms: self.attributes.iter().find_map(|a| {
-                if a.name == "timeout_ms" {
+                if a.name == TIMEOUT_MS {
                     a.args
                         .first()
                         .and_then(|arg| arg.as_str().parse::<u64>().ok())
@@ -1495,10 +1498,6 @@ impl AttrArg {
     }
 }
 
-/// The attribute a declaration carries in place of a body.
-/// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
-pub const UNAVAILABLE: &str = "unavailable";
-
 /// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
 pub struct Attribute {
@@ -1533,7 +1532,7 @@ pub mod lint {
 pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 /// [`attrs_allow`] for a module's `#![allow(...)]`, which waives the lint for
@@ -1542,7 +1541,7 @@ pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
 pub fn inner_attrs_allow(attrs: &[InnerAttribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 fn args_name(args: &[AttrArg], lint: &str) -> bool {
@@ -1581,7 +1580,7 @@ impl Attribute {
 
     /// The linearity `#[cm(..., linearity=...)]` declares, if any.
     pub fn cm_resource_linearity(&self) -> Option<CmResourceLinearity> {
-        if self.name != "cm" {
+        if self.name != CM {
             return None;
         }
         self.kv_value("linearity")
@@ -2130,6 +2129,9 @@ impl Visibility {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
+    /// Leading `#[…]` attributes, distinct from the `with { … }` clause the
+    /// `attributes` field carries.
+    pub attrs: Vec<Attribute>,
     /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
@@ -3489,25 +3491,38 @@ impl Type {
         }
     }
 
-    /// Whether `name` is spelled anywhere in this type. Exhaustive, as
-    /// [`Self::mentioned_names`] is: a spelling a walk like this skips reads as
-    /// a name the type does not mention, which is never what a caller wants.
+    /// Whether `pred` holds of this type or of any within it, outermost first.
+    /// The one recursion a type predicate takes; a hand-spelled walk forgets arms.
+    #[must_use]
+    pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
+        if pred(self) {
+            return true;
+        }
+        match self {
+            Type::Generic(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::NamespacedGeneric(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::Function(f) => f.params.iter().any(|p| p.any(pred)) || f.return_type.any(pred),
+            Type::Tuple(elems) => elems.iter().any(|e| e.any(pred)),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.any(pred),
+            Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
+    /// Whether `name` is spelled anywhere in this type.
     #[must_use]
     pub fn mentions(&self, name: &str) -> bool {
-        match self {
+        self.any(&mut |ty| match ty {
             Type::Named(n) => n.name == name,
-            Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
-            Type::NamespacedGeneric(g) => {
-                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
-            }
-            Type::Function(f) => {
-                f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
-            }
-            Type::Tuple(elems) => elems.iter().any(|e| e.mentions(name)),
-            Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
+            Type::Generic(g) => g.name == name,
+            Type::NamespacedGeneric(g) => g.namespace == name || g.name == name,
             Type::TypePackSpread(spread, _) => spread == name,
-            Type::Infer(_) | Type::Error(_) => false,
-        }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Infer(_)
+            | Type::Error(_) => false,
+        })
     }
 
     /// Every `..X` this type spells, with where it is written. Exhaustive, as
@@ -3984,6 +3999,7 @@ pub struct AssociatedTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeBinding {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -3994,6 +4010,7 @@ pub struct AssociatedTypeBinding {
 #[derive(Debug, Clone)]
 pub struct AssociatedConst {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub visibility: Visibility,
     pub ty: Type,
@@ -4097,6 +4114,7 @@ pub struct RestClauseDecl {
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The trait being implemented, if any: `impl Trait for Type`

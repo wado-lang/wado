@@ -8,6 +8,7 @@
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
+pub mod attribute;
 pub mod bind;
 pub mod builtin_registry;
 pub mod canonical;
@@ -887,15 +888,10 @@ fn tag_lib_local_decl_fields(
 /// and the unit type are not user types.
 fn lib_sig_uses_named_type(ty: &ast::Type) -> bool {
     use crate::ast::Type;
-    match ty {
-        Type::Named(named) => {
-            named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none()
-        }
-        Type::Generic(g) => g.args.iter().any(lib_sig_uses_named_type),
-        Type::Tuple(elems) => elems.iter().any(lib_sig_uses_named_type),
-        Type::Reference(inner) | Type::MutReference(inner) => lib_sig_uses_named_type(inner),
-        _ => false,
-    }
+    ty.any(&mut |ty| {
+        matches!(ty, Type::Named(named)
+            if named.name != "()" && wado_primitive_name_to_cm(&named.name).is_none())
+    })
 }
 
 /// The types a library declaration carries: a struct's fields, a variant's

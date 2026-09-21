@@ -7,6 +7,7 @@ use crate::ast::{
     StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
     written_params,
 };
+use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
@@ -306,7 +307,7 @@ fn collect_synopsis(module: &Module, source: &str) -> Vec<String> {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Test(t) if t.attributes.iter().any(|a| a.name == "synopsis") => {
+            Item::Test(t) if t.attributes.iter().any(|a| a.name == SYNOPSIS) => {
                 let span = t.body.span;
                 let inner = source.get(span.start + 1..span.end.saturating_sub(1))?;
                 Some(dedent_synopsis(inner))

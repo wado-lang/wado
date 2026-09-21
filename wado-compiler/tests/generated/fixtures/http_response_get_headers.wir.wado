@@ -404,14 +404,13 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 
 global global:http_response_get_headers.wado::$const_obj_2: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
 global global:http_response_get_headers.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:http_response_get_headers.wado::$const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 17 };
-global global:http_response_get_headers.wado::$const_obj_5: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 99, 104, 101, 99, 107), used: 7 };
-global global:http_response_get_headers.wado::$const_obj_7: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
-global global:core:prelude/traits.wado::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 101, 97, 100, 101, 114, 115), used: 7 };
-global global:core:prelude/traits.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
-global global:core:prelude/traits.wado::$const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
-global global:core:prelude/traits.wado::$const_obj_11: ref null Array<u8> = array.new_fixed<u8>(70, 105, 101, 108, 100, 115, 35, 48, 120);
-global global:core:prelude/primitive.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:http_response_get_headers.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 45, 99, 104, 101, 99, 107), used: 7 };
+global global:http_response_get_headers.wado::$const_obj_6: ref null "core:prelude//List<u8>" = struct.new "core:prelude//List<u8>" { repr: array.new_fixed<u8>(121, 101, 115), used: 3 };
+global global:core:prelude/traits.wado::$const_obj_7: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 101, 97, 100, 101, 114, 115), used: 7 };
+global global:core:prelude/traits.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
+global global:core:prelude/traits.wado::$const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(48, 120), used: 2 };
+global global:core:prelude/traits.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(70, 105, 101, 108, 100, 115, 35, 48, 120);
+global global:core:prelude/primitive.wado::$const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "http_response_get_headers.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
@@ -574,9 +573,9 @@ fn "http_response_get_headers.wado/$cm_task_entry__handle"(request) {
     let tx: i32;
     rx = builtin::i32_wrap_i64(local.tee packed("wasi/future-new"()));
     tx = builtin::i32_wrap_i64(packed >> 32_i64);
-    drop("http_response_get_headers.wado/$cm_binding__Fields_append"(local.tee headers("http_response_get_headers.wado/$cm_binding__Fields_new"()), global:http_response_get_headers.wado::$const_obj_5, global:http_response_get_headers.wado::$const_obj_7));
+    drop("http_response_get_headers.wado/$cm_binding__Fields_append"(local.tee headers("http_response_get_headers.wado/$cm_binding__Fields_new"()), global:http_response_get_headers.wado::$const_obj_4, global:http_response_get_headers.wado::$const_obj_6));
     $pattern_temp_1 = "http_response_get_headers.wado/$cm_binding__Response_new"(headers, struct.new "core:prelude/types.wado//Option<core:prelude/types.wado/Stream<u8>>" { 1 }, rx);
-    $v1 = "http_response_get_headers.wado/$cm_binding__Fields_has"(local.tee resp_headers("http_response_get_headers.wado/$cm_binding__Response_get_headers"(local.tee response($pattern_temp_1.0))), global:http_response_get_headers.wado::$const_obj_5);
+    $v1 = "http_response_get_headers.wado/$cm_binding__Fields_has"(local.tee resp_headers("http_response_get_headers.wado/$cm_binding__Response_get_headers"(local.tee response($pattern_temp_1.0))), global:http_response_get_headers.wado::$const_obj_4);
     if @unlikely($v1 == 0) {
         cold_path;
         $local_10 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(216);
@@ -587,7 +586,7 @@ fn "http_response_get_headers.wado/$cm_task_entry__handle"(request) {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_183 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_response_get_headers.wado"), used: 30 }, 30);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_183 + 60, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_11 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_10);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:http_response_get_headers.wado::$const_obj_4, $local_11);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 17 }, $local_11);
         $fuse_at_184 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_10, 67);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_10.repr, $fuse_at_184, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: resp_headers.has(\"x-check\" as FieldName)
@@ -1305,7 +1304,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/Headers^core:prelude/traits.wa
     }
     start_18 = self_5.used;
     self_5.used = new_used_17;
-    builtin::array_copy<u8>(self_5.repr, start_18, global:core:prelude/traits.wado::$const_obj_11, 0, 9);
+    builtin::array_copy<u8>(self_5.repr, start_18, global:core:prelude/traits.wado::$const_obj_10, 0, 9);
     val_i64_27 = builtin::i64_extend_i32_u(self);
     digit_count = $inline_count_digits_u64_base_9: block -> i32 {
         if val_i64_27 == 0_i64 {
@@ -1315,7 +1314,7 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/Headers^core:prelude/traits.wa
     };
     offset = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/traits.wado::$const_obj_10;
+        $mv_arg_3 = global:core:prelude/traits.wado::$const_obj_9;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, 0, $mv_arg_3.repr, $mv_arg_3.used, digit_count);
     };
     "core:prelude/primitive.wado/write_u64_base_digits"(self_35 = f.buf; self_35.repr, offset, val_i64_27, digit_count, 4, 15, 0);
@@ -1327,8 +1326,8 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/Headers^core:prelude/traits.wa
     }
     start_49 = self_36.used;
     self_36.used = new_used_48;
-    builtin::array_copy<u8>(self_36.repr, start_49, global:core:prelude/traits.wado::$const_obj_9, 0, 4);
-    s_52 = global:core:prelude/traits.wado::$const_obj_8;
+    builtin::array_copy<u8>(self_36.repr, start_49, global:core:prelude/traits.wado::$const_obj_8, 0, 4);
+    s_52 = global:core:prelude/traits.wado::$const_obj_7;
     self_53 = f.buf;
     new_used_65 = self_53.used + 7;
     if @unlikely(new_used_65 > builtin::array_len(self_53.repr)) {
@@ -2117,7 +2116,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_12;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_11;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;

@@ -1,0 +1,47 @@
+// Two traits declare `Base` on one type, so the projection in a bound's trait
+// argument is answered by the trait that declares it, not by the name alone.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Other with () {
+    type Base;
+
+    fn other(b: Self::Base) -> i32;
+}
+
+trait Constrained: Make<Self::Base> with () {
+    type Base;
+}
+
+struct Bag {
+    n: i32,
+}
+
+impl Make<String> for Bag {
+    fn make(v: String) -> Bag {
+        return Bag { n: v.len() };
+    }
+}
+
+impl Other for Bag {
+    type Base = i32;
+
+    fn other(b: i32) -> i32 {
+        return b;
+    }
+}
+
+impl Constrained for Bag {
+    type Base = String;
+}
+
+fn build<C: Constrained>(b: C::Base) -> C {
+    return C::make(b);
+}
+
+test "the declaring trait settles which Base the projection means" {
+    assert build::<Bag>("ab").n == 2;
+    assert Bag::other(3) == 3;
+}

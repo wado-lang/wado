@@ -744,8 +744,6 @@ pub enum Receiver {
     /// A universal reference receiver `&T` / `&mut T`; the pointee rides in the
     /// receiver's type-arg list, not here.
     Ref(RefKind),
-    /// An associated-type projection `Base::Assoc` (`S::SeqSerializer`).
-    Projection { base: String, assoc: String },
 }
 
 impl Receiver {
@@ -756,7 +754,6 @@ impl Receiver {
         match self {
             Receiver::Type(n) => MangledName::new(n.to_mangled()),
             Receiver::Ref(k) => MangledName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => MangledName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -786,9 +783,10 @@ impl Receiver {
                 | TypeHead::Shape { .. }
                 | TypeHead::ParamBucket { .. }
                 | TypeHead::Builtin(_)
+                | TypeHead::Projection { .. }
                 | TypeHead::Tuple => None,
             },
-            Receiver::Ref(_) | Receiver::Projection { .. } => None,
+            Receiver::Ref(_) => None,
         }
     }
 
@@ -826,7 +824,6 @@ impl Receiver {
         match self {
             Receiver::Type(n) => n.decl_name(),
             Receiver::Ref(k) => DeclName::new(k.prefix()),
-            Receiver::Projection { base, assoc } => DeclName::new(format!("{base}::{assoc}")),
         }
     }
 
@@ -857,12 +854,6 @@ impl Receiver {
             Receiver::Ref(k) => Some(*k),
             _ => None,
         }
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn is_assoc_projection(&self) -> bool {
-        matches!(self, Receiver::Projection { .. })
     }
 }
 
@@ -932,12 +923,8 @@ impl LocalMethodName {
     pub fn fq_base_struct_name(&self) -> FqTypeName {
         match &self.receiver {
             Receiver::Type(fq) => fq.clone(),
-            // A `&` / `&mut` head and a projection name no declaration, so no
-            // module qualifies them.
+            // A `&` / `&mut` head names no declaration, so no module qualifies it.
             Receiver::Ref(kind) => FqTypeName::builtin(kind.prefix()),
-            Receiver::Projection { base, assoc } => {
-                FqTypeName::builtin(&format!("{base}::{assoc}"))
-            }
         }
     }
 
@@ -979,12 +966,6 @@ impl LocalMethodName {
     #[must_use]
     pub fn ref_receiver(&self) -> Option<RefKind> {
         self.receiver.ref_kind()
-    }
-
-    /// Whether the receiver is an associated-type projection (`S::SeqSerializer`).
-    #[must_use]
-    pub fn receiver_is_assoc_projection(&self) -> bool {
-        self.receiver.is_assoc_projection()
     }
 
     /// Create a new `LocalMethodName` directly from components.
@@ -2600,6 +2581,16 @@ pub enum TypeHead {
     /// `Head<a,b>` like every other instantiated shape, which is what a
     /// `Builtin("[]")` carrying arguments would render as.
     Tuple,
+    /// An associated type of another name (`T::Base`), answering a type once
+    /// the base is concrete.
+    Projection {
+        base: Box<FqTypeName>,
+        assoc: String,
+        /// The trait declaring `assoc`, part of the identity: two traits
+        /// declaring one name on a type bind it to different types
+        /// (WEP-2026-08-12).
+        owning_trait: DeclaredHead,
+    },
 }
 
 impl TypeHead {
@@ -2624,13 +2615,15 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
 
     /// The spelling a mangle embeds — the head alone. What a binder's owner and
-    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds.
+    /// a bucket's module add to it, [`FqTypeName::to_mangled`] adds, as it adds
+    /// a projection's base.
     #[must_use]
     pub fn rendered(&self) -> &str {
         match self {
@@ -2638,7 +2631,8 @@ impl TypeHead {
             Self::Shape { name, .. }
             | Self::ParamBucket { name, .. }
             | Self::Builtin(name)
-            | Self::Binder { name, .. } => name,
+            | Self::Binder { name, .. }
+            | Self::Projection { assoc: name, .. } => name,
             Self::Tuple => TUPLE_TYPE_NAME,
         }
     }
@@ -2653,6 +2647,7 @@ impl TypeHead {
             | Self::ParamBucket { .. }
             | Self::Builtin(_)
             | Self::Binder { .. }
+            | Self::Projection { .. }
             | Self::Tuple => None,
         }
     }
@@ -2663,7 +2658,7 @@ impl TypeHead {
         match self {
             Self::Declared(head) => Some(head.module()),
             Self::Shape { module, .. } | Self::ParamBucket { module, .. } => Some(module),
-            Self::Builtin(_) | Self::Binder { .. } | Self::Tuple => None,
+            Self::Builtin(_) | Self::Binder { .. } | Self::Projection { .. } | Self::Tuple => None,
         }
     }
 }
@@ -2734,6 +2729,17 @@ impl FqTypeName {
         Self::of_head_kind(TypeHead::ParamBucket {
             module: module.clone(),
             name: name.to_string(),
+        })
+    }
+
+    /// The associated type `assoc` of `base`, as `owning_trait` declares it
+    /// (`T::Base`).
+    #[must_use]
+    pub fn projection(base: FqTypeName, assoc: &str, defs: &DefTable, owning_trait: DefId) -> Self {
+        Self::of_head_kind(TypeHead::Projection {
+            base: Box::new(base),
+            assoc: assoc.to_string(),
+            owning_trait: DeclaredHead::new(defs, owning_trait),
         })
     }
 
@@ -2829,8 +2835,35 @@ impl FqTypeName {
     /// name in some template's own parameter space rather than a type.
     #[must_use]
     pub fn mentions_binder(&self) -> bool {
-        matches!(self.head, TypeHead::Binder { .. })
-            || self.args.iter().any(FqTypeName::mentions_binder)
+        let head_mentions = match &self.head {
+            TypeHead::Binder { .. } => true,
+            TypeHead::Projection { base, .. } => base.mentions_binder(),
+            _ => false,
+        };
+        head_mentions || self.args.iter().any(FqTypeName::mentions_binder)
+    }
+
+    /// The base, associated-type name, and declaring trait this projects off,
+    /// `None` for any other shape.
+    #[must_use]
+    pub fn projected(&self) -> Option<(&FqTypeName, &str, DefId)> {
+        match &self.head {
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => Some((base, assoc, owning_trait.def())),
+            _ => None,
+        }
+    }
+
+    /// The binder this name is, `None` for a name that is not one.
+    #[must_use]
+    pub fn binder_name(&self) -> Option<&str> {
+        match &self.head {
+            TypeHead::Binder { name, .. } => Some(name),
+            _ => None,
+        }
     }
 
     /// The mangled spelling embedded in a mangled method name.
@@ -2860,6 +2893,16 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => out.push_str(&format!(
+                "{}::{assoc}#{}/{}",
+                base.to_mangled(),
+                owning_trait.module(),
+                owning_trait.rendered()
+            )),
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -2887,24 +2930,63 @@ impl FqTypeName {
         // A reference's pointee substitutes on its own: `&T` is `T` under a
         // prefix, and `old` naming the pointee must reach it however many
         // prefixes stand in front.
-        if let Some((outer, inner)) = self.reference.split_first() {
-            let pointee = FqTypeName {
-                reference: inner.to_vec(),
-                head: self.head.clone(),
-                args: self.args.clone(),
-            };
-            return pointee.substitute(old, new).with_reference(*outer);
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.substitute(old, new).with_reference(outer);
         }
-        FqTypeName {
-            reference: Vec::new(),
-            head: self.head.clone(),
-            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+        self.descend(&|inner| inner.substitute(old, new))
+    }
+
+    /// This name with `at` applied at every position a type stands in, a
+    /// position it answers for replaced whole.
+    #[must_use]
+    pub fn rewrite(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> FqTypeName {
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.rewrite(at).with_reference(outer);
+        }
+        match at(self) {
+            Some(replacement) => replacement,
+            None => self.descend(&|inner| inner.rewrite(at)),
         }
     }
 
-    ///
-    /// Modules dropped from the head and,
-    /// recursively, from every type argument. Diagnostics only.
+    /// The outermost `&` prefix and what it points at, `None` for a name
+    /// carrying no prefix.
+    fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
+        let (outer, inner) = self.reference.split_first()?;
+        Some((
+            *outer,
+            FqTypeName {
+                reference: inner.to_vec(),
+                head: self.head.clone(),
+                args: self.args.clone(),
+            },
+        ))
+    }
+
+    /// This name rebuilt with `at` applied to each name it holds: its type
+    /// arguments and a projection's base, never the head's own spelling.
+    fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
+        let head = match &self.head {
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => TypeHead::Projection {
+                base: Box::new(at(base)),
+                assoc: assoc.clone(),
+                owning_trait: owning_trait.clone(),
+            },
+            head => head.clone(),
+        };
+        FqTypeName {
+            reference: Vec::new(),
+            head,
+            args: self.args.iter().map(at).collect(),
+        }
+    }
+
+    /// The spelling a diagnostic prints: modules dropped from the head and,
+    /// recursively, from every type argument.
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();
@@ -2916,7 +2998,11 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-        out.push_str(self.head.name());
+        if let TypeHead::Projection { base, assoc, .. } = &self.head {
+            out.push_str(&format!("{}::{assoc}", base.to_display()));
+        } else {
+            out.push_str(self.head.name());
+        }
         if !args.is_empty() {
             out.push('<');
             out.push_str(&args.join(","));

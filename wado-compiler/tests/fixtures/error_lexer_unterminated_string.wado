@@ -1,0 +1,9 @@
+// A string literal nothing closes is a lexer fault. The scan runs to the end of
+// the file, so where it stops says nothing; the message is the whole report.
+
+export fn run() {
+    let x = "unterminated string;
+}
+
+__DATA__
+{"compile_error": "lexer error: unterminated string literal", "compile_error_codes": ["INVALID_SYNTAX"]}

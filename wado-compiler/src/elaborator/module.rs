@@ -307,27 +307,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Collect function signatures for call resolution
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
+        self.register_module_assoc_types(module);
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
-                // The scope is inherited so the caller's context survives, but
-                // an impl block's parameters are its own: whatever the enclosing
-                // one bound must not answer a name inside this block.
-                let mut scope = self.enter_inherited_type_param_scope();
-                scope.annotate_ctx.trait_ctx.type_params.clear();
-                scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-                scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-                scope.register_impl_block_params(impl_block);
+                let mut scope = self.enter_impl_scope(impl_block);
 
-                // Set up associated type bindings for trait implementations
                 if impl_block.trait_type.is_some() {
-                    for binding in &impl_block.associated_types {
-                        let type_id = scope.resolve_type(&binding.ty);
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .assoc_type_bindings
-                            .insert(binding.name.clone(), type_id);
-                    }
                     scope.enforce_impl_assoc_type_bounds(impl_block);
                     scope.enforce_impl_supertraits(impl_block);
                 }

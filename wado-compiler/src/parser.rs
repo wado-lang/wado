@@ -21,6 +21,7 @@ use crate::ast::{
     UseDecl, UseItem, UseItemSimple, VariantCase, VariantDecl, Visibility, WhileStmt,
     WithHandlerExpr, WorldDecl, WorldExport, WorldExportFn, WorldExportInterface, WorldImport,
 };
+use crate::attribute::{CANONICAL, CM, TODO};
 use crate::comment::{Comment, TriviaMap};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::escape::{quoted, unescape_string};
@@ -354,9 +355,7 @@ impl Parser {
     /// Valid even after a parse error: each inner attribute is recorded as it
     /// parses, so the valid ones survive a later malformed attribute or item.
     pub fn has_todo(&self) -> bool {
-        self.parsed_inner_attributes
-            .iter()
-            .any(|a| a.name == "TODO")
+        self.parsed_inner_attributes.iter().any(|a| a.name == TODO)
     }
 
     /// Parse an expression with struct literals restricted. Used in contexts
@@ -1168,7 +1167,7 @@ impl Parser {
         }
 
         match self.peek_kind() {
-            TokenKind::Use => self.parse_use_decl(visibility).map(Item::Use),
+            TokenKind::Use => self.parse_use_decl(visibility, attrs).map(Item::Use),
             TokenKind::Fn => self
                 .parse_function(visibility, has_export, is_async, attrs, false)
                 .map(Item::Function),
@@ -1182,7 +1181,7 @@ impl Parser {
                 .map(Item::Variant),
             TokenKind::Flags => self.parse_flags_decl(visibility, attrs).map(Item::Flags),
             TokenKind::Type => self.parse_type_decl(visibility, attrs),
-            TokenKind::Impl => self.parse_impl_block().map(Item::Impl),
+            TokenKind::Impl => self.parse_impl_block(attrs).map(Item::Impl),
             TokenKind::Trait => self.parse_trait_decl(visibility, attrs).map(Item::Trait),
             TokenKind::Resource => self
                 .parse_resource_decl(visibility, attrs)
@@ -1521,7 +1520,11 @@ impl Parser {
     /// - Simple: `name` or `name as alias`
     /// - Effect functions: `Effect::{func1, func2}` or `Effect::{func1 as alias}`
     /// - Wildcard: `_` (no braces needed)
-    fn parse_use_decl(&mut self, visibility: Visibility) -> ParseResult<UseDecl> {
+    fn parse_use_decl(
+        &mut self,
+        visibility: Visibility,
+        attrs: Vec<Attribute>,
+    ) -> ParseResult<UseDecl> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Use)?;
@@ -1570,6 +1573,7 @@ impl Parser {
 
         Ok(UseDecl {
             id,
+            attrs,
             visibility,
             source,
             source_span,
@@ -5732,7 +5736,7 @@ impl Parser {
         }))
     }
 
-    fn parse_impl_block(&mut self) -> ParseResult<ImplBlock> {
+    fn parse_impl_block(&mut self, block_attrs: Vec<Attribute>) -> ParseResult<ImplBlock> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
@@ -5764,6 +5768,7 @@ impl Parser {
             }
             return Ok(ImplBlock {
                 id,
+                attrs: block_attrs,
                 type_params,
                 trait_type,
                 ty,
@@ -5831,6 +5836,7 @@ impl Parser {
                 let end = self.expect(&TokenKind::Semicolon)?.span;
                 associated_types.push(AssociatedTypeBinding {
                     id: assoc_id,
+                    attrs,
                     name: assoc_name,
                     ty: assoc_ty,
                     span: type_span.merge(&end),
@@ -5871,6 +5877,7 @@ impl Parser {
                     let end = self.expect(&TokenKind::Semicolon)?.span;
                     constants.push(AssociatedConst {
                         id: const_id,
+                        attrs,
                         name: const_name,
                         visibility: member_vis,
                         ty: const_ty,
@@ -5887,6 +5894,7 @@ impl Parser {
 
         Ok(ImplBlock {
             id,
+            attrs: block_attrs,
             type_params,
             trait_type,
             ty,
@@ -6599,7 +6607,7 @@ fn reject_resource_linearity(attrs: &[Attribute]) -> ParseResult<()> {
 /// not parse as a full CM path gives `Name`. Anything else is `Ok(None)`; a
 /// malformed argument count or type returns `Err` for the caller to report.
 fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>, String> {
-    if name == "canonical" {
+    if name == CANONICAL {
         let [namespace, function] = args else {
             return Err(format!(
                 "#[canonical] expects exactly 2 string arguments (namespace, name), got {}",
@@ -6614,7 +6622,7 @@ fn parse_cm_boundary(name: &str, args: &[AttrArg]) -> Result<Option<CmBoundary>,
             name: fname.clone(),
         }));
     }
-    if name == "cm" {
+    if name == CM {
         let [path, fields @ ..] = args else {
             return Err("#[cm] expects a string argument".to_string());
         };

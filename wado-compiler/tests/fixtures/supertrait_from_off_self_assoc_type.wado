@@ -1,0 +1,42 @@
+// The end-to-end use the serde constrained-type design asks for: a guard trait
+// whose supertrait is `From<Self::Base>`, and a generic builder calling through
+// it. `type Base = String` is what makes the call reach `impl From<String>`.
+
+trait Constrained: From<Self::Base> with () {
+    type Base;
+
+    fn check(b: &Self::Base) -> bool;
+}
+
+struct UserName {
+    value: String,
+}
+
+impl From<String> for UserName {
+    fn from(v: String) -> UserName {
+        return UserName { value: v };
+    }
+}
+
+impl Constrained for UserName {
+    type Base = String;
+
+    fn check(b: &String) -> bool {
+        return b.len() > 0;
+    }
+}
+
+fn build<T: Constrained>(b: T::Base) -> Option<T> {
+    if !T::check(&b) {
+        return null;
+    }
+    return Option::Some(T::from(b));
+}
+
+test "a checked build through the supertrait reaches the impl" {
+    assert build::<UserName>("gfx").unwrap().value == "gfx";
+}
+
+test "the guard rejects before building" {
+    assert build::<UserName>("") matches { None };
+}

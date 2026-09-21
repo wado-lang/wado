@@ -1,0 +1,10 @@
+// A newline does not separate statements (no ASI), so the second `let` arrives
+// while the first is still open.
+
+export fn run() {
+    let x = 1
+    let y = 2;
+}
+
+__DATA__
+{"compile_error": ":6:5: parse error: expected `;` or `}`, found Let", "compile_error_codes": ["INVALID_SYNTAX"]}

@@ -18,7 +18,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitution};
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
@@ -108,11 +108,11 @@ fn resolve_resource_extends<H: CompilerHost>(
         };
         let parent = match resolutions.get(site) {
             Resolution::Def(def) => def,
-            Resolution::Binder(_) => {
+            Resolution::Binder(_) | Resolution::Projection(_) => {
                 reject(
                     clause,
                     format!(
-                        "`{}` extends a type parameter; a parent must be a resource declaration",
+                        "`{}` extends a type parameter or an associated type; a parent must be a resource declaration",
                         clause.child_name
                     ),
                 );
@@ -1414,6 +1414,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
             assoc_binding_stack: hashmap::IndexSet::default(),
+            bound_closure_stack: hashmap::IndexSet::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }
@@ -3273,6 +3274,27 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
+    /// Append each declared default to `settled`, resolved against the
+    /// declaring parameters and then substituted with the arguments settled
+    /// before it: `Both<A, B = A>` binds `B` to `A`'s argument, not to whatever
+    /// the use site calls `A`.
+    fn fill_declared_defaults(
+        settled: &mut Vec<TypeId>,
+        slots: &[ParamSlot],
+        defaults: &[Type],
+        type_table: &mut TypeTable,
+        lookup: &TypeLookup<'_>,
+    ) {
+        let mut substitution = positional_substitution(settled);
+        for default in defaults {
+            let resolved =
+                Self::resolve_type_static_with_params(default, type_table, lookup, slots);
+            let filled = type_table.substitute_type_params(resolved, &substitution);
+            substitution.insert(settled.len() as u32, filled);
+            settled.push(filled);
+        }
+    }
+
     /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
     /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
@@ -3364,13 +3386,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 }
                 _ => {
                     let head = lookup.declaration_at(Some(generic.id), &generic.name);
-                    // An argument the site left out takes its declared default,
-                    // the same as in `type_resolution`; otherwise a field type
-                    // here would carry a half-applied instantiation.
-                    let filled =
-                        head.and_then(|def| lookup.type_args_with_defaults(def, &generic.args));
-                    let args = filled.as_deref().unwrap_or(&generic.args);
-                    let type_args: Vec<TypeId> = args
+                    let mut type_args: Vec<TypeId> = generic
+                        .args
                         .iter()
                         .map(|arg| {
                             Self::resolve_type_static_with_params(
@@ -3381,6 +3398,20 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             )
                         })
                         .collect();
+                    // An argument the site left out takes its declared default,
+                    // the same as in `type_resolution`; otherwise a field type
+                    // here would carry a half-applied instantiation.
+                    if let Some((slots, defaults)) =
+                        head.and_then(|def| lookup.type_args_with_defaults(def, generic.args.len()))
+                    {
+                        Self::fill_declared_defaults(
+                            &mut type_args,
+                            &slots,
+                            &defaults,
+                            type_table,
+                            lookup,
+                        );
+                    }
                     // A generic newtype (`type MyArray<T> = List<T>`)
                     // resolves to a `Newtype` over the instantiated base,
                     // mirroring `type_resolution`. Without this it
@@ -3391,13 +3422,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         return TypeTable::UNKNOWN;
                     };
                     if let Some(gn_info) = lookup.generic_newtype_of(head).cloned() {
-                        let concrete_base = gn_info.base_instantiated(args);
-                        let base_type_id = Self::resolve_type_static_with_params(
-                            &concrete_base,
+                        // Resolved against the newtype's own parameters, then
+                        // the site's arguments substituted into it: a base
+                        // spelling `T::Assoc` names no type until `T` is one.
+                        let slots: Vec<ParamSlot> =
+                            gn_info.type_params.iter().map(ParamSlot::from).collect();
+                        let base = Self::resolve_type_static_with_params(
+                            &gn_info.base_type_ast,
                             type_table,
                             lookup,
-                            type_params,
+                            &slots,
                         );
+                        let substitution = positional_substitution(&type_args);
+                        let base_type_id = type_table.substitute_type_params(base, &substitution);
                         // The head is the declaration this reference site
                         // resolved to, not the rendered `MyArray<i32>` a
                         // display spelling shows; the arguments sit beside it.
@@ -3470,10 +3507,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // the `ns$Type` alias via the `Named` / `Generic` arms, which
                 // route through the import tier to the namespace's own module.
                 // Mirrors the dynamic resolver's namespace-alias branch.
-                if lookup
-                    .namespace_imports
-                    .contains_key(namespaced.namespace.as_str())
-                {
+                if lookup.namespace_imports.contains_key(&namespaced.namespace) {
                     let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
                     let aliased = if namespaced.args.is_empty() {
                         Type::Named(NamedType::new(namespaced.id, alias, namespaced.span))

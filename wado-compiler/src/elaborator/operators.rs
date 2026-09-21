@@ -1917,9 +1917,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if !self.tysys.trait_env.declares_assoc_type(&trait_, "Output") {
             return operand_type_id;
         }
-        let param_name =
-            bound_param_name(self.tysys.type_table.borrow().get(operand_type_id)).cloned();
-        let Some(name) = param_name else {
+        let Some(name) = self.tysys.binder_name(operand_type_id) else {
             return operand_type_id;
         };
         self.frame_projection_of_trait(&name, trait_, "Output")

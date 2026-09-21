@@ -95,7 +95,9 @@ export fn run() with Stdout {
 #[test]
 fn scalarized_struct_copy_is_not_remarked() {
     // SROA scalarizes `Point` into i32 locals, so the copy disappears entirely;
-    // no heap copy executes, so there is nothing to remark on.
+    // no heap copy executes, so there is nothing to remark on. `black_box`
+    // keeps the template off the constant-fold path, which a fully-literal one
+    // reaches and the const-region remark reports on its own axis.
     let remarks = remarks_for(
         r#"
 use { println, Stdout } from "core:cli";
@@ -103,7 +105,7 @@ use { println, Stdout } from "core:cli";
 struct Point { x: i32, y: i32 }
 
 export fn run() with Stdout {
-    let a = Point { x: 1, y: 2 };
+    let a = Point { x: builtin::black_box(1), y: 2 };
     let mut b = a;
     b.x = 9;
     println(`${a.x} ${b.x}`);

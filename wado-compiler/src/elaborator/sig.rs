@@ -7,7 +7,7 @@ use crate::ast::{Expr, GenericParam};
 use crate::defs::{DefId, DefTable};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{TypeId, TypeTable};
+use crate::tir::{TypeId, TypeTable, positional_substitution};
 
 use super::sem::decls::FunctionSig;
 use crate::ast;
@@ -538,12 +538,7 @@ impl DeclSig {
         type_table: &RefCell<TypeTable>,
         type_args: &[TypeId],
     ) -> InstantiatedSig {
-        let substitution: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &t)| (i as u32, t))
-            .collect();
-        self.instantiate_slots(type_table, &substitution)
+        self.instantiate_slots(type_table, &positional_substitution(type_args))
     }
 
     /// Fill slots by index rather than by position, for a caller that already
