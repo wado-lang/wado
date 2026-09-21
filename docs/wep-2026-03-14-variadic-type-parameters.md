@@ -200,6 +200,12 @@ does not accept an `[..A]` one. Naming the same packs is not enough.
 distinct packs are never known to be. Both are therefore out of scope for this WEP, and
 the compiler rejects such a `zip` where it is written.
 
+Rows that do share a layout transpose slot by slot, and a pack slot yields a pack again:
+`[[..A], [..A]].zip()` is a tuple of one pack whose element `k` is `[A_k, A_k]`, and
+`[[i32, ..A], [String, ..A]].zip()` puts `[i32, String]` ahead of it. The result is a pack
+rather than the positions it expands to, so a `let` may hold the transpose. Expanding it
+here would fix an arity the pack has not been given yet.
+
 ### 7. Compile-Time Tuple Enumeration with Packs
 
 The existing compile-time tuple enumeration (WEP-2026-02-10) works unchanged when the

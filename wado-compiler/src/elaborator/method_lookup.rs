@@ -756,29 +756,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     if method_name == "zip" {
-                        if elems.is_empty() {
+                        // A tuple of tuples is what `zip` transposes; anything
+                        // else has no such method.
+                        if elems.is_empty()
+                            || elems
+                                .iter()
+                                .any(|e| self.tysys.type_table.borrow().as_tuple(*e).is_none())
+                        {
                             return None;
                         }
-                        let inner_arities: Vec<Vec<TypeId>> = elems
-                            .iter()
-                            .filter_map(|e| self.tysys.type_table.borrow().as_tuple(*e))
-                            .collect();
-                        if inner_arities.len() != elems.len() {
-                            return None;
-                        }
-                        let arity = inner_arities[0].len();
-                        if !inner_arities.iter().all(|a| a.len() == arity) {
-                            return None;
-                        }
-                        let mut transposed = Vec::with_capacity(arity);
-                        for col in 0..arity {
-                            let col_types: Vec<TypeId> =
-                                inner_arities.iter().map(|row| row[col]).collect();
-                            let col_tuple =
-                                self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                            transposed.push(col_tuple);
-                        }
-                        let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
+                        // Rows that share no layout have no transposed shape.
+                        // The method still exists, so `resolve_method_call_with`
+                        // reaches the diagnostic that names the offending row.
+                        let return_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .transposed_tuple(base_type_id)
+                            .unwrap_or(TypeTable::ERROR);
                         return Some(MethodInfo {
                             impl_type_bindings: Vec::new(),
                             method_def: None,

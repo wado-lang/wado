@@ -2391,6 +2391,62 @@ impl TypeTable {
         )
     }
 
+    /// The type of `t.zip()` — the tuple-of-tuples `t` transposed, column by
+    /// column. `None` where a row is no tuple or the rows differ in layout,
+    /// which leaves the shape undetermined.
+    pub fn transposed_tuple(&mut self, id: TypeId) -> Option<TypeId> {
+        let row_ids = self.as_tuple(id)?;
+        let layout = self.tuple_layout(*row_ids.first()?)?;
+        if row_ids
+            .iter()
+            .any(|&row| self.tuple_layout(row).as_ref() != Some(&layout))
+        {
+            return None;
+        }
+        let rows: Vec<Vec<TypeId>> = row_ids
+            .into_iter()
+            .map(|row| self.as_tuple(row))
+            .collect::<Option<_>>()?;
+        let columns: Vec<TypeId> = layout
+            .iter()
+            .enumerate()
+            .map(|(col, slot)| {
+                let cells: Vec<TypeId> = rows.iter().map(|row| row[col]).collect();
+                match slot {
+                    TupleSlot::Fixed => self.make_tuple(cells),
+                    // A pack slot stands for a run, so its column is a pack too:
+                    // element `k` is the cells with the pack bound to its `k`-th
+                    // element, which is what a mapped pack's element spells.
+                    TupleSlot::Pack(_) => {
+                        let packs: Vec<(String, u32, TypeId)> =
+                            cells.iter().map(|&c| self.pack_slot_element(c)).collect();
+                        let elems = packs.iter().map(|p| p.2).collect();
+                        let elem = self.make_tuple(elems);
+                        let (name, index, _) = packs[0].clone();
+                        self.make_mapped_type_pack(name, index, elem)
+                    }
+                }
+            })
+            .collect();
+        Some(self.make_tuple(columns))
+    }
+
+    /// The pack a tuple slot holds: its name and index, and what one of its
+    /// elements contributes where it expands — the mapped element, or the
+    /// scalar placeholder an identity pack stands for.
+    fn pack_slot_element(&mut self, cell: TypeId) -> (String, u32, TypeId) {
+        let ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } = self.get(cell).clone()
+        else {
+            unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
+        };
+        let elem = mapped_elem.unwrap_or_else(|| self.make_type_param(name.clone(), index));
+        (name, index, elem)
+    }
+
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
     /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
     /// together with a `by_ref` flag that is `true` when the tuple was reached

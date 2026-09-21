@@ -1,0 +1,46 @@
+fn shape<..A>(a: [..A], b: [..A]) -> i32 {
+    let t = [a, b].zip();
+    let mut cols = 0;
+    let mut cells = 0;
+    for let p of t {
+        cols += 1;
+        cells += p.len();
+    }
+    return cols * 100 + cells;
+}
+
+fn paired<..A>(a: [..A], b: [..A]) -> String {
+    let t = [a, b].zip();
+    let mut s = "";
+    for let [x, y] of t {
+        s = `${s}(${x},${y})`;
+    }
+    return s;
+}
+
+fn leading<..A>(a: [i32, ..A], b: [i32, ..A]) -> i32 {
+    let t = [a, b].zip();
+    let mut cols = 0;
+    for let p of t {
+        cols += 1;
+    }
+    return cols;
+}
+
+test "a zip over pack rows keeps its transposed shape when bound to a local" {
+    assert shape([1, "x"], [2, "y"]) == 204;
+    assert shape([1], [2]) == 102;
+}
+
+test "a zip over pack rows pairs each column" {
+    assert paired([1, "x"], [2, "y"]) == "(1,2)(x,y)";
+}
+
+test "a zip over rows with a leading fixed element transposes both parts" {
+    assert leading([7, 1, "x"], [8, 2, "y"]) == 3;
+}
+
+__DATA__
+{
+  "test": {}
+}

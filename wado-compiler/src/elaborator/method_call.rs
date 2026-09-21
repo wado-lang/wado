@@ -681,6 +681,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = self.emit(TypeError::ZipOverUnequalPacks { row, span });
                 return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
             }
+            assert_ne!(
+                return_type,
+                TypeTable::ERROR,
+                "rows of one layout transpose, so the lookup has a shape for them"
+            );
             return MethodCallOutcome::no_dispatch(return_type);
         }
 
