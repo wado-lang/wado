@@ -1236,6 +1236,7 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
                 render: &payload.render,
                 label: format!("{} guard, {} payload", shape.keyword, payload.name),
                 finding: format!("{}-{}-{name}", shape.keyword, payload.name),
+                is_finding,
             };
             match injection.run(&sites) {
                 Ok(()) => survivors.push((shape, payload)),
@@ -1285,6 +1286,10 @@ struct Injection<'a> {
     label: String,
     /// Names the file a finding is written to.
     finding: String,
+    /// What this stage calls wrong code — the predicate it hands [`campaign`],
+    /// so the two never drift. What it does not call a finding is reported
+    /// without being reduced or written out.
+    is_finding: fn(&Excluded) -> bool,
 }
 
 impl Injection<'_> {
@@ -1306,11 +1311,7 @@ impl Injection<'_> {
                         detail: self.report(&detail),
                     });
                 }
-                let narrowed = self.narrowed(sites, Misbehaviour::Diverged);
-                Err(Excluded::GuardChangedOutput {
-                    level,
-                    detail: self.report(&format!("{narrowed} — {}", differences.join("; "))),
-                })
+                Err(self.excluded(Misbehaviour::Diverged, sites, &differences.join("; ")))
             }
             // A guard is valid wherever a statement is, except where the
             // surrounding value must stay constant; that is a rejection, not a
@@ -1320,11 +1321,7 @@ impl Injection<'_> {
                 detail: self.report(&detail),
             }),
             Evaluation::Crashed(detail) => {
-                let narrowed = self.narrowed(sites, Misbehaviour::Crashed);
-                Err(Excluded::GuardCrashed {
-                    level,
-                    detail: self.report(&format!("{narrowed} — {detail}")),
-                })
+                Err(self.excluded(Misbehaviour::Crashed, sites, &detail))
             }
         }
     }
@@ -1347,14 +1344,24 @@ impl Injection<'_> {
         }
     }
 
-    /// Reduce to the guards that carry the finding and write it out, so a
-    /// finding is read and re-run as source whichever stage found it.
-    fn narrowed(&self, sites: &[Site], what: Misbehaviour) -> String {
-        let (reduced, detail) = narrow(self.canonical, sites.to_vec(), &|subset| {
+    /// How `what` is reported. A stage that calls it wrong code gets it reduced
+    /// to the guards that carry it and written out as source, to be read and
+    /// re-run; a stage that only disqualifies the shape pays neither.
+    fn excluded(&self, what: Misbehaviour, sites: &[Site], seen: &str) -> Excluded {
+        let level = self.level;
+        let build = |detail: String| match what {
+            Misbehaviour::Diverged => Excluded::GuardChangedOutput { level, detail },
+            Misbehaviour::Crashed => Excluded::GuardCrashed { level, detail },
+        };
+        let reported = build(self.report(seen));
+        if !(self.is_finding)(&reported) {
+            return reported;
+        }
+        let (reduced, narrowed) = narrow(self.canonical, sites.to_vec(), &|subset| {
             self.reproduces(subset, what)
         });
         write_finding(&self.finding, &self.mutant(&reduced));
-        detail
+        build(self.report(&format!("{narrowed} — {seen}")))
     }
 }
 
@@ -1416,6 +1423,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
                 render: &|_| String::new(),
                 label: format!("{} guard", shape.keyword),
                 finding: format!("{}-{name}", shape.keyword),
+                is_finding: is_calibration_finding,
             };
             match injection.run(&sites) {
                 Ok(()) => survivors.push(shape),
@@ -2419,4 +2427,42 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
     assert_eq!(reduced[0].offset, 28);
     assert!(detail.contains("1 of 3 sites"), "{detail}");
     assert!(detail.contains("3:5 let"), "{detail}");
+}
+
+/// A stage reduces and writes out only what it calls wrong code. Calibration
+/// disqualifies a shape whose empty guard moves the output, so reducing one
+/// would cost a delta-debug per shape and leave a file that reads as a bug.
+#[test]
+fn a_stage_reduces_only_what_it_calls_a_finding() {
+    let baseline = Outcome {
+        stdout: String::new(),
+        trapped: false,
+        exit_code: Some(0),
+        test_failed: false,
+        detail: String::new(),
+    };
+    let spec = Spec {
+        test_world: false,
+        allocator: "bump".to_string(),
+    };
+    let injection = Injection {
+        path: Path::new("never-read.wado"),
+        canonical: "fn f() {}\n",
+        spec: &spec,
+        level: OptLevel::O2,
+        baseline: &baseline,
+        shape: &SHAPES[0],
+        render: &|_| String::new(),
+        label: "if guard".to_string(),
+        finding: "never-written".to_string(),
+        is_finding: is_calibration_finding,
+    };
+
+    let excluded = injection.excluded(Misbehaviour::Diverged, &[], "stdout differs");
+
+    let Excluded::GuardChangedOutput { detail, .. } = excluded else {
+        panic!("a moved output excludes the shape: {excluded:?}");
+    };
+    assert_eq!(detail, "if guard: stdout differs");
+    assert!(!out_dir().join("findings/never-written").exists());
 }
