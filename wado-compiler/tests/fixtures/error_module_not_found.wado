@@ -1,0 +1,10 @@
+// An import naming a module nothing resolves to.
+
+use { foo } from "unknown:module";
+
+export fn run() {
+    foo();
+}
+
+__DATA__
+{"compile_error": "unknown module namespace 'unknown'; expected 'core', 'wasi' or 'web'", "compile_error_codes": ["MODULE_NOT_FOUND"]}

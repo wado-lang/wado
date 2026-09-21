@@ -1,0 +1,14 @@
+// A `&mut` destructure of a scalar field is refused: Wasm GC has no interior
+// pointer to one, so the binding would reference a copy and `*x = 100` would
+// write where nothing can read it back.
+
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let mut p = Point { x: 10, y: 20 };
+    let { x, y } = &mut p;
+    *x = 100;
+}
+
+__DATA__
+{"compile_error": ":9:11: analysis error: cannot assign: cannot bind 'x' as a mutable reference to a primitive: destructure by value, or take the reference to the whole value", "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]}

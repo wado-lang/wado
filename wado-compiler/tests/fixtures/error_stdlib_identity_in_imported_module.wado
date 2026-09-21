@@ -1,0 +1,11 @@
+// `#![stdlib]` is checked wherever it is written, so an imported module's
+// malformed one is rejected against that module, not the entry.
+
+use { helper } from "./sub/stdlib_identity_dep.wado";
+
+test "the import never gets this far" {
+    assert helper() == 1;
+}
+
+__DATA__
+{"test": {}, "compile_error": "stdlib_identity_dep.wado:1:1: analysis error: #![stdlib] takes the name of a bundled stdlib module, as `#![stdlib(\"core:cli\")]`", "compile_error_codes": ["MODULE_NOT_FOUND"]}

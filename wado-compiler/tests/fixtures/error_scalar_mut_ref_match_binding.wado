@@ -1,0 +1,16 @@
+// The same rule on the `match` path, which reaches the wrap by another route.
+
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let mut p = Point { x: 10, y: 20 };
+    match &mut p {
+        Point { x, y } => {
+            *x = 100;
+            *y = 200;
+        }
+    }
+}
+
+__DATA__
+{"compile_error": ":8:17: analysis error: cannot assign: cannot bind 'x' as a mutable reference to a primitive: destructure by value, or take the reference to the whole value", "compile_error_codes": ["IMMUTABLE_ASSIGNMENT"]}

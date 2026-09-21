@@ -178,6 +178,12 @@ struct TestSpec {
     #[serde(default)]
     compile_errors_not_contains: Vec<String>,
 
+    /// `Code`s that must each be raised, spelled as the compiler prints them
+    /// (`MODULE_NOT_FOUND`). A message is wording and may be reworded; the code
+    /// is the fault's identity, so a rejection states which one it is.
+    #[serde(default)]
+    compile_error_codes: Vec<String>,
+
     /// Preopened directories, each `[template, guest_path]`. Every preopen is a
     /// fresh temp dir (see `prepare_preopened_dirs`). `template` seeds it:
     /// `""` for empty scratch, or a workspace-relative path to copy in.
@@ -842,30 +848,44 @@ fn run_normal_test(
     // Assert compile-time warnings (e.g. DeadFunction / DeadGlobal). These are
     // emitted during elaboration, so they are identical across optimization
     // levels; match on the message text only.
+    let warning_text = || diagnostic_text(&warnings);
+    let error_text = || diagnostic_text(&errors);
     for expected in &spec.warnings_contains {
         assert!(
-            warnings.iter().any(|w| w.contains(expected)),
-            "[{test_id}] expected a warning containing {expected:?}\n  warnings: {warnings:?}"
+            warnings.iter().any(|w| w.message.contains(expected)),
+            "[{test_id}] expected a warning containing {expected:?}\n  warnings: {}",
+            warning_text()
         );
     }
     for unexpected in &spec.warnings_not_contains {
         assert!(
-            !warnings.iter().any(|w| w.contains(unexpected)),
-            "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {warnings:?}"
+            !warnings.iter().any(|w| w.message.contains(unexpected)),
+            "[{test_id}] warning must not contain {unexpected:?}\n  warnings: {}",
+            warning_text()
         );
     }
 
     for expected in &spec.compile_errors_contains {
         assert!(
-            errors.iter().any(|e| e.contains(expected)),
-            "[{test_id}] expected an error containing {expected:?}\n  errors: {errors:?}"
+            errors.iter().any(|e| e.message.contains(expected)),
+            "[{test_id}] expected an error containing {expected:?}\n  errors: {}",
+            error_text()
         );
     }
 
     for unexpected in &spec.compile_errors_not_contains {
         assert!(
-            !errors.iter().any(|e| e.contains(unexpected)),
-            "[{test_id}] error must not contain {unexpected:?}\n  errors: {errors:?}"
+            !errors.iter().any(|e| e.message.contains(unexpected)),
+            "[{test_id}] error must not contain {unexpected:?}\n  errors: {}",
+            error_text()
+        );
+    }
+
+    for expected in &spec.compile_error_codes {
+        assert!(
+            errors.iter().any(|e| &e.code == expected),
+            "[{test_id}] expected an error raised as {expected}\n  errors: {}",
+            error_text()
         );
     }
 
@@ -1110,6 +1130,14 @@ fn fixture_test_o3(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error::Error>> {
     run_fixture_test_with_opt(path, content, OptLevel::Os);
     Ok(())
+}
+
+/// The diagnostics a failed assertion prints, each as `CODE: message`.
+fn diagnostic_text(diagnostics: &[common::CapturedDiagnostic]) -> String {
+    diagnostics
+        .iter()
+        .map(|d| format!("\n    {}: {}", d.code, d.message))
+        .collect()
 }
 
 /// Check each `wat_lines` entry against the emitted component's WAT.
