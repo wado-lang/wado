@@ -3752,6 +3752,7 @@ impl CmInterfaceRegistry {
                     .map(|arg| self.resolve_type_impl(arg, preserve_local, keep_handles))
                     .collect();
                 Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    base: None,
                     id: ng.id,
                     namespace: ng.namespace.clone(),
                     name: ng.name.clone(),

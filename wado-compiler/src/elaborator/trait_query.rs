@@ -16,7 +16,7 @@ use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::{BinderInScope, Scope, TraitCheckFrame};
 use super::sig::Param;
-use super::trait_env::{InheritedBound, bound_at_impl_assoc_types};
+use super::trait_env::InheritedBound;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
@@ -495,20 +495,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         };
         let written = written_arg_nodes_at_target(trait_type, &impl_block.ty);
-        let supertraits: Vec<(String, Option<FqTraitName>)> = self
+        let bounds: Vec<ast::TraitBound> = self
             .tysys
             .trait_env
             .supertrait_closure_at(&trait_decl, &written)
             .iter()
-            .map(|b| {
-                let bound = bound_at_impl_assoc_types(&b.bound, &impl_block.associated_types);
-                self.tysys.bound_named_written(&bound)
-            })
+            .map(|b| b.bound.clone())
             .collect();
-        if supertraits.is_empty() {
+        if bounds.is_empty() {
             return;
         }
         let self_type = self.resolve_type(&impl_block.ty);
+        let supertraits: Vec<(String, Option<FqTraitName>)> = bounds
+            .iter()
+            .map(|bound| self.supertrait_named_at_self(bound))
+            .collect();
         for (supertrait, supertrait_trait) in supertraits {
             let Some(supertrait_trait) = supertrait_trait else {
                 continue;
@@ -536,6 +537,43 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span: impl_block.span,
             });
         }
+    }
+
+    /// A supertrait clause named at the impl under check, with each projecting
+    /// argument resolved rather than spelled: `Make<Self::Base>` owed by
+    /// `UserName` is `Make<String>`, whichever of that type's impls writes the
+    /// binding, and `Make<X::Item>` at `Constrained<Feed>` is what `Feed` binds.
+    ///
+    /// Reading the block under check instead would answer only where that block
+    /// writes the binding itself, so an inherited clause reached through
+    /// another trait would go unanswered.
+    fn supertrait_named_at_self(
+        &mut self,
+        bound: &ast::TraitBound,
+    ) -> (String, Option<FqTraitName>) {
+        let (name, fq) = self.tysys.bound_named_written(bound);
+        let fq = fq.map(|fq| self.trait_named_with_resolved_args(fq, bound, names_no_type));
+        (name, fq)
+    }
+
+    /// `fq` with each argument `pick` selects resolved in this frame rather
+    /// than read as the spelling it was written with.
+    pub(super) fn trait_named_with_resolved_args(
+        &mut self,
+        fq: FqTraitName,
+        bound: &ast::TraitBound,
+        pick: impl Fn(&ast::Type) -> bool,
+    ) -> FqTraitName {
+        let resolved: Vec<Option<TypeId>> = bound
+            .type_args
+            .iter()
+            .map(|ty| pick(ty).then(|| self.resolve_type(ty)))
+            .collect();
+        if resolved.iter().all(Option::is_none) {
+            return fq;
+        }
+        let table = self.tysys.type_table.borrow();
+        trait_named_by_position(fq, &table, |i| resolved.get(i).copied().flatten())
     }
 
     /// The declared type parameters of an already-identified trait: the
@@ -2592,10 +2630,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 {
                     continue;
                 }
+                let inherited = self.tysys.bound_written(&bound).map(|trait_| {
+                    self.trait_named_with_resolved_args(
+                        trait_,
+                        &bound,
+                        ast::Type::projects_off_a_type,
+                    )
+                });
                 for &subject in &subjects {
-                    if let Some(trait_) = self
-                        .tysys
-                        .bound_written(&bound)
+                    if let Some(trait_) = inherited
+                        .clone()
                         .and_then(|trait_| asked_at(trait_, &at_call))
                     {
                         self.check_and_register_bound(subject, &trait_);
@@ -2679,31 +2723,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// A bound's argument written against `Self` names no type by its spelling,
-    /// so it is named from what the frame resolved it to: `Make<Self::Base>`
-    /// read at `T: Constrained` reaches `Make<T::Base>`.
+    /// A bound's argument that projects names no type by its spelling, so it is
+    /// named from what the frame resolved it to: `Make<Self::Base>` read at
+    /// `T: Constrained` reaches `Make<T::Base>`, and `Make<X::Item>` read at
+    /// `T: Constrained<Feed>` reaches what `Feed` binds `Item` to.
     fn trait_named_off_self(
         &self,
         fq: FqTraitName,
         bound: &ast::TraitBound,
         slots: &IndexMap<u32, TypeId>,
     ) -> FqTraitName {
-        if !bound.type_args.iter().any(|ty| ty.mentions("Self")) {
+        if !bound.type_args.iter().any(names_no_type) {
             return fq;
         }
         let table = self.tysys.type_table.borrow();
-        let args: Vec<FqTypeName> = fq
-            .args()
-            .iter()
-            .enumerate()
-            .map(|(i, written)| match bound.type_args.get(i) {
-                Some(ty) if ty.mentions("Self") => slots
-                    .get(&(1 + i as u32))
-                    .map_or_else(|| written.clone(), |&slot| table.fq_type_name(slot)),
-                _ => written.clone(),
-            })
-            .collect();
-        fq.with_args(args)
+        trait_named_by_position(fq, &table, |i| {
+            bound
+                .type_args
+                .get(i)
+                .filter(|ty| names_no_type(ty))
+                .and_then(|_| slots.get(&(1 + i as u32)).copied())
+        })
     }
 
     /// What a bound binds `decl`'s slots to: slot 0 is `Self`, and the trait's
@@ -3302,6 +3342,31 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ref_impl_target: None,
         })
     }
+}
+
+/// Whether a bound's argument names no type by its spelling: written against
+/// `Self`, or left projecting off a type by a substitution.
+fn names_no_type(ty: &ast::Type) -> bool {
+    ty.mentions("Self") || ty.projects_off_a_type()
+}
+
+/// `fq` with the argument at each position `named` answers for replaced by the
+/// type it names, the rest left as written.
+fn trait_named_by_position(
+    fq: FqTraitName,
+    table: &TypeTable,
+    named: impl Fn(usize) -> Option<TypeId>,
+) -> FqTraitName {
+    let args: Vec<FqTypeName> = fq
+        .args()
+        .iter()
+        .enumerate()
+        .map(|(i, written)| match named(i) {
+            Some(id) => table.fq_type_name(id),
+            None => written.clone(),
+        })
+        .collect();
+    fq.with_args(args)
 }
 
 /// The bound as the source writes it, so a failure over an argument names the

@@ -1,9 +1,6 @@
 // A supertrait clause writes its arguments in the declaring trait's parameter
-// space, so a reader re-spells them at what it wrote: `Collect<Item = X::Item>`
-// read at `Sink<Feed>` names `Feed::Item`, never the `X` no reader can resolve.
-//
-// `X::Item` must never reach a diagnostic. That the projection then goes
-// unanswered is the known gap, and the error pinning it goes once it closes.
+// space, so a substitution carries the reader's argument in: `Collect<Item =
+// X::Item>` read at `Sink<Feed>` binds `Item` to what `Feed` binds it to.
 
 trait Src with () {
     type Item;
@@ -41,13 +38,6 @@ fn take<T: Sink<Feed>>(t: &T) -> i32 {
     return t.one();
 }
 
-test "the clause is re-spelled at the reading site" {
+test "a constraint projecting off a trait parameter reaches the impl" {
     assert take(&Bag { n: 7 }) == 7;
-}
-
-__DATA__
-{
-  "test": {},
-  "compile_error": "unknown type 'Feed::Item'",
-  "compile_errors_not_contains": ["X::Item"]
 }

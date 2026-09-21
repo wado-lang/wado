@@ -3460,7 +3460,10 @@ impl Type {
                 }
             }
             Type::NamespacedGeneric(g) => {
-                out.push(g.namespace.clone());
+                match &g.base {
+                    Some(base) => base.mentioned_names(out),
+                    None => out.push(g.namespace.clone()),
+                }
                 out.push(g.name.clone());
                 for a in &g.args {
                     a.mentioned_names(out);
@@ -3492,7 +3495,11 @@ impl Type {
             Type::Named(n) => n.name == name,
             Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
             Type::NamespacedGeneric(g) => {
-                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
+                let base_mentions = match &g.base {
+                    Some(base) => base.mentions(name),
+                    None => g.namespace == name,
+                };
+                base_mentions || g.name == name || g.args.iter().any(|a| a.mentions(name))
             }
             Type::Function(f) => {
                 f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
@@ -3501,6 +3508,26 @@ impl Type {
             Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
             Type::TypePackSpread(spread, _) => spread == name,
             Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
+    /// Whether a substitution left a projection off a type anywhere in here.
+    /// No spelling denotes such a type, so an argument carrying one has to be
+    /// resolved rather than read as written.
+    #[must_use]
+    pub fn projects_off_a_type(&self) -> bool {
+        match self {
+            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
+            Type::Generic(g) => g.args.iter().any(Type::projects_off_a_type),
+            Type::NamespacedGeneric(g) => {
+                g.base.is_some() || g.args.iter().any(Type::projects_off_a_type)
+            }
+            Type::Function(f) => {
+                f.params.iter().any(Type::projects_off_a_type)
+                    || f.return_type.projects_off_a_type()
+            }
+            Type::Tuple(elems) => elems.iter().any(Type::projects_off_a_type),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.projects_off_a_type(),
         }
     }
 
@@ -3596,6 +3623,10 @@ pub struct NamespacedGenericType {
     pub id: AstId,
     /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`)
     pub namespace: String,
+    /// The type a substitution put where [`Self::namespace`] was written. The
+    /// parser never sets it: replacing the parameter in `T::Assoc` leaves a
+    /// projection off a type, which no spelling denotes.
+    pub base: Option<Type>,
     /// Type name (e.g., "Value")
     pub name: String,
     /// Span of just the type name token. `span` covers the whole `ns::Value<T>`,

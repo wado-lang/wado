@@ -998,6 +998,7 @@ impl Parser {
             let case_name = self.consume_ident()?;
             let qualifier = match first_type {
                 Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    base: None,
                     id: self.alloc_ast_id(),
                     namespace: t.name.clone(),
                     name: second_name,
@@ -4107,6 +4108,7 @@ impl Parser {
                 span: head.span,
             }),
             Some((namespace, _)) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                base: None,
                 id: self.alloc_ast_id(),
                 namespace: namespace.clone(),
                 name: head.name.clone(),
@@ -5075,6 +5077,7 @@ impl Parser {
                 let end_span = self.tokens[self.pos - 1].span;
 
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    base: None,
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,
@@ -5086,6 +5089,7 @@ impl Parser {
                 // Namespaced type without generics: namespace::type
                 let end_span = self.tokens[self.pos - 1].span;
                 return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    base: None,
                     id: self.alloc_ast_id(),
                     namespace: name,
                     name: type_name,

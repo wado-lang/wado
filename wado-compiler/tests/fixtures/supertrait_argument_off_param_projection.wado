@@ -1,0 +1,39 @@
+// A supertrait clause may project off the subtrait's own parameter:
+// `Constrained<Feed>` owes `Make` at `Feed::Item`, which `impl Src for Feed`
+// binds to `String`.
+
+trait Src with () {
+    type Item;
+}
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained<X: Src>: Make<X::Item> with () {}
+
+struct Feed {}
+
+impl Src for Feed {
+    type Item = String;
+}
+
+struct Bag {
+    n: i32,
+}
+
+impl Make<String> for Bag {
+    fn make(v: String) -> Bag {
+        return Bag { n: v.len() };
+    }
+}
+
+impl Constrained<Feed> for Bag {}
+
+fn build<T: Constrained<Feed>>(v: String) -> T {
+    return T::make(v);
+}
+
+test "a clause projecting off a trait parameter reaches the impl" {
+    assert build::<Bag>("ab").n == 2;
+}

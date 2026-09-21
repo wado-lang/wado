@@ -79,6 +79,11 @@ bound carries the projection with it, so `T: Constrained` requires
 `T: Make<T::Base>`, and a call through it lands on the impl the projection
 names ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
 
+A question about a type is answered by the type. The obligation an impl owes is
+therefore read from what every impl on the target binds, not from what the block
+under check happens to write, so a clause reached through another trait is
+answered the same as one the block wrote itself.
+
 The closure is stored in the declaring trait's parameter space, which is not the
 reading site's. The index therefore hands out nothing raw: a reader names the
 arguments the site writes and receives the closure already re-spelled. A reader
@@ -86,10 +91,11 @@ that could take a clause for one of its own bounds is the defect this forecloses
 — it fails by resolving a parameter name the site never wrote, which nothing
 downstream can detect.
 
-A parameter is re-spelled wherever it stands, the base of a projection
-included: `trait Sink<X: Src>: Collect<Item = X::Item>` read at `Sink<Feed>`
-says `Feed::Item`. Only a bare name can stand in that position, so a site
-binding the parameter to anything else leaves it as written.
+A parameter is replaced wherever it stands, the base of a projection included:
+`trait Sink<X: Src>: Collect<Item = X::Item>` read at `Sink<Feed>` binds `Item`
+to what `Feed` binds it to. No spelling denotes a projection off a type, so the
+re-spelled clause carries the base as a type and every reader of it resolves
+that base rather than reading a name.
 
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`
@@ -131,17 +137,6 @@ leaves open.
 
 An associated-type constraint in supertrait position is checked but not used for
 inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved.
-
-The obligation is checked by comparing written spellings, before any impl's
-associated types are known. A clause argument that projects therefore holds only
-where the impl under check writes the binding itself: `impl Constrained for
-UserName` answers `Make<Self::Base>` from its own `type Base = String`, while
-`impl Extra for UserName` over `trait Extra: Constrained` writes no `Base` and is
-rejected. A clause projecting off the subtrait's own parameter
-(`trait Constrained<X: Src>: Make<X::Item>`) is rejected for the same reason:
-the reading site names `Feed::Item`, and nothing answers it there. The bound
-path does answer both, so a call through `T: Extra` would reach the impl that
-the obligation check refuses to admit.
 
 The trait solver states a clause's arguments only where it can name them as
 types. A clause whose argument is the subtrait's own parameter states none

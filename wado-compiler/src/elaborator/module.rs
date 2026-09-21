@@ -307,6 +307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Collect function signatures for call resolution
     pub(super) fn collect_function_signatures(&mut self, module: &Module) {
+        self.register_module_assoc_types(module);
         for item in &module.items {
             if let Item::Impl(impl_block) = item {
                 // The scope is inherited so the caller's context survives, but
@@ -318,7 +319,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
                 scope.register_impl_block_params(impl_block);
 
-                // Set up associated type bindings for trait implementations
                 if impl_block.trait_type.is_some() {
                     for binding in &impl_block.associated_types {
                         let type_id = scope.resolve_type(&binding.ty);

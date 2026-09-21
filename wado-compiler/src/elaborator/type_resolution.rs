@@ -11,7 +11,7 @@ use super::scope::BinderInScope;
 use super::types::TypeError;
 use super::util::bound_param_name;
 use crate::ast;
-use crate::ast::{FunctionType, NamespacedGenericType, TraitBound};
+use crate::ast::{FunctionType, NamedType, NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
 use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
@@ -38,7 +38,7 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
         }),
         Type::NamespacedGeneric(namespaced) => {
             Type::NamespacedGeneric(Box::new(NamespacedGenericType {
-                namespace: substituted_namespace(namespaced, replace),
+                base: substituted_base(namespaced, replace),
                 args: namespaced.args.iter().map(at).collect(),
                 ..(**namespaced).clone()
             }))
@@ -55,25 +55,22 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
     }
 }
 
-/// The namespace `replace` gives `namespaced`, which is a type position too:
-/// `X::Item` under `X = Feed` is `Feed::Item`. Asked with a transient node, so
-/// a `replace` keyed on identity rather than spelling declines it.
-///
-/// Only a bare name can stand there, so a replacement that is anything else
-/// leaves the namespace as written and is reported where it resolves.
-fn substituted_namespace(
+/// The base a projection stands on once `replace` has answered for it. The
+/// namespace is a spelling rather than a type node, so it is offered to
+/// `replace` as the name it is, and the answer becomes the base.
+fn substituted_base(
     namespaced: &NamespacedGenericType,
     replace: &dyn Fn(&Type) -> Option<Type>,
-) -> String {
-    let asked = Type::Named(ast::NamedType::new(
+) -> Option<Type> {
+    if let Some(base) = &namespaced.base {
+        return Some(substitute_written_type(base, replace));
+    }
+    let written = Type::Named(NamedType::new(
         AstId::fresh(),
         namespaced.namespace.clone(),
         namespaced.span,
     ));
-    match replace(&asked) {
-        Some(Type::Named(named)) => named.name,
-        _ => namespaced.namespace.clone(),
-    }
+    replace(&written)
 }
 
 /// Substitute named type parameters in an AST type.
@@ -351,6 +348,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
         }
 
+        // A substitution replaced the base, so the projection stands on the
+        // type it put there rather than on a name any frame binds.
+        if let Some(base) = &namespaced.base {
+            let base_type_id = self.resolve_type(base);
+            let base_name =
+                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
+            return self.project_off(base_type_id, base_name, namespaced);
+        }
+
         // Handle T::AssociatedType where T is a type parameter in scope
         if let Some(&BinderInScope {
             type_id: param_type_id,
@@ -361,58 +367,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .get(&namespaced.namespace)
         {
-            // If the param is bound to a concrete type (not a TypeParam), look up the assoc
-            // type from the TypeTable directly. This handles cases like blanket impl resolution
-            // where we temporarily bind e.g. I = StrUtf8ByteIter (concrete struct), and
-            // I::Item should resolve to u8 via (StrUtf8ByteIter, "Item") → u8.
-            let param_is_concrete = !self
-                .tysys
-                .type_table
-                .borrow()
-                .contains_type_param(param_type_id);
-            if param_is_concrete {
-                // First try pre-registered concrete associated type resolution.
-                if let Some(resolved) = self
-                    .tysys
-                    .type_table
-                    .borrow()
-                    .resolve_assoc_type(param_type_id, &namespaced.name)
-                {
-                    return resolved;
-                }
-                // Fallback: resolve via generic associated type definitions.
-                // This handles GenericInstance types like ListIter<i32> whose Iterator impl
-                // is generic — resolve_assoc_type won't find a pre-registered entry, but
-                // resolve_generic_assoc_type_mono can derive i32 from ("ListIter", "Item") →
-                // TypeParam(0), and substitutes the instance's args into a reference / nested
-                // associated type (`&T`, `I::Item`) so it becomes concrete here at type-check.
-                if let Some(resolved) = self
-                    .tysys
-                    .type_table
-                    .borrow_mut()
-                    .resolve_generic_assoc_type_mono(param_type_id, &namespaced.name)
-                {
-                    return resolved;
-                }
-            }
-
             let base_name = namespaced.namespace.clone();
-            if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
-                return TypeTable::ERROR;
-            }
-            // What the frame's bounds bind it to, where they say: `I:
-            // IntoIterator<Item = u8>` answers `I::Item` directly.
-            if let Some(direct_type) =
-                self.frame_projection(param_type_id, &base_name, &namespaced.name)
-            {
-                return direct_type;
-            }
-            if let Some(projection) =
-                self.make_frame_projection(param_type_id, &base_name, &namespaced.name)
-            {
-                return projection;
-            }
-            return self.unknown_namespaced_type(&base_name, &namespaced.name, namespaced.span);
+            return self.project_off(param_type_id, Some(base_name), namespaced);
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
@@ -433,6 +389,62 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span)
         }
+    }
+
+    /// The associated type `namespaced` names, projected off `base_type_id`.
+    /// `base_name` is the name the frame files that base under, and a base the
+    /// frame binds under no name answers only from what the type itself knows.
+    fn project_off(
+        &mut self,
+        base_type_id: TypeId,
+        base_name: Option<String>,
+        namespaced: &NamespacedGenericType,
+    ) -> TypeId {
+        // A base bound to a concrete type is answered by the type: what the
+        // impls registered, then what a generic impl's definition derives for
+        // this instance (`ListIter<i32>` binding `Item` to its own argument).
+        if !self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_param(base_type_id)
+        {
+            if let Some(resolved) = self
+                .tysys
+                .type_table
+                .borrow()
+                .resolve_assoc_type(base_type_id, &namespaced.name)
+            {
+                return resolved;
+            }
+            if let Some(resolved) = self
+                .tysys
+                .type_table
+                .borrow_mut()
+                .resolve_generic_assoc_type_mono(base_type_id, &namespaced.name)
+            {
+                return resolved;
+            }
+        }
+        let Some(base_name) = base_name else {
+            let spelled = self.tysys.type_id_to_string(base_type_id);
+            return self.unknown_namespaced_type(&spelled, &namespaced.name, namespaced.span);
+        };
+        if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
+            return TypeTable::ERROR;
+        }
+        // What the frame's bounds bind it to, where they say: `I:
+        // IntoIterator<Item = u8>` answers `I::Item` directly.
+        if let Some(direct_type) = self.frame_projection(base_type_id, &base_name, &namespaced.name)
+        {
+            return direct_type;
+        }
+        if let Some(projection) =
+            self.make_frame_projection(base_type_id, &base_name, &namespaced.name)
+        {
+            return projection;
+        }
+        self.unknown_namespaced_type(&base_name, &namespaced.name, namespaced.span)
     }
 
     /// What a type position's name denotes where it denotes no type: `an

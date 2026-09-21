@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
-use crate::elaborator::type_resolution::{substitute_type_params, substitute_written_type};
+use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -2246,25 +2246,6 @@ fn bound_with_types(
             .collect(),
         ..bound.clone()
     }
-}
-
-/// A supertrait bound re-spelled at an impl's associated types: an impl writing
-/// `type Base = String` owes `Make<String>` for `Make<Self::Base>`.
-pub(super) fn bound_at_impl_assoc_types(
-    bound: &ast::TraitBound,
-    bindings: &[ast::AssociatedTypeBinding],
-) -> ast::TraitBound {
-    bound_with_types(bound, |ty| {
-        substitute_written_type(ty, &|ty| match ty {
-            ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" && ns.args.is_empty() => {
-                bindings
-                    .iter()
-                    .find(|binding| binding.name == ns.name)
-                    .map(|binding| binding.ty.clone())
-            }
-            _ => None,
-        })
-    })
 }
 
 /// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying
