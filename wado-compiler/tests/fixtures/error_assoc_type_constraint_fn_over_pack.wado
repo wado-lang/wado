@@ -1,6 +1,8 @@
 // A constraint whose type mentions a pack is left unchecked at the bound: a
-// pack has no arity until it expands. The mismatch is still rejected, at the
-// call that supplies the associated type.
+// pack has no arity until it expands. The call is what rejects it, and nothing
+// there settles `P`, so the call names the parameter it could not infer rather
+// than closing the pack to `[]` and reporting the shape that leaves
+// (docs/wep-2026-03-14-variadic-type-parameters.md §6).
 
 trait Sink with () {
     type Cb;
@@ -31,5 +33,5 @@ test "a pack in a constraint is rejected at the call, not at the bound" {
 __DATA__
 {
   "test": {},
-  "compile_error": "type mismatch"
+  "compile_error": "cannot infer type parameter `P` of function `drive`"
 }
