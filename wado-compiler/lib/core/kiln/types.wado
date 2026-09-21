@@ -1,15 +1,15 @@
 #![generated(by = "wado-from-idl", sources = ["wado-compiler/lib/core/kiln/generator.wit"])]
 #![stdlib("core:kiln/types.wado")]
 
-/// One schema file the compiler has pre-loaded for the generator.
-/// The file is always supplied by value so that the initial input
-/// set is fully determined by the invocation declaration.
+/// One schema file the compiler opened for the generator. The set of
+/// files is fixed by the invocation declaration; the content arrives as
+/// a stream so a generator reads only as far as it needs.
 #[cm("core:kiln/types@0.1.0#input-file")]
 pub struct InputFile {
     #[cm("path")]
     pub path: String,
     #[cm("content")]
-    pub content: String,
+    pub content: Stream<u8>,
 }
 
 /// One generated Wado file. `path` is relative to the invocation's

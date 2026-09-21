@@ -31,6 +31,7 @@ use std::task::{Context, Poll, Waker};
 use wado_compiler::compiler_host::{CompilerHost, Diagnostic, InMemoryCompilerHost, SourceError};
 use wado_compiler::{Code, CompilerOptions, LogLevel, OptLevel, Severity, compile_with_options};
 use wado_lsp::Engine;
+use wado_lsp::host::install_dev_stdlib;
 use wado_lsp::server::dispatch::{Lifecycle, dispatch};
 use wado_lsp::server::rpc::{JsonRpcRequest, error_codes};
 use wado_lsp::server::transport;
@@ -67,6 +68,7 @@ struct ProgressHost<F: Fn(&str) + Send + Sync> {
 
 impl<F: Fn(&str) + Send + Sync> ProgressHost<F> {
     fn new(on_phase: F) -> Self {
+        install_dev_stdlib();
         Self {
             inner: InMemoryCompilerHost::new(),
             on_phase,

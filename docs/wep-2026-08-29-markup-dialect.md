@@ -152,7 +152,7 @@ render function is its whole interface.
 
 - A source map for Kiln: a generator-supplied correspondence from output spans
   back to input spans, applied when the compiler renders a diagnostic. Recorded
-  as an open question in the Kiln WEP.
+  as a known gap in the Kiln WEP.
 - Grammar import resolution in Gale. `import S;` parses, but slave grammars are
   not resolved, so a dialect vendors `Wado.g4` and something has to keep the copy
   honest: `mise run check-grammar` holds the original to the compiler's parser,

@@ -90,6 +90,7 @@ pub mod world_registry;
 pub use analyze::Analyzer;
 pub use ast::{AstId, AstNodeKind, AstPtr};
 pub use bind::{BindError, Binder};
+pub use codegen::InvalidArtifact;
 pub use codegen_flags::CodegenFlags;
 pub use compiler_host::{
     Code, CompilerHost, DependencyIndex, Diagnostic, DiagnosticSpan, GeneratorDiagnostic,
@@ -211,6 +212,19 @@ fn report_without_span<H: compiler_host::CompilerHost>(
         message,
         span: None,
     });
+}
+
+/// Hand the invalid binary to the host to save, then stop: a pipeline that
+/// emits what it cannot validate has no result to return.
+fn panic_on_invalid_artifact<H: CompilerHost>(host: &H, invalid: &InvalidArtifact) -> ! {
+    let subject = invalid.subject;
+    let saved = match host.save_internal_artifact(invalid.file_stem, &invalid.wasm) {
+        Some(path) => {
+            format!("The full invalid {subject} is at {path} (inspect with `wasm-tools print`).")
+        }
+        None => format!("The invalid {subject} was not saved: this host keeps no files."),
+    };
+    panic!("{}\n{saved}", invalid.report);
 }
 
 /// [`report_without_span`], for a caller that stops at the first such error.
@@ -1424,10 +1438,12 @@ fn compile_after_load<H: CompilerHost>(
         && let Some(kiln_registry) = cm_registry
         && let Some(world) = lib_world_info.as_mut()
     {
-        // Only `generate` is the generator world's contract; a helper
-        // `export fn` beside it is not a world export and must not be
-        // force-routed through the async binding below.
-        world.exports.retain(|e| e.name == "generate");
+        // `generate` and the optional `probe` are the generator world's
+        // contract; a helper `export fn` beside them is not a world export and
+        // must not be force-routed through the async binding below.
+        world
+            .exports
+            .retain(|e| e.name == "generate" || e.name == "probe");
         let kiln_shared: hashmap::IndexSet<String> = kiln::import_check::KILN_SHARED_TYPE_NAMES
             .iter()
             .map(|s| (*s).to_string())
@@ -1897,7 +1913,10 @@ fn compile_after_load<H: CompilerHost>(
     // === Phase 14: Emit Wasm (WirPackage → Wasm component bytes) ===
     let wasm = {
         let _span = logger.span("codegen");
-        codegen::emit_wasm(&nir, &wir_package, &options.providers)
+        match codegen::emit_wasm(&nir, &wir_package, &options.providers) {
+            Ok(wasm) => wasm,
+            Err(invalid) => panic_on_invalid_artifact(logger.host(), &invalid),
+        }
     };
 
     // Return the entry AST for tooling
