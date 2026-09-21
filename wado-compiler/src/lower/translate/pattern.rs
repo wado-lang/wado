@@ -76,9 +76,8 @@ fn coerce_value_to_binding(
     }
 }
 
-/// Whether `expr` only reads a place, so projecting out of it again re-reads
-/// the same storage. A temp bound from it would instead hold a copy, which is
-/// what a nested `&mut` destructure must not bind (issue: nested pattern copy).
+/// Whether `expr` only reads a place, so projecting out of it again reaches the
+/// same storage rather than a temp's copy of it.
 fn reads_a_place(expr: &TirExpr) -> bool {
     match &expr.kind {
         TirExprKind::Local { .. } => true,
@@ -1817,6 +1816,48 @@ impl<'a> PatternLowerer<'a> {
         (local_index, name)
     }
 
+    /// The payload binding of a variant pattern, at any nesting depth. The
+    /// temp binds whether or not a payload is taken, since the scrutinee is
+    /// evaluated either way.
+    fn lower_variant_pattern(
+        &mut self,
+        bindings: &[TirPattern],
+        case_index: u32,
+        payload_type: TypeId,
+        is_mut: bool,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        let (temp_index, temp_name) = self.emit_pattern_temp_let(value, span, out, type_table);
+        let Some(binding) = bindings.first() else {
+            return;
+        };
+        // A unit payload holds nothing to extract, and the `struct.get` a
+        // `VariantPayload` lowers to would leave a dangling stack value.
+        if payload_type == TypeTable::UNIT && matches!(binding, TirPattern::Wildcard) {
+            return;
+        }
+        let payload = TirExpr::new(
+            TirExprKind::VariantPayload {
+                expr: Box::new(TirExpr::new(
+                    TirExprKind::Local {
+                        index: temp_index,
+                        name: temp_name,
+                    },
+                    type_table.get_local_type(temp_index, &self.locals),
+                    span,
+                )),
+                case_index,
+                payload_type,
+            },
+            payload_type,
+            span,
+        );
+        self.lower_pattern_to_lets(binding, is_mut, payload, span, out, type_table);
+    }
+
     /// One `Let` per element of a tuple pattern, at any nesting depth.
     fn lower_tuple_pattern(
         &mut self,
@@ -1895,10 +1936,8 @@ impl<'a> PatternLowerer<'a> {
         out: &mut Vec<TirStmt>,
         type_table: &TypeTable,
     ) {
-        // First, lower any expressions inside the value
         let mut value = value;
         self.lower_expr(&mut value, type_table);
-        let value = value;
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
@@ -1919,37 +1958,16 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                let (variant_temp_index, variant_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out, type_table);
-
-                // If there are bindings, extract payload
-                if let Some(binding) = bindings.first() {
-                    let payload_expr = TirExpr::new(
-                        TirExprKind::VariantPayload {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: variant_temp_index,
-                                    name: variant_temp_name,
-                                },
-                                type_table.get_local_type(variant_temp_index, &self.locals),
-                                span,
-                            )),
-                            case_index: *case_index,
-                            payload_type: *payload_type,
-                        },
-                        *payload_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(
-                        binding,
-                        is_mut,
-                        payload_expr,
-                        span,
-                        out,
-                        type_table,
-                    );
-                }
+                self.lower_variant_pattern(
+                    bindings,
+                    *case_index,
+                    *payload_type,
+                    is_mut,
+                    value,
+                    span,
+                    out,
+                    type_table,
+                );
             }
             TirPattern::Struct { fields, .. } => {
                 self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
@@ -2003,42 +2021,16 @@ impl<'a> PatternLowerer<'a> {
                 payload_type,
                 ..
             } => {
-                if let Some(binding) = bindings.first()
-                    // Skip payload extraction for unit-type wildcards — there is
-                    // no payload to extract, and the VariantPayload WIR translation
-                    // would emit a struct.get that leaves a dangling value on stack.
-                    && !(*payload_type == TypeTable::UNIT
-                        && matches!(binding, TirPattern::Wildcard))
-                {
-                    let (variant_temp_index, variant_temp_name) =
-                        self.emit_pattern_temp_let(value, span, out, type_table);
-
-                    let payload_expr = TirExpr::new(
-                        TirExprKind::VariantPayload {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: variant_temp_index,
-                                    name: variant_temp_name,
-                                },
-                                type_table.get_local_type(variant_temp_index, &self.locals),
-                                span,
-                            )),
-                            case_index: *case_index,
-                            payload_type: *payload_type,
-                        },
-                        *payload_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(
-                        binding,
-                        is_mut,
-                        payload_expr,
-                        span,
-                        out,
-                        type_table,
-                    );
-                }
+                self.lower_variant_pattern(
+                    bindings,
+                    *case_index,
+                    *payload_type,
+                    is_mut,
+                    value,
+                    span,
+                    out,
+                    type_table,
+                );
             }
             TirPattern::Struct { fields, .. } => {
                 self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
