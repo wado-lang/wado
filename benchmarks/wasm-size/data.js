@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789944714346,
+  "lastUpdate": 1789952977660,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57565,6 +57565,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/f230693f0087483960ad89bd946394741737597f"
         },
         "date": 1789944713630,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb9429843d143f810941f3319a9307db4c387d3a",
+          "message": "Merge pull request #2103 from wado-lang/claude/issue-2102-yr9sqg\n\nfix(cli): a dev `wado test` run starts with its results, not a panic",
+          "timestamp": "2026-09-21T09:49:39+09:00",
+          "tree_id": "60cebe9d44a17985e9271b9aaa4246cbde0ee29a",
+          "url": "https://github.com/wado-lang/wado/commit/cb9429843d143f810941f3319a9307db4c387d3a"
+        },
+        "date": 1789952976805,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
