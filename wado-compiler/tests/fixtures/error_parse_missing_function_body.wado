@@ -1,7 +1,8 @@
-// A signature with no body and nothing left to supply one: the parse stops at
-// the brace it expected, at the end of the file.
+// A signature with no body and nothing left to supply one. The parse stops at
+// the brace it expected, having reached the end of the file — a position this
+// fixture's own `__DATA__` moves, so only the message is stated.
 
 export fn run()
 
 __DATA__
-{"compile_error": ":8:1: parse error: expected LBrace, found Eof", "compile_error_codes": ["INVALID_SYNTAX"]}
+{"compile_error": "parse error: expected LBrace, found Eof", "compile_error_codes": ["INVALID_SYNTAX"]}

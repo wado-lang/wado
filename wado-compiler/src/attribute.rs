@@ -113,6 +113,9 @@ pub enum AttrArgs {
     OneString,
     /// One or more string literals, as `#[canonical("wasi", "stream-new")]`.
     Strings,
+    /// String literals, or nothing at all: `#[cm_params()]` is what a
+    /// zero-parameter CM function names.
+    OptionalStrings,
     /// One numeric literal, as `#[timeout_ms(5000)]`.
     OneNumber,
     /// One or more bare identifiers, as `#[allow(dead_code)]`. A lint name is
@@ -134,6 +137,7 @@ impl AttrArgs {
             Self::None => "no arguments",
             Self::OneString => "one string",
             Self::Strings => "one or more strings",
+            Self::OptionalStrings => "strings, or nothing",
             Self::OneNumber => "one number",
             Self::Idents => "one or more bare names",
             Self::Words => "one or more names, quoted or bare",
@@ -152,6 +156,7 @@ impl AttrArgs {
             Self::Strings => {
                 !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Str(_)))
             }
+            Self::OptionalStrings => args.iter().all(|arg| matches!(arg, AttrArg::Str(_))),
             Self::OneNumber => matches!(args, [AttrArg::Number(_)]),
             Self::Idents => {
                 !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Ident(_)))
@@ -301,7 +306,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: CM_PARAMS,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::Strings,
+        args: AttrArgs::OptionalStrings,
         summary: "the CM-side parameter names",
     },
     AttributeSchema {

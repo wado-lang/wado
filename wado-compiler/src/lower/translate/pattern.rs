@@ -9,7 +9,7 @@ use crate::name::{FqTraitName, FqTypeName, LocalMethodName};
 use crate::tir::{
     CallArg, FunctionRef, PrimitiveType, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr,
     TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TirUnaryOp, TypeId, TypeTable,
+    TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -73,6 +73,21 @@ fn coerce_value_to_binding(
             )
         }
         _ => value,
+    }
+}
+
+/// Whether `expr` only reads a place, so projecting out of it again re-reads
+/// the same storage. A temp bound from it would instead hold a copy, which is
+/// what a nested `&mut` destructure must not bind (issue: nested pattern copy).
+fn reads_a_place(expr: &TirExpr) -> bool {
+    match &expr.kind {
+        TirExprKind::Local { .. } => true,
+        TirExprKind::FieldAccess { expr, .. } => reads_a_place(expr),
+        TirExprKind::Unary {
+            op: TirUnaryOp::Deref | TirUnaryOp::Ref | TirUnaryOp::MutRef,
+            expr,
+        } => reads_a_place(expr),
+        _ => false,
     }
 }
 
@@ -308,10 +323,25 @@ impl<'a> PatternLowerer<'a> {
         }
     }
 
-    /// What a pattern temp's projections read through: the temp keeps the
-    /// scrutinee's reference, and the fields belong to what it points at.
-    fn temp_referent(&self, local_index: u32, type_table: &TypeTable) -> TypeId {
-        type_table.peel_refs(type_table.get_local_type(local_index, &self.locals))
+    /// What a compound pattern's projections read. A place is re-read rather
+    /// than bound, so every projection out of it still names the scrutinee's
+    /// own storage however deep the pattern nests.
+    fn pattern_base(
+        &mut self,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) -> TirExpr {
+        if reads_a_place(&value) {
+            return value;
+        }
+        let (index, name) = self.emit_pattern_temp_let(value, span, out, type_table);
+        TirExpr::new(
+            TirExprKind::Local { index, name },
+            type_table.get_local_type(index, &self.locals),
+            span,
+        )
     }
 
     /// Look up struct field definitions by `type_id`
@@ -1787,6 +1817,74 @@ impl<'a> PatternLowerer<'a> {
         (local_index, name)
     }
 
+    /// One `Let` per element of a tuple pattern, at any nesting depth.
+    fn lower_tuple_pattern(
+        &mut self,
+        sub_patterns: &[TirPattern],
+        is_mut: bool,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        // SROA / DCE elide a temp + struct.new that does not escape, so
+        // projecting each element does not force a heap allocation.
+        let base = self.pattern_base(value, span, out, type_table);
+        let elem_types = type_table
+            .as_tuple(type_table.peel_refs(base.type_id))
+            .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
+
+        for (i, (sub_pattern, elem_type)) in sub_patterns.iter().zip(elem_types.iter()).enumerate()
+        {
+            let project = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(base.clone()),
+                    field_index: i as u32,
+                    field_name: i.to_string(),
+                },
+                *elem_type,
+                span,
+            );
+            self.lower_pattern_to_lets(sub_pattern, is_mut, project, span, out, type_table);
+        }
+    }
+
+    /// One `Let` per field of a struct pattern, at any nesting depth.
+    fn lower_struct_pattern(
+        &mut self,
+        fields: &[TirStructPatternField],
+        is_mut: bool,
+        value: TirExpr,
+        span: Span,
+        out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
+    ) {
+        let base = self.pattern_base(value, span, out, type_table);
+        let fields_info = self.get_struct_fields(type_table.peel_refs(base.type_id), type_table);
+
+        for field in fields {
+            let field_type = fields_info
+                .as_ref()
+                .and_then(|info| {
+                    info.iter()
+                        .find(|f| f.name == field.field_name)
+                        .map(|f| f.type_id)
+                })
+                .unwrap_or(TypeTable::UNKNOWN);
+
+            let project = TirExpr::new(
+                TirExprKind::FieldAccess {
+                    expr: Box::new(base.clone()),
+                    field_index: field.field_index,
+                    field_name: field.field_name.clone(),
+                },
+                field_type,
+                span,
+            );
+            self.lower_pattern_to_lets(&field.pattern, is_mut, project, span, out, type_table);
+        }
+    }
+
     /// Lower `LetDestructure` to explicit Let statements
     fn lower_let_pattern(
         &mut self,
@@ -1804,40 +1902,7 @@ impl<'a> PatternLowerer<'a> {
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
-                let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out, type_table);
-
-                // Get element types
-                let elem_types = type_table
-                    .as_tuple(self.temp_referent(tuple_temp_index, type_table))
-                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
-
-                // Project each element via FieldAccess. SROA / DCE later
-                // elide the temp + struct.new when the temp doesn't escape,
-                // so we don't force tuple destructures through a heap
-                // allocation.
-                for (i, (sub_pattern, elem_type)) in
-                    sub_patterns.iter().zip(elem_types.iter()).enumerate()
-                {
-                    let project = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: tuple_temp_index,
-                                    name: tuple_temp_name.clone(),
-                                },
-                                type_table.get_local_type(tuple_temp_index, &self.locals),
-                                span,
-                            )),
-                            field_index: i as u32,
-                            field_name: i.to_string(),
-                        },
-                        *elem_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(sub_pattern, is_mut, project, span, out, type_table);
-                }
+                self.lower_tuple_pattern(sub_patterns, is_mut, value, span, out, type_table);
             }
             TirPattern::Binding {
                 name, local_index, ..
@@ -1887,51 +1952,7 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Struct { fields, .. } => {
-                let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out, type_table);
-
-                // Get field type info from struct definition
-                let struct_fields_info = self.get_struct_fields(
-                    self.temp_referent(struct_temp_index, type_table),
-                    type_table,
-                );
-
-                for field in fields {
-                    let field_type = struct_fields_info
-                        .as_ref()
-                        .and_then(|info| {
-                            info.iter()
-                                .find(|f| f.name == field.field_name)
-                                .map(|f| f.type_id)
-                        })
-                        .unwrap_or(TypeTable::UNKNOWN);
-
-                    let field_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: struct_temp_index,
-                                    name: struct_temp_name.clone(),
-                                },
-                                type_table.get_local_type(struct_temp_index, &self.locals),
-                                span,
-                            )),
-                            field_index: field.field_index,
-                            field_name: field.field_name.clone(),
-                        },
-                        field_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(
-                        &field.pattern,
-                        is_mut,
-                        field_access,
-                        span,
-                        out,
-                        type_table,
-                    );
-                }
+                self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
             }
             TirPattern::Literal(_)
             | TirPattern::Enum { .. }
@@ -1966,36 +1987,7 @@ impl<'a> PatternLowerer<'a> {
                 self.emit_binding_let(name, *local_index, is_mut, value, span, type_table, out);
             }
             TirPattern::Tuple(sub_patterns, _) => {
-                // Nested tuple - allocate temp and recurse
-                let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out, type_table);
-
-                let elem_types = type_table
-                    .as_tuple(self.temp_referent(tuple_temp_index, type_table))
-                    .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
-
-                for (i, (sub_pattern, elem_type)) in
-                    sub_patterns.iter().zip(elem_types.iter()).enumerate()
-                {
-                    let project = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: tuple_temp_index,
-                                    name: tuple_temp_name.clone(),
-                                },
-                                type_table.get_local_type(tuple_temp_index, &self.locals),
-                                span,
-                            )),
-                            field_index: i as u32,
-                            field_name: i.to_string(),
-                        },
-                        *elem_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(sub_pattern, is_mut, project, span, out, type_table);
-                }
+                self.lower_tuple_pattern(sub_patterns, is_mut, value, span, out, type_table);
             }
             TirPattern::Wildcard => {
                 // Discard value — emit as expression statement. The WIR
@@ -2049,51 +2041,7 @@ impl<'a> PatternLowerer<'a> {
                 }
             }
             TirPattern::Struct { fields, .. } => {
-                // Nested struct - allocate temp and recurse
-                let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out, type_table);
-
-                let struct_fields_info = self.get_struct_fields(
-                    self.temp_referent(struct_temp_index, type_table),
-                    type_table,
-                );
-
-                for field in fields {
-                    let field_type = struct_fields_info
-                        .as_ref()
-                        .and_then(|info| {
-                            info.iter()
-                                .find(|f| f.name == field.field_name)
-                                .map(|f| f.type_id)
-                        })
-                        .unwrap_or(TypeTable::UNKNOWN);
-
-                    let field_access = TirExpr::new(
-                        TirExprKind::FieldAccess {
-                            expr: Box::new(TirExpr::new(
-                                TirExprKind::Local {
-                                    index: struct_temp_index,
-                                    name: struct_temp_name.clone(),
-                                },
-                                type_table.get_local_type(struct_temp_index, &self.locals),
-                                span,
-                            )),
-                            field_index: field.field_index,
-                            field_name: field.field_name.clone(),
-                        },
-                        field_type,
-                        span,
-                    );
-
-                    self.lower_pattern_to_lets(
-                        &field.pattern,
-                        is_mut,
-                        field_access,
-                        span,
-                        out,
-                        type_table,
-                    );
-                }
+                self.lower_struct_pattern(fields, is_mut, value, span, out, type_table);
             }
             TirPattern::Literal(_)
             | TirPattern::Enum { .. }
