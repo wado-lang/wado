@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789983145481,
+  "lastUpdate": 1789986167556,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57829,6 +57829,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/17678459746c7eea6097717244349de4c43a0bff"
         },
         "date": 1789983145161,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17b4124bddd6bd8ba741ce94deeecefa3e6c8ed8",
+          "message": "Merge pull request #2110 from wado-lang/claude/workflow-pr-cancel-previous-0qv1qm\n\nchore(ci): cancel superseded pull-request runs in every workflow",
+          "timestamp": "2026-09-21T19:03:45+09:00",
+          "tree_id": "bf3643ca1ef69161106f49040df790c7e1e129ab",
+          "url": "https://github.com/wado-lang/wado/commit/17b4124bddd6bd8ba741ce94deeecefa3e6c8ed8"
+        },
+        "date": 1789986166758,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
