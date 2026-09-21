@@ -4494,6 +4494,8 @@ gale = { registry = "wado", package = "gale", version = "0.1" }
 
 A bare `use { ... } from "./schema.g4"` against such a file with no `with` clause is a hard error (`Code::KilnMissingWith`). Two `use` clauses for the same `from` in the same file collapse to a single invocation if their `(module, inputs, options, output_dir)` match; mismatched clauses are a duplicate-generator error.
 
+A file that is not `.wado` is only ever reached through a generator. When a `use` names one and no invocation produced a module for that schema, the import is a hard error (`Code::KilnNoGeneratedModule`); the compiler never falls back to parsing the schema as Wado.
+
 #### Authoring a generator
 
 A generator is a normal Wado package whose `wado.toml` declares a `[package].generator` entry pointing at a module that exports the `core:kiln/generator` world:

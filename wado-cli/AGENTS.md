@@ -41,7 +41,7 @@ How to _use_ the CLI is the `wado-cli` skill, not this file.
 
 - `compile.rs`, `check.rs`, `run.rs`, `serve.rs`, `test.rs`, `format.rs`, `doc.rs`, `dump.rs`, `wit.rs`, `query.rs` — one subcommand each.
 - `runtime.rs`, `http_hooks.rs`, `timezone_host.rs`, `tls_trust.rs` — the wasmtime host: instantiation, WASI wiring, and the hooks `serve` needs.
-- `kiln_driver.rs`, `kiln_provider.rs`, `kiln_runtime.rs`, `kiln_wit.rs`, `kiln_metadata.rs` — Kiln generators. `check` re-runs them and byte-compares against the committed source.
+- `kiln_driver.rs`, `kiln_provider.rs`, `kiln_runtime.rs`, `kiln_wit.rs`, `kiln_metadata.rs` — Kiln generators. `check` runs the same pipeline `compile` does, writes included.
 - `manifest.rs`, `build.rs`, `build_dep.rs`, `dep_component.rs`, `fetch.rs`, `git.rs`, `oci.rs`, `registry.rs`, `publish.rs` — `wado.toml` handling and the dependency backends behind `wado-manifest`'s `DependencyProvider` seam.
 - `query_adapter.rs`, `lsp.rs` — bridge to `wado-lsp`, for the `query` subcommand and the stdio server.
 - `discover.rs`, `test_report.rs` — source file discovery (shared by `test`, `format`, and `query`) and the progress digest. A directory argument goes through `files_in_dir` and a project-wide walk through `discover_tree`; a file named directly is taken as given, filters and all. The subcommand supplies only a `Filters` callback: `filters_at` naming its manifest section, or `no_filters` where a package's excludes must not apply (`query references` spans them). Directory expansion has no second implementation to drift from.

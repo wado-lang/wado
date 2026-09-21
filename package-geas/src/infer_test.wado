@@ -215,6 +215,34 @@ test "a declared output rank disagreeing with the produced one stops the build" 
     assert `${e}` == "Y: the graph declares rank 1 and the nodes produce rank 2";
 }
 
+test "a declared symbolic name need not be the one the schema gave the axis" {
+    let graph = read(
+        `agraph (float[?, 3] X) => (float[N, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+}
+
+test "a declared static extent settles an axis the nodes left symbolic" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[8, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    // Only the declared output is settled; the input keeps what it stated.
+    assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
+}
+
 test "a declared `?` claims nothing about the produced extent" {
     let graph = read(
         `agraph (float[N, 3] X) => (float[?, 3] Y) {

@@ -672,8 +672,13 @@ fn collect_lib_surface(
                         reexport_origin: Some((source.clone(), func.name.clone())),
                     });
                 }
+                // Not `is_public`: a lowered type carries its fields whatever
+                // their scope, so an `internal` type reaches the CM interface
+                // through a `pub` one that holds it.
                 _ if lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public) =>
+                    && item
+                        .visibility()
+                        .is_some_and(ast::Visibility::reaches_beyond_file) =>
                 {
                     submodule_type_decls.push((source.clone(), item.clone()));
                 }
@@ -1366,37 +1371,54 @@ fn compile_after_load<H: CompilerHost>(
         .collect();
 
     // A data-model library exposes public types with no `export fn`; those types
-    // are its component surface. Submodule type decls are already public-only;
-    // the entry module's are filtered here.
-    let lib_has_public_type = !lib_surface.submodule_type_decls.is_empty()
-        || sem.modules.get(&sem.entry_module_source).is_some_and(|m| {
-            m.items.iter().any(|item| {
-                lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public)
-            })
-        });
+    // are its component surface. `submodule_type_decls` answers a wider question
+    // — what the CM interface publishes, `internal` included — so the library
+    // API is asked for separately here, of every module.
+    let is_public_type_decl = |item: &ast::Item| {
+        lib_type_decl_name(item).is_some()
+            && item.visibility().is_some_and(ast::Visibility::is_public)
+    };
+    let lib_has_public_type = lib_surface
+        .submodule_type_decls
+        .iter()
+        .any(|(_, item)| is_public_type_decl(item))
+        || sem
+            .modules
+            .get(&sem.entry_module_source)
+            .is_some_and(|m| m.items.iter().any(is_public_type_decl));
 
     // Every published type reaches the registry under one interface FQ, which
     // registers each name once, so the check belongs to whoever synthesizes a
     // world rather than to `--lib` alone.
     if synth_world_fq.is_some() {
-        let all_names: Vec<String> = entry_type_names
+        let entry_named = entry_type_names
             .iter()
-            .cloned()
+            .map(|name| (name.clone(), sem.entry_module_source.to_string()));
+        let all_named: Vec<(String, String)> = entry_named
             .chain(
                 lib_surface
                     .submodule_type_decls
                     .iter()
-                    .filter_map(|(_, item)| lib_type_decl_name(item)),
+                    .filter_map(|(source, item)| {
+                        Some((lib_type_decl_name(item)?, source.to_string()))
+                    }),
             )
             .collect();
-        if let Some(dup) = first_duplicate(all_names.iter().map(String::as_str)) {
+        if let Some(dup) = first_duplicate(all_named.iter().map(|(name, _)| name.as_str())) {
+            let mut modules: Vec<&str> = all_named
+                .iter()
+                .filter(|(name, _)| *name == dup)
+                .map(|(_, source)| source.as_str())
+                .collect();
+            modules.dedup();
             return Err(bail_with(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "public type `{dup}` is defined in more than one module; the \
-                     types a component publishes must have distinct names"
+                    "type `{dup}` is defined in {}; the types a component \
+                     publishes must have distinct names, and every type but a \
+                     file-private one in a submodule is published",
+                    modules.join(" and "),
                 ),
             ));
         }
