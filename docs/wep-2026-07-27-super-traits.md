@@ -134,9 +134,6 @@ traits, and the stdlib `Fn: FnMut` that
 [Closure Implementation Internals](./wep-2026-01-25-closure-implementation-internals.md)
 leaves open.
 
-An associated-type constraint in supertrait position is checked but not used for
-inference, as Elaboration says: `T: Sink` leaves `T::Item` unresolved.
-
 The trait solver states a clause's arguments only where it can name them as
 types. A clause whose argument is the subtrait's own parameter states none
 there, and the solver answers that edge at the supertrait's declared defaults.

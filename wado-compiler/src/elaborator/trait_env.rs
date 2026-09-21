@@ -2172,11 +2172,19 @@ fn written_args_key(bound: &ast::TraitBound) -> String {
 
 /// Add an inherited bound unless the list already holds that supertrait at
 /// those arguments, so two spellings of one supertrait collapse.
+///
+/// The chain is part of the identity: two chains may write one clause alike in
+/// their own parameter spaces and still reach different arguments, and it is
+/// the chain a reader walks to tell them apart.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
-    let key = written_args_key(&bound.bound);
+    let identity = |b: &InheritedBound| {
+        let chain: Vec<String> = b.via.iter().map(written_args_key).collect();
+        (written_args_key(&b.bound), chain)
+    };
+    let key = identity(bound);
     let Some(existing) = bounds
         .iter_mut()
-        .find(|b| b.decl == bound.decl && written_args_key(&b.bound) == key)
+        .find(|b| b.decl == bound.decl && identity(b) == key)
     else {
         bounds.push(bound.clone());
         return;

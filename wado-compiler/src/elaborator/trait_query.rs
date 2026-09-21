@@ -646,10 +646,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             ast::Type::Generic(generic) => nested(&generic.args),
             ast::Type::Tuple(elems) => nested(elems),
+            ast::Type::Function(func) => {
+                nested(&func.params) || self.reads_a_projection(&func.return_type, binders)
+            }
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
                 self.reads_a_projection(inner, binders)
             }
-            _ => false,
+            ast::Type::Named(_)
+            | ast::Type::TypePackSpread(..)
+            | ast::Type::Infer(_)
+            | ast::Type::Error(_) => false,
         }
     }
 
@@ -2800,7 +2806,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // implied it, so it is asked but not reported — asking is what
             // drives the derivation that makes `T: Ord` alone satisfy `Eq`.
             for (bound, root, via) in self.inherited_bounds_of(&param.bounds) {
-                if param.bounds.iter().any(|b| b.name == bound.name) {
+                // Which trait a direct bound names, not how it spells it: two
+                // modules may call one name two traits. One that names no
+                // declaration falls back to its spelling, as `merge_bound` does.
+                let declared = bound
+                    .resolved
+                    .or_else(|| self.trait_decl_at(bound.id, &bound.name));
+                let already_direct = |b: &ast::TraitBound| match declared {
+                    Some(decl) => self.trait_decl_at(b.id, &b.name) == Some(decl),
+                    None => b.name == bound.name,
+                };
+                if param.bounds.iter().any(already_direct) {
                     continue;
                 }
                 // The clause is written in the trait that declared it, which the
