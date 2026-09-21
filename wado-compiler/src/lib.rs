@@ -1372,15 +1372,21 @@ fn compile_after_load<H: CompilerHost>(
         .collect();
 
     // A data-model library exposes public types with no `export fn`; those types
-    // are its component surface. Submodule type decls are already public-only;
-    // the entry module's are filtered here.
-    let lib_has_public_type = !lib_surface.submodule_type_decls.is_empty()
-        || sem.modules.get(&sem.entry_module_source).is_some_and(|m| {
-            m.items.iter().any(|item| {
-                lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public)
-            })
-        });
+    // are its component surface. `submodule_type_decls` answers a wider question
+    // — what the CM interface publishes, `internal` included — so the library
+    // API is asked for separately here, of every module.
+    let is_public_type_decl = |item: &&ast::Item| {
+        lib_type_decl_name(item).is_some()
+            && item.visibility().is_some_and(ast::Visibility::is_public)
+    };
+    let lib_has_public_type = lib_surface
+        .submodule_type_decls
+        .iter()
+        .any(|(_, item)| is_public_type_decl(&item))
+        || sem
+            .modules
+            .get(&sem.entry_module_source)
+            .is_some_and(|m| m.items.iter().any(|item| is_public_type_decl(&item)));
 
     // Every published type reaches the registry under one interface FQ, which
     // registers each name once, so the check belongs to whoever synthesizes a
@@ -1401,8 +1407,9 @@ fn compile_after_load<H: CompilerHost>(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "public type `{dup}` is defined in more than one module; the \
-                     types a component publishes must have distinct names"
+                    "type `{dup}` is defined in more than one module; the types a \
+                     component publishes must have distinct names, and every type \
+                     but a file-private one in a submodule is published"
                 ),
             ));
         }

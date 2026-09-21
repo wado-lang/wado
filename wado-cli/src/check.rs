@@ -224,7 +224,11 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
         }
     };
 
-    let kiln_drift = !outcome.stale.is_empty() || !outcome.missing.is_empty();
+    // A nested pipeline runs behind the provider and records its drift on the
+    // run, so it reaches the same gate an entry's does.
+    let kiln_drift = !outcome.stale.is_empty()
+        || !outcome.missing.is_empty()
+        || host.run_cache().nested_drift() > 0;
 
     // Drive the rest of the compile pipeline so type/resolve errors also gate
     // `wado check`. At `O0`, since the component is discarded: the optimization

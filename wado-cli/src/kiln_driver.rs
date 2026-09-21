@@ -881,10 +881,6 @@ pub enum PipelineError {
     /// per-conflict diagnostics have already been emitted through the host;
     /// this carries the count for the summary.
     RedirectConflict(usize),
-    /// A generator's own generated sources diverge from what its invocations
-    /// produce now. Only `wado check` reaches this: it byte-compares rather
-    /// than writing, so the nested build cannot proceed on repaired files.
-    NestedDrift(usize),
 }
 
 impl std::fmt::Display for PipelineError {
@@ -908,12 +904,6 @@ impl std::fmt::Display for PipelineError {
             }
             PipelineError::RedirectConflict(n) => {
                 write!(f, "kiln: {n} conflicting generator redirect(s)")
-            }
-            PipelineError::NestedDrift(n) => {
-                write!(
-                    f,
-                    "kiln: {n} generated file(s) a generator uses are out of date"
-                )
             }
         }
     }

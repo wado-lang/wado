@@ -1148,6 +1148,38 @@ fn test_lib_duplicate_export_name_rejected() {
         .stderr(predicate::str::contains("two functions named `dup`"));
 }
 
+/// An `internal` type is published into the CM interface so an export naming it
+/// resolves, but it is not the library's API, so it cannot be what a `--lib`
+/// offers its consumers.
+#[test]
+fn test_lib_with_only_internal_submodule_types_is_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"inner\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("geom.wado"),
+        "internal struct Point { internal x: i32 }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "use { Point } from \"./geom.wado\";\npub fn helper() -> i32 { return 0; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing"));
+}
+
 /// What reaches the CM interface is what an `export fn` names, and `export`
 /// carries a type across the boundary whatever its scope. An `internal` type
 /// is nameable by the entry, so it can be exported and must be published.
@@ -1208,6 +1240,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "public type `Node` is defined in more than one module",
+            "type `Node` is defined in more than one module",
         ));
 }

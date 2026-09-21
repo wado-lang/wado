@@ -97,6 +97,26 @@ fn a_nested_clause_resolves_a_build_dependency_nickname() {
     );
 }
 
+/// A generator shipped as its own package names its dependencies in its own
+/// manifest, so a nested clause resolves against the generator's project rather
+/// than the consumer's. The consumer here declares no build-dependency at all.
+#[test]
+fn a_nested_clause_resolves_against_the_generators_own_package() {
+    let project = fixture("kiln_nested_own_package");
+
+    let out = run_project(project.path());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "a generator's own `[build-dependencies]` must resolve:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("model 7"),
+        "the generator's own dependency must produce the value, got: {stdout}"
+    );
+}
+
 /// `wado check` dry-runs and byte-compares rather than writing, and a nested
 /// invocation owes the same answer: drift is reported, never repaired.
 #[test]
@@ -131,6 +151,13 @@ fn check_reports_a_stale_nested_generated_file_rather_than_rewriting_it() {
         generated.1,
         "check must not rewrite what it reports as out of date"
     );
+
+    // Nested drift reaches the same gate an entry's does, so `--warn` governs
+    // both alike rather than only the one the entry declared.
+    wado_in(project.path())
+        .args(["check", "--warn", "src/main.wado"])
+        .assert()
+        .success();
 }
 
 #[test]

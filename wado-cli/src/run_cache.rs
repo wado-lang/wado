@@ -13,6 +13,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use sha2::{Digest, Sha256};
 use wado_compiler::hashmap::IndexMap;
@@ -26,6 +27,10 @@ pub struct RunCache {
     components: KilnComponentCache,
     generators: GeneratorCache,
     inputs: SourceWatch,
+    /// Generated files a nested dry-run found stale or missing. A nested
+    /// pipeline runs behind the provider, too deep to answer `wado check`
+    /// directly, and the run is what both ends already share.
+    nested_drift: AtomicUsize,
 }
 
 impl Default for RunCache {
@@ -34,6 +39,7 @@ impl Default for RunCache {
             components: KilnComponentCache::default(),
             generators: GeneratorCache::default(),
             inputs: SourceWatch::default(),
+            nested_drift: AtomicUsize::new(0),
         };
         cache.inputs.observe_dev_stdlib();
         cache
@@ -66,6 +72,14 @@ impl RunCache {
     #[must_use]
     pub fn inputs(&self) -> &SourceWatch {
         &self.inputs
+    }
+
+    pub fn record_nested_drift(&self, files: usize) {
+        self.nested_drift.fetch_add(files, Ordering::Relaxed);
+    }
+
+    pub fn nested_drift(&self) -> usize {
+        self.nested_drift.load(Ordering::Relaxed)
     }
 }
 

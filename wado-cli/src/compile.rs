@@ -597,17 +597,10 @@ pub(crate) struct KilnSetup {
     identities: wado_compiler::hashmap::IndexMap<String, String>,
 }
 
-/// Collect the inline `with { generator: { ... } }` clauses `entry_file`
-/// declares and assemble everything the Kiln pipeline needs from them.
-/// `Ok(None)` when the entry declares no generators.
-///
-/// Shared by [`maybe_run_pipeline`] (which runs them) and `wado check` (which
-/// dry-runs them and byte-compares), so both tiers resolve generators through
-/// one identical setup.
-/// What a Kiln pipeline inherits from the run it belongs to: the project it
-/// resolves a specifier against, whether it writes, and the generator chain it
-/// continues. A nested pipeline differs from the entry's only in its entry, so
-/// it is handed this rather than building one of its own.
+/// What a Kiln pipeline inherits from the run it belongs to: whether it writes
+/// and the generator chain it continues. A nested pipeline differs from the
+/// entry's in its entry and in the project that entry belongs to, so it is
+/// handed this rather than building one of its own.
 #[derive(Debug, Clone)]
 pub(crate) struct KilnRun {
     pub project: Option<manifest::ProjectManifest>,
@@ -635,6 +628,13 @@ impl KilnRun {
     }
 }
 
+/// Collect the inline `with { generator: { ... } }` clauses `entry_file`
+/// declares and assemble everything the Kiln pipeline needs from them.
+/// `Ok(None)` when the entry declares no generators.
+///
+/// Shared by [`maybe_run_pipeline`] (which runs them), `wado check` (which
+/// dry-runs them and byte-compares) and [`run_nested_pipeline`], so every tier
+/// resolves generators through one identical setup.
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
     entry_key: Option<&str>,
@@ -706,7 +706,9 @@ pub(crate) async fn prepare_kiln(
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
-            locked_versions: locked_generator_versions(&manifest_root),
+            // `wado.lock` sits beside the manifest that declares the
+            // dependency, which is not where a nested pipeline is anchored.
+            locked_versions: locked_generator_versions(&project_root),
         });
     let kiln_host = host.rebased(manifest_root.clone());
     Ok(Some(KilnSetup {
@@ -779,6 +781,14 @@ pub(crate) async fn run_nested_pipeline(
     host: &FilesystemCompilerHost,
     run: &KilnRun,
 ) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
+    // A generator's `[build-dependencies]`, `[registries]` and `wado.lock` are
+    // its own package's, not the consumer's: a generator shipped as a package
+    // names its dependencies in its own manifest.
+    let run = KilnRun {
+        project: load_nearest_manifest(entry_file),
+        ..run.clone()
+    };
+    let run = &run;
     let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_key), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
@@ -805,13 +815,12 @@ pub(crate) async fn run_nested_pipeline(
                 inline,
             )
             .await?;
-            // `check` byte-compares rather than writing, and a generator built
-            // from a file that no longer matches its source is the drift the
-            // run exists to report.
-            let drift = outcome.stale.len() + outcome.missing.len();
-            if drift > 0 {
-                return Err(PipelineError::NestedDrift(drift));
-            }
+            // `check` byte-compares rather than writing, so the index still
+            // carries what the generator needs and the build goes on. The drift
+            // is recorded for the run to weigh as it weighs an entry's, under
+            // the same `--warn`.
+            host.run_cache()
+                .record_nested_drift(outcome.stale.len() + outcome.missing.len());
             outcome.invocations
         }
     };
