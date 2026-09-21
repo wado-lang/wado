@@ -287,19 +287,6 @@ fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     }
 }
 
-/// The type a compound pattern's temp holds: the scrutinee's, match-ergonomic
-/// references peeled.
-fn pattern_temp_type(pattern: &TirPattern, value_type: TypeId, type_table: &TypeTable) -> TypeId {
-    if !matches!(pattern, TirPattern::Tuple(_, _) | TirPattern::Struct { .. }) {
-        return value_type;
-    }
-    let mut current = value_type;
-    while let ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) = *type_table.get(current) {
-        current = inner;
-    }
-    current
-}
-
 impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
@@ -319,6 +306,12 @@ impl<'a> PatternLowerer<'a> {
             returns_receiver_alias,
             owned_temps: IndexSet::default(),
         }
+    }
+
+    /// What a pattern temp's projections read through: the temp keeps the
+    /// scrutinee's reference, and the fields belong to what it points at.
+    fn temp_referent(&self, local_index: u32, type_table: &TypeTable) -> TypeId {
+        type_table.peel_refs(type_table.get_local_type(local_index, &self.locals))
     }
 
     /// Look up struct field definitions by `type_id`
@@ -1769,11 +1762,16 @@ impl<'a> PatternLowerer<'a> {
         value: TirExpr,
         span: Span,
         out: &mut Vec<TirStmt>,
+        type_table: &TypeTable,
     ) -> (u32, String) {
         let local_index = self.alloc_local(value.type_id);
         let name = self.next_temp_name();
         let type_id = value.type_id;
-        self.owned_temps.insert(local_index);
+        // A temp holding a reference names the scrutinee's own storage, so what
+        // it destructures is aliased, never owned.
+        if type_table.peel_refs(type_id) == type_id {
+            self.owned_temps.insert(local_index);
+        }
         out.push(TirStmt::new(
             TirStmtKind::Let {
                 name: name.clone(),
@@ -1802,34 +1800,16 @@ impl<'a> PatternLowerer<'a> {
         // First, lower any expressions inside the value
         let mut value = value;
         self.lower_expr(&mut value, type_table);
-
-        let target = pattern_temp_type(pattern, value.type_id, type_table);
-        let mut value = value;
-        while value.type_id != target {
-            let (ResolvedType::Ref(inner) | ResolvedType::MutRef(inner)) =
-                *type_table.get(value.type_id)
-            else {
-                unreachable!("pattern_temp_type peels references only")
-            };
-            value = TirExpr::new(
-                TirExprKind::Unary {
-                    op: TirUnaryOp::Deref,
-                    expr: Box::new(value),
-                },
-                inner,
-                span,
-            );
-        }
         let value = value;
 
         match pattern {
             TirPattern::Tuple(sub_patterns, _) => {
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(value, span, out, type_table);
 
                 // Get element types
                 let elem_types = type_table
-                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
+                    .as_tuple(self.temp_referent(tuple_temp_index, type_table))
                     .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 // Project each element via FieldAccess. SROA / DCE later
@@ -1875,7 +1855,7 @@ impl<'a> PatternLowerer<'a> {
                 ..
             } => {
                 let (variant_temp_index, variant_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(value, span, out, type_table);
 
                 // If there are bindings, extract payload
                 if let Some(binding) = bindings.first() {
@@ -1908,11 +1888,11 @@ impl<'a> PatternLowerer<'a> {
             }
             TirPattern::Struct { fields, .. } => {
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(value, span, out, type_table);
 
                 // Get field type info from struct definition
                 let struct_fields_info = self.get_struct_fields(
-                    type_table.get_local_type(struct_temp_index, &self.locals),
+                    self.temp_referent(struct_temp_index, type_table),
                     type_table,
                 );
 
@@ -1988,10 +1968,10 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Tuple(sub_patterns, _) => {
                 // Nested tuple - allocate temp and recurse
                 let (tuple_temp_index, tuple_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(value, span, out, type_table);
 
                 let elem_types = type_table
-                    .as_tuple(type_table.get_local_type(tuple_temp_index, &self.locals))
+                    .as_tuple(self.temp_referent(tuple_temp_index, type_table))
                     .unwrap_or_else(|| vec![TypeTable::UNKNOWN; sub_patterns.len()]);
 
                 for (i, (sub_pattern, elem_type)) in
@@ -2039,7 +2019,7 @@ impl<'a> PatternLowerer<'a> {
                         && matches!(binding, TirPattern::Wildcard))
                 {
                     let (variant_temp_index, variant_temp_name) =
-                        self.emit_pattern_temp_let(value, span, out);
+                        self.emit_pattern_temp_let(value, span, out, type_table);
 
                     let payload_expr = TirExpr::new(
                         TirExprKind::VariantPayload {
@@ -2071,10 +2051,10 @@ impl<'a> PatternLowerer<'a> {
             TirPattern::Struct { fields, .. } => {
                 // Nested struct - allocate temp and recurse
                 let (struct_temp_index, struct_temp_name) =
-                    self.emit_pattern_temp_let(value, span, out);
+                    self.emit_pattern_temp_let(value, span, out, type_table);
 
                 let struct_fields_info = self.get_struct_fields(
-                    type_table.get_local_type(struct_temp_index, &self.locals),
+                    self.temp_referent(struct_temp_index, type_table),
                     type_table,
                 );
 

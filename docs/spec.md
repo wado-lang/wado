@@ -3946,7 +3946,7 @@ match s {
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - `match` expression/statement: implemented
 - `matches` operator: implemented
-- Match ergonomics (`&T` scrutinees in `if let`/`match`/`matches`; payload bindings become refs): implemented
+- Match ergonomics (`&T` scrutinees in `let`/`if let`/`match`/`matches`; payload bindings become refs onto the scrutinee's own storage, never a copy): implemented
 - Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
