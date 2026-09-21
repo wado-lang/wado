@@ -115,13 +115,13 @@ fn analyze_function_field_usage(
     let mut field_sets: IndexMap<u32, IndexSet<u32>> = IndexMap::default();
     let mut conservative_locals: IndexSet<u32> = IndexSet::default();
 
-    let mut cx = ParamUsageCtx {
+    let mut scan = ParamUsageScan {
         struct_params: &struct_param_locals,
         field_sets: &mut field_sets,
         conservative_params: &mut conservative_locals,
         type_table,
     };
-    collect_param_field_usage_node(arena, NodeRef::Block(arena.root), &mut cx);
+    scan.visit_node(arena, NodeRef::Block(arena.root));
 
     // Convert from local_index-keyed to position-keyed
     let mut result: IndexMap<u32, ParamFieldUsage> = IndexMap::default();
@@ -137,82 +137,102 @@ fn analyze_function_field_usage(
     result
 }
 
-/// Threaded read-only context for the parameter field-usage scan that
-/// builds the `FieldUsageCache`.
-struct ParamUsageCtx<'a> {
+/// Record which fields of each struct parameter the function accesses, for the
+/// `FieldUsageCache`.
+///
+/// Any shape that reads a tracked param *whole* — a bare `Local` in value
+/// position — resolves to conservative "all fields": the callee can reach every
+/// field through the shared reference. Precise `param.field` shapes return first.
+struct ParamUsageScan<'a> {
     struct_params: &'a IndexSet<u32>,
     field_sets: &'a mut IndexMap<u32, IndexSet<u32>>,
     conservative_params: &'a mut IndexSet<u32>,
     type_table: &'a TypeTable,
 }
 
-/// Record which fields of each struct parameter the function accesses.
-///
-/// Any shape that reads a tracked param *whole* — a bare `Local` in value
-/// position — resolves to conservative "all fields": the callee can reach every
-/// field through the shared reference. Precise `param.field` shapes return first.
-fn collect_param_field_usage_node(body: &Body, node: NodeRef, cx: &mut ParamUsageCtx) {
-    if let NodeRef::Expr(e) = node {
-        match &body.exprs[e].kind {
-            // `param.field` (or `(&param).field` / `(&mut param).field`):
-            // record the field and stop — the receiver place is not a
-            // value-position read.
-            ExprKind::FieldAccess {
+impl ParamUsageScan<'_> {
+    /// A struct param handed to a callee, directly or as `&`/`&mut` of one,
+    /// escapes: mark every field of it conservative.
+    fn mark_if_param_passed(&mut self, body: &Body, op: Operand) {
+        let Some(e) = op.as_expr() else { return };
+        let place = match &body.exprs[e].kind {
+            ExprKind::Unary {
+                op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
                 expr: inner,
-                field_index,
-                ..
             } => {
-                let (inner, field_index) = (*inner, *field_index);
-                // A promoted `Operand::Value` receiver names no scalarizable param.
-                if let Some(idx) = inner.as_expr().and_then(|e| extract_local_index(body, e))
-                    && cx.struct_params.contains(&idx)
-                {
-                    cx.field_sets.entry(idx).or_default().insert(field_index);
-                    return;
-                }
+                let Some(ie) = inner.as_expr() else { return };
+                ie
             }
-            // `param = val` reassigns the whole struct → conservative. (A
-            // `param.field = val` field-assign is recorded when the generic
-            // descent reaches its `FieldAccess` target.)
-            ExprKind::Assign { target, .. } => {
-                if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
-                    && cx.struct_params.contains(index)
-                {
-                    cx.conservative_params.insert(*index);
-                }
-            }
-            // A struct param passed to a callee escapes → conservative for
-            // every field.
-            ExprKind::Call { args, .. } => {
-                for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    mark_if_param_passed_operand(body, arg, cx);
-                }
-            }
-            ExprKind::IndirectCall { args, .. } => {
-                for arg in args.clone() {
-                    mark_if_param_passed_operand(body, arg, cx);
-                }
-            }
-            // Any other value-position read of the whole param — a ref-share
-            // binding, a return, a literal capture, an indirect-call callee —
-            // aliases the struct: writes through the alias are invisible to
-            // this scan, so all fields may be touched.
-            ExprKind::Local { index, .. } => {
-                if cx.struct_params.contains(index) {
-                    cx.conservative_params.insert(*index);
-                }
-            }
-            _ => {}
+            _ => e,
+        };
+        if let ExprKind::Local { index, .. } = &body.exprs[place].kind
+            && self.struct_params.contains(index)
+            && is_gc_heap_type(body.exprs[place].type_id, self.type_table)
+        {
+            self.conservative_params.insert(*index);
         }
     }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| {
-        if !matches!(c, NodeRef::Pat(_)) {
-            kids.push(c);
+}
+
+impl NirRefVisitor for ParamUsageScan<'_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        match node {
+            // A pattern binds names; it reads no param.
+            NodeRef::Pat(_) => return,
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                // `param.field` (or `(&param).field` / `(&mut param).field`):
+                // record the field and stop — the receiver place is not a
+                // value-position read.
+                ExprKind::FieldAccess {
+                    expr: inner,
+                    field_index,
+                    ..
+                } => {
+                    let (inner, field_index) = (*inner, *field_index);
+                    // A promoted `Operand::Value` receiver names no scalarizable param.
+                    if let Some(idx) = inner.as_expr().and_then(|e| extract_local_index(body, e))
+                        && self.struct_params.contains(&idx)
+                    {
+                        self.field_sets.entry(idx).or_default().insert(field_index);
+                        return;
+                    }
+                }
+                // `param = val` reassigns the whole struct → conservative. (A
+                // `param.field = val` field-assign is recorded when the generic
+                // descent reaches its `FieldAccess` target.)
+                ExprKind::Assign { target, .. } => {
+                    if let ExprKind::Local { index, .. } = &body.exprs[*target].kind
+                        && self.struct_params.contains(index)
+                    {
+                        self.conservative_params.insert(*index);
+                    }
+                }
+                // A struct param passed to a callee escapes → conservative for
+                // every field.
+                ExprKind::Call { args, .. } => {
+                    for arg in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                        self.mark_if_param_passed(body, arg);
+                    }
+                }
+                ExprKind::IndirectCall { args, .. } => {
+                    for arg in args.clone() {
+                        self.mark_if_param_passed(body, arg);
+                    }
+                }
+                // Any other value-position read of the whole param — a ref-share
+                // binding, a return, a literal capture, an indirect-call callee —
+                // aliases the struct: writes through the alias are invisible to
+                // this scan, so all fields may be touched.
+                ExprKind::Local { index, .. } => {
+                    if self.struct_params.contains(index) {
+                        self.conservative_params.insert(*index);
+                    }
+                }
+                _ => {}
+            },
+            NodeRef::Stmt(_) | NodeRef::Block(_) => {}
         }
-    });
-    for c in kids {
-        collect_param_field_usage_node(body, c, cx);
+        self.walk_node(body, node);
     }
 }
 
@@ -233,39 +253,6 @@ fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
             }
         }
         _ => None,
-    }
-}
-
-fn mark_if_param_passed_operand(body: &Body, op: Operand, cx: &mut ParamUsageCtx) {
-    if let Some(e) = op.as_expr() {
-        mark_if_param_passed(body, e, cx);
-    }
-}
-
-/// If `e` is a struct param (or &mut of one), mark it as conservative.
-fn mark_if_param_passed(body: &Body, e: ExprId, cx: &mut ParamUsageCtx) {
-    match &body.exprs[e].kind {
-        ExprKind::Local { index, .. } => {
-            if cx.struct_params.contains(index)
-                && is_gc_heap_type(body.exprs[e].type_id, cx.type_table)
-            {
-                cx.conservative_params.insert(*index);
-            }
-        }
-        ExprKind::Unary {
-            op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
-            expr: inner,
-        } => {
-            let inner = *inner;
-            if let Some(ie) = inner.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-                && cx.struct_params.contains(index)
-                && is_gc_heap_type(body.exprs[ie].type_id, cx.type_table)
-            {
-                cx.conservative_params.insert(*index);
-            }
-        }
-        _ => {}
     }
 }
 
@@ -689,13 +676,12 @@ fn count_field_accesses_in_block(
     counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
     type_table: &TypeTable,
 ) {
-    count_field_accesses_node(
-        body,
-        NodeRef::Block(block),
+    let mut scan = FieldAccessScan {
         counts,
-        FaCtx::default(),
         type_table,
-    );
+        ctx: FaCtx::default(),
+    };
+    scan.visit_node(body, NodeRef::Block(block));
 }
 
 /// Function-wide alias facts that disqualify scalarization candidates.
@@ -946,7 +932,7 @@ fn collect_locals_introduced_in_block(body: &Body, block: BlockId) -> IndexSet<u
 
 /// Positional context for the field-access tally. Both flags propagate exactly
 /// one level (`Assign` → target; a call → its args/receiver); every other node
-/// resets them, which is why neutral arms can delegate descent to `for_each_child`.
+/// resets them, which is why neutral arms can leave descent to the visitor.
 #[derive(Clone, Copy, Default)]
 struct FaCtx {
     is_assign_target: bool,
@@ -969,202 +955,183 @@ impl FaCtx {
     }
 }
 
-fn count_field_accesses_operand(
-    body: &Body,
-    op: Operand,
-    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
+/// The per-loop field-access tally. Descent is [`NirRefVisitor`]'s, so a shape
+/// with no arm here is still walked; the arms name only what depends on
+/// position (`is_assign_target` / `in_call_arg`) or prunes (`Loop`).
+struct FieldAccessScan<'a> {
+    counts: &'a mut IndexMap<(u32, u32), FieldAccessInfo>,
+    type_table: &'a TypeTable,
+    /// Context for the node about to be entered, taken as it is entered, so it
+    /// reaches exactly one level; every other node sees the default.
     ctx: FaCtx,
-    type_table: &TypeTable,
-) {
-    if let Operand::Expr(e) = op {
-        count_field_accesses_node(body, NodeRef::Expr(e), counts, ctx, type_table);
-    }
 }
 
-/// Tally read/write field accesses and alias-creating uses of GC-heap locals.
-/// Only the arms whose semantics depend on position (`is_assign_target` /
-/// `in_call_arg`) or that prune (`Loop`, patterns) are spelled out; neutral arms
-/// fall through to a `for_each_child` descent with the context reset.
-fn count_field_accesses_node(
-    body: &Body,
-    node: NodeRef,
-    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-    ctx: FaCtx,
-    type_table: &TypeTable,
-) {
-    match node {
-        // A `ConstantValue` pattern's expr can carry `local.field` reads or an
-        // alias-creating `&local`; descend so they are tallied — a missed alias
-        // would let HFS wrongly scalarize an aliased field (stale-scalar miscompile).
-        NodeRef::Pat(_) => count_field_accesses_children(body, node, counts, type_table),
-        NodeRef::Block(block) => {
-            for sid in body.blocks[block].stmts.clone() {
-                count_field_accesses_node(
-                    body,
-                    NodeRef::Stmt(sid),
-                    counts,
-                    FaCtx::default(),
-                    type_table,
-                );
-            }
+impl FieldAccessScan<'_> {
+    fn visit_operand(&mut self, body: &Body, op: Operand, ctx: FaCtx) {
+        if let Some(e) = op.as_expr() {
+            self.ctx = ctx;
+            self.visit_node(body, NodeRef::Expr(e));
         }
-        NodeRef::Stmt(s) => match &body.stmts[s].kind {
-            StmtKind::Let { value, .. } => {
-                // A bare GC-`Local` value aliases its source (the struct is a
-                // reference, so the copy shares the heap object); mutations
-                // through the new binding bypass the source's HFS scalar.
-                let value = *value;
-                if let Some(ve) = value.as_expr()
-                    && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
-                    && is_gc_heap_type(body.exprs[ve].type_id, type_table)
-                {
-                    mark_local_aliased(*index, counts);
-                }
-                count_field_accesses_operand(body, value, counts, FaCtx::default(), type_table);
-            }
-            // Each loop level is tallied independently by its own scalarize_loop;
-            // recursing would let outer HFS hoist inner-only fields before init.
-            StmtKind::Loop { .. } => {}
-            _ => count_field_accesses_children(body, node, counts, type_table),
-        },
-        NodeRef::Expr(e) => match &body.exprs[e].kind {
-            ExprKind::Assign { target, value } => {
-                let (target, value) = (*target, *value);
-                count_field_accesses_node(
-                    body,
-                    NodeRef::Expr(target),
-                    counts,
-                    FaCtx::assign_target(),
-                    type_table,
-                );
-                count_field_accesses_operand(body, value, counts, FaCtx::default(), type_table);
-                if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
-                    mark_local_fully_assigned(*index, counts);
-                }
-                if let Some(ve) = value.as_expr()
-                    && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
-                    && is_gc_heap_type(body.exprs[ve].type_id, type_table)
-                {
-                    mark_local_aliased(*index, counts);
-                }
-            }
-            ExprKind::FieldAccess {
-                expr: inner,
-                field_index,
-                field_name,
-            } => {
-                // Match both `local.field` and `(&mut local).field`
-                // (`&mut local.field` lowers to FieldAccess over Unary{MutRef}).
-                let (inner, field_index, field_name) = (*inner, *field_index, field_name.clone());
-                let local_info = match inner.as_expr() {
-                    Some(inner_e) => match &body.exprs[inner_e].kind {
-                        ExprKind::Local { index, name } => {
-                            Some((*index, name.clone(), body.exprs[inner_e].type_id))
-                        }
-                        ExprKind::Unary {
-                            op: NirUnaryOp::MutRef,
-                            expr: ref_inner,
-                        } => {
-                            let ref_inner = *ref_inner;
-                            if let Some(re) = ref_inner.as_expr()
-                                && let ExprKind::Local { index, name } = &body.exprs[re].kind
-                            {
-                                Some((*index, name.clone(), body.exprs[re].type_id))
-                            } else {
-                                None
-                            }
-                        }
-                        _ => None,
-                    },
-                    None => None,
-                };
-                if let Some((index, name, local_type_id)) = local_info {
-                    let key = (index, field_index);
-                    let field_type_id = body.exprs[e].type_id;
-                    let info = counts.entry(key).or_insert_with(|| FieldAccessInfo {
-                        local_name: name,
-                        field_name,
-                        local_type_id,
-                        field_type_id,
-                        read_count: 0,
-                        write_count: 0,
-                        local_fully_assigned: false,
-                        aliased: false,
-                    });
-                    if ctx.is_assign_target {
-                        info.write_count += 1;
-                    } else {
-                        info.read_count += 1;
-                    }
-                } else {
-                    count_field_accesses_operand(body, inner, counts, FaCtx::default(), type_table);
-                }
-            }
-            ExprKind::Unary { op, expr } => {
-                // `&local` / `&mut local` taken outside a direct call argument
-                // escapes (the reference can be stored / returned and writes
-                // through it bypass the HFS scalar); a call arg is exempt
-                // because the call's write-back/re-read synchronises the scalar.
-                // Either way the inner `Local` is an address, not a value read,
-                // so stop — do not let the `Local` arm over-mark it aliased.
-                let (op, inner) = (*op, *expr);
-                if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
-                    && let Some(ie) = inner.as_expr()
-                    && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
-                {
-                    if !ctx.in_call_arg && is_gc_heap_type(body.exprs[ie].type_id, type_table) {
-                        mark_local_aliased(*index, counts);
-                    }
-                } else {
-                    count_field_accesses_operand(body, inner, counts, FaCtx::default(), type_table);
-                }
-            }
-            ExprKind::Call { args, .. } => {
-                for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
-                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
-                }
-            }
-            ExprKind::CmRawCall { args, .. } => {
-                for aid in args.clone() {
-                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
-                }
-            }
-            ExprKind::IndirectCall { callee, args, .. } => {
-                let callee = *callee;
-                let arg_ids = args.clone();
-                count_field_accesses_operand(body, callee, counts, FaCtx::default(), type_table);
-                for aid in arg_ids {
-                    count_field_accesses_operand(body, aid, counts, FaCtx::call_arg(), type_table);
-                }
-            }
-            ExprKind::Local { index, .. } => {
-                // A whole-value read of a GC-heap local outside a call arg or
-                // assign target escapes: the surrounding code can read/write the
-                // struct's fields without going through any HFS scalar.
-                if !ctx.in_call_arg
-                    && !ctx.is_assign_target
-                    && is_gc_heap_type(body.exprs[e].type_id, type_table)
-                {
-                    mark_local_aliased(*index, counts);
-                }
-            }
-            _ => count_field_accesses_children(body, node, counts, type_table),
-        },
     }
 }
 
-/// Neutral descent: recurse into every child with the context reset. Pattern
-/// children are visited but tally nothing (the `Pat` arm above).
-fn count_field_accesses_children(
-    body: &Body,
-    node: NodeRef,
-    counts: &mut IndexMap<(u32, u32), FieldAccessInfo>,
-    type_table: &TypeTable,
-) {
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        count_field_accesses_node(body, c, counts, FaCtx::default(), type_table);
+impl NirRefVisitor for FieldAccessScan<'_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        let ctx = std::mem::take(&mut self.ctx);
+        match node {
+            // A `ConstantValue` pattern's expr can carry `local.field` reads or
+            // an alias-creating `&local`; descend so they are tallied — a missed
+            // alias would let HFS wrongly scalarize an aliased field
+            // (stale-scalar miscompile).
+            NodeRef::Pat(_) | NodeRef::Block(_) => {}
+            NodeRef::Stmt(s) => match &body.stmts[s].kind {
+                StmtKind::Let { value, .. } => {
+                    // A bare GC-`Local` value aliases its source (the struct is a
+                    // reference, so the copy shares the heap object); mutations
+                    // through the new binding bypass the source's HFS scalar.
+                    if let Some(ve) = value.as_expr()
+                        && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                        && is_gc_heap_type(body.exprs[ve].type_id, self.type_table)
+                    {
+                        let index = *index;
+                        mark_local_aliased(index, self.counts);
+                    }
+                }
+                // Each loop level is tallied independently by its own
+                // scalarize_loop; recursing would let outer HFS hoist inner-only
+                // fields before init.
+                StmtKind::Loop { .. } => return,
+                _ => {}
+            },
+            NodeRef::Expr(e) => match &body.exprs[e].kind {
+                ExprKind::Assign { target, value } => {
+                    let (target, value) = (*target, *value);
+                    self.ctx = FaCtx::assign_target();
+                    self.visit_node(body, NodeRef::Expr(target));
+                    self.visit_operand(body, value, FaCtx::default());
+                    if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
+                        let index = *index;
+                        mark_local_fully_assigned(index, self.counts);
+                    }
+                    if let Some(ve) = value.as_expr()
+                        && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
+                        && is_gc_heap_type(body.exprs[ve].type_id, self.type_table)
+                    {
+                        let index = *index;
+                        mark_local_aliased(index, self.counts);
+                    }
+                    return;
+                }
+                ExprKind::FieldAccess {
+                    expr: inner,
+                    field_index,
+                    field_name,
+                } => {
+                    // Match both `local.field` and `(&mut local).field`
+                    // (`&mut local.field` lowers to FieldAccess over Unary{MutRef}).
+                    let (inner, field_index, field_name) =
+                        (*inner, *field_index, field_name.clone());
+                    let local_info = match inner.as_expr() {
+                        Some(inner_e) => match &body.exprs[inner_e].kind {
+                            ExprKind::Local { index, name } => {
+                                Some((*index, name.clone(), body.exprs[inner_e].type_id))
+                            }
+                            ExprKind::Unary {
+                                op: NirUnaryOp::MutRef,
+                                expr: ref_inner,
+                            } => {
+                                let ref_inner = *ref_inner;
+                                if let Some(re) = ref_inner.as_expr()
+                                    && let ExprKind::Local { index, name } = &body.exprs[re].kind
+                                {
+                                    Some((*index, name.clone(), body.exprs[re].type_id))
+                                } else {
+                                    None
+                                }
+                            }
+                            _ => None,
+                        },
+                        None => None,
+                    };
+                    if let Some((index, name, local_type_id)) = local_info {
+                        let key = (index, field_index);
+                        let field_type_id = body.exprs[e].type_id;
+                        let info = self.counts.entry(key).or_insert_with(|| FieldAccessInfo {
+                            local_name: name,
+                            field_name,
+                            local_type_id,
+                            field_type_id,
+                            read_count: 0,
+                            write_count: 0,
+                            local_fully_assigned: false,
+                            aliased: false,
+                        });
+                        if ctx.is_assign_target {
+                            info.write_count += 1;
+                        } else {
+                            info.read_count += 1;
+                        }
+                        return;
+                    }
+                }
+                ExprKind::Unary { op, expr } => {
+                    // `&local` / `&mut local` taken outside a direct call argument
+                    // escapes (the reference can be stored / returned and writes
+                    // through it bypass the HFS scalar); a call arg is exempt
+                    // because the call's write-back/re-read synchronises the scalar.
+                    // Either way the inner `Local` is an address, not a value read,
+                    // so stop — do not let the `Local` arm over-mark it aliased.
+                    let (op, inner) = (*op, *expr);
+                    if matches!(op, NirUnaryOp::Ref | NirUnaryOp::MutRef)
+                        && let Some(ie) = inner.as_expr()
+                        && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
+                    {
+                        let index = *index;
+                        if !ctx.in_call_arg
+                            && is_gc_heap_type(body.exprs[ie].type_id, self.type_table)
+                        {
+                            mark_local_aliased(index, self.counts);
+                        }
+                        return;
+                    }
+                }
+                ExprKind::Call { args, .. } => {
+                    for aid in args.iter().map(|a| a.expr).collect::<Vec<_>>() {
+                        self.visit_operand(body, aid, FaCtx::call_arg());
+                    }
+                    return;
+                }
+                ExprKind::CmRawCall { args, .. } => {
+                    for aid in args.clone() {
+                        self.visit_operand(body, aid, FaCtx::call_arg());
+                    }
+                    return;
+                }
+                ExprKind::IndirectCall { callee, args, .. } => {
+                    let callee = *callee;
+                    let arg_ids = args.clone();
+                    self.visit_operand(body, callee, FaCtx::default());
+                    for aid in arg_ids {
+                        self.visit_operand(body, aid, FaCtx::call_arg());
+                    }
+                    return;
+                }
+                ExprKind::Local { index, .. } => {
+                    // A whole-value read of a GC-heap local outside a call arg or
+                    // assign target escapes: the surrounding code can read/write the
+                    // struct's fields without going through any HFS scalar.
+                    let index = *index;
+                    if !ctx.in_call_arg
+                        && !ctx.is_assign_target
+                        && is_gc_heap_type(body.exprs[e].type_id, self.type_table)
+                    {
+                        mark_local_aliased(index, self.counts);
+                    }
+                }
+                _ => {}
+            },
+        }
+        self.walk_node(body, node);
     }
 }
 
@@ -1250,69 +1217,73 @@ fn compute_deferrable_candidates(
     type_table: &TypeTable,
     cache: &FieldUsageCache,
 ) -> Vec<bool> {
-    let mut touched: IndexSet<(u32, u32)> = IndexSet::default();
-    collect_call_touched_node(
-        body,
-        NodeRef::Block(block),
+    let mut scan = CallTouchedScan {
         candidates,
         type_table,
         cache,
-        &mut touched,
-    );
+        touched: IndexSet::default(),
+    };
+    scan.visit_node(body, NodeRef::Block(block));
+    let touched = scan.touched;
     candidates
         .iter()
         .map(|c| !touched.contains(&(c.local_index, c.field_index)))
         .collect()
 }
 
-/// Recursively visit every node under `node`, recording which `(local,
-/// field)` candidates are touched through the GC reference: a call that
-/// takes the local by `&`/`&mut`, or a direct `&self.f` / `&mut self.f`.
-fn collect_call_touched_node(
-    body: &Body,
-    node: NodeRef,
-    candidates: &[ScalarizeCandidate],
-    type_table: &TypeTable,
-    cache: &FieldUsageCache,
-    touched: &mut IndexSet<(u32, u32)>,
-) {
-    if let NodeRef::Expr(e) = node {
-        if matches!(
-            &body.exprs[e].kind,
-            ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
-        ) {
-            let mut sync = SyncFields::default();
-            accumulate_call_sync(body, e, candidates, type_table, cache, &mut sync);
-            touched.extend(sync.write_back.iter().copied());
-            touched.extend(sync.re_read.iter().copied());
-            touched.extend(sync.scalar_write.iter().copied());
+/// Records which `(local, field)` candidates are touched through the GC
+/// reference: a call that takes the local by `&`/`&mut`, or a direct
+/// `&self.f` / `&mut self.f`. Descent is [`NirRefVisitor`]'s.
+struct CallTouchedScan<'a> {
+    candidates: &'a [ScalarizeCandidate],
+    type_table: &'a TypeTable,
+    cache: &'a FieldUsageCache,
+    touched: IndexSet<(u32, u32)>,
+}
+
+impl NirRefVisitor for CallTouchedScan<'_> {
+    fn visit_node(&mut self, body: &Body, node: NodeRef) {
+        if let NodeRef::Expr(e) = node {
+            if matches!(
+                &body.exprs[e].kind,
+                ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. }
+            ) {
+                let mut sync = SyncFields::default();
+                accumulate_call_sync(
+                    body,
+                    e,
+                    self.candidates,
+                    self.type_table,
+                    self.cache,
+                    &mut sync,
+                );
+                self.touched.extend(sync.write_back.iter().copied());
+                self.touched.extend(sync.re_read.iter().copied());
+                self.touched.extend(sync.scalar_write.iter().copied());
+            }
+            // Taking a reference to the candidate's exact field — `&self.f` /
+            // `&mut self.f` — lets a callee read or write the field through the
+            // reference, bypassing the scalar. `accumulate_call_sync` only
+            // tracks whole-local `&`/`&mut` args, so guard the field-ref shape
+            // here: such a candidate must NOT be deferred (its field is not
+            // call-clean). Conservative — at worst it forgoes the deferral.
+            if let ExprKind::Unary {
+                op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
+                expr: inner,
+            } = &body.exprs[e].kind
+                && let Some(ie) = inner.as_expr()
+                && let ExprKind::FieldAccess {
+                    expr: base,
+                    field_index,
+                    ..
+                } = &body.exprs[ie].kind
+                && let Some(be) = base.as_expr()
+                && let ExprKind::Local { index, .. } = &body.exprs[be].kind
+            {
+                self.touched.insert((*index, *field_index));
+            }
         }
-        // Taking a reference to the candidate's exact field — `&self.f` /
-        // `&mut self.f` — lets a callee read or write the field through the
-        // reference, bypassing the scalar. `accumulate_call_sync` only
-        // tracks whole-local `&`/`&mut` args, so guard the field-ref shape
-        // here: such a candidate must NOT be deferred (its field is not
-        // call-clean). Conservative — at worst it forgoes the deferral.
-        if let ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } = &body.exprs[e].kind
-            && let Some(ie) = inner.as_expr()
-            && let ExprKind::FieldAccess {
-                expr: base,
-                field_index,
-                ..
-            } = &body.exprs[ie].kind
-            && let Some(be) = base.as_expr()
-            && let ExprKind::Local { index, .. } = &body.exprs[be].kind
-        {
-            touched.insert((*index, *field_index));
-        }
-    }
-    let mut kids = Vec::new();
-    body.for_each_child(node, |c| kids.push(c));
-    for c in kids {
-        collect_call_touched_node(body, c, candidates, type_table, cache, touched);
+        self.walk_node(body, node);
     }
 }
 
