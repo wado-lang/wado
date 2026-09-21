@@ -1,0 +1,22 @@
+// A bound's associated-type binding is part of what a caller has to satisfy,
+// so it is as much the signature as the bound's own arguments are.
+struct Hidden {
+    n: i32,
+}
+
+pub trait Holder with () {
+    type Item;
+
+    fn item(&self) -> Self::Item;
+}
+
+pub fn take<T: Holder<Item = Hidden>>(t: &T) -> i32 {
+    return t.item().n;
+}
+
+export fn run() {
+    assert 1 == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

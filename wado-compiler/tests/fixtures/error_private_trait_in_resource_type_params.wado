@@ -1,0 +1,16 @@
+// A resource declares type parameters like any other item, and a caller that
+// instantiates one has to be able to satisfy their bounds.
+trait Hidden with () {
+    fn n(&self) -> i32;
+}
+
+pub resource Holder<T: Hidden> {
+    fn get(&self) -> i32;
+}
+
+export fn run() {
+    assert 1 == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

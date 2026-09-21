@@ -3,8 +3,8 @@
 //! See `docs/spec.md`, "Signature reach".
 
 use crate::ast::{
-    AstId, AstVisitor, Function, GenericParam, ImplBlock, Item, Module, SelfKind, TraitBound, Type,
-    Visibility, walk_type,
+    AstId, AstVisitor, Block, Function, GenericParam, ImplBlock, Item, Module, SelfKind,
+    TraitBound, Type, Visibility,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
@@ -98,6 +98,9 @@ impl Walk<'_> {
                     .trait_type
                     .as_ref()
                     .and_then(|ty| self.declared_reach(ty));
+                for binding in &block.associated_types {
+                    self.ty(&binding.ty, &binding.name, head);
+                }
                 for method in &block.methods {
                     let declared =
                         from_trait.unwrap_or_else(|| reach(method.visibility, method.is_export));
@@ -109,10 +112,11 @@ impl Walk<'_> {
                 }
             }
             Item::Trait(decl) => {
-                for bound in &decl.supertraits {
-                    self.bound(bound, &decl.name, decl.visibility);
-                }
+                self.bounds(&decl.supertraits, &decl.name, decl.visibility);
                 self.type_params(&decl.type_params, &decl.name, decl.visibility);
+                for assoc in &decl.associated_types {
+                    self.bounds(&assoc.bounds, &assoc.name, decl.visibility);
+                }
                 for method in &decl.methods {
                     self.function(method, decl.visibility);
                 }
@@ -123,6 +127,10 @@ impl Walk<'_> {
                 }
             }
             Item::Resource(decl) => {
+                self.type_params(&decl.type_params, &decl.name, decl.visibility);
+                if let Some(parent) = &decl.parent {
+                    self.ty(parent, &decl.name, decl.visibility);
+                }
                 for method in &decl.methods {
                     self.function(method, decl.visibility);
                 }
@@ -170,20 +178,21 @@ impl Walk<'_> {
     }
 
     fn type_params(&mut self, params: &[GenericParam], item: &str, item_reach: Visibility) {
-        for bound in params.iter().flat_map(|p| &p.bounds) {
-            self.bound(bound, item, item_reach);
-        }
+        self.check(item, item_reach, |sites| sites.visit_generic_params(params));
     }
 
-    fn bound(&mut self, bound: &TraitBound, item: &str, item_reach: Visibility) {
-        self.site(bound.id, bound.span, item, item_reach);
-        for arg in &bound.type_args {
-            self.ty(arg, item, item_reach);
-        }
+    fn bounds(&mut self, bounds: &[TraitBound], item: &str, item_reach: Visibility) {
+        self.check(item, item_reach, |sites| sites.visit_trait_bounds(bounds));
     }
 
     fn ty(&mut self, ty: &Type, item: &str, item_reach: Visibility) {
-        for (id, span) in reference_sites(ty) {
+        self.check(item, item_reach, |sites| sites.visit_type(ty));
+    }
+
+    fn check(&mut self, item: &str, item_reach: Visibility, collect: impl FnOnce(&mut Sites)) {
+        let mut sites = Sites(Vec::new());
+        collect(&mut sites);
+        for (id, span) in sites.0 {
             self.site(id, span, item, item_reach);
         }
     }
@@ -219,40 +228,48 @@ impl Walk<'_> {
         self.site_reach(head_site(ty)?)
     }
 
-    /// How far an impl's members reach: a caller has to be able to write the
-    /// head to name one, so no further than what the head itself names.
+    /// How far an impl's members reach. An impl declares no visibility of its
+    /// own, so it takes one from what a caller must write to select it: the
+    /// head, and the bounds gating it — a type that cannot name `T`'s bound
+    /// cannot satisfy it, and so never reaches the members.
     fn head_reach(&self, block: &ImplBlock) -> Visibility {
-        block
-            .trait_type
-            .iter()
-            .chain([&block.ty])
-            .flat_map(reference_sites)
+        let mut sites = Sites(Vec::new());
+        for ty in block.trait_type.iter().chain([&block.ty]) {
+            sites.visit_type(ty);
+        }
+        sites.visit_generic_params(&block.type_params);
+        sites
+            .0
+            .into_iter()
             .filter_map(|(id, _)| self.site_reach(id))
             .fold(Visibility::Public, Visibility::narrower)
     }
 }
 
-/// Every type reference site `ty` carries, the type's own walk deciding what
-/// counts. A `with` clause is left out: it names an effect, which the name
-/// resolver does not answer for and `effect_check` checks instead.
-fn reference_sites(ty: &Type) -> Vec<(AstId, Span)> {
-    struct Sites(Vec<(AstId, Span)>);
-    impl AstVisitor for Sites {
-        fn visit_id(&mut self, id: AstId, span: Span) {
-            self.0.push((id, span));
-        }
+/// Collects the reference sites under whatever it is pointed at, through the
+/// AST's own walkers so that a shape they reach is never silently exempt.
+///
+/// What it leaves out is what the name resolver does not answer for: an effect
+/// name, which `effect_check` checks, and a binder's own id, which declares
+/// rather than references. A body is left out because it names nothing the
+/// caller has to write.
+struct Sites(Vec<(AstId, Span)>);
 
-        fn visit_type(&mut self, ty: &Type) {
-            let Type::Function(ft) = ty else {
-                return walk_type(self, ty);
-            };
-            for param in &ft.params {
-                self.visit_type(param);
+impl AstVisitor for Sites {
+    fn visit_id(&mut self, id: AstId, span: Span) {
+        self.0.push((id, span));
+    }
+
+    fn visit_effect_id(&mut self, _id: AstId, _span: Span) {}
+
+    fn visit_block(&mut self, _block: &Block) {}
+
+    fn visit_generic_params(&mut self, params: &[GenericParam]) {
+        for p in params {
+            self.visit_trait_bounds(&p.bounds);
+            if let Some(default) = &p.default {
+                self.visit_type(default);
             }
-            self.visit_type(&ft.return_type);
         }
     }
-    let mut sites = Sites(Vec::new());
-    sites.visit_type(ty);
-    sites.0
 }

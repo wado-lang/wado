@@ -860,17 +860,16 @@ impl AstVisitor for Resolver<'_> {
         for bound in bounds {
             let answer = self.resolve_name(&bound.name);
             self.record(bound.id, answer);
-            for arg in &bound.type_args {
-                self.visit_type(arg);
-            }
             for assoc in &bound.assoc_types {
                 // The member is named relative to the bound's trait, not to
                 // this module, so the site is recorded and left for the
                 // consumer that knows the trait.
                 self.record(assoc.id, Resolution::Unresolved);
-                self.visit_type(&assoc.ty);
             }
         }
+        // The types a bound carries are reached structurally, so a shape the
+        // walker knows is never one this pass forgets to answer for.
+        ast::walk_trait_bounds(self, bounds);
     }
 
     /// A qualified path names declarations with the segments before its last:
