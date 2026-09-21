@@ -1,0 +1,19 @@
+//! The Kiln invocation that builds `../generated/onnx.wado` from the grammar.
+//!
+//! It lives here rather than beside the reader because a Kiln generator cannot
+//! run one, and `src/generator.wado` reaches the reader. `wado check` re-runs
+//! this and byte-compares, so the committed parser cannot drift from `Onnx.g4`.
+
+use onnx from "../grammar/Onnx.g4"
+    with {
+        generator: { module: "../../package-gale/src/generator.wado", output_dir: "../generated" },
+    };
+
+test "the committed parser is the one the grammar builds" {
+    let result = onnx::parse(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = Relu(X)
+        }`,
+    );
+    assert result.ok();
+}

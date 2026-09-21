@@ -1,10 +1,10 @@
 //! An ONNX graph as the textual format states it, read off the parse tree.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-use onnx from "../grammar/Onnx.g4"
-    with {
-        generator: { module: "../../package-gale/src/generator.wado" },
-    };
+// The parser Gale builds from `../grammar/Onnx.g4`, imported as the committed
+// module rather than through the grammar: a Kiln generator cannot itself run
+// one. `onnx_grammar_test.wado` holds the invocation that keeps the two equal.
+use onnx from "../generated/onnx.wado";
 
 /// One dimension as the file spells it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.
@@ -139,20 +139,15 @@ fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -
     let mut saw_bracket = false;
     let mut rank = Rank::Scalar;
     for let c of children(s, tensor) {
-        match s.child_kind(c) {
-            Token => {
-                let text = toks.token_text(s.token_index(c));
-                if text == "[" {
-                    saw_bracket = true;
-                } else if text != "]" {
-                    dtype = text;
-                }
-            },
-            Node => {
-                rank = Rank::Dims(read_dims(s, toks, c));
-            },
-            Missing | Skipped => {
-            },
+        if s.is_token(c) {
+            let text = toks.token_text(s.token_index(c));
+            if text == "[" {
+                saw_bracket = true;
+            } else if text != "]" {
+                dtype = text;
+            }
+        } else if s.is_node(c) {
+            rank = Rank::Dims(read_dims(s, toks, c));
         }
     }
     if saw_bracket && rank matches { Scalar } {

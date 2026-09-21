@@ -1,0 +1,11 @@
+# A two-layer MLP, the shape roadmap step 1 checks.
+<ir_version: 7, opset_import: [ "" : 14 ]>
+mlp (float[N, 128] X) => (float[N, 10] Y)
+<float[128, 64] W1, float[64] B1, float[64, 10] W2, float[10] B2>
+{
+    H = MatMul(X, W1)
+    HB = Add(H, B1)
+    A = Relu(HB)
+    T = MatMul(A, W2)
+    Y = Add(T, B2)
+}
