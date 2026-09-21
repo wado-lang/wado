@@ -6,9 +6,10 @@ on:
   pull_request:
     branches: [main]
 
-# A superseded pull-request run holds runners the push that superseded it needs.
+# A superseded pull-request run holds runners the next push needs. A run on main
+# is that commit's record, so it finishes.
 concurrency:
-  group: wado-vscode-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
