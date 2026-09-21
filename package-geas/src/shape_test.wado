@@ -23,7 +23,7 @@ test "matmul contracts the shared axis and keeps the outer two" {
         stat("Hidden", 4),
     ]);
 
-    let y = x.matmul(&w).unwrap();
+    let y = x.matmul(&w, "MatMul").unwrap();
     assert y.rank() == 2;
     assert y.axes[0].name == "Batch";
     assert y.axes[1].name == "Hidden";
@@ -40,8 +40,8 @@ test "a contracted axis of two lengths names both" {
         stat("Hidden", 4),
     ]);
 
-    let e = x.matmul(&w).unwrap_err();
-    assert `${e}` == "matmul: axis In is 3 on the left and 5 on the right";
+    let e = x.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis In is 3 on the left and 5 on the right";
 }
 
 test "a symbolic axis contracts against the same symbol" {
@@ -56,7 +56,7 @@ test "a symbolic axis contracts against the same symbol" {
         stat("Hidden", 4),
     ]);
 
-    let y = x.matmul(&w).unwrap();
+    let y = x.matmul(&w, "MatMul").unwrap();
     assert y.axes[0].extent.agrees(&Extent::Symbol("batch"));
 }
 
@@ -70,8 +70,8 @@ test "a symbol meeting a number is a failure, not a deferred check" {
         stat("Hidden", 4),
     ]);
 
-    let e = x.matmul(&w).unwrap_err();
-    assert `${e}` == "matmul: axis In is in on the left and 3 on the right";
+    let e = x.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis In is in on the left and 3 on the right";
 }
 
 test "matmul batches over every axis ahead of the last two" {
@@ -86,7 +86,7 @@ test "matmul batches over every axis ahead of the last two" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b).unwrap();
+    let y = a.matmul(&b, "MatMul").unwrap();
     assert y.rank() == 3;
     assert y.axes[0].extent.agrees(&Extent::Symbol("b"));
     assert y.axes[1].name == "M";
@@ -105,8 +105,8 @@ test "a batch axis of two lengths stops the contraction" {
         stat("N", 4),
     ]);
 
-    let e = a.matmul(&b).unwrap_err();
-    assert `${e}` == "matmul: axis Batch is 2 on the left and 8 on the right";
+    let e = a.matmul(&b, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis Batch is 2 on the left and 8 on the right";
 }
 
 test "a matrix broadcasts across the batch axes of the other operand" {
@@ -120,7 +120,7 @@ test "a matrix broadcasts across the batch axes of the other operand" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b).unwrap();
+    let y = a.matmul(&b, "MatMul").unwrap();
     assert y.rank() == 3;
     assert y.axes[0].name == "Batch";
     assert y.axes[1].name == "M";
@@ -139,7 +139,7 @@ test "a batch axis of extent 1 yields to the other operand's" {
         stat("N", 4),
     ]);
 
-    let y = a.matmul(&b).unwrap();
+    let y = a.matmul(&b, "MatMul").unwrap();
     assert y.axes[0].name == "Batch";
     assert y.axes[0].extent.agrees(&Extent::Static(8));
 }
@@ -151,7 +151,7 @@ test "a rank-1 left operand is a row whose axis is dropped" {
         stat("N", 4),
     ]);
 
-    let y = v.matmul(&w).unwrap();
+    let y = v.matmul(&w, "MatMul").unwrap();
     assert y.rank() == 1;
     assert y.axes[0].name == "N";
 }
@@ -163,7 +163,7 @@ test "a rank-1 right operand is a column whose axis is dropped" {
     ]);
     let v = shape([stat("K", 3)]);
 
-    let y = m.matmul(&v).unwrap();
+    let y = m.matmul(&v, "MatMul").unwrap();
     assert y.rank() == 1;
     assert y.axes[0].name == "M";
 }
@@ -175,8 +175,8 @@ test "a rank-1 operand still contracts its one axis" {
         stat("N", 4),
     ]);
 
-    let e = v.matmul(&w).unwrap_err();
-    assert `${e}` == "matmul: axis K is 5 on the left and 3 on the right";
+    let e = v.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis K is 5 on the left and 3 on the right";
 }
 
 test "elementwise broadcasts a missing leading axis" {

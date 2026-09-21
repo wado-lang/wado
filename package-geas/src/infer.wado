@@ -1,0 +1,189 @@
+//! Stage 0's pass over a graph: name every tensor's axes from the schema,
+//! then discharge each operator's extent conditions in order.
+//!
+//! Nothing here defers to run time. An operator whose conditions stage 0
+//! cannot discharge stops the build, which is what the MVP having one tier
+//! means (WEP 2026-09-20 § "The MVP Is Tier 1 Only").
+
+use { TreeMap } from "core:collections";
+use { Extent } from "./extent.wado";
+use { Axis, Shape, ShapeError } from "./shape.wado";
+use { Dim, Graph, Node, Rank, ValueInfo } from "./onnx_text.wado";
+use { Schema } from "./schema.wado";
+
+/// A tensor the schema does not reach. Geas does not fall back to positional
+/// axes, for the same reason stage 0 does not fall back to a runtime check.
+pub struct UnnamedTensor {
+    pub tensor: String,
+}
+
+/// The schema named a different number of axes than the graph gave the tensor
+/// dimensions.
+pub struct AxisCountConflict {
+    pub tensor: String,
+    pub named: i32,
+    pub dims: i32,
+}
+
+/// An operator's conditions failed, at the node its first output names.
+pub struct NodeConflict {
+    pub node: String,
+    pub error: ShapeError,
+}
+
+pub variant InferError {
+    Unnamed(UnnamedTensor),
+    AxisCount(AxisCountConflict),
+    UnknownOperator(String),
+    UnrankedTensor(String),
+    UndefinedInput(String),
+    Node(NodeConflict),
+}
+
+impl Display for UnnamedTensor {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.tensor}: no layout pattern names this tensor's axes`);
+    }
+}
+
+impl Display for AxisCountConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.tensor}: the schema names ${self.named} axes and the graph gives ${self.dims} dimensions`,
+        );
+    }
+}
+
+impl Display for NodeConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.error}`);
+    }
+}
+
+impl Display for InferError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Unnamed(e) => e.fmt(f),
+            AxisCount(e) => e.fmt(f),
+            UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
+            UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
+            UndefinedInput(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
+            Node(e) => e.fmt(f),
+        }
+    }
+}
+
+/// Every tensor's shape, keyed by name. Producing one is what discharges the
+/// graph's extent conditions, so a successful return is the proof.
+pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, InferError> {
+    let mut shapes = TreeMap::<String, Shape>::new();
+    for let vi of &graph.inputs {
+        shapes[vi.name] = shape_of(vi, schema)?;
+    }
+    for let vi of &graph.initializers {
+        shapes[vi.name] = shape_of(vi, schema)?;
+    }
+    for let node of &graph.nodes {
+        let out = infer_node(node, &shapes)?;
+        assert node.outputs.len() == 1;
+        shapes[node.outputs[0]] = out;
+    }
+    return Result::Ok(shapes);
+}
+
+/// The axes a value info declares, named by the schema and given extents by
+/// the graph.
+fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
+    let dims = match &vi.rank {
+        Dims(d) => *d,
+        Scalar => [] as List<Dim>,
+        Unranked => {
+            builtin::cold_path();
+            return Result::Err(InferError::UnrankedTensor(vi.name));
+        },
+    };
+    let Some(names) = schema.axes_for(&vi.name) else {
+        builtin::cold_path();
+        return Result::Err(InferError::Unnamed(UnnamedTensor { tensor: vi.name }));
+    };
+    if names.len() != dims.len() {
+        builtin::cold_path();
+        return Result::Err(InferError::AxisCount(AxisCountConflict {
+            tensor: vi.name,
+            named: names.len(),
+            dims: dims.len(),
+        }));
+    }
+    let mut axes: List<Axis> = [];
+    for let mut i = 0; i < dims.len(); i += 1 {
+        axes.push(Axis { name: names[i], extent: extent_of(&dims[i], &names[i]) });
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one.
+/// A `?` carries no symbol of its own, so the axis's name stands for it: two
+/// occurrences of one axis are the same length by the schema's account.
+fn extent_of(dim: &Dim, axis: &String) -> Extent {
+    return match dim {
+        Static(n) => Extent::Static(*n),
+        Symbol(s) => Extent::Symbol(*s),
+        Unknown => Extent::Symbol(*axis),
+    };
+}
+
+fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, InferError> {
+    let op = node.op;
+    if op == "MatMul" {
+        let a = operand(node, shapes, 0)?;
+        let b = operand(node, shapes, 1)?;
+        return at_node(node, a.matmul(&b, op));
+    }
+    if is_binary_elementwise(&op) {
+        let a = operand(node, shapes, 0)?;
+        let b = operand(node, shapes, 1)?;
+        return at_node(node, a.elementwise(&b, op));
+    }
+    if is_unary_elementwise(&op) {
+        return Result::Ok(operand(node, shapes, 0)?);
+    }
+    builtin::cold_path();
+    return Result::Err(InferError::UnknownOperator(op));
+}
+
+/// The operators whose output shape is their input's.
+fn is_unary_elementwise(op: &String) -> bool {
+    return *op == "Relu"
+        || *op == "Sigmoid"
+        || *op == "Tanh"
+        || *op == "Erf"
+        || *op == "Exp"
+        || *op == "Log"
+        || *op == "Sqrt"
+        || *op == "Neg"
+        || *op == "Abs";
+}
+
+/// The operators that broadcast two operands against each other.
+fn is_binary_elementwise(op: &String) -> bool {
+    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+}
+
+fn operand(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
+    let name = node.inputs[index];
+    let Some(shape) = shapes.get(name) else {
+        builtin::cold_path();
+        return Result::Err(InferError::UndefinedInput(name));
+    };
+    return Result::Ok(shape);
+}
+
+fn at_node(node: &Node, result: Result<Shape, ShapeError>) -> Result<Shape, InferError> {
+    return match result {
+        Ok(shape) => Result::Ok(shape),
+        Err(error) => Result::Err(InferError::Node(NodeConflict {
+            node: node.outputs[0],
+            error,
+        })),
+    };
+}

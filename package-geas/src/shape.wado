@@ -66,8 +66,7 @@ impl Shape {
     /// `self` contracts with the leading matrix axis of `rhs`, the batch axes
     /// ahead of them broadcast, and a rank-1 operand is a matrix whose missing
     /// axis is dropped from the result.
-    pub fn matmul(&self, rhs: &Shape) -> Result<Shape, ShapeError> {
-        let op = "matmul";
+    pub fn matmul(&self, rhs: &Shape, op: String) -> Result<Shape, ShapeError> {
         assert self.rank() >= 1 && rhs.rank() >= 1;
 
         let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
