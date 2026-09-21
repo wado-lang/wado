@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789952977660,
+  "lastUpdate": 1789970560555,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57609,6 +57609,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/cb9429843d143f810941f3319a9307db4c387d3a"
         },
         "date": 1789952976805,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9b41a2df2166a3f33579e405313f63756f4cdfbc",
+          "message": "Merge pull request #2105 from wado-lang/claude/geas-extent-algebra\n\nfeat(geas): check an ONNX graph's axes at build time, as a Kiln generator",
+          "timestamp": "2026-09-21T14:42:23+09:00",
+          "tree_id": "364927ede8c14f17aacd75c3080e81947e12f633",
+          "url": "https://github.com/wado-lang/wado/commit/9b41a2df2166a3f33579e405313f63756f4cdfbc"
+        },
+        "date": 1789970559760,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
