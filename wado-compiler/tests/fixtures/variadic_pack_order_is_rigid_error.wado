@@ -1,0 +1,16 @@
+//! A pack-carrying tuple is matched by layout, not by which packs it mentions.
+//! `[..B, ..A]` names only packs in scope, so id equality and "is it decided"
+//! both passed it, and reordering the packs reached codegen as invalid Wasm.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn reorder<..A, ..B>(a: [..A], b: [..B]) -> i32 {
+    let x: [..B, ..A] = [..a, ..b];
+    return 0;
+}
+
+test "the packs must appear in the order the annotation writes" {
+    assert reorder([1], [true]) == 0;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[..B, ..A]', found '[..A, ..B]'"}

@@ -1998,19 +1998,33 @@ impl Monomorphizer {
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
-                // Variadic pack: map the pack index to a tuple of the impl-level type args,
-                // excluding non-pack impl params.
-                let pack_args_count = key
-                    .impl_type_args
-                    .len()
-                    .saturating_sub(non_pack_impl_params_count);
-                let pack_args: Vec<TypeId> = key
-                    .impl_type_args
-                    .iter()
-                    .take(pack_args_count)
-                    .copied()
-                    .collect();
-                let pack_type = type_table.make_tuple(pack_args);
+                // Read the shape off the declaration, never off `key`:
+                // `InstantiationKey` leaves `method_info` out of its equality
+                // and hash, so two keys differing only there share one entry.
+                let one_arg_per_param = generic
+                    .method_info
+                    .as_ref()
+                    .is_some_and(|info| info.receiver.is_declared_type());
+                let before = param.index as usize;
+                let pack_type = if one_arg_per_param {
+                    key.impl_type_args
+                        .get(before)
+                        .copied()
+                        .unwrap_or_else(|| type_table.make_tuple(vec![]))
+                } else {
+                    let pack_args_count = key
+                        .impl_type_args
+                        .len()
+                        .saturating_sub(non_pack_impl_params_count);
+                    let pack_args: Vec<TypeId> = key
+                        .impl_type_args
+                        .iter()
+                        .skip(before)
+                        .take(pack_args_count)
+                        .copied()
+                        .collect();
+                    type_table.make_tuple(pack_args)
+                };
                 substitution.insert(param.index, pack_type);
             } else if let Some(&arg) = key.impl_type_args.get(param.index as usize) {
                 substitution.insert(param.index, arg);
@@ -2975,6 +2989,12 @@ impl Monomorphizer {
                     return;
                 }
                 let arity = inner_arities[0].len();
+                // Rows of two packs never reach here: elaboration rejects a
+                // `zip` whose rows differ in layout, which two packs always do.
+                assert!(
+                    inner_arities.iter().all(|row| row.len() == arity),
+                    "`zip` reached monomorphization with rows of unequal length"
+                );
                 let num_rows = outer_elems.len();
                 let mut col_exprs = Vec::with_capacity(arity);
                 for col in 0..arity {

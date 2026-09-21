@@ -1,0 +1,21 @@
+//! An instance method answers an unsettled pack as the free function and the
+//! static method do. Only the free path had learned not to pin a pack a written
+//! argument reached to the empty tuple, so the same call reported a mismatch
+//! against `[]` here and named the parameters there.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+struct Joiner {}
+
+impl Joiner {
+    fn join<..A, ..B>(&self, f: fn([..A, ..B]) -> i32) -> i32 {
+        return 0;
+    }
+}
+
+test "the method names the packs it could not infer" {
+    let j = Joiner {};
+    assert j.join(|t: [i32, bool]| 7) == 0;
+}
+
+__DATA__
+{"compile_error": "'Joiner::join' declares the type parameters 'A', 'B', which are not inferred from the arguments here"}

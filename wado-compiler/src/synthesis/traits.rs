@@ -3487,7 +3487,7 @@ fn shape_declaring_module(tt: &TypeTable, resolved: &ResolvedType) -> Option<Mod
 fn make_type_param_ids(type_params: &[TirTypeParam], tt: &mut TypeTable) -> Vec<TypeId> {
     type_params
         .iter()
-        .map(|tp| tt.make_type_param(tp.name.clone(), tp.index))
+        .map(|tp| tt.make_declared_param(tp.name.clone(), tp.index, tp.is_pack))
         .collect()
 }
 

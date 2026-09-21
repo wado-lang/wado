@@ -5344,12 +5344,80 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 Type pack parameters:
 
 - Are declared with `..` prefix in generic parameter lists: `<..T>`, `<A, ..T>`
-- At most one type pack parameter is allowed per function
+- May appear more than once per list, each settled on its own (see
+  [Multiple Type Packs](#multiple-type-packs))
 - Cannot be combined with `effect`: `<effect ..T>` is invalid
 - Appear inside tuple types as `[..T]` (type pack spread)
 - Can be mixed with fixed type elements: `[A, ..T]`, `[..T, B]`
 - Type arguments are inferred from tuple argument types at call sites
 - Expansion happens at monomorphization time
+
+#### Multiple Type Packs
+
+A parameter list may declare more than one pack. Each is settled from the
+argument that carries it alone, so nothing has to find a boundary that was
+never written:
+
+```wado
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
+```
+
+A tuple holding two packs (`[..A, ..B]`) determines neither pack, because
+matching it against a concrete tuple admits every split. It is legal only where a
+value is produced, such as a return type or a local annotation. A position that
+receives a value rejects it:
+
+```wado
+fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
+    return [x, ..a, ..b, y];   // OK: the parameters settle both packs
+}
+
+// fn split<..A, ..B>(t: [..A, ..B]) { }       // ERROR: a parameter
+// struct Joined<..A, ..B> { both: [..A, ..B] }  // ERROR: a field
+```
+
+The rule covers a parameter, a struct field and a variant payload, at any depth
+of the written type. A `fn` type written inside one ends the walk, because its
+parameters and return belong to that function. To receive both packs, give each
+a tuple of its own (`[[..A], [..B]]`).
+
+Where the tuple is produced, its ends still place elements. The elements ahead of
+the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
+settles `X` and `Y` and nothing else. An element between two packs is inferred
+from no argument, so name it in a turbofish.
+
+Inside the body that declares them, packs are rigid, as a scalar parameter is. A
+value matches such a tuple by layout: the same fixed positions and the same packs
+in the same order. Naming the same packs is not enough.
+
+```wado
+fn reorder<..A, ..B>(a: [..A], b: [..B]) {
+    let ab: [..A, ..B] = [..a, ..b];      // OK
+    // let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
+    // let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
+}
+```
+
+A turbofish spells each pack as its own tuple. A flat list carries no boundary
+either:
+
+```wado
+concat::<[i32], [bool, String]>([1], [true, "x"]);
+// concat::<i32, String>(…)  // ERROR: spell each type pack as a tuple
+```
+
+Writing one argument per pack is refused as well: `<i32, String>` and
+`<[i32, String], []>` split the same list, and nothing says which was meant. The
+flat form stays available where a single pack absorbs the surplus on its own
+(`make_defaults::<i32, String>()`).
+
+`zip` transposes its operands position by position, so its rows must be equally
+long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
+rejected where it is written.
 
 #### Lexical note
 

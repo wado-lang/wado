@@ -3510,6 +3510,69 @@ impl Type {
         }
     }
 
+    /// Every `..X` this type spells, with where it is written. Exhaustive, as
+    /// [`Self::mentioned_names`] is.
+    #[must_use]
+    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+        let mut out = Vec::new();
+        self.collect_pack_spreads(&mut out);
+        out
+    }
+
+    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
+        match self {
+            Type::Generic(g) => {
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
+            }
+            Type::NamespacedGeneric(g) => {
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
+            }
+            Type::Function(f) => {
+                for p in &f.params {
+                    p.collect_pack_spreads(out);
+                }
+                f.return_type.collect_pack_spreads(out);
+            }
+            Type::Tuple(elems) => {
+                for e in elems {
+                    e.collect_pack_spreads(out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
+            Type::TypePackSpread(name, span) => out.push((name, *span)),
+            Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
+        }
+    }
+
+    /// Where a tuple receiving a value spreads a second type pack, leaving the
+    /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
+    #[must_use]
+    pub fn second_pack_spread(&self, is_pack: &dyn Fn(&str) -> bool) -> Option<Span> {
+        let recurse = |t: &Type| t.second_pack_spread(is_pack);
+        match self {
+            Type::Tuple(elems) => elems
+                .iter()
+                .filter_map(|e| match e {
+                    Type::TypePackSpread(name, span) => is_pack(name).then_some(*span),
+                    _ => None,
+                })
+                .nth(1)
+                .or_else(|| elems.iter().find_map(recurse)),
+            Type::Generic(g) => g.args.iter().find_map(recurse),
+            Type::NamespacedGeneric(g) => g.args.iter().find_map(recurse),
+            Type::Reference(inner) | Type::MutReference(inner) => recurse(inner),
+            Type::Function(_)
+            | Type::Named(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => None,
+        }
+    }
+
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {

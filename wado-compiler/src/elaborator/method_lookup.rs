@@ -1430,6 +1430,40 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         merged
     }
 
+    /// Report a pack an argument reached that the solve still left open, which
+    /// is what the free-function and static paths report for themselves.
+    fn report_unsettled_reached_packs(
+        &mut self,
+        method_name: &str,
+        receiver_type: TypeId,
+        own_params: &[ast::GenericParam],
+        type_args: &[TypeId],
+        reached: &[String],
+        span: Span,
+    ) {
+        let open: Vec<String> = own_params
+            .iter()
+            .zip(type_args)
+            .filter(|(p, _)| p.is_pack && reached.contains(&p.name))
+            .filter(|&(_, &arg)| self.is_unbound_type_param(arg) || self.type_contains_pack(arg))
+            .map(|(p, _)| p.name.clone())
+            .collect();
+        if open.is_empty() {
+            return;
+        }
+        let receiver = self
+            .tysys
+            .type_table
+            .borrow()
+            .type_name(self.tysys.get_base_type(receiver_type));
+        let _ = self.emit(TypeError::UninferredMethodTypeArgs {
+            receiver,
+            method: method_name.to_string(),
+            params: open,
+            span,
+        });
+    }
+
     /// [`Self::resolve_method_type_args`], then what every caller does with the
     /// answer: check the declared bounds, and bind the slots for substitution.
     pub(super) fn bind_method_type_args(
@@ -1442,8 +1476,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_id: self.tysys.get_base_type(input.receiver_type),
             declaring_trait: input.trait_decl,
         };
+        let reached = self.packs_args_reach(input.param_types, input.args.len());
+        let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
-        self.settle_empty_pack_of(own_params, &mut type_args);
+        self.settle_unreached_packs(own_params, &mut type_args, &reached);
+        self.report_unsettled_reached_packs(
+            &method_name,
+            receiver_type,
+            own_params,
+            &type_args,
+            &reached,
+            span,
+        );
         let mut subst = SubstitutionContext::new();
         if !type_args.is_empty() {
             subst = subst.bind(slots, &type_args);

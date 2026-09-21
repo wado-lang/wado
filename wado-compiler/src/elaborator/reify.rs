@@ -4364,12 +4364,26 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_table = self.tysys.type_table.borrow();
             match type_table.as_tuple_through_ref(iterable.type_id) {
                 Some((elems, by_ref)) => {
-                    let inner = elems
-                        .iter()
-                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                        .or_else(|| elems.first())
-                        .copied()
-                        .unwrap_or(TypeTable::UNKNOWN);
+                    // A `.zip()` binds its one element, the pair `[..A, ..B]`,
+                    // so its pack sits a level down. Everywhere else the pack is
+                    // an element: `resolve_for_of` sends a tuple carrying none
+                    // down the concrete path instead.
+                    let inner = if let Some(&pack) =
+                        elems.iter().find(|e| type_table.is_type_pack(**e))
+                    {
+                        pack
+                    } else {
+                        let is_zip = matches!(
+                            actual_iterable,
+                            ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+                        );
+                        assert!(
+                            is_zip,
+                            "variadic for-of over a tuple carrying no pack: {}",
+                            type_table.type_name(iterable.type_id)
+                        );
+                        elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
+                    };
                     // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
                     // the mapped element, not the pack itself.
                     let inner = match type_table.get(inner) {
@@ -4436,8 +4450,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let ast::Pattern::Ident {
                     id,
@@ -4567,8 +4580,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, elem) in elems.iter().enumerate() {
                 let ast::Pattern::Ident {
                     id,
@@ -7125,12 +7137,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             elem.span(),
                         ));
                     } else {
-                        elem_types.push(spread_expr.type_id);
+                        let spread_type_id = spread_expr.type_id;
+                        elem_types.extend(
+                            self.tysys
+                                .type_table
+                                .borrow()
+                                .elem_types_or_self(spread_type_id),
+                        );
                         elements.push(TirExpr::new(
                             TirExprKind::TupleSpread {
                                 expr: Box::new(spread_expr),
                             },
-                            *elem_types.last().unwrap(),
+                            spread_type_id,
                             elem.span(),
                         ));
                     }
@@ -8823,6 +8841,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
                                 .collect();
                             let arity = inner_arities[0].len();
+                            assert!(
+                                inner_arities.iter().all(|row| row.len() == arity),
+                                "method lookup gives `zip` no return type unless its rows agree"
+                            );
                             let num_rows = outer_elems.len();
                             let mut col_exprs = Vec::with_capacity(arity);
                             for col in 0..arity {
