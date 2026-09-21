@@ -12,7 +12,9 @@ use super::types::TypeError;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::trait_env::{non_default_arg_count, written_arg_nodes, written_type_arg};
+use crate::elaborator::trait_env::{
+    ViaClause, non_default_arg_count, written_arg_nodes, written_type_arg,
+};
 use crate::name::{FqTraitName, FqTypeName, namespace_member_alias};
 use crate::symbol::SymbolKind;
 use crate::tir::TraitRef;
@@ -1024,15 +1026,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         root: DefId,
         args: &[TypeId],
-        via: &[ast::TraitBound],
+        via: &[ViaClause],
     ) -> ParamSpace {
         let mut space = self.param_space_of(root, args);
         for step in via {
-            let Some(next) = self.trait_decl_at(step.id, &step.name) else {
-                break;
-            };
-            let args = self.resolve_in_space(&space, &step.type_args);
-            space = self.param_space_of(next, &args);
+            let args = self.resolve_in_space(&space, &step.bound.type_args);
+            space = self.param_space_of(step.decl, &args);
         }
         space
     }

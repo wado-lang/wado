@@ -78,7 +78,8 @@ bind one member name on one type
 Substitution reaches every position a type stands in, so a projection nested
 inside an argument is answered as one standing alone is: `Make<List<T::Base>>`
 reaches `impl Make<List<String>>`. A position whose base the frame does not bind
-stays as written; an instance still inside a template needs that.
+stays as written; an instance still inside a template needs that. A function
+type is the exception, and Known gaps says what it costs.
 
 ### The candidates
 
@@ -527,6 +528,17 @@ Method lookup decides nothing of its own: it asks the order, materializes a
 match from each impl the order names, and reports what the order tied.
 
 ## Known gaps
+
+### A projection inside a function type is never answered
+
+A trait argument spelled as a function type carries its projection unanswered.
+`U: Uses<fn(P::Item) -> i32>` passes `wado check` and then fails where the call
+is monomorphized, reported as `User` not implementing `Uses<fn(P::Item)->i32>`.
+A function type stands in a trait's name as one opaque spelling, holding no
+position a substitution can reach, so `P::Item` stays written there while every
+other shape answers it — `Uses<P::Item>` and `Uses<List<P::Item>>` both
+dispatch. This admits a valid program the compiler rejects, at that one shape,
+naming a parameter the call site never wrote.
 
 ### Scope gates method calls, not the bounds path
 

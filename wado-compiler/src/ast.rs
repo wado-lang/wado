@@ -3483,25 +3483,43 @@ impl Type {
         }
     }
 
-    /// Whether `name` is spelled anywhere in this type. Exhaustive, as
-    /// [`Self::mentioned_names`] is: a spelling a walk like this skips reads as
-    /// a name the type does not mention, which is never what a caller wants.
+    /// Whether `pred` holds of this type or of any type within it, asked
+    /// outermost first.
+    ///
+    /// The one structural recursion a predicate over a type is written on: a
+    /// walk that spells the recursion itself answers `false` for the arm it
+    /// forgets, and a type it never looks inside reads as one that holds
+    /// nothing.
+    #[must_use]
+    pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
+        if pred(self) {
+            return true;
+        }
+        match self {
+            Type::Generic(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::NamespacedGeneric(g) => g.args.iter().any(|a| a.any(pred)),
+            Type::Function(f) => f.params.iter().any(|p| p.any(pred)) || f.return_type.any(pred),
+            Type::Tuple(elems) => elems.iter().any(|e| e.any(pred)),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.any(pred),
+            Type::Named(_) | Type::TypePackSpread(..) | Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
+    /// Whether `name` is spelled anywhere in this type.
     #[must_use]
     pub fn mentions(&self, name: &str) -> bool {
-        match self {
+        self.any(&mut |ty| match ty {
             Type::Named(n) => n.name == name,
-            Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
-            Type::NamespacedGeneric(g) => {
-                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
-            }
-            Type::Function(f) => {
-                f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
-            }
-            Type::Tuple(elems) => elems.iter().any(|e| e.mentions(name)),
-            Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
+            Type::Generic(g) => g.name == name,
+            Type::NamespacedGeneric(g) => g.namespace == name || g.name == name,
             Type::TypePackSpread(spread, _) => spread == name,
-            Type::Infer(_) | Type::Error(_) => false,
-        }
+            Type::Function(_)
+            | Type::Tuple(_)
+            | Type::Reference(_)
+            | Type::MutReference(_)
+            | Type::Infer(_)
+            | Type::Error(_) => false,
+        })
     }
 
     /// Whether this is the unit type, spelled `()`.

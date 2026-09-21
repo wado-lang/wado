@@ -16,7 +16,7 @@ use super::Elaborator;
 use super::callee::CalleeRef;
 use super::scope::{BinderInScope, ElaboratedBound, Scope, TraitCheckFrame};
 use super::sig::Param;
-use super::trait_env::InheritedBound;
+use super::trait_env::{InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
@@ -203,17 +203,7 @@ pub(super) fn assoc_const_owner_of_path(
 /// not an expectation to enforce — and `..P` belongs to the declaration's
 /// scope, so resolving it at a use site would not find it.
 fn mentions_type_pack(ty: &ast::Type) -> bool {
-    match ty {
-        ast::Type::TypePackSpread(..) => true,
-        ast::Type::NamespacedGeneric(ns) => ns.args.iter().any(mentions_type_pack),
-        ast::Type::Generic(generic) => generic.args.iter().any(mentions_type_pack),
-        ast::Type::Function(func) => {
-            func.params.iter().any(mentions_type_pack) || mentions_type_pack(&func.return_type)
-        }
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => mentions_type_pack(inner),
-        ast::Type::Tuple(elements) => elements.iter().any(mentions_type_pack),
-        ast::Type::Named(_) | ast::Type::Infer(_) | ast::Type::Error(_) => false,
-    }
+    ty.any(&mut |ty| matches!(ty, ast::Type::TypePackSpread(..)))
 }
 
 /// A bound as the asking site states it: its arguments are spelled in the
@@ -508,7 +498,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .trait_env
             .supertrait_closure_declared(&trait_decl);
         let params = params.to_vec();
-        let clauses: Vec<(DefId, ast::TraitBound, Vec<ast::TraitBound>)> = closure
+        let clauses: Vec<(DefId, ast::TraitBound, Vec<ViaClause>)> = closure
             .iter()
             .map(|inherited| {
                 (
@@ -636,27 +626,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn reads_a_projection(&self, ty: &ast::Type, binders: &[AstId]) -> bool {
-        let nested =
-            |args: &[ast::Type]| args.iter().any(|arg| self.reads_a_projection(arg, binders));
-        match ty {
-            ast::Type::NamespacedGeneric(ns) => {
-                matches!(self.tysys.resolutions.get(ns.id),
-                    Resolution::Projection(base) if binders.contains(&base))
-                    || nested(&ns.args)
-            }
-            ast::Type::Generic(generic) => nested(&generic.args),
-            ast::Type::Tuple(elems) => nested(elems),
-            ast::Type::Function(func) => {
-                nested(&func.params) || self.reads_a_projection(&func.return_type, binders)
-            }
-            ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-                self.reads_a_projection(inner, binders)
-            }
-            ast::Type::Named(_)
-            | ast::Type::TypePackSpread(..)
-            | ast::Type::Infer(_)
-            | ast::Type::Error(_) => false,
-        }
+        ty.any(&mut |ty| {
+            matches!(ty, ast::Type::NamespacedGeneric(ns)
+                if matches!(self.tysys.resolutions.get(ns.id),
+                    Resolution::Projection(base) if binders.contains(&base)))
+        })
     }
 
     /// `fq` with each argument `pick` marks resolved in this frame rather than

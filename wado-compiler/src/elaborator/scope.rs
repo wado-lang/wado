@@ -14,7 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId};
 
 use super::Elaborator;
-use super::trait_env::InheritedBound;
+use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use crate::ast::AstId;
 use crate::defs::DefId;
@@ -64,7 +64,7 @@ impl BinderInScope {
 #[derive(Clone)]
 pub(super) struct ElaboratedBound {
     pub(super) bound: ast::TraitBound,
-    pub(super) inherited: Option<(DefId, Vec<ast::TraitBound>)>,
+    pub(super) inherited: Option<(DefId, Vec<ViaClause>)>,
 }
 
 /// The node in `params` that declares `name`, when one does. The caller picks
@@ -370,7 +370,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn inherited_bounds_of(
         &self,
         bounds: &[ast::TraitBound],
-    ) -> Vec<(ast::TraitBound, DefId, Vec<ast::TraitBound>)> {
+    ) -> Vec<(ast::TraitBound, DefId, Vec<ViaClause>)> {
         let known = IndexMap::default();
         bounds
             .iter()
@@ -431,7 +431,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         &self,
         out: &mut Vec<(ElaboratedBound, Option<DefId>)>,
         bound: &ast::TraitBound,
-        inherited: Option<(DefId, Vec<ast::TraitBound>)>,
+        inherited: Option<(DefId, Vec<ViaClause>)>,
         known: &IndexMap<AstId, FqTraitName>,
     ) {
         let entry = || ElaboratedBound {

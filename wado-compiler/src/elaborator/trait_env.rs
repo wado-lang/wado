@@ -586,7 +586,15 @@ pub(super) struct InheritedBound {
     /// that declared `bound`, outermost first, each written in the previous
     /// one's parameter space. A reader walks them in order, resolving each at
     /// what the step before it answered — never collapsing them to a spelling.
-    pub(super) via: Vec<ast::TraitBound>,
+    pub(super) via: Vec<ViaClause>,
+}
+
+/// One step of an [`InheritedBound::via`] chain: the clause as its trait wrote
+/// it, and the trait it names.
+#[derive(Clone, Debug)]
+pub(super) struct ViaClause {
+    pub(super) bound: ast::TraitBound,
+    pub(super) decl: DefId,
 }
 
 /// Pre-built index: trait declaration → the transitive closure of its
@@ -2175,10 +2183,16 @@ fn written_args_key(bound: &ast::TraitBound) -> String {
 ///
 /// The chain is part of the identity: two chains may write one clause alike in
 /// their own parameter spaces and still reach different arguments, and it is
-/// the chain a reader walks to tell them apart.
+/// the chain a reader walks to tell them apart. A step is keyed by the trait it
+/// names as well as its arguments, since that trait's declared defaults answer
+/// the positions the step leaves out.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
     let identity = |b: &InheritedBound| {
-        let chain: Vec<String> = b.via.iter().map(written_args_key).collect();
+        let chain: Vec<(DefId, String)> = b
+            .via
+            .iter()
+            .map(|step| (step.decl, written_args_key(&step.bound)))
+            .collect();
         (written_args_key(&b.bound), chain)
     };
     let key = identity(bound);
@@ -2196,10 +2210,19 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
 
 /// An inherited bound with `direct` prepended to the chain that reaches it:
 /// `trait A<X>: B<X>` over `trait B<Y>: C<Y>` records `B<X>` ahead of `C<Y>`,
-/// each staying in the space it was written in.
-fn through_clause(inherited: &InheritedBound, direct: &ast::TraitBound) -> InheritedBound {
+/// each staying in the space it was written in. `decl` is the trait `direct`
+/// names.
+fn through_clause(
+    inherited: &InheritedBound,
+    direct: &ast::TraitBound,
+    decl: DefId,
+) -> InheritedBound {
+    let step = ViaClause {
+        bound: direct.clone(),
+        decl,
+    };
     InheritedBound {
-        via: std::iter::once(direct.clone())
+        via: std::iter::once(step)
             .chain(inherited.via.iter().cloned())
             .collect(),
         ..inherited.clone()
@@ -2284,7 +2307,7 @@ fn expand_supertraits(
         for inherited in expand_supertraits(
             defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_inherited(&mut closure, &through_clause(&inherited, direct));
+            push_unique_inherited(&mut closure, &through_clause(&inherited, direct, super_loc));
         }
     }
     stack.pop();
