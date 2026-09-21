@@ -1,0 +1,132 @@
+use { println, eprintln, print, eprint, print_bytes, args, cwd, env } from "core:cli";
+use { Stdout, Stderr } from "core:cli";
+use { ErrorCode } from "wasi:cli";
+
+// Captures what the helpers write. `write_via_stream` records which of the two
+// streams the next write belongs to, since one handler answers for both.
+struct MockStdio {
+    to_stderr: bool = false,
+    out: List<u8> = [],
+    err: List<u8> = [],
+}
+
+impl MockStdio {
+    fn stdout_text(&self) -> String {
+        return String::from_utf8_lossy(self.out);
+    }
+
+    fn stderr_text(&self) -> String {
+        return String::from_utf8_lossy(self.err);
+    }
+}
+
+impl Stdout for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = false;
+        resume 0 as Future<Result<(), ErrorCode>>;
+    }
+}
+
+impl Stderr for MockStdio {
+    fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
+        let _ = data;
+        self.to_stderr = true;
+        resume 0 as Future<Result<(), ErrorCode>>;
+    }
+}
+
+impl Stream<u8> for MockStdio {
+    fn new(&mut self) -> [Stream<u8>, StreamWritable<u8>] {
+        resume [0 as Stream<u8>, 0 as StreamWritable<u8>];
+    }
+
+    ..trap
+}
+
+impl StreamWritable<u8> for MockStdio {
+    fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
+        let _ = this;
+        let count = data.len();
+        if self.to_stderr {
+            self.err.extend(&data);
+        } else {
+            self.out.extend(&data);
+        }
+        resume StreamWrite { count: count, result: CopyResult::Completed };
+    }
+
+    fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
+        let _ = this;
+        let count = data.len();
+        if self.to_stderr {
+            self.err.extend_from_slice(data);
+        } else {
+            self.out.extend_from_slice(data);
+        }
+        resume StreamWrite { count: count, result: CopyResult::Completed };
+    }
+
+    fn drop(&mut self, this: &StreamWritable<u8>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+impl Future<Result<(), ErrorCode>> for MockStdio {
+    fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
+        let _ = this;
+    }
+
+    ..trap
+}
+
+test "println ends a line and print does not" {
+    let mut io = MockStdio {};
+    with &mut io do {
+        print("one");
+        print(" two");
+        println("");
+        println("three");
+    };
+    assert io.stdout_text() == "one two\nthree\n";
+}
+
+test "eprintln writes to stderr, leaving stdout empty" {
+    let mut io = MockStdio {};
+    with &mut io do {
+        eprint("warn");
+        eprintln(": disk full");
+    };
+    assert io.stderr_text() == "warn: disk full\n";
+    assert io.out.is_empty();
+}
+
+test "the two streams stay apart" {
+    let mut io = MockStdio {};
+    with &mut io do {
+        println("out");
+        eprintln("err");
+    };
+    assert io.stdout_text() == "out\n";
+    assert io.stderr_text() == "err\n";
+}
+
+test "print_bytes writes the bytes as given" {
+    let mut io = MockStdio {};
+    with &mut io do {
+        print_bytes([0x89, 0x50, 0x4E, 0x47]);
+    };
+    assert io.out == [0x89, 0x50, 0x4E, 0x47] as List<u8>;
+}
+
+// A name no environment sets, so the answer is the absent one either way.
+test "env answers None for a name nothing sets" {
+    assert env("WADO_CLI_TEST_UNSET_0f3a9c") matches { None };
+}
+
+test "args and cwd answer without trapping" {
+    let _ = args();
+    let _ = cwd();
+}

@@ -58,6 +58,21 @@ should come from the module that demands the effect, so `core:uuid` hands out
 caller ever names stays private: `core:log` reads the clock under `#[ambient]`
 and re-exports nothing.
 
+A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
+renders it as the module's `## Synopsis`. Write the shortest program that shows
+what the module is for, not a tour of its API. Leave it out only where such a
+program cannot be written.
+
+Tests for what a module exports live in `<module>_test.wado` beside it. A
+private item cannot be reached from there, so its test goes in the module. A
+facade puts each test beside the file that implements it, which is why
+`core:collections` is tested from `collections/treemap_test.wado` and
+`collections/treeset_test.wado`.
+
+`core:prelude` owes neither. Every program imports it, so a synopsis has no
+reaching-for-it to show, and the e2e fixtures are what hold its behaviour. What
+it already carries stays; nothing here asks for more.
+
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the
 result, as the equivalent `if` pays. Choose between them on eagerness, not on
