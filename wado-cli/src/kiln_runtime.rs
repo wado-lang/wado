@@ -612,6 +612,15 @@ mod tests {
     /// files, so `load_source` is never hit and diagnostics are dropped.
     struct NoopHost;
 
+    impl NoopHost {
+        /// A dev build takes the stdlib from its host, and a test compiling
+        /// against this one is its own host.
+        fn new() -> Self {
+            wado_lsp::host::install_dev_stdlib();
+            Self
+        }
+    }
+
     impl CompilerHost for NoopHost {
         fn load_source(
             &self,
@@ -652,7 +661,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         let compiled = runtime()
             .block_on(compile_with_options(
                 SRC,
-                &NoopHost,
+                &NoopHost::new(),
                 Some("generator.wado"),
                 options,
             ))
@@ -734,7 +743,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> {
         let compiled = runtime()
             .block_on(compile_with_options(
                 SRC,
-                &NoopHost,
+                &NoopHost::new(),
                 Some("generator.wado"),
                 options,
             ))
