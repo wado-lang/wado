@@ -1095,6 +1095,17 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
             };
             return;
         }
+        // A read of the whole param — it rides on to another scalarized
+        // position. The local now holds the field, so the read's type has to
+        // say so: a later pass projecting off this node (the multi-value
+        // split, which reads `x.repr` off it) otherwise names the wrapper's
+        // type and emits a field the field's type does not carry.
+        if let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && let Some(s) = affected.iter().find(|s| s.local == *index)
+        {
+            body.exprs[id].type_id = s.scalar_type_id;
+            return;
+        }
     }
     let mut kids = Vec::new();
     body.for_each_child(node, |c| kids.push(c));

@@ -805,6 +805,21 @@ fn collect_alias_node(
                 }
                 return;
             }
+            ExprKind::StructLiteral { fields, .. } => {
+                for op in fields.iter().map(|f| f.value).collect::<Vec<_>>() {
+                    mark_published_operand(body, op, type_table, out);
+                }
+            }
+            ExprKind::TupleLiteral { elements } | ExprKind::ArrayLiteral { elements } => {
+                for op in elements.clone() {
+                    mark_published_operand(body, op, type_table, out);
+                }
+            }
+            ExprKind::VariantConstruct { payload, .. } => {
+                if let Some(op) = *payload {
+                    mark_published_operand(body, op, type_table, out);
+                }
+            }
             _ => {}
         },
         NodeRef::Block(_) | NodeRef::Pat(_) => {}
@@ -813,6 +828,20 @@ fn collect_alias_node(
     body.for_each_child(node, |c| kids.push(c));
     for c in kids {
         collect_alias_node(body, c, false, type_table, out);
+    }
+}
+
+/// Mark a GC local stored bare into a fresh object: the object now holds a
+/// second handle on it, and a write through that handle bypasses the scalar.
+/// A closure's by-reference capture is this shape — the captured local's `Box`
+/// rides the env struct, so the call that writes it names no `&mut` to scan.
+/// A value copy reaches here wrapped in `$value_copy$…(x)`, which does not
+/// match, so a copied field keeps its candidacy.
+fn mark_published_operand(body: &Body, op: Operand, type_table: &TypeTable, out: &mut FnAliases) {
+    if let Some(e) = op.as_expr()
+        && let Some(src) = gc_alias_source(body, e, type_table)
+    {
+        out.locals.insert(src);
     }
 }
 

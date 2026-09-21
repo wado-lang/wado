@@ -1388,7 +1388,9 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
 
         let mut survivors = Vec::new();
         for shape in alive {
-            match calibrate_once(path, &canonical, &spec, level, &baseline, shape, &sites) {
+            match calibrate_once(
+                path, &canonical, &spec, level, &baseline, shape, &sites, &name,
+            ) {
                 Ok(()) => survivors.push(shape),
                 Err(excluded) if is_calibration_finding(&excluded) => return Err(excluded),
                 Err(excluded) => refusals.note(excluded),
@@ -1412,6 +1414,7 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
 }
 
 /// Run one shape's empty guard at one level, at every site at once.
+#[expect(clippy::too_many_arguments, reason = "one call site, all of it needed")]
 fn calibrate_once(
     path: &Path,
     canonical: &str,
@@ -1420,8 +1423,33 @@ fn calibrate_once(
     baseline: &Outcome,
     shape: &Shape,
     sites: &[Site],
+    name: &str,
 ) -> Result<(), Excluded> {
     let report = |detail: String| format!("{} guard: {detail}", shape.keyword);
+    let reproduces = |subset: &[Site], what: Misbehaviour| match evaluate(
+        path,
+        &inject(canonical, shape, subset, ""),
+        spec,
+        level,
+    ) {
+        Evaluation::Ran(outcome) => {
+            what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
+        }
+        Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
+        Evaluation::CompileError(_) => false,
+    };
+    // A calibration finding is read and re-run as source, exactly as a mutation
+    // one is: an empty guard narrowed to the sites that carry it.
+    let narrowed = |what: Misbehaviour| {
+        let (reduced, detail) = narrow(canonical, sites.to_vec(), &|subset| {
+            reproduces(subset, what)
+        });
+        write_finding(
+            &format!("{}-{name}", shape.keyword),
+            &inject(canonical, shape, &reduced, ""),
+        );
+        detail
+    };
     match evaluate(path, &inject(canonical, shape, sites, ""), spec, level) {
         Evaluation::Ran(outcome) => {
             let differences = baseline.differences(&outcome);
@@ -1429,9 +1457,10 @@ fn calibrate_once(
                 if let Some(detail) = baseline_moved(path, canonical, spec, level, baseline) {
                     return Err(Excluded::Nondeterministic { level, detail });
                 }
+                let reduced = narrowed(Misbehaviour::Diverged);
                 return Err(Excluded::GuardChangedOutput {
                     level,
-                    detail: report(differences.join("; ")),
+                    detail: report(format!("{reduced} — {}", differences.join("; "))),
                 });
             }
             Ok(())
@@ -1443,10 +1472,13 @@ fn calibrate_once(
             level,
             detail: report(detail),
         }),
-        Evaluation::Crashed(detail) => Err(Excluded::GuardCrashed {
-            level,
-            detail: report(detail),
-        }),
+        Evaluation::Crashed(detail) => {
+            let reduced = narrowed(Misbehaviour::Crashed);
+            Err(Excluded::GuardCrashed {
+                level,
+                detail: report(format!("{reduced} — {detail}")),
+            })
+        }
     }
 }
 
