@@ -1763,7 +1763,7 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::StructFields,
+                Code::StructFieldMismatch,
                 format!("missing field '{field_name}' in struct literal '{struct_name}'"),
                 *span,
             ),
@@ -1772,12 +1772,12 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::StructFields,
+                Code::StructFieldMismatch,
                 format!("struct '{struct_name}' has no field '{field_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (
-                Code::StructFields,
+                Code::StructFieldMismatch,
                 format!("duplicate field '{name}' in struct literal"),
                 *span,
             ),

@@ -76,20 +76,6 @@ fn coerce_value_to_binding(
     }
 }
 
-/// Whether `expr` only reads a place, so projecting out of it again reaches the
-/// same storage rather than a temp's copy of it.
-fn reads_a_place(expr: &TirExpr) -> bool {
-    match &expr.kind {
-        TirExprKind::Local { .. } => true,
-        TirExprKind::FieldAccess { expr, .. } => reads_a_place(expr),
-        TirExprKind::Unary {
-            op: TirUnaryOp::Deref | TirUnaryOp::Ref | TirUnaryOp::MutRef,
-            expr,
-        } => reads_a_place(expr),
-        _ => false,
-    }
-}
-
 /// Peel `Ref` / `MutRef` and `Box<T>` wrappers off `expr`, returning the
 /// unwrapped expression and its type — a `Deref` for the former, a `.value`
 /// field access for the latter. `boxing::prepare_types` redefines every
@@ -332,7 +318,7 @@ impl<'a> PatternLowerer<'a> {
         out: &mut Vec<TirStmt>,
         type_table: &TypeTable,
     ) -> TirExpr {
-        if reads_a_place(&value) {
+        if place::is_place(&value) {
             return value;
         }
         let (index, name) = self.emit_pattern_temp_let(value, span, out, type_table);

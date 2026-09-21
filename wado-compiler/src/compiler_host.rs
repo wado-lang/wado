@@ -91,12 +91,12 @@ pub enum Code {
     // Type errors
     /// A value whose type is not the one the position requires
     TypeMismatch,
-    /// A count that does not match the declaration: arguments, type arguments,
-    /// or a trait method's parameters.
+    /// A count the declaration does not take: arguments, type arguments, or a
+    /// trait method's parameters
     ArityMismatch,
     /// A callee whose type is not a function
     NotCallable,
-    /// Inference has nothing to settle a type from; the site must say
+    /// Inference has nothing to settle a type from, so the site must spell it
     NeedsTypeAnnotation,
     /// A type that does not implement a trait a bound requires
     TraitBoundNotSatisfied,
@@ -109,7 +109,7 @@ pub enum Code {
     /// A receiver whose mode or presence does not match the declaration
     ReceiverMismatch,
     /// A struct literal whose fields do not match the declaration
-    StructFields,
+    StructFieldMismatch,
     /// A path that must deliver a value and does not
     MissingReturn,
     /// A closure written where its form is not admitted
@@ -270,7 +270,7 @@ impl std::fmt::Display for Code {
             Code::TraitNotImported => "TRAIT_NOT_IMPORTED",
             Code::TraitDeclInvalid => "TRAIT_DECL_INVALID",
             Code::ReceiverMismatch => "RECEIVER_MISMATCH",
-            Code::StructFields => "STRUCT_FIELDS",
+            Code::StructFieldMismatch => "STRUCT_FIELD_MISMATCH",
             Code::MissingReturn => "MISSING_RETURN",
             Code::ClosureInvalid => "CLOSURE_INVALID",
             Code::CmBoundaryType => "CM_BOUNDARY_TYPE",
