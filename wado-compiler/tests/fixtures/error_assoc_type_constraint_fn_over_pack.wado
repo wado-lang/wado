@@ -1,0 +1,35 @@
+// A constraint whose type mentions a pack is left unchecked at the bound: a
+// pack has no arity until it expands. The mismatch is still rejected, at the
+// call that supplies the associated type.
+
+trait Sink with () {
+    type Cb;
+
+    fn run(&self, cb: Self::Cb) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Sink for Holder {
+    type Cb = String;
+
+    fn run(&self, cb: String) -> i32 {
+        return cb.len();
+    }
+}
+
+fn drive<..P, T: Sink<Cb = fn([..P]) -> i32>>(t: &T, cb: T::Cb) -> i32 {
+    return t.run(cb);
+}
+
+test "an impl binding the constraint to another type is rejected" {
+    assert drive(&Holder { n: 7 }, "ab") == 2;
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_error": "type mismatch"
+}
