@@ -1034,6 +1034,10 @@ export fn run() { }           // library API + CM boundary
 import site (file-private, or `internal` from another package) is a compile
 error. Struct fields take the same modifiers.
 
+An item's signature may not name a declaration that reaches less far than the
+item itself, so a `pub fn` cannot return a file-private struct. The caller has
+to be able to write the types the item names.
+
 A `use` with a visibility modifier re-exports at that reach. It may narrow what
 it names but never widen it, so `pub use { x }` requires a `pub` `x`. The facade
 pattern is the narrowing one: the entry module publishes the API under its own

@@ -4235,10 +4235,10 @@ impl Config {
 #### Signature reach
 
 An item's signature may not name a declaration that reaches less far than the
-item itself; doing so is a `PRIVATE_SYMBOL` compile error at the reference. A
-caller that reaches the item has to be able to write the types it names, so a
-`pub fn` returning a file-private struct would hand back a value with no
-writable type.
+item itself. Naming one is a compile error at the reference. A caller that
+reaches the item has to be able to write the types it names, and a `pub fn`
+returning a file-private struct hands back a value whose type no caller can
+write.
 
 ```wado
 struct Hidden { n: i32 }
@@ -4247,19 +4247,24 @@ pub fn make() -> Hidden { ... }   // ERROR: widen `Hidden`, or narrow `make`
 ```
 
 The rule holds at every rung: an `internal` item may not name a file-private
-type either. `export` counts as `pub` here, its CM-representability being a
-separate question answered at the definition site.
+type either. `export` counts as `pub` here. Whether the type crosses the CM
+boundary is a separate question, answered at the definition site.
 
 Where an item carries no modifier of its own, its reach comes from what encloses
-it: a trait impl's method reaches as far as the trait, and a struct field no
-further than its struct. A type parameter, `Self`, and an associated-type
-projection (`Self::Output`, `I::Item`) are binders rather than declarations, so
-they carry no reach of their own and are not checked.
+it. A struct field reaches no further than its struct. An impl's member reaches
+no further than the impl's head, and a trait impl's no further than the trait
+either: a caller has to be able to write the head to name the member. So
+`impl Add for Local` on a file-private `Local` gives its `add` that same reach,
+and `add` may then name `Local` freely.
 
-The bounds are subject to the same rule, so a bound naming a less visible trait
-is the same error. Wado therefore has no equivalent of Rust's sealed-trait
-pattern, which seals a trait by giving it a supertrait outside implementors'
-reach; sealing, if it is wanted, gets a mechanism that says so.
+A type parameter, `Self`, and an associated-type projection (`Self::Output`,
+`I::Item`) are binders rather than declarations, so they carry no reach of their
+own and are not checked.
+
+A bound obeys the rule too, so naming a less visible trait in one is the same
+error. Rust's sealed-trait pattern seals a trait by giving it a supertrait that
+implementors cannot reach, and that is exactly what this forbids. Wado has no
+equivalent. If sealing is wanted, it gets a keyword that says so.
 
 #### Re-export visibility
 

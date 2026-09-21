@@ -3,13 +3,13 @@
 //! See `docs/spec.md`, "Signature reach".
 
 use crate::ast::{
-    AstId, Function, GenericParam, Item, Module, SelfKind, StructField, TraitBound, Type,
-    Visibility,
+    AstId, AstVisitor, Function, GenericParam, ImplBlock, Item, Module, SelfKind, TraitBound, Type,
+    Visibility, walk_type,
 };
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::resolve::{Resolution, Resolutions};
+use crate::resolve::{Resolutions, head_site};
 use crate::token::Span;
 
 /// An item whose signature names a declaration that stops short of it.
@@ -93,20 +93,19 @@ impl Walk<'_> {
         match item {
             Item::Function(f) => self.function(f, reach(f.visibility, f.is_export)),
             Item::Impl(block) => {
-                // A trait impl's members reach as far as the trait, which is
-                // what decides whether a caller can name them at all.
+                let head = self.head_reach(block);
                 let from_trait = block
                     .trait_type
                     .as_ref()
                     .and_then(|ty| self.declared_reach(ty));
                 for method in &block.methods {
-                    let member =
+                    let declared =
                         from_trait.unwrap_or_else(|| reach(method.visibility, method.is_export));
-                    self.function(method, member);
+                    self.function(method, declared.narrower(head));
                 }
                 for c in &block.constants {
-                    let member = from_trait.unwrap_or(c.visibility);
-                    self.ty(&c.ty, &c.name, member);
+                    let declared = from_trait.unwrap_or(c.visibility);
+                    self.ty(&c.ty, &c.name, declared.narrower(head));
                 }
             }
             Item::Trait(decl) => {
@@ -129,19 +128,16 @@ impl Walk<'_> {
                 }
             }
             Item::Struct(decl) => {
-                let owner = decl.visibility;
-                self.type_params(&decl.type_params, &decl.name, owner);
+                self.type_params(&decl.type_params, &decl.name, decl.visibility);
                 for field in &decl.fields {
-                    self.field(field, &decl.name, owner);
+                    let field_reach = field.visibility.narrower(decl.visibility);
+                    self.ty(&field.ty, &decl.name, field_reach);
                 }
             }
             Item::Variant(decl) => {
-                let owner = decl.visibility;
-                self.type_params(&decl.type_params, &decl.name, owner);
-                for case in &decl.cases {
-                    if let Some(payload) = &case.payload {
-                        self.ty(payload, &decl.name, owner);
-                    }
+                self.type_params(&decl.type_params, &decl.name, decl.visibility);
+                for payload in decl.cases.iter().filter_map(|case| case.payload.as_ref()) {
+                    self.ty(payload, &decl.name, decl.visibility);
                 }
             }
             Item::Newtype(decl) => {
@@ -163,8 +159,7 @@ impl Walk<'_> {
     fn function(&mut self, f: &Function, item_reach: Visibility) {
         self.type_params(&f.type_params, &f.name, item_reach);
         for param in &f.params {
-            // A receiver names the impl target rather than a type the caller
-            // writes, so it carries no promise of its own.
+            // A receiver names the impl target, not a type the caller writes.
             if matches!(param.self_kind, SelfKind::None) {
                 self.ty(&param.ty, &f.name, item_reach);
             }
@@ -174,54 +169,38 @@ impl Walk<'_> {
         }
     }
 
-    fn field(&mut self, field: &StructField, owner_name: &str, owner_reach: Visibility) {
-        self.ty(
-            &field.ty,
-            owner_name,
-            field.visibility.narrower(owner_reach),
-        );
-    }
-
     fn type_params(&mut self, params: &[GenericParam], item: &str, item_reach: Visibility) {
-        for param in params {
-            for bound in &param.bounds {
-                self.bound(bound, item, item_reach);
-            }
+        for bound in params.iter().flat_map(|p| &p.bounds) {
+            self.bound(bound, item, item_reach);
         }
     }
 
     fn bound(&mut self, bound: &TraitBound, item: &str, item_reach: Visibility) {
-        self.site(bound.id, &bound.name, bound.span, item, item_reach);
+        self.site(bound.id, bound.span, item, item_reach);
         for arg in &bound.type_args {
             self.ty(arg, item, item_reach);
         }
     }
 
     fn ty(&mut self, ty: &Type, item: &str, item_reach: Visibility) {
-        for (id, name, span) in named_sites(ty) {
-            self.site(id, name, span, item, item_reach);
+        for (id, span) in reference_sites(ty) {
+            self.site(id, span, item, item_reach);
         }
     }
 
-    fn site(
-        &mut self,
-        id: AstId,
-        name: &str,
-        span: Span,
-        item: &str,
-        item_reach: Visibility,
-    ) {
-        let Resolution::Def(def) = self.resolutions.get(id) else {
+    fn site(&mut self, id: AstId, span: Span, item: &str, item_reach: Visibility) {
+        let Some(def) = self.resolutions.declared(id) else {
             return;
         };
-        let named_reach = self.resolutions.defs().visibility(def);
+        let defs = self.resolutions.defs();
+        let named_reach = defs.visibility(def);
         if named_reach < item_reach {
             self.out.push((
                 self.source.clone(),
                 SignatureReachViolation {
                     item: item.to_string(),
                     item_reach,
-                    named: name.to_string(),
+                    named: defs.name(def).to_string(),
                     named_reach,
                     span,
                 },
@@ -229,49 +208,51 @@ impl Walk<'_> {
         }
     }
 
+    /// The reach of the declaration `id` names. A binder carries none.
+    fn site_reach(&self, id: AstId) -> Option<Visibility> {
+        let def = self.resolutions.declared(id)?;
+        Some(self.resolutions.defs().visibility(def))
+    }
+
     /// The reach of what `ty`'s head names, when it names a declaration.
     fn declared_reach(&self, ty: &Type) -> Option<Visibility> {
-        let (id, _, _) = named_sites(ty).into_iter().next()?;
-        match self.resolutions.get(id) {
-            Resolution::Def(def) => Some(self.resolutions.defs().visibility(def)),
-            Resolution::Binder(_) | Resolution::Unresolved => None,
-        }
+        self.site_reach(head_site(ty)?)
+    }
+
+    /// How far an impl's members reach: a caller has to be able to write the
+    /// head to name one, so no further than what the head itself names.
+    fn head_reach(&self, block: &ImplBlock) -> Visibility {
+        block
+            .trait_type
+            .iter()
+            .chain([&block.ty])
+            .flat_map(|ty| reference_sites(ty))
+            .filter_map(|(id, _)| self.site_reach(id))
+            .fold(Visibility::Public, Visibility::narrower)
     }
 }
 
-/// Every declaration-naming site in `ty`, head first.
-fn named_sites(ty: &Type) -> Vec<(AstId, &str, Span)> {
-    let mut out = Vec::new();
-    collect_named_sites(ty, &mut out);
-    out
-}
+/// Every type reference site `ty` carries, the type's own walk deciding what
+/// counts. A `with` clause is left out: it names an effect, which the name
+/// resolver does not answer for and `effect_check` checks instead.
+fn reference_sites(ty: &Type) -> Vec<(AstId, Span)> {
+    struct Sites(Vec<(AstId, Span)>);
+    impl AstVisitor for Sites {
+        fn visit_id(&mut self, id: AstId, span: Span) {
+            self.0.push((id, span));
+        }
 
-fn collect_named_sites<'a>(ty: &'a Type, out: &mut Vec<(AstId, &'a str, Span)>) {
-    match ty {
-        Type::Named(t) => out.push((t.id, &t.name, t.span)),
-        Type::Generic(t) => {
-            out.push((t.id, &t.name, t.span));
-            for a in &t.args {
-                collect_named_sites(a, out);
+        fn visit_type(&mut self, ty: &Type) {
+            let Type::Function(ft) = ty else {
+                return walk_type(self, ty);
+            };
+            for param in &ft.params {
+                self.visit_type(param);
             }
+            self.visit_type(&ft.return_type);
         }
-        Type::NamespacedGeneric(t) => {
-            for a in &t.args {
-                collect_named_sites(a, out);
-            }
-        }
-        Type::Function(ft) => {
-            for p in &ft.params {
-                collect_named_sites(p, out);
-            }
-            collect_named_sites(&ft.return_type, out);
-        }
-        Type::Tuple(ts) => {
-            for t in ts {
-                collect_named_sites(t, out);
-            }
-        }
-        Type::Reference(t) | Type::MutReference(t) => collect_named_sites(t, out),
-        Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => {}
     }
+    let mut sites = Sites(Vec::new());
+    sites.visit_type(ty);
+    sites.0
 }
