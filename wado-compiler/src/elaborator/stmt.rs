@@ -925,7 +925,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Type::NamespacedGeneric(ns) => (
                 ns.id,
                 ns.span,
-                namespace_member_alias(ns.written_namespace(), &ns.name),
+                namespace_member_alias(&ns.namespace, &ns.name),
             ),
             _ => return None,
         };
@@ -3088,12 +3088,8 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
             format!("{}<{args}>", t.name)
         }
         Type::NamespacedGeneric(t) => {
-            let base = match &t.base {
-                Some(base) => format_pattern_qualifier_type(base),
-                None => t.written_namespace().to_string(),
-            };
             if t.args.is_empty() {
-                format!("{base}::{}", t.name)
+                format!("{}::{}", t.namespace, t.name)
             } else {
                 let args = t
                     .args
@@ -3101,7 +3097,7 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
                     .map(format_pattern_qualifier_type)
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("{base}::{}<{args}>", t.name)
+                format!("{}::{}<{args}>", t.namespace, t.name)
             }
         }
         Type::Function(_) => "fn".to_string(),

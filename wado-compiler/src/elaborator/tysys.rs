@@ -26,7 +26,6 @@ use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::hashmap;
 use crate::name::FqTypeName;
 use crate::resolve::Resolutions;
 
@@ -178,14 +177,9 @@ impl TypeSystem {
         if type_args.is_empty() {
             return type_id;
         }
-        let substitution: hashmap::IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &t)| (i as u32, t))
-            .collect();
         self.type_table
             .borrow_mut()
-            .substitute_type_params(type_id, &substitution)
+            .substitute_positional(type_id, type_args)
     }
 
     /// The `Type::Case` spelling of `case` under `owner`.

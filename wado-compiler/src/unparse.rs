@@ -2157,7 +2157,7 @@ impl<'a> Unparser<'a> {
                 self.unparse_turbofish(&g.args);
             }
             Type::NamespacedGeneric(n) => {
-                self.output.push_str(n.written_namespace());
+                self.output.push_str(&n.namespace);
                 self.output.push_str("::");
                 self.output.push_str(&n.name);
                 self.unparse_turbofish(&n.args);
@@ -4032,7 +4032,7 @@ pub fn unparse_type_into(ty: &Type, output: &mut String) {
             output.push_str(name);
         }
         Type::NamespacedGeneric(ng) => {
-            output.push_str(ng.written_namespace());
+            output.push_str(&ng.namespace);
             output.push_str("::");
             output.push_str(&ng.name);
             if !ng.args.is_empty() {

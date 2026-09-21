@@ -997,16 +997,14 @@ impl Parser {
             let case_span = self.peek().span;
             let case_name = self.consume_ident()?;
             let qualifier = match first_type {
-                Type::Named(ref t) => {
-                    Type::NamespacedGeneric(Box::new(NamespacedGenericType::written(
-                        self.alloc_ast_id(),
-                        t.name.clone(),
-                        second_name,
-                        second_span,
-                        second_args,
-                        start_span,
-                    )))
-                }
+                Type::Named(ref t) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
+                    namespace: t.name.clone(),
+                    name: second_name,
+                    name_span: second_span,
+                    args: second_args,
+                    span: start_span,
+                })),
                 _ => {
                     return Err(ParseError {
                         message: "invalid qualified case pattern".to_string(),
@@ -1028,9 +1026,7 @@ impl Parser {
             let prefix = match &qualifier {
                 Type::Named(t) => t.name.clone(),
                 Type::Generic(g) => g.name.clone(),
-                Type::NamespacedGeneric(n) => {
-                    format!("{}::{}", n.written_namespace(), n.name)
-                }
+                Type::NamespacedGeneric(n) => format!("{}::{}", n.namespace, n.name),
                 _ => unreachable!("qualifier is always a named/generic path"),
             };
             let type_name = format!("{prefix}::{case_name}");
@@ -4110,16 +4106,14 @@ impl Parser {
                 args,
                 span: head.span,
             }),
-            Some((namespace, _)) => {
-                Type::NamespacedGeneric(Box::new(NamespacedGenericType::written(
-                    self.alloc_ast_id(),
-                    namespace.clone(),
-                    head.name.clone(),
-                    head.name_span,
-                    args,
-                    head.span,
-                )))
-            }
+            Some((namespace, _)) => Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                id: self.alloc_ast_id(),
+                namespace: namespace.clone(),
+                name: head.name.clone(),
+                name_span: head.name_span,
+                args,
+                span: head.span,
+            })),
         }
     }
 
@@ -5080,29 +5074,25 @@ impl Parser {
                 // to the right wins trailing-comment ownership (drops the comment).
                 let end_span = self.tokens[self.pos - 1].span;
 
-                return Ok(Type::NamespacedGeneric(Box::new(
-                    NamespacedGenericType::written(
-                        self.alloc_ast_id(),
-                        name,
-                        type_name,
-                        type_name_span,
-                        args,
-                        start_span.merge(&end_span),
-                    ),
-                )));
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
+                    namespace: name,
+                    name: type_name,
+                    name_span: type_name_span,
+                    args,
+                    span: start_span.merge(&end_span),
+                })));
             } else {
                 // Namespaced type without generics: namespace::type
                 let end_span = self.tokens[self.pos - 1].span;
-                return Ok(Type::NamespacedGeneric(Box::new(
-                    NamespacedGenericType::written(
-                        self.alloc_ast_id(),
-                        name,
-                        type_name,
-                        type_name_span,
-                        Vec::new(),
-                        start_span.merge(&end_span),
-                    ),
-                )));
+                return Ok(Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                    id: self.alloc_ast_id(),
+                    namespace: name,
+                    name: type_name,
+                    name_span: type_name_span,
+                    args: Vec::new(),
+                    span: start_span.merge(&end_span),
+                })));
             }
         }
 
@@ -8231,9 +8221,7 @@ line 2
             assert_matches!(
                 variant_qualifier,
                 Some(Type::NamespacedGeneric(ns))
-                    if ns.written_namespace() == "shapes"
-                        && ns.name == "Shape"
-                        && ns.args.is_empty()
+                    if ns.namespace == "shapes" && ns.name == "Shape" && ns.args.is_empty()
             );
         } else {
             panic!("expected variant pattern");
@@ -8321,7 +8309,7 @@ line 2
         let module = parse("fn foo(x: core::Result<i32, String>) {}").unwrap();
         if let Item::Function(func) = &module.items[0] {
             if let Type::NamespacedGeneric(ng) = &func.params[0].ty {
-                assert_eq!(ng.written_namespace(), "core");
+                assert_eq!(ng.namespace, "core");
                 assert_eq!(ng.name, "Result");
                 assert_eq!(ng.args.len(), 2);
             } else {

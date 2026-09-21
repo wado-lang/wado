@@ -18,7 +18,7 @@ use crate::component_model::CmInterfaceRegistry;
 use crate::logger::{Bail, Logger, ModuleDiag};
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::symbol::SymbolTable;
-use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitution};
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
@@ -3271,8 +3271,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
-    /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
-    /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     /// Append each declared default to `settled`, resolved against the
     /// declaring parameters and then substituted with the arguments settled
     /// before it: `Both<A, B = A>` binds `B` to `A`'s argument, not to whatever
@@ -3284,18 +3282,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         type_table: &mut TypeTable,
         lookup: &TypeLookup<'_>,
     ) {
+        let mut substitution = positional_substitution(settled);
         for default in defaults {
             let resolved =
                 Self::resolve_type_static_with_params(default, type_table, lookup, slots);
-            let substitution: IndexMap<u32, TypeId> = settled
-                .iter()
-                .enumerate()
-                .map(|(index, &arg)| (index as u32, arg))
-                .collect();
-            settled.push(type_table.substitute_type_params(resolved, &substitution));
+            let filled = type_table.substitute_type_params(resolved, &substitution);
+            substitution.insert(settled.len() as u32, filled);
+            settled.push(filled);
         }
     }
 
+    /// [`Self::resolve_type_static`] inside a declaration's own type-parameter
+    /// list, so the `T` of `struct Node<T>` or `variant Result<T, E>` resolves.
     pub(super) fn resolve_type_static_with_params(
         ty: &Type,
         type_table: &mut TypeTable,
@@ -3432,11 +3430,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             lookup,
                             &slots,
                         );
-                        let substitution: IndexMap<u32, TypeId> = type_args
-                            .iter()
-                            .enumerate()
-                            .map(|(i, &arg)| (i as u32, arg))
-                            .collect();
+                        let substitution = positional_substitution(&type_args);
                         let base_type_id = type_table.substitute_type_params(base, &substitution);
                         // The head is the declaration this reference site
                         // resolved to, not the rendered `MyArray<i32>` a
@@ -3486,7 +3480,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             Type::NamespacedGeneric(namespaced) => {
                 if let Some(index) = type_params
                     .iter()
-                    .position(|p| p.name == namespaced.written_namespace())
+                    .position(|p| p.name == namespaced.namespace)
                 {
                     // The declaring trait is part of the projection's identity,
                     // so a name no bound declares resolves to nothing here and
@@ -3496,8 +3490,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     else {
                         return TypeTable::UNKNOWN;
                     };
-                    let param_id = type_table
-                        .make_type_param(namespaced.written_namespace().to_string(), index as u32);
+                    let param_id =
+                        type_table.make_type_param(namespaced.namespace.clone(), index as u32);
                     return type_table.make_assoc_type_projection(
                         param_id,
                         owning_trait,
@@ -3510,12 +3504,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // the `ns$Type` alias via the `Named` / `Generic` arms, which
                 // route through the import tier to the namespace's own module.
                 // Mirrors the dynamic resolver's namespace-alias branch.
-                if lookup
-                    .namespace_imports
-                    .contains_key(namespaced.written_namespace())
-                {
-                    let alias =
-                        namespace_member_alias(namespaced.written_namespace(), &namespaced.name);
+                if lookup.namespace_imports.contains_key(&namespaced.namespace) {
+                    let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
                     let aliased = if namespaced.args.is_empty() {
                         Type::Named(NamedType::new(namespaced.id, alias, namespaced.span))
                     } else {
@@ -3644,7 +3634,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
-                            let Some((idx, param)) = param_at(ns.written_namespace()) else {
+                            let Some((idx, param)) = param_at(&ns.namespace) else {
                                 continue;
                             };
                             let Some(owning_trait) = trait_env.bound_declaring_assoc_type(
@@ -3656,7 +3646,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             let inner_param_id = type_table
                                 .borrow_mut()
-                                .make_type_param(ns.written_namespace().to_string(), idx as u32);
+                                .make_type_param(ns.namespace.clone(), idx as u32);
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,

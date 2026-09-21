@@ -65,9 +65,7 @@ is what walks the closure. Registration sites are too many to keep in step.
 A clause writes its arguments in the declaring trait's own parameter space, so
 `trait Gauge<X>: Measure<X>` says `Measure` at whatever `Gauge` was asked at:
 `T: Gauge<i32>` supplies `Measure<i32>`, and `impl Gauge<i32> for Ruler`
-requires `Ruler: Measure<i32>`. The expansion substitutes as it walks, so a
-clause reached through another trait arrives in the space of the trait the
-question started from. A position the clause leaves out stands at the
+requires `Ruler: Measure<i32>`. A position the clause leaves out stands at the
 supertrait's declared default, so a bound inherited through it arrives as a type
 rather than as a parameter no later reader can resolve.
 
@@ -85,17 +83,18 @@ another trait is therefore answered the same as one the block wrote itself: a
 question about a type is answered by the type.
 
 The closure is stored in the declaring trait's parameter space, which is not the
-reading site's. The index therefore hands out nothing raw: a reader names the
-arguments the site writes and receives the closure already re-spelled. A reader
-that could take a clause for one of its own bounds is the defect this forecloses
-— it fails by resolving a parameter name the site never wrote, which nothing
-downstream can detect.
+reading site's. Each clause therefore travels with the chain of clauses that
+reaches it, every step written in the space of the step before. A reader carries
+its own arguments down that chain, resolving each step in what the step before
+it answered, and reads the clause in the space it arrives at. A reader that
+takes a clause for one of its own bounds is the defect this forecloses. It fails
+by resolving a parameter name the site never wrote, which nothing downstream can
+detect.
 
-A parameter is replaced wherever it stands, the base of a projection included:
+Walking is what answers a projection, because no spelling denotes one:
 `trait Sink<X: Src>: Collect<Item = X::Item>` read at `Sink<Feed>` binds `Item`
-to what `Feed` binds it to. No spelling denotes a projection off a type, so the
-re-spelled clause carries the base as a type and every reader of it resolves
-that base rather than reading a name.
+to what `Feed` binds it to. The walk settles `X` to `Feed` before anything reads
+`X::Item`, so the base is a type by the time the projection is asked.
 
 An associated-type constraint written in supertrait position
 (`trait Sink: Collect<Item = i32>`) is checked: a type binding `Item = String`

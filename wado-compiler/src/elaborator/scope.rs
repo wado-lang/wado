@@ -226,7 +226,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
-        if impl_block.trait_type.is_some() {
+        if impl_block.trait_type.is_some() && !impl_block.is_synthesize_request {
             let trait_name = scope.impl_block_trait_name(impl_block);
             scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
         }
@@ -384,11 +384,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect()
     }
 
-    /// [`Self::elaborate_bounds`] for bounds carrying no reference site of their
-    /// own. `known` maps a bound's id to the declaration it means, answered where
-    /// the bound was first read: a projection's bounds are rebuilt here with
-    /// fresh ids the table cannot answer for, and without `known` the dedup would
-    /// fall back to the spelling and collapse two same-named traits.
+    /// `bounds` expanded to include every bound's supertraits, so a declared
+    /// `T: Ord` also demands `Eq`. One declaration stays one bound however
+    /// spelled, so an alias never competes with its original.
+    ///
+    /// `known` maps a bound's id to the declaration it means, answered where the
+    /// bound was first read: a projection's bounds are rebuilt here with fresh
+    /// ids the table cannot answer for, and without `known` the dedup would fall
+    /// back to the spelling and collapse two same-named traits.
     pub(super) fn elaborate_bounds_with(
         &self,
         bounds: &[ast::TraitBound],

@@ -3460,10 +3460,7 @@ impl Type {
                 }
             }
             Type::NamespacedGeneric(g) => {
-                match &g.base {
-                    Some(base) => base.mentioned_names(out),
-                    None => out.push(g.namespace.clone()),
-                }
+                out.push(g.namespace.clone());
                 out.push(g.name.clone());
                 for a in &g.args {
                     a.mentioned_names(out);
@@ -3495,11 +3492,7 @@ impl Type {
             Type::Named(n) => n.name == name,
             Type::Generic(g) => g.name == name || g.args.iter().any(|a| a.mentions(name)),
             Type::NamespacedGeneric(g) => {
-                let base_mentions = match &g.base {
-                    Some(base) => base.mentions(name),
-                    None => g.namespace == name,
-                };
-                base_mentions || g.name == name || g.args.iter().any(|a| a.mentions(name))
+                g.namespace == name || g.name == name || g.args.iter().any(|a| a.mentions(name))
             }
             Type::Function(f) => {
                 f.params.iter().any(|p| p.mentions(name)) || f.return_type.mentions(name)
@@ -3508,25 +3501,6 @@ impl Type {
             Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
             Type::TypePackSpread(spread, _) => spread == name,
             Type::Infer(_) | Type::Error(_) => false,
-        }
-    }
-
-    /// Whether a substitution left a projection off a type anywhere in here.
-    /// No spelling denotes one, so it has to be resolved rather than read.
-    #[must_use]
-    pub fn projects_off_a_type(&self) -> bool {
-        match self {
-            Type::Named(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => false,
-            Type::Generic(g) => g.args.iter().any(Type::projects_off_a_type),
-            Type::NamespacedGeneric(g) => {
-                g.base.is_some() || g.args.iter().any(Type::projects_off_a_type)
-            }
-            Type::Function(f) => {
-                f.params.iter().any(Type::projects_off_a_type)
-                    || f.return_type.projects_off_a_type()
-            }
-            Type::Tuple(elems) => elems.iter().any(Type::projects_off_a_type),
-            Type::Reference(inner) | Type::MutReference(inner) => inner.projects_off_a_type(),
         }
     }
 
@@ -3620,13 +3594,8 @@ pub struct GenericType {
 #[derive(Debug, Clone)]
 pub struct NamespacedGenericType {
     pub id: AstId,
-    /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`).
-    /// Private: once [`Self::base`] stands there it names nothing, so a reader
-    /// goes through [`Self::spelled_namespace`] or [`Self::written_namespace`].
-    namespace: String,
-    /// The type a substitution put where [`Self::namespace`] was written. Only
-    /// a substitution sets it, since no spelling denotes a projection off a type.
-    pub base: Option<Type>,
+    /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`)
+    pub namespace: String,
     /// Type name (e.g., "Value")
     pub name: String,
     /// Span of just the type name token. `span` covers the whole `ns::Value<T>`,
@@ -3635,67 +3604,6 @@ pub struct NamespacedGenericType {
     /// Generic arguments
     pub args: Vec<Type>,
     pub span: Span,
-}
-
-impl NamespacedGenericType {
-    /// `ns::Name<args>` as written, carrying no base: what a parser builds.
-    #[must_use]
-    pub fn written(
-        id: AstId,
-        namespace: String,
-        name: String,
-        name_span: Span,
-        args: Vec<Type>,
-        span: Span,
-    ) -> Self {
-        Self {
-            id,
-            namespace,
-            base: None,
-            name,
-            name_span,
-            args,
-            span,
-        }
-    }
-
-    /// This node standing on `base` instead of the namespace it was written
-    /// with, which the substitution that supplied `base` has made meaningless.
-    #[must_use]
-    pub fn projecting_off(&self, base: Type, args: Vec<Type>) -> Self {
-        Self {
-            base: Some(base),
-            args,
-            ..self.clone()
-        }
-    }
-
-    /// This node with its type arguments replaced, standing where it stood.
-    #[must_use]
-    pub fn with_args(&self, args: Vec<Type>) -> Self {
-        Self {
-            args,
-            ..self.clone()
-        }
-    }
-
-    /// The namespace as the spelling names it, `None` once [`Self::base`]
-    /// stands there and the spelling names nothing.
-    #[must_use]
-    pub fn spelled_namespace(&self) -> Option<&str> {
-        self.base.is_none().then_some(self.namespace.as_str())
-    }
-
-    /// The namespace as source wrote it, for a reader that only ever sees a
-    /// node straight from the parser.
-    #[must_use]
-    pub fn written_namespace(&self) -> &str {
-        debug_assert!(
-            self.base.is_none(),
-            "a substituted node stands on a type, so its namespace names nothing"
-        );
-        &self.namespace
-    }
 }
 
 #[derive(Debug, Clone)]

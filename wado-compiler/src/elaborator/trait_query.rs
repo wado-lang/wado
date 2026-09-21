@@ -528,12 +528,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // from this impl's own arguments reaches: `X::Item` under `X = Feed`
             // is what `impl Src for Feed` binds it to. A spelling carries none
             // of that.
-            let (names, args) = self
-                .inherited_space(trait_decl, &args, &via)
-                .into_iter()
-                .unzip::<_, _, Vec<String>, Vec<TypeId>>();
+            let space = self.inherited_space(trait_decl, &args, &via);
             let pick = vec![true; bound.type_args.len()];
-            let supertrait_trait = self.with_type_params_bound(&names, &args, |e| {
+            let supertrait_trait = self.in_space(&space, |e| {
                 e.trait_named_with_resolved_args(named, &bound, &pick)
             });
             let supertrait = self.tysys.resolutions.defs().name(decl).to_string();
@@ -643,9 +640,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             |args: &[ast::Type]| args.iter().any(|arg| self.reads_a_projection(arg, binders));
         match ty {
             ast::Type::NamespacedGeneric(ns) => {
-                ns.base.is_some()
-                    || matches!(self.tysys.resolutions.get(ns.id),
-                        Resolution::Projection(base) if binders.contains(&base))
+                matches!(self.tysys.resolutions.get(ns.id),
+                    Resolution::Projection(base) if binders.contains(&base))
                     || nested(&ns.args)
             }
             ast::Type::Generic(generic) => nested(&generic.args),
@@ -797,31 +793,12 @@ impl TypeSystem {
         )
     }
 
-    /// Each transitive supertrait of `key`, named in `key`'s own parameter
-    /// space and re-spelled at `written`.
+    /// Each transitive supertrait in `closure`, written in `params`' own
+    /// parameter space and re-spelled at `written`.
     ///
     /// Substitution over names, not over a spelling: an argument that projects
     /// travels as a base, a member and the trait declaring it, which no
     /// spelling holds (WEP-2026-08-12).
-    pub(super) fn supertrait_names_at(
-        &self,
-        key: &DefId,
-        written: &[FqTypeName],
-    ) -> Vec<(DefId, FqTraitName)> {
-        let (params, closure) = self.trait_env.supertrait_closure_declared(key);
-        self.supertrait_names(params, closure, written)
-    }
-
-    /// [`Self::supertrait_names_at`] for a bare name with no import context.
-    pub(super) fn supertrait_names_at_named(
-        &self,
-        name: &str,
-        written: &[FqTypeName],
-    ) -> Vec<(DefId, FqTraitName)> {
-        let (params, closure) = self.trait_env.supertrait_closure_declared_named(name);
-        self.supertrait_names(params, closure, written)
-    }
-
     fn supertrait_names(
         &self,
         params: &[ast::GenericParam],
@@ -1263,10 +1240,11 @@ impl TypeSystem {
             .iter()
             .map(|arg| written_type_arg(arg, &self.resolutions))
             .collect();
-        match self.scoped_trait_decl_key(scope, trait_name) {
-            Some(key) => self.supertrait_names_at(&key, &written),
-            None => self.supertrait_names_at_named(trait_name, &written),
-        }
+        let (params, closure) = match self.scoped_trait_decl_key(scope, trait_name) {
+            Some(key) => self.trait_env.supertrait_closure_declared(&key),
+            None => self.trait_env.supertrait_closure_declared_named(trait_name),
+        };
+        self.supertrait_names(params, closure, &written)
     }
 
     /// The trait declaration `trait_name` binds to in scope (local, else an
@@ -2326,12 +2304,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.inherited_space(root, &root_args, &via)
     }
 
-    /// Run `body` with `space` answering for the names it holds.
-    fn in_space<R>(&mut self, space: &ParamSpace, body: impl FnOnce(&mut Self) -> R) -> R {
-        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
-        self.with_type_params_bound(&names, &args, body)
-    }
-
     /// [`Self::bound_slots`] read in the space the candidate's bound was written in.
     fn bound_slots_in_space(
         &mut self,
@@ -2584,14 +2556,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             &self.tysys.resolutions,
         );
         // An inherited bound wrote its arguments in the declaring trait's
-        // parameter space, so a spelling read here means the wrong binder. An
-        // argument naming no type stays for the slots below, where `Self` is
-        // the receiver rather than the declaring trait's own.
-        let pick: Vec<bool> = bound
-            .type_args
-            .iter()
-            .map(|ty| !names_no_type(ty))
-            .collect();
+        // parameter space, so a spelling read here means the wrong binder.
+        let pick = args_to_resolve(&bound);
         let fq_trait_name = self.in_space(&space, |e| {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
@@ -2847,19 +2813,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
-                let (names, args) = self
-                    .inherited_space(root, &root_args, &via)
-                    .into_iter()
-                    .unzip::<_, _, Vec<String>, Vec<TypeId>>();
-                // An argument naming no type keeps its spelling: `Self` here is
-                // the bounded parameter's, which this frame cannot answer.
-                let pick: Vec<bool> = bound
-                    .type_args
-                    .iter()
-                    .map(|ty| !names_no_type(ty))
-                    .collect();
+                let space = self.inherited_space(root, &root_args, &via);
+                let pick = args_to_resolve(&bound);
                 let subjects = subjects.clone();
-                self.with_type_params_bound(&names, &args, |e| {
+                self.in_space(&space, |e| {
                     let inherited = e
                         .tysys
                         .bound_written(&bound)
@@ -3084,8 +3041,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
         match ty {
             ast::Type::NamespacedGeneric(ns) => {
-                (ns.spelled_namespace() != Some("Self")
-                    || self.project_off_self(binding, &ns.name).is_some())
+                (ns.namespace != "Self" || self.project_off_self(binding, &ns.name).is_some())
                     && self.all_project_off_self(&ns.args, binding)
             }
             ast::Type::Generic(generic) => {
@@ -3594,10 +3550,24 @@ struct BoundCandidate {
     decl: DefId,
 }
 
-/// Whether a bound's argument names no type by its spelling: written against
-/// `Self`, or left projecting off a type by a substitution.
+/// Whether a bound's argument names no type by its spelling, being written
+/// against `Self`.
 fn names_no_type(ty: &ast::Type) -> bool {
-    ty.mentions("Self") || ty.projects_off_a_type()
+    ty.mentions("Self")
+}
+
+/// Which of `bound`'s arguments the reading frame resolves rather than reads as
+/// the spelling it was written with: every one that names a type.
+///
+/// An argument written against `Self` names none, and `Self` at a reader is the
+/// receiver rather than the declaring trait's own, so it stays for
+/// [`Elaborator::trait_named_from_slots`].
+fn args_to_resolve(bound: &ast::TraitBound) -> Vec<bool> {
+    bound
+        .type_args
+        .iter()
+        .map(|ty| !names_no_type(ty))
+        .collect()
 }
 
 /// `fq` with the argument at each position `named` answers for replaced by the

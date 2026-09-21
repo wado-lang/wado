@@ -1404,10 +1404,9 @@ impl TraitEnv {
         self.module_namespace_imports.get(module)
     }
 
-    /// Every trait with its supertrait closure.
-    /// Every trait's closure, each spelled in that trait's own parameter space
-    /// — the space a caller stating declarations rather than reading a site
-    /// wants. A caller reading a site owes [`Self::supertrait_closure_at`].
+    /// Every trait's closure, each written in that trait's own parameter space,
+    /// which is what a caller stating declarations rather than reading a site
+    /// wants.
     pub(super) fn supertrait_closures_in_own_space(
         &self,
     ) -> impl Iterator<Item = (&DefId, &Vec<InheritedBound>)> {
@@ -1418,8 +1417,8 @@ impl TraitEnv {
     /// declaration and excluding the trait itself. Empty for a trait with no
     /// supertrait clause, and for a name that declares no trait.
     ///
-    /// Spelled in `key`'s own parameter space, so a caller reading an argument
-    /// owes [`Self::supertrait_closure_at`] instead.
+    /// Written in `key`'s own parameter space, so a caller reading an argument
+    /// resolves it through [`InheritedBound::via`] rather than here.
     fn supertrait_closure(&self, key: &DefId) -> &[InheritedBound] {
         self.supertrait_closures.get(key).map_or_else(
             || self.supertrait_closure_named(self.defs.name(*key)),
@@ -2190,7 +2189,7 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
 /// An inherited bound with `direct` prepended to the chain that reaches it:
 /// `trait A<X>: B<X>` over `trait B<Y>: C<Y>` records `B<X>` ahead of `C<Y>`,
 /// each staying in the space it was written in.
-fn at_writer(inherited: &InheritedBound, direct: &ast::TraitBound) -> InheritedBound {
+fn through_clause(inherited: &InheritedBound, direct: &ast::TraitBound) -> InheritedBound {
     InheritedBound {
         via: std::iter::once(direct.clone())
             .chain(inherited.via.iter().cloned())
@@ -2277,7 +2276,7 @@ fn expand_supertraits(
         for inherited in expand_supertraits(
             defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_inherited(&mut closure, &at_writer(&inherited, direct));
+            push_unique_inherited(&mut closure, &through_clause(&inherited, direct));
         }
     }
     stack.pop();
@@ -3010,11 +3009,7 @@ fn written_type_source(ty: &ast::Type) -> String {
         ast::Type::Named(named) => named.name.clone(),
         ast::Type::Generic(g) => format!("{}<{}>", g.name, list(&g.args)),
         ast::Type::NamespacedGeneric(ns) => {
-            let base = match &ns.base {
-                Some(base) => written_type_source(base),
-                None => ns.written_namespace().to_string(),
-            };
-            format!("{base}::{}<{}>", ns.name, list(&ns.args))
+            format!("{}::{}<{}>", ns.namespace, ns.name, list(&ns.args))
         }
         ast::Type::Function(ft) => {
             let m = if ft.is_mut { " mut" } else { "" };

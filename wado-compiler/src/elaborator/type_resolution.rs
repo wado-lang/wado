@@ -206,16 +206,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
-        // Asked before the namespace, because a spelling the node no longer
-        // stands on says nothing about it — `Self` least of all.
-        if let Some(base) = &namespaced.base {
-            let base_type_id = self.resolve_type(base);
-            let base_name = self.tysys.binder_name(base_type_id);
-            return self.project_off(base_type_id, base_name, namespaced);
-        }
-
         // Handle Self::AssociatedType
-        if namespaced.written_namespace() == "Self" {
+        if namespaced.namespace == "Self" {
             // Look up the associated type binding
             if let Some(&type_id) = self
                 .annotate_ctx
@@ -285,33 +277,29 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .annotate_ctx
             .trait_ctx
             .type_params
-            .get(namespaced.written_namespace())
+            .get(&namespaced.namespace)
         {
-            let base_name = namespaced.written_namespace().to_string();
-            return self.project_off(param_type_id, Some(base_name), namespaced);
+            let base_name = namespaced.namespace.clone();
+            return self.project_off(param_type_id, &base_name, namespaced);
         }
 
         // The alias belongs to whichever module wrote this node, so a type a
         // travelled expression spells `ns::Type` reads its author's `use ns`.
         if self
-            .namespace_alias_source(namespaced.written_namespace(), namespaced.id)
+            .namespace_alias_source(&namespaced.namespace, namespaced.id)
             .is_some()
         {
             // `ns::Type` / `ns::Type<args>` (`ns` is a namespace-import alias):
             // resolve the `ns$Type` alias, which the import tier scopes to the
             // namespace's own module. Mirrors `canonical_ns_ref` for idents.
-            let alias = namespace_member_alias(namespaced.written_namespace(), &namespaced.name);
+            let alias = namespace_member_alias(&namespaced.namespace, &namespaced.name);
             if namespaced.args.is_empty() {
                 self.resolve_named_type(namespaced.id, &alias, namespaced.span, true)
             } else {
                 self.resolve_generic_type(namespaced.id, &alias, &namespaced.args, namespaced.span)
             }
         } else {
-            self.unknown_namespaced_type(
-                namespaced.written_namespace(),
-                &namespaced.name,
-                namespaced.span,
-            )
+            self.unknown_namespaced_type(&namespaced.namespace, &namespaced.name, namespaced.span)
         }
     }
 
@@ -327,32 +315,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .resolve_assoc_type_of_instance(base, assoc)
     }
 
-    /// The associated type `namespaced` names, projected off `base_type_id`.
-    /// `base_name` is the name the frame files that base under, and a base the
-    /// frame binds under no name answers only from what the type itself knows.
+    /// The associated type `namespaced` names, projected off `base_type_id`,
+    /// which the frame files under `base_name`.
     fn project_off(
         &mut self,
         base_type_id: TypeId,
-        base_name: Option<String>,
+        base_name: &str,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
         if let Some(resolved) = self.assoc_bound_by_type(base_type_id, &namespaced.name) {
             return resolved;
         }
-        // A base the frame binds under no name answers only from what the type
-        // itself knows, which the empty name reaches nothing under.
-        let base_name = base_name.unwrap_or_default();
-        if self.report_ambiguous_assoc_type(&base_name, &namespaced.name, namespaced.span) {
+        if self.report_ambiguous_assoc_type(base_name, &namespaced.name, namespaced.span) {
             return TypeTable::ERROR;
         }
         // What the frame's bounds bind it to, where they say: `I:
         // IntoIterator<Item = u8>` answers `I::Item` directly.
-        if let Some(direct_type) = self.frame_projection(base_type_id, &base_name, &namespaced.name)
+        if let Some(direct_type) = self.frame_projection(base_type_id, base_name, &namespaced.name)
         {
             return direct_type;
         }
         if let Some(projection) =
-            self.make_frame_projection(base_type_id, &base_name, &namespaced.name)
+            self.make_frame_projection(base_type_id, base_name, &namespaced.name)
         {
             return projection;
         }
@@ -361,12 +345,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(projected) = self.project_off_projection(base_type_id, &namespaced.name) {
             return projected;
         }
-        let spelled = if base_name.is_empty() {
-            self.tysys.type_id_to_string(base_type_id)
-        } else {
-            base_name
-        };
-        self.unknown_namespaced_type(&spelled, &namespaced.name, namespaced.span)
+        self.unknown_namespaced_type(base_name, &namespaced.name, namespaced.span)
     }
 
     /// `base::assoc` where `base` is itself a projection, so the frame files no
@@ -462,9 +441,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `Self::Assoc` and `T::Assoc` project through a type rather
                 // than naming a declaration, and the projection is what
                 // answers for them.
-                let projects = namespaced.spelled_namespace().is_none_or(|ns| {
-                    ns == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(ns)
-                });
+                let ns = &namespaced.namespace;
+                let projects =
+                    ns == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(ns);
                 if !projects
                     && head(
                         self,
@@ -1082,11 +1061,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space
     }
 
+    /// Run `body` with `space` answering for the names its types were written
+    /// in, layered on this frame.
+    pub(super) fn in_space<R>(
+        &mut self,
+        space: &ParamSpace,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
+        self.with_type_params_bound(&names, &args, body)
+    }
+
     /// `types` resolved with `space` answering for the names it was written in.
     fn resolve_in_space(&mut self, space: &ParamSpace, types: &[ast::Type]) -> Vec<TypeId> {
-        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
         let types = types.to_vec();
-        self.with_type_params_bound(&names, &args, |e| {
+        self.in_space(space, |e| {
             types.iter().map(|ty| e.resolve_type(ty)).collect()
         })
     }
@@ -1099,11 +1088,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut out = Vec::new();
         for (bound, space) in self.bound_closure_of(base_name).unwrap_or_default() {
             for binding in bound.assoc_types.iter().filter(|b| b.name == assoc) {
-                let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
                 let ty = binding.ty.clone();
-                let resolved = self.with_type_params_bound(&names, &args, |e| {
-                    e.resolve_bound_binding(base_name, &ty)
-                });
+                let resolved = self.in_space(&space, |e| e.resolve_bound_binding(base_name, &ty));
                 if resolved != TypeTable::UNKNOWN {
                     out.push(resolved);
                 }
@@ -1188,10 +1174,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .flatten()
                         .map(|binding| (binding.ty, space))
                 })?;
-        let (names, args): (Vec<String>, Vec<TypeId>) = space.into_iter().unzip();
-        let resolved = self.with_type_params_bound(&names, &args, |e| {
-            e.resolve_bound_binding(base_name, &written)
-        });
+        let resolved = self.in_space(&space, |e| e.resolve_bound_binding(base_name, &written));
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
     }
 
@@ -1211,7 +1194,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|bound| &bound.assoc_types)
             .filter_map(|binding| match &binding.ty {
-                ast::Type::NamespacedGeneric(ns) if ns.spelled_namespace() == Some("Self") => {
+                ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
                     Some((binding.name.clone(), ns.name.clone()))
                 }
                 _ => None,

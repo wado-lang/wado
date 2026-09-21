@@ -975,13 +975,13 @@ impl AstVisitor for Resolver<'_> {
                 // namespace reaching no member. Resolving the bare member in
                 // the writing module instead would confidently answer with a
                 // different declaration that happens to share the name.
-                let answer = match self.binder(ns.written_namespace()) {
+                let answer = match self.binder(&ns.namespace) {
                     Some(base) => Resolution::Projection(base),
                     None => self
                         .symbols
                         .imported(
                             self.module,
-                            &namespace_member_alias(ns.written_namespace(), &ns.name),
+                            &namespace_member_alias(&ns.namespace, &ns.name),
                         )
                         .and_then(|sym| self.defs.of_ast_id(sym.defined_at))
                         .map_or(Resolution::Unresolved, Resolution::Def),

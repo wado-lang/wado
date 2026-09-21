@@ -442,10 +442,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let (site, name) = match ty {
             ast::Type::Generic(generic) => (generic.id, generic.name.clone()),
             ast::Type::NamespacedGeneric(ns) => {
-                // A substituted node stands on a type, which no `use ns` names.
-                let namespace = ns.spelled_namespace()?;
-                self.namespace_alias_source(namespace, ns.id)?;
-                (ns.id, namespace_member_alias(namespace, &ns.name))
+                self.namespace_alias_source(&ns.namespace, ns.id)?;
+                (ns.id, namespace_member_alias(&ns.namespace, &ns.name))
             }
             _ => return None,
         };
@@ -2251,13 +2249,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// where the answering impl sits in the file.
     pub(super) fn register_module_assoc_types(&mut self, module: &ast::Module) {
         for item in &module.items {
-            let ast::Item::Impl(impl_block) = item else {
-                continue;
-            };
-            if impl_block.trait_type.is_none() || impl_block.is_synthesize_request {
-                continue;
+            if let ast::Item::Impl(impl_block) = item {
+                drop(self.enter_impl_scope(impl_block));
             }
-            drop(self.enter_impl_scope(impl_block));
         }
     }
 
@@ -2327,18 +2321,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// methods. The guard restores the parent context on every exit path,
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-
-        // Resolve impl block methods with mangled names
-        let struct_name = scope.get_type_name(&impl_block.ty);
+        let struct_name = self.get_type_name(&impl_block.ty);
+        let impl_owner = self.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        let mut scope = self.enter_impl_scope(impl_block);
         let trait_name = scope.impl_block_trait_name(impl_block);
-
-        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.register_impl_block_params(impl_block);
-        // The node the registration above bound the receiver to, so a method
-        // parameter shadowing the letter is a different binder.
+        // The node the scope bound the receiver to, so a method parameter
+        // shadowing the letter is a different binder.
         let receiver_decl = scope
             .annotate_ctx
             .trait_ctx
@@ -2352,18 +2340,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-        if impl_block.trait_type.is_some() {
-            scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
-        }
-        // Record the impl-block
-        // resolution facts so `reify_impl` can read them
-        // verbatim. All inputs are already computed by
-        // the setup above; the recording is one call
-        // that snapshots the resolved Self type, the
-        // trait canonical / mangled forms, the impl's
-        // TIR type-param projection, the assoc-type
-        // bindings, and the handler / ref-impl flags.
+        // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
             let is_handler_method = trait_name
