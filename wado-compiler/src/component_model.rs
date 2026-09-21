@@ -778,17 +778,11 @@ impl CmFunctionInfo {
         })
     }
 
-    /// Whether this function returns a `Future<T>`, or a tuple containing one.
+    /// Whether this function's return type carries a `Future<T>` anywhere.
     pub fn return_type_has_future(&self) -> bool {
-        fn has_future(ty: &Type) -> bool {
-            match ty {
-                Type::Generic(g) if g.name == "Future" => true,
-                Type::Generic(g) => g.args.iter().any(has_future),
-                Type::Tuple(elems) => elems.iter().any(has_future),
-                _ => false,
-            }
-        }
-        self.return_type.as_ref().is_some_and(has_future)
+        self.return_type.as_ref().is_some_and(|ty| {
+            ty.any(&mut |ty| matches!(ty, Type::Generic(g) if g.name == "Future"))
+        })
     }
 
     /// Check if a return type requires Memory + Realloc in canon lower.
@@ -4680,16 +4674,10 @@ fn is_param_type_supported_with_types(
     }
 }
 
-/// Whether `ty` names the empty tuple anywhere, including under a generic. The
-/// shape predicates ask this where they accept a generic without judging its
-/// arguments, so a payload of `[]` cannot ride in past them.
+/// Whether `ty` names the empty tuple anywhere. The shape predicates accept a
+/// generic without judging its arguments, so `[]` would otherwise ride past.
 fn mentions_empty_tuple(ty: &Type) -> bool {
-    match ty {
-        Type::Tuple(elems) => elems.is_empty() || elems.iter().any(mentions_empty_tuple),
-        Type::Generic(generic) => generic.args.iter().any(mentions_empty_tuple),
-        Type::Reference(inner) | Type::MutReference(inner) => mentions_empty_tuple(inner),
-        _ => false,
-    }
+    ty.any(&mut |ty| matches!(ty, Type::Tuple(elems) if elems.is_empty()))
 }
 
 /// Check if a return type is supported for Component Model generation

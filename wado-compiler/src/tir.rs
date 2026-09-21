@@ -3286,12 +3286,7 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let (_, def_type_id) =
             self.generic_assoc_type_def(self.decl_of_type(concrete_id)?, assoc_name)?;
-        let subst: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &a)| (i as u32, a))
-            .collect();
-        Some(self.substitute_type_params(def_type_id, &subst))
+        Some(self.substitute_positional(def_type_id, &type_args))
     }
 
     /// Whether the declaration behind `type_id` can be reflected — every
@@ -3355,12 +3350,13 @@ impl TypeTable {
         let type_args = self.nominal_type_args(concrete_id)?;
         let decl = self.decl_of_type(concrete_id)?;
         let def_type_id = self.generic_assoc_type_def_of_trait(decl, trait_key, assoc_name)?;
-        let subst: IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &a)| (i as u32, a))
-            .collect();
-        Some(self.substitute_type_params(def_type_id, &subst))
+        Some(self.substitute_positional(def_type_id, &type_args))
+    }
+
+    /// [`Self::substitute_type_params`] with `args` read positionally, which a
+    /// declaration's own parameters are, since it numbers them densely from zero.
+    pub fn substitute_positional(&mut self, type_id: TypeId, args: &[TypeId]) -> TypeId {
+        self.substitute_type_params(type_id, &positional_substitution(args))
     }
 
     /// Substitute `TypeParam` and `TypePack` indices in `type_id`, descending
@@ -4890,9 +4886,21 @@ impl TypeTable {
             ResolvedType::MutRef(inner) => self
                 .fq_type_name_spelled(*inner, unboxed)
                 .with_reference(RefKind::Mut),
-            // Shapes that name no declaration — assoc-type projections, packs,
-            // `Unknown`. They carry no module, so the rendered spelling is
-            // already their whole identity.
+            // Structural, so substituting the base reaches it: the base is what
+            // a monomorphized call answers, and the projection follows.
+            ResolvedType::AssocTypeProjection {
+                param_id,
+                assoc_name,
+                owning_trait,
+                ..
+            } => FqTypeName::projection(
+                self.fq_type_name_spelled(*param_id, unboxed),
+                assoc_name,
+                &self.defs,
+                *owning_trait,
+            ),
+            // Shapes that name no declaration — packs, `Unknown`. They carry no
+            // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),
         }
     }
@@ -4993,6 +5001,16 @@ impl TypeTable {
             ResolvedType::Unknown | ResolvedType::Error => TypeNameInfo::Unknown,
         }
     }
+}
+
+/// `args` keyed by the parameter slot each one fills, which is what
+/// [`TypeTable::substitute_type_params`] reads.
+#[must_use]
+pub fn positional_substitution(args: &[TypeId]) -> IndexMap<u32, TypeId> {
+    args.iter()
+        .enumerate()
+        .map(|(slot, &arg)| (slot as u32, arg))
+        .collect()
 }
 
 #[derive(Debug, Clone)]

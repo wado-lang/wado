@@ -1,0 +1,43 @@
+#![TODO]
+
+// `Self` in a bound on `T` should name `T` wherever in the bound it stands. It
+// does as an associated-type constraint (assoc_type_constraint_fn_over_self.wado)
+// and does not as a trait argument, where this reports `unknown type
+// 'Self::Item'`. Module-level because the file does not compile yet.
+//
+// The same position spelled `Uses<T::Item>` overflows the stack, so that case
+// has no fixture: the abort takes the whole runner down rather than failing one
+// test.
+
+trait Src with () {
+    type Item;
+}
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Src for Holder {
+    type Item = i32;
+}
+
+impl Uses<i32> for Holder {
+    fn go(&self, a: i32) -> i32 {
+        return self.n + a;
+    }
+}
+
+fn drive<T: Src + Uses<Self::Item>>(t: &T, a: T::Item) -> i32 {
+    return t.go(a);
+}
+
+test "Self in a bound's trait argument names the bounded type" {
+    assert drive(&Holder { n: 1 }, 2) == 3;
+}
+
+__DATA__
+{"test": {}}

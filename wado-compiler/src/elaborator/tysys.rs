@@ -21,11 +21,11 @@ use super::trait_env::TraitEnv;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, VariantInfo,
 };
+use super::util::bound_param_name;
 use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
 use crate::elaborator::solver_bridge::SolverBridge;
-use crate::hashmap;
 use crate::name::FqTypeName;
 use crate::resolve::Resolutions;
 
@@ -177,14 +177,9 @@ impl TypeSystem {
         if type_args.is_empty() {
             return type_id;
         }
-        let substitution: hashmap::IndexMap<u32, TypeId> = type_args
-            .iter()
-            .enumerate()
-            .map(|(i, &t)| (i as u32, t))
-            .collect();
         self.type_table
             .borrow_mut()
-            .substitute_type_params(type_id, &substitution)
+            .substitute_positional(type_id, type_args)
     }
 
     /// The `Type::Case` spelling of `case` under `owner`.
@@ -464,6 +459,12 @@ impl TypeSystem {
             // Other types: no substitution
             _ => type_id,
         }
+    }
+
+    /// The name the type parameter or pack in this slot carries, `None` for a
+    /// slot holding anything else.
+    pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
+        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
     }
 
     /// Render a type as a user-facing Wado type string (used in diagnostics

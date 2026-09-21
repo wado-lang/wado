@@ -1,0 +1,40 @@
+// A supertrait argument written `Self::Assoc` is read at the impl's own
+// associated type, so `type Base = String` makes this impl owe `Make<String>`.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained: Make<Self::Base> with () {
+    type Base;
+
+    fn check(b: &Self::Base) -> bool;
+}
+
+struct UserName {
+    value: String,
+}
+
+impl Make<String> for UserName {
+    fn make(v: String) -> UserName {
+        return UserName { value: v };
+    }
+}
+
+impl Constrained for UserName {
+    type Base = String;
+
+    fn check(b: &String) -> bool {
+        return b.len() > 0;
+    }
+}
+
+fn checked<T: Constrained>(b: &T::Base) -> bool {
+    return T::check(b);
+}
+
+test "a supertrait argument projects off the impl's associated type" {
+    assert checked::<UserName>(&"gfx");
+    assert !checked::<UserName>(&"");
+    assert UserName::make("gfx").value == "gfx";
+}

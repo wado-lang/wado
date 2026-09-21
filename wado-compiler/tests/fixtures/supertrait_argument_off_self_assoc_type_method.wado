@@ -1,0 +1,32 @@
+// The projection answers an instance call too: `t.wrap(v)` under
+// `T: Constrained` reaches `Wrap<String>`, the impl `type Base = String` names.
+
+trait Wrap<T> with () {
+    fn wrap(&self, v: T) -> i32;
+}
+
+trait Constrained: Wrap<Self::Base> with () {
+    type Base;
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Wrap<String> for Counter {
+    fn wrap(&self, v: String) -> i32 {
+        return self.n + v.len();
+    }
+}
+
+impl Constrained for Counter {
+    type Base = String;
+}
+
+fn run<T: Constrained>(t: &T, v: T::Base) -> i32 {
+    return t.wrap(v);
+}
+
+test "an instance call reaches the impl the supertrait projects to" {
+    assert run(&Counter { n: 1 }, "ab") == 3;
+}

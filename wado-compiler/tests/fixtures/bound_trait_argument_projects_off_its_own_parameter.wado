@@ -1,0 +1,37 @@
+// A bound's argument may project off the very parameter it bounds. The closure
+// of `T`'s bounds is what reads those arguments, so it is asked for again while
+// it is still being built; it cannot answer itself, and `T::Item` stays the
+// abstract projection the call settles.
+
+trait Src with () {
+    type Item;
+}
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Src for Holder {
+    type Item = i32;
+}
+
+impl Uses<i32> for Holder {
+    fn go(&self, a: i32) -> i32 {
+        return self.n + a;
+    }
+}
+
+fn drive<T: Src + Uses<T::Item>>(t: &T, a: T::Item) -> i32 {
+    return t.go(a);
+}
+
+test "a bound's argument projects off the parameter it bounds" {
+    assert drive(&Holder { n: 1 }, 2) == 3;
+}
+
+__DATA__
+{"test": {}}

@@ -219,10 +219,6 @@ struct SubstitutedCall {
     /// The pre-substitution mangled name, still the blanket-template key for a
     /// bare-`T` blanket dispatch.
     original_name: String,
-    /// Whether the *pre-substitution* receiver was an associated-type projection
-    /// (`S::SeqSerializer`) — read from the original method info's metadata, since
-    /// substitution rewrites the receiver into a plain concrete name.
-    receiver_is_assoc_projection: bool,
     /// Substituted impl type args, in param-index order.
     type_args: Vec<TypeId>,
     /// Substituted method-level type args, in declaration order. Non-empty for
@@ -2340,6 +2336,14 @@ impl Monomorphizer {
                     && !substitution.is_empty()
                     && let Some(info) = call_func.method_info.clone()
                 {
+                    // Only a receiver the substitution answers carries its
+                    // trait's arguments with it; every other instance keeps the
+                    // template's spelling, which is what defines it.
+                    let info = if info.is_type_param_receiver {
+                        self.trait_named_at_instance(info, substitution, type_table)
+                    } else {
+                        info
+                    };
                     let old_func_name = call_func.name.clone();
                     let module_source = call_func.module_source.clone();
 
@@ -3312,7 +3316,8 @@ impl Monomorphizer {
     }
 
     /// The name with the template's type parameters replaced in the trait's
-    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`.
+    /// arguments: `T^Add<T>::add` under `T = Meters` names `Add<Meters>`, and
+    /// `T^Make<T::Base>::make` under `T = UserName` names `Make<String>`.
     fn trait_named_at_instance(
         &self,
         info: LocalMethodName,
@@ -3325,14 +3330,51 @@ impl Monomorphizer {
         if !trait_name.args_mention_binder() {
             return info;
         }
-        let asked = self
-            .current_param_substitution_key
+        let bound = |name: &str| -> Option<TypeId> {
+            let key = self.current_param_substitution_key.get(name)?;
+            substitution.get(key).copied()
+        };
+        let args: Vec<FqTypeName> = trait_name
+            .args()
             .iter()
-            .filter_map(|(name, key)| Some((name, *substitution.get(key)?)))
-            .fold(trait_name.clone(), |trait_, (name, tid)| {
-                trait_.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
-            });
-        info.with_trait_type_args(asked.args())
+            .map(|arg| Self::trait_arg_at_instance(arg, &bound, type_table))
+            .collect();
+        info.with_trait_type_args(&args)
+    }
+
+    /// One trait argument re-spelled at the instance, at every position a type
+    /// stands in: `Make<List<T::Base>>` under `T = Bag` names `Make<List<String>>`.
+    ///
+    /// A position the frame does not bind stays as written: the instance is
+    /// still inside a template, and the substitution that does bind it settles
+    /// its name.
+    fn trait_arg_at_instance(
+        arg: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> FqTypeName {
+        arg.rewrite(&|node| {
+            let answer = Self::type_at_instance(node, bound, type_table)?;
+            Some(type_table.fq_type_name(answer))
+        })
+    }
+
+    /// The type a name stands for at the instance: a binder the frame binds, or
+    /// a projection off one — through any depth, since `C::Iter::Item` answers
+    /// only once its own base does.
+    fn type_at_instance(
+        node: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<TypeId> {
+        if let Some((base, assoc, owning_trait)) = node.projected() {
+            let base_id = Self::type_at_instance(base, bound, type_table)?;
+            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
+        }
+        if !node.args().is_empty() {
+            return None;
+        }
+        bound(node.binder_name()?)
     }
 
     /// The name with the trait's arguments cut back to what the answering impl
@@ -3500,7 +3542,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: info.receiver_is_assoc_projection(),
             type_args,
             method_type_args: sub_method_type_args,
             module_source,
@@ -3563,7 +3604,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection,
             type_args,
             method_type_args,
             module_source,
@@ -3643,9 +3683,7 @@ impl Monomorphizer {
                 blanket_impl_args(&self.functions.trait_env, b, recv_inner, type_table)
             });
             let has_projected = projected.as_ref().is_some_and(|args| args.len() > 1);
-            let blanket_name = if receiver_is_assoc_projection {
-                new_func_name.clone()
-            } else if let Some(b) = blanket.as_ref() {
+            let blanket_name = if let Some(b) = blanket.as_ref() {
                 blanket_template_name(b, &new_info, type_table)
             } else {
                 old_func_name
@@ -3697,7 +3735,6 @@ impl Monomorphizer {
             info: new_info,
             mangled: new_func_name,
             original_name: old_func_name,
-            receiver_is_assoc_projection: _,
             type_args,
             method_type_args: _,
             module_source,
