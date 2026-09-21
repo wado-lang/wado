@@ -1056,8 +1056,8 @@ fn borrow_of_scalarized<'a>(
 /// `Local`, keyed on the field index so `b.value.value` keeps its inner read.
 ///
 /// A read of the whole param stands, retyped to the field it now holds: it
-/// forwards to another scalarized position, and a later round reading the stale
-/// wrapper type would project the field twice.
+/// forwards to another scalarized position, and the multi-value split projects
+/// `x.repr` off a stale wrapper type, emitting a field the field does not carry.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
         // `&mut self.f` where the param is already `&mut F`: the whole borrow
@@ -1095,8 +1095,6 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
             };
             return;
         }
-        // The multi-value split projects `x.repr` off this node, so a stale
-        // wrapper type here emits a field the field's type does not carry.
         if let ExprKind::Local { index, .. } = &body.exprs[id].kind
             && let Some(s) = affected.iter().find(|s| s.local == *index)
         {

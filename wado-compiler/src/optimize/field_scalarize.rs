@@ -16,7 +16,7 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_visitor::NirRefVisitor;
-use crate::optimize::alias::copy_edge;
+use crate::optimize::alias::bound_value;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
@@ -701,9 +701,9 @@ fn collect_function_aliases(body: &Body, type_table: &TypeTable) -> FnAliases {
 /// arm here is still walked; the arms name only what publishes a handle.
 struct AliasScan<'a> {
     type_table: &'a TypeTable,
-    /// Set on the node a call hands its receiver or one argument to, and taken
-    /// as that node is entered, so it reaches exactly one level: a `&x` there
-    /// is bounded by the call's own write-back / re-read.
+    /// Set on the node a call hands an argument to and taken as that node is
+    /// entered, so it reaches one level: a `&x` there is bounded by the call's
+    /// own write-back / re-read.
     in_call_arg: bool,
     out: FnAliases,
 }
@@ -716,14 +716,10 @@ impl AliasScan<'_> {
         }
     }
 
-    /// A GC local stored bare into an object being built: the object now holds
+    /// Mark the local a bare GC operand names: the object being built now holds
     /// a second handle on it, and a write through that handle bypasses the
-    /// scalar. Every allocating expression kind takes its operands this way, so
-    /// each has an arm below. A closure's by-reference capture is one — the
-    /// captured local's `Box` rides the env struct, so the call that writes it
-    /// names no `&mut` to scan. A value copy arrives wrapped in
-    /// `$value_copy$…(x)`, which does not match, so a copied field keeps its
-    /// candidacy.
+    /// scalar. A value copy arrives wrapped in `$value_copy$…(x)` and does not
+    /// match, so a copied field keeps its candidacy.
     fn mark_published(&mut self, body: &Body, op: Operand) {
         if let Some(e) = op.as_expr()
             && let Some(src) = gc_alias_source(body, e, self.type_table)
@@ -736,29 +732,13 @@ impl AliasScan<'_> {
 impl NirRefVisitor for AliasScan<'_> {
     fn visit_node(&mut self, body: &Body, node: NodeRef) {
         let in_call_arg = std::mem::take(&mut self.in_call_arg);
-        // The name a copy binds to. Its source is marked below, from every
-        // binding shape — a store into `x.f` publishes the object with no
-        // local to pair.
-        if let Some((dst, value)) = copy_edge(body, node)
+        if let Some((dst, value)) = bound_value(body, node)
             && let Some(ve) = value.as_expr()
         {
-            mark_gc_alias_pair(body, Some(dst), ve, self.type_table, &mut self.out.locals);
+            mark_gc_alias_pair(body, dst, ve, self.type_table, &mut self.out.locals);
         }
         match node {
-            NodeRef::Stmt(s) => {
-                if let StmtKind::Let { value, .. } | StmtKind::LetDestructure { value, .. } =
-                    &body.stmts[s].kind
-                    && let Some(ve) = value.as_expr()
-                {
-                    mark_gc_alias_pair(body, None, ve, self.type_table, &mut self.out.locals);
-                }
-            }
             NodeRef::Expr(e) => match &body.exprs[e].kind {
-                ExprKind::Assign { value, .. } => {
-                    if let Some(ve) = value.as_expr() {
-                        mark_gc_alias_pair(body, None, ve, self.type_table, &mut self.out.locals);
-                    }
-                }
                 ExprKind::Unary {
                     op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
                     expr: inner,
@@ -832,7 +812,7 @@ impl NirRefVisitor for AliasScan<'_> {
                 }
                 _ => {}
             },
-            NodeRef::Block(_) | NodeRef::Pat(_) => {}
+            NodeRef::Stmt(_) | NodeRef::Block(_) | NodeRef::Pat(_) => {}
         }
         self.walk_node(body, node);
     }

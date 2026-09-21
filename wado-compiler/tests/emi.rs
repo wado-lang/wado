@@ -1286,9 +1286,8 @@ struct Injection<'a> {
     label: String,
     /// Names the file a finding is written to.
     finding: String,
-    /// What this stage calls wrong code — the predicate it hands [`campaign`],
-    /// so the two never drift. What it does not call a finding is reported
-    /// without being reduced or written out.
+    /// What this stage calls wrong code — the same predicate it hands
+    /// [`campaign`], so the two never drift.
     is_finding: fn(&Excluded) -> bool,
 }
 
@@ -1344,9 +1343,9 @@ impl Injection<'_> {
         }
     }
 
-    /// How `what` is reported. A stage that calls it wrong code gets it reduced
-    /// to the guards that carry it and written out as source, to be read and
-    /// re-run; a stage that only disqualifies the shape pays neither.
+    /// How `what` is reported: a stage that calls it wrong code gets it reduced
+    /// to the guards that carry it and written out as re-runnable source, and a
+    /// stage that only disqualifies the shape pays neither.
     fn excluded(&self, what: Misbehaviour, sites: &[Site], seen: &str) -> Excluded {
         let level = self.level;
         let build = |detail: String| match what {
@@ -2430,8 +2429,8 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
 }
 
 /// A stage reduces and writes out only what it calls wrong code. Calibration
-/// disqualifies a shape whose empty guard moves the output, so reducing one
-/// would cost a delta-debug per shape and leave a file that reads as a bug.
+/// disqualifies a shape whose empty guard moves the output, and reducing one
+/// costs a delta-debug per shape and leaves a file that reads as a bug.
 #[test]
 fn a_stage_reduces_only_what_it_calls_a_finding() {
     let baseline = Outcome {
