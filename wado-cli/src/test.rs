@@ -2163,16 +2163,7 @@ async fn run_one_package(
 /// Build the thread-local stdlib snapshot on `parallelism` distinct blocking
 /// threads at once, rather than ~120 ms on each worker's first compile.
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
-<<<<<<< HEAD
-    // A dev build reads the stdlib from its host, and this runs before any host
-    // is built; without it every prewarm task panics and warms nothing.
-    wado_lsp::host::install_dev_stdlib();
-    let parallelism = parallelism.max(1);
-||||||| f230693f008
-    let parallelism = parallelism.max(1);
-=======
     assert!(parallelism > 0, "prewarm_workers answers at least one");
->>>>>>> origin/main
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));
     let handles: Vec<_> = (0..parallelism)
         .map(|_| {
