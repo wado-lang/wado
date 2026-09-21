@@ -320,14 +320,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 scope.register_impl_block_params(impl_block);
 
                 if impl_block.trait_type.is_some() {
-                    for binding in &impl_block.associated_types {
-                        let type_id = scope.resolve_type(&binding.ty);
-                        scope
-                            .annotate_ctx
-                            .trait_ctx
-                            .assoc_type_bindings
-                            .insert(binding.name.clone(), type_id);
-                    }
+                    // Also binds `Self` to the target, which a clause writing
+                    // `Self::Assoc` resolves through.
+                    let trait_name = scope.impl_block_trait_name(impl_block);
+                    scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
                     scope.enforce_impl_assoc_type_bounds(impl_block);
                     scope.enforce_impl_supertraits(impl_block);
                 }
