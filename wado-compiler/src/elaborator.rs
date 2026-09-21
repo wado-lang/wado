@@ -67,7 +67,7 @@ use crate::name::{
 use crate::resolve::{Resolution, head_site};
 use crate::symbol::{Symbol, SymbolKind, SymbolTable, VariableSymbol};
 use crate::tir::{self as tir, TypeId, TypeTable};
-use crate::tir::{ResolvedType, StructDef, TraitRef};
+use crate::tir::{ResolvedType, StructDef};
 use crate::token::Span;
 
 /// Build a function-name → item-index map for a module's items. Used
@@ -182,6 +182,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
+    /// The binders whose bound closure is being built right now. A bound's own
+    /// arguments are read while it is built, so `T: Uses<T::Item>` asks for it
+    /// again, and a closure cannot answer itself.
+    pub(super) bound_closure_stack: hashmap::IndexSet<tir::TypeId>,
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
@@ -2224,30 +2228,103 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.finalize_infer_holes();
     }
 
+    /// The impl header's trait, named at the target it writes.
+    pub(super) fn impl_block_trait_name(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> Option<FqTraitName> {
+        let trait_type = impl_block.trait_type.as_ref()?;
+        let fq = self.fq_trait_name(trait_type);
+        Some(self.tysys.trait_env.fq_trait_named_by_impl(
+            fq,
+            &impl_block.ty,
+            &self.tysys.resolutions,
+        ))
+    }
+
+    /// Register every impl block's associated types before anything in the
+    /// module asks for one, so what a type binds a name to does not depend on
+    /// where the answering impl sits in the file.
+    pub(super) fn register_module_assoc_types(&mut self, module: &ast::Module) {
+        for item in &module.items {
+            if let ast::Item::Impl(impl_block) = item {
+                drop(self.enter_impl_scope(impl_block));
+            }
+        }
+    }
+
+    /// Bind this impl's associated types against the target and `Self` to it,
+    /// so `T::Assoc` is answered by the type rather than by the block in scope.
+    pub(super) fn register_impl_assoc_types(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+        trait_name: Option<&FqTraitName>,
+    ) {
+        let target_type_id = self.resolve_type(&impl_block.ty);
+        self.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
+        let is_concrete = !self
+            .tysys
+            .type_table
+            .borrow()
+            .contains_type_param(target_type_id);
+        // The header names one instantiation whatever it binds, so the
+        // arguments are resolved once rather than per associated type.
+        let impl_trait_ref = impl_block
+            .trait_type
+            .as_ref()
+            .zip(trait_name.and_then(FqTraitName::canonical))
+            .map(|(written, trait_key)| self.impl_trait_ref(written, &impl_block.ty, trait_key));
+
+        for binding in &impl_block.associated_types {
+            let type_id = self.resolve_type(&binding.ty);
+            self.annotate_ctx
+                .trait_ctx
+                .assoc_type_bindings
+                .insert(binding.name.clone(), type_id);
+
+            let Some(trait_ref) = impl_trait_ref.clone() else {
+                continue;
+            };
+            if is_concrete {
+                self.tysys
+                    .type_table
+                    .borrow_mut()
+                    .register_assoc_type_resolution(
+                        target_type_id,
+                        trait_ref,
+                        binding.name.clone(),
+                        type_id,
+                    );
+            } else {
+                // A generic impl registers the definition instead, which the
+                // monomorphizer reads to answer a `GenericInstance`.
+                let base_decl = self.tysys.type_table.borrow().decl_of_type(target_type_id);
+                if let Some(base_decl) = base_decl {
+                    self.tysys
+                        .type_table
+                        .borrow_mut()
+                        .register_generic_assoc_type_def(
+                            base_decl,
+                            trait_ref,
+                            binding.name.clone(),
+                            type_id,
+                        );
+                }
+            }
+        }
+    }
+
     /// Resolve an `impl` block item: register its type-param scope, record
     /// the impl facts, resolve its methods, and synthesise trait default
     /// methods. The guard restores the parent context on every exit path,
     /// including the synthesize-request early return.
     fn resolve_impl_item(&mut self, impl_block: &ast::ImplBlock) {
-        let mut scope = self.enter_inherited_type_param_scope();
-        scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
-
-        // Resolve impl block methods with mangled names
-        let struct_name = scope.get_type_name(&impl_block.ty);
-        let trait_name = impl_block.trait_type.as_ref().map(|t| {
-            let fq = scope.fq_trait_name(t);
-            scope.tysys.trait_env.fq_trait_named_by_impl(
-                fq,
-                &impl_block.ty,
-                &scope.tysys.resolutions,
-            )
-        });
-
-        let impl_owner = scope.tysys.resolutions.defs().of_ast_id(impl_block.id);
-        scope.register_impl_block_params(impl_block);
-        // The node the registration above bound the receiver to, so a method
-        // parameter shadowing the letter is a different binder.
+        let struct_name = self.get_type_name(&impl_block.ty);
+        let impl_owner = self.tysys.resolutions.defs().of_ast_id(impl_block.id);
+        let mut scope = self.enter_impl_scope(impl_block);
+        let trait_name = scope.impl_block_trait_name(impl_block);
+        // The node the scope bound the receiver to, so a method parameter
+        // shadowing the letter is a different binder.
         let receiver_decl = scope
             .annotate_ctx
             .trait_ctx
@@ -2261,83 +2338,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             return;
         }
 
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
-        if impl_block.trait_type.is_some() {
-            // Resolve the target type for registering associated type resolutions
-            let target_type_id = scope.resolve_type(&impl_block.ty);
-            // `type Output = Self;` names this impl's target. Without the
-            // binding it resolved to `unknown` and registered as one.
-            scope.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
-            let is_concrete = !scope
-                .tysys
-                .type_table
-                .borrow()
-                .contains_type_param(target_type_id);
-            // The header names one instantiation whatever it binds, so the
-            // arguments are resolved once rather than per associated type.
-            let impl_trait_ref =
-                trait_name
-                    .as_ref()
-                    .and_then(FqTraitName::canonical)
-                    .map(|trait_key| {
-                        impl_block.trait_type.as_ref().map_or_else(
-                            || TraitRef::bare(trait_key),
-                            |t| scope.impl_trait_ref(t, &impl_block.ty, trait_key),
-                        )
-                    });
-
-            for binding in &impl_block.associated_types {
-                let type_id = scope.resolve_type(&binding.ty);
-                scope
-                    .annotate_ctx
-                    .trait_ctx
-                    .assoc_type_bindings
-                    .insert(binding.name.clone(), type_id);
-
-                // Register in TypeTable for substitution resolution
-                // Only for concrete types (not generic impls like impl<T> Trait for List<T>)
-                let Some(trait_ref) = impl_trait_ref.clone() else {
-                    continue;
-                };
-                if is_concrete {
-                    scope
-                        .tysys
-                        .type_table
-                        .borrow_mut()
-                        .register_assoc_type_resolution(
-                            target_type_id,
-                            trait_ref,
-                            binding.name.clone(),
-                            type_id,
-                        );
-                } else {
-                    // For generic impls, register the definition so the monomorphizer
-                    // can resolve associated types for GenericInstance types.
-                    let base_decl = scope.tysys.type_table.borrow().decl_of_type(target_type_id);
-                    if let Some(base_decl) = base_decl {
-                        scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .register_generic_assoc_type_def(
-                                base_decl,
-                                trait_ref,
-                                binding.name.clone(),
-                                type_id,
-                            );
-                    }
-                }
-            }
-        }
-
-        // Record the impl-block
-        // resolution facts so `reify_impl` can read them
-        // verbatim. All inputs are already computed by
-        // the setup above; the recording is one call
-        // that snapshots the resolved Self type, the
-        // trait canonical / mangled forms, the impl's
-        // TIR type-param projection, the assoc-type
-        // bindings, and the handler / ref-impl flags.
+        // Snapshot the resolution facts, which `reify_impl` reads back verbatim.
         {
             let self_type = scope.resolve_type(&impl_block.ty);
             let is_handler_method = trait_name

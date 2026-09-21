@@ -20,7 +20,7 @@ use crate::tir::{
     CallArg, CaptureSource, EffectRef, FunctionKind, FunctionRef, GlobalInit, InlineHint,
     ResolvedType, StructDef, TirBlock, TirCapture, TirEffectOp, TirExpr, TirExprKind, TirField,
     TirFunction, TirGlobal, TirLocal, TirMatchArm, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable,
+    TirStruct, TirStructField, TirTemplatePart, TypeId, TypeTable, positional_substitution,
 };
 use crate::tir_visitor::TirRefVisitor;
 use crate::{Span, hashmap, tir, token};
@@ -267,11 +267,7 @@ fn substitute_operations(
     // zero, so the arguments *do* line up with the slots positionally. That is
     // what `substitute_type_params` is for; `SubstitutionContext` exists for
     // the case this is not — an impl and its method sharing one index space.
-    let subst: IndexMap<u32, TypeId> = type_args
-        .iter()
-        .enumerate()
-        .map(|(i, &a)| (i as u32, a))
-        .collect();
+    let subst = positional_substitution(type_args);
     template
         .iter()
         .map(|op| {

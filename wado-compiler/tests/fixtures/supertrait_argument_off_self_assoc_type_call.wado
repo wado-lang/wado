@@ -1,0 +1,38 @@
+// A call through the supertrait reaches the impl: `T: Constrained` requires
+// `Make<T::Base>`, and `type Base = String` is what makes that `Make<String>`.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained: Make<Self::Base> with () {
+    type Base;
+
+    fn check(b: &Self::Base) -> bool;
+}
+
+struct UserName {
+    value: String,
+}
+
+impl Make<String> for UserName {
+    fn make(v: String) -> UserName {
+        return UserName { value: v };
+    }
+}
+
+impl Constrained for UserName {
+    type Base = String;
+
+    fn check(b: &String) -> bool {
+        return b.len() > 0;
+    }
+}
+
+fn build<T: Constrained>(b: T::Base) -> T {
+    return T::make(b);
+}
+
+test "a static call reaches the impl the supertrait projects to" {
+    assert build::<UserName>("gfx").value == "gfx";
+}

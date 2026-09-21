@@ -1,0 +1,31 @@
+// The impl still owes the supertrait after the projection: `Base` is `i32`
+// here, and the only `Make` impl is at `String`.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Constrained: Make<Self::Base> with () {
+    type Base;
+}
+
+struct Slot {
+    v: i32,
+}
+
+impl Make<String> for Slot {
+    fn make(v: String) -> Slot {
+        return Slot { v: v.len() };
+    }
+}
+
+impl Constrained for Slot {
+    type Base = i32;
+}
+
+test "an impl whose base no supertrait answers is rejected" {
+    assert Slot::make("ab").v == 2;
+}
+
+__DATA__
+{"compile_error": "type 'Slot' implements trait 'Constrained' but not its supertrait 'Make'"}
