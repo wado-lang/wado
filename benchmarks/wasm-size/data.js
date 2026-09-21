@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790001481330,
+  "lastUpdate": 1790024740861,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57961,6 +57961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/651146727d1a143b03f586b107ef3afa5fbe8c24"
         },
         "date": 1790001480612,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e8ddf204e8bfa859a2f3d633295b2cd31013f93a",
+          "message": "Merge pull request #2112 from wado-lang/claude/declaration-identity-wep-gap-k1lplu\n\nfeat(traits): a supertrait clause may write `Self::Assoc`, and a projection keeps its identity everywhere it travels",
+          "timestamp": "2026-09-22T05:45:56+09:00",
+          "tree_id": "b09c6bf8a01aa426142f607d084a3abb70ae2fa0",
+          "url": "https://github.com/wado-lang/wado/commit/e8ddf204e8bfa859a2f3d633295b2cd31013f93a"
+        },
+        "date": 1790024739932,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
