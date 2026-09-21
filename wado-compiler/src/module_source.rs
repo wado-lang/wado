@@ -705,12 +705,6 @@ impl ModuleSource {
         self.is_core_builtin() || self.is_wasm_asset()
     }
 
-    /// Check if this is the core/prelude module.
-    #[must_use]
-    pub fn is_core_prelude(&self) -> bool {
-        matches!(self, Self::Core { name } if name == "prelude")
-    }
-
     /// Whether this is `core:prelude` or one of the modules implementing it.
     #[must_use]
     pub fn is_prelude(&self) -> bool {
@@ -1016,7 +1010,8 @@ mod tests {
         assert!(builtin.is_core_builtin());
 
         let prelude = ModuleSource::prelude();
-        assert!(prelude.is_core_prelude());
+        assert!(prelude.is_prelude());
+        assert!(ModuleSource::primitive().is_prelude());
 
         let wasi = interner.wasi("cli");
         assert!(wasi.is_binding());

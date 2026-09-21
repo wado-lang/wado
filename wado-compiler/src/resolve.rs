@@ -188,11 +188,10 @@ impl Scopes {
             }
         }
         // A builtin type is universal by nature rather than by export: `i32`
-        // names the same thing in a module that imports nothing, `#![no_prelude]`
-        // included.
+        // names the same thing in a module that imports nothing.
         for (name, id) in symbols.prelude_builtin_types() {
-            if let Some(def) = defs.of_ast_id(*id) {
-                surface.entry(name.clone()).or_insert(def);
+            if let Some(def) = defs.of_ast_id(id) {
+                surface.entry(name.to_string()).or_insert(def);
             }
         }
         out.prelude = surface;

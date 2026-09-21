@@ -1218,13 +1218,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // The prelude is auto-imported into every module, so its types are
             // visible everywhere.
-            let is_auto_visible = |ms: &ModuleSource| {
-                ms.is_core_prelude()
-                    || ms.is_core_rt()
-                    || ms.is_core_builtin()
-                    || matches!(ms, ModuleSource::Core { name }
-                        if name.as_str().starts_with("prelude/"))
-            };
+            let is_auto_visible =
+                |ms: &ModuleSource| ms.is_prelude() || ms.is_core_rt() || ms.is_core_builtin();
             let mut prelude_types: IndexSet<String> = IndexSet::default();
             for (ms, names) in &local {
                 if is_auto_visible(ms) {

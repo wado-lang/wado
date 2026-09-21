@@ -147,12 +147,12 @@ describing its own reach.
       re-exports. Both are read from modules outside `core:`, so
       `Visibility::reachable_from` gates each against a caller in another
       package. The builtin types join them on other grounds: `i32` is
-      universal by nature rather than by export, so it is `pub` and the
-      prelude tier takes it from whichever prelude module declares it. Being
-      in the tier, its name is reserved like any other prelude name —
-      `prelude_builtin_type_collision.wado` pins that `struct i32` is an
-      error, and `prelude_builtin_type_import.wado` that naming it in a `use`
-      is not. A symbol an implementation
+      universal by nature rather than by export. The prelude tier takes a
+      builtin type from whichever prelude module declares it, and the
+      declaration is `pub` because that is the reach the name has. Its name is
+      reserved like any other prelude name, so `struct i32` is an error, which
+      `prelude_builtin_type_collision.wado` pins; naming it in a `use` is not,
+      which `prelude_builtin_type_import.wado` pins. A symbol an implementation
       module declares for its siblings is not a prelude symbol:
       `core:prelude/fpfmt.wado`'s `UnpackResult` needs an import, which
       `prelude_internal_not_visible.wado` pins. A prelude-private helper stays

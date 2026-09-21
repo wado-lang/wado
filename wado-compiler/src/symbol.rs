@@ -247,9 +247,8 @@ pub struct SymbolTable {
     /// different modules cannot collide.
     imports: IndexMap<ModuleSource, IndexMap<String, AstId>>,
     /// Builtin type names declared anywhere in the prelude's implementation,
-    /// each with its declaring node. They reach every module without an
-    /// import, so the prelude tier in `resolve.rs` takes them and
-    /// [`Self::is_prelude_type`] reserves them.
+    /// each with its declaring node. They are read without an import, so the
+    /// prelude tier takes them and [`Self::is_prelude_type`] reserves them.
     prelude_builtin_types: IndexMap<String, AstId>,
 }
 
@@ -563,13 +562,8 @@ impl SymbolTable {
         None
     }
 
-    /// Whether `name` names a type every module reads without importing it.
-    ///
-    /// Two ways in, the same two the prelude tier in `resolve.rs` admits: a type
-    /// `core:prelude` declares or `pub use`s, and a builtin type declared
-    /// anywhere in the prelude's implementation, which is universal by nature
-    /// rather than by export. A type an implementation module declares for its
-    /// siblings (e.g. `UnpackResult` in fpfmt.wado) is neither.
+    /// Whether `name` names a type every module reads without importing it:
+    /// what `core:prelude` declares or `pub use`s, plus the builtin types.
     pub fn is_prelude_type(&self, name: &str) -> bool {
         let prelude = ModuleSource::prelude();
         if let Some(symbol) = self.lookup_in_module(&prelude, name) {
@@ -588,10 +582,11 @@ impl SymbolTable {
     }
 
     /// The builtin type names in scope in every module, with their declaring
-    /// nodes. The prelude tier reads these, and [`Self::is_prelude_type`]
-    /// reserves the same names.
-    pub fn prelude_builtin_types(&self) -> impl Iterator<Item = (&String, &AstId)> {
-        self.prelude_builtin_types.iter()
+    /// nodes.
+    pub fn prelude_builtin_types(&self) -> impl Iterator<Item = (&str, AstId)> {
+        self.prelude_builtin_types
+            .iter()
+            .map(|(name, id)| (name.as_str(), *id))
     }
 
     /// Get a symbol by its canonical key.
