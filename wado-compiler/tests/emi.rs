@@ -1226,9 +1226,19 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
         let mut survivors = Vec::new();
         for (shape, payload) in alive {
             let sites = sites_for(&all, payload);
-            match mutate_once(
-                path, &canonical, &spec, level, &baseline, shape, payload, sites, &name,
-            ) {
+            let injection = Injection {
+                path,
+                canonical: &canonical,
+                spec: &spec,
+                level,
+                baseline: &baseline,
+                shape,
+                render: &payload.render,
+                label: format!("{} guard, {} payload", shape.keyword, payload.name),
+                finding: format!("{}-{}-{name}", shape.keyword, payload.name),
+                is_finding,
+            };
+            match injection.run(&sites) {
                 Ok(()) => survivors.push((shape, payload)),
                 Err(excluded) if is_finding(&excluded) => return Err(excluded),
                 Err(excluded) => refusals.note(excluded),
@@ -1261,83 +1271,97 @@ fn mutate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
     })
 }
 
-/// Run one payload at one level: inject it at every site at once, and reduce
-/// what misbehaves back to the guards that cause it.
-#[expect(clippy::too_many_arguments, reason = "one call site, all of it needed")]
-fn mutate_once(
-    path: &Path,
-    canonical: &str,
-    spec: &Spec,
+/// One guard injected at every site of one program at one level. Calibration
+/// and mutation differ only in what the guard body says and what it is called.
+struct Injection<'a> {
+    path: &'a Path,
+    canonical: &'a str,
+    spec: &'a Spec,
     level: OptLevel,
-    baseline: &Outcome,
-    shape: &Shape,
-    payload: &Payload,
-    sites: Vec<Site>,
-    name: &str,
-) -> Result<(), Excluded> {
-    let reproduces = |subset: &[Site], what: Misbehaviour| {
-        let mutant = inject_each(canonical, shape, subset, payload.render);
-        match evaluate(path, &mutant, spec, level) {
+    baseline: &'a Outcome,
+    shape: &'a Shape,
+    /// The guard body at a site — empty at calibration, the payload at mutation.
+    render: &'a dyn Fn(&Site) -> String,
+    /// Opens every `Excluded` detail: the guard, and the payload if there is one.
+    label: String,
+    /// Names the file a finding is written to.
+    finding: String,
+    /// What this stage calls wrong code — the same predicate it hands
+    /// [`campaign`], so the two never drift.
+    is_finding: fn(&Excluded) -> bool,
+}
+
+impl Injection<'_> {
+    /// Inject at every site at once, and reduce what misbehaves back to the
+    /// guards that cause it.
+    fn run(&self, sites: &[Site]) -> Result<(), Excluded> {
+        let level = self.level;
+        match evaluate(self.path, &self.mutant(sites), self.spec, level) {
             Evaluation::Ran(outcome) => {
-                what == Misbehaviour::Diverged && !baseline.differences(&outcome).is_empty()
+                let differences = self.baseline.differences(&outcome);
+                if differences.is_empty() {
+                    return Ok(());
+                }
+                if let Some(detail) =
+                    baseline_moved(self.path, self.canonical, self.spec, level, self.baseline)
+                {
+                    return Err(Excluded::Nondeterministic {
+                        level,
+                        detail: self.report(&detail),
+                    });
+                }
+                Err(self.excluded(Misbehaviour::Diverged, sites, &differences.join("; ")))
+            }
+            // A guard is valid wherever a statement is, except where the
+            // surrounding value must stay constant; that is a rejection, not a
+            // divergence.
+            Evaluation::CompileError(detail) => Err(Excluded::GuardRejected {
+                level,
+                detail: self.report(&detail),
+            }),
+            Evaluation::Crashed(detail) => {
+                Err(self.excluded(Misbehaviour::Crashed, sites, &detail))
+            }
+        }
+    }
+
+    fn mutant(&self, sites: &[Site]) -> String {
+        inject_each(self.canonical, self.shape, sites, self.render)
+    }
+
+    fn report(&self, detail: &str) -> String {
+        format!("{}: {detail}", self.label)
+    }
+
+    fn reproduces(&self, subset: &[Site], what: Misbehaviour) -> bool {
+        match evaluate(self.path, &self.mutant(subset), self.spec, self.level) {
+            Evaluation::Ran(outcome) => {
+                what == Misbehaviour::Diverged && !self.baseline.differences(&outcome).is_empty()
             }
             Evaluation::Crashed(_) => what == Misbehaviour::Crashed,
             Evaluation::CompileError(_) => false,
         }
-    };
-    let report = |detail: String| {
-        format!(
-            "{} guard, {} payload: {detail}",
-            shape.keyword, payload.name
-        )
-    };
-    let record = |reduced: &[Site]| {
-        write_finding(
-            &format!("{}-{}-{name}", shape.keyword, payload.name),
-            &inject_each(canonical, shape, reduced, payload.render),
-        );
-    };
-
-    let mutant = inject_each(canonical, shape, &sites, payload.render);
-    match evaluate(path, &mutant, spec, level) {
-        Evaluation::Ran(outcome) => {
-            let differences = baseline.differences(&outcome);
-            if !differences.is_empty() {
-                if let Some(detail) = baseline_moved(path, canonical, spec, level, baseline) {
-                    return Err(Excluded::Nondeterministic {
-                        level,
-                        detail: report(detail),
-                    });
-                }
-                let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
-                    reproduces(subset, Misbehaviour::Diverged)
-                });
-                record(&reduced);
-                return Err(Excluded::GuardChangedOutput {
-                    level,
-                    detail: report(format!("{narrowed} — {}", differences.join("; "))),
-                });
-            }
-        }
-        Evaluation::CompileError(detail) => {
-            return Err(Excluded::GuardRejected {
-                level,
-                detail: report(detail),
-            });
-        }
-        Evaluation::Crashed(detail) => {
-            let (reduced, narrowed) = narrow(canonical, sites, &|subset| {
-                reproduces(subset, Misbehaviour::Crashed)
-            });
-            record(&reduced);
-            return Err(Excluded::GuardCrashed {
-                level,
-                detail: report(format!("{narrowed} — {detail}")),
-            });
-        }
     }
 
-    Ok(())
+    /// How `what` is reported: a stage that calls it wrong code gets it reduced
+    /// to the guards that carry it and written out as re-runnable source, and a
+    /// stage that only disqualifies the shape pays neither.
+    fn excluded(&self, what: Misbehaviour, sites: &[Site], seen: &str) -> Excluded {
+        let level = self.level;
+        let build = |detail: String| match what {
+            Misbehaviour::Diverged => Excluded::GuardChangedOutput { level, detail },
+            Misbehaviour::Crashed => Excluded::GuardCrashed { level, detail },
+        };
+        let reported = build(self.report(seen));
+        if !(self.is_finding)(&reported) {
+            return reported;
+        }
+        let (reduced, narrowed) = narrow(self.canonical, sites.to_vec(), &|subset| {
+            self.reproduces(subset, what)
+        });
+        write_finding(&self.finding, &self.mutant(&reduced));
+        build(self.report(&format!("{narrowed} — {seen}")))
+    }
 }
 
 /// Write the reduced mutant so a finding can be read, and re-run, as source.
@@ -1388,7 +1412,19 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
 
         let mut survivors = Vec::new();
         for shape in alive {
-            match calibrate_once(path, &canonical, &spec, level, &baseline, shape, &sites) {
+            let injection = Injection {
+                path,
+                canonical: &canonical,
+                spec: &spec,
+                level,
+                baseline: &baseline,
+                shape,
+                render: &|_| String::new(),
+                label: format!("{} guard", shape.keyword),
+                finding: format!("{}-{name}", shape.keyword),
+                is_finding: is_calibration_finding,
+            };
+            match injection.run(&sites) {
                 Ok(()) => survivors.push(shape),
                 Err(excluded) if is_calibration_finding(&excluded) => return Err(excluded),
                 Err(excluded) => refusals.note(excluded),
@@ -1409,45 +1445,6 @@ fn calibrate(subject: &Source, source: &str) -> Result<Eligible, Excluded> {
             .collect(),
         dropped: refusals.into_inner(),
     })
-}
-
-/// Run one shape's empty guard at one level, at every site at once.
-fn calibrate_once(
-    path: &Path,
-    canonical: &str,
-    spec: &Spec,
-    level: OptLevel,
-    baseline: &Outcome,
-    shape: &Shape,
-    sites: &[Site],
-) -> Result<(), Excluded> {
-    let report = |detail: String| format!("{} guard: {detail}", shape.keyword);
-    match evaluate(path, &inject(canonical, shape, sites, ""), spec, level) {
-        Evaluation::Ran(outcome) => {
-            let differences = baseline.differences(&outcome);
-            if !differences.is_empty() {
-                if let Some(detail) = baseline_moved(path, canonical, spec, level, baseline) {
-                    return Err(Excluded::Nondeterministic { level, detail });
-                }
-                return Err(Excluded::GuardChangedOutput {
-                    level,
-                    detail: report(differences.join("; ")),
-                });
-            }
-            Ok(())
-        }
-        // An empty guard is valid wherever a statement is, except where the
-        // surrounding value must stay constant; that is a rejection, not a
-        // divergence.
-        Evaluation::CompileError(detail) => Err(Excluded::GuardRejected {
-            level,
-            detail: report(detail),
-        }),
-        Evaluation::Crashed(detail) => Err(Excluded::GuardCrashed {
-            level,
-            detail: report(detail),
-        }),
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2429,4 +2426,42 @@ fn narrowing_names_the_guards_that_carry_a_finding() {
     assert_eq!(reduced[0].offset, 28);
     assert!(detail.contains("1 of 3 sites"), "{detail}");
     assert!(detail.contains("3:5 let"), "{detail}");
+}
+
+/// A stage reduces and writes out only what it calls wrong code. Calibration
+/// disqualifies a shape whose empty guard moves the output, and reducing one
+/// costs a delta-debug per shape and leaves a file that reads as a bug.
+#[test]
+fn a_stage_reduces_only_what_it_calls_a_finding() {
+    let baseline = Outcome {
+        stdout: String::new(),
+        trapped: false,
+        exit_code: Some(0),
+        test_failed: false,
+        detail: String::new(),
+    };
+    let spec = Spec {
+        test_world: false,
+        allocator: "bump".to_string(),
+    };
+    let injection = Injection {
+        path: Path::new("never-read.wado"),
+        canonical: "fn f() {}\n",
+        spec: &spec,
+        level: OptLevel::O2,
+        baseline: &baseline,
+        shape: &SHAPES[0],
+        render: &|_| String::new(),
+        label: "if guard".to_string(),
+        finding: "never-written".to_string(),
+        is_finding: is_calibration_finding,
+    };
+
+    let excluded = injection.excluded(Misbehaviour::Diverged, &[], "stdout differs");
+
+    let Excluded::GuardChangedOutput { detail, .. } = excluded else {
+        panic!("a moved output excludes the shape: {excluded:?}");
+    };
+    assert_eq!(detail, "if guard: stdout differs");
+    assert!(!out_dir().join("findings/never-written").exists());
 }

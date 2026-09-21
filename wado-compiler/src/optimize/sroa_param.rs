@@ -1055,9 +1055,9 @@ fn borrow_of_scalarized<'a>(
 /// Pre-order: replace the SROA'd param's `FieldAccess` with the bare scalar
 /// `Local`, keyed on the field index so `b.value.value` keeps its inner read.
 ///
-/// A `Local` read stands — the param forwarded whole to another scalarized
-/// position. [`rewrite_arg`] retypes it at the call it feeds, before a later
-/// round can read the stale wrapper type as licence to project the field twice.
+/// A read of the whole param stands, retyped to the field it now holds: it
+/// forwards to another scalarized position, and the multi-value split projects
+/// `x.repr` off a stale wrapper type, emitting a field the field does not carry.
 fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) {
     if let NodeRef::Expr(id) = node {
         // `&mut self.f` where the param is already `&mut F`: the whole borrow
@@ -1093,6 +1093,12 @@ fn rewrite_param_reads(body: &mut Body, node: NodeRef, affected: &[Scalarized]) 
                 index: s.local,
                 name: s.name.clone(),
             };
+            return;
+        }
+        if let ExprKind::Local { index, .. } = &body.exprs[id].kind
+            && let Some(s) = affected.iter().find(|s| s.local == *index)
+        {
+            body.exprs[id].type_id = s.scalar_type_id;
             return;
         }
     }
