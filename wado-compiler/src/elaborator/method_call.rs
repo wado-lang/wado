@@ -681,11 +681,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = self.emit(TypeError::ZipOverUnequalPacks { row, span });
                 return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
             }
-            assert_ne!(
-                return_type,
-                TypeTable::ERROR,
-                "rows of one layout transpose, so the lookup has a shape for them"
-            );
             return MethodCallOutcome::no_dispatch(return_type);
         }
 
@@ -2707,13 +2702,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.tysys.type_table.borrow();
         let rows = table.as_tuple(tuple)?;
-        // A row that is no tuple makes this no transpose at all, which method
-        // lookup reports; saying anything here would stack a packs diagnostic
-        // on a value that has none.
+        // Method lookup already rejects a row that is no tuple, and rows whose
+        // arities are all known. A packs diagnostic would only stack on that,
+        // naming packs the value does not carry.
         let layouts: Vec<Vec<TupleSlot>> = rows
             .iter()
             .map(|&row| table.tuple_layout(row))
             .collect::<Option<_>>()?;
+        if !layouts
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, TupleSlot::Pack(_)))
+        {
+            return None;
+        }
         let first = layouts.first()?;
         let odd = layouts.iter().position(|l| l != first)?;
         Some(table.type_name(rows[odd]))

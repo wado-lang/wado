@@ -756,18 +756,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     if method_name == "zip" {
-                        // A tuple of tuples is what `zip` transposes; anything
-                        // else has no such method.
-                        if elems.is_empty()
-                            || elems
-                                .iter()
-                                .any(|e| self.tysys.type_table.borrow().as_tuple(*e).is_none())
+                        let rows: Vec<Vec<TypeId>> = elems
+                            .iter()
+                            .filter_map(|e| self.tysys.type_table.borrow().as_tuple(*e))
+                            .collect();
+                        // `zip` transposes rows of equal length; nothing else has
+                        // the method. A pack fills one position here, so equal
+                        // length still leaves the layouts free to differ.
+                        if rows.is_empty()
+                            || rows.len() != elems.len()
+                            || rows.iter().any(|row| row.len() != rows[0].len())
                         {
                             return None;
                         }
-                        // Rows that share no layout have no transposed shape.
-                        // The method still exists, so `resolve_method_call_with`
-                        // reaches the diagnostic that names the offending row.
+                        // Rows sharing no layout have no transposed shape. The
+                        // method exists, so the caller reaches the diagnostic
+                        // naming the offending row.
                         let return_type = self
                             .tysys
                             .type_table

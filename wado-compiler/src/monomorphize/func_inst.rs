@@ -16,6 +16,7 @@ use crate::tir::{
     CallArg, FunctionKind, FunctionRef, InstantiationKey, MonomorphInfo, ResolvedType, TirBinaryOp,
     TirBlock, TirExpr, TirExprKind, TirFunction, TirLocal, TirModule, TirParam, TirPattern,
     TirStmt, TirStmtKind, TirTemplatePart, TirUnaryOp, TypeId, TypeTable, method_param_offset,
+    transpose_tuple_expr,
 };
 use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
@@ -2972,71 +2973,13 @@ impl Monomorphizer {
                     local_count,
                     locals,
                 );
-                // After substitution, expand to transposed TupleLiteral.
-                // Inner expr type: [[A0, A1, ...], [B0, B1, ...], ...]
-                // Result: [[A0, B0, ...], [A1, B1, ...], ...]
+                // Elaboration admits a `zip` only over rows of one layout, so
+                // substitution leaves concrete tuples of equal length here.
                 let inner_expr = zip_inner.as_ref().clone();
-                let span = expr.span;
-                let outer_elems = match type_table.as_tuple(inner_expr.type_id) {
-                    Some(elems) => elems,
-                    None => return,
-                };
-                let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                    .iter()
-                    .filter_map(|e| type_table.as_tuple(*e))
-                    .collect();
-                if inner_arities.is_empty() || inner_arities.len() != outer_elems.len() {
-                    return;
-                }
-                let arity = inner_arities[0].len();
-                // Rows of two packs never reach here: elaboration rejects a
-                // `zip` whose rows differ in layout, which two packs always do.
-                assert!(
-                    inner_arities.iter().all(|row| row.len() == arity),
-                    "`zip` reached monomorphization with rows of unequal length"
-                );
-                let num_rows = outer_elems.len();
-                let mut col_exprs = Vec::with_capacity(arity);
-                for col in 0..arity {
-                    let mut row_exprs = Vec::with_capacity(num_rows);
-                    for (row, row_types) in inner_arities.iter().enumerate() {
-                        let row_access = TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(inner_expr.clone()),
-                                field_index: row as u32,
-                                field_name: row.to_string(),
-                            },
-                            outer_elems[row],
-                            span,
-                        );
-                        let cell = TirExpr::new(
-                            TirExprKind::FieldAccess {
-                                expr: Box::new(row_access),
-                                field_index: col as u32,
-                                field_name: col.to_string(),
-                            },
-                            row_types[col],
-                            span,
-                        );
-                        row_exprs.push(cell);
-                    }
-                    let col_types: Vec<TypeId> = inner_arities.iter().map(|row| row[col]).collect();
-                    let col_tuple_type = type_table.make_tuple(col_types);
-                    col_exprs.push(TirExpr::new(
-                        TirExprKind::TupleLiteral {
-                            elements: row_exprs,
-                        },
-                        col_tuple_type,
-                        span,
-                    ));
-                }
-                // Compute the correct transposed type from the column tuple types
-                let transposed_types: Vec<TypeId> = col_exprs.iter().map(|e| e.type_id).collect();
-                let transposed_type = type_table.make_tuple(transposed_types);
-                expr.kind = TirExprKind::TupleLiteral {
-                    elements: col_exprs,
-                };
-                expr.type_id = transposed_type;
+                let transposed =
+                    transpose_tuple_expr(&inner_expr, inner_expr.type_id, expr.span, type_table);
+                expr.kind = transposed.kind;
+                expr.type_id = transposed.type_id;
             }
             TirExprKind::TypePackExpansion {
                 call_expr,
