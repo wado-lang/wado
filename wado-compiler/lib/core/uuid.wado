@@ -32,8 +32,11 @@ use {
     Visitor,
 } from "core:serde";
 use { bytes as random_bytes } from "core:secure_random";
-use { Random } from "wasi:random";
-use { SystemClock } from "wasi:clocks";
+
+/// The effects [`Uuid::v4`] and [`Uuid::v7`] carry, re-exported so a caller
+/// never names `wasi:random` or `wasi:clocks` to install or declare them.
+pub use { Random } from "core:secure_random";
+pub use { SystemClock } from "wasi:clocks";
 
 global SUB_MS_TICKS: i64 = 4096;
 

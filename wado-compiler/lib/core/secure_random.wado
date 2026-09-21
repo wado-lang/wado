@@ -163,7 +163,7 @@ impl BufferedRandom {
         self.buf = self.take(self.available());
         self.buf.extend(&Random::get_random_bytes(self.pool_bytes as u64));
         self.pos = 0;
-        assert self.buf.len() > 0, "wasi:random returned no data";
+        assert self.buf.len() > 0, "the installed Random returned no data";
     }
 
     fn take(&mut self, n: i32) -> List<u8> {

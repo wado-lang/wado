@@ -2372,12 +2372,9 @@ pub(super) fn remove_unreachable_globals(
     }
 }
 
-/// Remove `GlobalVarSet` statements for dead globals from a block.
-///
-/// A dead global whose initializer is a [`deletable_value`] takes the whole
-/// statement with it. Anything else keeps the value expression, so an
-/// initializer that writes another global, prints, asserts or traps keeps that
-/// effect even though the global itself is gone.
+/// Remove `GlobalVarSet` statements for dead globals from a block. A
+/// [`deletable_value`] initializer goes with its global; anything else keeps
+/// the value expression, so its effect or trap survives.
 fn remove_dead_global_sets_block(
     body: &mut Body,
     block: BlockId,
@@ -2413,9 +2410,6 @@ fn remove_dead_global_sets_block(
         };
         if let Some((value, span)) = dead {
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
-            // A call is answered by its whole-function summary rather than
-            // refused on sight, which is what lets a table built by a pure
-            // helper leave with the global nobody reads.
             if !deletable_value(body, value, type_table, effects)
                 && let Some(ve) = value.as_expr()
             {

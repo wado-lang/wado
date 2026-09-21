@@ -1,13 +1,23 @@
-use { BufferedRandom, bytes, seed, token_base64url, token_from, token_hex, with_buffered } from "core:secure_random";
+use {
+    BufferedRandom,
+    bytes,
+    Random,
+    seed,
+    token_base64url,
+    token_from,
+    token_hex,
+    with_buffered,
+} from "core:secure_random";
 use { Seedable, Rng, Xoshiro256pp } from "core:prng";
-use { Random } from "wasi:random";
 
 // Counts host calls and hands out a known stream: what the buffer served, and
-// how often it reached past itself to get it.
+// how often it reached past itself to get it. `chunk` makes it answer short
+// and `overrun` makes it answer long, neither of which a caller may rely on.
 struct CountingRandom {
     next: u8 = 0,
     calls: i32 = 0,
     chunk: i32 = 0,
+    overrun: i32 = 1,
 }
 
 impl Random for CountingRandom {
@@ -17,6 +27,7 @@ impl Random for CountingRandom {
         if self.chunk > 0 && self.chunk < n {
             n = self.chunk;
         }
+        n *= self.overrun;
         let mut out: List<u8> = [];
         for let mut i = 0; i < n; i += 1 {
             out.push(self.next);
@@ -166,26 +177,6 @@ test "seed draws 32 bytes and starts a stream" {
     assert Xoshiro256pp::from_seed(first).next_u64() != Xoshiro256pp::from_seed(other).next_u64();
 }
 
-// Serves a fixed byte sequence, cycling, so a draw that must be rejected can
-// be placed exactly where the test wants it.
-struct ScriptedRandom {
-    script: List<u8> = [],
-    pos: i32 = 0,
-}
-
-impl Random for ScriptedRandom {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
-        let mut out: List<u8> = [];
-        for let mut i = 0; i < max_len as i32; i += 1 {
-            out.push(self.script[self.pos]);
-            self.pos = (self.pos + 1) % self.script.len();
-        }
-        resume out;
-    }
-
-    ..trap
-}
-
 test "bytes returns exactly what was asked for" {
     let mut host = CountingRandom {};
     with Random => &mut host do {
@@ -208,27 +199,8 @@ test "bytes loops over a short read" {
     assert host.calls == 3;
 }
 
-// Hands back three times what it was asked for, which `wasi:random` never
-// does but an installed handler can.
-struct GenerousRandom {
-    next: u8 = 0,
-}
-
-impl Random for GenerousRandom {
-    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
-        let mut out: List<u8> = [];
-        for let mut i = 0; i < max_len as i32 * 3; i += 1 {
-            out.push(self.next);
-            self.next = (self.next as i32 + 1 & 0xFF) as u8;
-        }
-        resume out;
-    }
-
-    ..trap
-}
-
 test "an over-delivering host cannot lengthen what was asked for" {
-    let mut host = GenerousRandom {};
+    let mut host = CountingRandom { overrun: 3 };
     with Random => &mut host do {
         assert bytes(4).len() == 4;
         assert token_hex(4).len() == 8;
@@ -263,6 +235,26 @@ test "token_from draws from the alphabet" {
         assert token_from(&b"0123456789", 12) == "012345678901";
         assert token_from(&"abc", 0) == "";
     };
+}
+
+// Serves a fixed byte sequence, cycling, so a draw that must be rejected can
+// be placed exactly where the test wants it.
+struct ScriptedRandom {
+    script: List<u8> = [],
+    pos: i32 = 0,
+}
+
+impl Random for ScriptedRandom {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32; i += 1 {
+            out.push(self.script[self.pos]);
+            self.pos = (self.pos + 1) % self.script.len();
+        }
+        resume out;
+    }
+
+    ..trap
 }
 
 test "token_from rejects the bytes that would bias it" {

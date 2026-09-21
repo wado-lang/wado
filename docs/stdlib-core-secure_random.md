@@ -37,7 +37,8 @@ from unpredictable randomness into a reproducible stream.
 ### `pub fn bytes(n: i32) -> ByteList with Random`
 
 Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
-nonce. A short read from `wasi:random` is absorbed here, never passed on.
+nonce. Whatever length the installed `Random` hands back is absorbed here,
+never passed on.
 
 ### `pub fn token_hex(n: i32 = TOKEN_BYTES) -> String with Random`
 

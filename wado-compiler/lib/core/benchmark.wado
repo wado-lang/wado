@@ -17,8 +17,12 @@
 //! checked by `wado test`; `benchmark/` holds the real ones.
 
 
-use { println, Stdout } from "core:cli";
-use { MonotonicClock } from "wasi:clocks";
+use { println } from "core:cli";
+
+/// The effects [`Benchmark::run`] carries, re-exported so a caller installs
+/// them without importing `core:cli` or `wasi:clocks` for the names.
+pub use { Stdout } from "core:cli";
+pub use { MonotonicClock } from "wasi:clocks";
 
 #[synopsis]
 test {

@@ -41,7 +41,11 @@ use {
     DeserializeSeq,
     DeserializeMap,
 } from "core:serde";
-use { Instant as ClockInstant, SystemClock } from "wasi:clocks";
+use { Instant as ClockInstant } from "wasi:clocks";
+
+/// The effect every `now()` here carries, re-exported so a caller never names
+/// `wasi:clocks` to install or declare it.
+pub use { SystemClock } from "wasi:clocks";
 
 #[synopsis]
 test {

@@ -324,9 +324,8 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
         let globals_before = project.globals.len();
         let mut effects = compute_fn_effects(&project.functions, &project.builtin_registry);
         if unhoist_unobserved_globals(project, &effects) {
-            // The bodies it rewrote only lost work, so their real summaries are
-            // now smaller than this table says. Keeping it would refuse a
-            // deletion that no longer has a reason to be refused.
+            // A rewritten body only lost work, so its real summary shrank, and
+            // the stale table refuses deletions nothing has a reason to refuse.
             effects = compute_fn_effects(&project.functions, &project.builtin_registry);
         }
         let analysis = analyze_dce(project);
