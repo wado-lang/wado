@@ -12,8 +12,8 @@ Only the two versions in common use today are provided:
   correlation.
 
 `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-Generating in bulk, install `core:secure_random`'s `BufferedRandom` so the
-host call is drawn once per block rather than once per UUID.
+Generating in bulk, run it under `core:secure_random`'s `with_buffered` so
+the host call is drawn once per block rather than once per UUID.
 
 `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 and `Inspect` render the canonical hyphenated form, as does `Serialize` for
