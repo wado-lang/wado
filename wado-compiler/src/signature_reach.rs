@@ -9,7 +9,7 @@ use crate::ast::{
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::resolve::{Resolutions, head_site};
+use crate::resolve::Resolutions;
 use crate::token::Span;
 
 /// An item whose signature names a declaration that stops short of it.
@@ -94,21 +94,21 @@ impl Walk<'_> {
             Item::Function(f) => self.function(f, reach(f.visibility, f.is_export)),
             Item::Impl(block) => {
                 let head = self.head_reach(block);
-                let from_trait = block
-                    .trait_type
-                    .as_ref()
-                    .and_then(|ty| self.declared_reach(ty));
+                // A trait impl's member carries no modifier of its own, so the
+                // head is all that decides; an inherent one's own claim caps.
+                let claimed = |declared| match block.trait_type {
+                    Some(_) => head,
+                    None => Visibility::narrower(declared, head),
+                };
                 for binding in &block.associated_types {
                     self.ty(&binding.ty, &binding.name, head);
                 }
                 for method in &block.methods {
-                    let declared =
-                        from_trait.unwrap_or_else(|| reach(method.visibility, method.is_export));
-                    self.function(method, declared.narrower(head));
+                    let declared = reach(method.visibility, method.is_export);
+                    self.function(method, claimed(declared));
                 }
                 for c in &block.constants {
-                    let declared = from_trait.unwrap_or(c.visibility);
-                    self.ty(&c.ty, &c.name, declared.narrower(head));
+                    self.ty(&c.ty, &c.name, claimed(c.visibility));
                 }
             }
             Item::Trait(decl) => {
@@ -221,11 +221,6 @@ impl Walk<'_> {
     fn site_reach(&self, id: AstId) -> Option<Visibility> {
         let def = self.resolutions.declared(id)?;
         Some(self.resolutions.defs().visibility(def))
-    }
-
-    /// The reach of what `ty`'s head names, when it names a declaration.
-    fn declared_reach(&self, ty: &Type) -> Option<Visibility> {
-        self.site_reach(head_site(ty)?)
     }
 
     /// How far an impl's members reach. An impl declares no visibility of its

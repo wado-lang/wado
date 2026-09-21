@@ -400,9 +400,8 @@ pub trait AstVisitor: Sized {
     /// `visit_*` methods instead.
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
-    /// A `with` clause's reference site. Kept apart from [`Self::visit_id`]
-    /// because an effect name is answered by `effect_check` and not by the
-    /// name resolver, so a visitor reading type references has to skip it.
+    /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
+    /// because `effect_check` answers for it and the name resolver does not.
     fn visit_effect_id(&mut self, id: AstId, span: Span) {
         self.visit_id(id, span);
     }

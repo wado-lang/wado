@@ -4256,12 +4256,12 @@ no further than the impl's head, and a trait impl's no further than the trait
 either: a caller has to be able to write the head to name the member. So
 `impl Add for Local` on a file-private `Local` gives its `add` that same reach,
 and `add` may then name `Local` freely. An impl's own bounds count as part of
-its head: nothing that cannot name `T`'s bound can satisfy it, so
+its head: a type that cannot name `T`'s bound cannot satisfy it, so
 `impl<T: Local> Add for T` confines `add` the same way.
 
-A declared reach is a claim instead, so a bound there is checked rather than
-narrowing: `pub fn f<T: Local>()` and `pub trait F<T: Local>` are errors,
-because no caller can supply the `T` they ask for.
+A declared reach is a claim, so a bound on one is checked instead of narrowing
+it. `pub fn f<T: Local>()` and `pub trait F<T: Local>` are errors, because no
+caller can supply the `T` they ask for.
 
 A type parameter, `Self`, and an associated-type projection (`Self::Output`,
 `I::Item`) are binders rather than declarations, so they carry no reach of their

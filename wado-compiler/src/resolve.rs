@@ -843,15 +843,6 @@ impl AstVisitor for Resolver<'_> {
         ast::walk_pattern(self, pat);
     }
 
-    fn visit_generic_params(&mut self, params: &[GenericParam]) {
-        for p in params {
-            self.visit_trait_bounds(&p.bounds);
-            if let Some(default) = &p.default {
-                self.visit_type(default);
-            }
-        }
-    }
-
     /// A bound is a reference to a trait, and its associated-type bindings are
     /// references to that trait's members. Every bound position routes here —
     /// `<T: Trait>`, `trait Sub: Super`, `type A: Trait` — so an inherited
