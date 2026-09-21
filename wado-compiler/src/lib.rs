@@ -54,6 +54,7 @@ pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;
 pub mod semantics;
+pub mod signature_reach;
 pub mod stdlib;
 pub(crate) mod stdlib_snapshot;
 pub mod test_names;

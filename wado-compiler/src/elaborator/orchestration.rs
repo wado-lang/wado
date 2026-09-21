@@ -51,6 +51,7 @@ use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
 use crate::resolve::{Resolution, Resolutions, head_site};
+use crate::signature_reach;
 use crate::semantics::Semantics;
 use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
@@ -1010,6 +1011,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
 
         for (module_source, violation) in orphan_violations {
+            let _ = logger.error_in(&module_source, violation);
+        }
+
+        for (module_source, violation) in signature_reach::violations(modules, &resolutions) {
             let _ = logger.error_in(&module_source, violation);
         }
 

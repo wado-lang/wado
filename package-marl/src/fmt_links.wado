@@ -10,7 +10,7 @@ internal struct RefTable {
     internal defs: TreeMap<String, LinkReferenceDef>,
 }
 
-pub fn new_ref_table() -> RefTable {
+internal fn new_ref_table() -> RefTable {
     return RefTable { defs: TreeMap::<String, LinkReferenceDef>::new() };
 }
 
@@ -18,7 +18,7 @@ pub fn new_ref_table() -> RefTable {
 /// normalized) — preserved so printing can echo the author's original
 /// spelling; the table key is normalized internally. The first definition
 /// for a given normalized label wins, per CommonMark.
-pub fn ref_table_insert(table: &mut RefTable, def: LinkReferenceDef) {
+internal fn ref_table_insert(table: &mut RefTable, def: LinkReferenceDef) {
     let key = normalize_label(&def.label);
     if !table.defs.contains_key(key) {
         table.defs[key] = def;
@@ -26,7 +26,7 @@ pub fn ref_table_insert(table: &mut RefTable, def: LinkReferenceDef) {
 }
 
 /// Looks up a raw (not-yet-normalized) label.
-pub fn ref_table_get<S: AsStrSlice>(table: &RefTable, raw_label: S) -> Option<LinkReferenceDef> {
+internal fn ref_table_get<S: AsStrSlice>(table: &RefTable, raw_label: S) -> Option<LinkReferenceDef> {
     return table.defs.get(normalize_label(raw_label));
 }
 

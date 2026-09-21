@@ -12,12 +12,12 @@ use { CodeWriter, FnSpec, ImplSpec, StructSpec, Vis } from "./wadopoet.wado";
 use { add_parser_super_effect, entry_emits_vals } from "./action_gen.wado";
 use { MemberDecls } from "./java2wado/jmembers.wado";
 
-struct RecoverFragmentEntry {
+internal struct RecoverFragmentEntry {
     call: String,
     first_names: List<String>,
 }
 
-pub fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
+internal fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List<RecoverFragmentEntry> {
     let names = *ctx.fragment_entries();
     let mut result: List<RecoverFragmentEntry> = [];
     let mut seen: List<String> = [];
@@ -53,7 +53,7 @@ pub fn compute_fragment_entries(grammar: &Grammar, ctx: &mut GenContext) -> List
     return result;
 }
 
-pub fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &GenContext) {
+internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragmentEntry>, ctx: &GenContext) {
     for let mut i = 0; i < entries.len(); i += 1 {
         w.line(`global _FRAGMENT_FIRST_${i}: List<i32> = [${join_kinds(&entries[i].first_names)}];`);
     }

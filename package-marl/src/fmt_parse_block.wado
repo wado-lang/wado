@@ -35,13 +35,13 @@ internal struct Parsed {
     internal refs: RefTable,
 }
 
-pub fn parse<S: AsStrSlice>(source: S) -> Parsed {
+internal fn parse<S: AsStrSlice>(source: S) -> Parsed {
     let lines: List<String> = source.lines().collect();
     let refs = collect_ref_defs(&lines);
     return Parsed { document: build_document(&lines, &refs), refs };
 }
 
-pub fn parse_document<S: AsStrSlice>(source: S) -> Node {
+internal fn parse_document<S: AsStrSlice>(source: S) -> Node {
     let lines: List<String> = source.lines().collect();
     let refs = collect_ref_defs(&lines);
     return build_document(&lines, &refs);
