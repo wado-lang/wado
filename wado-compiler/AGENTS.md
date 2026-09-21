@@ -52,11 +52,11 @@ filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
 from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
 A module re-exports every effect its public signatures carry. A caller has to
-name an effect to install it or to declare it onward, and the module that
-demands it is the one place to get it from, so `core:uuid` hands out `Random`
-and `SystemClock` and no user of it imports `wasi:*`. An effect a caller never
-names stays private: `core:log` reads the clock under `#[ambient]`, so it
-re-exports nothing.
+name an effect to install a handler for it, or to declare it onward. The name
+should come from the module that demands the effect, so `core:uuid` hands out
+`Random` and `SystemClock` and no user of it imports `wasi:*`. An effect no
+caller ever names stays private: `core:log` reads the clock under `#[ambient]`
+and re-exports nothing.
 
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the
