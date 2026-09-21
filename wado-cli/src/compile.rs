@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use wado_manifest::DependencySource;
 
@@ -17,7 +17,7 @@ use crate::dep_component::{
 };
 use crate::git::materialize;
 use crate::kiln_driver::{PipelineError, PipelineOutcome};
-use crate::kiln_provider::{CliGeneratorProvider, RegistryContext};
+use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, normalize_path, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
@@ -593,32 +593,67 @@ pub(crate) struct KilnSetup {
     /// root, so schemas must be loaded relative to it — not the entry file's
     /// directory, where the main compile host is based.
     pub host: FilesystemCompilerHost,
-    /// Loader identities the harvested (full-path-keyed) index is remapped onto.
+    /// Loader identities the harvested index is remapped onto.
     identities: wado_compiler::hashmap::IndexMap<String, String>,
+    no_cache: bool,
+}
+
+/// What a Kiln pipeline inherits from the run it belongs to: the project it
+/// resolves against, and the generator chain it continues.
+#[derive(Debug, Clone)]
+pub(crate) struct KilnRun {
+    pub project: Option<manifest::ProjectManifest>,
+    pub no_cache: bool,
+    /// The generators being compiled, outermost first. A generator whose source
+    /// reaches itself has no order to run in, so finding it here is the cycle.
+    pub active: Arc<Mutex<Vec<String>>>,
+}
+
+impl KilnRun {
+    pub(crate) fn entry(project: Option<manifest::ProjectManifest>, no_cache: bool) -> Self {
+        Self {
+            project,
+            no_cache,
+            active: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
 }
 
 /// Collect the inline `with { generator: { ... } }` clauses `entry_file`
 /// declares and assemble everything the Kiln pipeline needs from them.
 /// `Ok(None)` when the entry declares no generators.
 ///
-/// Shared by [`maybe_run_pipeline`] (which runs them) and `wado check` (which
-/// dry-runs them and byte-compares), so both tiers resolve generators through
-/// one identical setup.
+/// Shared by [`maybe_run_pipeline`], `wado check` and [`run_nested_pipeline`],
+/// so every tier resolves generators through one identical setup.
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
+    entry_identity: Option<&str>,
     host: &FilesystemCompilerHost,
-    no_cache: bool,
-    project: Option<manifest::ProjectManifest>,
+    run: &KilnRun,
 ) -> Result<Option<KilnSetup>, PipelineError> {
-    let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
-        entry_file
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
+    let KilnRun {
+        project,
+        no_cache,
+        active,
+    } = run.clone();
+    let entry_dir = entry_file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    // Every invocation is anchored at the package root, so one schema keeps one
+    // identity however the pipeline was reached. A file outside any package has
+    // only its entry's directory to stand on.
+    let manifest_root = project
+        .as_ref()
+        .map(|p| p.root.clone())
+        .unwrap_or(entry_dir);
     let (mut invocations, identities, inline_diagnostics) =
-        collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root)
-            .await;
+        collect_inline_invocations_for_entry_with_identities(
+            entry_file,
+            entry_identity,
+            &manifest_root,
+        )
+        .await;
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
@@ -637,10 +672,7 @@ pub(crate) async fn prepare_kiln(
     if invocations.is_empty() {
         return Ok(None);
     }
-    let (manifest, manifest_root) = match project {
-        Some(p) => (p.manifest, p.root),
-        None => (empty_manifest(), probe_manifest_root),
-    };
+    let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
     rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root);
     rewrite_local_dir_modules(&mut invocations, &manifest_root);
     // A generator's outputs are products of this run, not a tree moving under
@@ -654,6 +686,9 @@ pub(crate) async fn prepare_kiln(
     let provider = CliGeneratorProvider::new(manifest_root.clone())
         .with_run_cache(host.run_cache())
         .with_no_cache(no_cache)
+        .with_active(active)
+        .with_run(run.clone())
+        .with_log_level(host.log_level())
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
@@ -667,13 +702,27 @@ pub(crate) async fn prepare_kiln(
         provider,
         host: kiln_host,
         identities,
+        no_cache,
     }))
 }
 
 impl KilnSetup {
-    /// Remap a pipeline's harvested index (keyed by full path) onto the loader
-    /// identities collected with the invocations, reporting any redirect that
-    /// two declarations disagree on through `host`.
+    /// Run the harvested invocations, writing what they produce.
+    pub(crate) async fn run(&mut self) -> Result<PipelineOutcome, PipelineError> {
+        kiln_driver::run_pipeline(
+            &self.manifest,
+            &self.manifest_root,
+            &self.host,
+            &self.provider,
+            std::mem::take(&mut self.invocations),
+            self.no_cache,
+        )
+        .await
+    }
+
+    /// Remap a pipeline's harvested index onto the loader identities collected
+    /// with the invocations, reporting any redirect that two declarations
+    /// disagree on through `host`.
     pub(crate) fn remap_conflicts(
         &self,
         invocations: &mut wado_compiler::kiln::InvocationIndex,
@@ -701,20 +750,37 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let Some(mut kiln) = prepare_kiln(entry_file, host, no_cache, project).await? else {
+    let Some(mut kiln) =
+        prepare_kiln(entry_file, None, host, &KilnRun::entry(project, no_cache)).await?
+    else {
         return Ok(PipelineOutcome::default());
     };
-    let mut outcome = kiln_driver::run_pipeline(
-        &kiln.manifest,
-        &kiln.manifest_root,
-        &kiln.host,
-        &kiln.provider,
-        std::mem::take(&mut kiln.invocations),
-        no_cache,
-    )
-    .await?;
+    let mut outcome = kiln.run().await?;
     kiln.remap_conflicts(&mut outcome.invocations, host)?;
     Ok(outcome)
+}
+
+/// Resolve the Kiln invocations a generator's own source carries, so the
+/// compile that follows sees generated modules where it wrote schemas. Answers
+/// an empty index when the generator declares none.
+pub(crate) async fn run_nested_pipeline(
+    entry_file: &Path,
+    entry_identity: &str,
+    host: &FilesystemCompilerHost,
+    outer: &KilnRun,
+) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
+    // A generator shipped as a package names its dependencies in its own
+    // manifest, so that is the project. The rest is the outer run's.
+    let run = &KilnRun {
+        project: load_nearest_manifest(entry_file),
+        ..outer.clone()
+    };
+    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
+        return Ok(wado_compiler::kiln::InvocationIndex::default());
+    };
+    let mut invocations = kiln.run().await?.invocations;
+    kiln.remap_conflicts(&mut invocations, host)?;
+    Ok(invocations)
 }
 
 /// Rewrite each inline invocation whose `module` is a `[build-dependencies]`
@@ -793,6 +859,19 @@ fn build_dep_generator_local_path(
     )))
 }
 
+/// `path` as an absolute, lexically normalized path, so two paths spelled
+/// independently can be expressed against each other.
+fn absolute(path: &Path) -> PathBuf {
+    // An empty path names the current directory here, and is the one input
+    // `std::path::absolute` refuses.
+    let path = if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    };
+    std::path::absolute(path).map_or_else(|_| path.to_path_buf(), |p| normalize_path(&p))
+}
+
 /// Resolve a generator *package directory* (absolute) to its
 /// `[world]."core:kiln/generator"` entry, as a path relative to that
 /// directory. `None` when the directory has no readable `wado.toml` or the
@@ -829,15 +908,27 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
 /// `.wado` imports, plus the `harvest_key → loader_identity` map the caller
 /// rewrites the redirect index through
 /// ([`wado_compiler::kiln::remap_decl_files`]).
+///
+/// Keys are spelled from `manifest_root`, so an invocation keeps one identity
+/// whether the entry is compiled on its own behalf or as a generator.
 async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
+    entry_identity: Option<&str>,
     manifest_root: &Path,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
     Vec<wado_compiler::Diagnostic>,
 ) {
-    let entry_key = entry_file.to_string_lossy().to_string();
+    // The identity must be byte-identical to the name the compile that follows
+    // gives its entry, since that is what the loader interns the redirect under.
+    let entry_identity = entry_identity
+        .map(str::to_string)
+        .unwrap_or_else(|| entry_file.to_string_lossy().to_string());
+    // The root either comes from the manifest above the entry or is the entry's
+    // own directory, so it always contains the entry.
+    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
+        .expect("the entry lies under the root it was resolved from");
     // An unreadable entry, or one whose parse recovered from an error, harvests
     // nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
@@ -849,18 +940,19 @@ async fn collect_inline_invocations_for_entry_with_identities(
     // A loader identity is anchored on the entry's directory, so that is what
     // an import joins onto.
     let entry_dir = entry_file.parent().unwrap_or(Path::new(".")).to_path_buf();
-    let harvest =
-        wado_compiler::kiln::harvest_module_graph(&entry_key, entry.ast, async |identity| {
-            fs::read_to_string(entry_dir.join(identity)).ok()
-        })
-        .await;
+    let harvest = wado_compiler::kiln::harvest_module_graph(
+        &entry_key,
+        &entry_identity,
+        entry.ast,
+        async |identity| fs::read_to_string(entry_dir.join(identity)).ok(),
+    )
+    .await;
 
     let descriptors = wado_compiler::hashmap::IndexMap::default();
-    let manifest_root_str = manifest_root.to_string_lossy();
     let (invocations, diagnostics) = wado_compiler::kiln::collect_inline_invocations(
         harvest.modules.iter().map(|(k, v)| (k.as_str(), v)),
         &descriptors,
-        &manifest_root_str,
+        "",
     );
     (invocations, harvest.identities, diagnostics)
 }
@@ -1228,7 +1320,7 @@ mod kiln_dir_module_tests {
         Vec<wado_compiler::Diagnostic>,
     ) {
         futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
-            entry, root,
+            entry, None, root,
         ))
     }
 
@@ -1336,11 +1428,11 @@ mod kiln_dir_module_tests {
             Some("./eval.wado"),
             "harvest key must map to the loader identity"
         );
-        // The entry maps to itself (its `EntryPoint.filename` is the full path).
-        let entry_key = entry.to_string_lossy().to_string();
+        // The entry is keyed from the package root and maps to the name the
+        // loader will present, its `EntryPoint.filename`.
         assert_eq!(
-            identities.get(&entry_key).map(String::as_str),
-            Some(entry_key.as_str())
+            identities.get("example/main.wado").map(String::as_str),
+            Some(entry.to_string_lossy().as_ref())
         );
 
         let _ = std::fs::remove_dir_all(&root);
@@ -1412,12 +1504,11 @@ mod kiln_dir_module_tests {
         .unwrap();
 
         let entry = root.join("src/main.wado");
-        let entry_key = entry.to_string_lossy().to_string();
         let (_invs, identities, _d) = harvest(&entry, &root);
         assert_eq!(
-            identities.get(&entry_key).map(String::as_str),
-            Some(entry_key.as_str()),
-            "the entry maps to itself only",
+            identities.get("src/main.wado").map(String::as_str),
+            Some(entry.to_string_lossy().as_ref()),
+            "the entry maps to its loader name only",
         );
         assert!(
             !identities.values().any(|v| v == "./main.wado"),

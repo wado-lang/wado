@@ -1,0 +1,39 @@
+//! A partial turbofish over two packs: the written tuple settles the first,
+//! and the arguments settle the rest. The free function, the static method and
+//! the instance method take it alike — none of them may pin a trailing pack to
+//! the empty tuple before the arguments have had their turn.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn join<..A, ..B>(a: [..A], b: [..B]) -> i32 {
+    return a.len() * 10 + b.len();
+}
+
+struct Joiner {}
+
+impl Joiner {
+    fn join<..A, ..B>(&self, a: [..A], b: [..B]) -> i32 {
+        return a.len() * 10 + b.len();
+    }
+
+    fn joined<..A, ..B>(a: [..A], b: [..B]) -> i32 {
+        return a.len() * 10 + b.len();
+    }
+}
+
+test "partial turbofish on a free function" {
+    assert join::<[i32]>([1], [true, "x"]) == 12;
+}
+
+test "partial turbofish on a static method" {
+    assert Joiner::joined::<[i32]>([1], [true, "x"]) == 12;
+}
+
+test "partial turbofish on an instance method" {
+    let j = Joiner {};
+    assert j.join::<[i32]>([1], [true, "x"]) == 12;
+}
+
+test "no turbofish at all" {
+    let j = Joiner {};
+    assert j.join([1, "s"], [true]) == 21;
+}

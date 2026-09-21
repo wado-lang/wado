@@ -58,8 +58,9 @@ use crate::build_dep::{
     GENERATOR_WORLD_FQ, GENERATOR_WORLD_SEGMENT, parse_spec, resolve_generator_version,
 };
 use crate::cache::{generator_path, write_atomic};
+use crate::compile::{KilnRun, run_nested_pipeline};
 use crate::compiler_host::FilesystemCompilerHost;
-use crate::kiln_driver::{GeneratorProvider, ProviderError, ResolvedGenerator};
+use crate::kiln_driver::{GeneratorProvider, PipelineError, ProviderError, ResolvedGenerator};
 use crate::kiln_wit::options_descriptor_from_component;
 use crate::oci;
 use crate::run_cache::RunCache;
@@ -124,6 +125,17 @@ pub struct CliGeneratorProvider {
     /// [`GeneratorModule::Spec`] (`module: "ns:name"`) against the
     /// registry. Empty for callers that only use local generators.
     registry: RegistryContext,
+    /// The generators being compiled, outermost first, shared with the
+    /// providers their own invocations run through. A generator whose source
+    /// reaches itself has no order to run in, so finding it here is the cycle.
+    active: Arc<Mutex<Vec<String>>>,
+    /// The context a nested pipeline runs in, so a generator's own invocations
+    /// see the project and the write mode the entry's did. Absent for a
+    /// provider built outside a pipeline, whose generators nest no further.
+    kiln_run: Option<KilnRun>,
+    /// How loud the run is. Compiling a generator and running its own
+    /// invocations are part of the build the user asked to see.
+    log_level: LogLevel,
 }
 
 impl CliGeneratorProvider {
@@ -135,7 +147,32 @@ impl CliGeneratorProvider {
             run: None,
             no_cache: false,
             registry: RegistryContext::default(),
+            active: Arc::new(Mutex::new(Vec::new())),
+            kiln_run: None,
+            log_level: LogLevel::Warn,
         }
+    }
+
+    /// Report a generator's compile and its own invocations at the run's level.
+    #[must_use]
+    pub fn with_log_level(mut self, log_level: LogLevel) -> Self {
+        self.log_level = log_level;
+        self
+    }
+
+    /// Continue an outer generator's chain, so a cycle through this provider is
+    /// seen as one.
+    #[must_use]
+    pub fn with_active(mut self, active: Arc<Mutex<Vec<String>>>) -> Self {
+        self.active = active;
+        self
+    }
+
+    /// Run a generator's own invocations in the context the entry's ran in.
+    #[must_use]
+    pub(crate) fn with_run(mut self, run: KilnRun) -> Self {
+        self.kiln_run = Some(run);
+        self
     }
 
     /// Pin this run's generator resolutions in `cache`, and record the
@@ -316,6 +353,58 @@ impl CliGeneratorProvider {
         Ok((abs, source, source_str))
     }
 
+    /// The invocations the generator at `abs` declares in its own source, run.
+    /// Anchored at the generator's own package, whose manifest names them.
+    async fn nested_invocations(
+        &self,
+        abs: &Path,
+        base_path: &Path,
+        entry_name: &str,
+    ) -> Result<wado_compiler::kiln::InvocationIndex, ProviderError> {
+        let (entry, base) = (abs.to_path_buf(), base_path.to_path_buf());
+        let entry_identity = entry_name.to_string();
+        // A provider with no run context was not built by a pipeline, so the
+        // generator it resolves has no outer invocation to nest under.
+        let Some(mut run) = self.kiln_run.clone() else {
+            return Ok(wado_compiler::kiln::InvocationIndex::default());
+        };
+        run.active = self.active.clone();
+        let shared_cache = self.run.clone();
+        let log_level = self.log_level;
+        let failed = |e: PipelineError| ProviderError::Internal {
+            message: format!(
+                "kiln: generator `{}` declares an invocation that failed: {e}",
+                abs.display()
+            ),
+        };
+        // On a blocking thread with its own runtime, as the compile below is
+        // and for the same reason: the pipeline holds a `Logger` whose future
+        // is `!Send`, and the driver's runtime is multi-threaded.
+        let started = tokio::task::spawn_blocking(move || {
+            let mut host = FilesystemCompilerHost::with_log_level(base, log_level);
+            // The run's own cache, so the generated modules this produces are
+            // marked as its output rather than read as a tree moving under it,
+            // and so the AOT components the outer run holds are reused.
+            if let Some(cache) = shared_cache {
+                host = host.with_shared_run_cache(cache);
+            }
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| ProviderError::Internal {
+                    message: format!(
+                        "kiln: failed to start inner runtime for a nested generator: {e}"
+                    ),
+                })?;
+            Ok(rt.block_on(run_nested_pipeline(&entry, &entry_identity, &host, &run)))
+        })
+        .await
+        .map_err(|e| ProviderError::Internal {
+            message: format!("kiln: nested generator pipeline panicked or was cancelled: {e}"),
+        })?;
+        started?.map_err(failed)
+    }
+
     /// Compile the generator, publish the component under its source hash, and
     /// record that identity in the project index.
     async fn compile_local(
@@ -323,6 +412,7 @@ impl CliGeneratorProvider {
         path_str: String,
         abs: PathBuf,
         source_str: String,
+        invocations: wado_compiler::kiln::InvocationIndex,
     ) -> Result<CompileArtifacts, ProviderError> {
         self.compile_count.fetch_add(1, Ordering::SeqCst);
 
@@ -342,6 +432,7 @@ impl CliGeneratorProvider {
         let recording_base = base_path.clone();
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
         let loaded_for_task = loaded.clone();
+        let log_level = self.log_level;
 
         // `compile_with_options` captures a `Logger<H>` whose internal
         // `Cell<usize>` makes the returned future `!Send`. Run the whole
@@ -351,7 +442,7 @@ impl CliGeneratorProvider {
         let artifacts: Result<CompileArtifacts, ProviderError> =
             tokio::task::spawn_blocking(move || {
                 let host = SilentHost {
-                    inner: FilesystemCompilerHost::with_log_level(base_path, LogLevel::Warn),
+                    inner: FilesystemCompilerHost::with_log_level(base_path, log_level),
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
@@ -362,7 +453,8 @@ impl CliGeneratorProvider {
                     opt_level: wado_compiler::OptLevel::O2,
                     target_world: Some(GENERATOR_WORLD_FQ.to_string()),
                     skip_validation: false,
-                    log_level: Some(LogLevel::Warn),
+                    log_level: Some(log_level),
+                    invocations,
                     ..CompilerOptions::default()
                 };
                 let rt = tokio::runtime::Builder::new_current_thread()
@@ -438,6 +530,39 @@ impl CliGeneratorProvider {
     }
 }
 
+/// One generator's place in the chain being compiled, held for as long as its
+/// compile runs.
+struct ActiveGenerator {
+    chain: Arc<Mutex<Vec<String>>>,
+}
+
+impl ActiveGenerator {
+    /// Join the chain, or report the cycle `path` closes by naming every
+    /// generator in it.
+    fn enter(chain: &Arc<Mutex<Vec<String>>>, path: &Path) -> Result<Self, ProviderError> {
+        let entry = normalize_path(path).to_string_lossy().to_string();
+        let mut held = lock(chain);
+        if let Some(start) = held.iter().position(|active| active == &entry) {
+            let mut cycle: Vec<&str> = held[start..].iter().map(String::as_str).collect();
+            cycle.push(&entry);
+            return Err(ProviderError::Internal {
+                message: format!("kiln: generator cycle: {}", cycle.join(" -> ")),
+            });
+        }
+        held.push(entry);
+        drop(held);
+        Ok(Self {
+            chain: chain.clone(),
+        })
+    }
+}
+
+impl Drop for ActiveGenerator {
+    fn drop(&mut self) {
+        lock(&self.chain).pop();
+    }
+}
+
 /// Re-anchor the recorded paths at `base`, walking up with `..` for anything
 /// outside it.
 ///
@@ -461,7 +586,7 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
 
 /// Fold `.` and `..` out of `path` without touching the filesystem. A `..` at
 /// the root, or leading a relative path, has nothing to pop and is kept.
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     use std::path::Component;
 
     let mut out = PathBuf::new();
@@ -492,7 +617,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 /// `target` expressed relative to `base`, with `..` for each level `target`
 /// sits above it. Both must already be normalized. `None` when the two share no
 /// root to walk between.
-fn relative_to(base: &Path, target: &Path) -> Option<String> {
+pub(crate) fn relative_to(base: &Path, target: &Path) -> Option<String> {
     use std::path::Component;
 
     if base.is_absolute() != target.is_absolute() {
@@ -951,6 +1076,16 @@ impl CliGeneratorProvider {
     ) -> Result<ResolvedGenerator, ProviderError> {
         let (abs, _source, source_str) = self.read_local_source(path)?;
         let base = abs.parent().map(Path::to_path_buf).unwrap_or_default();
+        let entry_name = abs
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| abs.to_string_lossy().into_owned());
+        // A generator is an ordinary Wado package, so its own source may import
+        // a module Kiln produces. Those run first: the generated module is an
+        // input to this generator, so the identity below is only its identity
+        // once the module is what the current sources produce.
+        let _entered = ActiveGenerator::enter(&self.active, &abs)?;
+        let invocations = self.nested_invocations(&abs, &base, &entry_name).await?;
         if !self.no_cache
             && let Some(resolved) = self.try_read_cache(path.as_str(), &base)
         {
@@ -971,7 +1106,7 @@ impl CliGeneratorProvider {
             return Ok(resolved);
         }
         let artifacts = self
-            .compile_local(path.as_str().to_string(), abs, source_str)
+            .compile_local(path.as_str().to_string(), abs, source_str, invocations)
             .await?;
         self.observe_closure(path.as_str(), &base);
         Ok(ResolvedGenerator {

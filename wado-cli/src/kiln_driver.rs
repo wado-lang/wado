@@ -101,10 +101,8 @@ pub struct InvocationRun {
     pub extents: Vec<Option<u64>>,
 }
 
-/// Output-file identity recorded after a generator run.
-///
-/// Produced by [`execute`], consumed by the cache-check / metadata layer
-/// and by `wado check` (which compares `bytes` against on-disk content).
+/// Output-file identity recorded after a generator run. Produced by
+/// [`execute`], consumed by the cache-check / metadata layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OutputHash {
     /// Project-root-relative forward-slash path of the written file.
@@ -114,11 +112,6 @@ pub struct OutputHash {
     /// Whether the generator marked this file as the invocation's entry
     /// module — the one a consuming `use ... from "<from>"` resolves to.
     pub is_entry: bool,
-    /// Full file bytes (header + generator body) as they would land on
-    /// disk. Always populated by [`execute`], regardless of write mode,
-    /// so `wado check` can byte-compare against the on-disk file without
-    /// re-running the generator.
-    pub bytes: Vec<u8>,
 }
 
 /// Errors from [`execute`].
@@ -187,40 +180,6 @@ pub async fn execute<H: CompilerHost>(
     manifest_root: &Path,
     host: &H,
 ) -> Result<InvocationRun, ExecuteError> {
-    execute_with_mode(
-        invocation,
-        component_wasm,
-        manifest_root,
-        host,
-        ExecuteMode::WriteAndWarnOnOverwrite,
-    )
-    .await
-}
-
-/// Behavior knob for [`execute_with_mode`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ExecuteMode {
-    /// Default `wado compile` behavior: write generator outputs to disk,
-    /// surface a [`Code::KilnGeneratedRegenerated`] debug notice when the
-    /// new bytes differ from the pre-existing on-disk file.
-    WriteAndWarnOnOverwrite,
-    /// `wado check` behavior: do not write to disk. The caller is
-    /// responsible for byte-comparing the returned [`InvocationRun`]
-    /// against on-disk files and surfacing
-    /// [`Code::KilnGeneratedStaleOnDisk`].
-    DryRun,
-}
-
-/// Run a generator and optionally write outputs to disk.
-///
-/// The default `execute` calls this with [`ExecuteMode::WriteAndWarnOnOverwrite`].
-pub async fn execute_with_mode<H: CompilerHost>(
-    invocation: &Invocation,
-    component_wasm: &[u8],
-    manifest_root: &Path,
-    host: &H,
-    mode: ExecuteMode,
-) -> Result<InvocationRun, ExecuteError> {
     let primary = load_input(host, &invocation.from).await?;
     let mut inputs = Vec::with_capacity(invocation.inputs.len());
     for p in &invocation.inputs {
@@ -288,40 +247,31 @@ pub async fn execute_with_mode<H: CompilerHost>(
             rel.to_string_lossy()
         ));
 
-        match mode {
-            ExecuteMode::WriteAndWarnOnOverwrite => {
-                if let Some(parent) = full_path.parent() {
-                    std::fs::create_dir_all(parent).map_err(|source| ExecuteError::Io {
-                        path: parent.to_path_buf(),
-                        source,
-                    })?;
-                }
-                if let Ok(existing) = std::fs::read(&full_path)
-                    && existing != bytes
-                {
-                    emit_generated_regenerated_notice(
-                        host,
-                        &invocation.decl_site().synthetic_id,
-                        normalized.as_str(),
-                    );
-                }
-                write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
-                    path: full_path.clone(),
-                    source,
-                })?;
-            }
-            ExecuteMode::DryRun => {
-                // Skip directory creation and write; caller (wado check)
-                // compares `bytes` against the on-disk file itself.
-            }
+        if let Some(parent) = full_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| ExecuteError::Io {
+                path: parent.to_path_buf(),
+                source,
+            })?;
         }
+        if let Ok(existing) = std::fs::read(&full_path)
+            && existing != bytes
+        {
+            emit_generated_regenerated_notice(
+                host,
+                &invocation.decl_site().synthetic_id,
+                normalized.as_str(),
+            );
+        }
+        write_atomic(&full_path, &bytes).map_err(|source| ExecuteError::Io {
+            path: full_path.clone(),
+            source,
+        })?;
 
         let hash = file_hash(&normalized, &bytes).hash;
         outputs.push(OutputHash {
             path: normalized.as_str().to_string(),
             hash,
             is_entry: file.is_entry,
-            bytes,
         });
     }
 
@@ -563,7 +513,7 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
         message: format!(
             "kiln[{invocation}]: {path} has been modified after generation; \
              the on-disk content is honored, but `wado check` will fail. \
-             Run `wado compile` (or delete the file) to regenerate.",
+             Delete the file to regenerate it — a build honors the edit too.",
         ),
         span: None,
     });
@@ -1192,136 +1142,6 @@ where
     outcome.deleted.sort();
 
     Ok(outcome)
-}
-
-/// Outcome of [`check_pipeline`].
-///
-/// `stale.len()` is non-zero iff at least one invocation produced bytes
-/// that did not match the on-disk source. Each entry is the
-/// project-root-relative path of the divergent file.
-#[derive(Debug, Default)]
-pub struct CheckOutcome {
-    pub checked: Vec<String>,
-    pub stale: Vec<String>,
-    pub missing: Vec<String>,
-    /// Redirect index for the elaborator, populated identically to
-    /// [`PipelineOutcome::invocations`] so the downstream compile can
-    /// resolve `use { ... } from "<schema>"` even though `check_pipeline`
-    /// did not write outputs to disk.
-    pub invocations: wado_compiler::kiln::InvocationIndex,
-}
-
-/// Run the Kiln pipeline in `wado check` mode: re-run every invocation
-/// from scratch (ignoring `<primary>.kiln.json`), byte-compare each
-/// output against the on-disk file, and surface
-/// [`Code::KilnGeneratedStaleOnDisk`] diagnostics for mismatches.
-///
-/// Does not write generator outputs to disk and does not touch
-/// `<primary>.kiln.json`. Suitable for CI: a clean checkout of a
-/// committed-source project should produce zero divergence.
-pub async fn check_pipeline<H, P>(
-    manifest: &Manifest,
-    manifest_root: &Path,
-    host: &H,
-    provider: &P,
-    inline_invocations: Vec<wado_compiler::kiln::Invocation>,
-) -> Result<CheckOutcome, PipelineError>
-where
-    H: CompilerHost,
-    P: GeneratorProvider,
-{
-    let plan_order =
-        wado_compiler::kiln::build_plan(inline_invocations).map_err(DriverError::Plan)?;
-    let mut planned = PlanOutcome {
-        plan: plan_order,
-        manifest_root: manifest_root.to_path_buf(),
-    };
-    if planned.plan.order.is_empty() {
-        return Ok(CheckOutcome::default());
-    }
-
-    let resolved = resolve_modules(&planned.plan.order, provider, host).await;
-    typed_encode_options(manifest, &mut planned.plan.order, &resolved, host);
-
-    let mut outcome = CheckOutcome::default();
-    for invocation in &planned.plan.order {
-        let invocation_name = invocation_id(invocation);
-
-        let generator = lookup_resolved(&resolved, &invocation.module).map_err(|source| {
-            PipelineError::Provider {
-                invocation: invocation_name.clone(),
-                source,
-            }
-        })?;
-        let run = execute_with_mode(
-            invocation,
-            &generator.wasm,
-            manifest_root,
-            host,
-            ExecuteMode::DryRun,
-        )
-        .await
-        .map_err(|source| PipelineError::Execute {
-            invocation: invocation_name.clone(),
-            source,
-        })?;
-        outcome.checked.push(invocation_name.clone());
-
-        if let Some(entry_path) = run.outputs.iter().find(|o| o.is_entry).map(|o| &o.path) {
-            record_redirects(
-                &mut outcome.invocations,
-                invocation,
-                manifest_root,
-                entry_path,
-            );
-        }
-
-        for output in &run.outputs {
-            let abs = manifest_root.join(&output.path);
-            match std::fs::read(&abs) {
-                Ok(existing) => {
-                    if existing != output.bytes {
-                        emit_stale_on_disk_warning(host, &invocation_name, &output.path);
-                        outcome.stale.push(output.path.clone());
-                    }
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    emit_missing_on_disk_warning(host, &invocation_name, &output.path);
-                    outcome.missing.push(output.path.clone());
-                }
-                Err(source) => {
-                    return Err(PipelineError::Io { path: abs, source });
-                }
-            }
-        }
-    }
-    Ok(outcome)
-}
-
-fn emit_stale_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Code, Diagnostic, Severity};
-    host.emit_diagnostic(Diagnostic {
-        severity: Severity::Warning,
-        code: Code::KilnGeneratedStaleOnDisk,
-        message: format!(
-            "kiln[{invocation}]: {path} differs from generator output; \
-             commit the regenerated file or revert the local edit",
-        ),
-        span: None,
-    });
-}
-
-fn emit_missing_on_disk_warning<H: CompilerHost>(host: &H, invocation: &str, path: &str) {
-    use wado_compiler::{Code, Diagnostic, Severity};
-    host.emit_diagnostic(Diagnostic {
-        severity: Severity::Warning,
-        code: Code::KilnGeneratedStaleOnDisk,
-        message: format!(
-            "kiln[{invocation}]: {path} is missing on disk but the generator produced it; \
-             run `wado compile` to materialize it",
-        ),
-        span: None,
-    });
 }
 
 fn is_unsupported(err: &PipelineError) -> bool {

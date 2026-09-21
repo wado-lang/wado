@@ -1,0 +1,51 @@
+//! A pack argument of arity one. A receiver naming a declaration spells the
+//! pack as one argument holding a tuple; a target that spreads it
+//! (`impl<..T> … for [..T]`) hands the tuple's elements over. Both spellings
+//! count one argument here, so neither may be read as the other.
+
+use { to_string } from "core:json";
+
+trait Countable with () {
+    fn count_all(&self) -> i32;
+}
+
+impl Countable for i32 {
+    fn count_all(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Countable for bool {
+    fn count_all(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl<..T: Countable> Countable for [..T] {
+    fn count_all(&self) -> i32 {
+        let mut n = 0;
+        for let v of *self {
+            n += v.count_all();
+        }
+        return n;
+    }
+}
+
+test "a spreading target takes a one-element tuple whole" {
+    let t: [[i32, bool]] = [[1, true]];
+    assert t.count_all() == 2;
+}
+
+test "a spreading target serializes a one-element tuple" {
+    let t: [[i32, bool]] = [[1, true]];
+    assert to_string(&t).unwrap() == "[[1,true]]";
+}
+
+struct One<..A> {
+    a: [..A],
+}
+
+test "a declared receiver takes the same tuple per slot" {
+    let t: One<[i32, bool]> = One { a: [1, true] };
+    assert `${t:?}` == "One { a: [1, true] }";
+}

@@ -354,7 +354,7 @@ fn test_help_summarizes_check_as_verifying_a_source_file() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "check [options] [file.wado]         Verify a source file and its Kiln generators",
+            "check [options] [file.wado | dir]   Verify a source file and its Kiln generators",
         ));
 }
 
@@ -532,6 +532,47 @@ fn test_check_with_no_file_checks_every_declared_world() {
     // The library world alone is satisfied, so selecting it passes.
     std::fs::write(dir.join("main.wado"), "export fn run() { let _ = 1; }\n").unwrap();
     wado().current_dir(dir).arg("check").assert().success();
+}
+
+/// A directory names the project to check, so a workspace member is reachable
+/// without changing directory first.
+#[test]
+fn test_check_takes_a_directory_as_the_project_to_check() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let pkg = dir.join("member");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(
+        pkg.join("wado.toml"),
+        "[package]\n\
+         name = \"member\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("lib.wado"),
+        "export fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .args(["check", "member"])
+        .assert()
+        .success();
+
+    std::fs::write(
+        pkg.join("lib.wado"),
+        "export fn answer() -> i32 { return; }\n",
+    )
+    .unwrap();
+    wado()
+        .current_dir(dir)
+        .args(["check", "member"])
+        .assert()
+        .failure();
 }
 
 #[test]
@@ -1148,6 +1189,69 @@ fn test_lib_duplicate_export_name_rejected() {
         .stderr(predicate::str::contains("two functions named `dup`"));
 }
 
+/// An `internal` type is published into the CM interface so an export naming it
+/// resolves, but it is not the library's API, so it cannot be what a `--lib`
+/// offers its consumers.
+#[test]
+fn test_lib_with_only_internal_submodule_types_is_rejected() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"inner\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("geom.wado"),
+        "internal struct Point { internal x: i32 }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "use { Point } from \"./geom.wado\";\npub fn helper() -> i32 { return 0; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir)
+        .arg("build")
+        .arg("--lib")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("exports nothing"));
+}
+
+/// A lowered type carries its fields whatever their scope, so an `internal`
+/// type reaches the CM interface through a `pub` one that holds it.
+#[test]
+fn test_lib_exports_an_internal_type_held_by_a_published_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"vis\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("geom.wado"),
+        "internal struct Point { internal x: i32, internal y: i32 }\n\
+         pub struct Marker { at: Point }\n\
+         impl Marker {\n\
+         pub fn new() -> Marker { return Marker { at: Point { x: 0, y: 0 } }; }\n\
+         }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "use { Marker } from \"./geom.wado\";\n\
+         export fn origin() -> Marker { return Marker::new(); }\n",
+    )
+    .unwrap();
+
+    wado_in(dir).arg("build").arg("--lib").assert().success();
+}
+
 #[test]
 fn test_lib_duplicate_type_name_rejected() {
     let tmp = tempfile::tempdir().unwrap();
@@ -1180,6 +1284,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "library type `Node` is defined in more than one module",
+            "type `Node` is defined in ./a.wado and ./b.wado",
         ));
 }

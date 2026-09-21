@@ -1,0 +1,14 @@
+// A builtin type name reaches every module, `#![no_prelude]` included, so it is
+// reserved everywhere the prelude's own names are. Without this, one module
+// held two types spelled `i32`: the annotation resolved to the primitive and
+// the literal to the struct.
+struct i32 {
+    a: bool,
+}
+
+export fn run() {
+    let s = i32 { a: true };
+}
+
+__DATA__
+{"compile_error": "type 'i32' conflicts with prelude type of the same name"}

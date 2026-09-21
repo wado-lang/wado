@@ -8,7 +8,7 @@ use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamSlot,
-    RealTypeParams, StructFieldInfo, VariantCaseData, VariantInfo,
+    RealTypeParams, ReceivedPosition, StructFieldInfo, VariantCaseData, VariantInfo,
 };
 use crate::elaborator::item::{
     register_enum_case_compiler_item, register_enum_compiler_item, register_function_compiler_item,
@@ -37,7 +37,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let mut field_defaults: Vec<Option<ast::Expr>> = Vec::new();
                     for field in &struct_decl.fields {
                         let type_id = scope.resolve_type(&field.ty);
-                        scope.reject_unresolved_annotation(&field.ty);
+                        scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
                         fields.push((field.name.clone(), type_id, field.visibility));
                         field_ast_ids.push(field.id);
                         field_defaults.push(field.default.clone());
@@ -115,7 +115,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         // Each variant case has exactly one payload type.
                         // Unit variants have `()` (unit type) payload.
                         let payload = if let Some(payload_ty) = &case.payload {
-                            scope.reject_unresolved_annotation(payload_ty);
+                            scope.reject_received_annotation(
+                                payload_ty,
+                                ReceivedPosition::VariantPayload,
+                            );
                             scope.resolve_type(payload_ty)
                         } else {
                             TypeTable::UNIT
@@ -378,11 +381,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     let offset = scope.annotate_ctx.trait_ctx.type_params.len();
                     for (i, param) in method.type_params.iter().enumerate() {
                         let idx = (offset + i) as u32;
-                        let type_id = scope
-                            .tysys
-                            .type_table
-                            .borrow_mut()
-                            .make_type_param(param.name.clone(), idx);
+                        let type_id = scope.tysys.type_table.borrow_mut().make_declared_param(
+                            param.name.clone(),
+                            idx,
+                            param.is_pack,
+                        );
                         scope.annotate_ctx.trait_ctx.type_params.insert(
                             param.name.clone(),
                             BinderInScope::declared(idx, type_id, param.id),

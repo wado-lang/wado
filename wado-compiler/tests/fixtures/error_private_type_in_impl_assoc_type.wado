@@ -1,0 +1,30 @@
+// An impl's associated type is read back through `Self::Out` wherever the impl
+// is reachable, so it reaches as far as the impl's head does.
+struct Hidden {
+    n: i32,
+}
+
+pub struct Boxed {
+    pub n: i32,
+}
+
+pub trait Shape with () {
+    type Out;
+
+    fn out(&self) -> Self::Out;
+}
+
+impl Shape for Boxed {
+    type Out = Hidden;
+
+    fn out(&self) -> Self::Out {
+        return Hidden { n: self.n };
+    }
+}
+
+export fn run() {
+    assert Boxed { n: 1 }.out().n == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

@@ -1,0 +1,55 @@
+//! Walking a tuple literal that splices a pack after fixed elements. The
+//! literal's type must carry the pack at its top level, as the annotate pass
+//! records it, or the loop binds every element at the first element's type and
+//! each body is typed for that one.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md.
+
+fn walk<..A>(a: [..A]) -> String {
+    let mut s = "";
+    for let v of [0, true, 'c', ..a] {
+        s = `${s}${v:?};`;
+    }
+    return s;
+}
+
+fn walk_leading<..A>(a: [..A]) -> String {
+    let mut s = "";
+    for let v of [0, ..a] {
+        s = `${s}${v:?};`;
+    }
+    return s;
+}
+
+fn walk_trailing<..A>(a: [..A]) -> String {
+    let mut s = "";
+    for let v of [..a, 0] {
+        s = `${s}${v:?};`;
+    }
+    return s;
+}
+
+fn walk_bare<..A>(a: [..A]) -> String {
+    let mut s = "";
+    for let v of [..a] {
+        s = `${s}${v:?};`;
+    }
+    return s;
+}
+
+test "fixed elements ahead of the splice" {
+    assert walk([7.5]) == "0;true;'c';7.5;";
+}
+
+test "one fixed element ahead of the splice" {
+    assert walk_leading([true]) == "0;true;";
+    assert walk_leading([true, "z"]) == "0;true;\"z\";";
+}
+
+test "the splice ahead of a fixed element" {
+    assert walk_trailing([true]) == "true;0;";
+    assert walk_trailing([true, "z"]) == "true;\"z\";0;";
+}
+
+test "nothing but the splice" {
+    assert walk_bare([true, 7]) == "true;7;";
+}

@@ -1,10 +1,11 @@
-// `Priv` is private to this module; callers of `plain` / `generic` cannot name
-// it, but the defaults supply it.
-struct Priv {
+// A default expression resolves in this module, not the caller's, so `plain`
+// and `generic` supply `Priv` without the caller writing it. `Priv` is `pub`
+// because a caller may pass it explicitly and so has to be able to name it.
+pub struct Priv {
     n: i32 = 5,
 }
 
-trait Tagged with () {
+pub trait Tagged with () {
     fn tag(&self) -> i32;
     fn zero() -> i32;
 }

@@ -1,0 +1,29 @@
+//! A tuple literal that spreads a pack-typed value. The literal's own type
+//! carries the pack, so it expands to one element per pack member rather than
+//! to a single nested tuple.
+
+fn count<..A>(a: [..A]) -> i32 {
+    let mut n = 0;
+    for let v of [..a] {
+        n += 1;
+    }
+    return n;
+}
+
+fn with_head<..A>(a: [..A]) -> i32 {
+    let mut n = 0;
+    for let v of [0, ..a] {
+        n += 1;
+    }
+    return n;
+}
+
+test "a spliced pack walks its own elements" {
+    assert count([1, true]) == 2;
+    assert count([1, true, "x"]) == 3;
+    assert count([]) == 0;
+}
+
+test "a fixed element ahead of the splice keeps its place" {
+    assert with_head([1, true]) == 3;
+}

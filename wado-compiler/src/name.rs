@@ -760,6 +760,14 @@ impl Receiver {
         }
     }
 
+    /// Whether this receiver names a declaration, whose type arguments stand
+    /// one per declared parameter. A tuple, a reference or a projection spreads
+    /// its parts over that list instead.
+    #[must_use]
+    pub fn is_declared_type(&self) -> bool {
+        matches!(self, Receiver::Type(fq) if matches!(fq.head(), TypeHead::Declared(_)))
+    }
+
     /// Whether this receiver is one of the binders `names` declares — how a
     /// blanket's receiver is recognized. By spelling, since a declaration list
     /// has no owning block to compare.
@@ -1500,6 +1508,18 @@ pub fn resolve_import(
 /// invocation's generated entry module under `build/kiln/…`, everything else
 /// falls through to [`resolve_import_with_entry`]. Use this in place of
 /// [`resolve_import`] wherever an index is available.
+/// The file a declaration in `source` is written in, as a [`InvocationIndex`]
+/// keys it and a diagnostic names it. Empty for a source that holds no path.
+#[must_use]
+pub fn decl_file_of(source: &ModuleSource) -> &str {
+    match source {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
+        ModuleSource::EntryPoint { filename } => filename.as_str(),
+        ModuleSource::Redirected { uri } => uri.as_str(),
+        _ => "",
+    }
+}
+
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1508,12 +1528,7 @@ pub fn resolve_import_with_invocations(
     invocations: &InvocationIndex,
 ) -> ModuleSource {
     if !invocations.is_empty() {
-        let decl_file = match from_module {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
-            ModuleSource::EntryPoint { filename } => filename.as_str(),
-            ModuleSource::Redirected { uri } => uri.as_str(),
-            _ => "",
-        };
+        let decl_file = decl_file_of(from_module);
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
             return interner.redirected(entry_uri);
         }

@@ -635,15 +635,14 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A static declaring type parameters of its own, on an `impl` block that
-    /// declares some too. The block's are spelled at the receiver and the
-    /// method's are not inferred from the arguments, so an unspelled one
-    /// reaches codegen unsubstituted.
-    UninferredStaticTypeArg {
+    /// A method's own type parameters that the arguments do not settle. Left
+    /// unspelled they reach codegen unsubstituted.
+    UninferredMethodTypeArgs {
         receiver: String,
         method: String,
-        /// The first of the method's own parameters, which the call must spell.
-        param: String,
+        /// The method's own parameters the call must spell, in declaration
+        /// order. Never empty.
+        params: Vec<String>,
         span: Span,
     },
 
@@ -841,6 +840,34 @@ pub enum TypeError {
     /// elements (`impl<..T> Trait for [i32, ..T]`) or under a reference
     /// (`&[..T]`) — which the compiler does not implement.
     UnsupportedVariadicImplTarget {
+        span: Span,
+    },
+
+    /// A position that receives a value holding two packs in one tuple
+    /// (`[..A, ..B]`). Every split of the value satisfies it, so nothing
+    /// reaching it settles either pack.
+    TwoPacksInReceivedType {
+        position: String,
+        span: Span,
+    },
+
+    /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
+    /// for one position, so spreading it says nothing a bare `X` does not.
+    SpreadOfNonPack {
+        name: String,
+        span: Span,
+    },
+
+    /// A turbofish spelling more than one type pack's arguments flat, which
+    /// says nothing about where one pack ends and the next begins.
+    UnspelledPackBoundary {
+        span: Span,
+    },
+
+    /// A tuple `zip` whose rows are not all the same length. Two distinct packs
+    /// are never known to be equally long, so the transpose has no answer.
+    ZipOverUnequalPacks {
+        row: String,
         span: Span,
     },
 
@@ -1597,16 +1624,42 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UninferredStaticTypeArg {
+            TypeError::UninferredMethodTypeArgs {
                 receiver,
                 method,
-                param,
+                params,
                 span,
             } => (
+<<<<<<< HEAD
                 Code::NeedsTypeAnnotation,
                 format!(
                     "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
                 ),
+||||||| 9552903a8
+                Code::TypeMismatch,
+                format!(
+                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
+                ),
+=======
+                Code::TypeMismatch,
+                {
+                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
+                    let named = params
+                        .iter()
+                        .map(|p| format!("'{p}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let (plural, verb, them) = if params.len() == 1 {
+                        ("", "is", "it")
+                    } else {
+                        ("s", "are", "them")
+                    };
+                    let spelled = params.join(", ");
+                    format!(
+                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
+                    )
+                },
+>>>>>>> origin/main
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
@@ -1861,6 +1914,32 @@ impl TypeError {
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
+                *span,
+            ),
+            TypeError::TwoPacksInReceivedType { position, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
+                ),
+                *span,
+            ),
+            TypeError::SpreadOfNonPack { name, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`..{name}` spreads `{name}`, which is not a type pack: declare it as `..{name}` in the type parameter list, or write `{name}` here"
+                ),
+                *span,
+            ),
+            TypeError::ZipOverUnequalPacks { row, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`zip` transposes its rows position by position, so every row must be the same length; `{row}` is not the length of the first. Two type packs are never known to be equally long, so `zip` over them is not supported"
+                ),
+                *span,
+            ),
+            TypeError::UnspelledPackBoundary { span } => (
+                Code::TypeMismatch,
+                "with more than one type pack, a flat list of type arguments does not say where one pack ends; spell each type pack as a tuple, as in `f::<[i32], [bool]>(...)`".to_string(),
                 *span,
             ),
             TypeError::UnconstrainedImplTypeParam { param_name, span } => (
@@ -3021,12 +3100,32 @@ impl TraitMethodMatch {
     }
 }
 
+/// A written type position a value arrives at, which is what settles the type
+/// parameters it names.
+#[derive(Clone, Copy)]
+pub(super) enum ReceivedPosition {
+    Parameter,
+    Field,
+    VariantPayload,
+}
+
+impl ReceivedPosition {
+    pub(super) fn name(self) -> &'static str {
+        match self {
+            ReceivedPosition::Parameter => "parameter",
+            ReceivedPosition::Field => "field",
+            ReceivedPosition::VariantPayload => "variant payload",
+        }
+    }
+}
+
 /// One type-parameter slot as a declaration-level resolver sees it: the name
 /// filling it and the bounds that say what `T::Assoc` means.
 #[derive(Debug, Clone, Default)]
 pub(super) struct ParamSlot {
     pub(super) name: String,
     pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) is_pack: bool,
 }
 
 impl From<&ast::GenericParam> for ParamSlot {
@@ -3034,6 +3133,7 @@ impl From<&ast::GenericParam> for ParamSlot {
         Self {
             name: param.name.clone(),
             bounds: param.bounds.clone(),
+            is_pack: param.is_pack,
         }
     }
 }

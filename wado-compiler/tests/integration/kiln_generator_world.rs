@@ -219,6 +219,122 @@ fn options_field_type_from_another_module_compiles() {
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
+/// Two submodules declaring one public type name reach the registry under the
+/// same (interface, name), which it registers exactly once. A generator's
+/// surface is published like a library's, so it owes the same diagnostic.
+const DUPLICATE_TYPE_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { Rule } from "./rule.wado";
+use { Other } from "./other.wado";
+
+pub struct Options {
+    pub rules: List<Rule>,
+    pub others: List<Other>,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = req.options.rules.len() + req.options.others.len();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+const DUPLICATE_TYPE_RULE: &str = r#"
+pub struct Rule {
+    pub pattern: String,
+}
+
+pub struct Shared {
+    pub a: String,
+}
+"#;
+
+const DUPLICATE_TYPE_OTHER: &str = r#"
+pub struct Other {
+    pub name: String,
+}
+
+pub struct Shared {
+    pub b: String,
+}
+"#;
+
+/// Every entry-module type is published, `pub` or not, because a type an
+/// `export fn` names crosses the boundary whether or not it is marked. So a
+/// private entry type still claims its name against a submodule's.
+const PRIVATE_ENTRY_TYPE_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { Rule } from "./rule.wado";
+
+struct Shared {
+    a: String,
+}
+
+pub struct Options {
+    pub rules: List<Rule>,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let scratch = Shared { a: req.primary.path };
+    let _ = scratch.a.len() + req.options.rules.len();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+#[test]
+fn a_private_entry_type_still_claims_its_name_against_a_submodule() {
+    let host = MapHost::new(&[("./rule.wado", DUPLICATE_TYPE_RULE)]);
+    let result = block_on(compile_with_options(
+        PRIVATE_ENTRY_TYPE_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(
+        result.is_err(),
+        "the name is claimed twice in one interface"
+    );
+
+    let diags = host.diagnostics();
+    let found = diags
+        .iter()
+        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Shared`"));
+    assert!(
+        found,
+        "expected DuplicateDefinition naming `Shared`, got:\n{}",
+        diag_list(&diags)
+    );
+}
+
+#[test]
+fn duplicate_public_type_across_generator_modules_is_diagnosed() {
+    let host = MapHost::new(&[
+        ("./rule.wado", DUPLICATE_TYPE_RULE),
+        ("./other.wado", DUPLICATE_TYPE_OTHER),
+    ]);
+    let result = block_on(compile_with_options(
+        DUPLICATE_TYPE_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    assert!(
+        result.is_err(),
+        "a duplicate public type should not compile"
+    );
+
+    let diags = host.diagnostics();
+    let found = diags
+        .iter()
+        .any(|d| d.code == Code::DuplicateDefinition && d.message.contains("`Shared`"));
+    assert!(
+        found,
+        "expected DuplicateDefinition naming `Shared`, got:\n{}",
+        diag_list(&diags)
+    );
+}
+
 /// A generator may declare helper `export fn`s beside `generate`. Only
 /// `generate` is the world contract, so a non-`generate` export (here a plain
 /// `u32`-returning function) must not be force-routed through the async

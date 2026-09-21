@@ -1,0 +1,20 @@
+//! A generator shipped as its own package. The nickname it names is declared
+//! in its own `wado.toml`, which the consumer's does not mention.
+
+use { Error, OutputFile, Request, Response } from "core:kiln";
+use { answer } from "./value.txt"
+    with {
+        generator: { module: "lib:inner" },
+    };
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: "model.wado",
+            content: `pub fn model() -> i32 { return ${answer()}; }\n`,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}

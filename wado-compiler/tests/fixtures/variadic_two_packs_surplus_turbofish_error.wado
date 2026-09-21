@@ -1,0 +1,15 @@
+//! More type arguments than parameters is an arity error, even where the packs
+//! each are spelled as a tuple. The two-pack boundary rule used to answer it,
+//! telling the call to write tuples it had already written.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+test "a surplus type argument is reported as one" {
+    let t = concat::<[i32], [bool], [f64]>([1], [true]);
+}
+
+__DATA__
+{"compile_error": "`concat` takes 2 type arguments, but 3 were supplied"}

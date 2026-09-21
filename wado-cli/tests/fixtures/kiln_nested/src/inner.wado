@@ -1,0 +1,20 @@
+//! The inner generator: turns its input's text into a function answering it.
+
+use { Error, OutputFile, Request, Response, read_text } from "core:kiln";
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let text = match read_text(req.primary.content) {
+        Ok(t) => t,
+        Err(e) => {
+            return Result::Err(Error::InvalidSchema(`${e}`));
+        },
+    };
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: "value.wado",
+            content: `pub fn answer() -> i32 { return ${text.trim()}; }\n`,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}

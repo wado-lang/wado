@@ -124,6 +124,19 @@ test "an attribute is read as the text the operator's schema types" {
     assert a[2].values == ["c"];
 }
 
+test "an attribute after the input list reads as the same attribute" {
+    let g = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X) <perm = [1, 0]>
+        }`,
+    ).unwrap();
+    let a = &g.nodes[0].attrs;
+    assert a.len() == 1;
+    assert a[0].name == "perm";
+    assert a[0].values == ["1", "0"];
+    assert g.nodes[0].inputs == ["X"];
+}
+
 test "an initializer's inline values are not mistaken for its name" {
     let g = read(
         `agraph (float[2] X) => (float[2] Y)
@@ -139,6 +152,17 @@ test "an initializer's inline values are not mistaken for its name" {
 test "a syntax error comes back with its position" {
     let e = read("agraph (float[2] X) => (float[2] Y)").unwrap_err();
     assert e.starts_with("1:");
+}
+
+test "an initializer pointing at another file names itself rather than being dropped" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = ["location": "weights.bin"]>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: an initializer whose data lives in another file is not read";
 }
 
 test "a sequence type names itself rather than being read as a tensor" {

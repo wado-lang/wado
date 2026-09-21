@@ -8,8 +8,8 @@
 //!   correlation.
 //!
 //! `Uuid::v4()` needs `Random`; `Uuid::v7()` needs `Random` and `SystemClock`.
-//! Generating in bulk, install `core:secure_random`'s `BufferedRandom` so the
-//! host call is drawn once per block rather than once per UUID.
+//! Generating in bulk, run it under `core:secure_random`'s `with_buffered` so
+//! the host call is drawn once per block rather than once per UUID.
 //!
 //! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 //! and `Inspect` render the canonical hyphenated form, as does `Serialize` for
@@ -32,8 +32,8 @@ use {
     Visitor,
 } from "core:serde";
 use { bytes as random_bytes } from "core:secure_random";
-pub use { Random } from "core:secure_random";
-pub use { SystemClock, Instant } from "wasi:clocks";
+use { Random } from "wasi:random";
+use { SystemClock } from "wasi:clocks";
 
 global SUB_MS_TICKS: i64 = 4096;
 

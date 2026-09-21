@@ -942,8 +942,9 @@ pub struct InstantiationKey {
     pub impl_type_args: Vec<TypeId>,
     /// Method-level type arguments (from the method's own generics)
     pub method_type_args: Vec<TypeId>,
-    /// Method info for method instantiations (None for struct/enum instantiations)
-    /// Not included in equality/hash - used only for name formatting
+    /// Method info for method instantiations (None for struct/enum instantiations).
+    /// Left out of equality and hash, so it names an instance but never decides
+    /// one: read a declaration's own `method_info` for anything else.
     pub method_info: Option<LocalMethodName>,
 }
 

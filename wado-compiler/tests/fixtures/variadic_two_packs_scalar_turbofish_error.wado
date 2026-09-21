@@ -1,0 +1,16 @@
+// Two packs and one type argument each reads as a boundary, but the source
+// wrote none: `[i32, String]` and `[]` split the same flat list as `[i32]` and
+// `[String]`. The arity is not what settles it, so a scalar in a pack slot is
+// refused whatever the count.
+
+fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
+    return [..a, ..b];
+}
+
+test "one scalar per pack" {
+    let r = concat::<i32, String>([1, "x"], []);
+    assert r.0 == 1;
+}
+
+__DATA__
+{"compile_error": "spell each type pack as a tuple"}

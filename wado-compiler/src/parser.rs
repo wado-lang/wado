@@ -5209,13 +5209,6 @@ impl Parser {
                 ));
             }
 
-            if is_pack && params.iter().any(|p: &GenericParam| p.is_pack) {
-                return Err(self.error_at_span(
-                    start_span,
-                    "only one type pack parameter is allowed per generic parameter list",
-                ));
-            }
-
             let (name, name_span) = self.consume_ident_with_span()?;
 
             if is_effect && name == EFFECT_HOLE {

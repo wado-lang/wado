@@ -1,0 +1,16 @@
+//! A pack is rigid inside the body that declares it, as a scalar type
+//! parameter is: `[..A]` stands for whatever the call settles `A` to, so the
+//! empty tuple does not satisfy it. Accepting it monomorphized to a call whose
+//! argument had the wrong shape and emitted invalid Wasm.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md.
+
+fn apply<..A>(g: fn([..A]) -> i32) -> i32 {
+    return g([]);
+}
+
+test "the empty tuple does not satisfy a rigid pack" {
+    assert apply(|a: [i32]| a.len()) == 1;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[..A]', found '[]'"}
