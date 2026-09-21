@@ -19,7 +19,7 @@ use crate::compile::{
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
-use crate::kiln_driver::{CheckOutcome, PipelineError, check_pipeline};
+use crate::kiln_driver::{CheckOutcome, PipelineError};
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
@@ -209,15 +209,10 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     let outcome = match kiln {
         None => CheckOutcome::default(),
         Some(mut kiln) => {
-            let mut outcome = check_pipeline(
-                &kiln.manifest,
-                &kiln.manifest_root,
-                &kiln.host,
-                &kiln.provider,
-                std::mem::take(&mut kiln.invocations),
-            )
-            .await
-            .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
+            let mut outcome = kiln
+                .check()
+                .await
+                .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
             kiln.remap_conflicts(&mut outcome.invocations, &host)
                 .map_err(silent_or_reported)?;
             outcome

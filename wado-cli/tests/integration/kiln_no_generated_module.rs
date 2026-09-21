@@ -4,8 +4,8 @@
 use crate::common::{wado_in, write_kiln_project};
 use predicates::prelude::*;
 
-/// Emits one file and marks none of them the entry, so nothing redirects the
-/// `use` site that named this generator.
+/// Emits a file and marks it not the entry, so nothing redirects the `use` site
+/// that named this generator.
 const NO_ENTRY_GENERATOR: &str = r#"use { Request, Response, OutputFile, Error } from "core:kiln";
 
 export fn generate(req: Request) -> Result<Response, Error> {

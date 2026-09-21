@@ -1500,6 +1500,18 @@ pub fn resolve_import(
 /// invocation's generated entry module under `build/kiln/…`, everything else
 /// falls through to [`resolve_import_with_entry`]. Use this in place of
 /// [`resolve_import`] wherever an index is available.
+/// The file a declaration in `source` is written in, as a [`InvocationIndex`]
+/// keys it and a diagnostic names it. Empty for a source that holds no path.
+#[must_use]
+pub fn decl_file_of(source: &ModuleSource) -> &str {
+    match source {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
+        ModuleSource::EntryPoint { filename } => filename.as_str(),
+        ModuleSource::Redirected { uri } => uri.as_str(),
+        _ => "",
+    }
+}
+
 pub fn resolve_import_with_invocations(
     interner: &mut ModuleSourceInterner,
     from_module: &ModuleSource,
@@ -1508,12 +1520,7 @@ pub fn resolve_import_with_invocations(
     invocations: &InvocationIndex,
 ) -> ModuleSource {
     if !invocations.is_empty() {
-        let decl_file = match from_module {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.as_str(),
-            ModuleSource::EntryPoint { filename } => filename.as_str(),
-            ModuleSource::Redirected { uri } => uri.as_str(),
-            _ => "",
-        };
+        let decl_file = decl_file_of(from_module);
         if let Some(entry_uri) = invocations.redirect(decl_file, import_source) {
             return interner.redirected(entry_uri);
         }

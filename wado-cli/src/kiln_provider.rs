@@ -354,8 +354,7 @@ impl CliGeneratorProvider {
     }
 
     /// The invocations the generator at `abs` declares in its own source, run.
-    /// Anchored at the generator's own directory, since nothing above it is a
-    /// project of this compile's.
+    /// Anchored at the generator's own package, whose manifest names them.
     async fn nested_invocations(
         &self,
         abs: &Path,
@@ -363,7 +362,7 @@ impl CliGeneratorProvider {
         entry_name: &str,
     ) -> Result<wado_compiler::kiln::InvocationIndex, ProviderError> {
         let (entry, base) = (abs.to_path_buf(), base_path.to_path_buf());
-        let entry_key = entry_name.to_string();
+        let entry_identity = entry_name.to_string();
         // A provider with no run context was not built by a pipeline, so the
         // generator it resolves has no outer invocation to nest under.
         let Some(mut run) = self.kiln_run.clone() else {
@@ -397,7 +396,7 @@ impl CliGeneratorProvider {
                         "kiln: failed to start inner runtime for a nested generator: {e}"
                     ),
                 })?;
-            Ok(rt.block_on(run_nested_pipeline(&entry, &entry_key, &host, &run)))
+            Ok(rt.block_on(run_nested_pipeline(&entry, &entry_identity, &host, &run)))
         })
         .await
         .map_err(|e| ProviderError::Internal {

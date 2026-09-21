@@ -16,7 +16,7 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
-use crate::kiln_driver::{ExecuteMode, PipelineError, PipelineOutcome};
+use crate::kiln_driver::{CheckOutcome, ExecuteMode, PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, normalize_path, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
@@ -593,14 +593,12 @@ pub(crate) struct KilnSetup {
     /// root, so schemas must be loaded relative to it — not the entry file's
     /// directory, where the main compile host is based.
     pub host: FilesystemCompilerHost,
-    /// Loader identities the harvested (full-path-keyed) index is remapped onto.
+    /// Loader identities the harvested index is remapped onto.
     identities: wado_compiler::hashmap::IndexMap<String, String>,
 }
 
-/// What a Kiln pipeline inherits from the run it belongs to: whether it writes
-/// and the generator chain it continues. A nested pipeline differs from the
-/// entry's in its entry and in the project that entry belongs to, so it is
-/// handed this rather than building one of its own.
+/// What a Kiln pipeline inherits from the run it belongs to: whether it writes,
+/// and the generator chain it continues.
 #[derive(Debug, Clone)]
 pub(crate) struct KilnRun {
     pub project: Option<manifest::ProjectManifest>,
@@ -637,7 +635,7 @@ impl KilnRun {
 /// resolves generators through one identical setup.
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
-    entry_key: Option<&str>,
+    entry_identity: Option<&str>,
     host: &FilesystemCompilerHost,
     run: &KilnRun,
 ) -> Result<Option<KilnSetup>, PipelineError> {
@@ -659,8 +657,12 @@ pub(crate) async fn prepare_kiln(
         .map(|p| p.root.clone())
         .unwrap_or(entry_dir);
     let (mut invocations, identities, inline_diagnostics) =
-        collect_inline_invocations_for_entry_with_identities(entry_file, entry_key, &manifest_root)
-            .await;
+        collect_inline_invocations_for_entry_with_identities(
+            entry_file,
+            entry_identity,
+            &manifest_root,
+        )
+        .await;
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
     // error is not buried under the downstream failure of the unredirected
@@ -713,9 +715,34 @@ pub(crate) async fn prepare_kiln(
 }
 
 impl KilnSetup {
-    /// Remap a pipeline's harvested index (keyed by full path) onto the loader
-    /// identities collected with the invocations, reporting any redirect that
-    /// two declarations disagree on through `host`.
+    /// Run the harvested invocations, writing what they produce.
+    pub(crate) async fn run(&mut self, no_cache: bool) -> Result<PipelineOutcome, PipelineError> {
+        kiln_driver::run_pipeline(
+            &self.manifest,
+            &self.manifest_root,
+            &self.host,
+            &self.provider,
+            std::mem::take(&mut self.invocations),
+            no_cache,
+        )
+        .await
+    }
+
+    /// Dry-run them and byte-compare, so drift is reported and never repaired.
+    pub(crate) async fn check(&mut self) -> Result<CheckOutcome, PipelineError> {
+        kiln_driver::check_pipeline(
+            &self.manifest,
+            &self.manifest_root,
+            &self.host,
+            &self.provider,
+            std::mem::take(&mut self.invocations),
+        )
+        .await
+    }
+
+    /// Remap a pipeline's harvested index onto the loader identities collected
+    /// with the invocations, reporting any redirect that two declarations
+    /// disagree on through `host`.
     pub(crate) fn remap_conflicts(
         &self,
         invocations: &mut wado_compiler::kiln::InvocationIndex,
@@ -748,15 +775,7 @@ pub(crate) async fn maybe_run_pipeline(
     else {
         return Ok(PipelineOutcome::default());
     };
-    let mut outcome = kiln_driver::run_pipeline(
-        &kiln.manifest,
-        &kiln.manifest_root,
-        &kiln.host,
-        &kiln.provider,
-        std::mem::take(&mut kiln.invocations),
-        no_cache,
-    )
-    .await?;
+    let mut outcome = kiln.run(no_cache).await?;
     kiln.remap_conflicts(&mut outcome.invocations, host)?;
     Ok(outcome)
 }
@@ -766,48 +785,25 @@ pub(crate) async fn maybe_run_pipeline(
 /// an empty index when the generator declares none.
 pub(crate) async fn run_nested_pipeline(
     entry_file: &Path,
-    entry_key: &str,
+    entry_identity: &str,
     host: &FilesystemCompilerHost,
     outer: &KilnRun,
 ) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
-    // A generator's `[build-dependencies]`, `[registries]` and `wado.lock` are
-    // its own package's, not the consumer's: a generator shipped as a package
-    // names its dependencies in its own manifest. Everything else — the write
-    // mode, the chain — is the outer run's.
+    // A generator shipped as a package names its dependencies in its own
+    // manifest, so that is the project. The rest is the outer run's.
     let run = &KilnRun {
         project: load_nearest_manifest(entry_file),
         ..outer.clone()
     };
-    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_key), host, run).await? else {
+    let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
-    let inline = std::mem::take(&mut kiln.invocations);
     let mut invocations = match run.mode {
-        ExecuteMode::WriteAndWarnOnOverwrite => {
-            kiln_driver::run_pipeline(
-                &kiln.manifest,
-                &kiln.manifest_root,
-                &kiln.host,
-                &kiln.provider,
-                inline,
-                run.no_cache,
-            )
-            .await?
-            .invocations
-        }
+        ExecuteMode::WriteAndWarnOnOverwrite => kiln.run(run.no_cache).await?.invocations,
         ExecuteMode::DryRun => {
-            let outcome = kiln_driver::check_pipeline(
-                &kiln.manifest,
-                &kiln.manifest_root,
-                &kiln.host,
-                &kiln.provider,
-                inline,
-            )
-            .await?;
-            // `check` byte-compares rather than writing, so the index still
-            // carries what the generator needs and the build goes on. The drift
-            // is recorded for the run to weigh as it weighs an entry's, under
-            // the same `--warn`.
+            let outcome = kiln.check().await?;
+            // The index still carries what the generator needs, so the build
+            // goes on and the run weighs this drift as it weighs an entry's.
             host.run_cache()
                 .record_nested_drift(outcome.stale.len() + outcome.missing.len());
             outcome.invocations
@@ -829,7 +825,7 @@ pub(crate) async fn run_nested_pipeline(
 pub(crate) fn rewrite_build_dep_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest: &wado_manifest::Manifest,
-    project_root: &Path,
+    manifest_root: &Path,
 ) {
     use wado_compiler::kiln::GeneratorModule;
     for inv in inline.iter_mut() {
@@ -837,7 +833,7 @@ pub(crate) fn rewrite_build_dep_modules(
             continue;
         };
         let key = spec_key(&spec.spec);
-        if let Some(local) = build_dep_generator_local_path(key, manifest, project_root) {
+        if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
             inv.module = GeneratorModule::LocalPath(local);
         }
     }
@@ -881,21 +877,28 @@ pub(crate) fn rewrite_local_dir_modules(
 fn build_dep_generator_local_path(
     key: &str,
     manifest: &wado_manifest::Manifest,
-    project_root: &Path,
+    manifest_root: &Path,
 ) -> Option<wado_compiler::kiln::InvocationPath> {
     let dep = manifest.build_dependencies.get(key)?;
     let DependencySource::Path { path, .. } = &dep.source else {
         return None;
     };
-    let entry = package_generator_entry(&project_root.join(path))?;
+    let entry = package_generator_entry(&manifest_root.join(path))?;
     Some(wado_compiler::kiln::InvocationPath::normalize(&format!(
         "{path}/{entry}"
     )))
 }
 
-/// `path` as an absolute, lexically normalized path, so two roots spelled
+/// `path` as an absolute, lexically normalized path, so two paths spelled
 /// independently can be expressed against each other.
 fn absolute(path: &Path) -> PathBuf {
+    // An empty path names the current directory here, and is the one input
+    // `std::path::absolute` refuses.
+    let path = if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    };
     std::path::absolute(path).map_or_else(|_| path.to_path_buf(), |p| normalize_path(&p))
 }
 
@@ -936,12 +939,12 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
 /// rewrites the redirect index through
 /// ([`wado_compiler::kiln::remap_decl_files`]).
 ///
-/// Keys are spelled from `project_root`, so an invocation keeps one identity
+/// Keys are spelled from `manifest_root`, so an invocation keeps one identity
 /// whether the entry is compiled on its own behalf or as a generator.
 async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
     entry_identity: Option<&str>,
-    project_root: &Path,
+    manifest_root: &Path,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
@@ -952,8 +955,10 @@ async fn collect_inline_invocations_for_entry_with_identities(
     let entry_identity = entry_identity
         .map(str::to_string)
         .unwrap_or_else(|| entry_file.to_string_lossy().to_string());
-    let entry_key = relative_to(&absolute(project_root), &absolute(entry_file))
-        .unwrap_or_else(|| entry_identity.clone());
+    // The root either comes from the manifest above the entry or is the entry's
+    // own directory, so it always contains the entry.
+    let entry_key = relative_to(&absolute(manifest_root), &absolute(entry_file))
+        .expect("the entry lies under the root it was resolved from");
     // An unreadable entry, or one whose parse recovered from an error, harvests
     // nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {

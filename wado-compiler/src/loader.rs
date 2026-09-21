@@ -20,8 +20,9 @@ use crate::module_source::{
     CmNamespace, ModuleSource, ModuleSourceInterner, WasmAssetKind, is_bundled_specifier,
 };
 use crate::name::{
-    canonical_local_path, canonicalize_entry_point, entry_dir_of, normalize_module_path,
-    resolve_import_with_invocations, resolve_local_identity, resolve_module_path,
+    canonical_local_path, canonicalize_entry_point, decl_file_of, entry_dir_of,
+    normalize_module_path, resolve_import_with_invocations, resolve_local_identity,
+    resolve_module_path,
 };
 use crate::parser::Parser;
 use crate::path::{is_cwd_relative, normalize};
@@ -482,16 +483,6 @@ fn strip_kiln_scheme(uri: &str) -> Option<String> {
         return None;
     }
     Some(parsed.path().decode().to_string_lossy().into_owned())
-}
-
-/// The file name a diagnostic about a declaration in `source` points at.
-fn decl_file_of(source: &ModuleSource) -> String {
-    match source {
-        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.to_string(),
-        ModuleSource::EntryPoint { filename } => filename.to_string(),
-        ModuleSource::Redirected { uri } => uri.to_string(),
-        _ => String::new(),
-    }
 }
 
 /// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
@@ -1796,12 +1787,8 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
     }
 
-    /// Emit a `Code::KilnMissingWith` diagnostic for a bare `use ... from
-    /// "./schema.<ext>"` whose source is a non-`.wado` schema and that has
-    /// no inline `with { generator: { ... } }` clause registered for this
-    /// importing file. WEP 2026-04-12 §"Use-site syntax" makes such
-    /// imports a hard error so the user gets a pointed message instead of
-    /// a downstream parse failure on the schema content.
+    /// Report a `use ... from "./schema.<ext>"` that names no generator. A
+    /// non-`.wado` schema is only reachable through one.
     fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = decl_file_of(from_module_source);
@@ -1813,15 +1800,12 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                  — non-`.wado` schemas can only be loaded through an inline Kiln invocation",
                 use_decl.source,
             ),
-            span: Some(DiagnosticSpan::from_span(
-                &use_decl.source_span,
-                Some(&file),
-            )),
+            span: Some(DiagnosticSpan::from_span(&use_decl.source_span, Some(file))),
         });
     }
 
-    /// Emit a `Code::KilnNoGeneratedModule` diagnostic for a `use ... from
-    /// "<schema>"` that names a generator no invocation ran.
+    /// Report a `use ... from "<schema>"` that names a generator no invocation
+    /// produced a module for.
     fn emit_kiln_no_generated_module(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
         let file = decl_file_of(from_module_source);
@@ -1834,10 +1818,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                  than the one this module imports",
                 use_decl.source,
             ),
-            span: Some(DiagnosticSpan::from_span(
-                &use_decl.source_span,
-                Some(&file),
-            )),
+            span: Some(DiagnosticSpan::from_span(&use_decl.source_span, Some(file))),
         });
     }
 
@@ -1853,14 +1834,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         // absolute URI the loader hands verbatim to the host — no further
         // base-path joining or relative-path normalization happens.
         if !self.invocations.is_empty() {
-            let decl_file = match from_module_source {
-                ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
-                    path.as_str()
-                }
-                ModuleSource::EntryPoint { filename } => filename.as_str(),
-                ModuleSource::Redirected { uri } => uri.as_str(),
-                _ => "",
-            };
+            let decl_file = decl_file_of(from_module_source);
             if !decl_file.is_empty()
                 && let Some(entry_uri) = self.invocations.redirect(decl_file, import_source)
             {

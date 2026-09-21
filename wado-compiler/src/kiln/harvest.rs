@@ -26,11 +26,10 @@ pub struct Harvest {
 /// Walk the local module graph from `entry_key` and `entry_ast`, parsing every
 /// `./` / `../` `.wado` import reachable from them.
 ///
-/// A module carries two names. `entry_key` seeds the keys, which every clause
-/// path is then spelled against, and `entry_identity` seeds the identities,
-/// which is what the loader reads a module under — a generator's own compile is
-/// rooted at its entry's directory while its invocations are rooted at its
-/// package, so the two differ.
+/// A module carries two names, seeded by `entry_key` and `entry_identity`: a
+/// clause path is spelled against the key, and the loader reads the module
+/// under the identity. They differ because a generator's own compile is rooted
+/// at its entry's directory while its invocations are rooted at its package.
 ///
 /// `load` receives the loader identity. The caller supplies the entry's tree
 /// because the loader does not read the entry through a host either.

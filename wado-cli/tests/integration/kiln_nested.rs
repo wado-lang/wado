@@ -117,10 +117,8 @@ fn a_nested_clause_resolves_against_the_generators_own_package() {
     );
 }
 
-/// Every invocation is anchored at the package root, whether the pipeline was
-/// reached for the entry or for a generator's own source. A second anchor would
-/// give one schema two identities, two output trees, and a generated file only
-/// one of the two routes can satisfy.
+/// A second anchor would give one schema two identities and two output trees,
+/// and a generated file only one of the two routes can satisfy.
 #[test]
 fn a_nested_invocation_writes_into_the_one_package_tree() {
     let project = fixture("kiln_nested");
@@ -157,8 +155,6 @@ fn check_reports_a_stale_nested_generated_file_rather_than_rewriting_it() {
     let project = fixture("kiln_nested");
     assert!(run_project(project.path()).status.success(), "first build");
 
-    // A nested invocation is anchored at the package root like any other, so
-    // its output shares the one `build/kiln` tree.
     let generated = std::fs::read_dir(project.path().join("build/kiln"))
         .expect("the nested generator wrote its output")
         .find_map(|e| {
