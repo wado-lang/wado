@@ -267,6 +267,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
+        // A substitution already answered for the base, so the projection
+        // stands on that type. Asked before the namespace is read, because a
+        // spelling the node no longer stands on says nothing about it — and
+        // `Self` is the one a reader would otherwise take for its own.
+        if let Some(base) = &namespaced.base {
+            let base_type_id = self.resolve_type(base);
+            let base_name =
+                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
+            return self.project_off(base_type_id, base_name, namespaced);
+        }
+
         // Handle Self::AssociatedType
         if namespaced.namespace.as_str() == "Self" {
             // Look up the associated type binding
@@ -327,15 +338,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 return projection;
             }
             return self.unknown_namespaced_type("Self", &namespaced.name, namespaced.span);
-        }
-
-        // A substitution replaced the base, so the projection stands on the
-        // type it put there rather than on a name any frame binds.
-        if let Some(base) = &namespaced.base {
-            let base_type_id = self.resolve_type(base);
-            let base_name =
-                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
-            return self.project_off(base_type_id, base_name, namespaced);
         }
 
         // Handle T::AssociatedType where T is a type parameter in scope

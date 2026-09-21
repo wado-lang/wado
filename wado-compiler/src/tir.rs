@@ -4754,6 +4754,7 @@ impl TypeTable {
             } => FqTypeName::projection(
                 self.fq_type_name_spelled(*param_id, unboxed),
                 assoc_name,
+                &self.defs,
                 *owning_trait,
             ),
             // Shapes that name no declaration — packs, `Unknown`. They carry no

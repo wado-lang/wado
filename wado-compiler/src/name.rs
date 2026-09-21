@@ -2592,10 +2592,11 @@ pub enum TypeHead {
     Projection {
         base: Box<FqTypeName>,
         assoc: String,
-        /// The trait declaring `assoc`, part of the identity: two traits
-        /// declaring one name on a type bind it to different types, and only
-        /// this tells them apart (WEP-2026-08-12).
-        owning_trait: DefId,
+        /// The trait declaring `assoc`. Part of the identity, and of what a
+        /// mangle embeds: two traits declaring one name on a type bind it to
+        /// different types, and a rendering dropping this collapses them into
+        /// one key (WEP-2026-08-12).
+        owning_trait: DeclaredHead,
     },
 }
 
@@ -2741,11 +2742,16 @@ impl FqTypeName {
     /// The associated type `assoc` of `base`, as `owning_trait` declares it
     /// (`T::Base`).
     #[must_use]
-    pub fn projection(base: FqTypeName, assoc: &str, owning_trait: DefId) -> Self {
+    pub fn projection(
+        base: FqTypeName,
+        assoc: &str,
+        defs: &DefTable,
+        owning_trait: DefId,
+    ) -> Self {
         Self::of_head_kind(TypeHead::Projection {
             base: Box::new(base),
             assoc: assoc.to_string(),
-            owning_trait,
+            owning_trait: DeclaredHead::new(defs, owning_trait),
         })
     }
 
@@ -2858,7 +2864,7 @@ impl FqTypeName {
                 base,
                 assoc,
                 owning_trait,
-            } => Some((base, assoc, *owning_trait)),
+            } => Some((base, assoc, owning_trait.def())),
             _ => None,
         }
     }
@@ -2899,9 +2905,16 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
-            TypeHead::Projection { base, assoc, .. } => {
-                out.push_str(&format!("{}::{assoc}", base.to_mangled()));
-            }
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => out.push_str(&format!(
+                "{}::{assoc}#{}/{}",
+                base.to_mangled(),
+                owning_trait.module(),
+                owning_trait.rendered()
+            )),
             TypeHead::Tuple => unreachable!("handled above"),
         }
         if !self.args.is_empty() {
@@ -2970,7 +2983,7 @@ impl FqTypeName {
             } => TypeHead::Projection {
                 base: Box::new(at(base)),
                 assoc: assoc.clone(),
-                owning_trait: *owning_trait,
+                owning_trait: owning_trait.clone(),
             },
             head => head.clone(),
         };
