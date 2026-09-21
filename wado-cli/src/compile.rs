@@ -771,24 +771,22 @@ pub(crate) async fn maybe_run_pipeline(
 }
 
 /// Resolve the Kiln invocations a generator's own source carries, so the
-/// compile that follows sees generated modules where it wrote schemas. Runs in
-/// `run`, the context the outer pipeline is already in, so a nested clause
-/// resolves a specifier and honours `wado check` exactly as the entry's does.
-/// Answers an empty index when the generator declares none.
+/// compile that follows sees generated modules where it wrote schemas. Answers
+/// an empty index when the generator declares none.
 pub(crate) async fn run_nested_pipeline(
     entry_file: &Path,
     entry_key: &str,
     host: &FilesystemCompilerHost,
-    run: &KilnRun,
+    outer: &KilnRun,
 ) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
     // A generator's `[build-dependencies]`, `[registries]` and `wado.lock` are
     // its own package's, not the consumer's: a generator shipped as a package
-    // names its dependencies in its own manifest.
-    let run = KilnRun {
+    // names its dependencies in its own manifest. Everything else — the write
+    // mode, the chain — is the outer run's.
+    let run = &KilnRun {
         project: load_nearest_manifest(entry_file),
-        ..run.clone()
+        ..outer.clone()
     };
-    let run = &run;
     let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_key), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };

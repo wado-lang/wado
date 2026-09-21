@@ -1375,18 +1375,18 @@ fn compile_after_load<H: CompilerHost>(
     // are its component surface. `submodule_type_decls` answers a wider question
     // — what the CM interface publishes, `internal` included — so the library
     // API is asked for separately here, of every module.
-    let is_public_type_decl = |item: &&ast::Item| {
+    let is_public_type_decl = |item: &ast::Item| {
         lib_type_decl_name(item).is_some()
             && item.visibility().is_some_and(ast::Visibility::is_public)
     };
     let lib_has_public_type = lib_surface
         .submodule_type_decls
         .iter()
-        .any(|(_, item)| is_public_type_decl(&item))
+        .any(|(_, item)| is_public_type_decl(item))
         || sem
             .modules
             .get(&sem.entry_module_source)
-            .is_some_and(|m| m.items.iter().any(|item| is_public_type_decl(&item)));
+            .is_some_and(|m| m.items.iter().any(is_public_type_decl));
 
     // Every published type reaches the registry under one interface FQ, which
     // registers each name once, so the check belongs to whoever synthesizes a
