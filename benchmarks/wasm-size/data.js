@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789974299458,
+  "lastUpdate": 1789980610136,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57697,6 +57697,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/9552903a82d5ec298ce6b9e83e8982be7fa36d8e"
         },
         "date": 1789974299147,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "26b17689549e400a6df4474ab07a5b8883a05c07",
+          "message": "Merge pull request #2108 from wado-lang/claude/secure-random-utilities-oydnep\n\nrefactor(stdlib): one import path per effect, and a block size on `with_buffered`",
+          "timestamp": "2026-09-21T17:29:52+09:00",
+          "tree_id": "c1ac307eb10513953390a51c54ece94b7e3ac35e",
+          "url": "https://github.com/wado-lang/wado/commit/26b17689549e400a6df4474ab07a5b8883a05c07"
+        },
+        "date": 1789980609498,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
