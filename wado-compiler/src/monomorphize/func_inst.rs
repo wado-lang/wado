@@ -2002,7 +2002,10 @@ impl Monomorphizer {
                 // argument per declared parameter, so the pack reads its own
                 // slot. A target that spreads it (`impl<..T> … for [..T]`) gives
                 // the tuple's elements, and the pack takes what the scalars leave.
-                let one_arg_per_param = key
+                // Read off the declaration, never off `key`: `InstantiationKey`
+                // leaves `method_info` out of its equality and hash, so two keys
+                // differing only there share one cache entry.
+                let one_arg_per_param = generic
                     .method_info
                     .as_ref()
                     .is_some_and(|info| info.receiver.is_declared_type());

@@ -6912,7 +6912,8 @@ pub struct TirImport {
 
 /// Tracks a requested instantiation of a generic item.
 /// `name`, `module_source`, `impl_type_args`, and `method_type_args` are used for equality/hashing.
-/// `method_info` is auxiliary metadata for name formatting.
+/// `method_info` names an instance but never decides one: it is left out of
+/// both, so read a declaration's own `method_info` for anything else.
 #[derive(Debug, Clone)]
 pub struct InstantiationKey {
     /// The generic declaration being instantiated, where the site holds one.

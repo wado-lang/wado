@@ -371,6 +371,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         if let Some(ty) = return_type {
             self.reject_unresolved_annotation(ty);
+            self.reject_non_pack_spreads(ty);
         }
     }
 
@@ -382,15 +383,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         position: ReceivedPosition,
     ) {
         self.reject_unresolved_annotation(ty);
-        if self.logger.has_errors() {
-            return;
-        }
-        if let Some(span) = ty.second_pack_spread() {
+        self.reject_non_pack_spreads(ty);
+        let second = ty.second_pack_spread(&|name| self.binds_type_pack(name));
+        if let Some(span) = second {
             let _ = self.emit(TypeError::TwoPacksInReceivedType {
                 position: position.name().to_string(),
                 span,
             });
         }
+    }
+
+    /// Report every `..X` in a written type whose `X` no type parameter list
+    /// declares a pack.
+    pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
+        let mut spreads: Vec<(&str, Span)> = Vec::new();
+        ty.pack_spreads(&mut spreads);
+        let bad: Vec<(String, Span)> = spreads
+            .into_iter()
+            .filter(|(name, _)| !self.binds_type_pack(name))
+            .map(|(name, span)| (name.to_string(), span))
+            .collect();
+        for (name, span) in bad {
+            let _ = self.emit(TypeError::SpreadOfNonPack { name, span });
+        }
+    }
+
+    /// Whether `name` is a type pack the enclosing declaration declares. A
+    /// scalar parameter spread in a tuple stands for one position, not a run.
+    fn binds_type_pack(&self, name: &str) -> bool {
+        let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
+            return false;
+        };
+        matches!(
+            self.tysys.type_table.borrow().get(binder.type_id),
+            ResolvedType::TypePack { .. }
+        )
     }
 
     /// Report a written type position naming a type no declaration answers
