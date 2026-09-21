@@ -249,19 +249,19 @@ fn write_bytes(buf: &mut ByteList, v: ByteSlice) {
     push_byte_slice(buf, v);
 }
 
-struct CborSeqSerializer {
+pub struct CborSeqSerializer {
     buf: &mut ByteList,
 }
 
-struct CborMapSerializer {
+pub struct CborMapSerializer {
     buf: &mut ByteList,
 }
 
-struct CborStructSerializer {
+pub struct CborStructSerializer {
     buf: &mut ByteList,
 }
 
-struct CborVariantSerializer {
+pub struct CborVariantSerializer {
     buf: &mut ByteList,
 }
 
@@ -530,22 +530,22 @@ fn canonical_encode<T: Serialize>(value: &T) -> Result<ByteList, SerializeError>
     return Result::Ok(buf as ByteList);
 }
 
-struct CanonicalCborSeqSerializer {
+pub struct CanonicalCborSeqSerializer {
     buf: &mut ByteList,
 }
 
-struct CanonicalCborMapSerializer {
+pub struct CanonicalCborMapSerializer {
     buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
     pending_key: ByteList,
 }
 
-struct CanonicalCborStructSerializer {
+pub struct CanonicalCborStructSerializer {
     buf: &mut ByteList,
     entries: List<[ByteList, ByteList]>,
 }
 
-struct CanonicalCborVariantSerializer {
+pub struct CanonicalCborVariantSerializer {
     buf: &mut ByteList,
 }
 
@@ -1273,7 +1273,7 @@ impl CborDeserializer {
     }
 }
 
-struct CborSeqAccess {
+pub struct CborSeqAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
@@ -1284,21 +1284,21 @@ struct CborSeqAccess {
     done: bool,
 }
 
-struct CborMapAccess {
+pub struct CborMapAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
     indef: bool,
 }
 
-struct CborStructAccess {
+pub struct CborStructAccess {
     de: &mut CborDeserializer,
     depth: i32,
     remaining: i64,
     indef: bool,
 }
 
-struct CborVariantAccess {
+pub struct CborVariantAccess {
     de: &mut CborDeserializer,
     depth: i32,
     variant: String,

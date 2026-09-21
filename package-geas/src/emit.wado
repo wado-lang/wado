@@ -44,17 +44,16 @@ impl Display for UnmappedDtype {
     }
 }
 
-/// One boundary tensor, as the type a caller writes for it. A graph output the
-/// nodes never produced has no shape, and the caller reports that first.
+/// One boundary tensor, as the type a caller writes for it.
 fn emit_boundary(
     out: &mut String,
     vi: &ValueInfo,
     shapes: &TreeMap<String, Shape>,
     role: String,
 ) -> Result<(), UnmappedDtype> {
-    let Some(shape) = shapes.get(vi.name) else {
-        return Result::Ok(());
-    };
+    // `infer` gives every boundary tensor a shape, and refuses a graph where an
+    // output has no producer.
+    let shape = shapes.get(vi.name).unwrap();
     let Some(element) = element_type(&vi.dtype) else {
         builtin::cold_path();
         return Result::Err(UnmappedDtype { tensor: vi.name, dtype: vi.dtype });

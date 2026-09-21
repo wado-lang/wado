@@ -400,6 +400,12 @@ pub trait AstVisitor: Sized {
     /// `visit_*` methods instead.
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
+    /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
+    /// because `effect_check` answers for it and the name resolver does not.
+    fn visit_effect_id(&mut self, id: AstId, span: Span) {
+        self.visit_id(id, span);
+    }
+
     fn visit_item(&mut self, item: &Item) {
         walk_item(self, item);
     }
@@ -711,7 +717,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
         v.visit_type(ret);
     }
     for (id, span) in &func.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -1106,7 +1112,7 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     }
     v.visit_type(&ft.return_type);
     for (id, span) in &ft.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
 }
 

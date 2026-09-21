@@ -148,7 +148,7 @@ fn lib_sync_lift_param_buffer_is_reclaimed_o2() {
 /// a buffer, one that owns nothing but is still returned indirectly, and one
 /// returned in a core result with no allocation at all.
 const OPTION_SOURCE: &str = r#"
-struct Pair {
+pub struct Pair {
     a: u32,
     b: u32,
 }

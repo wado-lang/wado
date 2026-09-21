@@ -52,6 +52,7 @@ use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
+use crate::signature_reach;
 use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
 use crate::tir::{AnonStructId, PrimitiveType, StructDef, TirFunction, TraitRef};
@@ -1013,6 +1014,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let _ = logger.error_in(&module_source, violation);
         }
 
+        for (module_source, violation) in signature_reach::violations(modules, &resolutions) {
+            let _ = logger.error_in(&module_source, violation);
+        }
+
         for sealed_item in [
             CompilerItem::Reflect,
             CompilerItem::ReflectStruct,
@@ -1218,13 +1223,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
             // The prelude is auto-imported into every module, so its types are
             // visible everywhere.
-            let is_auto_visible = |ms: &ModuleSource| {
-                ms.is_core_prelude()
-                    || ms.is_core_rt()
-                    || ms.is_core_builtin()
-                    || matches!(ms, ModuleSource::Core { name }
-                        if name.as_str().starts_with("prelude/"))
-            };
+            let is_auto_visible =
+                |ms: &ModuleSource| ms.is_prelude() || ms.is_core_rt() || ms.is_core_builtin();
             let mut prelude_types: IndexSet<String> = IndexSet::default();
             for (ms, names) in &local {
                 if is_auto_visible(ms) {

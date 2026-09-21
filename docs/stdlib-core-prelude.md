@@ -2773,6 +2773,20 @@ Error type returned by fallible conversions.
 
 #### `pub fn new(message: String) -> ConvertError`
 
+### `pub struct LenientParseError`
+
+Error returned by the lenient string parsers (`LenientFromStr`). All
+built-in impls share this single type, carrying a short human-readable
+reason. See `docs/wep-2026-06-22-lenient-from-str.md`.
+
+_Fields are private._
+
+#### `pub fn new(reason: String) -> LenientParseError`
+
+#### `pub fn reason(&self) -> String`
+
+A short description of why parsing failed.
+
 ### `pub struct Formatter`
 
 Formatter that writes directly into a referenced output buffer.
@@ -3614,6 +3628,14 @@ than Rust's `copied()`: every element read in Wado is a copy already.
 
 ##### `fn next(&mut self) -> Option<Self::Item>`
 
+### `pub struct SliceRefMutIter<T>`
+
+_Fields are private._
+
+#### `impl Iterator for SliceRefMutIter<T>`
+
+##### `fn next(&mut self) -> Option<Self::Item>`
+
 ### `pub struct SliceWindows<T>`
 
 Each item is a `Slice<T>` viewing the backing array, not a copy of it.
@@ -4075,6 +4097,56 @@ Iterator over the Unicode scalar values (chars) of a String.
 _Fields are private._
 
 #### `impl Iterator for StrCharIter`
+
+##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrCharIndicesIter`
+
+Iterator over characters paired with their byte indices.
+
+_Fields are private._
+
+#### `impl Iterator for StrCharIndicesIter`
+
+##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrSplitIter`
+
+Iterator over substrings split by a separator.
+
+_Fields are private._
+
+#### `impl Iterator for StrSplitIter`
+
+##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrSplitNIter`
+
+Iterator over substrings split by a separator, limited to `n` parts.
+
+_Fields are private._
+
+#### `impl Iterator for StrSplitNIter`
+
+##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrSplitWhitespaceIter`
+
+Iterator over whitespace-separated substrings.
+
+_Fields are private._
+
+#### `impl Iterator for StrSplitWhitespaceIter`
+
+##### `pub fn next(&mut self) -> Option<Self::Item>`
+
+### `pub struct StrLinesIter`
+
+Iterator over the lines of a string (split on `\n` or `\r\n`).
+
+_Fields are private._
+
+#### `impl Iterator for StrLinesIter`
 
 ##### `pub fn next(&mut self) -> Option<Self::Item>`
 

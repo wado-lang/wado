@@ -268,14 +268,14 @@ impl ArgvDeserializer {
     }
 }
 
-struct ArgvStructAccess {
+pub struct ArgvStructAccess {
     de: &mut ArgvDeserializer,
     /// How many positional fields have been returned so far (the rank passed to
     /// `FieldSchema::positional_at`).
     pos_rank: i32,
 }
 
-struct ArgvSeqAccess {
+pub struct ArgvSeqAccess {
     de: &mut ArgvDeserializer,
     /// True for a repeatable `--option` list (values pre-gathered in `vals`);
     /// false for a variadic positional (consumes the bare-token run on demand).
@@ -286,11 +286,11 @@ struct ArgvSeqAccess {
     cursor: i32,
 }
 
-struct ArgvMapAccess {
+pub struct ArgvMapAccess {
     de: &mut ArgvDeserializer,
 }
 
-struct ArgvVariantAccess {
+pub struct ArgvVariantAccess {
     de: &mut ArgvDeserializer,
     /// The leading bare token selecting the case (externally tagged).
     tag: String,

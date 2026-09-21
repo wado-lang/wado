@@ -1,5 +1,7 @@
 // The trait half of `default_arg_and_type_param.wado`: defaults declared in
-// another module than the impl, naming items only this module can see.
+// another module than the impl. A default expression resolves here, so `origin`
+// stays private; a type parameter's default is instantiated at the call, so
+// `Tag` is `pub`.
 
 fn origin() -> i32 {
     return 3;
@@ -9,7 +11,7 @@ pub trait Tagged with () {
     fn tagged(n: i32 = origin()) -> i32;
 }
 
-struct Tag {}
+pub struct Tag {}
 
 pub trait Named with () {
     fn name() -> String;
