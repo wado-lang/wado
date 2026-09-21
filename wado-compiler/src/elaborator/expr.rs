@@ -1438,10 +1438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index: usize,
     ) -> Result<TypeId, String> {
         let table = type_table.borrow();
-        let Some(pack_pos) = elements
-            .iter()
-            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
-        else {
+        let Some(pack_pos) = elements.iter().position(|&t| table.is_type_pack(t)) else {
             return elements.get(index).copied().ok_or_else(|| {
                 format!(
                     "tuple index {index} out of bounds, tuple has {} elements",
@@ -4850,8 +4847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .as_tuple(binding_type)
-                    .unwrap_or_else(|| vec![binding_type]);
+                    .elem_types_or_self(binding_type);
                 for (i, elem) in elems.iter().enumerate() {
                     if let ast::Pattern::Ident { id, name, span } = elem {
                         let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
@@ -4912,7 +4908,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         self.tysys
                             .type_table
                             .borrow()
-                            .pack_spread_elem_types(spread_type_id),
+                            .elem_types_or_self(spread_type_id),
                     );
                 } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
                     // Pack-map `..F::method()` whose return type is

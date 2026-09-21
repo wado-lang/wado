@@ -73,9 +73,9 @@ fn check_at(
     // solver, a pack awaiting expansion, a projection over one of those, and
     // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
     // of a polymorphic signature instantiates its slots into `InferVar`s first,
-    // so nothing but itself is ever assignable to it. A pack is opaque the same
-    // way, but only where its own declaration is in scope, which this layer
-    // cannot see: `Elaborator::typecheck` applies that rule.
+    // so nothing but itself is ever assignable to it. A pack is opaque on the
+    // same terms where its own declaration is in scope, which this layer cannot
+    // see; `Elaborator::typecheck` adds that rule.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -319,15 +319,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Reject a settled type where a pack this signature declares is expected.
-    /// `check_assignable` defers on any pack, since a callee's stands for what
-    /// the call settles it to. One this body declares is rigid instead — only
-    /// `[..A]` satisfies `[..A]` — and deferring let `g([])` through to codegen.
+    /// `check_assignable` defers on a callee's pack; one this body declares is
+    /// rigid, so only `[..A]` satisfies `[..A]`.
     fn reject_settled_own_pack(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
+        let packs = table.pack_names(expected);
         if actual == expected
-            || !table.contains_type_pack(expected)
+            || packs.is_empty()
             || table.contains_undecided(actual)
-            || !self.expected_pack_is_declared_here(expected, &table)
+            || !packs.iter().all(|name| self.binds_type_pack(name))
         {
             return;
         }
@@ -338,17 +338,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             found: found_name,
             span,
         });
-    }
-
-    /// Whether every pack `expected` mentions is one the enclosing declaration
-    /// declares, which is what makes it rigid here.
-    fn expected_pack_is_declared_here(&self, expected: TypeId, table: &TypeTable) -> bool {
-        table.pack_names(expected).iter().all(|name| {
-            self.annotate_ctx
-                .trait_ctx
-                .type_params
-                .contains_key(name.as_str())
-        })
     }
 
     /// Check return type mismatch and emit a diagnostic on rejection.

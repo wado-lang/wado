@@ -11,7 +11,7 @@ use crate::ast;
 use crate::compiler_host::CompilerHost;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
-use crate::tir::{ResolvedType, TypeId};
+use crate::tir::TypeId;
 
 use super::Elaborator;
 use super::trait_env::InheritedBound;
@@ -435,7 +435,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_params
             .iter()
             .flat_map(|(name, binder)| {
-                let elem = matches!(tt.get(binder.type_id), ResolvedType::TypePack { .. })
+                let elem = tt
+                    .is_type_pack(binder.type_id)
                     .then(|| tt.make_type_param(name.clone(), binder.index));
                 std::iter::once(binder.type_id).chain(elem)
             })

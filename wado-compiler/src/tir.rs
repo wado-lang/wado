@@ -2363,6 +2363,12 @@ impl TypeTable {
         )
     }
 
+    /// Whether a type is a declared type pack, as opposed to one of the
+    /// tuples a pack stands for.
+    pub fn is_type_pack(&self, id: TypeId) -> bool {
+        matches!(self.get(id), ResolvedType::TypePack { .. })
+    }
+
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
     /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
     /// together with a `by_ref` flag that is `true` when the tuple was reached
@@ -2394,10 +2400,9 @@ impl TypeTable {
         }
     }
 
-    /// What `..x` of a pack-carrying `id` contributes to the tuple holding it:
-    /// the elements, so a pack sits where the holding tuple's own type shows
-    /// it, never nested one level down.
-    pub fn pack_spread_elem_types(&self, id: TypeId) -> Vec<TypeId> {
+    /// The element types `id` stands for: a tuple's own, and otherwise the one
+    /// type itself. This is what a spread splices into the tuple holding it.
+    pub fn elem_types_or_self(&self, id: TypeId) -> Vec<TypeId> {
         self.as_tuple(id).unwrap_or_else(|| vec![id])
     }
 
@@ -3421,9 +3426,7 @@ impl TypeTable {
                                         // a pack-independent `..F::method()`
                                         // repeats its return type `|F|` times.
                                         Some(elem) => {
-                                            let pack_elems = self
-                                                .as_tuple(pack_type)
-                                                .unwrap_or_else(|| vec![pack_type]);
+                                            let pack_elems = self.elem_types_or_self(pack_type);
                                             for pe in pack_elems {
                                                 let mut elem_substitution = substitution.clone();
                                                 elem_substitution.insert(index, pe);

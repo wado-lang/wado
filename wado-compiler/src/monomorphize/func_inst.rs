@@ -1998,13 +1998,9 @@ impl Monomorphizer {
                     .unwrap_or_else(|| type_table.make_tuple(vec![]));
                 substitution.insert(param.index, projected);
             } else if param.is_pack {
-                // A receiver naming a declaration (`One<[i32, bool]>`) gives one
-                // argument per declared parameter, so the pack reads its own
-                // slot. A target that spreads it (`impl<..T> … for [..T]`) gives
-                // the tuple's elements, and the pack takes what the scalars leave.
-                // Read off the declaration, never off `key`: `InstantiationKey`
-                // leaves `method_info` out of its equality and hash, so two keys
-                // differing only there share one cache entry.
+                // Read the shape off the declaration, never off `key`:
+                // `InstantiationKey` leaves `method_info` out of its equality
+                // and hash, so two keys differing only there share one entry.
                 let one_arg_per_param = generic
                     .method_info
                     .as_ref()

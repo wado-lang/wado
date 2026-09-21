@@ -4364,22 +4364,17 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_table = self.tysys.type_table.borrow();
             match type_table.as_tuple_through_ref(iterable.type_id) {
                 Some((elems, by_ref)) => {
-                    // A `.zip()` yields one element — the pair `[..A, ..B]` — and
-                    // binds that, so its pack sits a level down. Everywhere else
-                    // the pack is an element, and a tuple carrying none never
-                    // reaches here: `resolve_for_of` sends it down the concrete
-                    // path instead. Mirrors `resolve_variadic_for_of`.
-                    let pack = elems
-                        .iter()
-                        .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                        .copied();
-                    let is_zip = matches!(
-                        actual_iterable,
-                        ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-                    );
-                    let inner = match pack {
-                        Some(pack) => pack,
+                    // A `.zip()` binds its one element, the pair `[..A, ..B]`,
+                    // so its pack sits a level down. Everywhere else the pack is
+                    // an element: `resolve_for_of` sends a tuple carrying none
+                    // down the concrete path instead.
+                    let inner = match elems.iter().find(|e| type_table.is_type_pack(**e)) {
+                        Some(&pack) => pack,
                         None => {
+                            let is_zip = matches!(
+                                actual_iterable,
+                                ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+                            );
                             assert!(
                                 is_zip,
                                 "variadic for-of over a tuple carrying no pack: {}",
@@ -4454,8 +4449,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let ast::Pattern::Ident {
                     id,
@@ -4585,8 +4579,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, elem) in elems.iter().enumerate() {
                 let ast::Pattern::Ident {
                     id,
@@ -7148,7 +7141,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             self.tysys
                                 .type_table
                                 .borrow()
-                                .pack_spread_elem_types(spread_type_id),
+                                .elem_types_or_self(spread_type_id),
                         );
                         elements.push(TirExpr::new(
                             TirExprKind::TupleSpread {

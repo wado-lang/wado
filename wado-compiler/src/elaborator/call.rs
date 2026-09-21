@@ -3196,11 +3196,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> bool {
         // A tuple says where the pack ends, and so does anything still
         // undecided, which a later pass answers.
-        let spelled = type_args.len() <= real.len()
-            && type_args.iter().enumerate().all(|(i, &arg)| {
-                let table = self.tysys.type_table.borrow();
+        let spelled = type_args.len() <= real.len() && {
+            let table = self.tysys.type_table.borrow();
+            type_args.iter().enumerate().all(|(i, &arg)| {
                 !real[i].is_pack || table.is_tuple(arg) || table.contains_undecided(arg)
-            });
+            })
+        };
         if spelled {
             return false;
         }
@@ -3245,7 +3246,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let unanswered: Vec<usize> = (0..real.len())
-            .filter(|&i| real[i].is_pack)
+            .filter(|&i| real[i].is_pack && !written.contains(&real[i].name))
             .filter(|&i| {
                 self.is_unbound_type_param(type_args[i]) || self.type_contains_pack(type_args[i])
             })
@@ -3260,7 +3261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         for pack_pos in unanswered {
-            if scope.contains(&type_args[pack_pos]) || written.contains(&real[pack_pos].name) {
+            if scope.contains(&type_args[pack_pos]) {
                 continue;
             }
             type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);

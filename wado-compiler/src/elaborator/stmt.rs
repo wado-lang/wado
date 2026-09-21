@@ -396,9 +396,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Report every `..X` in a written type whose `X` no type parameter list
     /// declares a pack.
     pub(super) fn reject_non_pack_spreads(&mut self, ty: &ast::Type) {
-        let mut spreads: Vec<(&str, Span)> = Vec::new();
-        ty.pack_spreads(&mut spreads);
-        let bad: Vec<(String, Span)> = spreads
+        let bad: Vec<(String, Span)> = ty
+            .pack_spreads()
             .into_iter()
             .filter(|(name, _)| !self.binds_type_pack(name))
             .map(|(name, span)| (name.to_string(), span))
@@ -410,14 +409,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// Whether `name` is a type pack the enclosing declaration declares. A
     /// scalar parameter spread in a tuple stands for one position, not a run.
-    fn binds_type_pack(&self, name: &str) -> bool {
+    pub(super) fn binds_type_pack(&self, name: &str) -> bool {
         let Some(binder) = self.annotate_ctx.trait_ctx.type_params.get(name) else {
             return false;
         };
-        matches!(
-            self.tysys.type_table.borrow().get(binder.type_id),
-            ResolvedType::TypePack { .. }
-        )
+        self.tysys.type_table.borrow().is_type_pack(binder.type_id)
     }
 
     /// Report a written type position naming a type no declaration answers
@@ -2296,9 +2292,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             type_table
                 .as_tuple_through_ref(iterable_type_id)
                 .map(|(elems, by_ref)| {
-                    let has_type_pack = elems
-                        .iter()
-                        .any(|e| matches!(type_table.get(*e), ResolvedType::TypePack { .. }));
+                    let has_type_pack = elems.iter().any(|e| type_table.is_type_pack(*e));
                     (elems, has_type_pack, by_ref)
                 })
         };
@@ -2412,10 +2406,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .as_tuple_through_ref(iterable)
                     .unwrap_or_else(|| panic!("variadic for-of requires tuple iterable"));
                 // Prefer a direct TypePack element
-                if let Some(tp) = elems
-                    .iter()
-                    .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                {
+                if let Some(tp) = elems.iter().find(|e| type_table.is_type_pack(**e)) {
                     // A mapped pack `..F::method()` binds the loop variable to
                     // the (pack-independent) return type, not the pack itself.
                     match type_table.get(*tp) {
@@ -2486,8 +2477,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .tysys
                 .type_table
                 .borrow()
-                .as_tuple(binding_type)
-                .unwrap_or_else(|| vec![binding_type]);
+                .elem_types_or_self(binding_type);
             for (i, pat_elem) in tp.iter().enumerate() {
                 if let Pattern::Ident {
                     id,

@@ -647,12 +647,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.group_variadic_type_args_of(&method_own_params, &mut type_args, span) {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
-        // A call that writes no argument leaves a pack to the turbofish and the
-        // parameter defaults, which the expected parameter types below are built
-        // from. A call that writes one may still settle it, so that waits for the
-        // solve — a turbofish spelling the packs ahead of it is not the whole
-        // list, and pinning the rest here would refuse the arguments meant for
-        // them.
+        // Only where no argument can settle a pack: past that, an argument the
+        // solve has yet to read would meet a slot already pinned empty.
         if args_ast.is_empty() {
             self.settle_empty_pack_of(&method_own_params, &mut type_args);
         }

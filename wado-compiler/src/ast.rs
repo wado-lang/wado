@@ -3506,30 +3506,37 @@ impl Type {
 
     /// Every `..X` this type spells, with where it is written. Exhaustive, as
     /// [`Self::mentioned_names`] is.
-    pub fn pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
+    #[must_use]
+    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+        let mut out = Vec::new();
+        self.collect_pack_spreads(&mut out);
+        out
+    }
+
+    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
         match self {
             Type::Generic(g) => {
                 for a in &g.args {
-                    a.pack_spreads(out);
+                    a.collect_pack_spreads(out);
                 }
             }
             Type::NamespacedGeneric(g) => {
                 for a in &g.args {
-                    a.pack_spreads(out);
+                    a.collect_pack_spreads(out);
                 }
             }
             Type::Function(f) => {
                 for p in &f.params {
-                    p.pack_spreads(out);
+                    p.collect_pack_spreads(out);
                 }
-                f.return_type.pack_spreads(out);
+                f.return_type.collect_pack_spreads(out);
             }
             Type::Tuple(elems) => {
                 for e in elems {
-                    e.pack_spreads(out);
+                    e.collect_pack_spreads(out);
                 }
             }
-            Type::Reference(inner) | Type::MutReference(inner) => inner.pack_spreads(out),
+            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
             Type::TypePackSpread(name, span) => out.push((name, *span)),
             Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
         }
@@ -3537,8 +3544,6 @@ impl Type {
 
     /// Where a tuple receiving a value spreads a second type pack, leaving the
     /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
-    /// `is_pack` answers whether a spread name is a declared pack, since only
-    /// those two stand for a run of positions.
     #[must_use]
     pub fn second_pack_spread(&self, is_pack: &dyn Fn(&str) -> bool) -> Option<Span> {
         let recurse = |t: &Type| t.second_pack_spread(is_pack);
@@ -3547,15 +3552,7 @@ impl Type {
                 .iter()
                 .filter_map(|e| match e {
                     Type::TypePackSpread(name, span) => is_pack(name).then_some(*span),
-                    Type::Named(_)
-                    | Type::Generic(_)
-                    | Type::NamespacedGeneric(_)
-                    | Type::Function(_)
-                    | Type::Tuple(_)
-                    | Type::Reference(_)
-                    | Type::MutReference(_)
-                    | Type::Infer(_)
-                    | Type::Error(_) => None,
+                    _ => None,
                 })
                 .nth(1)
                 .or_else(|| elems.iter().find_map(recurse)),
