@@ -2444,15 +2444,15 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_HTMLDOCUMENT: NodeKind = 0;
-pub global RK_SCRIPTLETORSEAWS: NodeKind = 1;
-pub global RK_HTMLELEMENTS: NodeKind = 2;
-pub global RK_HTMLELEMENT: NodeKind = 3;
-pub global RK_HTMLCONTENT: NodeKind = 4;
-pub global RK_HTMLATTRIBUTE: NodeKind = 5;
-pub global RK_HTMLCHARDATA: NodeKind = 6;
-pub global RK_HTMLMISC: NodeKind = 7;
-pub global RK_HTMLCOMMENT: NodeKind = 8;
+pub global RK_HTML_DOCUMENT: NodeKind = 0;
+pub global RK_SCRIPTLET_OR_SEA_WS: NodeKind = 1;
+pub global RK_HTML_ELEMENTS: NodeKind = 2;
+pub global RK_HTML_ELEMENT: NodeKind = 3;
+pub global RK_HTML_CONTENT: NodeKind = 4;
+pub global RK_HTML_ATTRIBUTE: NodeKind = 5;
+pub global RK_HTML_CHARDATA: NodeKind = 6;
+pub global RK_HTML_MISC: NodeKind = 7;
+pub global RK_HTML_COMMENT: NodeKind = 8;
 pub global RK_SCRIPT: NodeKind = 9;
 pub global RK_STYLE: NodeKind = 10;
 
@@ -3322,7 +3322,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_html_document(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLDOCUMENT, _start);
+    p.b.start_node(RK_HTML_DOCUMENT, _start);
     _parse_html_document__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3347,7 +3347,7 @@ fn _parse_scriptlet_or_sea_ws__inner(p: &mut Parser) -> () {
 fn _parse_scriptlet_or_sea_ws(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_SCRIPTLETORSEAWS, _start);
+    p.b.start_node(RK_SCRIPTLET_OR_SEA_WS, _start);
     _parse_scriptlet_or_sea_ws__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3420,7 +3420,7 @@ fn _parse_html_elements__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_html_elements(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLELEMENTS, _start);
+    p.b.start_node(RK_HTML_ELEMENTS, _start);
     _parse_html_elements__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3517,7 +3517,7 @@ fn _parse_html_element__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_html_element(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLELEMENT, _start);
+    p.b.start_node(RK_HTML_ELEMENT, _start);
     _parse_html_element__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3601,7 +3601,7 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_html_content(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLCONTENT, _start);
+    p.b.start_node(RK_HTML_CONTENT, _start);
     _parse_html_content__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3621,7 +3621,7 @@ fn _parse_html_attribute__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_html_attribute(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLATTRIBUTE, _start);
+    p.b.start_node(RK_HTML_ATTRIBUTE, _start);
     _parse_html_attribute__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3646,7 +3646,7 @@ fn _parse_html_chardata__inner(p: &mut Parser) -> () {
 fn _parse_html_chardata(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLCHARDATA, _start);
+    p.b.start_node(RK_HTML_CHARDATA, _start);
     _parse_html_chardata__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3675,7 +3675,7 @@ fn _parse_html_misc__inner(p: &mut Parser) -> () {
 fn _parse_html_misc(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLMISC, _start);
+    p.b.start_node(RK_HTML_MISC, _start);
     _parse_html_misc__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -3700,7 +3700,7 @@ fn _parse_html_comment__inner(p: &mut Parser) -> () {
 fn _parse_html_comment(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_HTMLCOMMENT, _start);
+    p.b.start_node(RK_HTML_COMMENT, _start);
     _parse_html_comment__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

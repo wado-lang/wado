@@ -1330,18 +1330,23 @@ fn compile_after_load<H: CompilerHost>(
         .lib_world
         .clone()
         .or_else(|| is_kiln_generator.then(|| KILN_GENERATOR_IMPL_FQ.to_string()));
-    // A kiln generator's `generate` lives in the entry module; only a real
-    // `--lib` package spreads its API (and the types it exposes) across
-    // submodules. Captured here (owned) so it outlives the `sem` destructure
-    // below and can be registered into the CM interface registry.
-    let lib_surface = if options.lib_world.is_some() {
-        collect_lib_surface(&sem.entry_module_source, &sem.modules)
-    } else {
-        LibSurface {
+    // Captured here (owned) so it outlives the `sem` destructure below and can
+    // be registered into the CM interface registry. A kiln generator keeps only
+    // the types: its world is `generate`, but that record's fields may name a
+    // type the generator shares with its own library, in another module.
+    let lib_surface = match (options.lib_world.is_some(), is_kiln_generator) {
+        (true, _) => collect_lib_surface(&sem.entry_module_source, &sem.modules),
+        (false, true) => LibSurface {
+            submodule_type_decls: collect_lib_surface(&sem.entry_module_source, &sem.modules)
+                .submodule_type_decls,
+            submodule_exports: Vec::new(),
+            submodule_interfaces: Vec::new(),
+        },
+        (false, false) => LibSurface {
             submodule_exports: Vec::new(),
             submodule_type_decls: Vec::new(),
             submodule_interfaces: Vec::new(),
-        }
+        },
     };
 
     let entry_type_names: Vec<String> = sem

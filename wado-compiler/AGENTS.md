@@ -51,6 +51,27 @@ rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
 from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
+A module re-exports every effect its public signatures carry. A caller has to
+name an effect to install a handler for it, or to declare it onward. The name
+should come from the module that demands the effect, so `core:uuid` hands out
+`Random` and `SystemClock` and no user of it imports `wasi:*`. An effect no
+caller ever names stays private: `core:log` reads the clock under `#[ambient]`
+and re-exports nothing.
+
+A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
+renders it as the module's `## Synopsis`. Write the shortest program that shows
+what the module is for, not a tour of its API. Leave it out only where such a
+program cannot be written.
+
+Tests for what a module exports live in `<module>_test.wado` beside it. A
+private item cannot be reached from there, so its test goes in the module. A
+facade puts each test beside the file that implements it, which is why
+`core:collections` is tested from `collections/treemap_test.wado` and
+`collections/treeset_test.wado`.
+
+`core:prelude` owes neither. Every program already imports it, so a synopsis has
+nothing to show, and the e2e fixtures are what hold its behaviour.
+
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the
 result, as the equivalent `if` pays. Choose between them on eagerness, not on

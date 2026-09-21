@@ -57,7 +57,7 @@ fn install_trace_sink() {
 /// Hand a dev build the stdlib, as the binaries do: an integration test links
 /// the library without `cfg(test)`, so it is the host here.
 #[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
-fn install_dev_stdlib() {
+pub fn install_dev_stdlib() {
     use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
 
     let root = Path::new(DEV_STDLIB_ROOT);
@@ -70,7 +70,7 @@ fn install_dev_stdlib() {
 }
 
 #[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
-fn install_dev_stdlib() {}
+pub fn install_dev_stdlib() {}
 
 /// A located diagnostic names the file it is in — what a per-document consumer
 /// selects on, and without which the LSP drops it. Checked at the host, so the

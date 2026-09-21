@@ -1,0 +1,262 @@
+//! Stage 0's pass over a graph: name every tensor's axes from the schema,
+//! then discharge each operator's extent conditions in order.
+
+use { TreeMap } from "core:collections";
+use { Extent } from "./extent.wado";
+use { Axis, ExtentConflict, Shape } from "./shape.wado";
+use { Dim, Graph, Node, Rank, ValueInfo } from "./onnx_text.wado";
+use { Schema } from "./schema.wado";
+
+/// A tensor the schema does not reach. Geas does not fall back to positional
+/// axes, for the same reason stage 0 does not fall back to a runtime check.
+pub struct UnnamedTensor {
+    pub tensor: String,
+}
+
+/// The schema named a different number of axes than the graph gave the tensor
+/// dimensions.
+pub struct AxisCountConflict {
+    pub tensor: String,
+    pub named: i32,
+    pub dims: i32,
+}
+
+/// An operator's conditions failed, at the node its first output names.
+pub struct NodeConflict {
+    pub node: String,
+    pub error: ExtentConflict,
+}
+
+pub variant InferError {
+    Unnamed(UnnamedTensor),
+    AxisCount(AxisCountConflict),
+    UnknownOperator(String),
+    UnrankedTensor(String),
+    UndefinedInput(String),
+    ScalarOperand(String),
+    OperandCount(OperandCountConflict),
+    OutputCount(OutputCountConflict),
+    Node(NodeConflict),
+}
+
+/// An operator was given fewer operands than it reads.
+pub struct OperandCountConflict {
+    pub node: String,
+    pub op: String,
+    pub given: i32,
+    pub needed: i32,
+}
+
+/// Every operator Geas carries produces one value, so a node naming any other
+/// number of outputs has nowhere to put them.
+pub struct OutputCountConflict {
+    pub node: String,
+    pub op: String,
+    pub given: i32,
+}
+
+impl Display for UnnamedTensor {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.tensor}: no layout pattern names this tensor's axes`);
+    }
+}
+
+impl Display for AxisCountConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.tensor}: the schema names ${self.named} axes and the graph gives ${self.dims} dimensions`,
+        );
+    }
+}
+
+impl Display for NodeConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.error}`);
+    }
+}
+
+impl Display for OperandCountConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.node} = ${self.op}: reads ${self.needed} operands and was given ${self.given}`,
+        );
+    }
+}
+
+impl Display for OutputCountConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: produces one output and names ${self.given}`);
+    }
+}
+
+impl Display for InferError {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Unnamed(e) => e.fmt(f),
+            AxisCount(e) => e.fmt(f),
+            UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
+            UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
+            UndefinedInput(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
+            ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
+            OperandCount(e) => e.fmt(f),
+            OutputCount(e) => e.fmt(f),
+            Node(e) => e.fmt(f),
+        }
+    }
+}
+
+/// Every tensor's shape, keyed by name. Producing one is what discharges the
+/// graph's extent conditions, so a successful return is the proof.
+pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, InferError> {
+    let mut shapes = TreeMap::<String, Shape>::new();
+    for let vi of &graph.inputs {
+        shapes[vi.name] = shape_of(vi, schema)?;
+    }
+    for let vi of &graph.initializers {
+        shapes[vi.name] = shape_of(vi, schema)?;
+    }
+    for let node of &graph.nodes {
+        if node.outputs.len() != 1 {
+            builtin::cold_path();
+            return Result::Err(InferError::OutputCount(OutputCountConflict {
+                node: node_name(node),
+                op: node.op,
+                given: node.outputs.len(),
+            }));
+        }
+        shapes[node.outputs[0]] = infer_node(node, &shapes)?;
+    }
+    return Result::Ok(shapes);
+}
+
+/// What names a node in a message. ONNX identifies one by its first output,
+/// and a node the file gave none falls back to its operator.
+fn node_name(node: &Node) -> String {
+    if node.outputs.is_empty() {
+        return node.op;
+    }
+    return node.outputs[0];
+}
+
+/// The axes a value info declares, named by the schema and given extents by
+/// the graph.
+fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
+    let dims = match &vi.rank {
+        Dims(d) => *d,
+        Scalar => [] as List<Dim>,
+        Unranked => {
+            builtin::cold_path();
+            return Result::Err(InferError::UnrankedTensor(vi.name));
+        },
+    };
+    let Some(names) = schema.axes_for(&vi.name) else {
+        builtin::cold_path();
+        return Result::Err(InferError::Unnamed(UnnamedTensor { tensor: vi.name }));
+    };
+    if names.len() != dims.len() {
+        builtin::cold_path();
+        return Result::Err(InferError::AxisCount(AxisCountConflict {
+            tensor: vi.name,
+            named: names.len(),
+            dims: dims.len(),
+        }));
+    }
+    let mut axes: List<Axis> = [];
+    for let mut i = 0; i < dims.len(); i += 1 {
+        axes.push(Axis { name: names[i], extent: extent_of(&dims[i], &names[i]) });
+    }
+    return Result::Ok(Shape { axes });
+}
+
+/// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one.
+/// A `?` carries no symbol of its own, so the axis's name stands for it: two
+/// occurrences of one axis are the same length by the schema's account.
+fn extent_of(dim: &Dim, axis: &String) -> Extent {
+    return match dim {
+        Static(n) => Extent::Static(*n),
+        Symbol(s) => Extent::Symbol(*s),
+        Unknown => Extent::Symbol(*axis),
+    };
+}
+
+fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, InferError> {
+    let op = node.op;
+    if op == "MatMul" {
+        let [a, b] = binary_operands(node, shapes)?;
+        if a.rank() == 0 || b.rank() == 0 {
+            builtin::cold_path();
+            return Result::Err(InferError::ScalarOperand(node_name(node)));
+        }
+        return at_node(node, a.matmul(&b, op));
+    }
+    if is_binary_elementwise(&op) {
+        let [a, b] = binary_operands(node, shapes)?;
+        return at_node(node, a.elementwise(&b, op));
+    }
+    if is_unary_elementwise(&op) {
+        arity(node, 1)?;
+        return operand(node, shapes, 0);
+    }
+    builtin::cold_path();
+    return Result::Err(InferError::UnknownOperator(op));
+}
+
+fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {
+    arity(node, 2)?;
+    return Result::Ok([
+        operand(node, shapes, 0)?,
+        operand(node, shapes, 1)?,
+    ]);
+}
+
+/// A graph that reached Geas has run once already, so a short operand list is
+/// a hand-edited file rather than an exporter's output. It still reports.
+fn arity(node: &Node, needed: i32) -> Result<(), InferError> {
+    if node.inputs.len() >= needed {
+        return Result::Ok(());
+    }
+    builtin::cold_path();
+    return Result::Err(InferError::OperandCount(OperandCountConflict {
+        node: node_name(node),
+        op: node.op,
+        given: node.inputs.len(),
+        needed,
+    }));
+}
+
+/// The operators whose output shape is their input's.
+fn is_unary_elementwise(op: &String) -> bool {
+    return *op == "Relu"
+        || *op == "Sigmoid"
+        || *op == "Tanh"
+        || *op == "Erf"
+        || *op == "Exp"
+        || *op == "Log"
+        || *op == "Sqrt"
+        || *op == "Neg"
+        || *op == "Abs";
+}
+
+/// The operators that broadcast two operands against each other.
+fn is_binary_elementwise(op: &String) -> bool {
+    return *op == "Add" || *op == "Sub" || *op == "Mul" || *op == "Div" || *op == "Pow";
+}
+
+fn operand(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<Shape, InferError> {
+    let name = node.inputs[index];
+    let Some(shape) = shapes.get(name) else {
+        builtin::cold_path();
+        return Result::Err(InferError::UndefinedInput(name));
+    };
+    return Result::Ok(shape);
+}
+
+fn at_node(node: &Node, result: Result<Shape, ExtentConflict>) -> Result<Shape, InferError> {
+    return match result {
+        Ok(shape) => Result::Ok(shape),
+        Err(error) => Result::Err(InferError::Node(NodeConflict {
+            node: node_name(node),
+            error,
+        })),
+    };
+}

@@ -48,10 +48,24 @@
 
 use { DescriptorFlags, DescriptorType, Filesize, OpenFlags, PathFlags } from "wasi:filesystem";
 
-/// The `wasi:filesystem` names this module's own signatures carry, so a caller
-/// naming the effect or reading an error imports this module alone.
 pub use { Preopens, Descriptor, ErrorCode } from "wasi:filesystem";
 pub use { Instant } from "wasi:clocks";
+
+#[synopsis]
+test {
+    let dir = "target/core-fs-synopsis";
+    create_dir_all(&join(&dir, "reports")).unwrap();
+
+    let path = join(&dir, "reports/summary.txt");
+    write(&path, &"3 passed, 0 failed\n").unwrap();
+
+    assert read_to_string(&path).unwrap().len() == 19;
+    assert metadata(&path).unwrap().size == 19;
+    assert file_name(&path).unwrap() == "summary.txt";
+
+    let missing = read_to_string(&join(&dir, "missing.txt")).unwrap_err();
+    assert `${missing}`.contains("no such file or directory");
+}
 
 /// Why a filesystem operation failed, and the path it failed on. `Display`
 /// renders the pair: `"build/out.json: no such file or directory"`.

@@ -1,0 +1,59 @@
+//! A two-layer MLP checked at build time.
+//!
+//! Geas reads `mlp.onnxtext` through Kiln, names each axis from the `layout`
+//! patterns, and discharges every operator's extent conditions before this
+//! file compiles. Give `W2` 32 hidden instead of 64 and the build stops with
+//! `T = MatMul: axis Hidden is 64 on the left and 32 on the right`.
+//!
+//!     wado run package-geas/example/mlp.wado
+
+use { println, Stdout } from "core:cli";
+use { Batch, In, Out, Tensor } from "./mlp.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "W1",
+                        axes: ["In", "Hidden"],
+                    },
+                    {
+                        pattern: "B1",
+                        axes: ["Hidden"],
+                    },
+                    {
+                        pattern: "W2",
+                        axes: ["Hidden", "Out"],
+                    },
+                    {
+                        pattern: "B2",
+                        axes: ["Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+/// The axes reached the type layer, so this takes the graph's input and
+/// nothing else. Passing the output is a compile error, since `[Batch, Out]`
+/// is not `[Batch, In]`.
+fn batch_size(t: &Tensor<f32, [Batch, In]>) -> i32 {
+    return t.extents[0];
+}
+
+export fn run() with Stdout {
+    let x = Tensor::<f32, [Batch, In]> {
+        data: [0.0] as List<f32>,
+        extents: [1, 128],
+    };
+    let y = Tensor::<f32, [Batch, Out]> {
+        data: [0.0] as List<f32>,
+        extents: [1, 10],
+    };
+    println(`batch ${batch_size(&x)}, output rank ${y.extents.len()}`);
+}
