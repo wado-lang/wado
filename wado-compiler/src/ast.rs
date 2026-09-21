@@ -3489,13 +3489,8 @@ impl Type {
         }
     }
 
-    /// Whether `pred` holds of this type or of any type within it, asked
-    /// outermost first.
-    ///
-    /// The one structural recursion a predicate over a type is written on: a
-    /// walk that spells the recursion itself answers `false` for the arm it
-    /// forgets, and a type it never looks inside reads as one that holds
-    /// nothing.
+    /// Whether `pred` holds of this type or of any within it, outermost first.
+    /// The one recursion a type predicate takes; a hand-spelled walk forgets arms.
     #[must_use]
     pub fn any(&self, pred: &mut impl FnMut(&Type) -> bool) -> bool {
         if pred(self) {

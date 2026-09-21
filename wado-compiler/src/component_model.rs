@@ -4671,9 +4671,8 @@ fn is_param_type_supported_with_types(
     }
 }
 
-/// Whether `ty` names the empty tuple anywhere, including under a generic. The
-/// shape predicates ask this where they accept a generic without judging its
-/// arguments, so a payload of `[]` cannot ride in past them.
+/// Whether `ty` names the empty tuple anywhere. The shape predicates accept a
+/// generic without judging its arguments, so `[]` would otherwise ride past.
 fn mentions_empty_tuple(ty: &Type) -> bool {
     ty.any(&mut |ty| matches!(ty, Type::Tuple(elems) if elems.is_empty()))
 }

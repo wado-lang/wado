@@ -2179,13 +2179,10 @@ fn written_args_key(bound: &ast::TraitBound) -> String {
 }
 
 /// Add an inherited bound unless the list already holds that supertrait at
-/// those arguments, so two spellings of one supertrait collapse.
+/// those arguments, reached by the same chain of clauses.
 ///
-/// The chain is part of the identity: two chains may write one clause alike in
-/// their own parameter spaces and still reach different arguments, and it is
-/// the chain a reader walks to tell them apart. A step is keyed by the trait it
-/// names as well as its arguments, since that trait's declared defaults answer
-/// the positions the step leaves out.
+/// Two chains may write one clause alike and still reach different arguments,
+/// and a step's own trait supplies the defaults for what it leaves out.
 fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBound) {
     let identity = |b: &InheritedBound| {
         let chain: Vec<(DefId, String)> = b
@@ -2636,23 +2633,20 @@ fn check_variadic_impl_overlap(
 /// Whether the target names one of the impl's own type parameters, making the
 /// impl generic over the head rather than written for one instantiation.
 fn target_mentions_impl_param(ty: &ast::Type, params: &IndexSet<&str>) -> bool {
-    match ty {
+    // A generic's own head names a type, not a parameter, so only its arguments
+    // are asked — `List<T>` mentions `T`, and `List` itself mentions nothing.
+    ty.any(&mut |ty| match ty {
         ast::Type::Named(named) => params.contains(named.name.as_str()),
-        ast::Type::Generic(generic) => generic
-            .args
-            .iter()
-            .any(|a| target_mentions_impl_param(a, params)),
-        ast::Type::Tuple(elems) => elems.iter().any(|e| target_mentions_impl_param(e, params)),
-        ast::Type::Reference(inner) | ast::Type::MutReference(inner) => {
-            target_mentions_impl_param(inner, params)
-        }
         ast::Type::TypePackSpread(name, _) => params.contains(name.as_str()),
-        ast::Type::NamespacedGeneric(ns) => ns
-            .args
-            .iter()
-            .any(|a| target_mentions_impl_param(a, params)),
-        ast::Type::Function(_) | ast::Type::Infer(_) | ast::Type::Error(_) => false,
-    }
+        ast::Type::Generic(_)
+        | ast::Type::NamespacedGeneric(_)
+        | ast::Type::Tuple(_)
+        | ast::Type::Function(_)
+        | ast::Type::Reference(_)
+        | ast::Type::MutReference(_)
+        | ast::Type::Infer(_)
+        | ast::Type::Error(_) => false,
+    })
 }
 
 /// An inherent `impl Box_<i32>` and an inherent `impl<T> Box_<T>` defining the
