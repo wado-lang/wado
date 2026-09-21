@@ -15,6 +15,7 @@ use crate::ast::{
     AstId, Attribute, CmBoundary, CmImport, FunctionType, GenericType, InterfaceDecl, Item,
     NamedType, NamespacedGenericType, Type, cm_import_of, declares_unrestricted,
 };
+use crate::attribute::CM_PARAMS;
 use crate::canonical::{CmDecl, CmFuturePayload, CmPayloadType, CmScalarType, CmStreamPayload};
 use crate::cm_abi::{
     CmValType, cm_discriminant_byte_size, cm_flags_byte_align, cm_flags_byte_size,
@@ -592,7 +593,7 @@ fn extern_handle_type(span: Span) -> Type {
 fn extract_cm_params_attr(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .find(|a| a.name == "cm_params")
+        .find(|a| a.name == CM_PARAMS)
         .map(|a| a.args.iter().map(|arg| arg.as_str().to_string()).collect())
         .unwrap_or_default()
 }

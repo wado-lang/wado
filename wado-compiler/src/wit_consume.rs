@@ -13,17 +13,13 @@ use crate::ast::{
     FlagsVariant, Function, GenericType, InnerAttribute, InterfaceDecl, Item, Module, NamedType,
     Newtype, Param, SelfKind, StructDecl, StructField, Type, VariantCase, VariantDecl, Visibility,
 };
+use crate::attribute::{CM, CM_HOST_IMPORTS, CM_PARAMS};
 use crate::component_model::SourceInterfaceBatch;
 use crate::hashmap;
 use crate::token::Span;
 use crate::wit_emit::CmShape;
 use heck::{ToSnakeCase, ToUpperCamelCase};
 use wit_parser::{Resolve, Type as WitType, TypeDefKind, TypeId, TypeOwner, WorldId, WorldItem};
-
-/// Inner-attribute name carrying a component's host-leaf import FQs on its
-/// synthesized module, so effect reconstruction can recover them from the AST
-/// alone (see [Effect Reconstruction from CM Component Imports]).
-pub const CM_HOST_IMPORTS_ATTR: &str = "cm_host_imports";
 
 /// The Wado bindings synthesized from one decoded imported component.
 pub struct ComponentBindings {
@@ -45,13 +41,13 @@ pub struct ComponentBindings {
 }
 
 /// Read the host-leaf import FQs a component-binding module carries in its
-/// [`CM_HOST_IMPORTS_ATTR`] inner attribute. Empty for a non-component module
+/// [`CM_HOST_IMPORTS`] inner attribute. Empty for a non-component module
 /// or a component that imports nothing.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
     module
         .inner_attributes
         .iter()
-        .find(|a| a.name == CM_HOST_IMPORTS_ATTR)
+        .find(|a| a.name == CM_HOST_IMPORTS)
         .map(|a| {
             a.args
                 .iter()
@@ -137,7 +133,7 @@ pub fn build_bindings(resolve: &Resolve, world: WorldId) -> Result<ComponentBind
         Vec::new()
     } else {
         vec![InnerAttribute {
-            name: CM_HOST_IMPORTS_ATTR.to_string(),
+            name: CM_HOST_IMPORTS.to_string(),
             args: host_leaf_imports
                 .iter()
                 .cloned()
@@ -200,7 +196,7 @@ impl Builder {
         let mut cm = CmImport::parse(fq).expect("interface FQ is well-formed");
         cm.function = frag.map(str::to_string);
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::Import(cm)),
             span: syn(),
@@ -210,7 +206,7 @@ impl Builder {
     /// `#[cm]` as a world-level function-import boundary (Phase 9).
     fn cm_world_import_attr(&self, func_name: &str) -> Attribute {
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::WorldImport(func_name.to_string())),
             span: syn(),
@@ -220,7 +216,7 @@ impl Builder {
     /// `#[cm("kebab-name")]` as a bare CM-name boundary (fields, cases, flags).
     fn cm_name_attr(&self, name: &str) -> Attribute {
         Attribute {
-            name: "cm".to_string(),
+            name: CM.to_string(),
             args: Vec::new(),
             cm_boundary: Some(CmBoundary::Name(name.to_string())),
             span: syn(),
@@ -271,7 +267,7 @@ impl Builder {
             let attrs = vec![
                 self.cm_import_attr(fq, Some(fname)),
                 Attribute {
-                    name: "cm_params".to_string(),
+                    name: CM_PARAMS.to_string(),
                     args: cm_params,
                     cm_boundary: None,
                     span: syn(),
@@ -357,7 +353,7 @@ impl Builder {
         let attrs = vec![
             self.cm_world_import_attr(&func.name),
             Attribute {
-                name: "cm_params".to_string(),
+                name: CM_PARAMS.to_string(),
                 args: cm_params,
                 cm_boundary: None,
                 span: syn(),

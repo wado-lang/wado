@@ -90,6 +90,8 @@ The AST is parser-immutable from this point on. The desugar-replacement surface 
 
 The LSP path stops after liveness and builds no TIR.
 
+`attribute.rs` is the single source of truth for the attributes: each one's name, the declarations it may sit on, and the arguments it takes. Analyze walks every attribute a module writes and rejects an unknown name, a misplaced one, and an argument list the schema fixes; a shape the schema leaves as `AttrArgs::Read` is checked where the attribute is read (`#[param]`, `#[result]`, `#[retain]`, `#[immediate]`, `#[cm]`, `#[wire]`). Every reader names its attribute through a constant there, so a name is spelled once.
+
 The result, `Semantics`, carries an `AstIndex`, and the `TirModule`s too once reify has run. It holds no fact of its own: a query names a globally-unique `AstId` and a fact kind, and is routed to the `ModuleSemantics` whose walk recorded that fact — the use→def edges among them. The kind is part of the route because one node's kinds need not come from one walk; [WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md) owns the rest of the rule. This is what makes the architecture LSP-friendly: facts are attached to AST nodes without mutating them, so cross-file navigation, hover, and rename all fall out of the same data the batch compiler uses. See the [LSP](#lsp) section below.
 
 The elaborator covers trait selection, generic inference, method dispatch, coercion, and effect typing. All trait calls are resolved statically — by the end of the pipeline every call targets a concrete monomorphized function. There is no runtime vtable.

@@ -9,6 +9,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
+use crate::attribute::{
+    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, WIRE,
+};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
@@ -1039,7 +1042,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let serde_positional = field
                 .attrs
                 .iter()
-                .any(|a| a.name == "wire" && a.has_arg("positional"));
+                .any(|a| a.name == WIRE && a.has_arg("positional"));
 
             fields.push(TirField {
                 name: field.name.clone(),
@@ -1047,7 +1050,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == "secret"),
+                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
                 wire_name_override,
                 serde_default,
                 serde_positional,
@@ -1141,12 +1144,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     type_id: *type_id,
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == "secret"),
+                    is_secret: attrs.iter().any(|a| a.name == SECRET),
                     wire_name_override: wire_name_override_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
                         .iter()
-                        .any(|a| a.name == "wire" && a.has_arg("positional")),
+                        .any(|a| a.name == WIRE && a.has_arg("positional")),
                     default_expr,
                 }
             })
@@ -2022,7 +2025,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// resolution itself (overrides, env, conversion) happens later in the
     /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
     fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
+        let attr = global_decl.attributes.iter().find(|a| a.name == PARAM)?;
         let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
 
         let mut ok = true;
@@ -2092,7 +2095,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<tir::ReturnConvention> {
         // The attribute, not what it resolved to: one that failed to resolve was
         // reported already, and asking for it again says nothing new.
-        let states_one = func.attrs.iter().any(|attr| attr.name == "result");
+        let states_one = func.attrs.iter().any(|attr| attr.name == RESULT);
         if has_body || states_one || reserves_a_name_only(func) {
             return declared;
         }
@@ -2127,7 +2130,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         params: &[tir::TirParam],
         has_body: bool,
     ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == "result")?;
+        let attr = attrs.iter().find(|a| a.name == RESULT)?;
         let emit = |message: String| {
             self.attr_error(Code::ResultAttr, attr, message);
             None
@@ -2177,7 +2180,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<tir::RetainSpec<String>> {
         attrs
             .iter()
-            .filter(|a| a.name == "retain")
+            .filter(|a| a.name == RETAIN)
             .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
             .collect()
     }
@@ -2260,7 +2263,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<String> {
         attrs
             .iter()
-            .filter(|a| a.name == "immediate")
+            .filter(|a| a.name == IMMEDIATE)
             .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
             .collect()
     }
@@ -10728,7 +10731,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
 fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == "ambient")
+    attrs.iter().any(|a| a.name == AMBIENT)
 }
 
 /// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
@@ -10737,14 +10740,14 @@ fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
 fn extract_benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .filter(|a| a.name == "benign")
+        .filter(|a| a.name == BENIGN)
         .flat_map(|a| a.args.iter().map(AttrArg::as_str))
         .map(str::to_string)
         .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
-    let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
+    let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
     };
     match attr.args.first().map(AttrArg::as_str) {
@@ -10758,7 +10761,7 @@ fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
 fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "export_name")
+        .find(|a| a.name == EXPORT_NAME)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -10766,7 +10769,7 @@ fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
 fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "allocator")
+        .find(|a| a.name == ALLOC)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -11287,7 +11290,7 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
 /// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name").map(str::to_string)
         } else {
             None
@@ -11298,7 +11301,7 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
 /// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.
 fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name_policy").map(str::to_string)
         } else {
             None

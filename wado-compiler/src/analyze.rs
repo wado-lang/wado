@@ -9,6 +9,7 @@ use crate::ast::{
     AstId, Function, FunctionSite, Item, Module, UseDecl, UseItem, Visibility, WorldExport,
     cm_import_of, for_each_function,
 };
+use crate::attribute::{AttributeFault, check, for_each_attribute};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -838,10 +839,38 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
             self.check_function_declarations(module, source);
         }
 
-        // Fifth pass: validate imports in each module
+        // Fifth pass: every attribute is one the schema describes
+        for (source, module) in modules {
+            self.check_attributes(module, source);
+        }
+
+        // Sixth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())
+    }
+
+    fn check_attributes(&self, module: &Module, module_source: &ModuleSource) {
+        for_each_attribute(module, |written| {
+            let Some(fault) = check(written.name, written.args, written.target) else {
+                return;
+            };
+            let code = match fault {
+                AttributeFault::Unknown => Code::UnknownAttr,
+                AttributeFault::Misplaced { .. }
+                | AttributeFault::Position { .. }
+                | AttributeFault::Arguments { .. } => Code::AttrMisuse,
+            };
+            let _ = self.logger.error_in(
+                module_source,
+                Diagnostic {
+                    severity: Severity::Error,
+                    code,
+                    message: fault.message(written.name),
+                    span: Some(DiagnosticSpan::from_span(&written.span, None)),
+                },
+            );
+        });
     }
 
     fn check_function_declarations(&self, module: &Module, module_source: &ModuleSource) {

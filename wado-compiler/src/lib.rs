@@ -8,6 +8,7 @@
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
+pub mod attribute;
 pub mod bind;
 pub mod builtin_registry;
 pub mod canonical;

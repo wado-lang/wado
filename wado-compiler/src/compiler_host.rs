@@ -190,6 +190,11 @@ pub enum Code {
     /// redirect index cannot represent both, so the conflict is reported
     /// instead of silently dropping one.
     KilnRedirectConflict,
+    /// An attribute no schema in `crate::attribute` describes.
+    UnknownAttr,
+    /// An attribute written where it does not belong, or with arguments its
+    /// schema does not admit.
+    AttrMisuse,
     /// A `#[compiler_item("...")]` attribute is malformed — the name
     /// is unknown, the attribute is attached to the wrong declaration
     /// kind, or it appears outside a `core::*` stdlib module.
@@ -273,6 +278,8 @@ impl std::fmt::Display for Code {
             Code::KilnGeneratedRegenerated => "KILN_GENERATED_REGENERATED",
             Code::KilnGeneratedStaleOnDisk => "KILN_GENERATED_STALE_ON_DISK",
             Code::KilnRedirectConflict => "KILN_REDIRECT_CONFLICT",
+            Code::UnknownAttr => "UNKNOWN_ATTR",
+            Code::AttrMisuse => "ATTR_MISUSE",
             Code::CompilerItemAttr => "COMPILER_ITEM_ATTR",
             Code::ResultAttr => "RESULT_ATTR",
             Code::RetainAttr => "RETAIN_ATTR",

@@ -1,0 +1,759 @@
+//! The attribute schema: every `#[…]` and `#![…]` the compiler recognizes,
+//! where it may be written, and what arguments it takes.
+
+use crate::ast::{
+    AstVisitor, AttrArg, Attribute, Expr, Function, GenericParam, InnerAttribute, Item, Module,
+    Stmt, WorldExport, walk_expr, walk_function, walk_generic_params, walk_item, walk_stmt,
+};
+use crate::token::Span;
+
+pub const ALLOC: &str = "allocator";
+pub const ALLOW: &str = "allow";
+pub const AMBIENT: &str = "ambient";
+pub const BENIGN: &str = "benign";
+pub const CANONICAL: &str = "canonical";
+pub const CM: &str = "cm";
+pub const CM_HOST_IMPORTS: &str = "cm_host_imports";
+pub const CM_PARAMS: &str = "cm_params";
+pub const COMPILER_ITEM: &str = "compiler_item";
+pub const EXPECT_TRAP: &str = "expect_trap";
+pub const EXPORT: &str = "export";
+pub const EXPORT_NAME: &str = "export_name";
+pub const GENERATED: &str = "generated";
+pub const IMMEDIATE: &str = "immediate";
+pub const INLINE: &str = "inline";
+pub const NO_PRELUDE: &str = "no_prelude";
+pub const PARAM: &str = "param";
+pub const RESULT: &str = "result";
+pub const RETAIN: &str = "retain";
+pub const SECRET: &str = "secret";
+pub const STDLIB: &str = "stdlib";
+pub const SYNOPSIS: &str = "synopsis";
+pub const TIMEOUT_MS: &str = "timeout_ms";
+pub const TODO: &str = "TODO";
+pub const UNAVAILABLE: &str = "unavailable";
+pub const WASM_MODULE: &str = "wasm_module";
+pub const WIRE: &str = "wire";
+
+/// A place an attribute may be written. `Module` is the inner-attribute
+/// position (`#![…]`); every other target takes an outer `#[…]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttrTarget {
+    Module,
+    Function,
+    Param,
+    GenericParam,
+    Global,
+    Let,
+    Test,
+    Struct,
+    StructField,
+    Enum,
+    EnumCase,
+    Variant,
+    VariantCase,
+    Flags,
+    FlagsVariant,
+    Newtype,
+    TupleType,
+    BuiltinType,
+    Trait,
+    Interface,
+    Resource,
+    World,
+}
+
+impl AttrTarget {
+    /// How a diagnostic names this place.
+    #[must_use]
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::Module => "module",
+            Self::Function => "function",
+            Self::Param => "parameter",
+            Self::GenericParam => "type parameter",
+            Self::Global => "global",
+            Self::Let => "let statement",
+            Self::Test => "test block",
+            Self::Struct => "struct",
+            Self::StructField => "struct field",
+            Self::Enum => "enum",
+            Self::EnumCase => "enum case",
+            Self::Variant => "variant",
+            Self::VariantCase => "variant case",
+            Self::Flags => "flags declaration",
+            Self::FlagsVariant => "flags member",
+            Self::Newtype => "newtype",
+            Self::TupleType => "tuple type declaration",
+            Self::BuiltinType => "builtin type declaration",
+            Self::Trait => "trait",
+            Self::Interface => "interface",
+            Self::Resource => "resource",
+            Self::World => "world",
+        }
+    }
+
+    /// How a diagnostic names this place, article and all.
+    #[must_use]
+    pub fn describe_one(self) -> String {
+        let article = match self {
+            Self::Enum | Self::EnumCase | Self::Interface => "an",
+            _ => "a",
+        };
+        format!("{article} {}", self.describe())
+    }
+
+    /// Whether this target takes `#![…]` rather than `#[…]`.
+    #[must_use]
+    pub fn is_inner(self) -> bool {
+        matches!(self, Self::Module)
+    }
+}
+
+/// The arguments an attribute takes. [`AttrArgs::Read`] is the shape no central
+/// rule captures, checked where the attribute is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttrArgs {
+    /// Nothing, as `#[expect_trap]`.
+    None,
+    /// One string literal, as `#[export_name("run")]`.
+    OneString,
+    /// One or more string literals, as `#[canonical("wasi", "stream-new")]`.
+    Strings,
+    /// One numeric literal, as `#[timeout_ms(5000)]`.
+    OneNumber,
+    /// One or more bare identifiers, as `#[allow(dead_code)]`. A lint name is
+    /// read as an identifier alone, so a quoted one waives nothing.
+    Idents,
+    /// One or more words, quoted or bare, as `#[benign(Stdout)]`.
+    Words,
+    /// Words, or nothing at all, as `#[inline]` / `#[inline("never")]`.
+    OptionalWords,
+    /// A shape of its own, described here and checked where it is read.
+    Read(&'static str),
+}
+
+impl AttrArgs {
+    /// How a diagnostic spells what this attribute takes.
+    #[must_use]
+    pub fn describe(self) -> &'static str {
+        match self {
+            Self::None => "no arguments",
+            Self::OneString => "one string",
+            Self::Strings => "one or more strings",
+            Self::OneNumber => "one number",
+            Self::Idents => "one or more bare names",
+            Self::Words => "one or more names, quoted or bare",
+            Self::OptionalWords => "names, quoted or bare, or nothing",
+            Self::Read(shape) => shape,
+        }
+    }
+
+    /// Whether `args` is what this shape takes. A [`Self::Read`] shape admits
+    /// every argument list here, and is checked where it is read.
+    fn admits(self, args: &[AttrArg]) -> bool {
+        match self {
+            Self::Read(_) => true,
+            Self::None => args.is_empty(),
+            Self::OneString => matches!(args, [AttrArg::Str(_)]),
+            Self::Strings => {
+                !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Str(_)))
+            }
+            Self::OneNumber => matches!(args, [AttrArg::Number(_)]),
+            Self::Idents => {
+                !args.is_empty() && args.iter().all(|arg| matches!(arg, AttrArg::Ident(_)))
+            }
+            Self::Words => !args.is_empty() && Self::OptionalWords.admits(args),
+            Self::OptionalWords => args
+                .iter()
+                .all(|arg| matches!(arg, AttrArg::Ident(_) | AttrArg::Str(_))),
+        }
+    }
+}
+
+/// One attribute's schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AttributeSchema {
+    pub name: &'static str,
+    /// Where the attribute may be written.
+    pub targets: &'static [AttrTarget],
+    pub args: AttrArgs,
+    /// What the attribute declares, as a diagnostic spells it.
+    pub summary: &'static str,
+}
+
+/// Every place an attribute can be written. `#[allow(…)]` reaches all of them.
+const EVERY_TARGET: &[AttrTarget] = &[
+    AttrTarget::Module,
+    AttrTarget::Function,
+    AttrTarget::Param,
+    AttrTarget::GenericParam,
+    AttrTarget::Global,
+    AttrTarget::Let,
+    AttrTarget::Test,
+    AttrTarget::Struct,
+    AttrTarget::StructField,
+    AttrTarget::Enum,
+    AttrTarget::EnumCase,
+    AttrTarget::Variant,
+    AttrTarget::VariantCase,
+    AttrTarget::Flags,
+    AttrTarget::FlagsVariant,
+    AttrTarget::Newtype,
+    AttrTarget::TupleType,
+    AttrTarget::BuiltinType,
+    AttrTarget::Trait,
+    AttrTarget::Interface,
+    AttrTarget::Resource,
+    AttrTarget::World,
+];
+
+/// Every declaration that crosses the Component Model boundary, which is what
+/// `#[cm(…)]` names on the CM side.
+const CM_TARGET: &[AttrTarget] = &[
+    AttrTarget::Function,
+    AttrTarget::Struct,
+    AttrTarget::StructField,
+    AttrTarget::Enum,
+    AttrTarget::EnumCase,
+    AttrTarget::Variant,
+    AttrTarget::VariantCase,
+    AttrTarget::Flags,
+    AttrTarget::FlagsVariant,
+    AttrTarget::Newtype,
+    AttrTarget::Interface,
+    AttrTarget::Resource,
+    AttrTarget::World,
+];
+
+/// Every declaration a `#[compiler_item("…")]` can bind. The registry checks
+/// each item against the kind it expects; this is the outer bound.
+const COMPILER_ITEM_TARGET: &[AttrTarget] = &[
+    AttrTarget::Function,
+    AttrTarget::Struct,
+    AttrTarget::Enum,
+    AttrTarget::EnumCase,
+    AttrTarget::Variant,
+    AttrTarget::VariantCase,
+    AttrTarget::Newtype,
+    AttrTarget::TupleType,
+    AttrTarget::BuiltinType,
+    AttrTarget::Trait,
+    AttrTarget::Interface,
+    AttrTarget::Resource,
+];
+
+/// Every declaration whose serialized form `#[wire(…)]` customizes.
+const WIRE_TARGET: &[AttrTarget] = &[
+    AttrTarget::Struct,
+    AttrTarget::StructField,
+    AttrTarget::Enum,
+    AttrTarget::EnumCase,
+    AttrTarget::Variant,
+    AttrTarget::VariantCase,
+    AttrTarget::Flags,
+    AttrTarget::FlagsVariant,
+    AttrTarget::Newtype,
+];
+
+const FUNCTION_TARGET: &[AttrTarget] = &[AttrTarget::Function];
+const TEST_TARGET: &[AttrTarget] = &[AttrTarget::Test];
+const MODULE_TARGET: &[AttrTarget] = &[AttrTarget::Module];
+
+/// The valid attributes, in the order a reference lists them. The single source
+/// of truth: a name absent here is rejected where it is written.
+pub const ATTRIBUTES: &[AttributeSchema] = &[
+    AttributeSchema {
+        name: ALLOC,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::OneString,
+        summary: "the allocator this entry point installs",
+    },
+    AttributeSchema {
+        name: ALLOW,
+        targets: EVERY_TARGET,
+        args: AttrArgs::Idents,
+        summary: "waive a lint here",
+    },
+    AttributeSchema {
+        name: AMBIENT,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::None,
+        summary: "perform this declaration's effects without declaring them",
+    },
+    AttributeSchema {
+        name: BENIGN,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Words,
+        summary: "effects a caller need not declare onward",
+    },
+    AttributeSchema {
+        name: CANONICAL,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Strings,
+        summary: "the Component Model canonical built-in this lowers to",
+    },
+    AttributeSchema {
+        name: CM,
+        targets: CM_TARGET,
+        args: AttrArgs::Read("the CM-side identifier, with an optional `linearity = \"…\"`"),
+        summary: "this declaration's identity at the Component Model boundary",
+    },
+    AttributeSchema {
+        name: CM_HOST_IMPORTS,
+        targets: MODULE_TARGET,
+        args: AttrArgs::Strings,
+        summary: "the host capabilities an imported component itself imports",
+    },
+    AttributeSchema {
+        name: CM_PARAMS,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Strings,
+        summary: "the CM-side parameter names",
+    },
+    AttributeSchema {
+        name: COMPILER_ITEM,
+        targets: COMPILER_ITEM_TARGET,
+        args: AttrArgs::OneString,
+        summary: "bind this stdlib declaration to the compiler item of that name",
+    },
+    AttributeSchema {
+        name: EXPECT_TRAP,
+        targets: TEST_TARGET,
+        args: AttrArgs::None,
+        summary: "the test passes when its body traps",
+    },
+    AttributeSchema {
+        name: EXPORT,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::None,
+        summary: "a raw Wasm export, and so an export-boundary root",
+    },
+    AttributeSchema {
+        name: EXPORT_NAME,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::OneString,
+        summary: "the name this function is exported under",
+    },
+    AttributeSchema {
+        name: GENERATED,
+        targets: MODULE_TARGET,
+        args: AttrArgs::Read("`by = \"…\"` and `sources = [\"…\"]` metadata"),
+        summary: "the file is machine-generated",
+    },
+    AttributeSchema {
+        name: IMMEDIATE,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read("one parameter name, unquoted"),
+        summary: "the parameter lowers to a Wasm immediate",
+    },
+    AttributeSchema {
+        name: INLINE,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::OptionalWords,
+        summary: "how the inliner should treat this function",
+    },
+    AttributeSchema {
+        name: NO_PRELUDE,
+        targets: MODULE_TARGET,
+        args: AttrArgs::None,
+        summary: "the file imports no prelude",
+    },
+    AttributeSchema {
+        name: PARAM,
+        targets: &[AttrTarget::Global],
+        args: AttrArgs::Read("`name = \"…\"` and `from_env = \"…\"`"),
+        summary: "the global is a build input",
+    },
+    AttributeSchema {
+        name: RESULT,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read("`owned`, or `part_of = param`"),
+        summary: "what the returned storage belongs to",
+    },
+    AttributeSchema {
+        name: RETAIN,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::Read("a parameter name, with an optional `into = param`"),
+        summary: "what this declaration retains a reference to",
+    },
+    AttributeSchema {
+        name: SECRET,
+        targets: &[AttrTarget::StructField],
+        args: AttrArgs::None,
+        summary: "the field's value stays out of debug output",
+    },
+    AttributeSchema {
+        name: STDLIB,
+        targets: MODULE_TARGET,
+        args: AttrArgs::OneString,
+        summary: "the bundled stdlib path this file is",
+    },
+    AttributeSchema {
+        name: SYNOPSIS,
+        targets: TEST_TARGET,
+        args: AttrArgs::None,
+        summary: "`wado doc` renders this test as the module's synopsis",
+    },
+    AttributeSchema {
+        name: TIMEOUT_MS,
+        targets: TEST_TARGET,
+        args: AttrArgs::OneNumber,
+        summary: "how long the test may run",
+    },
+    AttributeSchema {
+        name: TODO,
+        targets: &[AttrTarget::Module, AttrTarget::Test],
+        args: AttrArgs::None,
+        summary: "the tests are expected to fail until the work lands",
+    },
+    AttributeSchema {
+        name: UNAVAILABLE,
+        targets: FUNCTION_TARGET,
+        args: AttrArgs::OneString,
+        summary: "the name is reserved, and why a call cannot have it",
+    },
+    AttributeSchema {
+        name: WASM_MODULE,
+        targets: MODULE_TARGET,
+        args: AttrArgs::OneString,
+        summary: "the core wasm module name this file imports memory from",
+    },
+    AttributeSchema {
+        name: WIRE,
+        targets: WIRE_TARGET,
+        args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
+        summary: "how serialization spells this declaration",
+    },
+];
+
+/// The schema for `name`, or `None` where no attribute is written that way.
+#[must_use]
+pub fn lookup(name: &str) -> Option<&'static AttributeSchema> {
+    ATTRIBUTES.iter().find(|schema| schema.name == name)
+}
+
+/// Why an attribute as written is not the one the schema describes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AttributeFault {
+    /// No attribute is written that way.
+    Unknown,
+    /// Written somewhere the attribute does not belong.
+    Misplaced {
+        target: AttrTarget,
+        schema: &'static AttributeSchema,
+    },
+    /// Written with `#[…]` where it takes `#![…]`, or the other way round.
+    Position {
+        target: AttrTarget,
+        schema: &'static AttributeSchema,
+    },
+    /// The wrong number of arguments, or the wrong kind.
+    Arguments { schema: &'static AttributeSchema },
+}
+
+impl AttributeFault {
+    /// The sentence this fault reports.
+    #[must_use]
+    pub fn message(&self, name: &str) -> String {
+        match self {
+            Self::Unknown => format!("unknown attribute: `{name}`"),
+            Self::Misplaced { target, schema } => format!(
+                "`{name}` does not belong on {}; it belongs on {}",
+                target.describe_one(),
+                list_targets(schema.targets)
+            ),
+            Self::Position { target, schema } => {
+                if target.is_inner() {
+                    format!(
+                        "`#![{name}]` does not belong to the module; write `#[{name}]` on {}",
+                        list_targets(schema.targets)
+                    )
+                } else {
+                    format!(
+                        "`#[{name}]` belongs to the module — {}; write `#![{name}]` at the top of the file",
+                        schema.summary
+                    )
+                }
+            }
+            Self::Arguments { schema } => {
+                format!("`{name}` takes {}", schema.args.describe())
+            }
+        }
+    }
+}
+
+/// The targets a diagnostic lists, as prose.
+fn list_targets(targets: &[AttrTarget]) -> String {
+    if targets.len() == EVERY_TARGET.len() {
+        return "any declaration".to_string();
+    }
+    let mut out = String::new();
+    for (index, target) in targets.iter().enumerate() {
+        if index > 0 {
+            out.push_str(if index + 1 == targets.len() {
+                " or "
+            } else {
+                ", "
+            });
+        }
+        out.push_str(&target.describe_one());
+    }
+    out
+}
+
+/// What is wrong with an attribute named `name` carrying `args` at `target`,
+/// where a central rule decides. `None` means the schema admits it.
+#[must_use]
+pub fn check(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<AttributeFault> {
+    let Some(schema) = lookup(name) else {
+        return Some(AttributeFault::Unknown);
+    };
+    if !schema.targets.contains(&target) {
+        // An attribute that belongs only in the other position is written in
+        // the wrong one, which says what to write instead of where.
+        let wrong_position = schema
+            .targets
+            .iter()
+            .all(|admitted| admitted.is_inner() != target.is_inner());
+        let fault = if wrong_position {
+            AttributeFault::Position { target, schema }
+        } else {
+            AttributeFault::Misplaced { target, schema }
+        };
+        return Some(fault);
+    }
+    if schema.args.admits(args) {
+        return None;
+    }
+    Some(AttributeFault::Arguments { schema })
+}
+
+/// One attribute as written, whatever position it sits in.
+#[derive(Debug, Clone, Copy)]
+pub struct WrittenAttribute<'a> {
+    pub name: &'a str,
+    pub args: &'a [AttrArg],
+    pub target: AttrTarget,
+    pub span: Span,
+}
+
+impl<'a> WrittenAttribute<'a> {
+    fn outer(attr: &'a Attribute, target: AttrTarget) -> Self {
+        Self {
+            name: &attr.name,
+            args: &attr.args,
+            target,
+            span: attr.span,
+        }
+    }
+
+    fn inner(attr: &'a InnerAttribute) -> Self {
+        Self {
+            name: &attr.name,
+            args: &attr.args,
+            target: AttrTarget::Module,
+            span: attr.span,
+        }
+    }
+}
+
+/// Call `f` for every attribute written in `module`, with the place it sits.
+pub fn for_each_attribute(module: &Module, mut f: impl FnMut(WrittenAttribute<'_>)) {
+    for attr in module.inner_attributes() {
+        f(WrittenAttribute::inner(attr));
+    }
+    let mut walk = AttributeWalk { report: &mut f };
+    for item in &module.items {
+        walk.visit_item(item);
+    }
+}
+
+struct AttributeWalk<'a, F: FnMut(WrittenAttribute<'_>)> {
+    report: &'a mut F,
+}
+
+impl<F: FnMut(WrittenAttribute<'_>)> AttributeWalk<'_, F> {
+    fn report(&mut self, attrs: &[Attribute], target: AttrTarget) {
+        for attr in attrs {
+            (self.report)(WrittenAttribute::outer(attr, target));
+        }
+    }
+}
+
+impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
+    fn visit_item(&mut self, item: &Item) {
+        match item {
+            Item::Struct(decl) => {
+                self.report(&decl.attrs, AttrTarget::Struct);
+                for field in &decl.fields {
+                    self.report(&field.attrs, AttrTarget::StructField);
+                }
+            }
+            Item::Enum(decl) => {
+                self.report(&decl.attrs, AttrTarget::Enum);
+                for case in &decl.cases {
+                    self.report(&case.attrs, AttrTarget::EnumCase);
+                }
+            }
+            Item::Variant(decl) => {
+                self.report(&decl.attrs, AttrTarget::Variant);
+                for case in &decl.cases {
+                    self.report(&case.attrs, AttrTarget::VariantCase);
+                }
+            }
+            Item::Flags(decl) => {
+                if let Some(attrs) = &decl.attributes {
+                    self.report(attrs, AttrTarget::Flags);
+                }
+                for member in &decl.flags {
+                    self.report(&member.attrs, AttrTarget::FlagsVariant);
+                }
+            }
+            Item::Newtype(decl) => self.report(&decl.attrs, AttrTarget::Newtype),
+            Item::TupleTypeDecl(decl) => self.report(&decl.attrs, AttrTarget::TupleType),
+            Item::BuiltinTypeDecl(decl) => self.report(&decl.attrs, AttrTarget::BuiltinType),
+            Item::Trait(decl) => self.report(&decl.attrs, AttrTarget::Trait),
+            Item::Interface(decl) => self.report(&decl.attrs, AttrTarget::Interface),
+            Item::Resource(decl) => self.report(&decl.attrs, AttrTarget::Resource),
+            Item::World(decl) => {
+                self.report(&decl.attrs, AttrTarget::World);
+                for export in &decl.exports {
+                    if let WorldExport::Function(func) = export {
+                        for param in &func.params {
+                            self.report(&param.attrs, AttrTarget::Param);
+                        }
+                    }
+                }
+            }
+            Item::Test(decl) => self.report(&decl.attributes, AttrTarget::Test),
+            Item::Global(decl) => self.report(&decl.attributes, AttrTarget::Global),
+            Item::Function(_) | Item::Impl(_) | Item::Use(_) | Item::Error(_) => {}
+        }
+        walk_item(self, item);
+    }
+
+    fn visit_function(&mut self, func: &Function) {
+        self.report(&func.attrs, AttrTarget::Function);
+        for param in &func.params {
+            self.report(&param.attrs, AttrTarget::Param);
+        }
+        walk_function(self, func);
+    }
+
+    fn visit_generic_params(&mut self, params: &[GenericParam]) {
+        for param in params {
+            self.report(&param.attrs, AttrTarget::GenericParam);
+        }
+        walk_generic_params(self, params);
+    }
+
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if let Stmt::Let(let_stmt) = stmt {
+            self.report(&let_stmt.attrs, AttrTarget::Let);
+        }
+        walk_stmt(self, stmt);
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if let Expr::Closure(closure) = expr {
+            for param in &closure.params {
+                self.report(&param.attrs, AttrTarget::Param);
+            }
+        }
+        walk_expr(self, expr);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn names_are_unique_and_sorted_case_insensitively() {
+        let names: Vec<String> = ATTRIBUTES
+            .iter()
+            .map(|schema| schema.name.to_lowercase())
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(names, sorted, "ATTRIBUTES must be unique and sorted");
+    }
+
+    #[test]
+    fn every_schema_names_a_target() {
+        for schema in ATTRIBUTES {
+            assert!(
+                !schema.targets.is_empty(),
+                "`{}` belongs nowhere",
+                schema.name
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_name_is_rejected() {
+        assert_eq!(
+            check("expect_trab", &[], AttrTarget::Test),
+            Some(AttributeFault::Unknown)
+        );
+    }
+
+    #[test]
+    fn known_name_in_the_wrong_place_is_rejected() {
+        let fault = check(EXPECT_TRAP, &[], AttrTarget::Struct);
+        assert!(matches!(fault, Some(AttributeFault::Misplaced { .. })));
+    }
+
+    #[test]
+    fn inner_only_attribute_written_outer_names_the_position() {
+        let fault = check(NO_PRELUDE, &[], AttrTarget::Function);
+        assert!(matches!(fault, Some(AttributeFault::Position { .. })));
+    }
+
+    #[test]
+    fn argument_shape_is_checked_where_the_schema_fixes_it() {
+        assert!(check(EXPECT_TRAP, &[], AttrTarget::Test).is_none());
+        assert!(
+            check(
+                EXPECT_TRAP,
+                &[AttrArg::Ident("always".to_string())],
+                AttrTarget::Test
+            )
+            .is_some()
+        );
+        assert!(
+            check(
+                TIMEOUT_MS,
+                &[AttrArg::Number("5000".to_string())],
+                AttrTarget::Test
+            )
+            .is_none()
+        );
+        assert!(
+            check(
+                TIMEOUT_MS,
+                &[AttrArg::Str("5000".to_string())],
+                AttrTarget::Test
+            )
+            .is_some()
+        );
+    }
+
+    #[test]
+    fn a_read_shape_is_left_to_its_reader() {
+        assert!(check(PARAM, &[], AttrTarget::Global).is_none());
+        assert!(
+            check(
+                PARAM,
+                &[AttrArg::KeyValue(
+                    "from_env".to_string(),
+                    "PORT".to_string()
+                )],
+                AttrTarget::Global
+            )
+            .is_none()
+        );
+    }
+}
