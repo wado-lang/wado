@@ -1216,6 +1216,29 @@ pub(super) fn format_operator_not_applicable(
 }
 
 impl TypeError {
+    /// The one sentence every use site says when a type parameter goes
+    /// unanswered. `owner` names the declaration and `turbofish` shows the
+    /// spelling that would answer it, both already backticked.
+    pub(super) fn cannot_infer(
+        names: &[String],
+        owner: &str,
+        turbofish: &str,
+        span: Span,
+    ) -> TypeError {
+        let named = names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {named} of {owner}; \
+                 add a turbofish ({turbofish}) or a type annotation"
+            ),
+            span,
+        }
+    }
+
     /// This error as its `(code, message, span)` triple, which is what
     /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {

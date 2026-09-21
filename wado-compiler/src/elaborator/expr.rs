@@ -4700,9 +4700,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .and_then(|def| self.declared_default_type_arg(def, slot, &inferred[..slot]))
                 .unwrap_or(decl_param);
         }
+        self.report_uninferred_struct_type_args(&struct_info, &inferred, span);
         self.record_instantiation(&inst, &inferred);
         self.blame_unsolved(&inst, &inferred);
         inferred
+    }
+
+    /// Report a struct literal's type parameter that nothing settled, as a call
+    /// site reports its own.
+    fn report_uninferred_struct_type_args(
+        &mut self,
+        struct_info: &StructFieldInfo,
+        inferred: &[TypeId],
+        span: Span,
+    ) {
+        // A body that declares the same parameter is forwarding its own, not
+        // leaving one unanswered: `List { … }` inside `impl<T> List<T>`.
+        let scope_params = self.scope_type_param_ids();
+        let names: Vec<String> = struct_info
+            .type_param_type_ids
+            .iter()
+            .zip(inferred.iter())
+            // The declaration's own parameter standing as its own answer is what
+            // marks a slot unsettled. An answer that is some *other* variable is
+            // still open, and a later constraint fills it (`Paired { v: null, k:
+            // 1 }` settles `T` from `k` after `v` left a hole).
+            .filter(|&(&decl_param, &answer)| {
+                answer == decl_param && !scope_params.contains(&answer)
+            })
+            .filter_map(|(&decl_param, _)| {
+                util::bound_param_name(self.tysys.type_table.borrow().get(decl_param)).cloned()
+            })
+            .collect();
+        if names.is_empty() {
+            return;
+        }
+        let struct_name = &struct_info.name;
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("struct `{struct_name}`"),
+            &format!("`{struct_name}::<...> {{ … }}`"),
+            span,
+        ));
     }
 
     /// Check if a type contains a `TypePack` (variadic pack parameter).
