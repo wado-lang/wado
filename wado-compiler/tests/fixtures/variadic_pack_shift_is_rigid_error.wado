@@ -1,0 +1,16 @@
+//! One pack, same rule: a fixed element ahead of the pack is part of the
+//! layout, so `[..a]` does not satisfy `[i32, ..A]`. The check deferred on
+//! anything carrying a pack, so this reached codegen as invalid Wasm.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn shifted<..A>(a: [..A]) -> i32 {
+    let x: [i32, ..A] = [..a];
+    return 0;
+}
+
+test "a fixed element ahead of the pack is not optional" {
+    assert shifted([true]) == 0;
+}
+
+__DATA__
+{"compile_error": "type mismatch: expected '[i32, ..A]', found '[..A]'"}

@@ -81,7 +81,8 @@ impl Cmd {
 
     const fn args(self) -> &'static str {
         match self {
-            Self::Run | Self::Serve | Self::Check => "[options] [file.wado]",
+            Self::Run | Self::Serve => "[options] [file.wado]",
+            Self::Check => "[options] [file.wado | dir]",
             Self::Compile => "[options] <file.wado>",
             Self::Wit => "[options] [file.wado | dir]",
             Self::Test => "[options] [files or dirs...]",

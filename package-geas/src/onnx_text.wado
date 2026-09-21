@@ -1,10 +1,10 @@
 //! An ONNX graph as the textual format states it, read off the parse tree.
 //! Dimensions are extents without identity, since an ONNX shape is positional.
 
-// The parser Gale builds from `../grammar/Onnx.g4`, imported as the committed
-// module rather than through the grammar: a Kiln generator cannot itself run
-// one. `onnx_grammar_test.wado` holds the invocation that keeps the two equal.
-use onnx from "../generated/onnx.wado";
+use onnx from "../grammar/Onnx.g4"
+    with {
+        generator: { module: "../../package-gale/src/generator.wado" },
+    };
 
 /// One dimension as the file spells it. `Unknown` is ONNX's `?`, a dimension
 /// the exporter left open and no symbol stands for.

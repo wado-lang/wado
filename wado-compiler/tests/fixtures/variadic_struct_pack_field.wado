@@ -1,0 +1,38 @@
+//! A struct whose only type parameter is a pack. The field's value settles the
+//! pack as a whole, so a one-element tuple gives `One<[i32]>` and not
+//! `One<i32>`.
+
+struct One<..A> {
+    a: [..A],
+}
+
+fn second(o: One<[i32, bool]>) -> bool {
+    return o.a.1;
+}
+
+test "a one-element pack field settles the pack, not its element" {
+    let t: One<[i32]> = One { a: [1] };
+    assert t.a.0 == 1;
+}
+
+test "a pack field is inferred from the literal" {
+    let t = One { a: [1, true] };
+    assert t.a.0 == 1;
+    assert t.a.1 == true;
+}
+
+test "a pack field reaches a concrete parameter" {
+    let t: One<[i32, bool]> = One { a: [1, true] };
+    assert second(t) == true;
+}
+
+struct Tagged<T, ..A> {
+    tag: T,
+    rest: [..A],
+}
+
+test "a scalar parameter and a pack in one struct" {
+    let t = Tagged { tag: "id", rest: [1, true] };
+    assert t.tag == "id";
+    assert t.rest.1 == true;
+}

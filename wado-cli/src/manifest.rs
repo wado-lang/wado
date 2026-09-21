@@ -11,7 +11,7 @@ use crate::args::CliExit;
 const MANIFEST_FILENAME: &str = "wado.toml";
 
 /// A discovered manifest with its root directory.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ProjectManifest {
     /// The parsed manifest.
     pub manifest: Manifest,

@@ -1,0 +1,29 @@
+//! A pack consumes a dense slot whatever it is bounded by, which `fn`-bound
+//! scalars do not. Two places open-coded that rule without the pack exemption
+//! `GenericParam::is_real_type_param` states, so `..F: fn(...)` never became a
+//! `TirTypeParam` and reached codegen unsubstituted — with or without a scalar
+//! beside it. See docs/wep-2026-03-14-variadic-type-parameters.md.
+
+fn count<..F: fn(i32) -> i32>(fs: [..F]) -> i32 {
+    return fs.len();
+}
+
+fn with_scalar<..F: fn(i32) -> i32, X>(fs: [..F], x: X) -> i32 {
+    return fs.len();
+}
+
+fn scalar_first<X, ..F: fn(i32) -> i32>(x: X, fs: [..F]) -> i32 {
+    return fs.len();
+}
+
+test "a fn-bounded pack keeps its slot" {
+    assert count([|v: i32| v + 1, |v: i32| v * 2]) == 2;
+}
+
+test "a scalar beside a fn-bounded pack keeps its own" {
+    assert with_scalar([|v: i32| v + 1], "x") == 1;
+    assert scalar_first("x", [|v: i32| v + 1, |v: i32| v * 2]) == 2;
+}
+
+__DATA__
+{"test": {}}

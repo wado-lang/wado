@@ -1438,10 +1438,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         index: usize,
     ) -> Result<TypeId, String> {
         let table = type_table.borrow();
-        let Some(pack_pos) = elements
-            .iter()
-            .position(|&t| matches!(table.get(t), ResolvedType::TypePack { .. }))
-        else {
+        let Some(pack_pos) = elements.iter().position(|&t| table.is_type_pack(t)) else {
             return elements.get(index).copied().ok_or_else(|| {
                 format!(
                     "tuple index {index} out of bounds, tuple has {} elements",
@@ -4850,8 +4847,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .type_table
                     .borrow()
-                    .as_tuple(binding_type)
-                    .unwrap_or_else(|| vec![binding_type]);
+                    .elem_types_or_self(binding_type);
                 for (i, elem) in elems.iter().enumerate() {
                     if let ast::Pattern::Ident { id, name, span } = elem {
                         let elem_type = inner.get(i).copied().unwrap_or(TypeTable::UNKNOWN);
@@ -4904,11 +4900,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if let Expr::Spread(inner, _span) = elem {
                 let spread_type_id = self.resolve_expr(inner, ctx, None);
                 if self.type_contains_pack(spread_type_id) {
-                    // A direct `TypePack` (`[..T::method()]`) or a tuple
-                    // containing one (`[..rest]` where `rest: [..T]`): the
-                    // spread element keeps the spread's own type; monomorphize
-                    // expands it later.
-                    elem_types.push(spread_type_id);
+                    // A tuple carrying packs (`[..rest]` where `rest: [..T]`)
+                    // splices its own elements, so each pack lands directly in
+                    // the literal's type and monomorphize expands it there. A
+                    // bare `TypePack` (`[..T::method()]`) is already one.
+                    elem_types.extend(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .elem_types_or_self(spread_type_id),
+                    );
                 } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
                     // Pack-map `..F::method()` whose return type is
                     // pack-independent: a homogeneous pack of the return type,

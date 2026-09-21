@@ -1,0 +1,20 @@
+//! A generator whose own source is produced by an invocation that reaches back
+//! to it: there is no order to run the two in.
+
+use { Error, OutputFile, Request, Response } from "core:kiln";
+use { answer } from "./loop.spec"
+    with {
+        generator: { module: "./cyclic.wado" },
+    };
+
+export fn generate(req: Request) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let files: List<OutputFile> = [
+        OutputFile {
+            path: "model.wado",
+            content: `pub fn model() -> i32 { return ${answer()}; }\n`,
+            is_entry: true,
+        },
+    ];
+    return Result::Ok(Response { files });
+}

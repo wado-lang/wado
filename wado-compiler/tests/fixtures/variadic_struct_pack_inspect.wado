@@ -1,0 +1,32 @@
+//! Reflection over a struct whose type parameter is a pack. `members()` hands
+//! back one handle per field, each typed by that field — not by the whole
+//! `FieldTypes` tuple.
+
+struct One<..A> {
+    a: [..A],
+}
+
+struct Tagged<T, ..A> {
+    tag: T,
+    rest: [..A],
+}
+
+test "inspect a struct with a pack field" {
+    let t: One<[i32, bool]> = One { a: [1, true] };
+    assert `${t:?}` == "One { a: [1, true] }";
+}
+
+test "inspect a pack field of one element" {
+    let t: One<[i32]> = One { a: [1] };
+    assert `${t:?}` == "One { a: [1] }";
+}
+
+test "inspect a scalar parameter beside a pack" {
+    let t = Tagged { tag: "id", rest: [1, true] };
+    assert `${t:?}` == `Tagged { tag: "id", rest: [1, true] }`;
+}
+
+test "a captured pack struct reaches the assert message" {
+    let t: One<[i32, bool]> = One { a: [1, true] };
+    assert t.a.1 == true;
+}
