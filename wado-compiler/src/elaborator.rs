@@ -2245,8 +2245,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// Register every impl block's associated types before anything in the
-    /// module asks for one. A question about a type is answered by that type,
-    /// so it must not depend on where the answering impl sits in the file.
+    /// module asks for one, so what a type binds a name to does not depend on
+    /// where the answering impl sits in the file.
     pub(super) fn register_module_assoc_types(&mut self, module: &ast::Module) {
         for item in &module.items {
             let ast::Item::Impl(impl_block) = item else {
@@ -2255,15 +2255,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if impl_block.trait_type.is_none() || impl_block.is_synthesize_request {
                 continue;
             }
-            let mut scope = self.enter_impl_scope(impl_block);
-            let trait_name = scope.impl_block_trait_name(impl_block);
-            scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
+            drop(self.enter_impl_scope(impl_block));
         }
     }
 
     /// Bind this impl's associated types against the target and `Self` to it,
     /// so `T::Assoc` is answered by the type rather than by the block in scope.
-    /// Idempotent: the module pre-pass and the body walk each run it.
     pub(super) fn register_impl_assoc_types(
         &mut self,
         impl_block: &ast::ImplBlock,

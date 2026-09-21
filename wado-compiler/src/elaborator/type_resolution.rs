@@ -9,7 +9,6 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::BinderInScope;
 use super::types::TypeError;
-use super::util::bound_param_name;
 use crate::ast;
 use crate::ast::{FunctionType, NamedType, NamespacedGenericType, TraitBound};
 use crate::defs::{DefId, DefKind};
@@ -267,14 +266,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         namespaced: &NamespacedGenericType,
     ) -> TypeId {
-        // A substitution already answered for the base, so the projection
-        // stands on that type. Asked before the namespace is read, because a
-        // spelling the node no longer stands on says nothing about it — and
-        // `Self` is the one a reader would otherwise take for its own.
+        // Asked before the namespace, because a spelling the node no longer
+        // stands on says nothing about it — `Self` least of all.
         if let Some(base) = &namespaced.base {
             let base_type_id = self.resolve_type(base);
-            let base_name =
-                bound_param_name(self.tysys.type_table.borrow().get(base_type_id)).cloned();
+            let base_name = self.tysys.binder_name(base_type_id);
             return self.project_off(base_type_id, base_name, namespaced);
         }
 
@@ -327,10 +323,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             }
             // A parameter standing in for `Self` carries the frame's bounds under
             // its own name, so `Self::Base` at `T: Constrained` asks what `T::Base` asks.
-            let self_param = self.annotate_ctx.trait_ctx.self_type.and_then(|id| {
-                let name = bound_param_name(self.tysys.type_table.borrow().get(id)).cloned();
-                name.map(|name| (id, name))
-            });
+            let self_param = self
+                .annotate_ctx
+                .trait_ctx
+                .self_type
+                .and_then(|id| Some((id, self.tysys.binder_name(id)?)));
             if let Some((self_type, param_name)) = self_param
                 && let Some(projection) =
                     self.make_frame_projection(self_type, &param_name, &namespaced.name)
@@ -494,12 +491,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // `Self::Assoc` and `T::Assoc` project through a type rather
                 // than naming a declaration, and the projection is what
                 // answers for them.
-                let projects = namespaced.namespace == "Self"
-                    || self
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_params
-                        .contains_key(&namespaced.namespace);
+                let projects = namespaced.spelled_namespace().is_none_or(|ns| {
+                    ns == "Self" || self.annotate_ctx.trait_ctx.type_params.contains_key(ns)
+                });
                 if !projects
                     && head(
                         self,
@@ -1195,7 +1189,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .flat_map(|bound| &bound.assoc_types)
             .filter_map(|binding| match &binding.ty {
-                ast::Type::NamespacedGeneric(ns) if ns.namespace == "Self" => {
+                ast::Type::NamespacedGeneric(ns) if ns.spelled_namespace() == Some("Self") => {
                     Some((binding.name.clone(), ns.name.clone()))
                 }
                 _ => None,

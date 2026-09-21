@@ -313,10 +313,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let mut scope = self.enter_impl_scope(impl_block);
 
                 if impl_block.trait_type.is_some() {
-                    // Also binds `Self` to the target, which a clause writing
-                    // `Self::Assoc` resolves through.
-                    let trait_name = scope.impl_block_trait_name(impl_block);
-                    scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
                     scope.enforce_impl_assoc_type_bounds(impl_block);
                     scope.enforce_impl_supertraits(impl_block);
                 }

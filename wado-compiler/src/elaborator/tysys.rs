@@ -21,6 +21,7 @@ use super::trait_env::TraitEnv;
 use super::types::{
     EnumInfo, FlagsInfo, GenericNewtypeInfo, ResourceInfo, StructFieldInfo, VariantInfo,
 };
+use super::util::bound_param_name;
 use crate::ast::{AstId, GenericParam};
 use crate::defs::DefId;
 use crate::elaborator::sig;
@@ -464,6 +465,12 @@ impl TypeSystem {
             // Other types: no substitution
             _ => type_id,
         }
+    }
+
+    /// The name the type parameter or pack in this slot carries, `None` for a
+    /// slot holding anything else.
+    pub(crate) fn binder_name(&self, type_id: TypeId) -> Option<String> {
+        bound_param_name(self.type_table.borrow().get(type_id)).cloned()
     }
 
     /// Render a type as a user-facing Wado type string (used in diagnostics

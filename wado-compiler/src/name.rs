@@ -2586,16 +2586,14 @@ pub enum TypeHead {
     /// `Head<a,b>` like every other instantiated shape, which is what a
     /// `Builtin("[]")` carrying arguments would render as.
     Tuple,
-    /// An associated type of another name (`T::Base`). Its own head, so
-    /// substituting the base reaches it and the projection answers a type once
+    /// An associated type of another name (`T::Base`), answering a type once
     /// the base is concrete.
     Projection {
         base: Box<FqTypeName>,
         assoc: String,
-        /// The trait declaring `assoc`. Part of the identity, and of what a
-        /// mangle embeds: two traits declaring one name on a type bind it to
-        /// different types, and a rendering dropping this collapses them into
-        /// one key (WEP-2026-08-12).
+        /// The trait declaring `assoc`, part of the identity: two traits
+        /// declaring one name on a type bind it to different types
+        /// (WEP-2026-08-12).
         owning_trait: DeclaredHead,
     },
 }
@@ -2742,12 +2740,7 @@ impl FqTypeName {
     /// The associated type `assoc` of `base`, as `owning_trait` declares it
     /// (`T::Base`).
     #[must_use]
-    pub fn projection(
-        base: FqTypeName,
-        assoc: &str,
-        defs: &DefTable,
-        owning_trait: DefId,
-    ) -> Self {
+    pub fn projection(base: FqTypeName, assoc: &str, defs: &DefTable, owning_trait: DefId) -> Self {
         Self::of_head_kind(TypeHead::Projection {
             base: Box::new(base),
             assoc: assoc.to_string(),
@@ -2942,34 +2935,37 @@ impl FqTypeName {
         // A reference's pointee substitutes on its own: `&T` is `T` under a
         // prefix, and `old` naming the pointee must reach it however many
         // prefixes stand in front.
-        if let Some((outer, inner)) = self.reference.split_first() {
-            let pointee = FqTypeName {
-                reference: inner.to_vec(),
-                head: self.head.clone(),
-                args: self.args.clone(),
-            };
-            return pointee.substitute(old, new).with_reference(*outer);
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.substitute(old, new).with_reference(outer);
         }
         self.descend(&|inner| inner.substitute(old, new))
     }
 
-    /// This name with `at` applied at every position a type stands in. A
-    /// position `at` answers for is replaced whole, and `at` sees it stripped
-    /// of any `&` prefix, which is then put back.
+    /// This name with `at` applied at every position a type stands in, a
+    /// position it answers for replaced whole.
     #[must_use]
     pub fn rewrite(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> FqTypeName {
-        if let Some((outer, inner)) = self.reference.split_first() {
-            let pointee = FqTypeName {
-                reference: inner.to_vec(),
-                head: self.head.clone(),
-                args: self.args.clone(),
-            };
-            return pointee.rewrite(at).with_reference(*outer);
+        if let Some((outer, pointee)) = self.split_reference() {
+            return pointee.rewrite(at).with_reference(outer);
         }
         match at(self) {
             Some(replacement) => replacement,
             None => self.descend(&|inner| inner.rewrite(at)),
         }
+    }
+
+    /// The outermost `&` prefix and what it points at, `None` for a name
+    /// carrying no prefix.
+    fn split_reference(&self) -> Option<(RefKind, FqTypeName)> {
+        let (outer, inner) = self.reference.split_first()?;
+        Some((
+            *outer,
+            FqTypeName {
+                reference: inner.to_vec(),
+                head: self.head.clone(),
+                args: self.args.clone(),
+            },
+        ))
     }
 
     /// This name rebuilt with `at` applied to each name it holds: its type
@@ -2994,9 +2990,8 @@ impl FqTypeName {
         }
     }
 
-    ///
-    /// Modules dropped from the head and,
-    /// recursively, from every type argument. Diagnostics only.
+    /// The spelling a diagnostic prints: modules dropped from the head and,
+    /// recursively, from every type argument.
     #[must_use]
     pub fn to_display(&self) -> String {
         let mut out = String::new();

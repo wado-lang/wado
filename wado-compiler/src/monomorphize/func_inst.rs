@@ -3388,13 +3388,10 @@ impl Monomorphizer {
 
     /// One trait argument re-spelled at the instance, at every position a type
     /// stands in: `Make<List<T::Base>>` under `T = Bag` names `Make<List<String>>`.
-    /// A projection is answered by the associated type the binding carries,
-    /// asked of the trait that declares it so that two traits declaring one
-    /// name stay apart (WEP-2026-08-12).
     ///
-    /// A position whose base the frame does not bind stays as written: the
-    /// instance is still inside a template, and its name is settled by the
-    /// substitution that does bind it.
+    /// A position the frame does not bind stays as written: the instance is
+    /// still inside a template, and the substitution that does bind it settles
+    /// its name.
     fn trait_arg_at_instance(
         arg: &FqTypeName,
         bound: &impl Fn(&str) -> Option<TypeId>,

@@ -79,10 +79,10 @@ bound carries the projection with it, so `T: Constrained` requires
 `T: Make<T::Base>`, and a call through it lands on the impl the projection
 names ([Trait Resolution](./wep-2026-09-01-trait-resolution.md)).
 
-A question about a type is answered by the type. The obligation an impl owes is
-therefore read from what every impl on the target binds, not from what the block
-under check happens to write, so a clause reached through another trait is
-answered the same as one the block wrote itself.
+The obligation an impl owes is read from what every impl on the target binds,
+not from what the block under check happens to write. A clause reached through
+another trait is therefore answered the same as one the block wrote itself: a
+question about a type is answered by the type.
 
 The closure is stored in the declaring trait's parameter space, which is not the
 reading site's. The index therefore hands out nothing raw: a reader names the

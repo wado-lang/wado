@@ -3512,8 +3512,7 @@ impl Type {
     }
 
     /// Whether a substitution left a projection off a type anywhere in here.
-    /// No spelling denotes such a type, so an argument carrying one has to be
-    /// resolved rather than read as written.
+    /// No spelling denotes one, so it has to be resolved rather than read.
     #[must_use]
     pub fn projects_off_a_type(&self) -> bool {
         match self {
@@ -3623,9 +3622,8 @@ pub struct NamespacedGenericType {
     pub id: AstId,
     /// Namespace (e.g., "json" for `json::Value`, or a type parameter `T`)
     pub namespace: String,
-    /// The type a substitution put where [`Self::namespace`] was written. The
-    /// parser never sets it: replacing the parameter in `T::Assoc` leaves a
-    /// projection off a type, which no spelling denotes.
+    /// The type a substitution put where [`Self::namespace`] was written. Only
+    /// a substitution sets it, since no spelling denotes a projection off a type.
     pub base: Option<Type>,
     /// Type name (e.g., "Value")
     pub name: String,
@@ -3635,6 +3633,15 @@ pub struct NamespacedGenericType {
     /// Generic arguments
     pub args: Vec<Type>,
     pub span: Span,
+}
+
+impl NamespacedGenericType {
+    /// The namespace as the spelling names it, `None` once [`Self::base`]
+    /// stands there and the spelling names nothing.
+    #[must_use]
+    pub fn spelled_namespace(&self) -> Option<&str> {
+        self.base.is_none().then_some(self.namespace.as_str())
+    }
 }
 
 #[derive(Debug, Clone)]

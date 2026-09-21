@@ -24,7 +24,7 @@ fn drive<..P, T: Sink<Cb = fn([..P]) -> i32>>(t: &T, cb: T::Cb) -> i32 {
     return t.run(cb);
 }
 
-test "an impl binding the constraint to another type is rejected" {
+test "a pack in a constraint is rejected at the call, not at the bound" {
     assert drive(&Holder { n: 7 }, "ab") == 2;
 }
 

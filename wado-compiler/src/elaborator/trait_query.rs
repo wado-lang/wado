@@ -2713,10 +2713,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
     }
 
-    /// A bound's argument that projects names no type by its spelling, so it is
-    /// named from what the frame resolved it to: `Make<Self::Base>` read at
-    /// `T: Constrained` reaches `Make<T::Base>`, and `Make<X::Item>` read at
-    /// `T: Constrained<Feed>` reaches what `Feed` binds `Item` to.
+    /// `fq` with each argument that names no type taken from the slot the bound
+    /// fills: `Make<X::Item>` at `T: Constrained<Feed>` names what `Feed` binds
+    /// `Item` to.
     fn trait_named_from_slots(
         &self,
         fq: FqTraitName,
@@ -2834,7 +2833,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn projects_off_self(&mut self, ty: &ast::Type, binding: SelfBinding) -> bool {
         match ty {
             ast::Type::NamespacedGeneric(ns) => {
-                (ns.namespace != "Self" || self.project_off_self(binding, &ns.name).is_some())
+                (ns.spelled_namespace() != Some("Self")
+                    || self.project_off_self(binding, &ns.name).is_some())
                     && self.all_project_off_self(&ns.args, binding)
             }
             ast::Type::Generic(generic) => {

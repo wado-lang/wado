@@ -201,9 +201,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
-    /// A scope holding `impl_block`'s own parameters and nothing the caller
+    /// A scope answering `impl_block`'s own names and nothing the caller
     /// brought: an impl block names its parameters in `impl<...>` and inherits
-    /// none.
+    /// none, and its associated types and `Self` answer inside it.
     pub(super) fn enter_impl_scope(
         &mut self,
         impl_block: &ast::ImplBlock,
@@ -213,6 +213,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         scope.register_impl_block_params(impl_block);
+        if impl_block.trait_type.is_some() {
+            let trait_name = scope.impl_block_trait_name(impl_block);
+            scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
+        }
         scope
     }
 
