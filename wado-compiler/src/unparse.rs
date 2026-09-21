@@ -3040,34 +3040,10 @@ pub fn get_item_id(item: &Item) -> AstId {
     }
 }
 
-/// The attributes written above `item`. Exhaustive on purpose: a new item kind
-/// that carries attributes must say so here, or the formatter drops them.
-fn item_attrs(item: &Item) -> &[Attribute] {
-    match item {
-        Item::Struct(s) => &s.attrs,
-        Item::Enum(e) => &e.attrs,
-        Item::Variant(v) => &v.attrs,
-        Item::Interface(e) => &e.attrs,
-        Item::Resource(r) => &r.attrs,
-        Item::Function(f) => &f.attrs,
-        Item::Newtype(t) => &t.attrs,
-        Item::World(w) => &w.attrs,
-        Item::Global(g) => &g.attributes,
-        Item::Flags(f) => f.attributes.as_deref().unwrap_or(&[]),
-        Item::Trait(t) => &t.attrs,
-        Item::TupleTypeDecl(d) => &d.attrs,
-        Item::BuiltinTypeDecl(d) => &d.attrs,
-        Item::Test(t) => &t.attributes,
-        Item::Impl(i) => &i.attrs,
-        Item::Use(u) => &u.attrs,
-        Item::Error(_) => &[],
-    }
-}
-
 /// The first source line of an item, its attributes included, so a doc comment
 /// above an attribute does not grow a blank line on every formatting pass.
 fn get_item_first_line(item: &Item) -> usize {
-    effective_start_line(item_attrs(item), get_item_span(item).line)
+    effective_start_line(item.attrs(), get_item_span(item).line)
 }
 
 fn get_stmt_span(stmt: &Stmt) -> Span {

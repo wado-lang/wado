@@ -3703,7 +3703,8 @@ fn test_format_keeps_an_attribute_on_a_local_item() {
 }
 
 /// `impl`, `use`, and an impl's associated members each keep their own
-/// attributes through a format, rather than losing the line.
+/// attributes through a format, rather than losing the line. The second item's
+/// blank-line anchor is its attribute, which is what reads `Item::attrs()`.
 #[test]
 fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
     let source = concat!(

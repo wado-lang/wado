@@ -1362,7 +1362,8 @@ impl Item {
         }
     }
 
-    /// The attributes written before the item.
+    /// The attributes written before the item. Exhaustive on purpose: a new
+    /// item kind that carries attributes must name them here to be read at all.
     pub fn attrs(&self) -> &[Attribute] {
         match self {
             Item::Function(d) => &d.attrs,
@@ -1374,14 +1375,14 @@ impl Item {
             Item::Interface(d) => &d.attrs,
             Item::Resource(d) => &d.attrs,
             Item::TupleTypeDecl(d) => &d.attrs,
+            Item::BuiltinTypeDecl(d) => &d.attrs,
+            Item::Use(d) => &d.attrs,
+            Item::Impl(d) => &d.attrs,
+            Item::World(d) => &d.attrs,
+            Item::Test(d) => &d.attributes,
             Item::Global(d) => &d.attributes,
             Item::Flags(d) => d.attributes.as_deref().unwrap_or_default(),
-            Item::BuiltinTypeDecl(_)
-            | Item::Use(_)
-            | Item::Impl(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Error(_) => &[],
+            Item::Error(_) => &[],
         }
     }
 }
