@@ -2050,9 +2050,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let inherited: Vec<DeclaredAssocType> = self
             .tysys
             .trait_env
-            .supertrait_closure_at(key, &[])
-            .iter()
-            .filter_map(|bound| Some((bound.decl, self.trait_decl_header_of(&bound.decl)?)))
+            .supertrait_decls(key)
+            .filter_map(|decl| Some((decl, self.trait_decl_header_of(&decl)?)))
             .flat_map(|(decl, super_header)| {
                 super_header
                     .assoc_types

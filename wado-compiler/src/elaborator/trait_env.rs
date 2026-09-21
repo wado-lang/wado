@@ -1884,12 +1884,17 @@ impl TraitEnv {
     pub(super) fn supertrait_declaring_assoc_type(
         &self,
         key: &DefId,
-        written: &[ast::Type],
         assoc_name: &str,
     ) -> Option<DefId> {
-        self.supertrait_closure_at(key, written)
-            .into_iter()
-            .find(|inherited| self.declares_assoc_type(&inherited.decl, assoc_name))
+        self.supertrait_decls(key)
+            .find(|decl| self.declares_assoc_type(decl, assoc_name))
+    }
+
+    /// Which traits `key`'s transitive supertraits are. The clause's arguments
+    /// do not change that, so no caller of this owes them.
+    pub(super) fn supertrait_decls(&self, key: &DefId) -> impl Iterator<Item = DefId> + '_ {
+        self.supertrait_closure(key)
+            .iter()
             .map(|inherited| inherited.decl)
     }
 
@@ -1898,13 +1903,12 @@ impl TraitEnv {
     pub(super) fn trait_declaring_assoc_type(
         &self,
         key: &DefId,
-        written: &[ast::Type],
         assoc_name: &str,
     ) -> Option<DefId> {
         if self.declares_assoc_type(key, assoc_name) {
             return Some(*key);
         }
-        self.supertrait_declaring_assoc_type(key, written, assoc_name)
+        self.supertrait_declaring_assoc_type(key, assoc_name)
     }
 
     /// Which of `bounds` declares `assoc_name`, making `T::assoc_name` mean
@@ -1925,11 +1929,7 @@ impl TraitEnv {
             // name still wins for itself.
             .or_else(|| {
                 bounds.iter().find_map(|bound| {
-                    self.supertrait_declaring_assoc_type(
-                        &resolve(bound)?,
-                        &bound.type_args,
-                        assoc_name,
-                    )
+                    self.supertrait_declaring_assoc_type(&resolve(bound)?, assoc_name)
                 })
             })
     }

@@ -258,7 +258,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let self_trait = self.annotate_ctx.trait_ctx.self_trait?;
         self.tysys
             .trait_env
-            .trait_declaring_assoc_type(&self_trait, &[], assoc_name)
+            .trait_declaring_assoc_type(&self_trait, assoc_name)
     }
 
     /// Resolve a namespaced generic type like `ns::Type<T>` or `Self::Output`
