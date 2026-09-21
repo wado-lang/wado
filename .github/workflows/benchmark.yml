@@ -14,11 +14,11 @@ on:
 # the branch tip (the store steps and the deploy push). Serialize all push runs
 # under one group so they land one at a time; cancel-in-progress: false lets the
 # in-progress run finish and push its data instead of being killed mid-write.
-# Pull-request runs only read gh-pages, so give each its own group (keyed by
-# run id) to keep them fully independent.
+# Pull-request runs only read gh-pages, so they group per ref and a new push
+# cancels the run it supersedes rather than holding its runners.
 concurrency:
-  group: benchmark-gh-pages-${{ github.event_name == 'push' && 'main' || github.run_id }}
-  cancel-in-progress: false
+  group: benchmark-gh-pages-${{ github.event_name == 'push' && 'main' || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always

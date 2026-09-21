@@ -8,6 +8,11 @@ on:
     paths:
       - .github/workflows/copilot-setup-steps.yml
 
+# A superseded pull-request run holds runners the push that superseded it needs.
+concurrency:
+  group: copilot-setup-steps-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
