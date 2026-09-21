@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790024740861,
+  "lastUpdate": 1790026471149,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58005,6 +58005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/e8ddf204e8bfa859a2f3d633295b2cd31013f93a"
         },
         "date": 1790024739932,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4fd07b99cdb9b6bb77a226e259905c8df46c63f8",
+          "message": "Merge pull request #2115 from wado-lang/claude/emi-workflow-error-3bmb8j\n\nfix(optimizer): two wrong-code defects the nightly EMI campaign found",
+          "timestamp": "2026-09-22T05:46:35+09:00",
+          "tree_id": "10ea0d3d23efc0576d8b0e6d7c6cce3f3d1dc364",
+          "url": "https://github.com/wado-lang/wado/commit/4fd07b99cdb9b6bb77a226e259905c8df46c63f8"
+        },
+        "date": 1790026470503,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
