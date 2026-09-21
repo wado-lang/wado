@@ -1,8 +1,5 @@
 //! An ONNX graph as the textual format states it, read off the parse tree.
-//!
-//! What this module produces mirrors the file and nothing more: dimensions are
-//! extents without identity, because an ONNX shape is positional. The axis
-//! schema is what names them, one layer up.
+//! Dimensions are extents without identity, since an ONNX shape is positional.
 
 use onnx from "../grammar/Onnx.g4"
     with {
@@ -239,17 +236,7 @@ fn read_attrs(s: &onnx::CstStore, toks: &onnx::TokenStream, list: i32) -> Result
 }
 
 fn read_attr(s: &onnx::CstStore, toks: &onnx::TokenStream, attr: i32) -> Result<Attr, String> {
-    // `name` and the optional `: type` are both bare `ID`s; the name is first.
-    let mut name = "";
-    for let c of children(s, attr) {
-        if s.is_token(c) {
-            let text = toks.token_text(s.token_index(c));
-            if text != "=" && text != ":" {
-                name = text;
-                break;
-            }
-        }
-    }
+    let name = first_token_text(s, toks, attr);
     let Some(value) = first_child_of_kind(s, attr, onnx::RK_ATTR_VALUE) else {
         return Result::Err(`${name}: an attribute without a value`);
     };
@@ -291,12 +278,19 @@ fn single_attr_text(
 /// A `quotableId`'s text, with a quoted name's quotes taken off. An exporter's
 /// names carry `/` and `.`, so most of them arrive quoted.
 fn quotable_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
-    for let c of children(s, node) {
+    return unquote(first_token_text(s, toks, node));
+}
+
+/// The first terminal under a node. Every caller names a rule whose first
+/// element is one, so a node with none is a grammar that moved under the
+/// reader.
+fn first_token_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> String {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
         if s.is_token(c) {
-            return unquote(toks.token_text(s.token_index(c)));
+            return toks.token_text(s.token_index(c));
         }
     }
-    panic("quotableId: no token");
+    panic(`${s.kind(node)}: expected a terminal`);
 }
 
 /// Every token under a node, run together. `qualifiedId` is `ID ('.' ID)*`, so
@@ -313,7 +307,7 @@ fn joined_text(s: &onnx::CstStore, toks: &onnx::TokenStream, node: i32) -> Strin
 
 fn unquote(text: String) -> String {
     let view = text.as_str_slice();
-    if view.len() >= 2 && text.as_str_slice().sub(0, 1) == "\"" {
+    if view.len() >= 2 && view.sub(0, 1) == "\"" {
         return view.sub(1, view.len() - 1).to_string();
     }
     return text;
@@ -329,7 +323,7 @@ fn children(s: &onnx::CstStore, node: i32) -> List<i32> {
 
 fn children_of_kind(s: &onnx::CstStore, node: i32, kind: onnx::NodeKind) -> List<i32> {
     let mut out: List<i32> = [];
-    for let c of children(s, node) {
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
         if s.is_node(c) && s.kind(c) == kind {
             out.push(c);
         }
@@ -338,10 +332,9 @@ fn children_of_kind(s: &onnx::CstStore, node: i32, kind: onnx::NodeKind) -> List
 }
 
 fn first_child_of_kind(s: &onnx::CstStore, node: i32, kind: onnx::NodeKind) -> Option<i32> {
-    for let c of children(s, node) {
-        if s.is_node(c) && s.kind(c) == kind {
-            return Option::Some(c);
-        }
+    let found = s.find_child(node, kind);
+    if found < 0 {
+        return null;
     }
-    return null;
+    return Option::Some(found);
 }

@@ -142,8 +142,8 @@ impl CstStore {
 
 `kind` answers with a `RK_<RULE>` constant the parser exports, one per rule.
 The suffix is the rule's name in snake case, uppercased, so `valueInfo` is
-`RK_VALUE_INFO`. `NodeKind` prints its rule name through `Display`, which is
-what makes an unexpected node readable in a message.
+`RK_VALUE_INFO`. `NodeKind` prints its rule name through `Display`, so an
+unexpected node reads as its rule in a message.
 
 Because `expr`'s alternatives are labeled, the parser stamps which one matched
 onto each node, and exposes it as a per-rule enum plus a `CstStore` method:
@@ -330,8 +330,8 @@ Every generated parser module exports, at minimum:
 ### Walking a grammar without `# Label`s
 
 A rule with no labels stamps no alternative, so `s.alt(node)` is `-1` and there
-is no `<Rule>Alt` enum. Dispatch on the node's rule instead — `s.kind(node)`
-against the `RK_*` constants. The two shapes that cover most of a reader:
+is no `<Rule>Alt` enum. Dispatch on the node's rule instead: `s.kind(node)`
+against the `RK_*` constants. Two shapes cover most of a reader.
 
 ```wado
 // Every child that a given rule built.
@@ -349,9 +349,9 @@ fn children_of_kind(s: &g::CstStore, node: i32, kind: g::NodeKind) -> List<i32> 
 let type_node = s.find_child(value_info, g::RK_TYPE);
 ```
 
-A rule that mixes several sub-rules is read by walking its children once and
-switching on `s.kind(c)`, which keeps the reader independent of the order the
-grammar happens to list them in.
+For a rule that mixes several sub-rules, walk its children once and switch on
+`s.kind(c)`. The reader then does not depend on the order the grammar lists
+them in.
 
 ## The `gale` command
 

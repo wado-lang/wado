@@ -1,8 +1,5 @@
 //! The axis schema: what turns a graph's positional shapes into named axes.
-//!
-//! See WEP 2026-09-20 § "The Axis Schema Is an Invocation Option". A rule's
-//! patterns are consulted in order and the first match wins, so one pattern
-//! overrides an architecture table's entry without restating the rest of it.
+//! See WEP 2026-09-20 § "The Axis Schema Is an Invocation Option".
 
 pub struct LayoutRule {
     pub pattern: String,
@@ -14,13 +11,13 @@ pub struct Schema {
 }
 
 impl Schema {
-    /// The axis names for a tensor, or `None` where no pattern reaches it.
-    /// Geas does not fall back to positional axes, so `None` is a build error
-    /// at the caller.
+    /// The axis names for a tensor, from the first rule whose pattern reaches
+    /// it. `None` is a build error at the caller; there is no positional fallback.
     pub fn axes_for<S: AsStrSlice>(&self, tensor: S) -> Option<List<String>> {
-        let name = chars_of(tensor);
+        let name: List<char> = tensor.as_str_slice().chars().collect();
         for let rule of &self.layout {
-            if match_from(&chars_of(&rule.pattern), 0, &name, 0) {
+            let pattern: List<char> = rule.pattern.chars().collect();
+            if matches_chars(&pattern, &name) {
                 return Option::Some(rule.axes);
             }
         }
@@ -31,20 +28,14 @@ impl Schema {
 /// A shell wildcard over a tensor name: `*` spans any run of characters, `?`
 /// exactly one.
 pub fn glob_match<P: AsStrSlice, T: AsStrSlice>(pattern: P, text: T) -> bool {
-    return match_from(&chars_of(pattern), 0, &chars_of(text), 0);
+    let p: List<char> = pattern.as_str_slice().chars().collect();
+    let t: List<char> = text.as_str_slice().chars().collect();
+    return matches_chars(&p, &t);
 }
 
-fn chars_of<S: AsStrSlice>(s: S) -> List<char> {
-    let mut out: List<char> = [];
-    for let c of s.as_str_slice().chars() {
-        out.push(c);
-    }
-    return out;
-}
-
-fn match_from(pattern: &List<char>, p0: i32, text: &List<char>, t0: i32) -> bool {
-    let mut p = p0;
-    let mut t = t0;
+fn matches_chars(pattern: &List<char>, text: &List<char>) -> bool {
+    let mut p = 0;
+    let mut t = 0;
     // Where to resume when the tail fails: the last `*` and how much text it
     // had let through. One pair suffices, since an earlier `*` can absorb
     // whatever a later one gives back.

@@ -144,6 +144,32 @@ test "an unknown dimension takes its axis's name as its symbol" {
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
+test "an operator given too few operands stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Add(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Add: reads 2 operands and was given 1";
+}
+
+test "a node naming several outputs stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y, Z = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Relu: produces one output and names 2";
+}
+
 test "a node reading an undefined tensor stops the build" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {
