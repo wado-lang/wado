@@ -16,9 +16,10 @@ use { Stdout } from "core:cli";
 use { from_bytes as json_from_bytes } from "core:json";
 use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
 use { FeatureCollection, count_points } from "../json_canada/canada_schema.wado";
+use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Benchmark, MonotonicClock } from "core:benchmark";
+use { Benchmark } from "core:benchmark";
 
 test "smoke" {
     let fc = json_from_bytes::<FeatureCollection, _>(

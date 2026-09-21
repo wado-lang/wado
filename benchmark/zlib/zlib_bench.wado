@@ -9,10 +9,11 @@
 //   cargo run --bin wado -- run -O2 --dir .::. zlib/zlib_bench.wado
 
 use { Stdout } from "core:cli";
+use { MonotonicClock } from "wasi:clocks";
 use { zlib_compress, inflate_zlib } from "core:zlib";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Benchmark, MonotonicClock } from "core:benchmark";
+use { Benchmark } from "core:benchmark";
 
 test "smoke" {
     // Round-trip a tiny in-memory buffer; no Preopens needed.
