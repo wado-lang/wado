@@ -647,9 +647,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.group_variadic_type_args_of(&method_own_params, &mut type_args, span) {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
-        // What the turbofish alone already says, ahead of the value-default
-        // walk that resolves against it. An empty list is no turbofish at all.
-        if !type_args.is_empty() {
+        // A call that writes no argument leaves a pack to the turbofish and the
+        // parameter defaults, which the expected parameter types below are built
+        // from. A call that writes one may still settle it, so that waits for the
+        // solve — a turbofish spelling the packs ahead of it is not the whole
+        // list, and pinning the rest here would refuse the arguments meant for
+        // them.
+        if args_ast.is_empty() {
             self.settle_empty_pack_of(&method_own_params, &mut type_args);
         }
 
