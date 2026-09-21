@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use wado_manifest::DependencySource;
 
@@ -606,9 +606,11 @@ pub(crate) struct KilnSetup {
 /// one identical setup.
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
+    entry_key: Option<&str>,
     host: &FilesystemCompilerHost,
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
+    active: Arc<Mutex<Vec<String>>>,
 ) -> Result<Option<KilnSetup>, PipelineError> {
     let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
         entry_file
@@ -616,8 +618,15 @@ pub(crate) async fn prepare_kiln(
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("."))
     });
+    // A clause's paths are resolved against the declaring file and then stripped
+    // back to the root, so the root has to be spelled the way the entry key is:
+    // an entry named on its own is already anchored there.
+    let clause_root = match entry_key {
+        Some(_) => PathBuf::new(),
+        None => probe_manifest_root.clone(),
+    };
     let (mut invocations, identities, inline_diagnostics) =
-        collect_inline_invocations_for_entry_with_identities(entry_file, &probe_manifest_root)
+        collect_inline_invocations_for_entry_with_identities(entry_file, entry_key, &clause_root)
             .await;
 
     // Fail on a malformed clause here, with its own diagnostics, so the clear
@@ -654,6 +663,7 @@ pub(crate) async fn prepare_kiln(
     let provider = CliGeneratorProvider::new(manifest_root.clone())
         .with_run_cache(host.run_cache())
         .with_no_cache(no_cache)
+        .with_active(active)
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),
@@ -701,7 +711,16 @@ pub(crate) async fn maybe_run_pipeline(
     no_cache: bool,
     project: Option<manifest::ProjectManifest>,
 ) -> Result<PipelineOutcome, PipelineError> {
-    let Some(mut kiln) = prepare_kiln(entry_file, host, no_cache, project).await? else {
+    let Some(mut kiln) = prepare_kiln(
+        entry_file,
+        None,
+        host,
+        no_cache,
+        project,
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .await?
+    else {
         return Ok(PipelineOutcome::default());
     };
     let mut outcome = kiln_driver::run_pipeline(
@@ -715,6 +734,35 @@ pub(crate) async fn maybe_run_pipeline(
     .await?;
     kiln.remap_conflicts(&mut outcome.invocations, host)?;
     Ok(outcome)
+}
+
+/// Resolve the Kiln invocations a generator's own source carries, so the
+/// compile that follows sees generated modules where it wrote schemas.
+/// `active` is the chain this generator is already on, which is what makes a
+/// cycle visible. Answers an empty index when the generator declares none.
+pub async fn run_nested_pipeline(
+    entry_file: &Path,
+    entry_key: &str,
+    host: &FilesystemCompilerHost,
+    no_cache: bool,
+    active: Arc<Mutex<Vec<String>>>,
+) -> Result<wado_compiler::kiln::InvocationIndex, PipelineError> {
+    let Some(mut kiln) =
+        prepare_kiln(entry_file, Some(entry_key), host, no_cache, None, active).await?
+    else {
+        return Ok(wado_compiler::kiln::InvocationIndex::default());
+    };
+    let mut outcome = kiln_driver::run_pipeline(
+        &kiln.manifest,
+        &kiln.manifest_root,
+        &kiln.host,
+        &kiln.provider,
+        std::mem::take(&mut kiln.invocations),
+        no_cache,
+    )
+    .await?;
+    kiln.remap_conflicts(&mut outcome.invocations, host)?;
+    Ok(outcome.invocations)
 }
 
 /// Rewrite each inline invocation whose `module` is a `[build-dependencies]`
@@ -831,13 +879,18 @@ pub fn empty_manifest() -> wado_manifest::Manifest {
 /// ([`wado_compiler::kiln::remap_decl_files`]).
 async fn collect_inline_invocations_for_entry_with_identities(
     entry_file: &Path,
+    entry_key: Option<&str>,
     manifest_root: &Path,
 ) -> (
     Vec<wado_compiler::kiln::Invocation>,
     wado_compiler::hashmap::IndexMap<String, String>,
     Vec<wado_compiler::Diagnostic>,
 ) {
-    let entry_key = entry_file.to_string_lossy().to_string();
+    // The key must be byte-identical to the name the compile that follows gives
+    // its entry, since that is what the loader interns the redirect under.
+    let entry_key = entry_key
+        .map(str::to_string)
+        .unwrap_or_else(|| entry_file.to_string_lossy().to_string());
     // An unreadable entry, or one whose parse recovered from an error, harvests
     // nothing; the compile that follows reports it.
     let Ok(entry_source) = fs::read_to_string(entry_file) else {
@@ -1228,7 +1281,7 @@ mod kiln_dir_module_tests {
         Vec<wado_compiler::Diagnostic>,
     ) {
         futures::executor::block_on(collect_inline_invocations_for_entry_with_identities(
-            entry, root,
+            entry, None, root,
         ))
     }
 

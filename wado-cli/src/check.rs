@@ -8,6 +8,7 @@
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use lexopt::Arg::Value;
 use wado_compiler::Code;
@@ -196,9 +197,16 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
 
     // Same setup `wado compile` runs its generators through — only the pipeline
     // below differs: `check` dry-runs and byte-compares instead of writing.
-    let kiln = prepare_kiln(path, &host, opts.knobs.no_cache, manifest_pair)
-        .await
-        .map_err(silent_or_reported)?;
+    let kiln = prepare_kiln(
+        path,
+        None,
+        &host,
+        opts.knobs.no_cache,
+        manifest_pair,
+        Arc::new(Mutex::new(Vec::new())),
+    )
+    .await
+    .map_err(silent_or_reported)?;
     let outcome = match kiln {
         None => CheckOutcome::default(),
         Some(mut kiln) => {
