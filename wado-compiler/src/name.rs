@@ -2592,6 +2592,10 @@ pub enum TypeHead {
     Projection {
         base: Box<FqTypeName>,
         assoc: String,
+        /// The trait declaring `assoc`, part of the identity: two traits
+        /// declaring one name on a type bind it to different types, and only
+        /// this tells them apart (WEP-2026-08-12).
+        owning_trait: DefId,
     },
 }
 
@@ -2734,12 +2738,14 @@ impl FqTypeName {
         })
     }
 
-    /// The associated type `assoc` of `base` (`T::Base`).
+    /// The associated type `assoc` of `base`, as `owning_trait` declares it
+    /// (`T::Base`).
     #[must_use]
-    pub fn projection(base: FqTypeName, assoc: &str) -> Self {
+    pub fn projection(base: FqTypeName, assoc: &str, owning_trait: DefId) -> Self {
         Self::of_head_kind(TypeHead::Projection {
             base: Box::new(base),
             assoc: assoc.to_string(),
+            owning_trait,
         })
     }
 
@@ -2843,12 +2849,16 @@ impl FqTypeName {
         head || self.args.iter().any(FqTypeName::mentions_binder)
     }
 
-    /// The base and associated-type name this projects off, `None` for any
-    /// other shape.
+    /// The base, associated-type name, and declaring trait this projects off,
+    /// `None` for any other shape.
     #[must_use]
-    pub fn projected(&self) -> Option<(&FqTypeName, &str)> {
+    pub fn projected(&self) -> Option<(&FqTypeName, &str, DefId)> {
         match &self.head {
-            TypeHead::Projection { base, assoc } => Some((base, assoc)),
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => Some((base, assoc, *owning_trait)),
             _ => None,
         }
     }
@@ -2889,7 +2899,7 @@ impl FqTypeName {
                 Some(owner) => out.push_str(&format!("{name}#{}", owner.rendered())),
                 None => out.push_str(name),
             },
-            TypeHead::Projection { base, assoc } => {
+            TypeHead::Projection { base, assoc, .. } => {
                 out.push_str(&format!("{}::{assoc}", base.to_mangled()));
             }
             TypeHead::Tuple => unreachable!("handled above"),
@@ -2927,17 +2937,49 @@ impl FqTypeName {
             };
             return pointee.substitute(old, new).with_reference(*outer);
         }
+        self.descend(&|inner| inner.substitute(old, new))
+    }
+
+    /// This name with `at` applied at every position a type stands in: the name
+    /// itself, each type argument, and a projection's base, recursively. A
+    /// position `at` answers for is replaced whole and not descended into, and
+    /// `at` sees it stripped of any `&` prefix, which is then put back.
+    #[must_use]
+    pub fn rewrite(&self, at: &impl Fn(&FqTypeName) -> Option<FqTypeName>) -> FqTypeName {
+        if let Some((outer, inner)) = self.reference.split_first() {
+            let pointee = FqTypeName {
+                reference: inner.to_vec(),
+                head: self.head.clone(),
+                args: self.args.clone(),
+            };
+            return pointee.rewrite(at).with_reference(*outer);
+        }
+        match at(self) {
+            Some(replacement) => replacement,
+            None => self.descend(&|inner| inner.rewrite(at)),
+        }
+    }
+
+    /// This name rebuilt with `at` applied to each name it holds — its type
+    /// arguments and a projection's base. The head's own spelling is not one of
+    /// them, so a walk that stops here terminates.
+    fn descend(&self, at: &impl Fn(&FqTypeName) -> FqTypeName) -> FqTypeName {
         let head = match &self.head {
-            TypeHead::Projection { base, assoc } => TypeHead::Projection {
-                base: Box::new(base.substitute(old, new)),
+            TypeHead::Projection {
+                base,
+                assoc,
+                owning_trait,
+            } => TypeHead::Projection {
+                base: Box::new(at(base)),
                 assoc: assoc.clone(),
+                owning_trait: *owning_trait,
             },
             head => head.clone(),
         };
         FqTypeName {
             reference: Vec::new(),
             head,
-            args: self.args.iter().map(|a| a.substitute(old, new)).collect(),
+            args: self.args.iter().map(at).collect(),
         }
     }
 
@@ -2955,7 +2997,7 @@ impl FqTypeName {
             out.push_str(&mangle_tuple_type(&args));
             return out;
         }
-        if let TypeHead::Projection { base, assoc } = &self.head {
+        if let TypeHead::Projection { base, assoc, .. } = &self.head {
             out.push_str(&format!("{}::{assoc}", base.to_display()));
         } else {
             out.push_str(self.head.name());

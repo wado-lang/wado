@@ -4749,8 +4749,13 @@ impl TypeTable {
             ResolvedType::AssocTypeProjection {
                 param_id,
                 assoc_name,
+                owning_trait,
                 ..
-            } => FqTypeName::projection(self.fq_type_name_spelled(*param_id, unboxed), assoc_name),
+            } => FqTypeName::projection(
+                self.fq_type_name_spelled(*param_id, unboxed),
+                assoc_name,
+                *owning_trait,
+            ),
             // Shapes that name no declaration — packs, `Unknown`. They carry no
             // module, so the rendered spelling is already their whole identity.
             _ => FqTypeName::builtin(&self.mangle_type_name(id)),

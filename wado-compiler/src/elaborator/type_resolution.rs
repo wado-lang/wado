@@ -38,6 +38,7 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
         }),
         Type::NamespacedGeneric(namespaced) => {
             Type::NamespacedGeneric(Box::new(NamespacedGenericType {
+                namespace: substituted_namespace(namespaced, replace),
                 args: namespaced.args.iter().map(at).collect(),
                 ..(**namespaced).clone()
             }))
@@ -51,6 +52,27 @@ pub(super) fn substitute_written_type(ty: &Type, replace: &dyn Fn(&Type) -> Opti
         Type::MutReference(inner) => Type::MutReference(Box::new(at(inner))),
         Type::Tuple(elems) => Type::Tuple(elems.iter().map(at).collect()),
         Type::Named(_) | Type::TypePackSpread(_, _) | Type::Infer(_) | Type::Error(_) => ty.clone(),
+    }
+}
+
+/// The namespace `replace` gives `namespaced`, which is a type position too:
+/// `X::Item` under `X = Feed` is `Feed::Item`. Asked with a transient node, so
+/// a `replace` keyed on identity rather than spelling declines it.
+///
+/// Only a bare name can stand there, so a replacement that is anything else
+/// leaves the namespace as written and is reported where it resolves.
+fn substituted_namespace(
+    namespaced: &NamespacedGenericType,
+    replace: &dyn Fn(&Type) -> Option<Type>,
+) -> String {
+    let asked = Type::Named(ast::NamedType::new(
+        AstId::fresh(),
+        namespaced.namespace.clone(),
+        namespaced.span,
+    ));
+    match replace(&asked) {
+        Some(Type::Named(named)) => named.name,
+        _ => namespaced.namespace.clone(),
     }
 }
 

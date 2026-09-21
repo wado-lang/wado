@@ -3381,33 +3381,37 @@ impl Monomorphizer {
         let args: Vec<FqTypeName> = trait_name
             .args()
             .iter()
-            .map(|arg| self.trait_arg_at_instance(arg, &bound, type_table))
+            .map(|arg| Self::trait_arg_at_instance(arg, &bound, type_table))
             .collect();
         info.with_trait_type_args(&args)
     }
 
-    /// One trait argument re-spelled at the instance: a projection off a
-    /// parameter is answered by the associated type its binding carries, and
-    /// anything else has its binders replaced.
+    /// One trait argument re-spelled at the instance, at every position a type
+    /// stands in: `Make<List<T::Base>>` under `T = Bag` names `Make<List<String>>`.
+    /// A projection is answered by the associated type the binding carries,
+    /// asked of the trait that declares it so that two traits declaring one
+    /// name stay apart (WEP-2026-08-12).
+    ///
+    /// A position whose base the frame does not bind stays as written: the
+    /// instance is still inside a template, and its name is settled by the
+    /// substitution that does bind it.
     fn trait_arg_at_instance(
-        &self,
         arg: &FqTypeName,
         bound: &impl Fn(&str) -> Option<TypeId>,
         type_table: &TypeTable,
     ) -> FqTypeName {
-        if let Some((base, assoc)) = arg.projected()
-            && let Some(base_name) = base.binder_name()
-            && let Some(base_id) = bound(base_name)
-            && let Some(answer) = type_table.resolve_assoc_type(base_id, assoc)
-        {
-            return type_table.fq_type_name(answer);
-        }
-        self.current_param_substitution_key
-            .keys()
-            .filter_map(|name| Some((name, bound(name)?)))
-            .fold(arg.clone(), |arg, (name, tid)| {
-                arg.substitute(&FqTypeName::binder(name), &type_table.fq_type_name(tid))
-            })
+        arg.rewrite(&|node| {
+            if let Some((base, assoc, owning_trait)) = node.projected() {
+                let base_id = bound(base.binder_name()?)?;
+                let answer =
+                    type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc)?;
+                return Some(type_table.fq_type_name(answer));
+            }
+            if !node.args().is_empty() {
+                return None;
+            }
+            Some(type_table.fq_type_name(bound(node.binder_name()?)?))
+        })
     }
 
     /// The name with the trait's arguments cut back to what the answering impl

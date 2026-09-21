@@ -1,0 +1,53 @@
+// A supertrait clause writes its arguments in the declaring trait's parameter
+// space, so a reader re-spells them at what it wrote: `Collect<Item = X::Item>`
+// read at `Sink<Feed>` names `Feed::Item`, never the `X` no reader can resolve.
+//
+// `X::Item` must never reach a diagnostic. That the projection then goes
+// unanswered is the known gap, and the error pinning it goes once it closes.
+
+trait Src with () {
+    type Item;
+}
+
+trait Collect with () {
+    type Item;
+
+    fn one(&self) -> Self::Item;
+}
+
+trait Sink<X: Src>: Collect<Item = X::Item> with () {}
+
+struct Feed {}
+
+impl Src for Feed {
+    type Item = i32;
+}
+
+struct Bag {
+    n: i32,
+}
+
+impl Collect for Bag {
+    type Item = i32;
+
+    fn one(&self) -> i32 {
+        return self.n;
+    }
+}
+
+impl Sink<Feed> for Bag {}
+
+fn take<T: Sink<Feed>>(t: &T) -> i32 {
+    return t.one();
+}
+
+test "the clause is re-spelled at the reading site" {
+    assert take(&Bag { n: 7 }) == 7;
+}
+
+__DATA__
+{
+  "test": {},
+  "compile_error": "unknown type 'Feed::Item'",
+  "compile_errors_not_contains": ["X::Item"]
+}

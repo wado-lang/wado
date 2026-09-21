@@ -69,8 +69,16 @@ that impl binds. A call through the bound therefore lands on the same impl the
 bound check held the type to.
 
 The arguments travel as part of the trait's name, which carries a projection as
-a base and a member rather than as a spelling. A spelling would have to be split
-back apart to substitute the base, and no split is correct in general.
+a base, a member, and the trait declaring it, rather than as a spelling. A
+spelling would have to be split back apart to substitute the base, and no split
+is correct in general; and the declaring trait is what tells two traits binding
+one member name on one type apart
+([Declaration Identity](./wep-2026-08-12-declaration-identity.md)).
+
+Substitution reaches every position a type stands in, so a projection nested
+inside an argument is answered as one standing alone is: `Make<List<T::Base>>`
+reaches `impl Make<List<String>>`. A position whose base the frame does not bind
+stays as written, which is what an instance still inside a template needs.
 
 ### The candidates
 
