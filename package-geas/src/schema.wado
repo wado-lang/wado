@@ -1,0 +1,64 @@
+//! The axis schema: what turns a graph's positional shapes into named axes.
+//! See WEP 2026-09-20 § "The Axis Schema Is an Invocation Option".
+
+use { Deserialize } from "core:serde";
+
+/// One pattern and the axis names it gives the tensors it reaches. Also the
+/// shape a generator's `layout` option is written in.
+pub struct LayoutRule {
+    pub pattern: String,
+    pub axes: List<String>,
+}
+
+impl Deserialize for LayoutRule;
+
+pub struct Schema {
+    pub layout: List<LayoutRule>,
+}
+
+impl Schema {
+    /// The axis names for a tensor, from the first rule whose pattern reaches
+    /// it. `None` is a build error at the caller; there is no positional fallback.
+    pub fn axes_for<S: AsStrSlice>(&self, tensor: S) -> Option<List<String>> {
+        let name: List<char> = tensor.as_str_slice().chars().collect();
+        for let rule of &self.layout {
+            let pattern: List<char> = rule.pattern.chars().collect();
+            if matches_chars(&pattern, &name) {
+                return Option::Some(rule.axes);
+            }
+        }
+        return null;
+    }
+}
+
+/// A shell wildcard over a tensor name: `*` spans any run of characters, `?`
+/// exactly one.
+fn matches_chars(pattern: &List<char>, text: &List<char>) -> bool {
+    let mut p = 0;
+    let mut t = 0;
+    // Where to resume when the tail fails: the last `*` and how much text it
+    // had let through. One pair suffices, since an earlier `*` can absorb
+    // whatever a later one gives back.
+    let mut star = -1;
+    let mut star_t = 0;
+    while t < text.len() {
+        if p < pattern.len() && pattern[p] == '*' {
+            star = p;
+            star_t = t;
+            p += 1;
+        } else if p < pattern.len() && (pattern[p] == '?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if star >= 0 {
+            star_t += 1;
+            p = star + 1;
+            t = star_t;
+        } else {
+            return false;
+        }
+    }
+    while p < pattern.len() && pattern[p] == '*' {
+        p += 1;
+    }
+    return p == pattern.len();
+}

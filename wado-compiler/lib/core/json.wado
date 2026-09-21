@@ -250,23 +250,23 @@ fn write_json_null(buf: &mut String) -> Result<(), SerializeError> {
     return Result::Ok(());
 }
 
-struct JsonSeqSerializer {
+pub struct JsonSeqSerializer {
     buf: &mut String,
     count: i32,
 }
 
-struct JsonMapSerializer {
+pub struct JsonMapSerializer {
     buf: &mut String,
     count: i32,
     need_value: bool,
 }
 
-struct JsonStructSerializer {
+pub struct JsonStructSerializer {
     buf: &mut String,
     count: i32,
 }
 
-struct JsonVariantSerializer {
+pub struct JsonVariantSerializer {
     buf: &mut String,
 }
 
@@ -515,14 +515,14 @@ impl Serializer for JsonSerializer {
     }
 }
 
-struct PrettyJsonSeqSerializer {
+pub struct PrettyJsonSeqSerializer {
     buf: &mut String,
     count: i32,
     indent: &String,
     depth: i32,
 }
 
-struct PrettyJsonMapSerializer {
+pub struct PrettyJsonMapSerializer {
     buf: &mut String,
     count: i32,
     need_value: bool,
@@ -530,14 +530,14 @@ struct PrettyJsonMapSerializer {
     depth: i32,
 }
 
-struct PrettyJsonStructSerializer {
+pub struct PrettyJsonStructSerializer {
     buf: &mut String,
     count: i32,
     indent: &String,
     depth: i32,
 }
 
-struct PrettyJsonVariantSerializer {
+pub struct PrettyJsonVariantSerializer {
     buf: &mut String,
     indent: &String,
     depth: i32,
@@ -1167,7 +1167,9 @@ impl JsonDeserializer {
                 continue;
             }
             let advance = String::utf8_sequence_len(&self.input, pos, len);
-            if advance == 0 {
+            // The document ends at `len`, so a sequence short there is as
+            // invalid as a malformed one, and a negative would step backwards.
+            if advance <= 0 {
                 builtin::cold_path();
                 valid = false;
                 pos += 1;
@@ -1964,25 +1966,25 @@ impl JsonDeserializer {
 // would deep-copy, so the caller's `pos` would never see what the sub-access
 // consumed. Each carries its container's level, re-asserted before descending.
 
-struct JsonSeqAccess {
+pub struct JsonSeqAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
 }
 
-struct JsonMapAccess {
+pub struct JsonMapAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
 }
 
-struct JsonStructAccess {
+pub struct JsonStructAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     first: bool,
 }
 
-struct JsonVariantAccess {
+pub struct JsonVariantAccess {
     de: &mut JsonDeserializer,
     depth: i32,
     variant: String,
@@ -2423,23 +2425,23 @@ pub struct CanonicalJsonSerializer {
     buf: &mut String,
 }
 
-struct CanonicalSeqSerializer {
+pub struct CanonicalSeqSerializer {
     buf: &mut String,
     count: i32,
 }
 
-struct CanonicalMapSerializer {
+pub struct CanonicalMapSerializer {
     buf: &mut String,
     entries: List<[String, String]>,
     pending_key: String,
 }
 
-struct CanonicalStructSerializer {
+pub struct CanonicalStructSerializer {
     buf: &mut String,
     entries: List<[String, String]>,
 }
 
-struct CanonicalVariantSerializer {
+pub struct CanonicalVariantSerializer {
     buf: &mut String,
 }
 

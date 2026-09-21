@@ -259,7 +259,7 @@ fn no_options_generator_compiles_and_runs() {
     let request = GeneratorRequest {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
-            content: "syntax = \"proto3\";".to_string(),
+            content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
         options: wado_compiler::kiln::CanonicalOptions::default(),
@@ -787,7 +787,7 @@ fn host_caches_compiled_component_across_run_generator_calls() {
     let request = || GeneratorRequest {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
-            content: "syntax = \"proto3\";".to_string(),
+            content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
         options: wado_compiler::kiln::CanonicalOptions {
@@ -945,7 +945,7 @@ fn shared_kiln_cache_compiles_generator_once_across_hosts() {
     let request = || GeneratorRequest {
         primary: GeneratorInputFile {
             path: "schema.proto".to_string(),
-            content: "syntax = \"proto3\";".to_string(),
+            content: b"syntax = \"proto3\";".to_vec(),
         },
         inputs: vec![],
         options: wado_compiler::kiln::CanonicalOptions {
@@ -1016,7 +1016,7 @@ fn shared_kiln_cache_compiles_generator_once_under_concurrency() {
                 let request = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: "syntax = \"proto3\";".to_string(),
+                        content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
                     options: wado_compiler::kiln::CanonicalOptions {

@@ -1202,7 +1202,7 @@ struct Point {
 }
 
 const RECORD_FUTURE_SOURCE: &str = r#"
-struct Point {
+pub struct Point {
     x: f64,
     y: f64,
 }
@@ -1264,7 +1264,7 @@ fn cm_future_record_identity_o2() {
 }
 
 const RECORD_STREAM_SOURCE: &str = r#"
-struct Point {
+pub struct Point {
     x: f64,
     y: f64,
 }
@@ -1383,17 +1383,17 @@ wasmtime::component::flags! {
 /// `future<T>` / `stream<T>` over the named non-record shapes, which carry a
 /// discriminant — and, for `variant`, a per-case payload union.
 const NAMED_ASYNC_SOURCE: &str = r#"
-enum Color {
+pub enum Color {
     Red,
     Green,
     Blue,
 }
-variant Shape {
+pub variant Shape {
     Circle(f64),
     Rect([f64, f64]),
     Nothing,
 }
-flags Perms {
+pub flags Perms {
     Read,
     Write,
     Execute,
@@ -1824,7 +1824,7 @@ fn cm_lib_rejects_empty_record_boundary_type() {
 #[test]
 fn cm_lib_rejects_export_name_colliding_with_type_name() {
     let err = try_compile_lib(
-        "variant Shape {\n    Dot,\n    Line(u32),\n}\n\
+        "pub variant Shape {\n    Dot,\n    Line(u32),\n}\n\
          export fn shape(v: u32) -> u32 {\n    return v;\n}\n\
          export fn make(v: u32) -> Shape {\n    if v == 0 {\n        \
          return Shape::Dot;\n    } else {\n        return Shape::Line(v);\n    }\n}\n",
@@ -1858,8 +1858,8 @@ fn cm_lib_rejects_recursive_type_before_the_name_check_walks_it() {
 #[test]
 fn cm_lib_rejects_two_types_sharing_a_cm_name() {
     let err = try_compile_lib(
-        "struct HTTPServer {\n    port: u32,\n}\n\
-         struct HttpServer {\n    host: String,\n}\n\
+        "pub struct HTTPServer {\n    port: u32,\n}\n\
+         pub struct HttpServer {\n    host: String,\n}\n\
          export fn a(v: HTTPServer) -> u32 {\n    return v.port;\n}\n\
          export fn b(v: HttpServer) -> String {\n    return v.host;\n}\n",
     )

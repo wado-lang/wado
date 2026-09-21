@@ -1,0 +1,18 @@
+// `extends` names the parent in the child's own head: every method the child
+// inherits is reached through a resource the caller has to be able to name.
+#[cm("wasi:demo/events@0.1.0#event-target", linearity = "unrestricted")]
+resource Hidden {
+    fn n(&self) -> i32;
+}
+
+#[cm("wasi:demo/events@0.1.0#node", linearity = "unrestricted")]
+pub resource Node extends Hidden {
+    fn tag(&self) -> i32;
+}
+
+export fn run() {
+    assert 1 == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}

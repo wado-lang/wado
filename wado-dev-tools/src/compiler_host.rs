@@ -20,6 +20,7 @@ impl FilesystemCompilerHost {
     #[must_use]
     pub fn silent(base_path: PathBuf) -> Self {
         wado_lsp::install_stderr_trace_sink();
+        wado_lsp::host::install_dev_stdlib();
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),

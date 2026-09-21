@@ -2030,7 +2030,8 @@ pub(super) fn synthesize_variant_lower_to_flat(
     tir_modules: &IndexMap<ModuleSource, TirModule>,
     ctx: LiftContext<'_>,
 ) {
-    // Set flat[0] = discriminant
+    // The tag is an i32 but flat[0] may be wider: the Canonical ABI joins this
+    // slot with an enclosing variant's sibling case, as `result<u64, error>` does.
     if !flat_locals.is_empty() {
         stmts.push(expr_stmt(assign(
             local_ref(
@@ -2038,7 +2039,11 @@ pub(super) fn synthesize_variant_lower_to_flat(
                 &flat_locals[0].1,
                 cm_val_type_to_type_id(flat_types[0]),
             ),
-            variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+            coerce_flat_lower(
+                variant_tag(local_ref(value_local, "$variant_val", value_type_id)),
+                cm_abi::CmValType::I32,
+                flat_types[0],
+            ),
         )));
     }
 

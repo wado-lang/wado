@@ -54,6 +54,24 @@ fn install_trace_sink() {
     set_trace_sink(&SINK);
 }
 
+/// Hand a dev build the stdlib, as the binaries do: an integration test links
+/// the library without `cfg(test)`, so it is the host here.
+#[cfg(all(debug_assertions, not(target_arch = "wasm32")))]
+pub fn install_dev_stdlib() {
+    use wado_compiler::stdlib::{DEV_STDLIB_ROOT, dev_stdlib_files};
+
+    let root = Path::new(DEV_STDLIB_ROOT);
+    wado_compiler::stdlib::install_dev_stdlib(dev_stdlib_files().into_iter().map(|file| {
+        let path = root.join(file);
+        let source = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("reading the stdlib at {}: {e}", path.display()));
+        (file.to_string(), source)
+    }));
+}
+
+#[cfg(not(all(debug_assertions, not(target_arch = "wasm32"))))]
+pub fn install_dev_stdlib() {}
+
 /// A located diagnostic names the file it is in — what a per-document consumer
 /// selects on, and without which the LSP drops it. Checked at the host, so the
 /// whole fixture corpus enforces it. A span-less diagnostic is about the
@@ -86,6 +104,7 @@ pub struct FilesystemHost {
 impl FilesystemHost {
     pub fn new(base_path: PathBuf) -> Self {
         install_trace_sink();
+        install_dev_stdlib();
         Self {
             base_path,
             diagnostics: Mutex::new(Vec::new()),
@@ -151,6 +170,7 @@ pub struct InMemoryHost {
 impl InMemoryHost {
     pub fn new() -> Self {
         install_trace_sink();
+        install_dev_stdlib();
         Self {
             diagnostics: Mutex::new(Vec::new()),
         }

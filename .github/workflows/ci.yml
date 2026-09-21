@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# A superseded pull-request run holds runners the next push needs. A run on main
+# is that commit's record, so it finishes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0

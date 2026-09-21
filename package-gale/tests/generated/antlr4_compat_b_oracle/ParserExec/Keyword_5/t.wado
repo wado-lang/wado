@@ -1184,7 +1184,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_PROGRAM: NodeKind = 0;
-pub global RK_ADDERRORLISTENER: NodeKind = 1;
+pub global RK_ADD_ERROR_LISTENER: NodeKind = 1;
 
 global RULE_NAMES: List<String> = ["program", "addErrorListener"];
 
@@ -1610,7 +1610,7 @@ fn _parse_add_error_listener__inner(p: &mut Parser) -> () {
 fn _parse_add_error_listener(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ADDERRORLISTENER, _start);
+    p.b.start_node(RK_ADD_ERROR_LISTENER, _start);
     _parse_add_error_listener__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

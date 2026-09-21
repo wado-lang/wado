@@ -50,6 +50,48 @@ Accepts any byte source via `AsByteSlice` (including a `String`).
 
 ## Structs
 
+### `pub struct NsdSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for NsdSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct NsdMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for NsdMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct NsdStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for NsdStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct NsdVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for NsdVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
 ### `pub struct NsdSerializer`
 
 _Fields are private._
@@ -89,6 +131,58 @@ _Fields are private._
 ##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
 ##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<NsdVariantSerializer, SerializeError>`
+
+### `pub struct NsdSeqAccess`
+
+_Fields are private._
+
+#### `impl DeserializeSeq for NsdSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct NsdMapAccess`
+
+_Fields are private._
+
+#### `impl DeserializeMap for NsdMapAccess`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct NsdStructAccess`
+
+_Fields are private._
+
+#### `impl DeserializeStruct for NsdStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct NsdVariantAccess`
+
+_Fields are private._
+
+#### `impl DeserializeVariant for NsdVariantAccess`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
 
 ### `pub struct NsdDeserializer`
 

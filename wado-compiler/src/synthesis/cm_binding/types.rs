@@ -136,9 +136,17 @@ impl LiftContext<'_> {
     /// a name rather than following a reference site.
     pub(super) fn cm_decl(&self, source: &str, name: &str) -> DefId {
         let module_source = self.module_source_for(source);
-        self.type_table
-            .borrow()
+        let type_table = self.type_table.borrow();
+        type_table
             .cm_decl_in(name, &module_source)
+            // A lib-local type defined in a submodule: the interface FQ maps to
+            // the entry module, so resolve via the type's own recorded module.
+            // One name reaches one declaration here, since a surface carrying
+            // the same public name twice is refused before synthesis.
+            .or_else(|| {
+                let own = self.cm_interface_registry.lib_local_type_source(name)?;
+                type_table.cm_decl_in(name, own)
+            })
             .unwrap_or_else(|| panic!("CM type `{source}#{name}` names no declaration"))
     }
 

@@ -2,6 +2,7 @@
 //! [`wado_lsp::FilesystemCompilerHost`] with CLI decorations: phase-tracking
 //! timestamps, log-level filtering, and stderr printing.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -269,6 +270,20 @@ impl CompilerHost for FilesystemCompilerHost {
         self.inner.source_exists(path).await
     }
 
+    /// Saves into the OS temp directory, which exists on every platform the
+    /// CLI runs on and needs no write permission where the sources live. The
+    /// name is opaque: a predictable one there is a symlink target (CWE-59).
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        let mut file = tempfile::Builder::new()
+            .prefix(&format!("wado-{file_stem}-"))
+            .suffix(".wasm")
+            .tempfile()
+            .ok()?;
+        file.write_all(bytes).ok()?;
+        let (_, path) = file.keep().ok()?;
+        Some(path.display().to_string())
+    }
+
     fn emit_diagnostic(&self, diagnostic: Diagnostic) {
         if self.print_diagnostics && self.should_log(diagnostic.severity) {
             let formatted = self.format_diagnostic(&diagnostic);
@@ -300,6 +315,20 @@ impl CompilerHost for FilesystemCompilerHost {
         // `run_generator` has no host to print through, so its diagnostics
         // surface here — before `outcome` propagates, so a failing generator
         // does not swallow the explanation.
+        for diag in diagnostics {
+            kiln_runtime::relay_diagnostic(self, diag);
+        }
+        outcome
+    }
+
+    async fn probe_generator(
+        &self,
+        component_wasm: &[u8],
+        request: &GeneratorRequest,
+    ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
+        let (engine, component) = self.run.components().get_or_compile(component_wasm)?;
+        let (outcome, diagnostics) =
+            kiln_runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
         for diag in diagnostics {
             kiln_runtime::relay_diagnostic(self, diag);
         }

@@ -1346,7 +1346,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_S: NodeKind = 0;
 pub global RK_E: NodeKind = 1;
-pub global RK_ELIST: NodeKind = 2;
+pub global RK_E_LIST: NodeKind = 2;
 
 global RULE_NAMES: List<String> = ["s", "e", "eList"];
 
@@ -1878,7 +1878,7 @@ fn _parse_e_list__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_e_list(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ELIST, _start);
+    p.b.start_node(RK_E_LIST, _start);
     _parse_e_list__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {

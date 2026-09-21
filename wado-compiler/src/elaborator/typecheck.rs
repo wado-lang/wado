@@ -25,10 +25,11 @@ pub(super) enum TypeCheckResult {
 }
 
 /// Pure type compatibility check, emitting no errors. Rules apply in order:
-/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; anything
-/// genuinely undecided deferred; reference variance (`&mut T` → `&T` only);
-/// newtypes and flags distinct from their base; `Option`; structural comparison
-/// for function types and generic instances; anything else incompatible.
+/// identity; `NEVER` compatible and `UNKNOWN` / `ERROR` deferred; a pack-arity
+/// conflict incompatible; anything else genuinely undecided deferred; reference
+/// variance (`&mut T` → `&T` only); newtypes and flags distinct from their base;
+/// `Option`; structural comparison for function types and generic instances;
+/// anything else incompatible.
 pub(super) fn check_assignable(
     actual: TypeId,
     expected: TypeId,
@@ -69,13 +70,30 @@ fn check_at(
         return TypeCheckResult::Compatible;
     }
 
+    if pack_shape_conflict(actual, expected, type_table) {
+        return TypeCheckResult::Incompatible;
+    }
+
     // Defer only what is genuinely undecided: an inference variable awaiting its
+<<<<<<< HEAD
     // solver, a pack awaiting expansion, a projection over one of those, and
     // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
     // of a polymorphic signature instantiates its slots into `InferVar`s first,
     // so nothing but itself is ever assignable to it. A pack is opaque on the
     // same terms where its own declaration is in scope, which this layer cannot
     // see; `Elaborator::typecheck` adds that rule.
+||||||| d358fbb7f
+    // solver, a pack awaiting expansion, a projection over one of those, and
+    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
+    // of a polymorphic signature instantiates its slots into `InferVar`s first,
+    // so nothing but itself is ever assignable to it.
+=======
+    // solver, a pack awaiting expansion that the rule above did not settle, a
+    // projection over one of those, and `unknown` / `error`. A rigid `TypeParam`
+    // is opaque, not undecided — a use of a polymorphic signature instantiates
+    // its slots into `InferVar`s first, so nothing but itself is ever assignable
+    // to it.
+>>>>>>> origin/main
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -236,6 +254,67 @@ fn check_at(
     }
 
     TypeCheckResult::Compatible
+}
+
+/// Two tuple types over one pack are the same type only when their fixed
+/// elements line up. The pack stands for the same arity on both sides, so the
+/// elements before it and after it each have a settled offset: `[..R, L]` is
+/// never `[..R]`, and never `[L, ..R]` either. Decidable before the pack is
+/// expanded, which is the only point where a body carrying one is checked.
+fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
+    let (actual_inner, _) = unwrap_ref(actual, type_table);
+    let (expected_inner, _) = unwrap_ref(expected, type_table);
+    let (Some(actual_shape), Some(expected_shape)) = (
+        tuple_pack_shape(actual_inner, type_table),
+        tuple_pack_shape(expected_inner, type_table),
+    ) else {
+        return false;
+    };
+    if actual_shape.pack != expected_shape.pack {
+        return false;
+    }
+    if actual_shape.before.len() != expected_shape.before.len()
+        || actual_shape.after.len() != expected_shape.after.len()
+    {
+        return true;
+    }
+    // Invariant, as rule 8 compares a generic instance's arguments. Only a
+    // settled element conflicts; an undecided one defers with everything else.
+    actual_shape
+        .before
+        .iter()
+        .zip(expected_shape.before)
+        .chain(actual_shape.after.iter().zip(expected_shape.after))
+        .any(|(&a, &e)| {
+            check_at(a, e, type_table, Position::Invariant) == TypeCheckResult::Incompatible
+        })
+}
+
+/// A tuple type's pack and the fixed elements on either side of it.
+struct PackShape<'a> {
+    pack: TypeId,
+    before: &'a [TypeId],
+    after: &'a [TypeId],
+}
+
+fn tuple_pack_shape(type_id: TypeId, type_table: &TypeTable) -> Option<PackShape<'_>> {
+    let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id) else {
+        return None;
+    };
+    if !TypeTable::is_tuple_type(type_table.def_name(*def)) {
+        return None;
+    }
+    let is_pack = |&arg: &TypeId| matches!(type_table.get(arg), ResolvedType::TypePack { .. });
+    let at = type_args.iter().position(is_pack)?;
+    assert!(
+        !type_args[at + 1..].iter().any(is_pack),
+        "the parser admits one pack per parameter list"
+    );
+    Some(PackShape {
+        pack: type_args[at],
+        before: &type_args[..at],
+        after: &type_args[at + 1..],
+    })
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).

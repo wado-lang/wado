@@ -1148,7 +1148,7 @@ pub fn token_kind_name(kind: i32) -> String {
     };
 }
 
-pub global RK_CPPCOMPILATIONUNIT: NodeKind = 0;
+pub global RK_CPP_COMPILATION_UNIT: NodeKind = 0;
 pub global RK_CONTENT: NodeKind = 1;
 pub global RK_ANYTHING: NodeKind = 2;
 
@@ -1586,7 +1586,7 @@ fn _parse_cpp_compilation_unit__inner(p: &mut Parser) -> () {
 fn _parse_cpp_compilation_unit(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_CPPCOMPILATIONUNIT, _start);
+    p.b.start_node(RK_CPP_COMPILATION_UNIT, _start);
     _parse_cpp_compilation_unit__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

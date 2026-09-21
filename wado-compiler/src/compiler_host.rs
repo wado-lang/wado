@@ -425,6 +425,15 @@ pub trait CompilerHost: Send + Sync {
     /// a list, send to an LSP client, etc.
     fn emit_diagnostic(&self, diagnostic: Diagnostic);
 
+    /// Save bytes the compiler produced but cannot explain, under a name of
+    /// the host's choosing carrying `file_stem`, and answer where they landed.
+    /// The default keeps none: a host with no filesystem has nowhere to put
+    /// them.
+    fn save_internal_artifact(&self, file_stem: &str, bytes: &[u8]) -> Option<String> {
+        let _ = (file_stem, bytes);
+        None
+    }
+
     /// Execute a Kiln generator component and return its response. The host
     /// instantiates `component_wasm` and links `core:kiln/host` so
     /// `emit-diagnostic` forwards back into itself. The default `Unsupported`
@@ -436,6 +445,18 @@ pub trait CompilerHost: Send + Sync {
         _request: GeneratorRequest,
     ) -> impl Future<Output = Result<GeneratorResponse, GeneratorRunnerError>> + Send {
         async move { Err(GeneratorRunnerError::Unsupported) }
+    }
+
+    /// Ask a generator how many leading bytes of each input determine its
+    /// output, one answer per file in declaration order. `None` in a slot —
+    /// and the default empty answer — means the whole file, which is what a
+    /// generator exporting no `probe` gets. Protocol: WEP 2026-04-12.
+    fn probe_generator(
+        &self,
+        _component_wasm: &[u8],
+        _request: &GeneratorRequest,
+    ) -> impl Future<Output = Result<Vec<Option<u64>>, GeneratorRunnerError>> + Send {
+        async move { Ok(Vec::new()) }
     }
 
     /// Resolve `[dependencies]` for bare-name `use { … } from "<name>"`.
@@ -494,13 +515,27 @@ pub struct GeneratorRequest {
     pub options: CanonicalOptions,
 }
 
+impl GeneratorRequest {
+    /// Every input file, primary first. This is the order a probe answers in
+    /// and the order extents are recorded in, so it lives here rather than
+    /// being re-spelled at each site that walks them.
+    pub fn files(&self) -> impl Iterator<Item = &GeneratorInputFile> {
+        std::iter::once(&self.primary).chain(self.inputs.iter())
+    }
+
+    /// [`Self::files`], for a caller that rewrites what it walks.
+    pub fn files_mut(&mut self) -> impl Iterator<Item = &mut GeneratorInputFile> {
+        std::iter::once(&mut self.primary).chain(self.inputs.iter_mut())
+    }
+}
+
 /// One schema file passed to a Kiln generator.
 #[derive(Debug, Clone)]
 pub struct GeneratorInputFile {
     pub path: String,
-    /// UTF-8 content of the file. Kiln schemas are text (proto,
-    /// graphql, g4, wit, ...), so string is the natural wire form.
-    pub content: String,
+    /// Raw bytes of the file. A checkpoint is not text, and the generator
+    /// receives these as a `stream<u8>` it reads only as far as it needs.
+    pub content: Vec<u8>,
 }
 
 /// Response returned by a Kiln generator.
@@ -701,7 +736,7 @@ mod tests {
                 let req = GeneratorRequest {
                     primary: GeneratorInputFile {
                         path: "schema.proto".to_string(),
-                        content: "syntax = \"proto3\";".to_string(),
+                        content: b"syntax = \"proto3\";".to_vec(),
                     },
                     inputs: vec![],
                     options: CanonicalOptions::default(),

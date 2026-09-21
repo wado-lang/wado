@@ -1,0 +1,175 @@
+//! What the reader takes out of a graph, on the forms a real model carries.
+
+use { Dim, Graph, Rank, read } from "./onnx_text.wado";
+
+global MLP: String = `<ir_version: 7, opset_import: [ "" : 10 ]>
+mlp (float[N, 128] X) => (float[N, 10] Y)
+<float[128, 64] W1, float[64] B1, float[64, 10] W2, float[10] B2>
+{
+    H = MatMul(X, W1)
+    HB = Add(H, B1)
+    A = Relu(HB)
+    T = MatMul(A, W2)
+    Y = Add(T, B2)
+}`;
+
+fn mlp() -> Graph {
+    return read(&MLP).unwrap();
+}
+
+fn dims(rank: &Rank) -> List<Dim> {
+    return match rank {
+        Dims(d) => *d,
+        Scalar => panic("expected a ranked tensor, found a scalar"),
+        Unranked => panic("expected a ranked tensor, found an unranked one"),
+    };
+}
+
+test "the graph carries its name" {
+    assert mlp().name == "mlp";
+}
+
+test "an input's dtype and dimensions come off its type" {
+    let g = mlp();
+    assert g.inputs.len() == 1;
+    assert g.inputs[0].name == "X";
+    assert g.inputs[0].dtype == "float";
+
+    let d = dims(&g.inputs[0].rank);
+    assert d.len() == 2;
+    assert `${d[0]}` == "N";
+    assert `${d[1]}` == "128";
+}
+
+test "initializers are read in order, separately from the inputs" {
+    let g = mlp();
+    assert g.initializers.len() == 4;
+    assert g.initializers[0].name == "W1";
+    assert g.initializers[3].name == "B2";
+    assert dims(&g.initializers[1].rank).len() == 1;
+}
+
+test "a node carries its operator and both name lists" {
+    let g = mlp();
+    assert g.nodes.len() == 5;
+    assert g.nodes[0].op == "MatMul";
+    assert g.nodes[0].outputs == ["H"];
+    assert g.nodes[0].inputs == ["X", "W1"];
+    assert g.nodes[2].op == "Relu";
+    assert g.nodes[2].inputs == ["HB"];
+}
+
+test "the graph's output is a value info of its own" {
+    let g = mlp();
+    assert g.outputs.len() == 1;
+    assert g.outputs[0].name == "Y";
+    assert `${dims(&g.outputs[0].rank)[1]}` == "10";
+}
+
+test "a quoted name loses its quotes" {
+    let g = read(
+        `agraph (float[2] "input.1") => (float[2] "/out") {
+            "/out" = Relu("input.1")
+        }`,
+    ).unwrap();
+    assert g.inputs[0].name == "input.1";
+    assert g.nodes[0].outputs == ["/out"];
+    assert g.nodes[0].inputs == ["input.1"];
+}
+
+test "an unknown dimension is distinct from a symbolic one" {
+    let g = read(
+        `agraph (float[N, ?] X) => (float[N, ?] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let d = dims(&g.inputs[0].rank);
+    assert d[0] matches { Symbol(_) };
+    assert d[1] matches { Unknown };
+}
+
+test "a scalar and an unranked tensor are told apart" {
+    let g = read(
+        `agraph (float X, float[] Z) => (float Y) {
+            Y = Add(X, Z)
+        }`,
+    ).unwrap();
+    assert g.inputs[0].rank matches { Scalar };
+    assert g.inputs[1].rank matches { Unranked };
+}
+
+test "an operator keeps its domain" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y) {
+            Y = com.microsoft.Gelu(X)
+        }`,
+    ).unwrap();
+    assert g.nodes[0].op == "com.microsoft.Gelu";
+}
+
+test "an attribute is read as the text the operator's schema types" {
+    let g = read(
+        `agraph (float[1, 3, 8, 8] X, float[4, 3, 3, 3] W) => (float[1, 4, 8, 8] Y) {
+            Y = Conv <kernel_shape = [3, 3], alpha: float = 1.5, name = "c"> (X, W)
+        }`,
+    ).unwrap();
+    let a = &g.nodes[0].attrs;
+    assert a.len() == 3;
+    assert a[0].name == "kernel_shape";
+    assert a[0].is_list;
+    assert a[0].values == ["3", "3"];
+    assert a[1].name == "alpha";
+    assert !a[1].is_list;
+    assert a[1].values == ["1.5"];
+    assert a[2].values == ["c"];
+}
+
+test "an attribute after the input list reads as the same attribute" {
+    let g = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X) <perm = [1, 0]>
+        }`,
+    ).unwrap();
+    let a = &g.nodes[0].attrs;
+    assert a.len() == 1;
+    assert a[0].name == "perm";
+    assert a[0].values == ["1", "0"];
+    assert g.nodes[0].inputs == ["X"];
+}
+
+test "an initializer's inline values are not mistaken for its name" {
+    let g = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = {1.0, -2.5}>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap();
+    assert g.initializers.len() == 1;
+    assert g.initializers[0].name == "W";
+}
+
+test "a syntax error comes back with its position" {
+    let e = read("agraph (float[2] X) => (float[2] Y)").unwrap_err();
+    assert e.starts_with("1:");
+}
+
+test "an initializer pointing at another file names itself rather than being dropped" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = ["location": "weights.bin"]>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: an initializer whose data lives in another file is not read";
+}
+
+test "a sequence type names itself rather than being read as a tensor" {
+    let e = read(
+        `agraph (seq(float[2]) X) => (float[2] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap_err();
+    assert e == "X: only a tensor type is read, not a sequence or a map";
+}

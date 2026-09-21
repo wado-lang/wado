@@ -50,6 +50,23 @@ other call is one the host settles on its own. No window reaches outside
 the preopen: every path opens with `PathFlags::none()`, so a component
 swapped for a symlink fails rather than resolving through it.
 
+## Synopsis
+
+```wado
+let dir = "target/core-fs-synopsis";
+create_dir_all(&join(&dir, "reports")).unwrap();
+
+let path = join(&dir, "reports/summary.txt");
+write(&path, &"3 passed, 0 failed\n").unwrap();
+
+assert read_to_string(&path).unwrap().len() == 19;
+assert metadata(&path).unwrap().size == 19;
+assert file_name(&path).unwrap() == "summary.txt";
+
+let missing = read_to_string(&join(&dir, "missing.txt")).unwrap_err();
+assert `${missing}`.contains("no such file or directory");
+```
+
 ## Functions
 
 ### `pub fn root() -> Result<Descriptor, FsError> with Preopens`

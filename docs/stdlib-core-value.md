@@ -83,6 +83,48 @@ _Fields are private._
 
 ##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<ValueVariantSerializer, SerializeError>`
 
+### `pub struct ValueSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for ValueSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct ValueMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for ValueMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct ValueStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for ValueStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct ValueVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for ValueVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
 ## Variants
 
 ### `pub variant Value`

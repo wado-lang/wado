@@ -632,6 +632,17 @@ fn test_test_passing() {
 }
 
 #[test]
+fn test_test_installs_the_stdlib_before_anything_reaches_it() {
+    // A dev build takes the stdlib from its host, and the prewarm workers
+    // reached it first: one swallowed panic per worker (issue #2102).
+    wado()
+        .args(["test", "wado-compiler/tests/fixtures/test_decl.wado"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("panicked").not());
+}
+
+#[test]
 fn test_test_failing() {
     wado()
         .args(["test", "wado-cli/tests/fixtures/test_fail.wado"])
@@ -1169,6 +1180,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "library type `Node` is defined in more than one module",
+            "public type `Node` is defined in more than one module",
         ));
 }

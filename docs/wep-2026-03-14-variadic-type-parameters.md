@@ -155,16 +155,25 @@ an open world cannot decide whether two bounds can both hold. For the full order
 and where these two rules sit in it, see
 [Trait Resolution](./wep-2026-09-01-trait-resolution.md).
 
-### 6. Multi-Pack (Limited)
+### 6. Multi-Pack — Not Implemented
 
+<<<<<<< HEAD
 A generic parameter list may declare more than one pack. Each is settled from the argument
 that carries it alone, so nothing has to find a boundary the source never wrote. The
 primary use case is concatenation:
+||||||| d358fbb7f
+Two packs may appear in the same impl or function only in a type-level position (not in a
+single expansion context). The primary use case is concatenation:
+=======
+A parameter list carries one pack. A second is a parse error:
+>>>>>>> origin/main
 
 ```wado
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
+// error: only one type pack parameter is allowed per generic parameter list
 ```
 
+<<<<<<< HEAD
 A tuple holding two packs (`[..A, ..B]`) determines neither, because every split of a
 concrete tuple satisfies it. Such a tuple is legal only where a value is produced, such as
 a return type or a local annotation. A position that receives one is rejected at the
@@ -199,6 +208,20 @@ does not accept an `[..A]` one. Naming the same packs is not enough.
 `zip` and interleave transpose their operands, so their rows must be equally long. Two
 distinct packs are never known to be. Both are therefore out of scope for this WEP, and
 the compiler rejects such a `zip` where it is written.
+||||||| d358fbb7f
+When two packs appear in an expansion expression (§8), they must have the same length at
+every call site; this is enforced at monomorphization time. More complex multi-pack
+operations (zip, interleave) are out of scope for this WEP.
+=======
+The shape a second pack would take is kept here, because it is what to build if it lands.
+Two packs appear in one impl or function only in type position, never in a single
+expansion context, and concatenation is what they are for. Two meeting in an expansion
+expression (§8) would have to be the same length at every call site, which
+monomorphization would enforce. Zip and interleave need more than that shape gives.
+
+The limit costs `[..Pre, K, ..Post]`, so a tuple type cannot name an element in its
+middle.
+>>>>>>> origin/main
 
 ### 7. Compile-Time Tuple Enumeration with Packs
 

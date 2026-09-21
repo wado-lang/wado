@@ -1,0 +1,18 @@
+// A trait's associated type carries bounds every implementor must meet, so an
+// implementor has to be able to name them.
+trait Hidden with () {
+    fn n(&self) -> i32;
+}
+
+pub trait Outer with () {
+    type Inner: Hidden;
+
+    fn inner(&self) -> Self::Inner;
+}
+
+export fn run() {
+    assert 1 == 1;
+}
+
+__DATA__
+{"compile_error": "names `Hidden`, which is private to its defining file"}
