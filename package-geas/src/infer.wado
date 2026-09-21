@@ -27,20 +27,6 @@ pub struct NodeConflict {
     pub error: ExtentConflict,
 }
 
-pub variant InferError {
-    Unnamed(UnnamedTensor),
-    AxisCount(AxisCountConflict),
-    UnknownOperator(String),
-    UnrankedTensor(String),
-    Undefined(String),
-    ScalarOperand(String),
-    OperandCount(OperandCountConflict),
-    OutputCount(OutputCountConflict),
-    DeclaredRank(DeclaredRankConflict),
-    Declared(DeclaredConflict),
-    Node(NodeConflict),
-}
-
 /// A graph output whose declared rank is not the rank the nodes produced.
 pub struct DeclaredRankConflict {
     pub tensor: String,
@@ -70,6 +56,20 @@ pub struct OutputCountConflict {
     pub node: String,
     pub op: String,
     pub given: i32,
+}
+
+pub variant InferError {
+    Unnamed(UnnamedTensor),
+    AxisCount(AxisCountConflict),
+    UnknownOperator(String),
+    UnrankedTensor(String),
+    Undefined(String),
+    ScalarOperand(String),
+    OperandCount(OperandCountConflict),
+    OutputCount(OutputCountConflict),
+    DeclaredRank(DeclaredRankConflict),
+    Declared(DeclaredConflict),
+    Node(NodeConflict),
 }
 
 impl Display for UnnamedTensor {
@@ -174,12 +174,8 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
 /// The graph's own output declaration is a condition like any other. A `?`
 /// claims nothing, so it discharges against whatever the nodes produced.
 fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
-    let dims = match &vi.rank {
-        Dims(d) => *d,
-        Scalar => [] as List<Dim>,
-        Unranked => {
-            return Result::Ok(());
-        },
+    let Some(dims) = dims_of(&vi.rank) else {
+        return Result::Ok(());
     };
     if dims.len() != produced.rank() {
         builtin::cold_path();
@@ -220,13 +216,9 @@ fn node_name(node: &Node) -> String {
 /// The axes a value info declares, named by the schema and given extents by
 /// the graph.
 fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
-    let dims = match &vi.rank {
-        Dims(d) => *d,
-        Scalar => [] as List<Dim>,
-        Unranked => {
-            builtin::cold_path();
-            return Result::Err(InferError::UnrankedTensor(vi.name));
-        },
+    let Some(dims) = dims_of(&vi.rank) else {
+        builtin::cold_path();
+        return Result::Err(InferError::UnrankedTensor(vi.name));
     };
     let Some(names) = schema.axes_for(&vi.name) else {
         builtin::cold_path();
@@ -245,6 +237,16 @@ fn shape_of(vi: &ValueInfo, schema: &Schema) -> Result<Shape, InferError> {
         axes.push(Axis { name: names[i], extent: extent_of(&dims[i], &names[i]) });
     }
     return Result::Ok(Shape { axes });
+}
+
+/// The dimensions a rank states, a scalar's being none. `None` is a tensor
+/// whose rank the graph leaves open, which states nothing to work from.
+fn dims_of(rank: &Rank) -> Option<List<Dim>> {
+    return match rank {
+        Dims(d) => Option::Some(*d),
+        Scalar => Option::Some([] as List<Dim>),
+        Unranked => null,
+    };
 }
 
 /// An ONNX `dim_value` is a static extent and a `dim_param` a symbolic one.
