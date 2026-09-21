@@ -54,7 +54,6 @@ swapped for a symlink fails rather than resolving through it.
 
 ```wado
 let dir = "target/core-fs-synopsis";
-remove_dir_all(&dir).unwrap();
 create_dir_all(&join(&dir, "reports")).unwrap();
 
 let path = join(&dir, "reports/summary.txt");

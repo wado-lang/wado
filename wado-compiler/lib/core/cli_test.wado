@@ -22,7 +22,6 @@ impl MockStdio {
 
 impl Stdout for MockStdio {
     fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
-        let _ = data;
         self.to_stderr = false;
         resume 0 as Future<Result<(), ErrorCode>>;
     }
@@ -30,7 +29,6 @@ impl Stdout for MockStdio {
 
 impl Stderr for MockStdio {
     fn write_via_stream(&mut self, data: Stream<u8>) -> Future<Result<(), ErrorCode>> {
-        let _ = data;
         self.to_stderr = true;
         resume 0 as Future<Result<(), ErrorCode>>;
     }
@@ -46,29 +44,26 @@ impl Stream<u8> for MockStdio {
 
 impl StreamWritable<u8> for MockStdio {
     fn write(&mut self, this: &StreamWritable<u8>, data: List<u8>) -> StreamWrite {
-        let _ = this;
         let count = data.len();
         if self.to_stderr {
             self.err.extend(&data);
         } else {
             self.out.extend(&data);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed };
+        resume StreamWrite { count, result: CopyResult::Completed };
     }
 
     fn write_raw(&mut self, this: &StreamWritable<u8>, data: Slice<u8>) -> StreamWrite {
-        let _ = this;
         let count = data.len();
         if self.to_stderr {
             self.err.extend_from_slice(data);
         } else {
             self.out.extend_from_slice(data);
         }
-        resume StreamWrite { count: count, result: CopyResult::Completed };
+        resume StreamWrite { count, result: CopyResult::Completed };
     }
 
     fn drop(&mut self, this: &StreamWritable<u8>) {
-        let _ = this;
     }
 
     ..trap
@@ -76,7 +71,6 @@ impl StreamWritable<u8> for MockStdio {
 
 impl Future<Result<(), ErrorCode>> for MockStdio {
     fn drop(&mut self, this: &Future<Result<(), ErrorCode>>) {
-        let _ = this;
     }
 
     ..trap

@@ -69,9 +69,8 @@ facade puts each test beside the file that implements it, which is why
 `core:collections` is tested from `collections/treemap_test.wado` and
 `collections/treeset_test.wado`.
 
-`core:prelude` owes neither. Every program imports it, so a synopsis has no
-reaching-for-it to show, and the e2e fixtures are what hold its behaviour. What
-it already carries stays; nothing here asks for more.
+`core:prelude` owes neither. Every program already imports it, so a synopsis has
+nothing to show, and the e2e fixtures are what hold its behaviour.
 
 `builtin::select` evaluates both operands and hands one back, so it is planned
 as the merge it is: the copy keeping a composite result independent lands on the

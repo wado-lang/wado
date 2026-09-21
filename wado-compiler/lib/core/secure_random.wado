@@ -87,7 +87,7 @@ pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random 
 }
 
 /// Run `body` with a [`BufferedRandom`] installed, so the small draws inside it
-/// can share a host call. A draw past the block size, or past what a short
+/// can share a host call. A draw larger than the block, or than what a short
 /// block held, reaches the host again.
 pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E) {
     let mut rng = BufferedRandom {};
@@ -148,7 +148,7 @@ impl Random for BufferedRandom {
 
 impl BufferedRandom {
     /// A handler whose block is `pool_bytes` rather than the default 4096. The
-    /// caller owes a positive size.
+    /// size must be positive.
     pub fn new(pool_bytes: i32) -> BufferedRandom {
         assert pool_bytes > 0;
         return BufferedRandom { pool_bytes };
