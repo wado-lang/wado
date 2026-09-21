@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789980610136,
+  "lastUpdate": 1789981843663,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57741,6 +57741,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/26b17689549e400a6df4474ab07a5b8883a05c07"
         },
         "date": 1789980609498,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ad28e81523356162a777de12c4b45163e7f75346",
+          "message": "Merge pull request #2107 from wado-lang/claude/kiln-duplicate-type-diagnostic\n\nfix(kiln): diagnose a duplicate public type name instead of asserting",
+          "timestamp": "2026-09-21T17:50:33+09:00",
+          "tree_id": "d9c13015ddd889bd74b55ea34ea1321bb96a8868",
+          "url": "https://github.com/wado-lang/wado/commit/ad28e81523356162a777de12c4b45163e7f75346"
+        },
+        "date": 1789981842815,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
