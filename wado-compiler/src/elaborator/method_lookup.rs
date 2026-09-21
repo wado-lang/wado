@@ -1530,6 +1530,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
+        let self_binding = Some(SelfBinding {
+            type_id: self.tysys.get_base_type(receiver_type),
+            declaring_trait: trait_decl,
+        });
         let inst = self.instantiate(
             slots,
             &Instantiation {
@@ -1539,9 +1543,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The inference pass itself: its caller merges the turbofish in
                 // afterwards, so every slot is open here.
                 type_args: &[],
+                self_binding,
             },
         );
-        self.record_slot_bounds(&inst, &method_type_params, span);
+        self.record_slot_bounds(&inst, &method_type_params, self_binding, span);
         let param_types = self.instantiate_types(param_types, &inst);
         let decl_return_type = self.instantiate_type(decl_return_type, &inst);
 
@@ -3362,6 +3367,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: &method_call.method,
                 span: method_call.span,
                 type_args: &type_args,
+                self_binding: Some(SelfBinding {
+                    type_id: self.tysys.get_base_type(output_type),
+                    declaring_trait: method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                }),
             },
         );
 

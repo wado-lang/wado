@@ -301,6 +301,12 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// A bound writing `Self` where no declaration binds one.
+    SelfInUnboundedBound {
+        param: String,
+        span: Span,
+    },
+
     /// Expanding a type parameter's `= Default` reaches the declaration it
     /// belongs to again, so filling the slot has no fixpoint.
     RecursiveTypeParamDefault {
@@ -1231,6 +1237,13 @@ impl TypeError {
             TypeError::UnknownType { name, span } => {
                 (Code::UnknownType, format!("unknown type '{name}'"), *span)
             }
+            TypeError::SelfInUnboundedBound { param, span } => (
+                Code::UnknownType,
+                format!(
+                    "`Self` in a bound on `{param}` names no implementing type here; write `{param}`"
+                ),
+                *span,
+            ),
             TypeError::RecursiveTypeParamDefault { name, span } => (
                 Code::UnknownType,
                 format!(

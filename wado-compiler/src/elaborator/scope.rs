@@ -16,9 +16,11 @@ use crate::tir::TypeId;
 use super::Elaborator;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
+use super::types::TypeError;
 use crate::ast::AstId;
 use crate::defs::DefId;
 use crate::name::{FqTraitName, FqTypeName};
+use crate::token::Span;
 
 /// A name bound in a type-parameter scope: its slot, the type it stands for,
 /// and the node that declares it.
@@ -549,6 +551,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> u32 {
         let mut idx = offset;
         for tp in params.iter().filter(|p| !p.is_effect) {
+            self.reject_self_in_bounds(tp);
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
             // signature". Such params consume no `TypeParam` index slot, keeping
@@ -589,6 +592,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
         idx
+    }
+
+    /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
+    /// on a free function's parameter would go unchecked rather than mean what
+    /// the parameter's own name already says.
+    fn reject_self_in_bounds(&mut self, param: &ast::GenericParam) {
+        if self.annotate_ctx.trait_ctx.self_type.is_some() {
+            return;
+        }
+        let written: Vec<Span> = param
+            .real_bounds()
+            .iter()
+            .filter(|bound| {
+                bound.type_args.iter().any(|ty| ty.mentions("Self"))
+                    || bound.assoc_types.iter().any(|c| c.ty.mentions("Self"))
+            })
+            .map(|bound| bound.span)
+            .collect();
+        for span in written {
+            let _ = self.emit(TypeError::SelfInUnboundedBound {
+                param: param.name.clone(),
+                span,
+            });
+        }
     }
 
     /// Bind a trait's declared type parameters to the impl's concrete trait

@@ -24,6 +24,7 @@ use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
 use super::synth::ArgClass;
+use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, MethodInfo, MethodOwner, TypeError};
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::ast::Expr;
@@ -728,6 +729,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: method_name,
                 span,
                 type_args: &type_args,
+                self_binding: Some(SelfBinding {
+                    type_id: self.tysys.get_base_type(receiver),
+                    declaring_trait: trait_name.as_ref().and_then(FqTraitName::canonical),
+                }),
             },
         );
 

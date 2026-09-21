@@ -839,6 +839,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     name: effective_name,
                     span: call.span,
                     type_args: &type_args,
+                    self_binding: None,
                 },
             )
         });
@@ -2644,6 +2645,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     span,
                     // A builtin has no turbofish to read.
                     type_args: &[],
+                    self_binding: None,
                 },
             );
             let resolved_param_types = self.instantiate_types(&decl_param_types, &inst);
@@ -2725,6 +2727,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The inference pass itself: its caller merges the turbofish in
                 // afterwards, so every slot is open here.
                 type_args: &[],
+                self_binding: None,
             },
         );
         let resolved_param_types = self.instantiate_types(&resolved_param_types, &inst);
@@ -3064,7 +3067,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 new_args.push(type_args[i]);
                 continue;
             }
-            let bounds = self.declared_bounds(p);
+            let bounds = self.declared_bounds(p, None);
             // `infer_fn_type_args` already instantiated this slot, so the
             // variable standing in for it is the one to blame — minting a
             // second would orphan the first, which the sweep would then pin to

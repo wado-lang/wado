@@ -586,20 +586,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `trait_` with every argument that reads an associated type resolved at
     /// `type_args`, what the site answers for `params`. `T::Assoc` denotes no
     /// type until `T` is one, so re-spelling it at the site drops its base.
-    fn bound_trait_at_args(
+    pub(super) fn bound_trait_at_args(
         &mut self,
         trait_: FqTraitName,
         bound: &ast::TraitBound,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
+        self_binding: Option<SelfBinding>,
     ) -> FqTraitName {
-        let pick = self.args_reading_a_projection(bound, params);
+        let pick = self.args_reading_a_projection(bound, params, self_binding);
         if !pick.contains(&true) {
             return trait_;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
-        self.with_type_params_bound(&names, type_args, |e| {
-            e.trait_named_with_resolved_args(trait_, bound, &pick)
+        self.with_type_params_bound(&names, type_args, |e| match self_binding {
+            Some(binding) => e.with_self_binding(binding, |e| {
+                e.trait_named_with_resolved_args(trait_, bound, &pick)
+            }),
+            None => e.trait_named_with_resolved_args(trait_, bound, &pick),
         })
     }
 
@@ -609,19 +613,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolves it at its own arguments rather than re-spelling it
     /// (WEP-2026-08-12).
     ///
-    /// Matched by the binder the projection stands on, not by its spelling. A
-    /// base the site does not supply — `Self` above all — answers only where it
-    /// is bound, which is not here.
+    /// Matched by the binder the projection stands on, not by its spelling.
+    /// `Self` is the one base no binder carries, and a receiver is what supplies
+    /// it, so an argument mentioning it is read only where one is bound.
     fn args_reading_a_projection(
         &self,
         bound: &ast::TraitBound,
         params: &[ast::GenericParam],
+        self_binding: Option<SelfBinding>,
     ) -> Vec<bool> {
         let binders: Vec<AstId> = params.iter().map(|param| param.id).collect();
         bound
             .type_args
             .iter()
-            .map(|ty| self.reads_a_projection(ty, &binders))
+            .map(|ty| {
+                self.reads_a_projection(ty, &binders)
+                    || (self_binding.is_some() && ty.mentions("Self"))
+            })
             .collect()
     }
 
@@ -2763,7 +2771,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let written = self
                     .tysys
                     .bound_written(bound)
-                    .map(|trait_| self.bound_trait_at_args(trait_, bound, params, type_args))
+                    .map(|trait_| {
+                        self.bound_trait_at_args(trait_, bound, params, type_args, self_binding)
+                    })
                     .and_then(|trait_| asked_at(trait_, &at_call));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(

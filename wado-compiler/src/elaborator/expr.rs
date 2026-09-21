@@ -4592,6 +4592,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
                 // A struct literal has no turbofish; its fields name the slots.
                 type_args: &[],
+                self_binding: None,
             },
         );
         let decl_field_types: Vec<TypeId> = struct_info.fields.iter().map(|(_, t, _)| *t).collect();

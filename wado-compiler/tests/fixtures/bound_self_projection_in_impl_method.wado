@@ -1,0 +1,49 @@
+#![TODO]
+
+// An inherent method's bound may write `Self::Assoc` as a trait argument. The
+// block's own type is what `Self` names, and a trait it implements elsewhere is
+// what binds the member.
+//
+// It reports `unknown type 'Self::Item'`, and so does the same bound spelled
+// `Uses<H::Item>`: a bound argument projecting off a concrete type is resolved
+// before the impl's associated types are registered. That is the blocker here,
+// not `Self` — the trait-method form
+// (bound_self_projection_in_trait_method.wado) passes. Module-level because the
+// file does not compile yet.
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+trait Src with () {
+    type Item;
+}
+
+struct Worker {}
+
+impl Uses<i32> for Worker {
+    fn go(&self, a: i32) -> i32 {
+        return a * 2;
+    }
+}
+
+struct H {
+    n: i32,
+}
+
+impl Src for H {
+    type Item = i32;
+}
+
+impl H {
+    fn run<O: Uses<Self::Item>>(&self, o: &O, a: i32) -> i32 {
+        return self.n + o.go(a);
+    }
+}
+
+test "Self::Assoc as a trait argument in an inherent method's bound" {
+    assert H { n: 1 }.run(&Worker {}, 2) == 5;
+}
+
+__DATA__
+{"test": {}}
