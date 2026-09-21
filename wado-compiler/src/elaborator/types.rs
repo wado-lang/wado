@@ -843,14 +843,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A position that receives a value holding two packs in one tuple
-    /// (`[..A, ..B]`). Every split of the value satisfies it, so nothing
-    /// reaching it settles either pack.
-    TwoPacksInReceivedType {
-        position: String,
-        span: Span,
-    },
-
     /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
     /// for one position, so spreading it says nothing a bare `X` does not.
     SpreadOfNonPack {
@@ -1902,13 +1894,6 @@ impl TypeError {
             TypeError::UnsupportedVariadicImplTarget { span } => (
                 Code::OrphanRule,
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
-                *span,
-            ),
-            TypeError::TwoPacksInReceivedType { position, span } => (
-                Code::TypeMismatch,
-                format!(
-                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
-                ),
                 *span,
             ),
             TypeError::SpreadOfNonPack { name, span } => (
@@ -3084,25 +3069,6 @@ impl TraitMethodMatch {
                 MethodOwner::InheritedFrom(link)
             }
             _ => self.method_info.owner,
-        }
-    }
-}
-
-/// A written type position a value arrives at, which is what settles the type
-/// parameters it names.
-#[derive(Clone, Copy)]
-pub(super) enum ReceivedPosition {
-    Parameter,
-    Field,
-    VariantPayload,
-}
-
-impl ReceivedPosition {
-    pub(super) fn name(self) -> &'static str {
-        match self {
-            ReceivedPosition::Parameter => "parameter",
-            ReceivedPosition::Field => "field",
-            ReceivedPosition::VariantPayload => "variant payload",
         }
     }
 }

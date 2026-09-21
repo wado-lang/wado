@@ -1,0 +1,26 @@
+//! A contraction naming its axis where the axis sits, which is what Geas's
+//! tensor signatures need: `K` is repeated on both operands and absent from
+//! the result, and each operand's ends are packs of their own.
+//! See docs/wep-2026-09-20-geas.md § "The Signature Is the Notation".
+
+struct Tensor<E, Axes> {
+    extents: List<i32>,
+}
+
+struct Batch {}
+struct Row {}
+struct Inner {}
+struct Col {}
+
+fn contract<..Pre, K, ..Post, ..QPre, ..QPost>(
+    a: &Tensor<f32, [..Pre, K, ..Post]>,
+    b: &Tensor<f32, [..QPre, K, ..QPost]>,
+) -> i32 {
+    return a.extents.len() * 10 + b.extents.len();
+}
+
+test "a middle axis is named where it sits" {
+    let a: Tensor<f32, [Batch, Inner, Row]> = Tensor { extents: [2, 3, 4] };
+    let b: Tensor<f32, [Inner, Col]> = Tensor { extents: [3, 5] };
+    assert contract::<[Batch], Inner, [Row], [], [Col]>(&a, &b) == 32;
+}

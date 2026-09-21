@@ -165,16 +165,29 @@ primary use case is concatenation:
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] { ... }
 ```
 
-A tuple holding two packs (`[..A, ..B]`) determines neither, because every split of a
-concrete tuple satisfies it. Such a tuple is legal only where a value is produced, such as
-a return type or a local annotation. A position that receives one is rejected at the
-declaration: a parameter, a struct field or a variant payload, at any depth of the written
-type. A `fn` type written inside one ends the walk, since its parameters and return belong
-to that function and settle no pack of the signature naming it. To receive both packs,
-each takes a tuple of its own (`[[..A], [..B]]`).
+A tuple holding two packs (`[..A, ..B]`) settles neither, because every split of a
+concrete tuple satisfies it. The rule is therefore about settling rather than about where
+the tuple is written: such a tuple is legal anywhere, and each pack it names must be
+settled by something else — another parameter, a turbofish, or an annotation. Once they
+are, the tuple is checked against the arity they fix, so a surplus element is a type
+mismatch rather than something a split silently absorbs.
 
-Rejecting the declaration puts the message on what cannot be meant, rather than on the
-argument that later fails to match an empty pack.
+```wado
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { ... }
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
+
+joined([[1], [true]], [1, true]);                    // `split` settles both
+middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
+```
+
+A pack nothing settles is reported at the use site, as an uninferred type parameter. That
+is where the answer would come from, and it is the only place that knows whether a
+turbofish supplied one. To settle both packs from one value, each takes a tuple of its own
+(`[[..A], [..B]]`).
+
+A pack binds from a written type argument as a scalar type parameter does, and not only
+from the positions a value offers. That is what lets a turbofish or an annotation settle
+one.
 
 Where such a tuple is produced, its ends still place elements. The elements ahead of the
 first pack and behind the last keep their positions whatever the packs expand to, so
@@ -187,9 +200,9 @@ its own tuple (`concat::<[i32], [bool, String]>(…)`); any other spelling is an
 one argument per pack included, since `<i32, String>` and `<[i32, String], []>` split one
 list two ways.
 
-An element between two packs, as in a produced `[..A, M, ..B]`, is determined once the
-packs are bound, but binding them does not feed the constraint again. `M` is reported
-uninferred, and a turbofish names it.
+An element between two packs, as in `[..A, M, ..B]`, is determined once the packs are
+bound, but binding them does not feed the constraint again. `M` is reported uninferred,
+and a turbofish names it.
 
 Inside the body that declares them, packs are rigid, as scalar parameters are. A value
 matches a pack-carrying tuple by layout: the same fixed positions, and the same packs in

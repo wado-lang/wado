@@ -29,12 +29,21 @@ pub(super) fn unify(
     let actual_type = type_table.borrow().get(actual).clone();
 
     match (&expected_type, &actual_type) {
-        // Direct type parameter mapping.
+        // Direct type parameter mapping. A pack binds here too, which is how a
+        // turbofish or an annotation settles one: the tuple arm below reads a
+        // pack off a value's positions, and a spelled `..A` has none to read.
         //
         // `or_insert` prevents later fields with self-referential types
         // (like `List<&Node<K>>`) from overwriting earlier correct
         // mappings (like `K -> String`) with incorrect ones (`K -> K`).
-        (ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_), _) => {
+        (
+            ResolvedType::TypeParam { .. }
+            | ResolvedType::InferVar(_)
+            | ResolvedType::TypePack {
+                mapped_elem: None, ..
+            },
+            _,
+        ) => {
             bindings.entry(expected).or_insert(actual);
         }
         // Tuple types with a type pack: e.g., `[A, ..T, B]` matched

@@ -1,0 +1,18 @@
+//! A parameter tuple may hold two packs when a sibling parameter settles them.
+//! The split is then read off the bindings rather than searched for, so the
+//! tuple is checked against the arity the packs already fixed.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 {
+    return split.0.len() * 100 + both.len();
+}
+
+test "a sibling parameter settles both packs" {
+    assert joined([[1], [true, "x"]], [1, true, "x"]) == 103;
+}
+
+test "an empty pack on either side" {
+    assert joined([[], [1]], [1]) == 1;
+    assert joined([[1], []], [1]) == 101;
+    assert joined([[], []], []) == 0;
+}

@@ -20,7 +20,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
-use super::types::{FunctionContext, ReceivedPosition, TypeError};
+use super::types::{FunctionContext, TypeError};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
@@ -1491,7 +1491,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
+            scope.reject_written_annotation(&field.ty);
             if let Some(serde_default) = field
                 .attrs
                 .iter()
