@@ -1023,7 +1023,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // Before anything counts slots, since a pack's arguments are
                 // one per element until they are grouped.
                 let mut written = type_args.clone();
-                if self.group_variadic_type_args_of(&mtype_params, &mut written, call.span) {
+                if self.group_variadic_type_args_of(suffix, &mtype_params, &mut written, call.span)
+                {
                     return TypeTable::ERROR;
                 }
                 // An omitted turbofish infers both levels; a partial one keeps
@@ -1859,7 +1860,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
         // one tuple, the per-param shape inference already produces.
-        if self.group_variadic_type_args_of(&declared, &mut type_args, call.span) {
+        if self.group_variadic_type_args_of(
+            &callee.name().to_string(),
+            &declared,
+            &mut type_args,
+            call.span,
+        ) {
             return TypeTable::ERROR;
         }
 
@@ -1876,7 +1882,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
         let written = self.packs_written_args_reach(&callee, args.len());
-        self.settle_empty_pack_of_beyond(&declared, &mut type_args, &written);
+        self.settle_unreached_packs(&declared, &mut type_args, &written);
 
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -3158,6 +3164,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// fills one `..T` slot with `[i32, bool]` — or report, and say which.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
+        callee_name: &str,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
         span: token::Span,
@@ -3172,7 +3179,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return false;
         };
         if packs.next().is_some() {
-            return self.reject_unspelled_pack_args(&real, type_args, span);
+            return self.reject_unspelled_pack_args(callee_name, &real, type_args, span);
         }
         if type_args.len() <= real.len() {
             return false;
@@ -3186,43 +3193,52 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         false
     }
 
-    /// Report a site whose type arguments leave two packs' boundary unwritten,
-    /// returning whether it did.
+    /// Report type arguments that cannot be matched to more than one pack,
+    /// returning whether they were. Surplus arguments are an arity error here,
+    /// where with one pack they are what the pack absorbs.
     fn reject_unspelled_pack_args(
         &mut self,
+        callee_name: &str,
         real: &[&ast::GenericParam],
         type_args: &[TypeId],
         span: token::Span,
     ) -> bool {
         // A tuple says where the pack ends, and so does anything still
-        // undecided, which a later pass answers.
-        let spelled = type_args.len() <= real.len() && {
+        // undecided, which a later pass answers. Asked of the slots that exist
+        // before the count is: a flat `f::<i32, bool, String>` is surplus only
+        // because nothing says where the first pack stops, and naming the count
+        // would send the caller to delete an argument rather than group them.
+        let spelled = {
             let table = self.tysys.type_table.borrow();
-            type_args.iter().enumerate().all(|(i, &arg)| {
-                !real[i].is_pack || table.is_tuple(arg) || table.contains_undecided(arg)
-            })
+            type_args
+                .iter()
+                .zip(real.iter())
+                .all(|(&arg, p)| !p.is_pack || table.is_tuple(arg) || table.contains_undecided(arg))
         };
-        if spelled {
-            return false;
+        if !spelled {
+            let _ = self.emit(TypeError::UnspelledPackBoundary { span });
+            return true;
         }
-        let _ = self.emit(TypeError::UnspelledPackBoundary { span });
-        true
+        // Each pack spelled and still too many: a count the call can fix by
+        // itself, which with one pack would instead be what the pack absorbs.
+        if type_args.len() > real.len() {
+            let _ = self.emit(TypeError::SurplusTypeArguments {
+                name: callee_name.to_string(),
+                expected: real.len(),
+                found: type_args.len(),
+                span,
+            });
+            return true;
+        }
+        false
     }
 
-    /// Settle a pack slot nothing else answered for to the empty pack: a pack
-    /// stands for the type arguments left over, and this site left none over.
-    pub(super) fn settle_empty_pack_of(
-        &mut self,
-        declared: &[ast::GenericParam],
-        type_args: &mut Vec<TypeId>,
-    ) {
-        self.settle_empty_pack_of_beyond(declared, type_args, &[]);
-    }
-
-    /// [`Self::settle_empty_pack_of`], leaving alone the packs a written
-    /// argument reaches. Those the call was meant to settle, so closing them
-    /// here answers a failed inference with a shape nothing asked for.
-    pub(super) fn settle_empty_pack_of_beyond(
+    /// Settle to the empty pack every pack slot this site left nothing over
+    /// for, which is what a pack stands for. `reached` names the packs a
+    /// written argument was meant to settle, from [`Self::packs_args_reach`]:
+    /// closing one of those answers a failed inference with a shape nothing
+    /// asked for, so every caller states them rather than defaulting to none.
+    pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
@@ -3270,16 +3286,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// The packs a parameter the call writes an argument for mentions. Those a
     /// written argument was meant to settle; the rest the site never reached.
-    fn packs_written_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
-        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
-            return vec![];
-        };
+    pub(super) fn packs_args_reach(&self, param_types: &[TypeId], arg_count: usize) -> Vec<String> {
         let table = self.tysys.type_table.borrow();
         param_types
             .iter()
             .take(arg_count)
             .flat_map(|&t| table.pack_names(t))
             .collect()
+    }
+
+    /// [`Self::packs_args_reach`] for a free function, whose parameter types
+    /// the callee reference answers.
+    fn packs_written_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
+            return vec![];
+        };
+        self.packs_args_reach(&param_types, arg_count)
     }
 
     /// Look up a generic function (current or imported) and produce a temporary

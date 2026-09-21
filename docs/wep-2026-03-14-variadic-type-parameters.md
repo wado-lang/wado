@@ -191,9 +191,10 @@ An element between two packs, as in a produced `[..A, M, ..B]`, is determined on
 packs are bound, but binding them does not feed the constraint again. `M` is reported
 uninferred, and a turbofish names it.
 
-When two packs appear in an expansion expression (§8), they must have the same length at
-every call site; this is enforced at monomorphization time. More complex multi-pack
-operations (zip, interleave) are out of scope for this WEP.
+An expansion that transposes its operands, `zip` among them, needs its rows to be equally
+long. Two distinct packs are never known to be, so `zip` over them is rejected where it is
+written, which is what keeps the multi-pack `zip` this WEP puts out of scope out of the
+compiler as well. Interleave is out of scope for the same reason.
 
 ### 7. Compile-Time Tuple Enumeration with Packs
 

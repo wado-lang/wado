@@ -5344,6 +5344,22 @@ the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
 settles `X` and `Y` and nothing else. An element between two packs is inferred
 from no argument, so name it in a turbofish.
 
+Inside the body that declares them, packs are rigid, as a scalar parameter is. A
+value matches such a tuple by layout: the same fixed positions and the same packs
+in the same order. Mentioning only packs in scope is not enough.
+
+```wado
+fn reorder<..A, ..B>(a: [..A], b: [..B]) {
+    let ab: [..A, ..B] = [..a, ..b];      // OK
+    // let ba: [..B, ..A] = [..a, ..b];   // ERROR: the order is part of the type
+    // let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
+}
+```
+
+`zip` transposes its operands position by position, so its rows must be equally
+long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
+rejected where it is written.
+
 A turbofish spells each pack as its own tuple. A flat list carries no boundary
 either:
 

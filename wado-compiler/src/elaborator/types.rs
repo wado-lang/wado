@@ -642,8 +642,9 @@ pub enum TypeError {
     UninferredStaticTypeArg {
         receiver: String,
         method: String,
-        /// The first of the method's own parameters, which the call must spell.
-        param: String,
+        /// The method's own parameters the call must spell, in declaration
+        /// order. Never empty.
+        params: Vec<String>,
         span: Span,
     },
 
@@ -862,6 +863,13 @@ pub enum TypeError {
     /// A turbofish spelling more than one type pack's arguments flat, which
     /// says nothing about where one pack ends and the next begins.
     UnspelledPackBoundary {
+        span: Span,
+    },
+
+    /// A tuple `zip` whose rows are not all the same length. Two distinct packs
+    /// are never known to be equally long, so the transpose has no answer.
+    ZipOverUnequalPacks {
+        row: String,
         span: Span,
     },
 
@@ -1621,13 +1629,27 @@ impl TypeError {
             TypeError::UninferredStaticTypeArg {
                 receiver,
                 method,
-                param,
+                params,
                 span,
             } => (
                 Code::TypeMismatch,
-                format!(
-                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
-                ),
+                {
+                    assert!(!params.is_empty(), "the emitter found an unspelled slot");
+                    let named = params
+                        .iter()
+                        .map(|p| format!("'{p}'"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    let (plural, verb, them) = if params.len() == 1 {
+                        ("", "is", "it")
+                    } else {
+                        ("s", "are", "them")
+                    };
+                    let spelled = params.join(", ");
+                    format!(
+                        "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
+                    )
+                },
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
@@ -1895,6 +1917,13 @@ impl TypeError {
                 Code::TypeMismatch,
                 format!(
                     "`..{name}` spreads `{name}`, which is not a type pack: declare it as `..{name}` in the type parameter list, or write `{name}` here"
+                ),
+                *span,
+            ),
+            TypeError::ZipOverUnequalPacks { row, span } => (
+                Code::TypeMismatch,
+                format!(
+                    "`zip` transposes its rows position by position, so every row must be the same length; `{row}` is not the length of the first. Two type packs are never known to be equally long, so `zip` over them is not supported"
                 ),
                 *span,
             ),

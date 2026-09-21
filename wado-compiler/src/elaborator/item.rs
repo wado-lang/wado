@@ -2498,10 +2498,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_params
             .iter()
             .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.has_fn_bound() {
+                if !p.is_real_type_param() {
                     return None;
                 }
                 let idx = non_effect_non_fn_idx;
@@ -2835,10 +2832,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_params
             .iter()
             .filter_map(|p| {
-                if p.is_effect {
-                    return None;
-                }
-                if p.has_fn_bound() {
+                if !p.is_real_type_param() {
                     return None;
                 }
                 let idx = non_effect_non_fn_idx;

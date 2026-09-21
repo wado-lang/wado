@@ -644,13 +644,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Before anything counts slots, since a pack's arguments are one per
         // element until they are grouped.
         let mut type_args = type_args;
-        if self.group_variadic_type_args_of(&method_own_params, &mut type_args, span) {
+        if self.group_variadic_type_args_of(method_name, &method_own_params, &mut type_args, span) {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
         // Only where no argument can settle a pack: past that, an argument the
         // solve has yet to read would meet a slot already pinned empty.
         if args_ast.is_empty() {
-            self.settle_empty_pack_of(&method_own_params, &mut type_args);
+            self.settle_unreached_packs(&method_own_params, &mut type_args, &[]);
         }
 
         self.check_inherent_member_visibility(
@@ -675,6 +675,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // or leaves the expansion to monomorphization when a `..T` pack is
         // present; `return_type` already says what it yields.
         if method_name == "zip" && self.tysys.type_table.borrow().is_tuple(base_type_id) {
+            if let Some(row) = self.zip_row_of_unprovable_arity(base_type_id) {
+                let _ = self.emit(TypeError::ZipOverUnequalPacks { row, span });
+                return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
+            }
             return MethodCallOutcome::no_dispatch(return_type);
         }
 
@@ -765,8 +769,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 type_args.clone()
             };
             // The solve above has seen every written argument, so a pack still
-            // open here is one the call left nothing over for.
-            self.settle_empty_pack_of(&method_own_params, &mut known);
+            // open here is one the call left nothing over for — unless an
+            // argument reached it, which makes it the solve's failure.
+            let reached = self.packs_args_reach(&expected_param_types, args.len());
+            self.settle_unreached_packs(&method_own_params, &mut known, &reached);
             default_type_bindings.extend(self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
@@ -1693,6 +1699,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if let Some(sig) = callee_sig.as_ref() {
             let own_params = sig.own_params.clone();
             if self.group_variadic_type_args_of(
+                &static_call.method,
                 &own_params,
                 &mut method_type_args,
                 static_call.span,
@@ -1819,13 +1826,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let _ = self.emit(TypeError::UninferredStaticTypeArg {
                     receiver,
                     method: static_call.method.clone(),
-                    param: sig.own_params[i].name.clone(),
+                    params: vec![sig.own_params[i].name.clone()],
                     span: static_call.span,
                 });
                 return TypeTable::ERROR;
             }
             merge_turbofish_type_args(&mut method_type_args, &inferred);
-            self.settle_empty_pack_of(&sig.own_params, &mut method_type_args);
+            let reached = self.packs_args_reach(&param_types, args.len());
+            self.settle_unreached_packs(&sig.own_params, &mut method_type_args, &reached);
             let declaring_args = self
                 .receiver_declaring_args(Some(target_type_id), &[])
                 .unwrap_or_default();
@@ -2684,6 +2692,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow_mut()
             .make_type_param(blanket_param.to_string(), 0)
+    }
+
+    /// The first row of a tuple `zip` whose length no other row is known to
+    /// match. Rows are transposed position by position, so unequal rows have no
+    /// answer; two distinct packs are never known to be equally long, which is
+    /// why `zip` over them is out of scope in
+    /// `docs/wep-2026-03-14-variadic-type-parameters.md` §6.
+    fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
+        let table = self.tysys.type_table.borrow();
+        let rows = table.as_tuple(tuple)?;
+        let first = table.tuple_layout(*rows.first()?)?;
+        let odd = rows
+            .iter()
+            .skip(1)
+            .find(|&&row| table.tuple_layout(row) != Some(first.clone()))?;
+        Some(table.type_name(*odd))
     }
 
     /// A qualified method's own type parameters — the slots past the declaring
