@@ -111,7 +111,9 @@ impl AttrTarget {
 }
 
 /// The arguments an attribute takes. [`AttrArgs::Read`] is the shape no central
-/// rule captures, checked where the attribute is read.
+/// rule captures, checked where the attribute is read — for `#[cm]` and
+/// `#[canonical]` that reader is the parser, which turns them into a
+/// `CmBoundary` on the attribute itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AttrArgs {
     /// Nothing, as `#[expect_trap]`.
@@ -290,7 +292,7 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: CANONICAL,
         targets: FUNCTION_TARGET,
-        args: AttrArgs::Strings,
+        args: AttrArgs::Read("a namespace and a name, as two strings"),
         summary: "the Component Model canonical built-in this lowers to",
     },
     AttributeSchema {

@@ -10,7 +10,6 @@ mod common;
 
 mod array_literal_sroa;
 mod assert_capture_plan;
-mod attribute_schema;
 mod box_local_unwrap;
 mod closure_confinement;
 mod closure_frame_moves;

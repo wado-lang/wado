@@ -1,0 +1,12 @@
+// An attribute no schema in `attribute.rs` describes is rejected where it is
+// written. A typo in an attribute name is otherwise dropped without a word.
+
+#[expect_trab]
+test "typo" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown attribute: `expect_trab`"}
