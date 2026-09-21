@@ -5750,13 +5750,9 @@ impl TirBlock {
 }
 
 /// `receiver.zip()` as a tuple literal: one column per position, each reading
-/// its cell out of every row. `tuple` is the receiver's type, refs peeled.
-pub fn transpose_tuple_expr(
-    receiver: &TirExpr,
-    tuple: TypeId,
-    span: Span,
-    type_table: &mut TypeTable,
-) -> TirExpr {
+/// its cell out of every row. A `&`/`&mut` receiver transposes what it refers to.
+pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut TypeTable) -> TirExpr {
+    let tuple = type_table.peel_refs(receiver.type_id);
     let transposed = type_table
         .transposed_tuple(tuple)
         .expect("method lookup admits `zip` only over rows that transpose");

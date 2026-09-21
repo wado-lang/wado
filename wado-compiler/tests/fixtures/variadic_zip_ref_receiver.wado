@@ -1,0 +1,30 @@
+fn columns<..A>(t: &[[..A], [..A]]) -> i32 {
+    let z = t.zip();
+    let mut cols = 0;
+    let mut cells = 0;
+    for let p of z {
+        cols += 1;
+        cells += p.len();
+    }
+    return cols * 100 + cells;
+}
+
+fn columns_inline<..A>(t: &[[..A], [..A]]) -> i32 {
+    let mut cols = 0;
+    for let p of t.zip() {
+        cols += 1;
+    }
+    return cols;
+}
+
+test "a zip transposes what a reference refers to" {
+    let a = [1, "x"];
+    let b = [2, "y"];
+    assert columns(&[a, b]) == 204;
+    assert columns_inline(&[a, b]) == 2;
+}
+
+__DATA__
+{
+  "test": {}
+}

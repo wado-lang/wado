@@ -8832,7 +8832,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
                             transpose_tuple_expr(
                                 &receiver,
-                                base_type_id,
                                 method_call.span,
                                 &mut self.tysys.type_table.borrow_mut(),
                             )
