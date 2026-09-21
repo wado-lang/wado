@@ -817,34 +817,29 @@ impl<'a, H: CompilerHost> Analyzer<'a, H> {
         self.implicit_modules = implicit_modules;
         self.entry_module_source = entry_source.clone();
 
-        // First pass: collect definitions from all modules (excluding pub use)
         for (source, module) in modules {
             self.collect_definitions(module, source);
         }
 
-        // Second pass: process pub use (re-exports) now that all symbols are collected
+        // Re-exports need every module's symbols collected.
         for (source, module) in modules {
             self.process_reexports(module, source, modules);
         }
 
-        // Third pass: check for prelude type collisions
-        // Must run after pub use processing so that is_prelude_type can
-        // resolve re-exports from core:prelude.
+        // `is_prelude_type` resolves re-exports from core:prelude, so this
+        // follows the re-export pass.
         for (source, module) in modules {
             self.check_prelude_collisions(module, source);
         }
 
-        // Fourth pass: every function either has a body or is backed by one
         for (source, module) in modules {
             self.check_function_declarations(module, source);
         }
 
-        // Fifth pass: every attribute is one the schema describes
         for (source, module) in modules {
             self.check_attributes(module, source);
         }
 
-        // Sixth pass: validate imports in each module
         let _ = self.validate_all_imports(modules);
 
         self.logger.ok_or_bail(())

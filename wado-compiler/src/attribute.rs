@@ -31,6 +31,7 @@ pub const STDLIB: &str = "stdlib";
 pub const SYNOPSIS: &str = "synopsis";
 pub const TIMEOUT_MS: &str = "timeout_ms";
 pub const TODO: &str = "TODO";
+/// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
 pub const UNAVAILABLE: &str = "unavailable";
 pub const WASM_MODULE: &str = "wasm_module";
 pub const WIRE: &str = "wire";
@@ -64,43 +65,33 @@ pub enum AttrTarget {
 }
 
 impl AttrTarget {
-    /// How a diagnostic names this place.
+    /// How a diagnostic names this place, article and all.
     #[must_use]
     pub fn describe(self) -> &'static str {
         match self {
-            Self::Module => "module",
-            Self::Function => "function",
-            Self::Param => "parameter",
-            Self::GenericParam => "type parameter",
-            Self::Global => "global",
-            Self::Let => "let statement",
-            Self::Test => "test block",
-            Self::Struct => "struct",
-            Self::StructField => "struct field",
-            Self::Enum => "enum",
-            Self::EnumCase => "enum case",
-            Self::Variant => "variant",
-            Self::VariantCase => "variant case",
-            Self::Flags => "flags declaration",
-            Self::FlagsVariant => "flags member",
-            Self::Newtype => "newtype",
-            Self::TupleType => "tuple type declaration",
-            Self::BuiltinType => "builtin type declaration",
-            Self::Trait => "trait",
-            Self::Interface => "interface",
-            Self::Resource => "resource",
-            Self::World => "world",
+            Self::Module => "a module",
+            Self::Function => "a function",
+            Self::Param => "a parameter",
+            Self::GenericParam => "a type parameter",
+            Self::Global => "a global",
+            Self::Let => "a let statement",
+            Self::Test => "a test block",
+            Self::Struct => "a struct",
+            Self::StructField => "a struct field",
+            Self::Enum => "an enum",
+            Self::EnumCase => "an enum case",
+            Self::Variant => "a variant",
+            Self::VariantCase => "a variant case",
+            Self::Flags => "a flags declaration",
+            Self::FlagsVariant => "a flags member",
+            Self::Newtype => "a newtype",
+            Self::TupleType => "a tuple type declaration",
+            Self::BuiltinType => "a builtin type declaration",
+            Self::Trait => "a trait",
+            Self::Interface => "an interface",
+            Self::Resource => "a resource",
+            Self::World => "a world",
         }
-    }
-
-    /// How a diagnostic names this place, article and all.
-    #[must_use]
-    pub fn describe_one(self) -> String {
-        let article = match self {
-            Self::Enum | Self::EnumCase | Self::Interface => "an",
-            _ => "a",
-        };
-        format!("{article} {}", self.describe())
     }
 
     /// Whether this target takes `#![…]` rather than `#[…]`.
@@ -462,7 +453,7 @@ impl AttributeFault {
             Self::Unknown => format!("unknown attribute: `{name}`"),
             Self::Misplaced { target, schema } => format!(
                 "`{name}` does not belong on {}; it belongs on {}",
-                target.describe_one(),
+                target.describe(),
                 list_targets(schema.targets)
             ),
             Self::Position { target, schema } => {
@@ -487,7 +478,7 @@ impl AttributeFault {
 
 /// The targets a diagnostic lists, as prose.
 fn list_targets(targets: &[AttrTarget]) -> String {
-    if targets.len() == EVERY_TARGET.len() {
+    if targets == EVERY_TARGET {
         return "any declaration".to_string();
     }
     let mut out = String::new();
@@ -499,7 +490,7 @@ fn list_targets(targets: &[AttrTarget]) -> String {
                 ", "
             });
         }
-        out.push_str(&target.describe_one());
+        out.push_str(target.describe());
     }
     out
 }
@@ -694,55 +685,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn unknown_name_is_rejected() {
-        assert_eq!(
-            check("expect_trab", &[], AttrTarget::Test),
-            Some(AttributeFault::Unknown)
-        );
-    }
-
-    #[test]
-    fn known_name_in_the_wrong_place_is_rejected() {
-        let fault = check(EXPECT_TRAP, &[], AttrTarget::Struct);
-        assert!(matches!(fault, Some(AttributeFault::Misplaced { .. })));
-    }
-
-    #[test]
-    fn inner_only_attribute_written_outer_names_the_position() {
-        let fault = check(NO_PRELUDE, &[], AttrTarget::Function);
-        assert!(matches!(fault, Some(AttributeFault::Position { .. })));
-    }
-
-    #[test]
-    fn argument_shape_is_checked_where_the_schema_fixes_it() {
-        assert!(check(EXPECT_TRAP, &[], AttrTarget::Test).is_none());
-        assert!(
-            check(
-                EXPECT_TRAP,
-                &[AttrArg::Ident("always".to_string())],
-                AttrTarget::Test
-            )
-            .is_some()
-        );
-        assert!(
-            check(
-                TIMEOUT_MS,
-                &[AttrArg::Number("5000".to_string())],
-                AttrTarget::Test
-            )
-            .is_none()
-        );
-        assert!(
-            check(
-                TIMEOUT_MS,
-                &[AttrArg::Str("5000".to_string())],
-                AttrTarget::Test
-            )
-            .is_some()
-        );
-    }
-
+    /// What a fixture cannot state: the `Read` shapes reach their reader
+    /// unjudged, however they are written. The faults themselves are stated by
+    /// the `attr_*.wado` fixtures, in the source they reject.
     #[test]
     fn a_read_shape_is_left_to_its_reader() {
         assert!(check(PARAM, &[], AttrTarget::Global).is_none());
