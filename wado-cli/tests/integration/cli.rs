@@ -1148,6 +1148,34 @@ fn test_lib_duplicate_export_name_rejected() {
         .stderr(predicate::str::contains("two functions named `dup`"));
 }
 
+/// What reaches the CM interface is what an `export fn` names, and `export`
+/// carries a type across the boundary whatever its scope. An `internal` type
+/// is nameable by the entry, so it can be exported and must be published.
+#[test]
+fn test_lib_exports_an_internal_type_from_a_submodule() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("wado.toml"),
+        "[package]\nnamespace = \"acme\"\nname = \"vis\"\nversion = \"0.1.0\"\nlib = \"src/lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src").join("geom.wado"),
+        "internal struct Point { internal x: i32, internal y: i32 }\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("src").join("lib.wado"),
+        "use { Point } from \"./geom.wado\";\n\
+         export fn origin() -> Point { return Point { x: 0, y: 0 }; }\n",
+    )
+    .unwrap();
+
+    wado_in(dir).arg("build").arg("--lib").assert().success();
+}
+
 #[test]
 fn test_lib_duplicate_type_name_rejected() {
     let tmp = tempfile::tempdir().unwrap();

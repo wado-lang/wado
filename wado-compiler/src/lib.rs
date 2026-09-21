@@ -671,8 +671,15 @@ fn collect_lib_surface(
                         reexport_origin: Some((source.clone(), func.name.clone())),
                     });
                 }
+                // Not `is_public`: `pub` is the Wado source API, while what
+                // reaches the CM interface is what an `export fn` names, and
+                // `export` carries a type across whatever its scope. Only a
+                // file-private type is out of reach, since no other module can
+                // name it to export it.
                 _ if lib_type_decl_name(item).is_some()
-                    && item.visibility().is_some_and(ast::Visibility::is_public) =>
+                    && item
+                        .visibility()
+                        .is_some_and(ast::Visibility::reaches_beyond_file) =>
                 {
                     submodule_type_decls.push((source.clone(), item.clone()));
                 }
