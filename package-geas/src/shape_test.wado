@@ -1,0 +1,221 @@
+use { Extent } from "./extent.wado";
+use { Axis, Shape } from "./shape.wado";
+
+fn stat(name: String, n: i32) -> Axis {
+    return Axis { name, extent: Extent::Static(n) };
+}
+
+fn sym(name: String, symbol: String) -> Axis {
+    return Axis { name, extent: Extent::Symbol(symbol) };
+}
+
+fn shape(axes: List<Axis>) -> Shape {
+    return Shape { axes };
+}
+
+test "matmul contracts the shared axis and keeps the outer two" {
+    let x = shape([
+        stat("Batch", 2),
+        stat("In", 3),
+    ]);
+    let w = shape([
+        stat("In", 3),
+        stat("Hidden", 4),
+    ]);
+
+    let y = x.matmul(&w, "MatMul").unwrap();
+    assert y.rank() == 2;
+    assert y.axes[0].name == "Batch";
+    assert y.axes[1].name == "Hidden";
+    assert y.axes[1].extent.agrees(&Extent::Static(4));
+}
+
+test "a contracted axis of two lengths names both" {
+    let x = shape([
+        stat("Batch", 2),
+        stat("In", 3),
+    ]);
+    let w = shape([
+        stat("In", 5),
+        stat("Hidden", 4),
+    ]);
+
+    let e = x.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis In is 3 on the left and 5 on the right";
+}
+
+test "a symbolic axis contracts against the same symbol" {
+    // A batch that only the run knows still flows through, because it meets
+    // its own symbol rather than a number.
+    let x = shape([
+        sym("Batch", "batch"),
+        stat("In", 3),
+    ]);
+    let w = shape([
+        stat("In", 3),
+        stat("Hidden", 4),
+    ]);
+
+    let y = x.matmul(&w, "MatMul").unwrap();
+    assert y.axes[0].extent.agrees(&Extent::Symbol("batch"));
+}
+
+test "a symbol meeting a number is a failure, not a deferred check" {
+    let x = shape([
+        stat("Batch", 2),
+        sym("In", "in"),
+    ]);
+    let w = shape([
+        stat("In", 3),
+        stat("Hidden", 4),
+    ]);
+
+    let e = x.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis In is in on the left and 3 on the right";
+}
+
+test "matmul batches over every axis ahead of the last two" {
+    let a = shape([
+        sym("Batch", "b"),
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let b = shape([
+        sym("Batch", "b"),
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = a.matmul(&b, "MatMul").unwrap();
+    assert y.rank() == 3;
+    assert y.axes[0].extent.agrees(&Extent::Symbol("b"));
+    assert y.axes[1].name == "M";
+    assert y.axes[2].name == "N";
+}
+
+test "a batch axis of two lengths stops the contraction" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let b = shape([
+        stat("Batch", 8),
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let e = a.matmul(&b, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis Batch is 2 on the left and 8 on the right";
+}
+
+test "a matrix broadcasts across the batch axes of the other operand" {
+    let a = shape([
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let b = shape([
+        sym("Batch", "b"),
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = a.matmul(&b, "MatMul").unwrap();
+    assert y.rank() == 3;
+    assert y.axes[0].name == "Batch";
+    assert y.axes[1].name == "M";
+    assert y.axes[2].name == "N";
+}
+
+test "a batch axis of extent 1 yields to the other operand's" {
+    let a = shape([
+        stat("One", 1),
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let b = shape([
+        stat("Batch", 8),
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = a.matmul(&b, "MatMul").unwrap();
+    assert y.axes[0].name == "Batch";
+    assert y.axes[0].extent.agrees(&Extent::Static(8));
+}
+
+test "a rank-1 left operand is a row whose axis is dropped" {
+    let v = shape([stat("K", 3)]);
+    let w = shape([
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = v.matmul(&w, "MatMul").unwrap();
+    assert y.rank() == 1;
+    assert y.axes[0].name == "N";
+}
+
+test "a rank-1 right operand is a column whose axis is dropped" {
+    let m = shape([
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let v = shape([stat("K", 3)]);
+
+    let y = m.matmul(&v, "MatMul").unwrap();
+    assert y.rank() == 1;
+    assert y.axes[0].name == "M";
+}
+
+test "a rank-1 operand still contracts its one axis" {
+    let v = shape([stat("K", 5)]);
+    let w = shape([
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let e = v.matmul(&w, "MatMul").unwrap_err();
+    assert `${e}` == "MatMul: axis K is 5 on the left and 3 on the right";
+}
+
+test "elementwise broadcasts a missing leading axis" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Out", 4),
+    ]);
+    let bias = shape([stat("Out", 4)]);
+
+    let y = a.elementwise(&bias, "add").unwrap();
+    assert y.rank() == 2;
+    assert y.axes[0].name == "Batch";
+}
+
+test "elementwise keeps the shape when every axis agrees" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Out", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("Out", 4),
+    ]);
+
+    let y = a.elementwise(&b, "add").unwrap();
+    assert y.rank() == 2;
+    assert y.axes[1].name == "Out";
+}
+
+test "elementwise names the operation that disagreed" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Out", 4),
+    ]);
+    let b = shape([
+        stat("Batch", 2),
+        stat("Out", 7),
+    ]);
+
+    let e = a.elementwise(&b, "add").unwrap_err();
+    assert `${e}` == "add: axis Out is 4 on the left and 7 on the right";
+}

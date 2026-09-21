@@ -1226,7 +1226,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_S: NodeKind = 0;
 pub global RK_STMT: NodeKind = 1;
-pub global RK_IFSTMT: NodeKind = 2;
+pub global RK_IF_STMT: NodeKind = 2;
 
 global RULE_NAMES: List<String> = ["s", "stmt", "ifStmt"];
 
@@ -1698,7 +1698,7 @@ fn _parse_if_stmt__inner(p: &mut Parser) -> () {
 fn _parse_if_stmt(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_IFSTMT, _start);
+    p.b.start_node(RK_IF_STMT, _start);
     _parse_if_stmt__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

@@ -1380,7 +1380,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_PROG: NodeKind = 0;
-pub global RK_MATCHEXPR: NodeKind = 1;
+pub global RK_MATCH_EXPR: NodeKind = 1;
 pub global RK_ARM: NodeKind = 2;
 pub global RK_PATTERN: NodeKind = 3;
 pub global RK_PATH: NodeKind = 4;
@@ -1919,7 +1919,7 @@ fn _parse_match_expr__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_match_expr(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_MATCHEXPR, _start);
+    p.b.start_node(RK_MATCH_EXPR, _start);
     _parse_match_expr__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {

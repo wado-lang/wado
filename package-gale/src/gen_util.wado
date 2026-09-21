@@ -29,6 +29,19 @@ pub fn rule_type_name<S: AsStrSlice>(name: S) -> String {
     return result;
 }
 
+/// A rule's `RK_` node-kind constant: its snake-case name uppercased, so
+/// `valueInfo` reaches `RK_VALUE_INFO`. The declaration and every `start_node`
+/// referring to it come through here, which is what keeps them one name.
+pub fn rule_kind_const<S: AsStrSlice>(name: S) -> String {
+    let snake = to_snake_case(name);
+    let mut out = String::with_capacity(snake.len() + 3);
+    out.push_str("RK_");
+    for let c of snake.chars() {
+        out.push(c.to_ascii_uppercase());
+    }
+    return out;
+}
+
 fn symbol_char_names(c: char) -> Option<[String, String]> {
     return match c {
         '+' => Option::Some(["plus", "PLUS"]),

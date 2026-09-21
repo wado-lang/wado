@@ -1155,7 +1155,7 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_PROG: NodeKind = 0;
 pub global RK_STATEMENT: NodeKind = 1;
-pub global RK_LETTERA: NodeKind = 2;
+pub global RK_LETTER_A: NodeKind = 2;
 
 global RULE_NAMES: List<String> = ["prog", "statement", "letterA"];
 
@@ -1664,7 +1664,7 @@ fn _parse_letter_a__inner(p: &mut Parser) -> () {
 fn _parse_letter_a(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_LETTERA, _start);
+    p.b.start_node(RK_LETTER_A, _start);
     _parse_letter_a__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {
