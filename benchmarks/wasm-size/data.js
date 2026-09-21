@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789996353722,
+  "lastUpdate": 1790001481330,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57917,6 +57917,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/53343077ee41cac49730e076553c5735b4347f0a"
         },
         "date": 1789996353053,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "651146727d1a143b03f586b107ef3afa5fbe8c24",
+          "message": "Merge pull request #2114 from wado-lang/claude/kiln-nested-generators-v2\n\nfeat(kiln): a generator may use a generator, anchored at one package root",
+          "timestamp": "2026-09-21T23:17:13+09:00",
+          "tree_id": "11389de0f1d27e51bc4aa23391581d0d4d8da3db",
+          "url": "https://github.com/wado-lang/wado/commit/651146727d1a143b03f586b107ef3afa5fbe8c24"
+        },
+        "date": 1790001480612,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
