@@ -9,7 +9,8 @@
 // parse error here. `seq(...)` and `map(...)` are the same: they are an `ID`
 // followed by `(`, which nothing else in a type position can be.
 //
-// Local functions are left out. A model carrying one does not parse.
+// Local functions are left out, and with them the `@name` attribute reference
+// that only a function body can carry. A model holding one does not parse.
 grammar Onnx;
 
 model : metadata? graph EOF ;
@@ -28,12 +29,20 @@ outputs      : LPAREN (valueInfo (COMMA valueInfo)*)? RPAREN ;
 initializers : LT (valueInfo (COMMA valueInfo)*)? GT ;
 
 // An initializer whose data lives in a checkpoint is spelled as a plain
-// value-info; the braces are for a constant written inline.
-valueInfo : type quotableId (EQ tensorValues)? ;
+// value-info. Written data is either inline in braces or a key-value list
+// naming a file, which is ONNX's `external-data`.
+valueInfo    : type quotableId (EQ constantData)? ;
+constantData : tensorValues | externalData ;
+externalData : LBRACK strPair (COMMA strPair)* RBRACK ;
+strPair      : STRING COLON STRING ;
 
-nodes     : LBRACE node* RBRACE ;
-node      : nodeLabel? outputNames? EQ qualifiedId attrs? LPAREN inputNames? RPAREN ;
-nodeLabel : LBRACK quotableId RBRACK ;
+nodes : LBRACE node* RBRACE ;
+
+// ONNX writes a node's attributes on one side of the input list or the other,
+// never both. Both positions are optional here, so neither side needs a
+// decision to reach the other.
+node        : nodeLabel? outputNames? EQ qualifiedId attrs? LPAREN inputNames? RPAREN attrs? ;
+nodeLabel   : LBRACK quotableId RBRACK ;
 outputNames : quotableId (COMMA quotableId)* ;
 inputNames  : quotableId (COMMA quotableId)* ;
 

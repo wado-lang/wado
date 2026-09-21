@@ -124,6 +124,19 @@ test "an attribute is read as the text the operator's schema types" {
     assert a[2].values == ["c"];
 }
 
+test "an attribute after the input list reads as the same attribute" {
+    let g = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X) <perm = [1, 0]>
+        }`,
+    ).unwrap();
+    let a = &g.nodes[0].attrs;
+    assert a.len() == 1;
+    assert a[0].name == "perm";
+    assert a[0].values == ["1", "0"];
+    assert g.nodes[0].inputs == ["X"];
+}
+
 test "an initializer's inline values are not mistaken for its name" {
     let g = read(
         `agraph (float[2] X) => (float[2] Y)

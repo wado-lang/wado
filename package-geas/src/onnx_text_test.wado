@@ -76,6 +76,24 @@ test "a node carries attributes, typed and untyped" {
     );
 }
 
+test "a node carries its attributes after the input list too" {
+    parse_ok(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X) <perm = [1, 0]>
+        }`,
+    );
+}
+
+test "an initializer's data may live in a file the text names" {
+    parse_ok(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = ["location": "weights.bin", "offset": "0"]>
+        {
+            Y = Add(X, W)
+        }`,
+    );
+}
+
 test "a dimension is static, symbolic, or unknown" {
     parse_ok(
         `agraph (float[N, ?, 128] X) => (float[N, ?, 128] Y) {

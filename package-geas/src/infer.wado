@@ -32,11 +32,28 @@ pub variant InferError {
     AxisCount(AxisCountConflict),
     UnknownOperator(String),
     UnrankedTensor(String),
-    UndefinedInput(String),
+    Undefined(String),
     ScalarOperand(String),
     OperandCount(OperandCountConflict),
     OutputCount(OutputCountConflict),
+    DeclaredRank(DeclaredRankConflict),
+    Declared(DeclaredConflict),
     Node(NodeConflict),
+}
+
+/// A graph output whose declared rank is not the rank the nodes produced.
+pub struct DeclaredRankConflict {
+    pub tensor: String,
+    pub declared: i32,
+    pub produced: i32,
+}
+
+/// A graph output whose declared extent is not the one the nodes produced.
+pub struct DeclaredConflict {
+    pub tensor: String,
+    pub axis: String,
+    pub declared: Extent,
+    pub produced: Extent,
 }
 
 /// An operator was given fewer operands than it reads.
@@ -89,6 +106,22 @@ impl Display for OutputCountConflict {
     }
 }
 
+impl Display for DeclaredRankConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.tensor}: the graph declares rank ${self.declared} and the nodes produce rank ${self.produced}`,
+        );
+    }
+}
+
+impl Display for DeclaredConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.tensor}: axis ${self.axis} is declared ${self.declared} and produced ${self.produced}`,
+        );
+    }
+}
+
 impl Display for InferError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
@@ -96,10 +129,12 @@ impl Display for InferError {
             AxisCount(e) => e.fmt(f),
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
-            UndefinedInput(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
+            Undefined(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
             ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
             OutputCount(e) => e.fmt(f),
+            DeclaredRank(e) => e.fmt(f),
+            Declared(e) => e.fmt(f),
             Node(e) => e.fmt(f),
         }
     }
@@ -126,7 +161,51 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
         }
         shapes[node.outputs[0]] = infer_node(node, &shapes)?;
     }
+    for let vi of &graph.outputs {
+        let Some(produced) = shapes.get(vi.name) else {
+            builtin::cold_path();
+            return Result::Err(InferError::Undefined(vi.name));
+        };
+        check_declared(vi, &produced)?;
+    }
     return Result::Ok(shapes);
+}
+
+/// The graph's own output declaration is a condition like any other. A `?`
+/// claims nothing, so it discharges against whatever the nodes produced.
+fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
+    let dims = match &vi.rank {
+        Dims(d) => *d,
+        Scalar => [] as List<Dim>,
+        Unranked => {
+            return Result::Ok(());
+        },
+    };
+    if dims.len() != produced.rank() {
+        builtin::cold_path();
+        return Result::Err(InferError::DeclaredRank(DeclaredRankConflict {
+            tensor: vi.name,
+            declared: dims.len(),
+            produced: produced.rank(),
+        }));
+    }
+    for let mut i = 0; i < dims.len(); i += 1 {
+        if dims[i] matches { Unknown } {
+            continue;
+        }
+        let axis = &produced.axes[i];
+        let declared = extent_of(&dims[i], &axis.name);
+        if !declared.agrees(&axis.extent) {
+            builtin::cold_path();
+            return Result::Err(InferError::Declared(DeclaredConflict {
+                tensor: vi.name,
+                axis: axis.name,
+                declared,
+                produced: axis.extent,
+            }));
+        }
+    }
+    return Result::Ok(());
 }
 
 /// What names a node in a message. ONNX identifies one by its first output,
@@ -246,7 +325,7 @@ fn operand(node: &Node, shapes: &TreeMap<String, Shape>, index: i32) -> Result<S
     let name = node.inputs[index];
     let Some(shape) = shapes.get(name) else {
         builtin::cold_path();
-        return Result::Err(InferError::UndefinedInput(name));
+        return Result::Err(InferError::Undefined(name));
     };
     return Result::Ok(shape);
 }
