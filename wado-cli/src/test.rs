@@ -2171,6 +2171,9 @@ async fn run_one_package(
 /// `spawn_blocking` compile tasks scheduled by [`run_compile_stage`],
 /// turning each first-compile from a cold miss into a cache hit.
 async fn prewarm_stdlib_snapshot_on_workers(parallelism: usize) {
+    // A dev build reads the stdlib from its host, and this runs before any host
+    // is built; without it every prewarm task panics and warms nothing.
+    wado_lsp::host::install_dev_stdlib();
     let parallelism = parallelism.max(1);
     let barrier = Arc::new(std::sync::Barrier::new(parallelism));
     let handles: Vec<_> = (0..parallelism)

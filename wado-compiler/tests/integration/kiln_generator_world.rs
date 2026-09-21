@@ -14,7 +14,7 @@
 
 use std::sync::Mutex;
 
-use crate::common::block_on;
+use crate::common::{block_on, install_dev_stdlib};
 use indexmap::IndexMap;
 use wado_compiler::{
     Code, CompileResult, CompilerHost, CompilerOptions, Diagnostic, LogLevel, Severity,
@@ -28,6 +28,7 @@ struct MapHost {
 
 impl MapHost {
     fn new(sources: &[(&str, &str)]) -> Self {
+        install_dev_stdlib();
         Self {
             sources: sources
                 .iter()
@@ -170,6 +171,51 @@ fn typed_options_generator_compiles_to_valid_component() {
     // options)` shape must produce a valid component (unlike the old
     // `raw-request` GC-reference mismatch).
     let result = compile_generator(TYPED_OPTIONS_GENERATOR, "typed-options generator");
+    assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
+}
+
+/// A nested `Options` field type may be declared in another module, which is
+/// where a generator that shares the type with its own library puts it. The
+/// options descriptor already resolves one across modules; the CM emit has to
+/// declare it too, or it reaches the named-type registry with nothing behind
+/// the name.
+const CROSS_MODULE_OPTIONS_GENERATOR: &str = r#"
+use { Request, Response, Error } from "core:kiln";
+use { Rule } from "./rule.wado";
+
+pub struct Options {
+    pub rules: List<Rule>,
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> {
+    let _ = req.primary.path;
+    let _ = req.options.rules.len();
+    return Result::Ok(Response { files: [] });
+}
+"#;
+
+const CROSS_MODULE_OPTIONS_RULE: &str = r#"
+pub struct Rule {
+    pub pattern: String,
+    pub names: List<String>,
+}
+"#;
+
+#[test]
+fn options_field_type_from_another_module_compiles() {
+    let host = MapHost::new(&[("./rule.wado", CROSS_MODULE_OPTIONS_RULE)]);
+    let result = block_on(compile_with_options(
+        CROSS_MODULE_OPTIONS_GENERATOR,
+        &host,
+        Some("generator.wado"),
+        kiln_options(),
+    ));
+    let Ok(result) = result else {
+        panic!(
+            "cross-module options generator failed to compile:\n{}",
+            diag_list(&host.diagnostics())
+        );
+    };
     assert!(result.wasm.starts_with(b"\0asm"), "not component-shaped");
 }
 
