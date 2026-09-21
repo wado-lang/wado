@@ -77,6 +77,26 @@ fn editing_the_innermost_input_rebuilds_the_generator() {
     );
 }
 
+/// A generator's own clause may name a `[build-dependencies]` nickname, whose
+/// path is spelled against the project root while the clause resolves against
+/// the generator's own directory.
+#[test]
+fn a_nested_clause_resolves_a_build_dependency_nickname() {
+    let project = fixture("kiln_nested_build_dep");
+
+    let out = run_project(project.path());
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        out.status.success(),
+        "a nested `lib:` specifier must resolve:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains("model 99"),
+        "the nickname-resolved generator must produce the value, got: {stdout}"
+    );
+}
+
 /// `wado check` dry-runs and byte-compares rather than writing, and a nested
 /// invocation owes the same answer: drift is reported, never repaired.
 #[test]

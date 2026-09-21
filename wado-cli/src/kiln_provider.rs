@@ -359,11 +359,6 @@ impl CliGeneratorProvider {
             return Ok(wado_compiler::kiln::InvocationIndex::default());
         };
         run.active = self.active.clone();
-        // A generator's own clauses are harvested as identities anchored on its
-        // directory, so that directory is the root they resolve against. The
-        // project's is a different anchor, and carrying it here would leave a
-        // clause naming a `[build-dependencies]` specifier unresolvable.
-        run.project = None;
         let shared_cache = self.run.clone();
         let failed = |e: PipelineError| ProviderError::Internal {
             message: format!(
@@ -579,7 +574,7 @@ fn make_relative_sources(base: &Path, raw: Vec<(String, [u8; 32])>) -> Vec<(Stri
 
 /// Fold `.` and `..` out of `path` without touching the filesystem. A `..` at
 /// the root, or leading a relative path, has nothing to pop and is kept.
-fn normalize_path(path: &Path) -> PathBuf {
+pub(crate) fn normalize_path(path: &Path) -> PathBuf {
     use std::path::Component;
 
     let mut out = PathBuf::new();
@@ -610,7 +605,7 @@ fn normalize_path(path: &Path) -> PathBuf {
 /// `target` expressed relative to `base`, with `..` for each level `target`
 /// sits above it. Both must already be normalized. `None` when the two share no
 /// root to walk between.
-fn relative_to(base: &Path, target: &Path) -> Option<String> {
+pub(crate) fn relative_to(base: &Path, target: &Path) -> Option<String> {
     use std::path::Component;
 
     if base.is_absolute() != target.is_absolute() {

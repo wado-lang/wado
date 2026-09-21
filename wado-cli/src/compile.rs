@@ -17,7 +17,7 @@ use crate::dep_component::{
 };
 use crate::git::materialize;
 use crate::kiln_driver::{ExecuteMode, PipelineError, PipelineOutcome};
-use crate::kiln_provider::{CliGeneratorProvider, RegistryContext};
+use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, normalize_path, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
 use crate::metadata_embed::{clean_git_revision, embed_metadata_sections};
@@ -647,18 +647,23 @@ pub(crate) async fn prepare_kiln(
         active,
         ..
     } = run.clone();
-    let probe_manifest_root = project.as_ref().map(|p| p.root.clone()).unwrap_or_else(|| {
-        entry_file
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from("."))
-    });
-    // A clause's paths are resolved against the declaring file and then stripped
-    // back to the root, so the root has to be spelled the way the entry key is:
-    // an entry named on its own is already anchored there.
-    let clause_root = match entry_key {
-        Some(_) => PathBuf::new(),
-        None => probe_manifest_root.clone(),
+    let entry_dir = entry_file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."));
+    // Where a dependency's path is spelled from, whether or not this pipeline
+    // resolves its own invocations there.
+    let project_root = project
+        .as_ref()
+        .map(|p| p.root.clone())
+        .unwrap_or_else(|| entry_dir.clone());
+    // A generator's own clauses are harvested as identities anchored on that
+    // generator's directory, so that is what they resolve against; an entry
+    // named on its own behalf resolves against the project. `clause_root` is
+    // stripped back off, so it is the same root spelled for the harvest.
+    let (pipeline_root, clause_root) = match entry_key {
+        Some(_) => (entry_dir, PathBuf::new()),
+        None => (project_root.clone(), project_root.clone()),
     };
     let (mut invocations, identities, inline_diagnostics) =
         collect_inline_invocations_for_entry_with_identities(entry_file, entry_key, &clause_root)
@@ -681,11 +686,9 @@ pub(crate) async fn prepare_kiln(
     if invocations.is_empty() {
         return Ok(None);
     }
-    let (manifest, manifest_root) = match project {
-        Some(p) => (p.manifest, p.root),
-        None => (empty_manifest(), probe_manifest_root),
-    };
-    rewrite_build_dep_modules(&mut invocations, &manifest, &manifest_root);
+    let manifest = project.map_or_else(empty_manifest, |p| p.manifest);
+    let manifest_root = pipeline_root;
+    rewrite_build_dep_modules(&mut invocations, &manifest, &project_root, &manifest_root);
     rewrite_local_dir_modules(&mut invocations, &manifest_root);
     // A generator's outputs are products of this run, not a tree moving under
     // it. Declared here but applied when the watch is asked, so the order
@@ -825,9 +828,13 @@ pub(crate) async fn run_nested_pipeline(
 /// of the pipeline (cache key, generator identity, provider) sees a
 /// path-addressed module; a registry build-dependency is left as `Spec` for the
 /// provider to pull as a prebuilt component.
+/// A dependency's path is spelled against the project root, and the pipeline
+/// resolves an invocation against `manifest_root`. The two differ for a
+/// generator's own invocations, which anchor on that generator's directory.
 pub(crate) fn rewrite_build_dep_modules(
     inline: &mut [wado_compiler::kiln::Invocation],
     manifest: &wado_manifest::Manifest,
+    project_root: &Path,
     manifest_root: &Path,
 ) {
     use wado_compiler::kiln::GeneratorModule;
@@ -836,7 +843,9 @@ pub(crate) fn rewrite_build_dep_modules(
             continue;
         };
         let key = spec_key(&spec.spec);
-        if let Some(local) = build_dep_generator_local_path(key, manifest, manifest_root) {
+        if let Some(local) =
+            build_dep_generator_local_path(key, manifest, project_root, manifest_root)
+        {
             inv.module = GeneratorModule::LocalPath(local);
         }
     }
@@ -880,16 +889,27 @@ pub(crate) fn rewrite_local_dir_modules(
 fn build_dep_generator_local_path(
     key: &str,
     manifest: &wado_manifest::Manifest,
+    project_root: &Path,
     manifest_root: &Path,
 ) -> Option<wado_compiler::kiln::InvocationPath> {
     let dep = manifest.build_dependencies.get(key)?;
     let DependencySource::Path { path, .. } = &dep.source else {
         return None;
     };
-    let entry = package_generator_entry(&manifest_root.join(path))?;
-    Some(wado_compiler::kiln::InvocationPath::normalize(&format!(
-        "{path}/{entry}"
-    )))
+    let pkg_dir = project_root.join(path);
+    let entry = package_generator_entry(&pkg_dir)?;
+    if project_root == manifest_root {
+        return Some(wado_compiler::kiln::InvocationPath::normalize(&format!(
+            "{path}/{entry}"
+        )));
+    }
+    // The two roots are spelled independently — one off the manifest, one off
+    // the entry the pipeline was handed — so both are lifted to absolute before
+    // either is expressed against the other.
+    let target = normalize_path(&std::path::absolute(pkg_dir.join(entry)).ok()?);
+    let base = normalize_path(&std::path::absolute(manifest_root).ok()?);
+    let spelled = relative_to(&base, &target)?;
+    Some(wado_compiler::kiln::InvocationPath::normalize(&spelled))
 }
 
 /// Resolve a generator *package directory* (absolute) to its
