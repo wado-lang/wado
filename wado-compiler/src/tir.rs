@@ -3925,29 +3925,37 @@ impl TypeTable {
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
+        self.contains_undecided_with(id, true)
+    }
+
+    /// [`Self::contains_undecided`] with a type pack counted as decided. A pack
+    /// is rigid where it is declared, as a type parameter is: a call
+    /// instantiates a callee's slots before anything compares them, so a pack
+    /// reaching a comparison stands for itself.
+    pub fn contains_undecided_beyond_packs(&self, id: TypeId) -> bool {
+        self.contains_undecided_with(id, false)
+    }
+
+    fn contains_undecided_with(&self, id: TypeId, pack_undecided: bool) -> bool {
+        let recurse = |inner: TypeId| self.contains_undecided_with(inner, pack_undecided);
         match self.get(id) {
-            ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            ResolvedType::TypePack { .. } => pack_undecided,
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
+            | ResolvedType::Reactive(inner) => recurse(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|p| self.contains_undecided(*p))
-                    || self.contains_undecided(*return_type)
-            }
+            } => params.iter().any(|p| recurse(*p)) || recurse(*return_type),
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_undecided(*t))
+                type_args.iter().any(|t| recurse(*t))
             }
             _ => false,
         }

@@ -37,6 +37,16 @@ pub(super) fn check_assignable(
     check_at(actual, expected, type_table, Position::Covariant)
 }
 
+/// Whether `id` is a pack standing on its own, which is what a walk over a pack
+/// binds: it stands for one element, and only substitution says which. A pack
+/// inside a tuple is the tuple's own shape, so that tuple is decided.
+fn is_bare_pack(id: TypeId, type_table: &TypeTable) -> bool {
+    matches!(
+        type_table.get(unwrap_ref(id, type_table).0),
+        ResolvedType::TypePack { .. }
+    )
+}
+
 /// Whether the position admits a subtype: a value, a `return` and a `&T`
 /// referent do; `&mut T`, a container element and a function type's parts do
 /// not. See `docs/wep-2026-04-28-resource-inheritance.md`.
@@ -70,11 +80,17 @@ fn check_at(
     }
 
     // Defer only what is genuinely undecided: an inference variable awaiting its
-    // solver, a pack awaiting expansion, a projection over one of those, and
-    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
-    // of a polymorphic signature instantiates its slots into `InferVar`s first,
-    // so nothing but itself is ever assignable to it.
-    if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
+    // solver, a projection over one, and `unknown` / `error`. A rigid
+    // `TypeParam` is opaque, not undecided — a use of a polymorphic signature
+    // instantiates its slots into `InferVar`s first, so nothing but itself is
+    // ever assignable to it. A `TypePack` is rigid on the same terms, so `[]`
+    // does not satisfy `[..A]` inside the body that declares `A`.
+    if is_bare_pack(actual, type_table) || is_bare_pack(expected, type_table) {
+        return TypeCheckResult::Deferred;
+    }
+    if type_table.contains_undecided_beyond_packs(actual)
+        || type_table.contains_undecided_beyond_packs(expected)
+    {
         return TypeCheckResult::Deferred;
     }
 
