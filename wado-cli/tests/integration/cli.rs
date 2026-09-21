@@ -354,7 +354,7 @@ fn test_help_summarizes_check_as_verifying_a_source_file() {
         .assert()
         .success()
         .stderr(predicate::str::contains(
-            "check [options] [file.wado]         Verify a source file and its Kiln generators",
+            "check [options] [file.wado | dir]   Verify a source file and its Kiln generators",
         ));
 }
 
@@ -532,6 +532,47 @@ fn test_check_with_no_file_checks_every_declared_world() {
     // The library world alone is satisfied, so selecting it passes.
     std::fs::write(dir.join("main.wado"), "export fn run() { let _ = 1; }\n").unwrap();
     wado().current_dir(dir).arg("check").assert().success();
+}
+
+/// A directory names the project to check, so a workspace member is reachable
+/// without changing directory first.
+#[test]
+fn test_check_takes_a_directory_as_the_project_to_check() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let pkg = dir.join("member");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(
+        pkg.join("wado.toml"),
+        "[package]\n\
+         name = \"member\"\n\
+         namespace = \"wado\"\n\
+         version = \"0.1.0\"\n\
+         lib = \"lib.wado\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        pkg.join("lib.wado"),
+        "export fn answer() -> i32 { return 42; }\n",
+    )
+    .unwrap();
+
+    wado()
+        .current_dir(dir)
+        .args(["check", "member"])
+        .assert()
+        .success();
+
+    std::fs::write(
+        pkg.join("lib.wado"),
+        "export fn answer() -> i32 { return; }\n",
+    )
+    .unwrap();
+    wado()
+        .current_dir(dir)
+        .args(["check", "member"])
+        .assert()
+        .failure();
 }
 
 #[test]

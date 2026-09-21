@@ -72,21 +72,21 @@ impl Opt {
 
 fn format_usage() -> String {
     let mut buf = String::new();
-    writeln!(buf, "Usage: wado check [options] [file.wado]").unwrap();
+    writeln!(buf, "Usage: wado check [options] [file.wado | dir]").unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
         "Verify Wado sources (and their Kiln generators) without emitting Wasm.\n\
-         With no file, checks every world wado.toml declares — the targets\n\
-         `wado build` builds — and stops after the analysis.",
+         Given a directory, or nothing, checks every world that directory's\n\
+         wado.toml declares — the targets `wado build` builds.",
     )
     .unwrap();
     writeln!(buf).unwrap();
     writeln!(
         buf,
-        "Re-runs every Kiln generator and compares the output against the on-disk\n\
-         source. By default, any Kiln divergence (modified, regenerated, or stale\n\
-         output) exits non-zero — suitable for CI gates on committed-source workflows.",
+        "Runs every Kiln generator as a build does, writing what it produces. By\n\
+         default a Kiln warning exits non-zero, which is what gates CI; --warn\n\
+         keeps warnings as warnings.",
     )
     .unwrap();
     writeln!(buf).unwrap();
@@ -137,9 +137,16 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<CheckOptions, CliExit> {
 
 pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     let Some(input) = opts.input.clone() else {
-        return check_declared_worlds(&opts).await;
+        let project = build::project_here(NO_PROJECT)?;
+        return check_declared_worlds(&project, &opts).await;
     };
     let path = PathBuf::from(&input);
+    // A directory names the project to check, as it does for `test` and
+    // `format`; `wado.toml` then supplies the entries.
+    if path.is_dir() {
+        let project = build::project_at(&path, NO_PROJECT)?;
+        return check_declared_worlds(&project, &opts).await;
+    }
     let world = check_world(
         opts.target_world.as_deref(),
         &path,
@@ -148,14 +155,16 @@ pub async fn run(opts: CheckOptions) -> Result<(), CliExit> {
     check_entry(&path, world, &opts).await
 }
 
+const NO_PROJECT: &str = "no wado.toml found; name a file to check \
+                          (`wado check <file.wado>`) or a directory under a project";
+
 /// Check every world `wado.toml` declares, selected the way `wado build`
 /// selects its targets. Same analysis as a single file, once per entry.
-async fn check_declared_worlds(opts: &CheckOptions) -> Result<(), CliExit> {
-    let project = build::project_here(
-        "no wado.toml found; name a file to check \
-         (`wado check <file.wado>`) or run from a project directory",
-    )?;
-    let mut targets = build::declared_worlds(&project)?;
+async fn check_declared_worlds(
+    project: &manifest::ProjectManifest,
+    opts: &CheckOptions,
+) -> Result<(), CliExit> {
+    let mut targets = build::declared_worlds(project)?;
     if let Some(world_fq) = &opts.target_world {
         build::retain_world(&mut targets, world_fq)?;
     }
