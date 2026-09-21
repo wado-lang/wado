@@ -711,6 +711,12 @@ impl ModuleSource {
         matches!(self, Self::Core { name } if name == "prelude")
     }
 
+    /// Whether this is `core:prelude` or one of the modules implementing it.
+    #[must_use]
+    pub fn is_prelude(&self) -> bool {
+        matches!(self, Self::Core { name } if name == "prelude" || name.starts_with("prelude/"))
+    }
+
     /// Check if this is the entry point module.
     #[must_use]
     pub fn is_entry_point(&self) -> bool {

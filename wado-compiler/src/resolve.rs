@@ -13,7 +13,7 @@ use crate::hashmap;
 use crate::hashmap::IndexMap;
 use crate::module_source::ModuleSource;
 use crate::name::{NAMESPACE_MEMBER_SEP, namespace_member_alias};
-use crate::symbol::{SymbolKind, SymbolTable};
+use crate::symbol::SymbolTable;
 use crate::token::Span;
 
 /// What a reference site refers to.
@@ -190,12 +190,9 @@ impl Scopes {
         // A builtin type is universal by nature rather than by export: `i32`
         // names the same thing in a module that imports nothing, `#![no_prelude]`
         // included.
-        for (id, sym) in symbols.iter() {
-            if matches!(sym.kind, SymbolKind::BuiltinType)
-                && is_prelude_module(sym.module_source())
-                && let Some(def) = defs.of_ast_id(*id)
-            {
-                surface.entry(sym.name.clone()).or_insert(def);
+        for (name, id) in symbols.prelude_builtin_types() {
+            if let Some(def) = defs.of_ast_id(*id) {
+                surface.entry(name.clone()).or_insert(def);
             }
         }
         out.prelude = surface;
@@ -400,11 +397,6 @@ impl Resolutions {
 
 /// The name `Self` binds to inside a `trait` or `impl` body.
 const SELF_TYPE: &str = "Self";
-
-fn is_prelude_module(module: &ModuleSource) -> bool {
-    matches!(module, ModuleSource::Core { name } if name.as_str() == "prelude"
-        || name.as_str().starts_with("prelude/"))
-}
 
 /// A module's declaration scope: the one implementation of "what does this name
 /// mean here", and the only place a name becomes a [`DefId`].
