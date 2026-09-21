@@ -1394,8 +1394,8 @@ fn compile_after_load<H: CompilerHost>(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "library type `{dup}` is defined in more than one module; a \
-                     library's public types must have distinct names"
+                    "public type `{dup}` is defined in more than one module; the \
+                     types a component publishes must have distinct names"
                 ),
             ));
         }

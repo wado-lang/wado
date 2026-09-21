@@ -84,6 +84,14 @@ test "a node carries its attributes after the input list too" {
     );
 }
 
+test "a node carrying attributes on both sides does not parse" {
+    parse_fails(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose<perm = [1, 0]>(X) <other = [0, 1]>
+        }`,
+    );
+}
+
 test "an initializer's data may live in a file the text names" {
     parse_ok(
         `agraph (float[2] X) => (float[2] Y)

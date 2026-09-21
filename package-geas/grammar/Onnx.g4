@@ -39,9 +39,12 @@ strPair      : STRING COLON STRING ;
 nodes : LBRACE node* RBRACE ;
 
 // ONNX writes a node's attributes on one side of the input list or the other,
-// never both. Both positions are optional here, so neither side needs a
-// decision to reach the other.
-node        : nodeLabel? outputNames? EQ qualifiedId attrs? LPAREN inputNames? RPAREN attrs? ;
+// never both, and a node carrying two lists is a parse error here. The
+// alternatives start on different tokens, `<` and `(`, so the choice is
+// token-led rather than a decision to scan for.
+node        : nodeLabel? outputNames? EQ qualifiedId
+              ( attrs LPAREN inputNames? RPAREN
+              | LPAREN inputNames? RPAREN attrs? ) ;
 nodeLabel   : LBRACK quotableId RBRACK ;
 outputNames : quotableId (COMMA quotableId)* ;
 inputNames  : quotableId (COMMA quotableId)* ;

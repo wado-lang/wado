@@ -154,6 +154,17 @@ test "a syntax error comes back with its position" {
     assert e.starts_with("1:");
 }
 
+test "an initializer pointing at another file names itself rather than being dropped" {
+    let e = read(
+        `agraph (float[2] X) => (float[2] Y)
+        <float[2] W = ["location": "weights.bin"]>
+        {
+            Y = Add(X, W)
+        }`,
+    ).unwrap_err();
+    assert e == "W: an initializer whose data lives in another file is not read";
+}
+
 test "a sequence type names itself rather than being read as a tensor" {
     let e = read(
         `agraph (seq(float[2]) X) => (float[2] Y) {
