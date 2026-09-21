@@ -3394,17 +3394,27 @@ impl Monomorphizer {
         type_table: &TypeTable,
     ) -> FqTypeName {
         arg.rewrite(&|node| {
-            if let Some((base, assoc, owning_trait)) = node.projected() {
-                let base_id = bound(base.binder_name()?)?;
-                let answer =
-                    type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc)?;
-                return Some(type_table.fq_type_name(answer));
-            }
-            if !node.args().is_empty() {
-                return None;
-            }
-            Some(type_table.fq_type_name(bound(node.binder_name()?)?))
+            let answer = Self::type_at_instance(node, bound, type_table)?;
+            Some(type_table.fq_type_name(answer))
         })
+    }
+
+    /// The type a name stands for at the instance: a binder the frame binds, or
+    /// a projection off one — through any depth, since `C::Iter::Item` answers
+    /// only once its own base does.
+    fn type_at_instance(
+        node: &FqTypeName,
+        bound: &impl Fn(&str) -> Option<TypeId>,
+        type_table: &TypeTable,
+    ) -> Option<TypeId> {
+        if let Some((base, assoc, owning_trait)) = node.projected() {
+            let base_id = Self::type_at_instance(base, bound, type_table)?;
+            return type_table.resolve_assoc_type_qualified(base_id, &owning_trait, assoc);
+        }
+        if !node.args().is_empty() {
+            return None;
+        }
+        bound(node.binder_name()?)
     }
 
     /// The name with the trait's arguments cut back to what the answering impl

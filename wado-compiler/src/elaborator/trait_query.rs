@@ -17,6 +17,7 @@ use super::callee::CalleeRef;
 use super::scope::{BinderInScope, ElaboratedBound, Scope, TraitCheckFrame};
 use super::sig::Param;
 use super::trait_env::InheritedBound;
+use super::type_resolution::ParamSpace;
 use super::types::{
     MethodInfo, MethodOwner, ResolvedTraitMethod, TraitMethodMatch, TypeError, TypeLookup,
 };
@@ -2310,20 +2311,48 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
+    /// The space `elaborated`'s written types are read in: empty for a bound the
+    /// frame wrote itself, and for an inherited one the chain from what `bounds`
+    /// writes down to the trait that declared it.
+    fn bound_space(&mut self, bounds: &[ast::TraitBound], elaborated: &ElaboratedBound) -> ParamSpace {
+        let Some((root, via)) = elaborated.inherited.clone() else {
+            return ParamSpace::new();
+        };
+        let root_args = self.trait_args_of_bound(bounds, root);
+        self.inherited_space(root, &root_args, &via)
+    }
+
+    /// Run `body` with `space` answering for the names it holds.
+    fn in_space<R>(&mut self, space: &ParamSpace, body: impl FnOnce(&mut Self) -> R) -> R {
+        let (names, args): (Vec<String>, Vec<TypeId>) = space.iter().cloned().unzip();
+        self.with_type_params_bound(&names, &args, body)
+    }
+
+    /// [`Self::bound_slots`] read in the space the candidate's bound was written in.
+    fn bound_slots_in_space(
+        &mut self,
+        candidate: &BoundCandidate,
+        self_type_id: TypeId,
+    ) -> IndexMap<u32, TypeId> {
+        let BoundCandidate { bound, space, decl } = candidate;
+        let (bound, decl) = (bound.clone(), *decl);
+        self.in_space(space, |e| e.bound_slots(&bound, decl, self_type_id))
+    }
+
     /// One bound per trait declaration. Several bounds on one trait are one
     /// method at several instantiations, which the call's arguments choose.
     fn one_bound_per_trait(
         &mut self,
-        candidates: Vec<(ElaboratedBound, DefId)>,
+        candidates: Vec<BoundCandidate>,
         method_name: &str,
         self_type_id: TypeId,
         args: ArgSource<'_, '_>,
-    ) -> Vec<(ElaboratedBound, DefId)> {
-        let mut groups: Vec<Vec<(ElaboratedBound, DefId)>> = Vec::new();
-        for (bound, key) in candidates {
-            match groups.iter_mut().find(|group| group[0].1 == key) {
-                Some(group) => group.push((bound, key)),
-                None => groups.push(vec![(bound, key)]),
+    ) -> Vec<BoundCandidate> {
+        let mut groups: Vec<Vec<BoundCandidate>> = Vec::new();
+        for candidate in candidates {
+            match groups.iter_mut().find(|group| group[0].decl == candidate.decl) {
+                Some(group) => group.push(candidate),
+                None => groups.push(vec![candidate]),
             }
         }
         let mut args = args;
@@ -2340,12 +2369,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// naming only the declared default.
     fn select_instantiation(
         &mut self,
-        group: Vec<(ElaboratedBound, DefId)>,
+        group: Vec<BoundCandidate>,
         method_name: &str,
         self_type_id: TypeId,
         args: ArgSource<'_, '_>,
-    ) -> (ElaboratedBound, DefId) {
-        let written = group.iter().any(|(b, _)| !b.bound.type_args.is_empty());
+    ) -> BoundCandidate {
+        let written = group.iter().any(|c| !c.bound.type_args.is_empty());
         let mut args = args;
         if group.len() > 1 && written && !args.is_empty() {
             // Classification costs something, so it waits for an overload set,
@@ -2353,12 +2382,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let classes: Vec<ArgClass> = (0..args.len()).map(|i| args.class(self, i)).collect();
             let admitted: Vec<usize> = (0..group.len())
                 .filter(|&i| {
-                    let Some(params) = self.bound_param_types(
-                        &group[i].0.bound,
-                        group[i].1,
-                        method_name,
-                        self_type_id,
-                    ) else {
+                    let Some(params) =
+                        self.bound_param_types(&group[i], method_name, self_type_id)
+                    else {
                         return false;
                     };
                     classes.len() <= params.len()
@@ -2390,7 +2416,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let first_written = group
             .iter()
-            .position(|(b, _)| !b.bound.type_args.is_empty())
+            .position(|c| !c.bound.type_args.is_empty())
             .unwrap_or(0);
         let mut group = group;
         group.swap_remove(first_written)
@@ -2400,14 +2426,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// no slot standing in. Argument passing’s one coercion still applies.
     fn exactly_admits(
         &mut self,
-        candidate: &(ElaboratedBound, DefId),
+        candidate: &BoundCandidate,
         method_name: &str,
         self_type_id: TypeId,
         classes: &[ArgClass],
     ) -> bool {
-        let Some(params) =
-            self.bound_param_types(&candidate.0.bound, candidate.1, method_name, self_type_id)
-        else {
+        let Some(params) = self.bound_param_types(candidate, method_name, self_type_id) else {
             return false;
         };
         let tt = self.tysys.type_table.borrow();
@@ -2417,17 +2441,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
     }
 
-    /// The value parameters `method_name` takes under `bound`, for selection.
+    /// The value parameters `method_name` takes under `candidate`, for selection.
     fn bound_param_types(
         &mut self,
-        bound: &ast::TraitBound,
-        decl: DefId,
+        candidate: &BoundCandidate,
         method_name: &str,
         self_type_id: TypeId,
     ) -> Option<Vec<TypeId>> {
+        let decl = candidate.decl;
         let (sig, trait_assoc_types) = self.trait_method_of(&decl, method_name)?;
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        let slots = self.bound_slots(bound, decl, self_type_id);
+        let slots = self.bound_slots_in_space(candidate, self_type_id);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
             &slots,
@@ -2479,7 +2503,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `Base::tag(x)` names a supertrait the frame never wrote. Comparing
         // declarations, not spellings, keeps another module's same-named trait
         // from answering for the one the call named.
-        let candidates: Vec<(ElaboratedBound, DefId)> = keyed
+        let kept: Vec<(ElaboratedBound, DefId)> = keyed
             .into_iter()
             .filter(|(_, key)| {
                 required_trait.is_none_or(|w| match w.decl {
@@ -2491,30 +2515,41 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }) && self.trait_declares_method_of(key, method_name)
             })
             .collect();
+        // The space each bound's written types are read in, settled once here:
+        // every reader below resolves in it rather than re-spelling.
+        let mut candidates = Vec::with_capacity(kept.len());
+        for (elaborated, decl) in kept {
+            let space = self.bound_space(bounds, &elaborated);
+            candidates.push(BoundCandidate {
+                bound: elaborated.bound,
+                space,
+                decl,
+            });
+        }
         let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
-        let resolved = candidates.first().and_then(|(bound, key)| {
-            self.trait_method_of(key, method_name)
-                .map(|found| (bound.clone(), *key, found))
+        let resolved = candidates.first().and_then(|candidate| {
+            self.trait_method_of(&candidate.decl, method_name)
+                .map(|found| (candidate.clone(), found))
         });
         if candidates.len() > 1 {
             // Two candidates can share a spelling; reporting both as "Base"
             // names no escape from the collision.
-            let ambiguous_spelling = |bound: &ast::TraitBound, key: &DefId| {
+            let ambiguous_spelling = |c: &BoundCandidate| {
                 candidates
                     .iter()
-                    .any(|(other, other_key)| other.bound.name == bound.name && other_key != key)
+                    .any(|other| other.bound.name == c.bound.name && other.decl != c.decl)
             };
             let traits = candidates
                 .iter()
-                .map(|(b, key)| {
-                    if ambiguous_spelling(&b.bound, key) {
+                .map(|c| {
+                    if ambiguous_spelling(c) {
                         format!(
                             "{}::{}",
-                            self.tysys.resolutions.defs().module(*key),
-                            b.bound.name
+                            self.tysys.resolutions.defs().module(c.decl),
+                            c.bound.name
                         )
                     } else {
-                        b.bound.name.clone()
+                        c.bound.name.clone()
                     }
                 })
                 .collect();
@@ -2526,8 +2561,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 span,
             });
         }
-        let (found, decl, (sig, trait_assoc_types)) = resolved?;
-        let ElaboratedBound { bound, inherited } = found;
+        let (candidate, (sig, trait_assoc_types)) = resolved?;
+        let BoundCandidate { bound, space, decl } = candidate;
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
@@ -2537,29 +2572,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| FqTraitName::declared(self.tysys.resolutions.defs(), decl));
         // The arguments the bound writes name the trait the way the impl that
         // answers it is named, so `T: Eq<String>` reaches `impl Eq<String>`.
-        // An inherited bound wrote them in the declaring trait's parameter
-        // space, so they are resolved at what the chain down to it answered.
-        let fq_trait_name = match &inherited {
-            Some((root, via)) => {
-                let root_args = self.trait_args_of_bound(bounds, *root);
-                let (names, args) = self
-                    .inherited_space(*root, &root_args, via)
-                    .into_iter()
-                    .unzip::<_, _, Vec<String>, Vec<TypeId>>();
-                let pick = vec![true; bound.type_args.len()];
-                self.with_type_params_bound(&names, &args, |e| {
-                    e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
-                })
-            }
-            None => self.tysys.trait_env.fq_trait_named_by_bound(
-                fq_trait_name,
-                &bound,
-                &self.tysys.resolutions,
-            ),
-        };
+        let fq_trait_name = self.tysys.trait_env.fq_trait_named_by_bound(
+            fq_trait_name,
+            &bound,
+            &self.tysys.resolutions,
+        );
+        // An inherited bound wrote its arguments in the declaring trait's
+        // parameter space, so a spelling read here means the wrong binder. An
+        // argument naming no type stays for the slots below, where `Self` is
+        // the receiver rather than the declaring trait's own.
+        let pick: Vec<bool> = bound.type_args.iter().map(|ty| !names_no_type(ty)).collect();
+        let fq_trait_name = self.in_space(&space, |e| {
+            e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
+        });
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        let slots = self.bound_slots(&bound, decl, self_type_id);
+        let slots = self.in_space(&space, |e| e.bound_slots(&bound, decl, self_type_id));
         let fq_trait_name = self.trait_named_from_slots(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
@@ -2800,18 +2828,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     continue;
                 }
                 // The clause is written in the trait that declared it, which the
-                // chain from the direct bound's own arguments reaches.
-                let root_args = self.trait_args_of_bound(&param.bounds, root);
+                // chain from the direct bound's own arguments reaches. Those
+                // arguments are the declaration's, so they are read with the
+                // call's own answers in scope — `U: Uses<P::Inner>` asks what
+                // the argument for `P` binds `Inner` to.
+                let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
+                let bounds = param.bounds.clone();
+                let root_args = self.with_type_params_bound(&site, type_args, |e| {
+                    e.trait_args_of_bound(&bounds, root)
+                });
                 let (names, args) = self
                     .inherited_space(root, &root_args, &via)
                     .into_iter()
                     .unzip::<_, _, Vec<String>, Vec<TypeId>>();
+                // An argument naming no type keeps its spelling: `Self` here is
+                // the bounded parameter's, which this frame cannot answer.
+                let pick: Vec<bool> = bound.type_args.iter().map(|ty| !names_no_type(ty)).collect();
                 let subjects = subjects.clone();
                 self.with_type_params_bound(&names, &args, |e| {
-                    let inherited = e.tysys.bound_written(&bound).map(|trait_| {
-                        let pick = vec![true; bound.type_args.len()];
-                        e.trait_named_with_resolved_args(trait_, &bound, &pick)
-                    });
+                    let inherited = e
+                        .tysys
+                        .bound_written(&bound)
+                        .map(|trait_| e.trait_named_with_resolved_args(trait_, &bound, &pick));
                     for subject in subjects {
                         if let Some(trait_) = inherited
                             .clone()
@@ -3531,6 +3569,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ref_impl_target: None,
         })
     }
+}
+
+/// A bound a call may dispatch through, with the trait it names and the space
+/// its written types are read in.
+#[derive(Clone)]
+struct BoundCandidate {
+    bound: ast::TraitBound,
+    space: ParamSpace,
+    decl: DefId,
 }
 
 /// Whether a bound's argument names no type by its spelling: written against
