@@ -1,10 +1,16 @@
 //! The axis schema: what turns a graph's positional shapes into named axes.
 //! See WEP 2026-09-20 § "The Axis Schema Is an Invocation Option".
 
+use { Deserialize } from "core:serde";
+
+/// One pattern and the axis names it gives the tensors it reaches. Also the
+/// shape a generator's `layout` option is written in.
 pub struct LayoutRule {
     pub pattern: String,
     pub axes: List<String>,
 }
+
+impl Deserialize for LayoutRule;
 
 pub struct Schema {
     pub layout: List<LayoutRule>,
@@ -27,12 +33,6 @@ impl Schema {
 
 /// A shell wildcard over a tensor name: `*` spans any run of characters, `?`
 /// exactly one.
-pub fn glob_match<P: AsStrSlice, T: AsStrSlice>(pattern: P, text: T) -> bool {
-    let p: List<char> = pattern.as_str_slice().chars().collect();
-    let t: List<char> = text.as_str_slice().chars().collect();
-    return matches_chars(&p, &t);
-}
-
 fn matches_chars(pattern: &List<char>, text: &List<char>) -> bool {
     let mut p = 0;
     let mut t = 0;

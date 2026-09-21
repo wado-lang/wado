@@ -82,6 +82,8 @@ fn axis_names(graph: &Graph, shapes: &TreeMap<String, Shape>) -> List<String> {
         push_axes(&mut names, &mut seen, shapes, &vi.name);
     }
     for let node of &graph.nodes {
+        // `infer` succeeded, and it refuses a node that names any other number.
+        assert node.outputs.len() == 1;
         push_axes(&mut names, &mut seen, shapes, &node.outputs[0]);
     }
     return names;
@@ -100,7 +102,7 @@ fn push_axes(names: &mut List<String>, seen: &mut TreeSet<String>, shapes: &Tree
 
 /// ONNX's element type as Wado's, for a tensor that crosses the generated
 /// module's boundary. `None` is a build error naming the type.
-pub fn element_type(dtype: &String) -> Option<String> {
+fn element_type(dtype: &String) -> Option<String> {
     if *dtype == "float" {
         return Option::Some("f32");
     }

@@ -2,8 +2,8 @@
 //!
 //! Geas reads `mlp.onnxtext` through Kiln, names each axis from the `layout`
 //! patterns, and discharges every operator's extent conditions before this
-//! file compiles. Give `W2` a hidden extent other than 64 and the build stops
-//! with `T = MatMul: axis Hidden is 64 on the left and 32 on the right`.
+//! file compiles. Give `W2` 32 hidden instead of 64 and the build stops with
+//! `T = MatMul: axis Hidden is 64 on the left and 32 on the right`.
 //!
 //!     wado run package-geas/example/mlp.wado
 
@@ -56,5 +56,4 @@ export fn run() with Stdout {
         extents: [1, 10],
     };
     println(`batch ${batch_size(&x)}, output rank ${y.extents.len()}`);
-    // batch_size(&y);   // error: expected 'Tensor<f32, [Batch, In]>'
 }

@@ -33,6 +33,7 @@ pub variant InferError {
     UnknownOperator(String),
     UnrankedTensor(String),
     UndefinedInput(String),
+    ScalarOperand(String),
     OperandCount(OperandCountConflict),
     OutputCount(OutputCountConflict),
     Node(NodeConflict),
@@ -96,6 +97,7 @@ impl Display for InferError {
             UnknownOperator(op) => f.write_str(`${op}: no shape rule for this operator`),
             UnrankedTensor(name) => f.write_str(`${name}: the graph states no rank`),
             UndefinedInput(name) => f.write_str(`${name}: no graph input, initializer or node defines this`),
+            ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
             OutputCount(e) => e.fmt(f),
             Node(e) => e.fmt(f),
@@ -114,7 +116,6 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
         shapes[vi.name] = shape_of(vi, schema)?;
     }
     for let node of &graph.nodes {
-        let out = infer_node(node, &shapes)?;
         if node.outputs.len() != 1 {
             builtin::cold_path();
             return Result::Err(InferError::OutputCount(OutputCountConflict {
@@ -123,7 +124,7 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
                 given: node.outputs.len(),
             }));
         }
-        shapes[node.outputs[0]] = out;
+        shapes[node.outputs[0]] = infer_node(node, &shapes)?;
     }
     return Result::Ok(shapes);
 }
@@ -182,6 +183,10 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
     let op = node.op;
     if op == "MatMul" {
         let [a, b] = binary_operands(node, shapes)?;
+        if a.rank() == 0 || b.rank() == 0 {
+            builtin::cold_path();
+            return Result::Err(InferError::ScalarOperand(node_name(node)));
+        }
         return at_node(node, a.matmul(&b, op));
     }
     if is_binary_elementwise(&op) {

@@ -170,6 +170,22 @@ test "a node naming several outputs stops the build rather than trapping" {
     assert `${e}` == "Y = Relu: produces one output and names 2";
 }
 
+test "a scalar operand to MatMul stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float S, float[2, 3] W) => (float[2, 3] Y) {
+            Y = MatMul(S, W)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("S", []),
+            rule("*", ["A", "B"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = MatMul: a scalar operand has no axis to contract";
+}
+
 test "a node reading an undefined tensor stops the build" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {

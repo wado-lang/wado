@@ -17,24 +17,20 @@ use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
-/// One pattern and the axis names it gives a tensor. Consulted in order, and
-/// the first that matches wins.
-pub struct AxisPattern {
-    pub pattern: String,
-    pub axes: List<String>,
-}
-
-impl Deserialize for AxisPattern;
-
 /// Generator-side options, written at the `use ... with { generator: { options:
 /// { ... } } }` site. See WEP 2026-09-20 § "The Axis Schema Is an Invocation
 /// Option".
 pub struct Options {
-    /// Patterns consulted ahead of the architecture's table.
-    pub layout: List<AxisPattern>,
+    /// Patterns naming the axes of the graph's inputs and initializers.
+    pub layout: List<LayoutRule>,
 }
 
 impl Deserialize for Options;
+
+/// Whatever the graph is wrong about, said against the file it was read from.
+fn at<E: Display>(path: &String, e: &E) -> Error {
+    return Error::InvalidSchema(`geas: '${path}': ${e}`);
+}
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
     let path = req.primary.path;
@@ -44,32 +40,11 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
             return Result::Err(Error::InvalidSchema(`geas: '${path}' is not UTF-8: ${e}`));
         },
     };
-    let graph = match read(&source) {
-        Ok(g) => g,
-        Err(message) => {
-            return Result::Err(Error::InvalidSchema(`geas: '${path}': ${message}`));
-        },
-    };
-
-    let mut layout: List<LayoutRule> = [];
-    for let rule of req.options.layout {
-        layout.push(LayoutRule { pattern: rule.pattern, axes: rule.axes });
-    }
-    let shapes = match infer(&graph, &Schema { layout }) {
-        Ok(s) => s,
-        Err(e) => {
-            // The build stops here rather than emitting a module that computes
-            // the wrong thing, which is what having one tier means.
-            return Result::Err(Error::InvalidSchema(`geas: '${path}': ${e}`));
-        },
-    };
-
-    let generated = match emit(&graph, &shapes) {
-        Ok(s) => s,
-        Err(e) => {
-            return Result::Err(Error::InvalidSchema(`geas: '${path}': ${e}`));
-        },
-    };
+    let graph = read(&source).map_err(|e| at(&path, &e))?;
+    // An extent the algebra cannot discharge stops the build here, since there
+    // is no tier below this one to re-check at.
+    let shapes = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;
+    let generated = emit(&graph, &shapes).map_err(|e| at(&path, &e))?;
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,

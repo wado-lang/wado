@@ -1,45 +1,59 @@
 //! The wildcard a layout pattern is, and the order the schema consults them in.
 
-use { LayoutRule, Schema, glob_match } from "./schema.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+
+/// Whether a lone pattern reaches a tensor name, which is all a one-rule
+/// schema answers.
+fn reaches(pattern: String, tensor: String) -> bool {
+    let schema = Schema {
+        layout: [
+            LayoutRule {
+                pattern,
+                axes: ["A"],
+            },
+        ],
+    };
+    return schema.axes_for(tensor) matches { Some(_) };
+}
 
 test "a pattern with no wildcard matches only itself" {
-    assert glob_match("W1", "W1");
-    assert !glob_match("W1", "W2");
-    assert !glob_match("W1", "W11");
-    assert !glob_match("W11", "W1");
+    assert reaches("W1", "W1");
+    assert !reaches("W1", "W2");
+    assert !reaches("W1", "W11");
+    assert !reaches("W11", "W1");
 }
 
 test "a star spans any run, including an empty one" {
-    assert glob_match("*", "");
-    assert glob_match("*", "anything");
-    assert glob_match("layers.*.weight", "layers.0.weight");
-    assert glob_match("layers.*.weight", "layers..weight");
-    assert glob_match("*.weight", "layers.0.self_attn.q_proj.weight");
-    assert !glob_match("*.weight", "layers.0.weight.bias");
+    assert reaches("*", "");
+    assert reaches("*", "anything");
+    assert reaches("layers.*.weight", "layers.0.weight");
+    assert reaches("layers.*.weight", "layers..weight");
+    assert reaches("*.weight", "layers.0.self_attn.q_proj.weight");
+    assert !reaches("*.weight", "layers.0.weight.bias");
 }
 
 test "a question mark spans exactly one" {
-    assert glob_match("W?", "W1");
-    assert !glob_match("W?", "W");
-    assert !glob_match("W?", "W12");
+    assert reaches("W?", "W1");
+    assert !reaches("W?", "W");
+    assert !reaches("W?", "W12");
 }
 
 test "a star backtracks when the tail first fails" {
     // The star takes `aa` on its first try, leaving `b` against `ab`; matching
     // needs it to give one character back.
-    assert glob_match("*ab", "aaab");
-    assert glob_match("*a*b", "xaybzb");
-    assert !glob_match("*ab", "aaba");
+    assert reaches("*ab", "aaab");
+    assert reaches("*a*b", "xaybzb");
+    assert !reaches("*ab", "aaba");
 }
 
 test "trailing stars absorb nothing at the end" {
-    assert glob_match("abc***", "abc");
-    assert !glob_match("abc*d", "abc");
+    assert reaches("abc***", "abc");
+    assert !reaches("abc*d", "abc");
 }
 
 test "a pattern is matched by character, not by byte" {
-    assert glob_match("層?", "層数");
-    assert glob_match("*数", "層数");
+    assert reaches("層?", "層数");
+    assert reaches("*数", "層数");
 }
 
 test "the first rule that matches wins" {
