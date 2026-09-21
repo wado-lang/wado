@@ -434,8 +434,8 @@ pub struct CompiledFixture {
     pub wasm: Result<Vec<u8>, String>,
     /// The WIR unparsed to text, when the compile was asked to retain it.
     pub wir_text: Option<String>,
-    pub warnings: Vec<String>,
-    pub errors: Vec<String>,
+    pub warnings: Vec<CapturedDiagnostic>,
+    pub errors: Vec<CapturedDiagnostic>,
 }
 
 /// Compile a fixture on a compile worker, unparsing its WIR there when
@@ -1249,8 +1249,15 @@ pub fn compile_source_with_compiler_options_and_filename(
 /// carries only the first error, so the ones behind it are reachable only here.
 pub struct CapturedCompile {
     pub result: Result<wado_compiler::CompileResult, CompileError>,
-    pub warnings: Vec<String>,
-    pub errors: Vec<String>,
+    pub warnings: Vec<CapturedDiagnostic>,
+    pub errors: Vec<CapturedDiagnostic>,
+}
+
+/// One diagnostic as a fixture reads it: the `Code` it was raised under, spelled
+/// as `SCREAMING_SNAKE_CASE`, and the message it printed.
+pub struct CapturedDiagnostic {
+    pub code: String,
+    pub message: String,
 }
 
 /// Compile and return the result alongside every diagnostic message the host
@@ -1283,19 +1290,22 @@ pub fn compile_capturing_diagnostics(
         .map_err(|_| bail_to_compile_error(&host.diagnostics(), Some(&filename)));
 
     let diagnostics = host.diagnostics();
-    let messages = |keep: fn(Severity) -> bool| -> Vec<String> {
+    let captured = |keep: fn(Severity) -> bool| -> Vec<CapturedDiagnostic> {
         diagnostics
             .iter()
             .filter(|d| keep(d.severity))
-            .map(|d| d.message.clone())
+            .map(|d| CapturedDiagnostic {
+                code: d.code.to_string(),
+                message: d.message.clone(),
+            })
             .collect()
     };
 
     CapturedCompile {
         result,
-        warnings: messages(|s| s == Severity::Warning),
+        warnings: captured(|s| s == Severity::Warning),
         // The same set `bail_to_compile_error` picks `compile_error` from.
-        errors: messages(|s| matches!(s, Severity::Error | Severity::Fatal)),
+        errors: captured(|s| matches!(s, Severity::Error | Severity::Fatal)),
     }
 }
 

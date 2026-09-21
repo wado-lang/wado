@@ -1,0 +1,48 @@
+// The nested counterpart of `nonscalar_mut_ref_destructure`: a compound
+// sub-pattern projects the scrutinee's storage at every depth, not just the
+// first, so the write reaches the original however deep the pattern goes.
+
+struct Inner { items: List<i32> }
+struct Outer { inner: Inner }
+struct Holder { pair: [List<i32>, i32] }
+
+test "a nested struct destructure writes through" {
+    let mut o = Outer { inner: Inner { items: [1] } };
+    let { inner: { items } } = &mut o;
+    items.push(2);
+    assert o.inner.items.len() == 2;
+    assert o.inner.items[1] == 2;
+}
+
+test "a struct nested in a tuple writes through" {
+    let mut t: [Inner, i32] = [Inner { items: [1] }, 0];
+    let [{ items }, _] = &mut t;
+    items.push(2);
+    assert t.0.items.len() == 2;
+}
+
+test "a tuple nested in a struct writes through" {
+    let mut h = Holder { pair: [[1], 0] };
+    let { pair: [xs, _] } = &mut h;
+    xs.push(2);
+    assert h.pair.0.len() == 2;
+}
+
+test "a nested match binding writes through" {
+    let mut o = Outer { inner: Inner { items: [1] } };
+    match &mut o {
+        Outer { inner: { items } } => { items.push(2); }
+    }
+    assert o.inner.items.len() == 2;
+}
+
+test "a nested by-value destructure still copies" {
+    let o = Outer { inner: Inner { items: [1] } };
+    let mut { inner: { items } } = o;
+    items.push(2);
+    assert o.inner.items.len() == 1;
+    assert items.len() == 2;
+}
+
+__DATA__
+{"test": {}}

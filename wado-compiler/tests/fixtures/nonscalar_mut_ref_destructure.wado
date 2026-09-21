@@ -1,0 +1,41 @@
+// A `&mut` destructure binds the scrutinee's own storage, never a copy of it.
+// The scalar case is refused outright (`error_scalar_mut_ref_destructure`);
+// the non-scalar one used to bind a deep copy, so the write went nowhere.
+
+struct Bag { items: List<i32> }
+
+test "a let destructure writes through" {
+    let mut b = Bag { items: [1] };
+    let { items } = &mut b;
+    items.push(2);
+    assert b.items.len() == 2;
+    assert b.items[1] == 2;
+}
+
+test "a match binding writes through" {
+    let mut b = Bag { items: [1] };
+    match &mut b {
+        Bag { items } => { items.push(2); }
+    }
+    assert b.items.len() == 2;
+    assert b.items[1] == 2;
+}
+
+test "a tuple destructure writes through" {
+    let mut t: [List<i32>, List<i32>] = [[1], [9]];
+    let [head, tail] = &mut t;
+    head.push(2);
+    tail.push(8);
+    assert t.0.len() == 2;
+    assert t.1.len() == 2;
+}
+
+test "an immutable destructure still reads the original" {
+    let mut b = Bag { items: [1] };
+    let { items } = &b;
+    b.items.push(2);
+    assert items.len() == 2;
+}
+
+__DATA__
+{"test": {}}

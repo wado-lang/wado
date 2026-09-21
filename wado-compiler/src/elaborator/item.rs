@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 
 use crate::ast::{self, Function, GlobalDecl, SelfKind, Type};
+use crate::attribute::WIRE;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::{
     CompilerItem, CompilerItemKind, RegisterError, Resolved, parse_compiler_item_attrs,
@@ -1495,7 +1496,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if let Some(serde_default) = field
                 .attrs
                 .iter()
-                .find(|a| a.name == "wire" && a.has_arg("default"))
+                .find(|a| a.name == WIRE && a.has_arg("default"))
             {
                 let _ = scope.emit(TypeError::WireDefaultAttr {
                     field: field.name.clone(),

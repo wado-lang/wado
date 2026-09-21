@@ -1,0 +1,26 @@
+// An impl's associated type and associated const each reach the schema, from
+// the one attribute list the member parse reads for both.
+
+trait Shape {
+    type Unit;
+    fn area(&self) -> i32;
+}
+
+struct Square { side: i32 }
+
+impl Shape for Square {
+    #[bogus_on_type]
+    type Unit = i32;
+
+    #[bogus_on_const]
+    const SIDES: i32 = 4;
+
+    fn area(&self) -> i32 {
+        return self.side * self.side;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":12:5: analysis error: unknown attribute: `bogus_on_type`; 15:5: unknown attribute: `bogus_on_const`", "compile_error_codes": ["UNKNOWN_ATTR"]}

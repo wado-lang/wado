@@ -7,6 +7,7 @@
 use std::fmt;
 
 use crate::ast::{AstId, Attribute};
+use crate::attribute::COMPILER_ITEM;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
@@ -2273,7 +2274,7 @@ pub fn parse_compiler_item_attrs(attrs: &[Attribute]) -> (Vec<CompilerItem>, Vec
     let mut items = Vec::new();
     let mut unknown = Vec::new();
     for attr in attrs {
-        if attr.name != "compiler_item" {
+        if attr.name != COMPILER_ITEM {
             continue;
         }
         for arg in &attr.args {

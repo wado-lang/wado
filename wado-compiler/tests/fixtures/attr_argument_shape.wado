@@ -1,0 +1,12 @@
+// A shape the schema fixes is checked centrally: `#[timeout_ms]` takes the
+// number the runner waits, not a string that would parse to one.
+
+#[timeout_ms("5000")]
+test "string timeout" {
+    assert 1 == 1;
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`timeout_ms` takes one number", "compile_error_codes": ["ATTR_MISUSE"]}
