@@ -2415,12 +2415,12 @@ impl TypeTable {
                     TupleSlot::Pack(name) => {
                         let parts: Vec<(u32, TypeId)> =
                             cells.iter().map(|&c| self.pack_element(c)).collect();
-                        let index = parts[0].0;
+                        let (index, _) = parts[0];
                         assert!(
-                            parts.iter().all(|p| p.0 == index),
+                            parts.iter().all(|&(i, _)| i == index),
                             "one scope gives a pack name one index"
                         );
-                        let elem = self.make_tuple(parts.iter().map(|p| p.1).collect());
+                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
                         self.make_mapped_type_pack(name.clone(), index, elem)
                     }
                 }
@@ -5760,13 +5760,15 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
     let transposed = type_table
         .transposed_tuple(tuple)
         .expect("method lookup admits `zip` only over rows that transpose");
-    let rows = type_table.as_tuple(tuple).expect("a transpose has rows");
-    let cells: Vec<Vec<TypeId>> = rows
-        .iter()
-        .map(|&row| {
-            type_table
+    let rows: Vec<(TypeId, Vec<TypeId>)> = type_table
+        .as_tuple(tuple)
+        .expect("a transpose has rows")
+        .into_iter()
+        .map(|row| {
+            let cells = type_table
                 .as_tuple(row)
-                .expect("a transposed row is a tuple")
+                .expect("a transposed row is a tuple");
+            (row, cells)
         })
         .collect();
     let column_types = type_table
@@ -5776,17 +5778,17 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
         .into_iter()
         .enumerate()
         .map(|(col, column_type)| {
-            let elements: Vec<TirExpr> = cells
+            let elements: Vec<TirExpr> = rows
                 .iter()
                 .enumerate()
-                .map(|(row, row_cells)| {
+                .map(|(row, (row_type, cells))| {
                     let row_access = TirExpr::new(
                         TirExprKind::FieldAccess {
                             expr: Box::new(receiver.clone()),
                             field_index: row as u32,
                             field_name: row.to_string(),
                         },
-                        rows[row],
+                        *row_type,
                         span,
                     );
                     TirExpr::new(
@@ -5795,7 +5797,7 @@ pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut Typ
                             field_index: col as u32,
                             field_name: col.to_string(),
                         },
-                        row_cells[col],
+                        cells[col],
                         span,
                     )
                 })

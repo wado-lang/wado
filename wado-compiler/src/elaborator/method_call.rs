@@ -2716,7 +2716,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         {
             return None;
         }
-        let first = layouts.first()?;
+        let first = &layouts[0];
         let odd = layouts.iter().position(|l| l != first)?;
         Some(table.type_name(rows[odd]))
     }
