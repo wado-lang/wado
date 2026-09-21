@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789981843663,
+  "lastUpdate": 1789983145481,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57785,6 +57785,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/ad28e81523356162a777de12c4b45163e7f75346"
         },
         "date": 1789981842815,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "17678459746c7eea6097717244349de4c43a0bff",
+          "message": "Merge pull request #2106 from wado-lang/claude/prelude-visibility-investigation-s9axq2\n\nfeat(compiler): reject a signature that names a declaration it outreaches",
+          "timestamp": "2026-09-21T17:56:20+09:00",
+          "tree_id": "1f2a86a4e2b6934209d95de627b0f4d52a6873a4",
+          "url": "https://github.com/wado-lang/wado/commit/17678459746c7eea6097717244349de4c43a0bff"
+        },
+        "date": 1789983145161,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
