@@ -130,20 +130,24 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    // A `["location": ...]` initializer names a file this reader does not open,
-    // and dropping it would leave a tensor whose data silently came from
-    // nowhere. Geas takes its weights from the checkpoint the invocation names.
-    if let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) && first_child_of_kind(
-        s,
-        data,
-        onnx::RK_EXTERNAL_DATA,
-    ) matches { Some(_) } {
+    // Geas takes its weights from the checkpoint the invocation names, so
+    // dropping this would leave a tensor whose data came from nowhere.
+    if has_external_data(s, vi) {
         return Result::Err(
             `${name}: an initializer whose data lives in another file is not read`,
         );
     }
     let [dtype, rank] = read_tensor_type(s, toks, tensor);
     return Result::Ok(ValueInfo { name, dtype, rank });
+}
+
+/// Whether an initializer's data is a `["location": ...]` list naming a file,
+/// rather than inline values or the checkpoint.
+fn has_external_data(s: &onnx::CstStore, vi: i32) -> bool {
+    let Some(data) = first_child_of_kind(s, vi, onnx::RK_CONSTANT_DATA) else {
+        return false;
+    };
+    return first_child_of_kind(s, data, onnx::RK_EXTERNAL_DATA) matches { Some(_) };
 }
 
 fn read_tensor_type(s: &onnx::CstStore, toks: &onnx::TokenStream, tensor: i32) -> [String, Rank] {
