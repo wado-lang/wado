@@ -1,7 +1,7 @@
-// A closure's capture publishes the captured local's `Box` cell into the env
-// struct, so hot-field scalarization may not hold `step.value` in a scalar
-// across the call: `bump()` writes the cell through the env, naming no `&mut`
-// the call scan can see.
+// A closure's by-reference capture publishes the captured local's `Box` cell
+// into the env struct. `bump()` writes `step.value` through that cell, naming
+// no `&mut` for the call scan to see, so hot-field scalarization must not hold
+// the field in a scalar across the call.
 
 use { println, Stdout } from "core:cli";
 

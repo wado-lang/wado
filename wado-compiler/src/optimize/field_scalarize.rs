@@ -154,22 +154,14 @@ impl ParamUsageScan<'_> {
     /// A struct param handed to a callee, directly or as `&`/`&mut` of one,
     /// escapes: mark every field of it conservative.
     fn mark_if_param_passed(&mut self, body: &Body, op: Operand) {
-        let Some(e) = op.as_expr() else { return };
-        let place = match &body.exprs[e].kind {
-            ExprKind::Unary {
-                op: NirUnaryOp::MutRef | NirUnaryOp::Ref,
-                expr: inner,
-            } => {
-                let Some(ie) = inner.as_expr() else { return };
-                ie
-            }
-            _ => e,
+        let Some(index) = op
+            .as_expr()
+            .and_then(|e| gc_alias_source(body, e, self.type_table))
+        else {
+            return;
         };
-        if let ExprKind::Local { index, .. } = &body.exprs[place].kind
-            && self.struct_params.contains(index)
-            && is_gc_heap_type(body.exprs[place].type_id, self.type_table)
-        {
-            self.conservative_params.insert(*index);
+        if self.struct_params.contains(&index) {
+            self.conservative_params.insert(index);
         }
     }
 }
@@ -190,7 +182,7 @@ impl NirRefVisitor for ParamUsageScan<'_> {
                 } => {
                     let (inner, field_index) = (*inner, *field_index);
                     // A promoted `Operand::Value` receiver names no scalarizable param.
-                    if let Some(idx) = inner.as_expr().and_then(|e| extract_local_index(body, e))
+                    if let Some((_, idx)) = inner.as_expr().and_then(|e| local_place(body, e))
                         && self.struct_params.contains(&idx)
                     {
                         self.field_sets.entry(idx).or_default().insert(field_index);
@@ -236,22 +228,18 @@ impl NirRefVisitor for ParamUsageScan<'_> {
     }
 }
 
-/// Extract local index from a local expression or `&local` / `&mut local`.
-fn extract_local_index(body: &Body, e: ExprId) -> Option<u32> {
-    match &body.exprs[e].kind {
-        ExprKind::Local { index, .. } => Some(*index),
+/// The local a place names, seen through a `&`/`&mut` that wraps it: its
+/// expression, for the type the place carries, and its index.
+fn local_place(body: &Body, e: ExprId) -> Option<(ExprId, u32)> {
+    let place = match &body.exprs[e].kind {
         ExprKind::Unary {
             op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
             expr: inner,
-        } => {
-            if let Some(inner_e) = inner.as_expr()
-                && let ExprKind::Local { index, .. } = &body.exprs[inner_e].kind
-            {
-                Some(*index)
-            } else {
-                None
-            }
-        }
+        } => inner.as_expr()?,
+        _ => e,
+    };
+    match &body.exprs[place].kind {
+        ExprKind::Local { index, .. } => Some((place, *index)),
         _ => None,
     }
 }
@@ -685,6 +673,7 @@ fn count_field_accesses_in_block(
 }
 
 /// Function-wide alias facts that disqualify scalarization candidates.
+#[derive(Default)]
 struct FnAliases {
     /// GC-heap locals aliased anywhere in the function.
     locals: IndexSet<u32>,
@@ -702,10 +691,7 @@ fn collect_function_aliases(body: &Body, type_table: &TypeTable) -> FnAliases {
     let mut scan = AliasScan {
         type_table,
         in_call_arg: false,
-        out: FnAliases {
-            locals: IndexSet::default(),
-            fields: IndexSet::default(),
-        },
+        out: FnAliases::default(),
     };
     scan.visit_node(body, NodeRef::Block(body.root));
     scan.out
@@ -872,19 +858,8 @@ fn mark_gc_alias_pair(
 
 /// The local `value` reads as a whole GC object, directly or through one borrow.
 fn gc_alias_source(body: &Body, value: ExprId, type_table: &TypeTable) -> Option<u32> {
-    let place = match &body.exprs[value].kind {
-        ExprKind::Unary {
-            op: NirUnaryOp::Ref | NirUnaryOp::MutRef,
-            expr: inner,
-        } => inner.as_expr()?,
-        _ => value,
-    };
-    match &body.exprs[place].kind {
-        ExprKind::Local { index, .. } if is_gc_heap_type(body.exprs[place].type_id, type_table) => {
-            Some(*index)
-        }
-        _ => None,
-    }
+    let (place, index) = local_place(body, value)?;
+    is_gc_heap_type(body.exprs[place].type_id, type_table).then_some(index)
 }
 
 /// Collects every local index introduced (by `Let`, `LetDestructure`, match-
@@ -979,10 +954,9 @@ impl NirRefVisitor for FieldAccessScan<'_> {
     fn visit_node(&mut self, body: &Body, node: NodeRef) {
         let ctx = std::mem::take(&mut self.ctx);
         match node {
-            // A `ConstantValue` pattern's expr can carry `local.field` reads or
-            // an alias-creating `&local`; descend so they are tallied — a missed
-            // alias would let HFS wrongly scalarize an aliased field
-            // (stale-scalar miscompile).
+            // A pattern's `ConstantValue` expr can carry a `local.field` read or
+            // an alias-creating `&local`, and a missed alias miscompiles, so the
+            // visitor descends into patterns too.
             NodeRef::Pat(_) | NodeRef::Block(_) => {}
             NodeRef::Stmt(s) => match &body.stmts[s].kind {
                 StmtKind::Let { value, .. } => {
@@ -993,8 +967,7 @@ impl NirRefVisitor for FieldAccessScan<'_> {
                         && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
                         && is_gc_heap_type(body.exprs[ve].type_id, self.type_table)
                     {
-                        let index = *index;
-                        mark_local_aliased(index, self.counts);
+                        mark_local_aliased(*index, self.counts);
                     }
                 }
                 // Each loop level is tallied independently by its own
@@ -1010,15 +983,13 @@ impl NirRefVisitor for FieldAccessScan<'_> {
                     self.visit_node(body, NodeRef::Expr(target));
                     self.visit_operand(body, value, FaCtx::default());
                     if let ExprKind::Local { index, .. } = &body.exprs[target].kind {
-                        let index = *index;
-                        mark_local_fully_assigned(index, self.counts);
+                        mark_local_fully_assigned(*index, self.counts);
                     }
                     if let Some(ve) = value.as_expr()
                         && let ExprKind::Local { index, .. } = &body.exprs[ve].kind
                         && is_gc_heap_type(body.exprs[ve].type_id, self.type_table)
                     {
-                        let index = *index;
-                        mark_local_aliased(index, self.counts);
+                        mark_local_aliased(*index, self.counts);
                     }
                     return;
                 }
@@ -1086,11 +1057,10 @@ impl NirRefVisitor for FieldAccessScan<'_> {
                         && let Some(ie) = inner.as_expr()
                         && let ExprKind::Local { index, .. } = &body.exprs[ie].kind
                     {
-                        let index = *index;
                         if !ctx.in_call_arg
                             && is_gc_heap_type(body.exprs[ie].type_id, self.type_table)
                         {
-                            mark_local_aliased(index, self.counts);
+                            mark_local_aliased(*index, self.counts);
                         }
                         return;
                     }
@@ -1120,12 +1090,11 @@ impl NirRefVisitor for FieldAccessScan<'_> {
                     // A whole-value read of a GC-heap local outside a call arg or
                     // assign target escapes: the surrounding code can read/write the
                     // struct's fields without going through any HFS scalar.
-                    let index = *index;
                     if !ctx.in_call_arg
                         && !ctx.is_assign_target
                         && is_gc_heap_type(body.exprs[e].type_id, self.type_table)
                     {
-                        mark_local_aliased(index, self.counts);
+                        mark_local_aliased(*index, self.counts);
                     }
                 }
                 _ => {}
