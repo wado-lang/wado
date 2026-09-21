@@ -318,14 +318,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_settled_own_pack(actual, expected, span);
     }
 
-    /// Reject a settled type where a pack this signature declares is expected.
-    /// `check_assignable` defers on a callee's pack; one this body declares is
-    /// rigid, so only `[..A]` satisfies `[..A]`.
+    /// Reject a settled type where a tuple holding a pack this signature
+    /// declares is expected. `check_assignable` defers on a callee's pack; one
+    /// this body declares is rigid, so only `[..A]` satisfies `[..A]`.
+    ///
+    /// A bare `P` is exempt: inside an expansion it names the step's element,
+    /// which is settled by construction.
     fn reject_settled_own_pack(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
         let packs = table.pack_names(expected);
         if actual == expected
             || packs.is_empty()
+            || table.is_type_pack(expected)
             || table.contains_undecided(actual)
             || !packs.iter().all(|name| self.binds_type_pack(name))
         {
