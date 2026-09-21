@@ -129,3 +129,49 @@ contribute. Empty array on a 404 or when only `any` is registered.
 
 Matches against a `wasi:http` `Request`. Strips `?query` / `#frag`
 from the path before matching.
+
+### `pub struct PathParamsStructAccess`
+
+_Fields are private._
+
+#### `impl DeserializeStruct for PathParamsStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct PathParamsSeqStub`
+
+#### `impl DeserializeSeq for PathParamsSeqStub`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct PathParamsMapStub`
+
+#### `impl DeserializeMap for PathParamsMapStub`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct PathParamsVariantStub`
+
+#### `impl DeserializeVariant for PathParamsVariantStub`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`

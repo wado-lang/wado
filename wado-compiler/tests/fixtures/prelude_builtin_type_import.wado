@@ -1,0 +1,13 @@
+// A builtin type's declaration reaches as far as the name does, so naming it in
+// a `use` is not a visibility error. `prelude_builtin_type_collision.wado` pins
+// the other side: the name is reserved everywhere for the same reason.
+use { i32 } from "core:prelude/primitive.wado";
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let x: i32 = 7;
+    println(`${x}`);
+}
+
+__DATA__
+{"stdout": "7\n"}
