@@ -109,7 +109,7 @@ test "a batch axis of two lengths stops the contraction" {
     assert `${e}` == "matmul: axis Batch is 2 on the left and 8 on the right";
 }
 
-test "operands of different rank are reported as rank, not as an axis" {
+test "a matrix broadcasts across the batch axes of the other operand" {
     let a = shape([
         stat("M", 2),
         stat("K", 3),
@@ -120,8 +120,75 @@ test "operands of different rank are reported as rank, not as an axis" {
         stat("N", 4),
     ]);
 
-    let e = a.matmul(&b).unwrap_err();
-    assert `${e}` == "matmul: rank 2 on the left and 3 on the right";
+    let y = a.matmul(&b).unwrap();
+    assert y.rank() == 3;
+    assert y.axes[0].name == "Batch";
+    assert y.axes[1].name == "M";
+    assert y.axes[2].name == "N";
+}
+
+test "a batch axis of extent 1 yields to the other operand's" {
+    let a = shape([
+        stat("One", 1),
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let b = shape([
+        stat("Batch", 8),
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = a.matmul(&b).unwrap();
+    assert y.axes[0].name == "Batch";
+    assert y.axes[0].extent.agrees(&Extent::Static(8));
+}
+
+test "a rank-1 left operand is a row whose axis is dropped" {
+    let v = shape([stat("K", 3)]);
+    let w = shape([
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let y = v.matmul(&w).unwrap();
+    assert y.rank() == 1;
+    assert y.axes[0].name == "N";
+}
+
+test "a rank-1 right operand is a column whose axis is dropped" {
+    let m = shape([
+        stat("M", 2),
+        stat("K", 3),
+    ]);
+    let v = shape([stat("K", 3)]);
+
+    let y = m.matmul(&v).unwrap();
+    assert y.rank() == 1;
+    assert y.axes[0].name == "M";
+}
+
+test "a rank-1 operand still contracts its one axis" {
+    let v = shape([stat("K", 5)]);
+    let w = shape([
+        stat("K", 3),
+        stat("N", 4),
+    ]);
+
+    let e = v.matmul(&w).unwrap_err();
+    assert `${e}` == "matmul: axis K is 5 on the left and 3 on the right";
+}
+
+test "elementwise broadcasts a missing leading axis" {
+    let a = shape([
+        stat("Batch", 2),
+        stat("Out", 4),
+    ]);
+    let bias = shape([stat("Out", 4)]);
+
+    let y = a.elementwise(&bias, "add").unwrap();
+    assert y.rank() == 2;
+    assert y.axes[0].name == "Batch";
 }
 
 test "elementwise keeps the shape when every axis agrees" {

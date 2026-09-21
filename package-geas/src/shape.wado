@@ -24,15 +24,8 @@ pub struct ExtentConflict {
     pub right: Extent,
 }
 
-pub struct RankConflict {
-    pub op: String,
-    pub left: i32,
-    pub right: i32,
-}
-
 pub variant ShapeError {
     Extents(ExtentConflict),
-    Rank(RankConflict),
 }
 
 impl Display for ExtentConflict {
@@ -43,17 +36,10 @@ impl Display for ExtentConflict {
     }
 }
 
-impl Display for RankConflict {
-    fn fmt(&self, f: &mut Formatter) {
-        f.write_str(`${self.op}: rank ${self.left} on the left and ${self.right} on the right`);
-    }
-}
-
 impl Display for ShapeError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
             Extents(c) => c.fmt(f),
-            Rank(c) => c.fmt(f),
         }
     }
 }
@@ -69,47 +55,66 @@ impl Shape {
         return &self.axes[self.rank() - 1 - back];
     }
 
-    /// Elementwise over two operands of one shape, which every unary operation
-    /// is the one-operand case of.
+    /// Elementwise over two operands under ONNX's multidirectional
+    /// broadcasting, which every unary operation is the one-operand case of.
     pub fn elementwise(&self, other: &Shape, op: String) -> Result<Shape, ShapeError> {
-        Shape::same_rank(self, other, &op)?;
-        for let mut i = 0; i < self.rank(); i += 1 {
-            Shape::agree(&self.axes[i], &other.axes[i], &op)?;
-        }
-        return Result::Ok(*self);
+        let axes = Shape::broadcast(&self.axes, &other.axes, &op)?;
+        return Result::Ok(Shape { axes });
     }
 
-    /// Contract the trailing axis of `self` with the leading matrix axis of
-    /// `rhs`, batching over everything ahead of both: `[..Bs, M, K] x
-    /// [..Bs, K, N] -> [..Bs, M, N]`.
+    /// `MatMul` as ONNX defines it, which is numpy's: the trailing axis of
+    /// `self` contracts with the leading matrix axis of `rhs`, the batch axes
+    /// ahead of them broadcast, and a rank-1 operand is a matrix whose missing
+    /// axis is dropped from the result.
     pub fn matmul(&self, rhs: &Shape) -> Result<Shape, ShapeError> {
         let op = "matmul";
-        Shape::same_rank(self, rhs, &op)?;
-        assert self.rank() >= 2;
+        assert self.rank() >= 1 && rhs.rank() >= 1;
 
-        for let mut i = 0; i < self.rank() - 2; i += 1 {
-            Shape::agree(&self.axes[i], &rhs.axes[i], &op)?;
+        let right_k = if rhs.rank() == 1 { rhs.from_end(0) } else { rhs.from_end(1) };
+        Shape::agree(self.from_end(0), right_k, &op)?;
+
+        let mut axes = Shape::broadcast(&self.batch_axes(), &rhs.batch_axes(), &op)?;
+        if self.rank() >= 2 {
+            axes.push(*self.from_end(1));
         }
-        Shape::agree(self.from_end(0), rhs.from_end(1), &op)?;
+        if rhs.rank() >= 2 {
+            axes.push(*rhs.from_end(0));
+        }
+        return Result::Ok(Shape { axes });
+    }
 
+    /// The axes ahead of the matrix a `MatMul` operand ends in. A rank-1
+    /// operand is all matrix.
+    fn batch_axes(&self) -> List<Axis> {
         let mut axes: List<Axis> = [];
         for let mut i = 0; i < self.rank() - 2; i += 1 {
             axes.push(self.axes[i]);
         }
-        axes.push(*self.from_end(1));
-        axes.push(*rhs.from_end(0));
-        return Result::Ok(Shape { axes });
+        return axes;
     }
 
-    fn same_rank(left: &Shape, right: &Shape, op: &String) -> Result<(), ShapeError> {
-        if left.rank() != right.rank() {
-            return Result::Err(ShapeError::Rank(RankConflict {
-                op: *op,
-                left: left.rank(),
-                right: right.rank(),
-            }));
+    /// Align two axis lists from the end and take, at each position, the axis
+    /// the other cannot override: a missing axis or an extent of 1 yields.
+    fn broadcast(left: &List<Axis>, right: &List<Axis>, op: &String) -> Result<List<Axis>, ShapeError> {
+        let rank = i32::max(left.len(), right.len());
+        let mut axes: List<Axis> = [];
+        for let mut i = 0; i < rank; i += 1 {
+            let li = i - (rank - left.len());
+            let ri = i - (rank - right.len());
+            if li < 0 {
+                axes.push(right[ri]);
+            } else if ri < 0 {
+                axes.push(left[li]);
+            } else if left[li].extent matches { Static(1) } {
+                axes.push(right[ri]);
+            } else if right[ri].extent matches { Static(1) } {
+                axes.push(left[li]);
+            } else {
+                Shape::agree(&left[li], &right[ri], op)?;
+                axes.push(left[li]);
+            }
         }
-        return Result::Ok(());
+        return Result::Ok(axes);
     }
 
     /// Discharge the one condition an operation places on a pair of axes. What
