@@ -1,7 +1,10 @@
 //! AST Type to `TypeId` resolution.
 
+use std::hash::Hash;
+
 use crate::ast::{AstId, Type};
 use crate::compiler_host::CompilerHost;
+use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
@@ -981,6 +984,26 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// Run `body` unless `key` is already on the walk, which means it is being
+    /// asked for what it is computing. Scoped so no exit from `body` can leave
+    /// the key behind and answer `None` for the rest of the module.
+    fn unless_on_walk<K, R>(
+        &mut self,
+        stack: impl Fn(&mut Self) -> &mut hashmap::IndexSet<K>,
+        key: K,
+        body: impl FnOnce(&mut Self) -> Option<R>,
+    ) -> Option<R>
+    where
+        K: Eq + Hash + Clone,
+    {
+        if !stack(self).insert(key.clone()) {
+            return None;
+        }
+        let answer = body(self);
+        stack(self).shift_remove(&key);
+        answer
+    }
+
     /// Every bound on `base_name` a projection may be answered from, each with
     /// the parameter space it was written in answered at this frame. A
     /// supertrait binds an assoc type too, so one walk serves every lookup.
@@ -1001,32 +1024,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_params
             .get(base_name)?
             .type_id;
-        if !self.bound_closure_stack.insert(binder) {
-            return None;
-        }
-        let mut out: Vec<FrameBound> = Vec::new();
-        for bound in bounds {
-            let Some(decl) = self.trait_decl_at(bound.id, &bound.name) else {
-                out.push((bound, Vec::new()));
-                continue;
-            };
-            let written = self.resolve_in_space(&ParamSpace::new(), &bound.type_args);
-            let at_decl = self.param_space_of(decl, &written);
-            let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
-            let closure = self
-                .tysys
-                .trait_env
-                .supertrait_closure_declared(&decl)
-                .1
-                .to_vec();
-            out.push((bound, at_decl));
-            for inherited in closure {
-                let space = self.inherited_space(decl, &args, &inherited.via);
-                out.push((inherited.bound, space));
-            }
-        }
-        self.bound_closure_stack.shift_remove(&binder);
-        Some(out)
+        self.unless_on_walk(
+            |e| &mut e.bound_closure_stack,
+            binder,
+            |e| {
+                let mut out: Vec<FrameBound> = Vec::new();
+                for bound in bounds {
+                    let Some(decl) = e.trait_decl_at(bound.id, &bound.name) else {
+                        out.push((bound, Vec::new()));
+                        continue;
+                    };
+                    let written = e.resolve_in_space(&ParamSpace::new(), &bound.type_args);
+                    let at_decl = e.param_space_of(decl, &written);
+                    let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();
+                    let closure = e
+                        .tysys
+                        .trait_env
+                        .supertrait_closure_declared(&decl)
+                        .1
+                        .to_vec();
+                    out.push((bound, at_decl));
+                    for inherited in closure {
+                        let space = e.inherited_space(decl, &args, &inherited.via);
+                        out.push((inherited.bound, space));
+                    }
+                }
+                Some(out)
+            },
+        )
     }
 
     /// The space an inherited clause's own bound is written in, reached from
@@ -1220,13 +1245,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // that does not with the projection — which is built from
                 // `assoc`'s own bounds, so a pair already on the walk recurses.
                 let answer = self.frame_projection(base, base_name, &assoc).or_else(|| {
-                    let key = (base, assoc.clone());
-                    if !self.assoc_binding_stack.insert(key.clone()) {
-                        return None;
-                    }
-                    let built = self.make_frame_projection(base, base_name, &assoc);
-                    self.assoc_binding_stack.shift_remove(&key);
-                    built
+                    self.unless_on_walk(
+                        |e| &mut e.assoc_binding_stack,
+                        (base, assoc.clone()),
+                        |e| e.make_frame_projection(base, base_name, &assoc),
+                    )
                 })?;
                 Some((name, answer))
             })
