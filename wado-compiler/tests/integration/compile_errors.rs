@@ -115,8 +115,8 @@ fn test_error_display_analyzer_without_filename() {
     assert!(display.contains("analysis error"));
 }
 
-/// Orphan / coherence / sealed-`Reflect` errors must point at the user's file,
-/// not a stdlib module (`core:libm.wat` before the fix). Regression for #1596.
+/// The file `source`'s analysis error is attributed to. The tests below pin it
+/// to the user's file rather than a stdlib module (#1596).
 fn analyzer_filename(source: &str) -> String {
     let path = Path::new("orphan_phase_diag.wado");
     let err = compile_source_with_opts(path, source, OptLevel::default())

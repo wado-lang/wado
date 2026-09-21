@@ -1782,9 +1782,8 @@ impl<'a> PatternLowerer<'a> {
         let local_index = self.alloc_local(value.type_id);
         let name = self.next_temp_name();
         let type_id = value.type_id;
-        // A temp holding a reference names the scrutinee's own storage, so what
-        // it destructures is aliased, never owned. Boxing rewrote some of those
-        // references into a `Box<T>` struct, which `peel_refs` no longer sees.
+        // A temp holding a reference names the scrutinee's storage, not its own.
+        // Boxing rewrites some of those into a `Box<T>` `peel_refs` cannot see.
         let aliases_scrutinee = type_table.peel_refs(type_id) != type_id
             || type_table.box_payload_of(type_id).is_some();
         if !aliases_scrutinee {

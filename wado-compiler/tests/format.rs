@@ -3702,9 +3702,8 @@ fn test_format_keeps_an_attribute_on_a_local_item() {
     assert_format_preserves_ast(source);
 }
 
-/// `impl`, `use`, and an impl's associated members each carry their own
-/// attributes. The printer dropped them while the parser still discarded them,
-/// so formatting deleted the line.
+/// `impl`, `use`, and an impl's associated members each keep their own
+/// attributes through a format, rather than losing the line.
 #[test]
 fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
     let source = concat!(

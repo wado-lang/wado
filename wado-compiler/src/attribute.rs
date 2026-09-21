@@ -181,38 +181,16 @@ impl AttrArgs {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AttributeSchema {
     pub name: &'static str,
-    /// Where the attribute may be written.
+    /// Where the attribute may be written, or [`EVERY_TARGET`] for anywhere.
     pub targets: &'static [AttrTarget],
     pub args: AttrArgs,
     /// What the attribute declares, as a diagnostic spells it.
     pub summary: &'static str,
 }
 
-/// Every place an attribute can be written. `#[allow(…)]` reaches all of them.
-const EVERY_TARGET: &[AttrTarget] = &[
-    AttrTarget::Module,
-    AttrTarget::Function,
-    AttrTarget::Param,
-    AttrTarget::GenericParam,
-    AttrTarget::Global,
-    AttrTarget::Let,
-    AttrTarget::Test,
-    AttrTarget::Struct,
-    AttrTarget::StructField,
-    AttrTarget::Enum,
-    AttrTarget::EnumCase,
-    AttrTarget::Variant,
-    AttrTarget::VariantCase,
-    AttrTarget::Flags,
-    AttrTarget::FlagsVariant,
-    AttrTarget::Newtype,
-    AttrTarget::TupleType,
-    AttrTarget::BuiltinType,
-    AttrTarget::Trait,
-    AttrTarget::Interface,
-    AttrTarget::Resource,
-    AttrTarget::World,
-];
+/// Every place an attribute can be written, which `#[allow(…)]` reaches. The
+/// list is empty so a new [`AttrTarget`] belongs to it without being added.
+const EVERY_TARGET: &[AttrTarget] = &[];
 
 /// Every declaration that crosses the Component Model boundary, which is what
 /// `#[cm(…)]` names on the CM side.
@@ -491,7 +469,7 @@ impl AttributeFault {
 
 /// The targets a diagnostic lists, as prose.
 fn list_targets(targets: &[AttrTarget]) -> String {
-    if targets == EVERY_TARGET {
+    if targets.is_empty() {
         return "any declaration".to_string();
     }
     let mut out = String::new();
@@ -515,7 +493,7 @@ pub fn check(name: &str, args: &[AttrArg], target: AttrTarget) -> Option<Attribu
     let Some(schema) = lookup(name) else {
         return Some(AttributeFault::Unknown);
     };
-    if !schema.targets.contains(&target) {
+    if !schema.targets.is_empty() && !schema.targets.contains(&target) {
         // An attribute that belongs only in the other position is written in
         // the wrong one, which says what to write instead of where.
         let wrong_position = schema
@@ -697,14 +675,20 @@ mod tests {
         assert_eq!(names, sorted, "ATTRIBUTES must be unique and sorted");
     }
 
+    /// An empty target list is [`EVERY_TARGET`], not "nowhere", so only
+    /// `#[allow]` may carry one.
     #[test]
-    fn every_schema_names_a_target() {
+    fn only_allow_reaches_every_target() {
         for schema in ATTRIBUTES {
-            assert!(
-                !schema.targets.is_empty(),
-                "`{}` belongs nowhere",
+            assert_eq!(
+                schema.targets.is_empty(),
+                schema.name == ALLOW,
+                "`{}` names the wrong target list",
                 schema.name
             );
+        }
+        for target in [AttrTarget::Impl, AttrTarget::Use, AttrTarget::Module] {
+            assert!(check(ALLOW, &[AttrArg::Ident("dead_code".to_string())], target).is_none());
         }
     }
 

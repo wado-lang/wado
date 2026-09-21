@@ -5743,7 +5743,7 @@ impl Parser {
         }))
     }
 
-    fn parse_impl_block(&mut self, attrs: Vec<Attribute>) -> ParseResult<ImplBlock> {
+    fn parse_impl_block(&mut self, block_attrs: Vec<Attribute>) -> ParseResult<ImplBlock> {
         let id = self.alloc_ast_id();
         let start_span = self.peek().span;
         self.expect(&TokenKind::Impl)?;
@@ -5775,7 +5775,7 @@ impl Parser {
             }
             return Ok(ImplBlock {
                 id,
-                attrs,
+                attrs: block_attrs,
                 type_params,
                 trait_type,
                 ty,
@@ -5901,13 +5901,13 @@ impl Parser {
 
         Ok(ImplBlock {
             id,
+            attrs: block_attrs,
             type_params,
             trait_type,
             ty,
             associated_types,
             constants,
             methods,
-            attrs,
             is_synthesize_request: false,
             rest,
             span: start_span.merge(&end_span),

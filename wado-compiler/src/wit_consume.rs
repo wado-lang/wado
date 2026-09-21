@@ -40,9 +40,8 @@ pub struct ComponentBindings {
     pub source_interfaces: SourceInterfaceBatch,
 }
 
-/// Read the host-leaf import FQs a component-binding module carries in its
-/// [`CM_HOST_IMPORTS`] inner attribute. Empty for a non-component module
-/// or a component that imports nothing.
+/// The host-leaf import FQs a component-binding module carries in its
+/// [`CM_HOST_IMPORTS`] inner attribute. Empty where it carries none.
 pub fn module_host_leaf_imports(module: &Module) -> Vec<String> {
     module
         .inner_attributes

@@ -1,11 +1,30 @@
 // The attributes the schema admits, in the places and spellings it admits
 // them: the check that rejects the rest must let these through.
 
+#[allow(dead_code)]
 use { println, Stdout } from "core:cli";
 
 #[allow(dead_code)]
 fn unused() -> i32 {
     return 1;
+}
+
+trait Named {
+    type Id;
+    fn name(&self) -> String;
+}
+
+#[allow(dead_code)]
+impl Named for Login {
+    #[allow(dead_code)]
+    type Id = i32;
+
+    #[allow(dead_code)]
+    const MAX: i32 = 1;
+
+    fn name(&self) -> String {
+        return self.user;
+    }
 }
 
 #[inline("never")]
