@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1789986167556,
+  "lastUpdate": 1789996353722,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -57873,6 +57873,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/17b4124bddd6bd8ba741ce94deeecefa3e6c8ed8"
         },
         "date": 1789986166758,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "53343077ee41cac49730e076553c5735b4347f0a",
+          "message": "Merge pull request #2113 from wado-lang/claude/multiple-pack-type-parameters-ib0mc5\n\nfeat(compiler): a generic parameter list may declare more than one type pack",
+          "timestamp": "2026-09-21T21:56:53+09:00",
+          "tree_id": "4628971ace775badae653e495a441ddc9e6b6e75",
+          "url": "https://github.com/wado-lang/wado/commit/53343077ee41cac49730e076553c5735b4347f0a"
+        },
+        "date": 1789996353053,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
