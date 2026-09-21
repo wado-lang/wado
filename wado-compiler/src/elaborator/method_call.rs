@@ -1823,7 +1823,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && !defaulted
                 && strict
             {
-                let _ = self.emit(TypeError::UninferredStaticTypeArg {
+                let _ = self.emit(TypeError::UninferredMethodTypeArgs {
                     receiver,
                     method: static_call.method.clone(),
                     params: vec![sig.own_params[i].name.clone()],
@@ -2695,10 +2695,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The first row of a tuple `zip` whose length no other row is known to
-    /// match. Rows are transposed position by position, so unequal rows have no
-    /// answer; two distinct packs are never known to be equally long, which is
-    /// why `zip` over them is out of scope in
-    /// `docs/wep-2026-03-14-variadic-type-parameters.md` §6.
+    /// match. Two distinct packs never are, which is why the variadic WEP §6
+    /// puts `zip` over them out of scope.
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.tysys.type_table.borrow();
         let rows = table.as_tuple(tuple)?;

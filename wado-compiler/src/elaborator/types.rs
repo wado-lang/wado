@@ -635,11 +635,9 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A static declaring type parameters of its own, on an `impl` block that
-    /// declares some too. The block's are spelled at the receiver and the
-    /// method's are not inferred from the arguments, so an unspelled one
-    /// reaches codegen unsubstituted.
-    UninferredStaticTypeArg {
+    /// A method's own type parameters that the arguments do not settle. Left
+    /// unspelled they reach codegen unsubstituted.
+    UninferredMethodTypeArgs {
         receiver: String,
         method: String,
         /// The method's own parameters the call must spell, in declaration
@@ -1626,7 +1624,7 @@ impl TypeError {
                 ),
                 *span,
             ),
-            TypeError::UninferredStaticTypeArg {
+            TypeError::UninferredMethodTypeArgs {
                 receiver,
                 method,
                 params,

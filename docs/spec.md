@@ -5346,7 +5346,7 @@ from no argument, so name it in a turbofish.
 
 Inside the body that declares them, packs are rigid, as a scalar parameter is. A
 value matches such a tuple by layout: the same fixed positions and the same packs
-in the same order. Mentioning only packs in scope is not enough.
+in the same order. Naming the same packs is not enough.
 
 ```wado
 fn reorder<..A, ..B>(a: [..A], b: [..B]) {
@@ -5355,10 +5355,6 @@ fn reorder<..A, ..B>(a: [..A], b: [..B]) {
     // let shifted: [i32, ..A] = [..a];   // ERROR: so is a fixed element
 }
 ```
-
-`zip` transposes its operands position by position, so its rows must be equally
-long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
-rejected where it is written.
 
 A turbofish spells each pack as its own tuple. A flat list carries no boundary
 either:
@@ -5372,6 +5368,10 @@ Writing one argument per pack is refused as well: `<i32, String>` and
 `<[i32, String], []>` split the same list, and nothing says which was meant. The
 flat form stays available where a single pack absorbs the surplus on its own
 (`make_defaults::<i32, String>()`).
+
+`zip` transposes its operands position by position, so its rows must be equally
+long. Two distinct packs are never known to be, so `[[..a], [..b]].zip()` is
+rejected where it is written.
 
 #### Lexical note
 

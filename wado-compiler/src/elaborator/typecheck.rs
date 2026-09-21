@@ -315,30 +315,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
             return;
         }
-        self.reject_settled_own_pack(actual, expected, span);
+        self.reject_pack_layout_mismatch(actual, expected, span);
     }
 
-    /// Reject a value whose tuple layout differs from the expected one, where
-    /// the expected packs are this signature's own. `check_assignable` defers
-    /// on any pack, which is right for a callee's — the call settles it — and
-    /// wrong for one this body declares, which is rigid.
-    ///
-    /// Layout, not identity: `[..B, ..A]` and `[i32, ..A]` each mention only
-    /// packs in scope, so id equality and "is it decided" both pass them, and
-    /// they reached codegen as invalid Wasm. A bare `P` is exempt — inside an
-    /// expansion it names the step's element, not the tuple.
-    fn reject_settled_own_pack(&self, actual: TypeId, expected: TypeId, span: Span) {
+    /// Reject a value whose tuple layout differs from an expected tuple whose
+    /// packs this signature declares. `check_assignable` defers on any pack,
+    /// which is right for a callee's and wrong for one this body declares.
+    fn reject_pack_layout_mismatch(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
+        let Some(layout) = table.tuple_layout(expected) else {
+            return;
+        };
         let packs = table.pack_names(expected);
-        if actual == expected
-            || packs.is_empty()
-            || table.is_type_pack(expected)
+        if packs.is_empty()
             || table.awaits_inference(actual)
             || !packs.iter().all(|name| self.binds_type_pack(name))
+            || table.tuple_layout(actual) == Some(layout)
         {
-            return;
-        }
-        if table.tuple_layout(actual) == table.tuple_layout(expected) {
             return;
         }
         let (expected_name, found_name) = (table.type_name(expected), table.type_name(actual));

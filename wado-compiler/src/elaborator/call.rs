@@ -1860,12 +1860,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Group flat turbofish args into the variadic pack so a pack slot holds
         // one tuple, the per-param shape inference already produces.
-        if self.group_variadic_type_args_of(
-            &callee.name().to_string(),
-            &declared,
-            &mut type_args,
-            call.span,
-        ) {
+        if self.group_variadic_type_args_of(callee.name(), &declared, &mut type_args, call.span) {
             return TypeTable::ERROR;
         }
 
@@ -3160,8 +3155,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         )
     }
 
-    /// Group flat turbofish type args into a variadic pack — `ids::<i32, bool>()`
-    /// fills one `..T` slot with `[i32, bool]` — or report, and say which.
+    /// Group flat turbofish type args into one variadic pack: `ids::<i32, bool>()`
+    /// fills `..T` with `[i32, bool]`. Returns whether it reported instead.
     pub(super) fn group_variadic_type_args_of(
         &mut self,
         callee_name: &str,
@@ -3203,9 +3198,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         type_args: &[TypeId],
         span: token::Span,
     ) -> bool {
-        // A tuple says where the pack ends, and so does anything still
-        // undecided, which a later pass answers. Asked of the slots that exist
-        // before the count is: a flat `f::<i32, bool, String>` is surplus only
+        // Before the count: a flat `f::<i32, bool, String>` is surplus only
         // because nothing says where the first pack stops, and naming the count
         // would send the caller to delete an argument rather than group them.
         let spelled = {
@@ -3219,8 +3212,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let _ = self.emit(TypeError::UnspelledPackBoundary { span });
             return true;
         }
-        // Each pack spelled and still too many: a count the call can fix by
-        // itself, which with one pack would instead be what the pack absorbs.
+        // Each pack spelled and still too many. With one pack the surplus is
+        // instead what that pack absorbs, which is why this lives here.
         if type_args.len() > real.len() {
             let _ = self.emit(TypeError::SurplusTypeArguments {
                 name: callee_name.to_string(),
@@ -3234,10 +3227,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Settle to the empty pack every pack slot this site left nothing over
-    /// for, which is what a pack stands for. `reached` names the packs a
-    /// written argument was meant to settle, from [`Self::packs_args_reach`]:
-    /// closing one of those answers a failed inference with a shape nothing
-    /// asked for, so every caller states them rather than defaulting to none.
+    /// for. `reached` ([`Self::packs_args_reach`]) names the packs an argument
+    /// was meant to settle, which closing here would answer with a wrong shape.
     pub(super) fn settle_unreached_packs(
         &mut self,
         declared: &[ast::GenericParam],

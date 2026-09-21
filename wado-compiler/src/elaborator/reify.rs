@@ -8840,6 +8840,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
                                 .collect();
                             let arity = inner_arities[0].len();
+                            assert!(
+                                inner_arities.iter().all(|row| row.len() == arity),
+                                "method lookup gives `zip` no return type unless its rows agree"
+                            );
                             let num_rows = outer_elems.len();
                             let mut col_exprs = Vec::with_capacity(arity);
                             for col in 0..arity {

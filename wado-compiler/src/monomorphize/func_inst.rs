@@ -2989,6 +2989,12 @@ impl Monomorphizer {
                     return;
                 }
                 let arity = inner_arities[0].len();
+                // Rows of two packs never reach here: elaboration rejects a
+                // `zip` whose rows differ in layout, which two packs always do.
+                assert!(
+                    inner_arities.iter().all(|row| row.len() == arity),
+                    "`zip` reached monomorphization with rows of unequal length"
+                );
                 let num_rows = outer_elems.len();
                 let mut col_exprs = Vec::with_capacity(arity);
                 for col in 0..arity {

@@ -1430,10 +1430,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         merged
     }
 
-    /// Report a pack an argument reached that the solve still left open. Only
-    /// [`Self::settle_unreached_packs`] used to answer such a slot, by pinning
-    /// it to the empty tuple — a shape nothing asked for, which reported as a
-    /// mismatch against it or reached codegen.
+    /// Report a pack an argument reached that the solve still left open, which
+    /// is what the free-function and static paths report for themselves.
     fn report_unsettled_reached_packs(
         &mut self,
         method_name: &str,
@@ -1458,7 +1456,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_table
             .borrow()
             .type_name(self.tysys.get_base_type(receiver_type));
-        let _ = self.emit(TypeError::UninferredStaticTypeArg {
+        let _ = self.emit(TypeError::UninferredMethodTypeArgs {
             receiver,
             method: method_name.to_string(),
             params: open,

@@ -2378,8 +2378,7 @@ impl TypeTable {
     }
 
     /// How a tuple's positions divide into packs and single slots, or `None`
-    /// where `id` is no tuple. Two tuples agree on a value's shape exactly when
-    /// their layouts are equal, whatever the packs later expand to.
+    /// where `id` is no tuple. Equal layouts are the same shape for a value.
     pub fn tuple_layout(&self, id: TypeId) -> Option<Vec<TupleSlot>> {
         Some(
             self.as_tuple(id)?
@@ -2390,46 +2389,6 @@ impl TypeTable {
                 })
                 .collect(),
         )
-    }
-
-    /// How many packs a tuple spreads. Zero for a tuple without one, and for
-    /// anything that is not a tuple.
-    pub fn tuple_pack_count(&self, id: TypeId) -> usize {
-        self.tuple_layout(id)
-            .map(|slots| {
-                slots
-                    .iter()
-                    .filter(|s| matches!(s, TupleSlot::Pack(_)))
-                    .count()
-            })
-            .unwrap_or(0)
-    }
-
-    /// Whether a type still awaits inference: [`Self::contains_undecided`]
-    /// without the packs. A pack is a decided thing wherever its own
-    /// declaration is in scope, so a rule about shape must not read it as a
-    /// hole the way an `InferVar` is one.
-    pub fn awaits_inference(&self, id: TypeId) -> bool {
-        match self.get(id) {
-            ResolvedType::TypePack { .. } => false,
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.awaits_inference(*t))
-            }
-            ResolvedType::BuiltinArray(inner)
-            | ResolvedType::Ref(inner)
-            | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.awaits_inference(*inner),
-            ResolvedType::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                params.iter().any(|p| self.awaits_inference(*p))
-                    || self.awaits_inference(*return_type)
-            }
-            _ => self.contains_undecided(id),
-        }
     }
 
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
@@ -3991,30 +3950,37 @@ impl TypeTable {
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
+        self.contains_hole(id, true)
+    }
+
+    /// [`Self::contains_undecided`] without the packs. A pack is decided
+    /// wherever its own declaration is in scope, so a rule about shape must not
+    /// read it as the hole an `InferVar` is.
+    pub fn awaits_inference(&self, id: TypeId) -> bool {
+        self.contains_hole(id, false)
+    }
+
+    /// The walk both of the above are, differing only in whether a declared
+    /// pack counts as a hole.
+    fn contains_hole(&self, id: TypeId, packs_count: bool) -> bool {
+        let holds = |&t: &TypeId| self.contains_hole(t, packs_count);
         match self.get(id) {
-            ResolvedType::InferVar(_)
-            | ResolvedType::TypePack { .. }
-            | ResolvedType::Unknown
-            | ResolvedType::Error => true,
+            ResolvedType::TypePack { .. } => packs_count,
+            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
+            | ResolvedType::Reactive(inner) => holds(inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => {
-                params.iter().any(|p| self.contains_undecided(*p))
-                    || self.contains_undecided(*return_type)
-            }
+            } => params.iter().any(holds) || holds(return_type),
             ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| self.contains_undecided(*t))
-            }
+            | ResolvedType::GenericResource { type_args, .. } => type_args.iter().any(holds),
             _ => false,
         }
     }
