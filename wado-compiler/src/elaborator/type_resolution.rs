@@ -991,6 +991,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_param_bounds
             .get(base_name)?
             .clone();
+        // A bound's arguments are read while this closure is built, so
+        // `T: Uses<T::Item>` asks for it again. The closure cannot answer
+        // itself: the re-entrant ask gets nothing, and `T::Item` stays the
+        // abstract projection its instantiation settles.
+        let binder = self.annotate_ctx.trait_ctx.type_params.get(base_name)?.type_id;
+        if !self.bound_closure_stack.insert(binder) {
+            return None;
+        }
         let mut out: Vec<FrameBound> = Vec::new();
         for bound in bounds {
             let Some(decl) = self.trait_decl_at(bound.id, &bound.name) else {
@@ -1012,6 +1020,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 out.push((inherited.bound, space));
             }
         }
+        self.bound_closure_stack.shift_remove(&binder);
         Some(out)
     }
 

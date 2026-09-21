@@ -112,7 +112,7 @@ fn resolve_resource_extends<H: CompilerHost>(
                 reject(
                     clause,
                     format!(
-                        "`{}` extends a type parameter; a parent must be a resource declaration",
+                        "`{}` extends a type parameter or an associated type; a parent must be a resource declaration",
                         clause.child_name
                     ),
                 );
@@ -1414,6 +1414,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             suppress_reference_recording: false,
             infer_holes: InferHoleTable::default(),
             assoc_binding_stack: hashmap::IndexSet::default(),
+            bound_closure_stack: hashmap::IndexSet::default(),
             checked_type_param_defaults: hashmap::IndexMap::default(),
         }
     }

@@ -182,6 +182,10 @@ pub struct Elaborator<'a, H: CompilerHost> {
     /// Two assoc types bounded through each other have no fixpoint, so a pair
     /// already on the walk contributes no binding and stays abstract.
     pub(super) assoc_binding_stack: hashmap::IndexSet<(tir::TypeId, String)>,
+    /// The binders whose bound closure is being built right now. A bound's own
+    /// arguments are read while it is built, so `T: Uses<T::Item>` asks for it
+    /// again, and a closure cannot answer itself.
+    pub(super) bound_closure_stack: hashmap::IndexSet<tir::TypeId>,
     /// Whether each declaration's `= Default`s can be expanded at all, asked
     /// once: the declaration is ill-formed, not the application reaching it.
     pub(super) checked_type_param_defaults: hashmap::IndexMap<DefId, bool>,
