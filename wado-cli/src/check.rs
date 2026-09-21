@@ -194,9 +194,8 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     .await
     .map_err(CliExit::error)?;
 
-    // The same pipeline `wado compile` runs, writing what it generates: a
-    // second route would drift from the one every build takes, and a generator
-    // rewriting its own output costs nobody anything.
+    // The pipeline a build runs, writes included. A route of its own would be a
+    // second behaviour to hold in step with this one.
     let kiln = prepare_kiln(
         path,
         None,
@@ -209,7 +208,7 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
         None => PipelineOutcome::default(),
         Some(mut kiln) => {
             let mut outcome = kiln
-                .run(opts.knobs.no_cache)
+                .run()
                 .await
                 .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
             kiln.remap_conflicts(&mut outcome.invocations, &host)

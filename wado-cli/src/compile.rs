@@ -595,6 +595,7 @@ pub(crate) struct KilnSetup {
     pub host: FilesystemCompilerHost,
     /// Loader identities the harvested index is remapped onto.
     identities: wado_compiler::hashmap::IndexMap<String, String>,
+    no_cache: bool,
 }
 
 /// What a Kiln pipeline inherits from the run it belongs to: the project it
@@ -634,7 +635,6 @@ pub(crate) async fn prepare_kiln(
         project,
         no_cache,
         active,
-        ..
     } = run.clone();
     let entry_dir = entry_file
         .parent()
@@ -702,19 +702,20 @@ pub(crate) async fn prepare_kiln(
         provider,
         host: kiln_host,
         identities,
+        no_cache,
     }))
 }
 
 impl KilnSetup {
     /// Run the harvested invocations, writing what they produce.
-    pub(crate) async fn run(&mut self, no_cache: bool) -> Result<PipelineOutcome, PipelineError> {
+    pub(crate) async fn run(&mut self) -> Result<PipelineOutcome, PipelineError> {
         kiln_driver::run_pipeline(
             &self.manifest,
             &self.manifest_root,
             &self.host,
             &self.provider,
             std::mem::take(&mut self.invocations),
-            no_cache,
+            self.no_cache,
         )
         .await
     }
@@ -754,7 +755,7 @@ pub(crate) async fn maybe_run_pipeline(
     else {
         return Ok(PipelineOutcome::default());
     };
-    let mut outcome = kiln.run(no_cache).await?;
+    let mut outcome = kiln.run().await?;
     kiln.remap_conflicts(&mut outcome.invocations, host)?;
     Ok(outcome)
 }
@@ -777,7 +778,7 @@ pub(crate) async fn run_nested_pipeline(
     let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
-    let mut invocations = kiln.run(run.no_cache).await?.invocations;
+    let mut invocations = kiln.run().await?.invocations;
     kiln.remap_conflicts(&mut invocations, host)?;
     Ok(invocations)
 }

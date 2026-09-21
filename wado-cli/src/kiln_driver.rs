@@ -513,7 +513,7 @@ fn emit_generated_modified_warning<H: CompilerHost>(host: &H, invocation: &str, 
         message: format!(
             "kiln[{invocation}]: {path} has been modified after generation; \
              the on-disk content is honored, but `wado check` will fail. \
-             Run `wado compile` (or delete the file) to regenerate.",
+             Delete the file to regenerate it — a build honors the edit too.",
         ),
         span: None,
     });
