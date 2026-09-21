@@ -16,10 +16,9 @@ use { Stdout } from "core:cli";
 use { from_bytes as json_from_bytes } from "core:json";
 use { to_bytes as cbor_to_bytes, from_bytes as cbor_from_bytes } from "core:cbor";
 use { CitmCatalog, event_count, performance_count } from "../json_catalog/catalog_schema.wado";
-use { MonotonicClock } from "wasi:clocks";
 use fs from "core:fs";
 use { Preopens } from "core:fs";
-use { Benchmark } from "core:benchmark";
+use { Benchmark, MonotonicClock } from "core:benchmark";
 
 test "smoke" {
     let catalog = json_from_bytes::<CitmCatalog, _>(
