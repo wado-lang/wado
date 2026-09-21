@@ -32,15 +32,17 @@ pub fn seed() -> Seed with Random {
 }
 
 /// Exactly `n` unpredictable bytes: the raw material of a key, a salt or a
-/// nonce. A short read from `wasi:random` is absorbed here, never passed on.
+/// nonce. Whatever length the installed `Random` hands back is absorbed here,
+/// never passed on.
 pub fn bytes(n: i32) -> ByteList with Random {
     assert n >= 0;
     let mut out = Random::get_random_bytes(n as u64) as ByteList;
     while out.len() < n {
         let chunk = Random::get_random_bytes((n - out.len()) as u64) as ByteList;
-        assert chunk.len() > 0, "wasi:random returned no data";
+        assert chunk.len() > 0, "the installed Random returned no data";
         out.extend(&chunk);
     }
+    out.truncate(n);
     return out;
 }
 

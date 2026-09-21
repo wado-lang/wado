@@ -208,6 +208,35 @@ test "bytes loops over a short read" {
     assert host.calls == 3;
 }
 
+// Hands back three times what it was asked for, which `wasi:random` never
+// does but an installed handler can.
+struct GenerousRandom {
+    next: u8 = 0,
+}
+
+impl Random for GenerousRandom {
+    fn get_random_bytes(&mut self, max_len: u64) -> List<u8> {
+        let mut out: List<u8> = [];
+        for let mut i = 0; i < max_len as i32 * 3; i += 1 {
+            out.push(self.next);
+            self.next = (self.next as i32 + 1 & 0xFF) as u8;
+        }
+        resume out;
+    }
+
+    ..trap
+}
+
+test "an over-delivering host cannot lengthen what was asked for" {
+    let mut host = GenerousRandom {};
+    with Random => &mut host do {
+        assert bytes(4).len() == 4;
+        assert token_hex(4).len() == 8;
+        assert token_base64url(3).len() == 4;
+        assert token_from(&b"abcdef", 5).len() == 5;
+    };
+}
+
 test "token_hex is two hex digits per byte" {
     let mut host = CountingRandom {};
     with Random => &mut host do {
