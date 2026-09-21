@@ -1,0 +1,43 @@
+// A `Self::Assoc` under a function type is still phrased against `Self`, so the
+// constraint is left to the impl-side check rather than resolved at the bound.
+
+trait Src with () {
+    type Item;
+}
+
+trait Sink with () {
+    type Cb;
+
+    fn run(&self, cb: Self::Cb) -> i32;
+}
+
+struct Holder {
+    n: i32,
+}
+
+impl Src for Holder {
+    type Item = i32;
+}
+
+impl Sink for Holder {
+    type Cb = fn(i32) -> i32;
+
+    fn run(&self, cb: fn(i32) -> i32) -> i32 {
+        return cb(self.n);
+    }
+}
+
+fn add_one(x: i32) -> i32 {
+    return x + 1;
+}
+
+fn drive<T: Src + Sink<Cb = fn(Self::Item) -> i32>>(t: &T, cb: T::Cb) -> i32 {
+    return t.run(cb);
+}
+
+test "a constraint over a function type mentioning Self resolves" {
+    assert drive(&Holder { n: 7 }, add_one) == 8;
+}
+
+__DATA__
+{"test": {}}

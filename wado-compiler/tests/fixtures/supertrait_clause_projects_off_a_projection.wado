@@ -1,0 +1,68 @@
+// A supertrait clause projecting off the subtrait's parameter, read where that
+// parameter is filled by another projection: `Needs<X::E>` at `X = P::Inner`
+// means `Needs<(P::Inner)::E>`, whose base is a type (WEP-2026-08-12).
+
+trait Twice with () {
+    fn twice(&self) -> i32;
+}
+
+trait Elem with () {
+    type E: Twice;
+}
+
+trait Holder with () {
+    type Inner: Elem;
+}
+
+trait Needs<V: Twice> with () {
+    fn pick(&self) -> V;
+}
+
+trait Uses<X: Elem>: Needs<X::E> with () {}
+
+struct Leaf {
+    n: i32,
+}
+
+impl Twice for Leaf {
+    fn twice(&self) -> i32 {
+        return self.n * 2;
+    }
+}
+
+struct Mid {}
+
+impl Elem for Mid {
+    type E = Leaf;
+}
+
+struct Root {}
+
+impl Holder for Root {
+    type Inner = Mid;
+}
+
+struct User {
+    n: i32,
+}
+
+impl Needs<Leaf> for User {
+    fn pick(&self) -> Leaf {
+        return Leaf { n: self.n };
+    }
+}
+
+impl Uses<Mid> for User {}
+
+fn go<P: Holder, U: Uses<P::Inner>>(u: &U) -> i32 {
+    return u.pick().twice();
+}
+
+test "an inherited clause projects off a projection" {
+    let u = User { n: 21 };
+
+    assert go::<Root, User>(&u) == 42;
+}
+
+__DATA__
+{"test": {}}

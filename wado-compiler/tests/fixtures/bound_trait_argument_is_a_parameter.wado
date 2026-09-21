@@ -1,0 +1,46 @@
+// A bound's trait argument may be the caller's own parameter: `T: Make<U>`
+// reaches `impl Make<String>` once the call settles `U` to `String`.
+
+trait Make<T> with () {
+    fn make(v: T) -> Self;
+}
+
+trait Wrap<T> with () {
+    fn wrap(&self, v: T) -> i32;
+}
+
+struct UserName {
+    value: String,
+}
+
+impl Make<String> for UserName {
+    fn make(v: String) -> UserName {
+        return UserName { value: v };
+    }
+}
+
+struct Counter {
+    n: i32,
+}
+
+impl Wrap<String> for Counter {
+    fn wrap(&self, v: String) -> i32 {
+        return self.n + v.len();
+    }
+}
+
+fn build<T: Make<U>, U>(b: U) -> T {
+    return T::make(b);
+}
+
+fn wrapped<T: Wrap<U>, U>(t: &T, v: U) -> i32 {
+    return t.wrap(v);
+}
+
+test "a static call through a parameterized bound" {
+    assert build::<UserName, String>("gfx").value == "gfx";
+}
+
+test "an instance call through a parameterized bound" {
+    assert wrapped(&Counter { n: 1 }, "ab") == 3;
+}

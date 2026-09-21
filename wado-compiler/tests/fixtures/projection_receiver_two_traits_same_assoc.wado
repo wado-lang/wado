@@ -1,0 +1,78 @@
+// Two traits declare `Item` on one type, bound by one trait but answered by
+// different types. A call on `X::Item` dispatches through the projection, so a
+// key that drops the declaring trait serves one body for both
+// (WEP-2026-08-12).
+
+trait Twice with () {
+    fn twice(&self) -> i32;
+}
+
+trait Holder with () {
+    type Item: Twice;
+
+    fn item(&self) -> Self::Item;
+}
+
+trait Source with () {
+    type Item: Twice;
+
+    fn source(&self) -> Self::Item;
+}
+
+struct Held {
+    n: i32,
+}
+
+struct Made {
+    n: i32,
+}
+
+impl Twice for Held {
+    fn twice(&self) -> i32 {
+        return self.n * 2;
+    }
+}
+
+impl Twice for Made {
+    fn twice(&self) -> i32 {
+        return self.n + 1000;
+    }
+}
+
+struct Both {
+    n: i32,
+}
+
+impl Holder for Both {
+    type Item = Held;
+
+    fn item(&self) -> Held {
+        return Held { n: self.n };
+    }
+}
+
+impl Source for Both {
+    type Item = Made;
+
+    fn source(&self) -> Made {
+        return Made { n: self.n };
+    }
+}
+
+fn held_twice<X: Holder>(x: &X) -> i32 {
+    return x.item().twice();
+}
+
+fn made_twice<X: Source>(x: &X) -> i32 {
+    return x.source().twice();
+}
+
+test "each trait's Item dispatches to its own impl" {
+    let b = Both { n: 21 };
+
+    assert held_twice(&b) == 42;
+    assert made_twice(&b) == 1021;
+}
+
+__DATA__
+{"test": {}}

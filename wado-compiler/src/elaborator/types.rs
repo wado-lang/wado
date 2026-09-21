@@ -15,7 +15,6 @@ use crate::elaborator::reify::ReifyAssertCaptureContext;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::trait_env::TraitEnv;
 use crate::elaborator::trait_query::BoundUnmet;
-use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::tysys::TypeSystem;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
@@ -238,15 +237,6 @@ pub(crate) struct GenericNewtypeInfo {
     /// [`StructFieldInfo::type_params`].
     pub(super) type_params: RealTypeParams,
     pub(super) base_type_ast: ast::Type,
-}
-
-impl GenericNewtypeInfo {
-    /// The base type with each declared parameter replaced by `args`. A generic
-    /// newtype names no single type, so every instantiation goes through this.
-    pub(super) fn base_instantiated(&self, args: &[ast::Type]) -> ast::Type {
-        let names: Vec<String> = self.type_params.iter().map(|p| p.name.clone()).collect();
-        substitute_type_params(&self.base_type_ast, &names, args)
-    }
 }
 
 /// Which kind of inherent impl member a visibility violation names.
@@ -3317,27 +3307,20 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn type_args_with_defaults(
         &self,
         def: DefId,
-        args: &[ast::Type],
-    ) -> Option<Vec<ast::Type>> {
+        given: usize,
+    ) -> Option<(Vec<ParamSlot>, Vec<ast::Type>)> {
         let params = self.declared_generic_params(def)?;
-        if args.len() >= params.len() {
+        if given >= params.len() {
             return None;
         }
         if !self.type_param_defaults_terminate(def) {
             return None;
         }
-        let names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-        let mut filled = args.to_vec();
-        for param in &params[args.len()..] {
-            let default = param.default.clone()?;
-            let settled = filled.clone();
-            filled.push(substitute_type_params(
-                &default,
-                &names[..settled.len()],
-                &settled,
-            ));
-        }
-        Some(filled)
+        let defaults: Option<Vec<ast::Type>> = params[given..]
+            .iter()
+            .map(|param| param.default.clone())
+            .collect();
+        Some((params.iter().map(ParamSlot::from).collect(), defaults?))
     }
 
     /// Whether expanding `def`'s declared defaults reaches a fixpoint.
@@ -3462,7 +3445,9 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         match site.and_then(|site| self.resolutions.walked(site)) {
             Some(Resolution::Def(def)) => Some(def),
-            Some(Resolution::Binder(_)) => None,
+            // Neither is a declaration, and a projection's bare member name
+            // would reach whatever else this module calls that.
+            Some(Resolution::Binder(_) | Resolution::Projection(_)) => None,
             Some(Resolution::Unresolved) | None => self.declaration(name),
         }
     }

@@ -2408,7 +2408,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let required = match required_trait.map(|r| r.decl) {
             Some(Resolution::Def(def)) => Some(def),
             // A qualified trait that resolved to nothing is already reported.
-            Some(Resolution::Binder(_) | Resolution::Unresolved) => {
+            Some(Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved) => {
                 return None;
             }
             None => None,

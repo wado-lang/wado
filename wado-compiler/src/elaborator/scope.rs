@@ -14,7 +14,7 @@ use crate::module_source::ModuleSource;
 use crate::tir::TypeId;
 
 use super::Elaborator;
-use super::trait_env::InheritedBound;
+use super::trait_env::{InheritedBound, ViaClause};
 use super::trait_query::SelfBinding;
 use crate::ast::AstId;
 use crate::defs::DefId;
@@ -52,6 +52,19 @@ impl BinderInScope {
             decl: None,
         }
     }
+}
+
+/// A bound a frame carries, with the chain it came through when it was reached
+/// through a supertrait clause rather than written here.
+///
+/// `inherited` names the trait the written bound resolved to and the clauses
+/// from there down to the one that declared `bound`. `bound`'s own types are
+/// written in that last trait's parameter space, so a reader resolves them
+/// through the chain instead of reading them here (WEP-2026-08-12).
+#[derive(Clone)]
+pub(super) struct ElaboratedBound {
+    pub(super) bound: ast::TraitBound,
+    pub(super) inherited: Option<(DefId, Vec<ViaClause>)>,
 }
 
 /// The node in `params` that declares `name`, when one does. The caller picks
@@ -201,6 +214,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// A scope answering `impl_block`'s own names and nothing the caller
+    /// brought: an impl block names its parameters in `impl<...>` and inherits
+    /// none, and its associated types and `Self` answer inside it.
+    pub(super) fn enter_impl_scope(
+        &mut self,
+        impl_block: &ast::ImplBlock,
+    ) -> TypeParamScope<'_, 'a, H> {
+        let mut scope = self.enter_inherited_type_param_scope();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
+        scope.register_impl_block_params(impl_block);
+        if impl_block.trait_type.is_some() && !impl_block.is_synthesize_request {
+            let trait_name = scope.impl_block_trait_name(impl_block);
+            scope.register_impl_assoc_types(impl_block, trait_name.as_ref());
+        }
+        scope
+    }
+
     /// Run `body` with `names` bound to `args` and no other type parameter in
     /// scope, for resolving a type the declaration wrote against its arguments.
     ///
@@ -226,6 +258,26 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .collect();
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params = binders;
+        body(&mut scope)
+    }
+
+    /// [`Self::with_type_param_args`] layered on this frame instead of replacing
+    /// it, for resolving a declaration's type at a site's arguments: `Self` and
+    /// the enclosing parameters still answer, and a repeated name is shadowed.
+    pub(super) fn with_type_params_bound<R>(
+        &mut self,
+        names: &[String],
+        args: &[TypeId],
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        let mut scope = self.enter_inherited_type_param_scope();
+        let base = scope.annotate_ctx.trait_ctx.type_params.len() as u32;
+        for (slot, (name, &type_id)) in names.iter().zip(args).enumerate() {
+            scope.annotate_ctx.trait_ctx.type_params.insert(
+                name.clone(),
+                BinderInScope::undeclared(base + slot as u32, type_id),
+            );
+        }
         body(&mut scope)
     }
 
@@ -312,35 +364,57 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.with_scope_field(|scope| &mut scope.default_arg_types, types, body)
     }
 
-    /// Expand a written bound list to include every bound's supertraits, so a
-    /// declared `T: Ord` also demands `Eq`. For the sites that *check* a bound;
-    /// what a parameter is known to satisfy is elaborated on read instead, by
-    /// [`super::tysys::TypeSystem::bound_decl_implies`]. One declaration stays one
-    /// bound however spelled, so an alias never competes with its original.
-    pub(super) fn elaborate_bounds(&self, bounds: &[ast::TraitBound]) -> Vec<ast::TraitBound> {
-        self.elaborate_bounds_with(bounds, &IndexMap::default())
+    /// The supertraits `bounds` carry, each with the trait it was reached from
+    /// and the chain that reaches it. For a caller that reads the inherited
+    /// bound's own types, which are written in the declaring trait's space.
+    pub(super) fn inherited_bounds_of(
+        &self,
+        bounds: &[ast::TraitBound],
+    ) -> Vec<(ast::TraitBound, DefId, Vec<ViaClause>)> {
+        let known = IndexMap::default();
+        bounds
+            .iter()
+            .filter(|bound| bound.fn_signature.is_none())
+            .filter_map(|bound| Some((bound, self.bound_decl(bound, &known)?)))
+            .flat_map(|(bound, root)| {
+                self.supertraits_of_bound(bound, &known)
+                    .into_iter()
+                    .map(move |inherited| (inherited.bound, root, inherited.via))
+            })
+            .collect()
     }
 
-    /// [`Self::elaborate_bounds`] for bounds carrying no reference site of their
-    /// own. `known` maps a bound's id to the declaration it means, answered where
-    /// the bound was first read: a projection's bounds are rebuilt here with
-    /// fresh ids the table cannot answer for, and without `known` the dedup would
-    /// fall back to the spelling and collapse two same-named traits.
+    /// `bounds` expanded to include every bound's supertraits, so a declared
+    /// `T: Ord` also demands `Eq`. One declaration stays one bound however
+    /// spelled, so an alias never competes with its original.
+    ///
+    /// `known` maps a bound's id to the declaration it means, answered where the
+    /// bound was first read: a projection's bounds are rebuilt here with fresh
+    /// ids the table cannot answer for, and without `known` the dedup would fall
+    /// back to the spelling and collapse two same-named traits.
     pub(super) fn elaborate_bounds_with(
         &self,
         bounds: &[ast::TraitBound],
         known: &IndexMap<AstId, FqTraitName>,
-    ) -> Vec<ast::TraitBound> {
+    ) -> Vec<ElaboratedBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
-        let mut out: Vec<(ast::TraitBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
+        let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for bound in bounds {
-            self.merge_bound(&mut out, bound, known);
+            self.merge_bound(&mut out, bound, None, known);
             if bound.fn_signature.is_some() {
                 continue;
             }
+            let Some(root) = self.bound_decl(bound, known) else {
+                continue;
+            };
             for inherited in self.supertraits_of_bound(bound, known) {
-                self.merge_bound(&mut out, &inherited.bound, known);
+                self.merge_bound(
+                    &mut out,
+                    &inherited.bound,
+                    Some((root, inherited.via)),
+                    known,
+                );
             }
         }
         out.into_iter().map(|(bound, _)| bound).collect()
@@ -355,16 +429,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// sites stay two bounds, and only a bound repeated at one site merges.
     fn merge_bound(
         &self,
-        out: &mut Vec<(ast::TraitBound, Option<DefId>)>,
+        out: &mut Vec<(ElaboratedBound, Option<DefId>)>,
         bound: &ast::TraitBound,
+        inherited: Option<(DefId, Vec<ViaClause>)>,
         known: &IndexMap<AstId, FqTraitName>,
     ) {
+        let entry = || ElaboratedBound {
+            bound: bound.clone(),
+            inherited: inherited.clone(),
+        };
         if bound.fn_signature.is_some() {
             if !out
                 .iter()
-                .any(|(b, _)| b.name == bound.name && b.id == bound.id)
+                .any(|(b, _)| b.bound.name == bound.name && b.bound.id == bound.id)
             {
-                out.push((bound.clone(), None));
+                out.push((entry(), None));
             }
             return;
         }
@@ -379,18 +458,18 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let duplicate = match decl {
             Some(decl) => out
                 .iter_mut()
-                .find(|(b, d)| *d == Some(decl) && mergeable(b)),
+                .find(|(b, d)| *d == Some(decl) && mergeable(&b.bound)),
             None => out
                 .iter_mut()
-                .find(|(b, d)| d.is_none() && b.name == bound.name && mergeable(b)),
+                .find(|(b, d)| d.is_none() && b.bound.name == bound.name && mergeable(&b.bound)),
         };
         if let Some((existing, _)) = duplicate {
-            if existing.assoc_types.is_empty() {
-                existing.assoc_types.clone_from(&bound.assoc_types);
+            if existing.bound.assoc_types.is_empty() {
+                existing.bound.assoc_types.clone_from(&bound.assoc_types);
             }
             return;
         }
-        out.push((bound.clone(), decl));
+        out.push((entry(), decl));
     }
 
     /// The declaration a bound names: `known` first, then the bound's own site.
@@ -405,12 +484,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .or_else(|| self.trait_decl_at(bound.id, &bound.name))
     }
 
-    /// The transitive supertraits of the trait `bound` names, as bounds.
+    /// The transitive supertraits of the trait `bound` names, as declared.
     ///
     /// Answered from the bound's own reference site: two modules may declare
     /// the same name, and expanding by spelling picks whichever the by-name
     /// index holds — for the loser, an empty closure, so a supertrait's methods
     /// silently vanish.
+    ///
+    /// Each carries the declaration it names, since its spelling belongs to the
+    /// declaring module and its arguments to that trait's parameter space. A
+    /// caller reading those arguments walks `via` from what `bound` writes.
     fn supertraits_of_bound(
         &self,
         bound: &ast::TraitBound,
@@ -421,7 +504,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         self.tysys
             .trait_env
-            .supertrait_closure_at(&decl, &bound.type_args)
+            .supertrait_closure_declared(&decl)
+            .1
+            .iter()
+            .map(|inherited| InheritedBound {
+                bound: ast::TraitBound {
+                    resolved: Some(inherited.decl),
+                    ..inherited.bound.clone()
+                },
+                ..inherited.clone()
+            })
+            .collect()
     }
 
     /// The type-parameter ids the enclosing generic scope owns: a slot bound to

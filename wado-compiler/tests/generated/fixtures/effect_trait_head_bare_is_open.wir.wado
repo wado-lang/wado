@@ -104,7 +104,6 @@ fn "effect_trait_head_bare_is_open.wado/run"() with Stdout, Stderr {
     let packed_59: i64;
     let rx_60: i32;
     let tx_61: i32;
-    let $sroa_quiet_n: i32;
     loud = struct.new "effect_trait_head_bare_is_open.wado//Loud" { n: 0 };
     noisy = struct.new "effect_trait_head_bare_is_open.wado//Noisy" { n: 0 };
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
@@ -122,7 +121,7 @@ fn "effect_trait_head_bare_is_open.wado/run"() with Stdout, Stderr {
     "core:rt/write_string_to_stream"(tx_42, $local_5.repr, $local_5.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_31);
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(local.tee $sroa_quiet_n(3), $local_7);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(3, $local_7);
     rx_60 = builtin::i32_wrap_i64(local.tee packed_59("wasi/stream-new"()));
     tx_61 = builtin::i32_wrap_i64(packed_59 >> 32_i64);
     handle_50 = "effect_trait_head_bare_is_open.wado/$cm_binding__Stdout_write_via_stream"(rx_60);
