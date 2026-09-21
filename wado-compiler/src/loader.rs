@@ -484,6 +484,16 @@ fn strip_kiln_scheme(uri: &str) -> Option<String> {
     Some(parsed.path().decode().to_string_lossy().into_owned())
 }
 
+/// The file name a diagnostic about a declaration in `source` points at.
+fn decl_file_of(source: &ModuleSource) -> String {
+    match source {
+        ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => path.to_string(),
+        ModuleSource::EntryPoint { filename } => filename.to_string(),
+        ModuleSource::Redirected { uri } => uri.to_string(),
+        _ => String::new(),
+    }
+}
+
 /// `true` when `path` looks like a non-`.wado` schema source (i.e. has any
 /// extension other than `.wado`). Wado modules and bare paths with no
 /// extension fall through to normal resolution.
@@ -1497,14 +1507,22 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
                     self.pending_component_imports.push((resolved, kind));
                     continue;
                 }
-                if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path))
-                    && use_decl
+                if matches!(&resolved, ModuleSource::Local { path } if is_non_wado_schema(path)) {
+                    let declares_generator = use_decl
                         .attributes
                         .as_ref()
                         .and_then(ImportAttributes::generator)
-                        .is_none()
-                {
-                    self.emit_kiln_missing_with(from_module_source, use_decl);
+                        .is_some();
+                    if declares_generator {
+                        // The redirect above did not fire, so no invocation
+                        // produced this module. Reading the schema as Wado would
+                        // report the generator's absence as a parse error in a
+                        // file that was never Wado.
+                        self.emit_kiln_no_generated_module(from_module_source, use_decl);
+                    } else {
+                        self.emit_kiln_missing_with(from_module_source, use_decl);
+                    }
+                    continue;
                 }
                 pending.push_back((from_module_source.clone(), resolved));
             }
@@ -1786,20 +1804,34 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
     /// a downstream parse failure on the schema content.
     fn emit_kiln_missing_with(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
         use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
-        let file = match from_module_source {
-            ModuleSource::Local { path } | ModuleSource::Dependency { path, .. } => {
-                path.to_string()
-            }
-            ModuleSource::EntryPoint { filename } => filename.to_string(),
-            ModuleSource::Redirected { uri } => uri.to_string(),
-            _ => String::new(),
-        };
+        let file = decl_file_of(from_module_source);
         self.host.emit_diagnostic(Diagnostic {
             severity: Severity::Error,
             code: Code::KilnMissingWith,
             message: format!(
                 "kiln: `use ... from {:?}` requires `with {{ generator: {{ module: \"...\" }} }}` \
                  — non-`.wado` schemas can only be loaded through an inline Kiln invocation",
+                use_decl.source,
+            ),
+            span: Some(DiagnosticSpan::from_span(
+                &use_decl.source_span,
+                Some(&file),
+            )),
+        });
+    }
+
+    /// Emit a `Code::KilnNoGeneratedModule` diagnostic for a `use ... from
+    /// "<schema>"` that names a generator no invocation ran.
+    fn emit_kiln_no_generated_module(&self, from_module_source: &ModuleSource, use_decl: &UseDecl) {
+        use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
+        let file = decl_file_of(from_module_source);
+        self.host.emit_diagnostic(Diagnostic {
+            severity: Severity::Error,
+            code: Code::KilnNoGeneratedModule,
+            message: format!(
+                "kiln: no generated module for `use ... from {:?}` — its generator \
+                 declared no output for this schema, or ran under a different name \
+                 than the one this module imports",
                 use_decl.source,
             ),
             span: Some(DiagnosticSpan::from_span(
