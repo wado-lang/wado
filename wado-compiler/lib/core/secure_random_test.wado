@@ -303,15 +303,14 @@ test "with_buffered passes the body's own effects through" {
     assert tally.n == 1;
 }
 
-test "a BufferedRandom block can be sized" {
+test "with_buffered takes the block size" {
     let mut host = CountingRandom {};
     with Random => &mut host do {
-        let mut rng = BufferedRandom::new(32);
-        with Random => &mut rng do {
+        with_buffered(|| {
             for let mut i = 0; i < 8; i += 1 {
                 assert Random::get_random_bytes(16).len() == 16;
             }
-        };
+        }, 32);
     };
     assert host.calls == 4;
 }

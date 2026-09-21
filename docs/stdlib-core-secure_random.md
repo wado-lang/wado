@@ -57,11 +57,11 @@ one-time code or an invite code, where the alphabet has to be readable.
 
 The alphabet is ASCII and at most 256 bytes; a repeated byte weights it.
 
-### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E)`
+### `pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E), pool_bytes: i32 = POOL_BYTES) -> T with (Random, E)`
 
-Run `body` with a [`BufferedRandom`] installed, so the small draws inside it
-can share a host call. A draw larger than the block, or than what a short
-block held, reaches the host again.
+Run `body` with a [`BufferedRandom`] of `pool_bytes` installed, so the small
+draws inside it can share a host call. A draw larger than the block, or than
+what a short block held, reaches the host again.
 
 ## Structs
 
@@ -71,11 +71,6 @@ A `Random` handler that draws entropy in blocks. Install it around the work
 that consumes randomness; its block lives in guest memory until consumed.
 
 _Fields are private._
-
-#### `pub fn new(pool_bytes: i32) -> BufferedRandom`
-
-A handler whose block is `pool_bytes` rather than the default 4096. The
-size must be positive.
 
 #### `impl Random for BufferedRandom`
 
