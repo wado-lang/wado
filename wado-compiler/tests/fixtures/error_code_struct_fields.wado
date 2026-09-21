@@ -1,0 +1,10 @@
+// A struct literal that leaves a field the declaration requires unset.
+
+struct Point { x: i32, y: i32 }
+
+export fn run() {
+    let p = Point { x: 1 };
+}
+
+__DATA__
+{"compile_error":"missing field 'y' in struct literal 'Point'","compile_error_codes":["STRUCT_FIELDS"]}

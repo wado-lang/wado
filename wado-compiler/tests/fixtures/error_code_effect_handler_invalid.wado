@@ -1,0 +1,17 @@
+// A `with ... do` whose handler value implements no operation of the effect.
+
+interface Counter {
+    fn next() -> i32;
+}
+
+struct NotAHandler { x: i32 }
+
+export fn run() {
+    let mut h = NotAHandler { x: 0 };
+    with Counter => &mut h do {
+        let a = Counter::next();
+    }
+}
+
+__DATA__
+{"compile_error":"handler value of type 'NotAHandler' does not implement interface 'Counter'","compile_error_codes":["EFFECT_HANDLER_INVALID"]}

@@ -229,7 +229,7 @@ impl AnalyzeError {
                 name,
                 span,
             } => (
-                Code::UndefinedVariable,
+                Code::ImportNotFound,
                 format!("symbol '{name}' not found in module '{module_source}'"),
                 *span,
             ),

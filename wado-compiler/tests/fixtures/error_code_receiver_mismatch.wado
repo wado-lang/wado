@@ -1,0 +1,14 @@
+// `self` by value on a value type: only a resource takes its receiver that way.
+
+struct Counter { x: i32 }
+
+impl Counter {
+    fn get(self) -> i32 {
+        return self.x;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error":"`self` by value is only allowed on a resource; `Counter` is a value type","compile_error_codes":["RECEIVER_MISMATCH"]}

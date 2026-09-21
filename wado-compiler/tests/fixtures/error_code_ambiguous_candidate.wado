@@ -1,0 +1,27 @@
+// Two traits declare the method, and the receiver implements both.
+
+trait Left {
+    fn go(&self) -> i32;
+}
+
+trait Right {
+    fn go(&self) -> i32;
+}
+
+struct Both {}
+
+impl Left for Both {
+    fn go(&self) -> i32 { return 1; }
+}
+
+impl Right for Both {
+    fn go(&self) -> i32 { return 2; }
+}
+
+export fn run() {
+    let b = Both {};
+    let n = b.go();
+}
+
+__DATA__
+{"compile_error":"ambiguous method 'go': declared by 'Left' and 'Right'","compile_error_codes":["AMBIGUOUS_CANDIDATE"]}

@@ -17,6 +17,7 @@ use bytes::Bytes;
 use futures::future::{Either, select};
 use http_body_util::{BodyExt, Full};
 use serde::Deserialize;
+use std::fmt::Write as _;
 use std::path::Path;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -1134,10 +1135,10 @@ fn fixture_test_os(path: &Path, content: &str) -> Result<(), Box<dyn std::error:
 
 /// The diagnostics a failed assertion prints, each as `CODE: message`.
 fn diagnostic_text(diagnostics: &[common::CapturedDiagnostic]) -> String {
-    diagnostics
-        .iter()
-        .map(|d| format!("\n    {}: {}", d.code, d.message))
-        .collect()
+    diagnostics.iter().fold(String::new(), |mut text, d| {
+        let _ = write!(text, "\n    {}: {}", d.code, d.message);
+        text
+    })
 }
 
 /// Check each `wat_lines` entry against the emitted component's WAT.
