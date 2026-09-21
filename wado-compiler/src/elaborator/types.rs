@@ -1630,18 +1630,7 @@ impl TypeError {
                 params,
                 span,
             } => (
-<<<<<<< HEAD
                 Code::NeedsTypeAnnotation,
-                format!(
-                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
-                ),
-||||||| 9552903a8
-                Code::TypeMismatch,
-                format!(
-                    "'{receiver}::{method}' declares the type parameter '{param}', which is not inferred from the arguments here; spell it: '{receiver}::{method}::<{param}>(…)'"
-                ),
-=======
-                Code::TypeMismatch,
                 {
                     assert!(!params.is_empty(), "the emitter found an unspelled slot");
                     let named = params
@@ -1659,7 +1648,6 @@ impl TypeError {
                         "'{receiver}::{method}' declares the type parameter{plural} {named}, which {verb} not inferred from the arguments here; spell {them}: '{receiver}::{method}::<{spelled}>(…)'"
                     )
                 },
->>>>>>> origin/main
                 *span,
             ),
             TypeError::AmbiguousStaticArgument {
