@@ -4368,20 +4368,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     // so its pack sits a level down. Everywhere else the pack is
                     // an element: `resolve_for_of` sends a tuple carrying none
                     // down the concrete path instead.
-                    let inner = match elems.iter().find(|e| type_table.is_type_pack(**e)) {
-                        Some(&pack) => pack,
-                        None => {
-                            let is_zip = matches!(
-                                actual_iterable,
-                                ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
-                            );
-                            assert!(
-                                is_zip,
-                                "variadic for-of over a tuple carrying no pack: {}",
-                                type_table.type_name(iterable.type_id)
-                            );
-                            elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
-                        }
+                    let inner = if let Some(&pack) =
+                        elems.iter().find(|e| type_table.is_type_pack(**e))
+                    {
+                        pack
+                    } else {
+                        let is_zip = matches!(
+                            actual_iterable,
+                            ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+                        );
+                        assert!(
+                            is_zip,
+                            "variadic for-of over a tuple carrying no pack: {}",
+                            type_table.type_name(iterable.type_id)
+                        );
+                        elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
                     };
                     // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
                     // the mapped element, not the pack itself.
