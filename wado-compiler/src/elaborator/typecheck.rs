@@ -5,7 +5,7 @@
 //! diagnostic. The last two each have a `_return` flavour where `UNIT` passes.
 
 use crate::compiler_host::CompilerHost;
-use crate::tir::{ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TupleSlot, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -75,25 +75,13 @@ fn check_at(
     }
 
     // Defer only what is genuinely undecided: an inference variable awaiting its
-<<<<<<< HEAD
-    // solver, a pack awaiting expansion, a projection over one of those, and
-    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
-    // of a polymorphic signature instantiates its slots into `InferVar`s first,
-    // so nothing but itself is ever assignable to it. A pack is opaque on the
-    // same terms where its own declaration is in scope, which this layer cannot
-    // see; `Elaborator::typecheck` adds that rule.
-||||||| d358fbb7f
-    // solver, a pack awaiting expansion, a projection over one of those, and
-    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
-    // of a polymorphic signature instantiates its slots into `InferVar`s first,
-    // so nothing but itself is ever assignable to it.
-=======
     // solver, a pack awaiting expansion that the rule above did not settle, a
     // projection over one of those, and `unknown` / `error`. A rigid `TypeParam`
     // is opaque, not undecided — a use of a polymorphic signature instantiates
     // its slots into `InferVar`s first, so nothing but itself is ever assignable
-    // to it.
->>>>>>> origin/main
+    // to it. A value carrying no pack at all is opaque on the same terms where
+    // the expected packs are in scope, which this layer cannot see;
+    // `Elaborator::typecheck` adds that rule.
     if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
@@ -256,65 +244,61 @@ fn check_at(
     TypeCheckResult::Compatible
 }
 
-/// Two tuple types over one pack are the same type only when their fixed
-/// elements line up. The pack stands for the same arity on both sides, so the
-/// elements before it and after it each have a settled offset: `[..R, L]` is
-/// never `[..R]`, and never `[L, ..R]` either. Decidable before the pack is
-/// expanded, which is the only point where a body carrying one is checked.
+/// Two tuple types over the same packs are the same type only when their
+/// layouts line up. Each pack stands for the same arity on both sides, so every
+/// other element has a settled offset: `[..R, L]` is never `[..R]`, never
+/// `[L, ..R]`, and `[..A, ..B]` is never `[..B, ..A]`. Decidable before the
+/// packs expand, which is the only point where a body carrying one is checked.
 fn pack_shape_conflict(actual: TypeId, expected: TypeId, type_table: &TypeTable) -> bool {
     let (actual_inner, _) = unwrap_ref(actual, type_table);
     let (expected_inner, _) = unwrap_ref(expected, type_table);
-    let (Some(actual_shape), Some(expected_shape)) = (
-        tuple_pack_shape(actual_inner, type_table),
-        tuple_pack_shape(expected_inner, type_table),
+    let (Some(actual_layout), Some(expected_layout)) = (
+        type_table.tuple_layout(actual_inner),
+        type_table.tuple_layout(expected_inner),
     ) else {
         return false;
     };
-    if actual_shape.pack != expected_shape.pack {
+    // Two tuples naming different packs are two declarations' slots, which a
+    // call settles; only the same packs make them one type to compare.
+    let packs = packs_named(&actual_layout);
+    if packs.is_empty() || packs != packs_named(&expected_layout) {
         return false;
     }
-    if actual_shape.before.len() != expected_shape.before.len()
-        || actual_shape.after.len() != expected_shape.after.len()
-    {
+    if actual_layout != expected_layout {
         return true;
     }
-    // Invariant, as rule 8 compares a generic instance's arguments. Only a
-    // settled element conflicts; an undecided one defers with everything else.
-    actual_shape
-        .before
+    // Equal layouts put every fixed element at the same offset. Invariant, as
+    // rule 8 compares a generic instance's arguments; only a settled element
+    // conflicts, an undecided one defers with everything else.
+    let actual_elems = type_table.as_tuple(actual_inner).unwrap();
+    let expected_elems = type_table.as_tuple(expected_inner).unwrap();
+    actual_layout
         .iter()
-        .zip(expected_shape.before)
-        .chain(actual_shape.after.iter().zip(expected_shape.after))
-        .any(|(&a, &e)| {
-            check_at(a, e, type_table, Position::Invariant) == TypeCheckResult::Incompatible
+        .enumerate()
+        .filter(|(_, slot)| **slot == TupleSlot::Fixed)
+        .any(|(i, _)| {
+            check_at(
+                actual_elems[i],
+                expected_elems[i],
+                type_table,
+                Position::Invariant,
+            ) == TypeCheckResult::Incompatible
         })
 }
 
-/// A tuple type's pack and the fixed elements on either side of it.
-struct PackShape<'a> {
-    pack: TypeId,
-    before: &'a [TypeId],
-    after: &'a [TypeId],
-}
-
-fn tuple_pack_shape(type_id: TypeId, type_table: &TypeTable) -> Option<PackShape<'_>> {
-    let ResolvedType::GenericInstance { def, type_args } = type_table.get(type_id) else {
-        return None;
-    };
-    if !TypeTable::is_tuple_type(type_table.def_name(*def)) {
-        return None;
-    }
-    let is_pack = |&arg: &TypeId| matches!(type_table.get(arg), ResolvedType::TypePack { .. });
-    let at = type_args.iter().position(is_pack)?;
-    assert!(
-        !type_args[at + 1..].iter().any(is_pack),
-        "the parser admits one pack per parameter list"
-    );
-    Some(PackShape {
-        pack: type_args[at],
-        before: &type_args[..at],
-        after: &type_args[at + 1..],
-    })
+/// The packs a layout names, sorted and deduplicated, so two tuples naming the
+/// same packs in different orders still compare as one type.
+fn packs_named(layout: &[TupleSlot]) -> Vec<&str> {
+    let mut names: Vec<&str> = layout
+        .iter()
+        .filter_map(|slot| match slot {
+            TupleSlot::Pack(name) => Some(name.as_str()),
+            TupleSlot::Fixed => None,
+        })
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    names
 }
 
 /// Unwrap one layer of Ref/MutRef, returning (`inner_type`, `was_ref`).
@@ -397,12 +381,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.reject_pack_layout_mismatch(actual, expected, span);
     }
 
-    /// Reject a value whose tuple layout differs from an expected tuple whose
-    /// packs this signature declares. `check_assignable` defers on any pack,
-    /// which is right for a callee's and wrong for one this body declares.
+    /// Reject a value carrying no pack where a tuple of packs this signature
+    /// declares is expected. `pack_shape_conflict` compares two tuples naming
+    /// the same packs; a value naming none is the case only a scope can settle.
     fn reject_pack_layout_mismatch(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
-        if !table.contains_type_pack(expected) || table.awaits_inference(actual) {
+        if !table.contains_type_pack(expected)
+            || table.contains_type_pack(actual)
+            || table.awaits_inference(actual)
+        {
             return;
         }
         let Some(layout) = table.tuple_layout(expected) else {
