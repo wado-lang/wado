@@ -1,0 +1,41 @@
+//! A method taking no arguments leaves its pack to the expected type. Closing
+//! the pack empty before reading that type answered the call with `[]`.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md.
+
+struct Defaults {}
+
+impl Defaults {
+    fn make<..A: Default>(&self) -> [..A] {
+        return [..A::default()];
+    }
+
+    fn statically<..A: Default>() -> [..A] {
+        return [..A::default()];
+    }
+
+    fn padded<..A: Default>(&self, n: i32 = 1) -> [..A] {
+        return [..A::default()];
+    }
+}
+
+test "the expected type settles a no-argument method's pack" {
+    let d = Defaults {};
+    let pair: [i32, bool] = d.make();
+    assert pair.0 == 0;
+    assert pair.1 == false;
+
+    let triple: [i32, i32, String] = d.make();
+    assert triple.2 == "";
+}
+
+test "a static and a defaulted call read the expected type too" {
+    let s: [i32, bool] = Defaults::statically();
+    assert s.0 == 0;
+
+    let d = Defaults {};
+    let p: [String, i32] = d.padded();
+    assert p.0 == "";
+}
+
+__DATA__
+{"test": {}}

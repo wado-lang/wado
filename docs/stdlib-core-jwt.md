@@ -165,3 +165,13 @@ The signature is not this key's over this token.
 #### `NotYetValid`
 
 `nbf` has not arrived.
+
+### `pub enum Crit`
+
+Whether the header carries `crit`, which is all [`verify`] asks: the member
+is refused for being present, so its contents are never read. An `Option`
+field would read an explicit `null` as the absent member it is not.
+
+#### `Absent`
+
+#### `Present`

@@ -1,0 +1,30 @@
+//! Inside an expansion, a bare pack name annotates the step's element, not the
+//! tuple the pack stands for. Making a pack rigid in its declaring body caught
+//! this too, and `let payload: P = ...` stopped compiling.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md.
+
+variant Shape {
+    Circle(i32),
+    Named(String),
+    Empty,
+}
+
+fn payload_text<V: ReflectVariant<CasePayloads = [..P]>, ..P: Inspect>(v: &V) -> String {
+    let mut out = "";
+    for let case of ReflectVariant::<V>::members() {
+        if case.holds(v) && !case.is_unit() {
+            let payload: P = case.extract(v);
+            out = `${payload:?}`;
+        }
+    }
+    return out;
+}
+
+test "a bare pack name annotates the expansion's element" {
+    assert payload_text(&Shape::Circle(3)) == "3";
+    assert payload_text(&Shape::Named("x")) == "\"x\"";
+    assert payload_text(&Shape::Empty) == "";
+}
+
+__DATA__
+{"test": {}}

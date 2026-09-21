@@ -1,0 +1,63 @@
+// A type a `pub` stdlib method hands back is part of that method's API, so it
+// carries the same reach and the prelude re-exports it beside its siblings.
+// These seven were `internal`: callable, but impossible to write down.
+use { println, Stdout } from "core:cli";
+
+fn count_parts(it: StrSplitIter) -> i32 {
+    let mut n = 0;
+    for let p of it { n += 1; }
+    return n;
+}
+
+fn count_first_parts(it: StrSplitNIter) -> i32 {
+    let mut n = 0;
+    for let p of it { n += 1; }
+    return n;
+}
+
+fn count_words(it: StrSplitWhitespaceIter) -> i32 {
+    let mut n = 0;
+    for let w of it { n += 1; }
+    return n;
+}
+
+fn count_lines(it: StrLinesIter) -> i32 {
+    let mut n = 0;
+    for let l of it { n += 1; }
+    return n;
+}
+
+fn first_index(it: StrCharIndicesIter) -> i32 {
+    for let [i, c] of it { return i; }
+    return -1;
+}
+
+struct Cell {
+    n: i32,
+}
+
+fn bump_all(it: SliceRefMutIter<Cell>) {
+    for let c of it { c.n += 1; }
+}
+
+fn reason_of(e: LenientParseError) -> String {
+    return e.reason();
+}
+
+export fn run() with Stdout {
+    assert count_parts("a b c".split(" ")) == 3;
+    assert count_first_parts("a b c".splitn(2, " ")) == 2;
+    assert count_words("a  b c".split_whitespace()) == 3;
+    assert count_lines("a\nb".lines()) == 2;
+    assert first_index("xy".char_indices()) == 0;
+
+    let mut cells: List<Cell> = [Cell { n: 1 }, Cell { n: 2 }];
+    bump_all(cells.iter_ref_mut());
+    assert cells[0].n == 2;
+
+    let Err(e) = bool::from_str_lenient("maybe") else { return; };
+    println(reason_of(e));
+}
+
+__DATA__
+{"stdout": "invalid boolean string\n"}

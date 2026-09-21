@@ -1,0 +1,14 @@
+//! A row that is no tuple makes `zip` no transpose at all, which method lookup
+//! reports on its own. Comparing layouts read "not a tuple" as "a different
+//! shape" and stacked a packs diagnostic on a value that has no pack.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+test "a non-tuple row is reported as a missing method alone" {
+    let z = [[1, 2], 3].zip();
+}
+
+__DATA__
+{
+  "compile_error": "no method 'zip' found on type '[[i32, i32], i32]'",
+  "compile_errors_not_contains": ["every row must be the same length"]
+}

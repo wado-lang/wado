@@ -400,6 +400,12 @@ pub trait AstVisitor: Sized {
     /// `visit_*` methods instead.
     fn visit_id(&mut self, _id: AstId, _span: Span) {}
 
+    /// A `with` clause's reference site, kept apart from [`Self::visit_id`]
+    /// because `effect_check` answers for it and the name resolver does not.
+    fn visit_effect_id(&mut self, id: AstId, span: Span) {
+        self.visit_id(id, span);
+    }
+
     fn visit_item(&mut self, item: &Item) {
         walk_item(self, item);
     }
@@ -711,7 +717,7 @@ pub fn walk_function<V: AstVisitor>(v: &mut V, func: &Function) {
         v.visit_type(ret);
     }
     for (id, span) in &func.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
     if let Some(body) = &func.body {
         v.visit_block(body);
@@ -1106,7 +1112,7 @@ fn walk_function_type<V: AstVisitor>(v: &mut V, ft: &FunctionType) {
     }
     v.visit_type(&ft.return_type);
     for (id, span) in &ft.effect_ids {
-        v.visit_id(*id, *span);
+        v.visit_effect_id(*id, *span);
     }
 }
 
@@ -3501,6 +3507,69 @@ impl Type {
             Type::Reference(inner) | Type::MutReference(inner) => inner.mentions(name),
             Type::TypePackSpread(spread, _) => spread == name,
             Type::Infer(_) | Type::Error(_) => false,
+        }
+    }
+
+    /// Every `..X` this type spells, with where it is written. Exhaustive, as
+    /// [`Self::mentioned_names`] is.
+    #[must_use]
+    pub fn pack_spreads(&self) -> Vec<(&str, Span)> {
+        let mut out = Vec::new();
+        self.collect_pack_spreads(&mut out);
+        out
+    }
+
+    fn collect_pack_spreads<'a>(&'a self, out: &mut Vec<(&'a str, Span)>) {
+        match self {
+            Type::Generic(g) => {
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
+            }
+            Type::NamespacedGeneric(g) => {
+                for a in &g.args {
+                    a.collect_pack_spreads(out);
+                }
+            }
+            Type::Function(f) => {
+                for p in &f.params {
+                    p.collect_pack_spreads(out);
+                }
+                f.return_type.collect_pack_spreads(out);
+            }
+            Type::Tuple(elems) => {
+                for e in elems {
+                    e.collect_pack_spreads(out);
+                }
+            }
+            Type::Reference(inner) | Type::MutReference(inner) => inner.collect_pack_spreads(out),
+            Type::TypePackSpread(name, span) => out.push((name, *span)),
+            Type::Named(_) | Type::Infer(_) | Type::Error(_) => {}
+        }
+    }
+
+    /// Where a tuple receiving a value spreads a second type pack, leaving the
+    /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
+    #[must_use]
+    pub fn second_pack_spread(&self, is_pack: &dyn Fn(&str) -> bool) -> Option<Span> {
+        let recurse = |t: &Type| t.second_pack_spread(is_pack);
+        match self {
+            Type::Tuple(elems) => elems
+                .iter()
+                .filter_map(|e| match e {
+                    Type::TypePackSpread(name, span) => is_pack(name).then_some(*span),
+                    _ => None,
+                })
+                .nth(1)
+                .or_else(|| elems.iter().find_map(recurse)),
+            Type::Generic(g) => g.args.iter().find_map(recurse),
+            Type::NamespacedGeneric(g) => g.args.iter().find_map(recurse),
+            Type::Reference(inner) | Type::MutReference(inner) => recurse(inner),
+            Type::Function(_)
+            | Type::Named(_)
+            | Type::TypePackSpread(..)
+            | Type::Infer(_)
+            | Type::Error(_) => None,
         }
     }
 

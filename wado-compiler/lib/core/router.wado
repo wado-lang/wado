@@ -797,7 +797,7 @@ struct PathParamsDeserializer {
     cursor: i32,
 }
 
-struct PathParamsStructAccess {
+pub struct PathParamsStructAccess {
     de: PathParamsDeserializer,
 }
 
@@ -1029,7 +1029,7 @@ impl DeserializeStruct for PathParamsStructAccess {
 // (or scalar at the field level), so seq/map/variant accesses are stubs that
 // fail if invoked.
 
-struct PathParamsSeqStub {
+pub struct PathParamsSeqStub {
 }
 impl DeserializeSeq for PathParamsSeqStub {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
@@ -1041,7 +1041,7 @@ impl DeserializeSeq for PathParamsSeqStub {
     }
 }
 
-struct PathParamsMapStub {
+pub struct PathParamsMapStub {
 }
 impl DeserializeMap for PathParamsMapStub {
     fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
@@ -1057,7 +1057,7 @@ impl DeserializeMap for PathParamsMapStub {
     }
 }
 
-struct PathParamsVariantStub {
+pub struct PathParamsVariantStub {
 }
 impl DeserializeVariant for PathParamsVariantStub {
     fn variant_name(&mut self) -> Result<String, DeserializeError> {
