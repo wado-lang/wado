@@ -1184,7 +1184,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_PROGRAM: NodeKind = 0;
-pub global RK_RULEINDEXMAP: NodeKind = 1;
+pub global RK_RULE_INDEX_MAP: NodeKind = 1;
 
 global RULE_NAMES: List<String> = ["program", "ruleIndexMap"];
 
@@ -1610,7 +1610,7 @@ fn _parse_rule_index_map__inner(p: &mut Parser) -> () {
 fn _parse_rule_index_map(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_RULEINDEXMAP, _start);
+    p.b.start_node(RK_RULE_INDEX_MAP, _start);
     _parse_rule_index_map__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

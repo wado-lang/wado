@@ -126,12 +126,24 @@ index (`i32`), where row 0 is the root. A node's children are walked with
 pub enum ChildKind { Node, Token, Missing, Skipped }
 
 impl CstStore {
-    pub fn first_child(&self, node: i32) -> i32    // -1 when none
-    pub fn next_sibling(&self, child: i32) -> i32  // -1 after the last
+    pub fn first_child(&self, node: i32) -> i32       // -1 when none
+    pub fn next_sibling(&self, child: i32) -> i32     // -1 after the last
     pub fn child_kind(&self, i: i32) -> ChildKind
-    pub fn token_index(&self, i: i32) -> i32       // stream index of a terminal
+    pub fn is_node(&self, i: i32) -> bool
+    pub fn is_token(&self, i: i32) -> bool
+    pub fn token_index(&self, i: i32) -> i32          // stream index of a terminal
+    pub fn kind(&self, i: i32) -> NodeKind            // which rule built this node
+    pub fn find_child(&self, i: i32, k: NodeKind) -> i32  // first child of that rule, -1 when none
+    pub fn alt(&self, i: i32) -> i32                  // matched alternative, -1 when unstamped
+    pub fn span(&self, i: i32) -> Span
+    pub fn is_error(&self, i: i32) -> bool
 }
 ```
+
+`kind` answers with a `RK_<RULE>` constant the parser exports, one per rule.
+The suffix is the rule's name in snake case, uppercased, so `valueInfo` is
+`RK_VALUE_INFO`. `NodeKind` prints its rule name through `Display`, which is
+what makes an unexpected node readable in a message.
 
 Because `expr`'s alternatives are labeled, the parser stamps which one matched
 onto each node, and exposes it as a per-rule enum plus a `CstStore` method:
@@ -314,6 +326,32 @@ Every generated parser module exports, at minimum:
 `Diagnostic` carries `line`, `col`, `message`, a `code`, and a severity
 (`is_error()`); a resilient parse reports recovery edits as `Missing` /
 `Skipped` children and `<error>` region nodes so the original input round-trips.
+
+### Walking a grammar without `# Label`s
+
+A rule with no labels stamps no alternative, so `s.alt(node)` is `-1` and there
+is no `<Rule>Alt` enum. Dispatch on the node's rule instead — `s.kind(node)`
+against the `RK_*` constants. The two shapes that cover most of a reader:
+
+```wado
+// Every child that a given rule built.
+fn children_of_kind(s: &g::CstStore, node: i32, kind: g::NodeKind) -> List<i32> {
+    let mut out: List<i32> = [];
+    for let mut c = s.first_child(node); c >= 0; c = s.next_sibling(c) {
+        if s.is_node(c) && s.kind(c) == kind {
+            out.push(c);
+        }
+    }
+    return out;
+}
+
+// One child a rule is known to have exactly one of.
+let type_node = s.find_child(value_info, g::RK_TYPE);
+```
+
+A rule that mixes several sub-rules is read by walking its children once and
+switching on `s.kind(c)`, which keeps the reader independent of the order the
+grammar happens to list them in.
 
 ## The `gale` command
 

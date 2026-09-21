@@ -47,6 +47,7 @@ use {
     follow_forward_args,
     follow_yields_call,
     follow_yields_call_of,
+    rule_kind_const,
 } from "./gen_util.wado";
 use { GenContext, is_nullable, sets_overlap, union_kind_arrays } from "./gen_context.wado";
 use { CodeWriter, FnSpec, ParamSpec, wado } from "./wadopoet.wado";
@@ -2639,16 +2640,6 @@ fn gen_parse_fn(w: &mut CodeWriter, rule: &ParserRule, lowered_rule: &Rule, ctx:
         ctx,
         lr_mid_operand_gated(lowered_rule),
     );
-}
-
-/// `RK_<UPPER>` node-kind constant name for a rule (matches `gen_node_kinds`).
-fn rule_kind_const<S: AsStrSlice>(name: S) -> String {
-    let mut out = String::with_capacity(name.len() + 3);
-    out.push_str("RK_");
-    for let c of name.chars() {
-        out.push(c.to_ascii_uppercase());
-    }
-    return out;
 }
 
 /// Emit a thin entry wrapper named `outer_name` that delegates to

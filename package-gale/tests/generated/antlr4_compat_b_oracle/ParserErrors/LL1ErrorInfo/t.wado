@@ -1257,7 +1257,7 @@ pub fn token_kind_name(kind: i32) -> String {
 pub global RK_START: NodeKind = 0;
 pub global RK_ANIMAL: NodeKind = 1;
 pub global RK_SERVICE: NodeKind = 2;
-pub global RK_ACCLASS: NodeKind = 3;
+pub global RK_AC_CLASS: NodeKind = 3;
 
 global RULE_NAMES: List<String> = ["start", "animal", "service", "acClass"];
 
@@ -1748,7 +1748,7 @@ fn _parse_ac_class__inner(p: &mut Parser) -> () {
 fn _parse_ac_class(p: &mut Parser) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_ACCLASS, _start);
+    p.b.start_node(RK_AC_CLASS, _start);
     _parse_ac_class__inner(p);
     p.b.finish_node(p.last_end());
     if p.recovering {

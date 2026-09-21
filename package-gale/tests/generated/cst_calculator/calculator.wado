@@ -1805,9 +1805,9 @@ pub fn token_kind_name(kind: i32) -> String {
 
 pub global RK_EQUATION: NodeKind = 0;
 pub global RK_EXPRESSION: NodeKind = 1;
-pub global RK_MULTIPLYINGEXPRESSION: NodeKind = 2;
-pub global RK_POWEXPRESSION: NodeKind = 3;
-pub global RK_SIGNEDATOM: NodeKind = 4;
+pub global RK_MULTIPLYING_EXPRESSION: NodeKind = 2;
+pub global RK_POW_EXPRESSION: NodeKind = 3;
+pub global RK_SIGNED_ATOM: NodeKind = 4;
 pub global RK_ATOM: NodeKind = 5;
 pub global RK_SCIENTIFIC: NodeKind = 6;
 pub global RK_CONSTANT: NodeKind = 7;
@@ -2476,7 +2476,7 @@ fn _parse_multiplying_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_multiplying_expression(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_MULTIPLYINGEXPRESSION, _start);
+    p.b.start_node(RK_MULTIPLYING_EXPRESSION, _start);
     _parse_multiplying_expression__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -2516,7 +2516,7 @@ fn _parse_pow_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_pow_expression(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_POWEXPRESSION, _start);
+    p.b.start_node(RK_POW_EXPRESSION, _start);
     _parse_pow_expression__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {
@@ -2555,7 +2555,7 @@ fn _parse_signed_atom__inner(p: &mut Parser, follow: i64 = 0) -> () {
 fn _parse_signed_atom(p: &mut Parser, follow: i64 = 0) -> () {
     if p.recovering { return; }
     let _start = p.peek_start();
-    p.b.start_node(RK_SIGNEDATOM, _start);
+    p.b.start_node(RK_SIGNED_ATOM, _start);
     _parse_signed_atom__inner(p, follow);
     p.b.finish_node(p.last_end());
     if p.recovering {

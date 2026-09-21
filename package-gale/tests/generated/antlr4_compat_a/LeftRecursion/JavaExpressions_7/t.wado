@@ -2783,7 +2783,7 @@ pub fn token_kind_name(kind: i32) -> String {
 }
 
 pub global RK_S: NodeKind = 0;
-pub global RK_EXPRESSIONLIST: NodeKind = 1;
+pub global RK_EXPRESSION_LIST: NodeKind = 1;
 pub global RK_E: NodeKind = 2;
 pub global RK_TYPESPEC: NodeKind = 3;
 
@@ -4105,7 +4105,7 @@ fn _parse_expression_list(p: &mut Parser, follow: i64 = 0) -> () {
     p.atn_ret_pending = -1;
     p.atn_stack.push(_atn_ret);
     let _start = p.peek_start();
-    p.b.start_node(RK_EXPRESSIONLIST, _start);
+    p.b.start_node(RK_EXPRESSION_LIST, _start);
     _parse_expression_list__inner(p, follow);
     p.b.finish_node(p.last_end());
     p.atn_stack.pop();
