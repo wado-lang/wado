@@ -16,7 +16,7 @@ use crate::dep_component::{
     resolve_inline_git_dependencies,
 };
 use crate::git::materialize;
-use crate::kiln_driver::{CheckOutcome, ExecuteMode, PipelineError, PipelineOutcome};
+use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::kiln_provider::{CliGeneratorProvider, RegistryContext, normalize_path, relative_to};
 use crate::knobs::{CompileKnobOpt, CompileKnobs, EmbedOpt, EmbedOptions};
 use crate::manifest::{openable_dir, resolve_manifest};
@@ -597,12 +597,11 @@ pub(crate) struct KilnSetup {
     identities: wado_compiler::hashmap::IndexMap<String, String>,
 }
 
-/// What a Kiln pipeline inherits from the run it belongs to: whether it writes,
-/// and the generator chain it continues.
+/// What a Kiln pipeline inherits from the run it belongs to: the project it
+/// resolves against, and the generator chain it continues.
 #[derive(Debug, Clone)]
 pub(crate) struct KilnRun {
     pub project: Option<manifest::ProjectManifest>,
-    pub mode: ExecuteMode,
     pub no_cache: bool,
     /// The generators being compiled, outermost first. A generator whose source
     /// reaches itself has no order to run in, so finding it here is the cycle.
@@ -613,16 +612,9 @@ impl KilnRun {
     pub(crate) fn entry(project: Option<manifest::ProjectManifest>, no_cache: bool) -> Self {
         Self {
             project,
-            mode: ExecuteMode::WriteAndWarnOnOverwrite,
             no_cache,
             active: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-
-    #[must_use]
-    pub(crate) fn dry_run(mut self) -> Self {
-        self.mode = ExecuteMode::DryRun;
-        self
     }
 }
 
@@ -630,9 +622,8 @@ impl KilnRun {
 /// declares and assemble everything the Kiln pipeline needs from them.
 /// `Ok(None)` when the entry declares no generators.
 ///
-/// Shared by [`maybe_run_pipeline`] (which runs them), `wado check` (which
-/// dry-runs them and byte-compares) and [`run_nested_pipeline`], so every tier
-/// resolves generators through one identical setup.
+/// Shared by [`maybe_run_pipeline`], `wado check` and [`run_nested_pipeline`],
+/// so every tier resolves generators through one identical setup.
 pub(crate) async fn prepare_kiln(
     entry_file: &Path,
     entry_identity: Option<&str>,
@@ -728,18 +719,6 @@ impl KilnSetup {
         .await
     }
 
-    /// Dry-run them and byte-compare, so drift is reported and never repaired.
-    pub(crate) async fn check(&mut self) -> Result<CheckOutcome, PipelineError> {
-        kiln_driver::check_pipeline(
-            &self.manifest,
-            &self.manifest_root,
-            &self.host,
-            &self.provider,
-            std::mem::take(&mut self.invocations),
-        )
-        .await
-    }
-
     /// Remap a pipeline's harvested index onto the loader identities collected
     /// with the invocations, reporting any redirect that two declarations
     /// disagree on through `host`.
@@ -798,17 +777,7 @@ pub(crate) async fn run_nested_pipeline(
     let Some(mut kiln) = prepare_kiln(entry_file, Some(entry_identity), host, run).await? else {
         return Ok(wado_compiler::kiln::InvocationIndex::default());
     };
-    let mut invocations = match run.mode {
-        ExecuteMode::WriteAndWarnOnOverwrite => kiln.run(run.no_cache).await?.invocations,
-        ExecuteMode::DryRun => {
-            let outcome = kiln.check().await?;
-            // The index still carries what the generator needs, so the build
-            // goes on and the run weighs this drift as it weighs an entry's.
-            host.run_cache()
-                .record_nested_drift(outcome.stale.len() + outcome.missing.len());
-            outcome.invocations
-        }
-    };
+    let mut invocations = kiln.run(run.no_cache).await?.invocations;
     kiln.remap_conflicts(&mut invocations, host)?;
     Ok(invocations)
 }

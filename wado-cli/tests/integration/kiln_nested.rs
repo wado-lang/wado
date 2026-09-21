@@ -148,44 +148,39 @@ fn collect_kiln_trees(root: &Path, dir: &Path, out: &mut Vec<String>) {
     }
 }
 
-/// `wado check` dry-runs and byte-compares rather than writing, and a nested
-/// invocation owes the same answer: drift is reported, never repaired.
+/// `wado check` runs the pipeline and writes, as a build does, so it works on a
+/// tree that has never been built. A route that only compared would report
+/// every generated file as missing and then fail to read the one it needs.
 #[test]
-fn check_reports_a_stale_nested_generated_file_rather_than_rewriting_it() {
+fn check_materializes_a_nested_generated_file_on_an_unbuilt_tree() {
+    let project = fixture("kiln_nested");
+
+    wado_in(project.path())
+        .args(["check", "src/main.wado"])
+        .assert()
+        .success();
+
+    let generated = std::fs::read_dir(project.path().join("build/kiln"))
+        .expect("check wrote the kiln tree")
+        .find_map(|e| std::fs::read_to_string(e.ok()?.path().join("value.wado")).ok())
+        .expect("value.wado among the nested outputs");
+    assert!(
+        generated.contains("42"),
+        "the innermost input must reach the generated module, got: {generated}"
+    );
+}
+
+/// An edited input regenerates rather than failing: the overwrite is what the
+/// edit asked for, so only an integrity finding gates the check.
+#[test]
+fn check_regenerates_after_an_edit_to_the_innermost_input() {
     let project = fixture("kiln_nested");
     assert!(run_project(project.path()).status.success(), "first build");
 
-    let generated = std::fs::read_dir(project.path().join("build/kiln"))
-        .expect("the nested generator wrote its output")
-        .find_map(|e| {
-            let dir = e.ok()?.path();
-            std::fs::read_to_string(dir.join("value.wado"))
-                .ok()
-                .map(|text| (dir, text))
-        })
-        .expect("value.wado among the nested outputs");
-
     std::fs::write(project.path().join("src/value.txt"), "7\n").unwrap();
 
-    let out = wado_in(project.path())
-        .args(["check", "src/main.wado"])
-        .output()
-        .expect("wado check");
-    assert!(
-        !out.status.success(),
-        "a stale nested generated file must fail the check, got:\n{}",
-        String::from_utf8_lossy(&out.stdout)
-    );
-    assert_eq!(
-        std::fs::read_to_string(generated.0.join("value.wado")).unwrap(),
-        generated.1,
-        "check must not rewrite what it reports as out of date"
-    );
-
-    // Nested drift reaches the same gate an entry's does, so `--warn` governs
-    // both alike rather than only the one the entry declared.
     wado_in(project.path())
-        .args(["check", "--warn", "src/main.wado"])
+        .args(["check", "src/main.wado"])
         .assert()
         .success();
 }

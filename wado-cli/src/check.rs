@@ -1,7 +1,5 @@
-//! `wado check` — CI-side integrity check for committed-source Kiln
-//! workflows. Re-runs every Kiln invocation, byte-compares each output
-//! against the on-disk file, and treats Kiln warnings as errors by
-//! default.
+//! `wado check` — a build's diagnostics without its output. Runs the Kiln
+//! pipeline as `wado compile` does and treats Kiln warnings as errors.
 //!
 //! See [WEP: Kiln](../../docs/wep-2026-04-12-kiln.md), section "The
 //! `wado check` command".
@@ -19,7 +17,7 @@ use crate::compile::{
 };
 use crate::compiler_host::FilesystemCompilerHost;
 use crate::dep_component::Acquisition;
-use crate::kiln_driver::{CheckOutcome, PipelineError};
+use crate::kiln_driver::{PipelineError, PipelineOutcome};
 use crate::knobs::{CompileKnobOpt, CompileKnobs};
 use crate::manifest;
 
@@ -196,21 +194,22 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     .await
     .map_err(CliExit::error)?;
 
-    // Same setup `wado compile` runs its generators through — only the pipeline
-    // below differs: `check` dry-runs and byte-compares instead of writing.
+    // The same pipeline `wado compile` runs, writing what it generates: a
+    // second route would drift from the one every build takes, and a generator
+    // rewriting its own output costs nobody anything.
     let kiln = prepare_kiln(
         path,
         None,
         &host,
-        &KilnRun::entry(manifest_pair, opts.knobs.no_cache).dry_run(),
+        &KilnRun::entry(manifest_pair, opts.knobs.no_cache),
     )
     .await
     .map_err(silent_or_reported)?;
     let outcome = match kiln {
-        None => CheckOutcome::default(),
+        None => PipelineOutcome::default(),
         Some(mut kiln) => {
             let mut outcome = kiln
-                .check()
+                .run(opts.knobs.no_cache)
                 .await
                 .map_err(|e| CliExit::error(FormatPipelineError(&e)))?;
             kiln.remap_conflicts(&mut outcome.invocations, &host)
@@ -218,12 +217,6 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
             outcome
         }
     };
-
-    // A nested pipeline runs behind the provider and records its drift on the
-    // run, so it reaches the same gate an entry's does.
-    let kiln_drift = !outcome.stale.is_empty()
-        || !outcome.missing.is_empty()
-        || host.run_cache().nested_drift() > 0;
 
     // Drive the rest of the compile pipeline so type/resolve errors also gate
     // `wado check`. At `O0`, since the component is discarded: the optimization
@@ -252,11 +245,10 @@ async fn check_entry(path: &Path, world: CheckWorld, opts: &CheckOptions) -> Res
     if has_compile_errors {
         return Err(CliExit::silent_failure(1));
     }
-    if !opts.warn_only && (kiln_drift || has_kiln_warnings) {
+    if !opts.warn_only && has_kiln_warnings {
         return Err(CliExit::error(
             "wado check: Kiln integrity check failed — \
-             one or more generators produced output that differs from on-disk source. \
-             Pass --warn to keep warnings as warnings.",
+             see the warnings above. Pass --warn to keep warnings as warnings.",
         ));
     }
     Ok(())
@@ -318,6 +310,8 @@ fn silent_or_reported(e: PipelineError) -> CliExit {
     }
 }
 
+/// Not `KilnGeneratedRegenerated`: the check writes what it generates, so an
+/// overwrite is what an edited input is supposed to produce.
 fn is_kiln_diagnostic(code: &Code) -> bool {
     matches!(
         code,
@@ -326,8 +320,6 @@ fn is_kiln_diagnostic(code: &Code) -> bool {
             | Code::KilnMissingWith
             | Code::KilnNoGeneratedModule
             | Code::KilnGeneratedModified
-            | Code::KilnGeneratedRegenerated
-            | Code::KilnGeneratedStaleOnDisk
     )
 }
 
