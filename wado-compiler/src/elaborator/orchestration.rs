@@ -107,7 +107,7 @@ fn resolve_resource_extends<H: CompilerHost>(
         };
         let parent = match resolutions.get(site) {
             Resolution::Def(def) => def,
-            Resolution::Binder(_) => {
+            Resolution::Binder(_) | Resolution::Projection(_) => {
                 reject(
                     clause,
                     format!(

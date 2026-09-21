@@ -27,6 +27,9 @@ pub enum Resolution {
     /// A type parameter of an enclosing item, named by the parameter's own
     /// node. `Self` binds to the `impl` or `trait` that introduces it.
     Binder(AstId),
+    /// An associated type read off a type parameter, named by that parameter's
+    /// binder. `T::Assoc` reaches a declaration only once `T` is a type.
+    Projection(AstId),
     /// Reaches no declaration.
     Unresolved,
 }
@@ -348,7 +351,7 @@ impl Resolutions {
     pub fn declared(&self, site: AstId) -> Option<DefId> {
         match self.get(site) {
             Resolution::Def(def) => Some(def),
-            Resolution::Binder(_) | Resolution::Unresolved => None,
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -358,7 +361,7 @@ impl Resolutions {
     pub fn declared_if_walked(&self, site: AstId) -> Option<DefId> {
         match self.walked(site)? {
             Resolution::Def(def) => Some(def),
-            Resolution::Binder(_) | Resolution::Unresolved => None,
+            Resolution::Binder(_) | Resolution::Projection(_) | Resolution::Unresolved => None,
         }
     }
 
@@ -526,6 +529,8 @@ impl Resolver<'_> {
             match self.resolve_value_name(name) {
                 Resolution::Def(def) => Shadowed::Decl(def),
                 Resolution::Binder(_) => Shadowed::Binder,
+                // Only a `ns::Name` type site records a projection.
+                Resolution::Projection(_) => unreachable!("a value name cannot project"),
                 Resolution::Unresolved => return,
             }
         };
@@ -971,7 +976,7 @@ impl AstVisitor for Resolver<'_> {
                 // the writing module instead would confidently answer with a
                 // different declaration that happens to share the name.
                 let answer = match self.binder(ns.written_namespace()) {
-                    Some(_) => Resolution::Unresolved,
+                    Some(base) => Resolution::Projection(base),
                     None => self
                         .symbols
                         .imported(

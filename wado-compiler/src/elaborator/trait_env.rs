@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
-use crate::elaborator::type_resolution::substitute_type_params;
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::kiln::InvocationIndex;
@@ -577,14 +576,17 @@ impl DefaultArg {
 
 /// A supertrait paired with the declaration it resolved to. The bound keeps the
 /// declaring module's spelling, which need not name the same trait elsewhere.
-///
-/// `writer` is the trait whose declaration listed it: `trait Foo<A>:
-/// Bar<Item = A>` binds `Item` to `Foo`'s `A`, not an asking frame's.
 #[derive(Clone, Debug)]
 pub(super) struct InheritedBound {
+    /// As the trait that listed it declared it, in that trait's own parameter
+    /// space: `trait Foo<A>: Bar<Item = A>` binds `Item` to `Foo`'s `A`.
     pub(super) bound: ast::TraitBound,
     pub(super) decl: DefId,
-    pub(super) writer: DefId,
+    /// The clauses leading from the trait owning this closure down to the one
+    /// that declared `bound`, outermost first, each written in the previous
+    /// one's parameter space. A reader walks them in order, resolving each at
+    /// what the step before it answered — never collapsing them to a spelling.
+    pub(super) via: Vec<ast::TraitBound>,
 }
 
 /// Pre-built index: trait declaration → the transitive closure of its
@@ -1434,44 +1436,6 @@ impl TraitEnv {
             .map_or(&[], Vec::as_slice)
     }
 
-    /// The transitive supertraits of `key`, re-spelled at `written` — the
-    /// arguments the reading site gives `key`'s parameters. The only way out of
-    /// the index, so no reader can take a clause for one of its own bounds.
-    pub(super) fn supertrait_closure_at(
-        &self,
-        key: &DefId,
-        written: &[ast::Type],
-    ) -> Vec<InheritedBound> {
-        let params = self.trait_decl_params(*key);
-        self.supertrait_closure(key)
-            .iter()
-            .map(|inherited| InheritedBound {
-                bound: bound_at_args(&inherited.bound, params, written),
-                ..inherited.clone()
-            })
-            .collect()
-    }
-
-    /// [`Self::supertrait_closure_at`] for a name with no import context.
-    pub(super) fn supertrait_closure_named_at(
-        &self,
-        name: &str,
-        written: &[ast::Type],
-    ) -> Vec<InheritedBound> {
-        let params = self
-            .trait_decl_headers
-            .iter()
-            .find(|(decl, _)| self.defs.name(**decl) == name)
-            .map_or(&[][..], |(_, header)| header.type_params.as_slice());
-        self.supertrait_closure_named(name)
-            .iter()
-            .map(|inherited| InheritedBound {
-                bound: bound_at_args(&inherited.bound, params, written),
-                ..inherited.clone()
-            })
-            .collect()
-    }
-
     /// Keys of every impl block on `type_key`, in global build order —
     /// inherent and trait alike.
     pub(super) fn all_impl_keys(&self, type_key: &ImplTargetKey) -> Vec<DefId> {
@@ -1898,6 +1862,30 @@ impl TraitEnv {
             .map(|inherited| inherited.decl)
     }
 
+    /// `key`'s parameters and its closure as declared, both in `key`'s own
+    /// parameter space. A reader re-spells them at its own arguments with
+    /// [`TypeSystem::supertrait_names`].
+    pub(super) fn supertrait_closure_declared(
+        &self,
+        key: &DefId,
+    ) -> (&[ast::GenericParam], &[InheritedBound]) {
+        (self.trait_decl_params(*key), self.supertrait_closure(key))
+    }
+
+    /// [`Self::supertrait_closure_declared`] for a bare name with no import
+    /// context. Empty when more than one module declares the name.
+    pub(super) fn supertrait_closure_declared_named(
+        &self,
+        name: &str,
+    ) -> (&[ast::GenericParam], &[InheritedBound]) {
+        let params = self
+            .trait_decl_headers
+            .iter()
+            .find(|(decl, _)| self.defs.name(**decl) == name)
+            .map_or(&[][..], |(_, header)| header.type_params.as_slice());
+        (params, self.supertrait_closure_named(name))
+    }
+
     /// `key` or the supertrait of it declaring `assoc_name`, making
     /// `<T as key>::assoc_name` mean the trait that declared it.
     pub(super) fn trait_declaring_assoc_type(
@@ -2030,7 +2018,7 @@ fn sited_impl_target_key(
             get_type_name_static(ty),
         )),
         Resolution::Def(def) => Some(ImplTargetKey::of_decl(resolutions.defs(), def)),
-        Resolution::Unresolved => None,
+        Resolution::Projection(_) | Resolution::Unresolved => None,
     }
 }
 
@@ -2199,68 +2187,15 @@ fn push_unique_inherited(bounds: &mut Vec<InheritedBound>, bound: &InheritedBoun
     }
 }
 
-/// A trait reference written against `params` re-spelled at `written`, the
-/// arguments a site gives them: `C<Y>` under `B<X, Y = i32>` written `B<String>`
-/// reaches `C<i32>`. Every reader of an inherited bound owes this, since the
-/// bound arrives in the declaring trait's parameter space and not the reader's.
-pub(super) fn bound_at_args(
-    bound: &ast::TraitBound,
-    params: &[ast::GenericParam],
-    written: &[ast::Type],
-) -> ast::TraitBound {
-    let mut names: Vec<String> = Vec::new();
-    let mut args: Vec<ast::Type> = Vec::new();
-    for (index, param) in params.iter().enumerate() {
-        // A position the site leaves out stands at the declared default, so an
-        // inherited bound spelling it arrives as a type and not a binder. A
-        // default naming a parameter to its left means that parameter's
-        // argument, not the name the reading site happens to use.
-        let arg = match written.get(index) {
-            Some(arg) => arg.clone(),
-            None => match param.default.as_ref() {
-                Some(default) => substitute_type_params(default, &names, &args),
-                None => break,
-            },
-        };
-        names.push(param.name.clone());
-        args.push(arg);
-    }
-    bound_with_types(bound, |ty| substitute_type_params(ty, &names, &args))
-}
-
-/// `bound` with `at` applied to every type written in it: its arguments and the
-/// right-hand side of each associated-type constraint.
-fn bound_with_types(
-    bound: &ast::TraitBound,
-    at: impl Fn(&ast::Type) -> ast::Type,
-) -> ast::TraitBound {
-    ast::TraitBound {
-        type_args: bound.type_args.iter().map(&at).collect(),
-        assoc_types: bound
-            .assoc_types
-            .iter()
-            .map(|constraint| ast::AssocTypeBound {
-                ty: at(&constraint.ty),
-                ..constraint.clone()
-            })
-            .collect(),
-        ..bound.clone()
-    }
-}
-
-/// An inherited bound re-spelled in `writer`'s parameter space, `direct` saying
-/// what `params` are there: `trait A<X>: B<X>` over `trait B<Y>: C<Y>` reaches
-/// `C<X>`.
-fn at_writer(
-    inherited: &InheritedBound,
-    params: &[ast::GenericParam],
-    direct: &ast::TraitBound,
-    writer: DefId,
-) -> InheritedBound {
+/// An inherited bound with `direct` prepended to the chain that reaches it:
+/// `trait A<X>: B<X>` over `trait B<Y>: C<Y>` records `B<X>` ahead of `C<Y>`,
+/// each staying in the space it was written in.
+fn at_writer(inherited: &InheritedBound, direct: &ast::TraitBound) -> InheritedBound {
     InheritedBound {
-        bound: bound_at_args(&inherited.bound, params, &direct.type_args),
-        decl: inherited.decl,
-        writer,
+        via: std::iter::once(direct.clone())
+            .chain(inherited.via.iter().cloned())
+            .collect(),
+        ..inherited.clone()
     }
 }
 
@@ -2336,19 +2271,13 @@ fn expand_supertraits(
             &InheritedBound {
                 bound: direct.clone(),
                 decl: super_loc,
-                writer: loc,
+                via: Vec::new(),
             },
         );
-        let super_params = headers
-            .get(&super_loc)
-            .map_or(&[][..], |h| h.type_params.as_slice());
         for inherited in expand_supertraits(
             defs, super_loc, headers, resolve, closures, stack, reported, cycles,
         ) {
-            push_unique_inherited(
-                &mut closure,
-                &at_writer(&inherited, super_params, direct, loc),
-            );
+            push_unique_inherited(&mut closure, &at_writer(&inherited, direct));
         }
     }
     stack.pop();
@@ -2884,17 +2813,6 @@ pub(super) fn written_arg_nodes(ty: &ast::Type) -> &[ast::Type] {
     }
 }
 
-/// [`written_arg_nodes`] with `Self` read as `target`, so an impl head's
-/// arguments say what a reader of the closure needs before it is re-spelled.
-pub(super) fn written_arg_nodes_at_target(ty: &ast::Type, target: &ast::Type) -> Vec<ast::Type> {
-    let self_name = ["Self".to_string()];
-    let at_target = std::slice::from_ref(target);
-    written_arg_nodes(ty)
-        .iter()
-        .map(|arg| substitute_type_params(arg, &self_name, at_target))
-        .collect()
-}
-
 /// The type arguments a written trait position supplies, each read off the node
 /// that wrote it, so its own reference site says which declaration it names.
 pub(super) fn written_type_args(
@@ -3055,7 +2973,11 @@ pub(super) fn written_type_arg(ty: &ast::Type, resolutions: &Resolutions) -> nam
             let head = match head_site(ty).map(|site| resolutions.get(site)) {
                 Some(Resolution::Def(def)) => name::FqTypeName::of_head(resolutions.defs(), def),
                 Some(Resolution::Binder(_)) => name::FqTypeName::binder(&get_type_name_static(ty)),
-                Some(Resolution::Unresolved) | None => {
+                // A projection names no type until its base is one, and the
+                // trait declaring the member is part of that name
+                // (WEP-2026-08-12). A site that must know resolves it at its own
+                // arguments rather than reading this spelling.
+                Some(Resolution::Projection(_) | Resolution::Unresolved) | None => {
                     name::FqTypeName::builtin(&get_type_name_static(ty))
                 }
             };

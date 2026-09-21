@@ -3357,7 +3357,9 @@ impl<'a> TypeLookup<'a> {
     pub(super) fn declaration_at(&self, site: Option<AstId>, name: &str) -> Option<DefId> {
         match site.and_then(|site| self.resolutions.walked(site)) {
             Some(Resolution::Def(def)) => Some(def),
-            Some(Resolution::Binder(_)) => None,
+            // Neither is a declaration, and a projection's bare member name
+            // would reach whatever else this module calls that.
+            Some(Resolution::Binder(_) | Resolution::Projection(_)) => None,
             Some(Resolution::Unresolved) | None => self.declaration(name),
         }
     }
