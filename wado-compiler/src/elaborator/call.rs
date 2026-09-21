@@ -1875,7 +1875,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
-        self.settle_empty_pack_of(&declared, &mut type_args);
+        let written = self.packs_written_args_reach(&callee, args.len());
+        self.settle_empty_pack_of_beyond(&declared, &mut type_args, &written);
 
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -3214,6 +3215,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
     ) {
+        self.settle_empty_pack_of_beyond(declared, type_args, &[]);
+    }
+
+    /// [`Self::settle_empty_pack_of`], leaving alone the packs a written
+    /// argument reaches. Those the call was meant to settle, so closing them
+    /// here answers a failed inference with a shape nothing asked for.
+    pub(super) fn settle_empty_pack_of_beyond(
+        &mut self,
+        declared: &[ast::GenericParam],
+        type_args: &mut Vec<TypeId>,
+        written: &[String],
+    ) {
         let real = RealTypeParams::borrowed(declared);
         if !real.iter().any(|p| p.is_pack) {
             return;
@@ -3221,7 +3234,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // A pack slot the site never reached stands for no arguments at all, so
         // append one empty tuple per trailing pack. A non-pack slot stops the
         // walk: nothing here can answer for it.
-        while real.get(type_args.len()).is_some_and(|p| p.is_pack) {
+        while real
+            .get(type_args.len())
+            .is_some_and(|p| p.is_pack && !written.contains(&p.name))
+        {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
         }
@@ -3244,11 +3260,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         for pack_pos in unanswered {
-            if scope.contains(&type_args[pack_pos]) {
+            if scope.contains(&type_args[pack_pos]) || written.contains(&real[pack_pos].name) {
                 continue;
             }
             type_args[pack_pos] = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
         }
+    }
+
+    /// The packs a parameter the call writes an argument for mentions. Those a
+    /// written argument was meant to settle; the rest the site never reached.
+    fn packs_written_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+        let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
+            return vec![];
+        };
+        let table = self.tysys.type_table.borrow();
+        param_types
+            .iter()
+            .take(arg_count)
+            .flat_map(|&t| table.pack_names(t))
+            .collect()
     }
 
     /// Look up a generic function (current or imported) and produce a temporary
