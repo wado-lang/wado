@@ -323,14 +323,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// which is right for a callee's and wrong for one this body declares.
     fn reject_pack_layout_mismatch(&self, actual: TypeId, expected: TypeId, span: Span) {
         let table = self.tysys.type_table.borrow();
+        if !table.contains_type_pack(expected) || table.awaits_inference(actual) {
+            return;
+        }
         let Some(layout) = table.tuple_layout(expected) else {
             return;
         };
-        let packs = table.pack_names(expected);
-        if packs.is_empty()
-            || table.awaits_inference(actual)
-            || !packs.iter().all(|name| self.binds_type_pack(name))
-            || table.tuple_layout(actual) == Some(layout)
+        if table.tuple_layout(actual) == Some(layout) {
+            return;
+        }
+        if !table
+            .pack_names(expected)
+            .iter()
+            .all(|name| self.binds_type_pack(name))
         {
             return;
         }

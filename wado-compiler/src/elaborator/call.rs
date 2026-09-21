@@ -1876,8 +1876,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // After the projection above, which is what answers for a pack bound
         // through another parameter's associated type.
-        let written = self.packs_written_args_reach(&callee, args.len());
-        self.settle_unreached_packs(&declared, &mut type_args, &written);
+        let reached = self.packs_callee_args_reach(&callee, args.len());
+        self.settle_unreached_packs(&declared, &mut type_args, &reached);
 
         if !type_args.is_empty() {
             self.check_function_type_arg_bounds(&callee, &type_args, call.span);
@@ -3233,7 +3233,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         declared: &[ast::GenericParam],
         type_args: &mut Vec<TypeId>,
-        written: &[String],
+        reached: &[String],
     ) {
         let real = RealTypeParams::borrowed(declared);
         if !real.iter().any(|p| p.is_pack) {
@@ -3244,7 +3244,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // walk: nothing here can answer for it.
         while real
             .get(type_args.len())
-            .is_some_and(|p| p.is_pack && !written.contains(&p.name))
+            .is_some_and(|p| p.is_pack && !reached.contains(&p.name))
         {
             let empty = self.tysys.type_table.borrow_mut().make_tuple(vec![]);
             type_args.push(empty);
@@ -3253,7 +3253,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
         let unanswered: Vec<usize> = (0..real.len())
-            .filter(|&i| real[i].is_pack && !written.contains(&real[i].name))
+            .filter(|&i| real[i].is_pack && !reached.contains(&real[i].name))
             .filter(|&i| {
                 self.is_unbound_type_param(type_args[i]) || self.type_contains_pack(type_args[i])
             })
@@ -3288,7 +3288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// [`Self::packs_args_reach`] for a free function, whose parameter types
     /// the callee reference answers.
-    fn packs_written_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
+    fn packs_callee_args_reach(&self, callee: &CalleeRef, arg_count: usize) -> Vec<String> {
         let Some((_, param_types, _)) = self.lookup_generic_func_for_inference(callee) else {
             return vec![];
         };

@@ -7,7 +7,7 @@ use crate::defs::DefId;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName, Receiver, RefKind};
 use crate::tir::{
-    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TypeId, TypeTable,
+    FunctionRef, MonomorphInfo, ResolvedType, SubstitutionContext, TupleSlot, TypeId, TypeTable,
 };
 use crate::token::Span;
 
@@ -647,11 +647,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if self.group_variadic_type_args_of(method_name, &method_own_params, &mut type_args, span) {
             return MethodCallOutcome::no_dispatch(TypeTable::ERROR);
         }
-        // Only where no argument can settle a pack: past that, an argument the
-        // solve has yet to read would meet a slot already pinned empty.
-        if args_ast.is_empty() {
-            self.settle_unreached_packs(&method_own_params, &mut type_args, &[]);
+        // An argument reaches a pack through a parameter and an expected type
+        // through the return, so closing either empty answers the call first.
+        let mut reached = self.packs_args_reach(&param_types, args_ast.len());
+        if expected_type.is_some() {
+            reached.extend(self.tysys.type_table.borrow().pack_names(return_type));
         }
+        self.settle_unreached_packs(&method_own_params, &mut type_args, &reached);
 
         self.check_inherent_member_visibility(
             inherent_visibility,
@@ -2694,18 +2696,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .make_type_param(blanket_param.to_string(), 0)
     }
 
-    /// The first row of a tuple `zip` whose length no other row is known to
-    /// match. Two distinct packs never are, which is why the variadic WEP §6
-    /// puts `zip` over them out of scope.
+    /// The first row of a tuple `zip` whose layout differs from row zero's, so
+    /// nothing says the two are equally long. Two distinct packs never are,
+    /// which is why the variadic WEP §6 puts `zip` over them out of scope.
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.tysys.type_table.borrow();
         let rows = table.as_tuple(tuple)?;
-        let first = table.tuple_layout(*rows.first()?)?;
-        let odd = rows
+        // A row that is no tuple makes this no transpose at all, which method
+        // lookup reports; saying anything here would stack a packs diagnostic
+        // on a value that has none.
+        let layouts: Vec<Vec<TupleSlot>> = rows
             .iter()
-            .skip(1)
-            .find(|&&row| table.tuple_layout(row) != Some(first.clone()))?;
-        Some(table.type_name(*odd))
+            .map(|&row| table.tuple_layout(row))
+            .collect::<Option<_>>()?;
+        let first = layouts.first()?;
+        let odd = layouts.iter().position(|l| l != first)?;
+        Some(table.type_name(rows[odd]))
     }
 
     /// A qualified method's own type parameters — the slots past the declaring
