@@ -27,7 +27,6 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
 };
-use crate::optimize::mod_ref::compute_fn_effects;
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -2187,15 +2186,17 @@ fn dead_pure_binding(
 /// holds its whole initializer in the binary for no observer. The
 /// `is_uninitialized` guard and a read bound to an unmentioned local do not
 /// count as observing, provided the value is a `deletable_value`.
-pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
+///
+/// Answers whether any body changed, so a caller holding `effects` knows
+/// whether they still describe the IR.
+pub(super) fn unhoist_unobserved_globals(project: &mut NirPackage, effects: &[FnEffect]) -> bool {
     let descriptors = build_callee_descriptors(project);
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
         descriptors: &descriptors,
         types: &types,
-        effects: &effects,
+        effects,
         inert_functions: IndexSet::default(),
     };
     loop {
@@ -2244,7 +2245,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     }
     let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
     if unobserved.is_empty() {
-        return;
+        return false;
     }
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -2260,6 +2261,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
             );
         }
     }
+    true
 }
 
 /// Whether a reachable expression still reads one of `globals`. The pass drops
@@ -2350,9 +2352,10 @@ fn compute_global_reachability(
 /// `GlobalVarSet` for a dead global from surviving function bodies
 /// (covers both the original `$initialize_module` and any inlined
 /// copies).
-pub fn remove_unreachable_globals(
+pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
+    effects: &[FnEffect],
 ) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
@@ -2364,26 +2367,24 @@ pub fn remove_unreachable_globals(
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets_block(body, root, used_globals, &type_table);
+            remove_dead_global_sets_block(body, root, used_globals, &type_table, effects);
         }
     }
 }
 
-/// Remove `GlobalVarSet` statements for dead globals from a block.
-///
-/// For dead globals whose initializer contains function calls (potential side
-/// effects), the `GlobalVarSet` is replaced with the value expression to
-/// preserve the side effects. For pure initializers (constants, struct/array
-/// literals without calls), the entire statement is removed.
+/// Remove `GlobalVarSet` statements for dead globals from a block. A
+/// [`deletable_value`] initializer goes with its global; anything else keeps
+/// the value expression, so its effect or trap survives.
 fn remove_dead_global_sets_block(
     body: &mut Body,
     block: BlockId,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
+    effects: &[FnEffect],
 ) {
     // Recurse into sub-statements first.
     for s in body.blocks[block].stmts.clone() {
-        remove_dead_global_sets_stmt(body, s, used, type_table);
+        remove_dead_global_sets_stmt(body, s, used, type_table, effects);
     }
 
     // Process GlobalVarSet statements for dead globals.
@@ -2408,13 +2409,9 @@ fn remove_dead_global_sets_block(
             None
         };
         if let Some((value, span)) = dead {
-            // Dead global: keep the value expression when it is not provably
-            // pure-and-nontrapping, so an initializer that calls a function
-            // (writing another global, printing, asserting) or that can trap
-            // keeps its effect/trap even though the global itself is gone.
             // The discarded GlobalVarSet owned `value`, so reuse its id here.
-            if let Some(ve) = value.as_expr()
-                && !is_pure_nontrapping_expr_typed(body, ve, Some(type_table))
+            if !deletable_value(body, value, type_table, effects)
+                && let Some(ve) = value.as_expr()
             {
                 let new_s = body.stmts.push(StmtNode {
                     kind: StmtKind::Expr(ve.into()),
@@ -2434,6 +2431,7 @@ fn remove_dead_global_sets_stmt(
     s: StmtId,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
+    effects: &[FnEffect],
 ) {
     enum W {
         Expr(ExprId),
@@ -2455,11 +2453,11 @@ fn remove_dead_global_sets_stmt(
         StmtKind::Continue | StmtKind::LetDestructure { .. } => W::None,
     };
     match w {
-        W::Expr(e) => remove_dead_global_sets_expr(body, e, used, type_table),
+        W::Expr(e) => remove_dead_global_sets_expr(body, e, used, type_table, effects),
         W::Blocks(b0, b1) => {
-            remove_dead_global_sets_block(body, b0, used, type_table);
+            remove_dead_global_sets_block(body, b0, used, type_table, effects);
             if let Some(b1) = b1 {
-                remove_dead_global_sets_block(body, b1, used, type_table);
+                remove_dead_global_sets_block(body, b1, used, type_table, effects);
             }
         }
         W::None => {}
@@ -2479,14 +2477,15 @@ fn remove_dead_global_sets_expr(
     e: ExprId,
     used: &IndexSet<(String, String)>,
     type_table: &TypeTable,
+    effects: &[FnEffect],
 ) {
     let mut children: Vec<NodeRef> = Vec::new();
     body.for_each_child(NodeRef::Expr(e), |c| children.push(c));
     for child in children {
         match child {
-            NodeRef::Block(b) => remove_dead_global_sets_block(body, b, used, type_table),
-            NodeRef::Stmt(s) => remove_dead_global_sets_stmt(body, s, used, type_table),
-            NodeRef::Expr(x) => remove_dead_global_sets_expr(body, x, used, type_table),
+            NodeRef::Block(b) => remove_dead_global_sets_block(body, b, used, type_table, effects),
+            NodeRef::Stmt(s) => remove_dead_global_sets_stmt(body, s, used, type_table, effects),
+            NodeRef::Expr(x) => remove_dead_global_sets_expr(body, x, used, type_table, effects),
             NodeRef::Pat(_) => {}
         }
     }

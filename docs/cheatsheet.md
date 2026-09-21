@@ -1723,7 +1723,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 - [`core:prng`](./stdlib-core-prng.md) — seedable, reproducible pseudo-randomness
   for simulation: `Rng`, `VectorRng`, and the keyed `Squares64`
 - [`core:secure_random`](./stdlib-core-secure_random.md) — unpredictable
-  randomness, buffered from `wasi:random`, and `seed()` for `core:prng`
+  randomness from `wasi:random`: `bytes`, the `token_*` generators,
+  `with_buffered`, and `seed()` for `core:prng`
 - [`core:uuid`](./stdlib-core-uuid.md) — UUID v4 / v7
 - [`core:temporal`](./stdlib-core-temporal.md) — date/time on the TC39 Temporal
   model (`Instant`, `ZonedDateTime`, `Duration`, `Plain*`)
