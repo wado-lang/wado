@@ -4908,13 +4908,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // splices its own elements, so each pack lands directly in
                     // the literal's type and monomorphize expands it there. A
                     // bare `TypePack` (`[..T::method()]`) is already one.
-                    if let Some(inner_elems) =
-                        self.tysys.type_table.borrow().as_tuple(spread_type_id)
-                    {
-                        elem_types.extend(inner_elems);
-                    } else {
-                        elem_types.push(spread_type_id);
-                    }
+                    elem_types.extend(
+                        self.tysys
+                            .type_table
+                            .borrow()
+                            .pack_spread_elem_types(spread_type_id),
+                    );
                 } else if let Some(mapped) = self.spread_pack_map_type(inner, spread_type_id) {
                     // Pack-map `..F::method()` whose return type is
                     // pack-independent: a homogeneous pack of the return type,

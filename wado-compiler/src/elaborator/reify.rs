@@ -4364,12 +4364,30 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let type_table = self.tysys.type_table.borrow();
             match type_table.as_tuple_through_ref(iterable.type_id) {
                 Some((elems, by_ref)) => {
-                    let inner = elems
+                    // A `.zip()` yields one element — the pair `[..A, ..B]` — and
+                    // binds that, so its pack sits a level down. Everywhere else
+                    // the pack is an element, and a tuple carrying none never
+                    // reaches here: `resolve_for_of` sends it down the concrete
+                    // path instead. Mirrors `resolve_variadic_for_of`.
+                    let pack = elems
                         .iter()
                         .find(|e| matches!(type_table.get(**e), ResolvedType::TypePack { .. }))
-                        .or_else(|| elems.first())
-                        .copied()
-                        .unwrap_or(TypeTable::UNKNOWN);
+                        .copied();
+                    let is_zip = matches!(
+                        actual_iterable,
+                        ast::Expr::MethodCall(mc) if mc.method == "zip" && mc.args.is_empty()
+                    );
+                    let inner = match pack {
+                        Some(pack) => pack,
+                        None => {
+                            assert!(
+                                is_zip,
+                                "variadic for-of over a tuple carrying no pack: {}",
+                                type_table.type_name(iterable.type_id)
+                            );
+                            elems.first().copied().unwrap_or(TypeTable::UNKNOWN)
+                        }
+                    };
                     // A mapped pack (`[..Case<T, P>]`) binds the loop variable to
                     // the mapped element, not the pack itself.
                     let inner = match type_table.get(inner) {
@@ -7125,12 +7143,18 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                             elem.span(),
                         ));
                     } else {
-                        elem_types.push(spread_expr.type_id);
+                        let spread_type_id = spread_expr.type_id;
+                        elem_types.extend(
+                            self.tysys
+                                .type_table
+                                .borrow()
+                                .pack_spread_elem_types(spread_type_id),
+                        );
                         elements.push(TirExpr::new(
                             TirExprKind::TupleSpread {
                                 expr: Box::new(spread_expr),
                             },
-                            *elem_types.last().unwrap(),
+                            spread_type_id,
                             elem.span(),
                         ));
                     }

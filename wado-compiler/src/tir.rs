@@ -2394,6 +2394,13 @@ impl TypeTable {
         }
     }
 
+    /// What `..x` of a pack-carrying `id` contributes to the tuple holding it:
+    /// the elements, so a pack sits where the holding tuple's own type shows
+    /// it, never nested one level down.
+    pub fn pack_spread_elem_types(&self, id: TypeId) -> Vec<TypeId> {
+        self.as_tuple(id).unwrap_or_else(|| vec![id])
+    }
+
     pub fn make_function(
         &mut self,
         params: Vec<TypeId>,
