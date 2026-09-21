@@ -1178,15 +1178,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_: DefId,
         assoc: &str,
     ) -> Option<TypeId> {
-        let (written, space) = self.bound_closure_of(base_name)?.into_iter().find_map(
-            |(bound, space)| {
-                let fq = self.fq_trait_name_at(bound.id, &bound.name);
-                (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
-                    .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
-                    .flatten()
-                    .map(|binding| (binding.ty, space))
-            },
-        )?;
+        let (written, space) =
+            self.bound_closure_of(base_name)?
+                .into_iter()
+                .find_map(|(bound, space)| {
+                    let fq = self.fq_trait_name_at(bound.id, &bound.name);
+                    (self.tysys.trait_env.trait_def_of_fq(&fq) == Some(trait_))
+                        .then(|| bound.assoc_types.iter().find(|b| b.name == assoc).cloned())
+                        .flatten()
+                        .map(|binding| (binding.ty, space))
+                })?;
         let (names, args): (Vec<String>, Vec<TypeId>) = space.into_iter().unzip();
         let resolved = self.with_type_params_bound(&names, &args, |e| {
             e.resolve_bound_binding(base_name, &written)

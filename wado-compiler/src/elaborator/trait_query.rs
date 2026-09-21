@@ -2314,7 +2314,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The space `elaborated`'s written types are read in: empty for a bound the
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
     /// writes down to the trait that declared it.
-    fn bound_space(&mut self, bounds: &[ast::TraitBound], elaborated: &ElaboratedBound) -> ParamSpace {
+    fn bound_space(
+        &mut self,
+        bounds: &[ast::TraitBound],
+        elaborated: &ElaboratedBound,
+    ) -> ParamSpace {
         let Some((root, via)) = elaborated.inherited.clone() else {
             return ParamSpace::new();
         };
@@ -2350,7 +2354,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> Vec<BoundCandidate> {
         let mut groups: Vec<Vec<BoundCandidate>> = Vec::new();
         for candidate in candidates {
-            match groups.iter_mut().find(|group| group[0].decl == candidate.decl) {
+            match groups
+                .iter_mut()
+                .find(|group| group[0].decl == candidate.decl)
+            {
                 Some(group) => group.push(candidate),
                 None => groups.push(vec![candidate]),
             }
@@ -2382,8 +2389,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let classes: Vec<ArgClass> = (0..args.len()).map(|i| args.class(self, i)).collect();
             let admitted: Vec<usize> = (0..group.len())
                 .filter(|&i| {
-                    let Some(params) =
-                        self.bound_param_types(&group[i], method_name, self_type_id)
+                    let Some(params) = self.bound_param_types(&group[i], method_name, self_type_id)
                     else {
                         return false;
                     };
@@ -2581,7 +2587,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter space, so a spelling read here means the wrong binder. An
         // argument naming no type stays for the slots below, where `Self` is
         // the receiver rather than the declaring trait's own.
-        let pick: Vec<bool> = bound.type_args.iter().map(|ty| !names_no_type(ty)).collect();
+        let pick: Vec<bool> = bound
+            .type_args
+            .iter()
+            .map(|ty| !names_no_type(ty))
+            .collect();
         let fq_trait_name = self.in_space(&space, |e| {
             e.trait_named_with_resolved_args(fq_trait_name, &bound, &pick)
         });
@@ -2843,7 +2853,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .unzip::<_, _, Vec<String>, Vec<TypeId>>();
                 // An argument naming no type keeps its spelling: `Self` here is
                 // the bounded parameter's, which this frame cannot answer.
-                let pick: Vec<bool> = bound.type_args.iter().map(|ty| !names_no_type(ty)).collect();
+                let pick: Vec<bool> = bound
+                    .type_args
+                    .iter()
+                    .map(|ty| !names_no_type(ty))
+                    .collect();
                 let subjects = subjects.clone();
                 self.with_type_params_bound(&names, &args, |e| {
                     let inherited = e
