@@ -51,12 +51,13 @@ rebuild. A release build embeds them, as does any `wasm32` build, which has no
 filesystem. `lib/wasi/` and `lib/core/kiln/` are generated from WIT, `lib/web/`
 from a WebIDL snapshot: read `wado-from-idl/AGENTS.md` first.
 
-A module re-exports every effect its public signatures carry. A caller has to
-name an effect to install a handler for it, or to declare it onward. The name
-should come from the module that demands the effect, so `core:uuid` hands out
-`Random` and `SystemClock` and no user of it imports `wasi:*`. An effect no
-caller ever names stays private: `core:log` reads the clock under `#[ambient]`
-and re-exports nothing.
+A module re-exports an effect only where it owns it: `core:cli` hands out
+`Stdout`, `core:fs` hands out `Preopens`. A module that merely performs an
+ambient effect imports it privately, and its callers take the name from
+`wasi:*` too. `pub use` keeps the identity, so re-exporting an effect abstracts
+nothing — it only adds a second path to one type, and a reader of
+`use { MonotonicClock } from "core:benchmark"` has to go and find out which
+clock that is.
 
 A module carries a `#[synopsis]` test, in the module itself, since `wado doc`
 renders it as the module's `## Synopsis`. Write the shortest program that shows

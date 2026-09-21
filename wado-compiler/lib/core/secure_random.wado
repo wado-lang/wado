@@ -12,7 +12,7 @@
 
 use { encode_url } from "core:base64";
 use { Seed } from "core:prng";
-pub use { Random } from "wasi:random";
+use { Random } from "wasi:random";
 
 global POOL_BYTES: i32 = 4096;
 
@@ -86,11 +86,15 @@ pub fn token_from<A: AsByteSlice>(alphabet: &A, len: i32) -> String with Random 
     return out;
 }
 
-/// Run `body` with a [`BufferedRandom`] installed, so the small draws inside it
-/// can share a host call. A draw larger than the block, or than what a short
-/// block held, reaches the host again.
-pub fn with_buffered<T, effect E>(mut body: fn mut() -> T with (Random, E)) -> T with (Random, E) {
-    let mut rng = BufferedRandom {};
+/// Run `body` with a [`BufferedRandom`] of `pool_bytes` installed, so the small
+/// draws inside it can share a host call. A draw larger than the block, or than
+/// what a short block held, reaches the host again.
+pub fn with_buffered<T, effect E>(
+    mut body: fn mut() -> T with (Random, E),
+    pool_bytes: i32 = POOL_BYTES,
+) -> T with (Random, E) {
+    assert pool_bytes > 0;
+    let mut rng = BufferedRandom { pool_bytes };
     return with Random => &mut rng do {
         body();
     };
@@ -147,13 +151,6 @@ impl Random for BufferedRandom {
 }
 
 impl BufferedRandom {
-    /// A handler whose block is `pool_bytes` rather than the default 4096. The
-    /// size must be positive.
-    pub fn new(pool_bytes: i32) -> BufferedRandom {
-        assert pool_bytes > 0;
-        return BufferedRandom { pool_bytes };
-    }
-
     fn available(&self) -> i32 {
         return self.buf.len() - self.pos;
     }
