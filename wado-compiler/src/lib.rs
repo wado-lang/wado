@@ -672,11 +672,9 @@ fn collect_lib_surface(
                         reexport_origin: Some((source.clone(), func.name.clone())),
                     });
                 }
-                // Not `is_public`: `pub` is the Wado source API, while what
-                // reaches the CM interface is what an `export fn` names, and
-                // `export` carries a type across whatever its scope. Only a
-                // file-private type is out of reach, since no other module can
-                // name it to export it.
+                // Not `is_public`: a lowered type carries its fields whatever
+                // their scope, so an `internal` type reaches the CM interface
+                // through a `pub` one that holds it.
                 _ if lib_type_decl_name(item).is_some()
                     && item
                         .visibility()

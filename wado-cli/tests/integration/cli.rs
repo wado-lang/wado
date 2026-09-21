@@ -1221,11 +1221,10 @@ fn test_lib_with_only_internal_submodule_types_is_rejected() {
         .stderr(predicate::str::contains("exports nothing"));
 }
 
-/// What reaches the CM interface is what an `export fn` names, and `export`
-/// carries a type across the boundary whatever its scope. An `internal` type
-/// is nameable by the entry, so it can be exported and must be published.
+/// A lowered type carries its fields whatever their scope, so an `internal`
+/// type reaches the CM interface through a `pub` one that holds it.
 #[test]
-fn test_lib_exports_an_internal_type_from_a_submodule() {
+fn test_lib_exports_an_internal_type_held_by_a_published_one() {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path();
     std::fs::write(
@@ -1236,13 +1235,17 @@ fn test_lib_exports_an_internal_type_from_a_submodule() {
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(
         dir.join("src").join("geom.wado"),
-        "internal struct Point { internal x: i32, internal y: i32 }\n",
+        "internal struct Point { internal x: i32, internal y: i32 }\n\
+         pub struct Marker { at: Point }\n\
+         impl Marker {\n\
+         pub fn new() -> Marker { return Marker { at: Point { x: 0, y: 0 } }; }\n\
+         }\n",
     )
     .unwrap();
     std::fs::write(
         dir.join("src").join("lib.wado"),
-        "use { Point } from \"./geom.wado\";\n\
-         export fn origin() -> Point { return Point { x: 0, y: 0 }; }\n",
+        "use { Marker } from \"./geom.wado\";\n\
+         export fn origin() -> Marker { return Marker::new(); }\n",
     )
     .unwrap();
 
