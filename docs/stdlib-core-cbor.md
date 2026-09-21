@@ -66,6 +66,48 @@ represent; `max_depth` bounds nesting, raised only for a trusted source.
 
 ## Structs
 
+### `pub struct CborSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for CborSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CborMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for CborMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CborStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for CborStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CborVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for CborVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
 ### `pub struct CborSerializer`
 
 _Fields are private._
@@ -111,6 +153,48 @@ _Fields are private._
 ##### `fn serialize_unit_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<(), SerializeError>`
 
 ##### `fn begin_variant<S: AsStrSlice, S1: AsStrSlice>(&mut self, type_name: S, variant_name: S1, disc: i32) -> Result<CborVariantSerializer, SerializeError>`
+
+### `pub struct CanonicalCborSeqSerializer`
+
+_Fields are private._
+
+#### `impl SerializeSeq for CanonicalCborSeqSerializer`
+
+##### `fn element<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalCborMapSerializer`
+
+_Fields are private._
+
+#### `impl SerializeMap for CanonicalCborMapSerializer`
+
+##### `fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError>`
+
+##### `fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalCborStructSerializer`
+
+_Fields are private._
+
+#### `impl SerializeStruct for CanonicalCborStructSerializer`
+
+##### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
+
+### `pub struct CanonicalCborVariantSerializer`
+
+_Fields are private._
+
+#### `impl SerializeVariant for CanonicalCborVariantSerializer`
+
+##### `fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError>`
+
+##### `fn end(&mut self) -> Result<(), SerializeError>`
 
 ### `pub struct CanonicalCborSerializer`
 
@@ -205,3 +289,55 @@ is the type-mismatch diagnostic, by reference so success allocates none.
 ##### `fn begin_variant<S: AsStrSlice>(&mut self, type_name: S, num_cases: i32) -> Result<CborVariantAccess, DeserializeError>`
 
 ##### `fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError>`
+
+### `pub struct CborSeqAccess`
+
+_Fields are private._
+
+#### `impl DeserializeSeq for CborSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct CborMapAccess`
+
+_Fields are private._
+
+#### `impl DeserializeMap for CborMapAccess`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct CborStructAccess`
+
+_Fields are private._
+
+#### `impl DeserializeStruct for CborStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct CborVariantAccess`
+
+_Fields are private._
+
+#### `impl DeserializeVariant for CborVariantAccess`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`

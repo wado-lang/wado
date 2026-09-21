@@ -226,7 +226,7 @@ impl Walk<'_> {
             .trait_type
             .iter()
             .chain([&block.ty])
-            .flat_map(|ty| reference_sites(ty))
+            .flat_map(reference_sites)
             .filter_map(|(id, _)| self.site_reach(id))
             .fold(Visibility::Public, Visibility::narrower)
     }

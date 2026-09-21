@@ -141,6 +141,58 @@ consumes its later occurrences.
 
 An argv token is always text, so a dynamic `Deserialize` gets it raw.
 
+### `pub struct ArgvStructAccess`
+
+_Fields are private._
+
+#### `impl DeserializeStruct for ArgvStructAccess`
+
+##### `fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError>`
+
+##### `fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn skip(&mut self) -> Result<(), DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct ArgvSeqAccess`
+
+_Fields are private._
+
+#### `impl DeserializeSeq for ArgvSeqAccess`
+
+##### `fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct ArgvMapAccess`
+
+_Fields are private._
+
+#### `impl DeserializeMap for ArgvMapAccess`
+
+##### `fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError>`
+
+##### `fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
+### `pub struct ArgvVariantAccess`
+
+_Fields are private._
+
+#### `impl DeserializeVariant for ArgvVariantAccess`
+
+##### `fn variant_name(&mut self) -> Result<String, DeserializeError>`
+
+##### `fn disc(&mut self) -> Result<i32, DeserializeError>`
+
+##### `fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError>`
+
+##### `fn is_unit(&mut self) -> Result<bool, DeserializeError>`
+
+##### `fn end(&mut self) -> Result<(), DeserializeError>`
+
 ## Enums
 
 ### `pub enum ArgsErrorKind`
