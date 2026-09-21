@@ -527,7 +527,7 @@ impl<'a> Unparser<'a> {
     }
 
     fn unparse_use(&mut self, u: &UseDecl) {
-        self.write_indent();
+        self.emit_outer_attrs(&u.attrs);
 
         self.emit_visibility(u.visibility);
 
@@ -1078,7 +1078,7 @@ impl<'a> Unparser<'a> {
     /// Output an inherent impl type with type param bounds inlined into type args.
     /// E.g.: `impl<T: Ord> List<T>` → `impl List<T: Ord>`
     fn unparse_impl(&mut self, i: &ImplBlock) {
-        self.write_indent();
+        self.emit_outer_attrs(&i.attrs);
         self.output.push_str("impl");
 
         // Always emit explicit type params: `impl<T> Foo<T>`, not compact `impl Foo<T>`
@@ -1100,8 +1100,8 @@ impl<'a> Unparser<'a> {
 
         self.with_braced_body(i.span, |this| {
             for assoc in &i.associated_types {
-                this.emit_member(assoc.id, assoc.span, &[], |this| {
-                    this.write_indent();
+                this.emit_member(assoc.id, assoc.span, &assoc.attrs, |this| {
+                    this.emit_outer_attrs(&assoc.attrs);
                     this.output.push_str("type ");
                     this.output.push_str(&assoc.name);
                     this.output.push_str(" = ");
@@ -1111,17 +1111,22 @@ impl<'a> Unparser<'a> {
             }
 
             for assoc_const in &i.constants {
-                this.emit_member(assoc_const.id, assoc_const.span, &[], |this| {
-                    this.write_indent();
-                    this.output.push_str(assoc_const.visibility.keyword());
-                    this.output.push_str("const ");
-                    this.output.push_str(&assoc_const.name);
-                    this.output.push_str(": ");
-                    this.unparse_type(&assoc_const.ty);
-                    this.output.push_str(" = ");
-                    this.unparse_expr(&assoc_const.value);
-                    this.output.push(';');
-                });
+                this.emit_member(
+                    assoc_const.id,
+                    assoc_const.span,
+                    &assoc_const.attrs,
+                    |this| {
+                        this.emit_outer_attrs(&assoc_const.attrs);
+                        this.output.push_str(assoc_const.visibility.keyword());
+                        this.output.push_str("const ");
+                        this.output.push_str(&assoc_const.name);
+                        this.output.push_str(": ");
+                        this.unparse_type(&assoc_const.ty);
+                        this.output.push_str(" = ");
+                        this.unparse_expr(&assoc_const.value);
+                        this.output.push(';');
+                    },
+                );
             }
 
             // Force one blank line between an associated-type / constant
@@ -3082,6 +3087,8 @@ fn get_item_first_line(item: &Item) -> usize {
         Item::TupleTypeDecl(d) => first_attr_line(&d.attrs),
         Item::BuiltinTypeDecl(d) => first_attr_line(&d.attrs),
         Item::Test(t) => first_attr_line(&t.attributes),
+        Item::Impl(i) => first_attr_line(&i.attrs),
+        Item::Use(u) => first_attr_line(&u.attrs),
         _ => None,
     };
     attr_line.unwrap_or(item_line).min(item_line)

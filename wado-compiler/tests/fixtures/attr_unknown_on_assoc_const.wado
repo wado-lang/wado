@@ -1,0 +1,24 @@
+// An impl's associated const and associated type each reach the schema.
+
+trait Shape {
+    type Unit;
+    fn area(&self) -> i32;
+}
+
+struct Square { side: i32 }
+
+impl Shape for Square {
+    #[totally_bogus]
+    type Unit = i32;
+
+    const SIDES: i32 = 4;
+
+    fn area(&self) -> i32 {
+        return self.side * self.side;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown attribute: `totally_bogus`", "compile_error_codes": ["UNKNOWN_ATTR"]}

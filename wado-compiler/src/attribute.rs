@@ -62,6 +62,10 @@ pub enum AttrTarget {
     Interface,
     Resource,
     World,
+    Impl,
+    AssociatedConst,
+    AssociatedType,
+    Use,
 }
 
 impl AttrTarget {
@@ -91,6 +95,10 @@ impl AttrTarget {
             Self::Interface => "an interface",
             Self::Resource => "a resource",
             Self::World => "a world",
+            Self::Impl => "an impl block",
+            Self::AssociatedConst => "an associated const",
+            Self::AssociatedType => "an associated type",
+            Self::Use => "a use declaration",
         }
     }
 
@@ -626,7 +634,17 @@ impl<F: FnMut(WrittenAttribute<'_>)> AstVisitor for AttributeWalk<'_, F> {
             }
             Item::Test(decl) => self.report(&decl.attributes, AttrTarget::Test),
             Item::Global(decl) => self.report(&decl.attributes, AttrTarget::Global),
-            Item::Function(_) | Item::Impl(_) | Item::Use(_) | Item::Error(_) => {}
+            Item::Impl(decl) => {
+                self.report(&decl.attrs, AttrTarget::Impl);
+                for binding in &decl.associated_types {
+                    self.report(&binding.attrs, AttrTarget::AssociatedType);
+                }
+                for constant in &decl.constants {
+                    self.report(&constant.attrs, AttrTarget::AssociatedConst);
+                }
+            }
+            Item::Use(decl) => self.report(&decl.attrs, AttrTarget::Use),
+            Item::Function(_) | Item::Error(_) => {}
         }
         walk_item(self, item);
     }

@@ -1,0 +1,27 @@
+// An attribute reaches the schema wherever it is written. `impl`, `use`, and an
+// impl's associated members each carry their own, so none of them is a position
+// where an unknown name goes unread.
+
+use { println } from "core:cli";
+
+trait Shape {
+    type Unit;
+    fn area(&self) -> i32;
+}
+
+struct Square { side: i32 }
+
+#[totally_bogus]
+impl Shape for Square {
+    type Unit = i32;
+    const SIDES: i32 = 4;
+
+    fn area(&self) -> i32 {
+        return self.side * self.side;
+    }
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "unknown attribute: `totally_bogus`", "compile_error_codes": ["UNKNOWN_ATTR"]}

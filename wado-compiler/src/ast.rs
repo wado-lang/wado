@@ -2122,6 +2122,9 @@ impl Visibility {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
+    /// Leading `#[…]` attributes, distinct from the `with { … }` clause the
+    /// `attributes` field carries.
+    pub attrs: Vec<Attribute>,
     /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
@@ -3938,6 +3941,7 @@ pub struct AssociatedTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeBinding {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -3948,6 +3952,7 @@ pub struct AssociatedTypeBinding {
 #[derive(Debug, Clone)]
 pub struct AssociatedConst {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub visibility: Visibility,
     pub ty: Type,
@@ -4051,6 +4056,7 @@ pub struct RestClauseDecl {
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The trait being implemented, if any: `impl Trait for Type`

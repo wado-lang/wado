@@ -3701,3 +3701,30 @@ fn test_format_keeps_an_attribute_on_a_local_item() {
     assert_eq!(formatted, source);
     assert_format_preserves_ast(source);
 }
+
+/// `impl`, `use`, and an impl's associated members each carry their own
+/// attributes. The printer dropped them while the parser still discarded them,
+/// so formatting deleted the line.
+#[test]
+fn test_format_keeps_an_attribute_on_impl_use_and_assoc_members() {
+    let source = concat!(
+        "#[cm(\"a\")]\n",
+        "use { x } from \"./m.wado\";\n",
+        "\n",
+        "#[cm(\"b\")]\n",
+        "impl Shape for Square {\n",
+        "    #[cm(\"c\")]\n",
+        "    type Unit = i32;\n",
+        "\n",
+        "    #[cm(\"d\")]\n",
+        "    const SIDES: i32 = 4;\n",
+        "\n",
+        "    fn area(&self) -> i32 {\n",
+        "        return 1;\n",
+        "    }\n",
+        "}\n"
+    );
+    let formatted = wado_compiler::format(source).expect("format failed");
+    assert_eq!(formatted, source);
+    assert_format_preserves_ast(source);
+}
