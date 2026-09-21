@@ -1392,24 +1392,34 @@ fn compile_after_load<H: CompilerHost>(
     // registers each name once, so the check belongs to whoever synthesizes a
     // world rather than to `--lib` alone.
     if synth_world_fq.is_some() {
-        let all_names: Vec<String> = entry_type_names
+        let entry_named = entry_type_names
             .iter()
-            .cloned()
+            .map(|name| (name.clone(), sem.entry_module_source.to_string()));
+        let all_named: Vec<(String, String)> = entry_named
             .chain(
                 lib_surface
                     .submodule_type_decls
                     .iter()
-                    .filter_map(|(_, item)| lib_type_decl_name(item)),
+                    .filter_map(|(source, item)| {
+                        Some((lib_type_decl_name(item)?, source.to_string()))
+                    }),
             )
             .collect();
-        if let Some(dup) = first_duplicate(all_names.iter().map(String::as_str)) {
+        if let Some(dup) = first_duplicate(all_named.iter().map(|(name, _)| name.as_str())) {
+            let mut modules: Vec<&str> = all_named
+                .iter()
+                .filter(|(name, _)| *name == dup)
+                .map(|(_, source)| source.as_str())
+                .collect();
+            modules.dedup();
             return Err(bail_with(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "type `{dup}` is defined in more than one module; the types a \
-                     component publishes must have distinct names, and every type \
-                     but a file-private one in a submodule is published"
+                    "type `{dup}` is defined in {}; the types a component \
+                     publishes must have distinct names, and every type but a \
+                     file-private one in a submodule is published",
+                    modules.join(" and "),
                 ),
             ));
         }

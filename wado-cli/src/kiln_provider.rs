@@ -133,6 +133,9 @@ pub struct CliGeneratorProvider {
     /// see the project and the write mode the entry's did. Absent for a
     /// provider built outside a pipeline, whose generators nest no further.
     kiln_run: Option<KilnRun>,
+    /// How loud the run is. Compiling a generator and running its own
+    /// invocations are part of the build the user asked to see.
+    log_level: LogLevel,
 }
 
 impl CliGeneratorProvider {
@@ -146,7 +149,15 @@ impl CliGeneratorProvider {
             registry: RegistryContext::default(),
             active: Arc::new(Mutex::new(Vec::new())),
             kiln_run: None,
+            log_level: LogLevel::Warn,
         }
+    }
+
+    /// Report a generator's compile and its own invocations at the run's level.
+    #[must_use]
+    pub fn with_log_level(mut self, log_level: LogLevel) -> Self {
+        self.log_level = log_level;
+        self
     }
 
     /// Continue an outer generator's chain, so a cycle through this provider is
@@ -360,6 +371,7 @@ impl CliGeneratorProvider {
         };
         run.active = self.active.clone();
         let shared_cache = self.run.clone();
+        let log_level = self.log_level;
         let failed = |e: PipelineError| ProviderError::Internal {
             message: format!(
                 "kiln: generator `{}` declares an invocation that failed: {e}",
@@ -370,7 +382,7 @@ impl CliGeneratorProvider {
         // and for the same reason: the pipeline holds a `Logger` whose future
         // is `!Send`, and the driver's runtime is multi-threaded.
         let started = tokio::task::spawn_blocking(move || {
-            let mut host = FilesystemCompilerHost::with_log_level(base, LogLevel::Warn);
+            let mut host = FilesystemCompilerHost::with_log_level(base, log_level);
             // The run's own cache, so the generated modules this produces are
             // marked as its output rather than read as a tree moving under it,
             // and so the AOT components the outer run holds are reused.
@@ -421,6 +433,7 @@ impl CliGeneratorProvider {
         let recording_base = base_path.clone();
         let loaded = Arc::new(Mutex::new(Vec::<(String, [u8; 32])>::new()));
         let loaded_for_task = loaded.clone();
+        let log_level = self.log_level;
 
         // `compile_with_options` captures a `Logger<H>` whose internal
         // `Cell<usize>` makes the returned future `!Send`. Run the whole
@@ -430,7 +443,7 @@ impl CliGeneratorProvider {
         let artifacts: Result<CompileArtifacts, ProviderError> =
             tokio::task::spawn_blocking(move || {
                 let host = SilentHost {
-                    inner: FilesystemCompilerHost::with_log_level(base_path, LogLevel::Warn),
+                    inner: FilesystemCompilerHost::with_log_level(base_path, log_level),
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
@@ -441,7 +454,7 @@ impl CliGeneratorProvider {
                     opt_level: wado_compiler::OptLevel::O2,
                     target_world: Some(GENERATOR_WORLD_FQ.to_string()),
                     skip_validation: false,
-                    log_level: Some(LogLevel::Warn),
+                    log_level: Some(log_level),
                     invocations,
                     ..CompilerOptions::default()
                 };

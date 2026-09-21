@@ -160,6 +160,12 @@ impl FilesystemCompilerHost {
         self
     }
 
+    /// How loud this host is, so work it delegates reports at the same level.
+    #[must_use]
+    pub fn log_level(&self) -> LogLevel {
+        self.log_level
+    }
+
     /// The run-scoped state this host shares.
     #[must_use]
     pub fn run_cache(&self) -> Arc<RunCache> {

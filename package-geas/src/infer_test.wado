@@ -228,7 +228,7 @@ test "a declared symbolic name need not be the one the schema gave the axis" {
     assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
 }
 
-test "a declared static extent still conflicts with a produced symbolic one only when both are static" {
+test "a declared static extent settles an axis the nodes left symbolic" {
     let graph = read(
         `agraph (float[N, 3] X) => (float[8, 3] Y) {
             Y = Relu(X)
@@ -238,7 +238,9 @@ test "a declared static extent still conflicts with a produced symbolic one only
         layout: [rule("*", ["Batch", "B"])],
     };
     let shapes = infer(&graph, &schema).unwrap();
-    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    // Only the declared output is settled; the input keeps what it stated.
+    assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
 }
 
 test "a declared `?` claims nothing about the produced extent" {

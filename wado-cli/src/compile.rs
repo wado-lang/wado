@@ -703,6 +703,7 @@ pub(crate) async fn prepare_kiln(
         .with_no_cache(no_cache)
         .with_active(active)
         .with_run(run.clone())
+        .with_log_level(host.log_level())
         .with_registry_context(RegistryContext {
             build_dependencies: manifest.build_dependencies.clone(),
             registries: manifest.registries.clone(),

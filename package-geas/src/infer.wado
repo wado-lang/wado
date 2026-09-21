@@ -166,16 +166,17 @@ pub fn infer(graph: &Graph, schema: &Schema) -> Result<TreeMap<String, Shape>, I
             builtin::cold_path();
             return Result::Err(InferError::Undefined(vi.name));
         };
-        check_declared(vi, &produced)?;
+        shapes[vi.name] = merge_declared(vi, &produced)?;
     }
     return Result::Ok(shapes);
 }
 
 /// Merge the graph's own output declaration into what the nodes produced, as
-/// ONNX's `mergeInDimensionInfo` does: only two static extents can conflict.
-fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
+/// ONNX's `mergeInDimensionInfo` does: only two static extents can conflict,
+/// and a declared static extent settles an axis the nodes left symbolic.
+fn merge_declared(vi: &ValueInfo, produced: &Shape) -> Result<Shape, InferError> {
     let Some(dims) = dims_of(&vi.rank) else {
-        return Result::Ok(());
+        return Result::Ok(*produced);
     };
     if dims.len() != produced.rank() {
         builtin::cold_path();
@@ -185,27 +186,34 @@ fn check_declared(vi: &ValueInfo, produced: &Shape) -> Result<(), InferError> {
             produced: produced.rank(),
         }));
     }
+    let mut merged = *produced;
     for let mut i = 0; i < dims.len(); i += 1 {
         // A `dim_param` names the axis in the model author's words and `?`
         // names nothing, so neither can disagree with the schema's own name.
         let Static(declared) = dims[i] else {
             continue;
         };
-        let axis = &produced.axes[i];
-        let Static(produced_extent) = axis.extent else {
-            continue;
-        };
-        if declared != produced_extent {
-            builtin::cold_path();
-            return Result::Err(InferError::Declared(DeclaredConflict {
-                tensor: vi.name,
-                axis: axis.name,
-                declared: Extent::Static(declared),
-                produced: axis.extent,
-            }));
+        let axis = &merged.axes[i];
+        match axis.extent {
+            Static(found) => {
+                if declared != found {
+                    builtin::cold_path();
+                    return Result::Err(InferError::Declared(DeclaredConflict {
+                        tensor: vi.name,
+                        axis: axis.name,
+                        declared: Extent::Static(declared),
+                        produced: axis.extent,
+                    }));
+                }
+            },
+            // The graph states a length the nodes only carried a name for, and
+            // a consumer of the shape table is owed the constant.
+            Symbol(_) => {
+                merged.axes[i].extent = Extent::Static(declared);
+            },
         }
     }
-    return Result::Ok(());
+    return Result::Ok(merged);
 }
 
 /// What names a node in a message. ONNX identifies one by its first output,

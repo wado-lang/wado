@@ -1240,6 +1240,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "type `Node` is defined in more than one module",
+            "type `Node` is defined in ./a.wado and ./b.wado",
         ));
 }
