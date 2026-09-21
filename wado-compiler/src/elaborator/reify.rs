@@ -7642,7 +7642,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use super::expr::UnionSource;
-        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
+        use crate::tir::TirStructField;
 
         // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
@@ -7747,15 +7747,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.span,
         );
 
-        if stmts.is_empty() {
-            return literal;
-        }
-        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
-            struct_type,
-            struct_lit.span,
-        )
+        Self::hoist_block(literal, stmts)
     }
 
     /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
@@ -7767,7 +7759,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prefix: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmt, TirStmtKind};
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
@@ -7788,6 +7779,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
         TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+    }
+
+    /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
+    /// reads, or `value` alone when nothing was hoisted.
+    fn hoist_block(value: TirExpr, mut stmts: Vec<TirStmt>) -> TirExpr {
+        if stmts.is_empty() {
+            return value;
+        }
+        let (span, type_id) = (value.span, value.type_id);
+        stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            type_id,
+            span,
+        )
     }
 
     /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters
@@ -8815,8 +8821,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     }
                     "zip" => {
                         let span = method_call.span;
-                        // The transpose reads the receiver once per cell, so it
-                        // is bound here, ahead of both expansions.
+                        // Bound ahead of the branch so the deferred expansion
+                        // inherits it: the monomorphizer allocates no locals.
                         let mut stmts = Vec::new();
                         let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
@@ -8834,23 +8840,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                                 span,
                             )
                         } else {
-                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
                             transpose_tuple_expr(
                                 &receiver,
                                 span,
                                 &mut self.tysys.type_table.borrow_mut(),
                             )
                         };
-                        if stmts.is_empty() {
-                            return transposed;
-                        }
-                        let type_id = transposed.type_id;
-                        stmts.push(TirStmt::new(TirStmtKind::Expr(transposed), span));
-                        TirExpr::new(
-                            TirExprKind::Block(TirBlock::new(stmts, span)),
-                            type_id,
-                            span,
-                        )
+                        Self::hoist_block(transposed, stmts)
                     }
                     _ => unreachable!(),
                 };

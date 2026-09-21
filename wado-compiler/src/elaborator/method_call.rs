@@ -2702,13 +2702,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.tysys.type_table.borrow();
         let rows = table.as_tuple(tuple)?;
-        // Method lookup already rejects a row that is no tuple, and rows whose
-        // arities are all known. A packs diagnostic would only stack on that,
-        // naming packs the value does not carry.
+        // A row that is no tuple has no layout, and is no transpose either.
         let layouts: Vec<Vec<TupleSlot>> = rows
             .iter()
             .map(|&row| table.tuple_layout(row))
             .collect::<Option<_>>()?;
+        // Only a pack leaves two rows' lengths unprovable. Without one, the
+        // "no method" message already said everything.
         if !layouts
             .iter()
             .flatten()

@@ -2973,8 +2973,6 @@ impl Monomorphizer {
                     local_count,
                     locals,
                 );
-                // Elaboration admits a `zip` only over rows of one layout, so
-                // substitution leaves concrete tuples of equal length here.
                 let inner_expr = zip_inner.as_ref().clone();
                 let transposed = transpose_tuple_expr(&inner_expr, expr.span, type_table);
                 expr.kind = transposed.kind;
