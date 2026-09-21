@@ -3925,39 +3925,73 @@ impl TypeTable {
     /// yet: an inference variable, a type pack, or an unresolved / error type.
     /// A rigid type parameter is decided, and so is a projection over one.
     pub fn contains_undecided(&self, id: TypeId) -> bool {
-        self.contains_undecided_with(id, true)
-    }
-
-    /// [`Self::contains_undecided`] with a type pack counted as decided. A pack
-    /// is rigid where it is declared, as a type parameter is: a call
-    /// instantiates a callee's slots before anything compares them, so a pack
-    /// reaching a comparison stands for itself.
-    pub fn contains_undecided_beyond_packs(&self, id: TypeId) -> bool {
-        self.contains_undecided_with(id, false)
-    }
-
-    fn contains_undecided_with(&self, id: TypeId, pack_undecided: bool) -> bool {
-        let recurse = |inner: TypeId| self.contains_undecided_with(inner, pack_undecided);
         match self.get(id) {
-            ResolvedType::TypePack { .. } => pack_undecided,
-            ResolvedType::InferVar(_) | ResolvedType::Unknown | ResolvedType::Error => true,
+            ResolvedType::InferVar(_)
+            | ResolvedType::TypePack { .. }
+            | ResolvedType::Unknown
+            | ResolvedType::Error => true,
             ResolvedType::AssocTypeProjection { param_id, .. } => {
                 !self.projects_from_param(*param_id)
             }
             ResolvedType::BuiltinArray(inner)
             | ResolvedType::Ref(inner)
             | ResolvedType::MutRef(inner)
-            | ResolvedType::Reactive(inner) => recurse(*inner),
+            | ResolvedType::Reactive(inner) => self.contains_undecided(*inner),
             ResolvedType::Function {
                 params,
                 return_type,
                 ..
-            } => params.iter().any(|p| recurse(*p)) || recurse(*return_type),
+            } => {
+                params.iter().any(|p| self.contains_undecided(*p))
+                    || self.contains_undecided(*return_type)
+            }
             ResolvedType::GenericInstance { type_args, .. }
             | ResolvedType::GenericResource { type_args, .. } => {
-                type_args.iter().any(|t| recurse(*t))
+                type_args.iter().any(|t| self.contains_undecided(*t))
             }
             _ => false,
+        }
+    }
+
+    /// The name of every type pack `id` mentions, so a caller can ask whose
+    /// declaration they belong to.
+    pub fn pack_names(&self, id: TypeId) -> Vec<String> {
+        let mut out = Vec::new();
+        self.collect_pack_names(id, &mut out);
+        out
+    }
+
+    fn collect_pack_names(&self, id: TypeId, out: &mut Vec<String>) {
+        match self.get(id) {
+            ResolvedType::TypePack {
+                name, mapped_elem, ..
+            } => {
+                out.push(name.clone());
+                if let Some(elem) = mapped_elem {
+                    self.collect_pack_names(*elem, out);
+                }
+            }
+            ResolvedType::BuiltinArray(inner)
+            | ResolvedType::Ref(inner)
+            | ResolvedType::MutRef(inner)
+            | ResolvedType::Reactive(inner) => self.collect_pack_names(*inner, out),
+            ResolvedType::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for p in params {
+                    self.collect_pack_names(*p, out);
+                }
+                self.collect_pack_names(*return_type, out);
+            }
+            ResolvedType::GenericInstance { type_args, .. }
+            | ResolvedType::GenericResource { type_args, .. } => {
+                for t in type_args {
+                    self.collect_pack_names(*t, out);
+                }
+            }
+            _ => {}
         }
     }
 

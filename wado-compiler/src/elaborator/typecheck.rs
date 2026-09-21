@@ -37,16 +37,6 @@ pub(super) fn check_assignable(
     check_at(actual, expected, type_table, Position::Covariant)
 }
 
-/// Whether `id` is a pack standing on its own, which is what a walk over a pack
-/// binds: it stands for one element, and only substitution says which. A pack
-/// inside a tuple is the tuple's own shape, so that tuple is decided.
-fn is_bare_pack(id: TypeId, type_table: &TypeTable) -> bool {
-    matches!(
-        type_table.get(unwrap_ref(id, type_table).0),
-        ResolvedType::TypePack { .. }
-    )
-}
-
 /// Whether the position admits a subtype: a value, a `return` and a `&T`
 /// referent do; `&mut T`, a container element and a function type's parts do
 /// not. See `docs/wep-2026-04-28-resource-inheritance.md`.
@@ -80,17 +70,13 @@ fn check_at(
     }
 
     // Defer only what is genuinely undecided: an inference variable awaiting its
-    // solver, a projection over one, and `unknown` / `error`. A rigid
-    // `TypeParam` is opaque, not undecided — a use of a polymorphic signature
-    // instantiates its slots into `InferVar`s first, so nothing but itself is
-    // ever assignable to it. A `TypePack` is rigid on the same terms, so `[]`
-    // does not satisfy `[..A]` inside the body that declares `A`.
-    if is_bare_pack(actual, type_table) || is_bare_pack(expected, type_table) {
-        return TypeCheckResult::Deferred;
-    }
-    if type_table.contains_undecided_beyond_packs(actual)
-        || type_table.contains_undecided_beyond_packs(expected)
-    {
+    // solver, a pack awaiting expansion, a projection over one of those, and
+    // `unknown` / `error`. A rigid `TypeParam` is opaque, not undecided — a use
+    // of a polymorphic signature instantiates its slots into `InferVar`s first,
+    // so nothing but itself is ever assignable to it. A pack is opaque the same
+    // way, but only where its own declaration is in scope, which this layer
+    // cannot see: `Elaborator::typecheck` applies that rule.
+    if type_table.contains_undecided(actual) || type_table.contains_undecided(expected) {
         return TypeCheckResult::Deferred;
     }
 
@@ -327,7 +313,42 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 found: payload.found,
                 span,
             });
+            return;
         }
+        self.reject_settled_own_pack(actual, expected, span);
+    }
+
+    /// Reject a settled type where a pack this signature declares is expected.
+    /// `check_assignable` defers on any pack, since a callee's stands for what
+    /// the call settles it to. One this body declares is rigid instead — only
+    /// `[..A]` satisfies `[..A]` — and deferring let `g([])` through to codegen.
+    fn reject_settled_own_pack(&self, actual: TypeId, expected: TypeId, span: Span) {
+        let table = self.tysys.type_table.borrow();
+        if actual == expected
+            || !table.contains_type_pack(expected)
+            || table.contains_undecided(actual)
+            || !self.expected_pack_is_declared_here(expected, &table)
+        {
+            return;
+        }
+        let (expected_name, found_name) = (table.type_name(expected), table.type_name(actual));
+        drop(table);
+        let _ = self.emit(TypeError::TypeMismatch {
+            expected: expected_name,
+            found: found_name,
+            span,
+        });
+    }
+
+    /// Whether every pack `expected` mentions is one the enclosing declaration
+    /// declares, which is what makes it rigid here.
+    fn expected_pack_is_declared_here(&self, expected: TypeId, table: &TypeTable) -> bool {
+        table.pack_names(expected).iter().all(|name| {
+            self.annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(name.as_str())
+        })
     }
 
     /// Check return type mismatch and emit a diagnostic on rejection.
