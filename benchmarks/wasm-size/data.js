@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790026471149,
+  "lastUpdate": 1790034953736,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58049,6 +58049,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/4fd07b99cdb9b6bb77a226e259905c8df46c63f8"
         },
         "date": 1790026470503,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "aa8c85d5297ca37eda20a0491deffd6b86758e07",
+          "message": "Merge pull request #2116 from wado-lang/claude/wado-compiler-attribute-schema-foo52j\n\nfix(compiler): bind a `&mut` destructure to the scrutinee, and check every attribute",
+          "timestamp": "2026-09-22T08:36:38+09:00",
+          "tree_id": "de81527ce8b61806003e671401fa26494b36808c",
+          "url": "https://github.com/wado-lang/wado/commit/aa8c85d5297ca37eda20a0491deffd6b86758e07"
+        },
+        "date": 1790034952844,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
