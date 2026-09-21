@@ -8814,28 +8814,43 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
+                        let span = method_call.span;
+                        // The transpose reads the receiver once per cell, so it
+                        // is bound here, ahead of both expansions.
+                        let mut stmts = Vec::new();
+                        let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        if self.type_contains_pack(base_type_id) {
+                        let transposed = if self.type_contains_pack(base_type_id) {
                             TirExpr::new(
                                 TirExprKind::TupleZip {
                                     expr: Box::new(receiver),
                                 },
                                 recorded_type,
-                                method_call.span,
+                                span,
                             )
                         } else {
                             // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
                             transpose_tuple_expr(
                                 &receiver,
-                                method_call.span,
+                                span,
                                 &mut self.tysys.type_table.borrow_mut(),
                             )
+                        };
+                        if stmts.is_empty() {
+                            return transposed;
                         }
+                        let type_id = transposed.type_id;
+                        stmts.push(TirStmt::new(TirStmtKind::Expr(transposed), span));
+                        TirExpr::new(
+                            TirExprKind::Block(TirBlock::new(stmts, span)),
+                            type_id,
+                            span,
+                        )
                     }
                     _ => unreachable!(),
                 };
