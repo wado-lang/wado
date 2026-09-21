@@ -27,7 +27,6 @@ use crate::nir_visitor::{NirRefVisitor, reachable_exprs};
 use crate::optimize::arena_query::{
     expr_node_may_trap, is_pure_nontrapping_expr_typed, promoted_local_reads,
 };
-use crate::optimize::mod_ref::compute_fn_effects;
 use crate::tir::{ResolvedType, StructDef, TypeId, TypeTable};
 use crate::{hashmap, nir, tir};
 
@@ -2187,15 +2186,17 @@ fn dead_pure_binding(
 /// holds its whole initializer in the binary for no observer. The
 /// `is_uninitialized` guard and a read bound to an unmentioned local do not
 /// count as observing, provided the value is a `deletable_value`.
-pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
+///
+/// Answers whether any body changed, so a caller holding `effects` knows
+/// whether they still describe the IR.
+pub(super) fn unhoist_unobserved_globals(project: &mut NirPackage, effects: &[FnEffect]) -> bool {
     let descriptors = build_callee_descriptors(project);
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
         descriptors: &descriptors,
         types: &types,
-        effects: &effects,
+        effects,
         inert_functions: IndexSet::default(),
     };
     loop {
@@ -2244,7 +2245,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
     }
     let unobserved: IndexSet<(String, String)> = guarded.difference(&observed).cloned().collect();
     if unobserved.is_empty() {
-        return;
+        return false;
     }
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
@@ -2260,6 +2261,7 @@ pub fn unhoist_unobserved_globals(project: &mut NirPackage) {
             );
         }
     }
+    true
 }
 
 /// Whether a reachable expression still reads one of `globals`. The pass drops
@@ -2350,22 +2352,22 @@ fn compute_global_reachability(
 /// `GlobalVarSet` for a dead global from surviving function bodies
 /// (covers both the original `$initialize_module` and any inlined
 /// copies).
-pub fn remove_unreachable_globals(
+pub(super) fn remove_unreachable_globals(
     project: &mut NirPackage,
     used_globals: &IndexSet<(String, String)>,
+    effects: &[FnEffect],
 ) {
     project.globals.retain(|global| {
         let global_module_key = global.module_source.to_path().join("::");
         used_globals.contains(&(global_module_key, global.name.clone()))
     });
 
-    let effects = compute_fn_effects(&project.functions, &project.builtin_registry);
     let type_table = project.type_table.borrow();
     for func_rc in &project.functions {
         let mut func = func_rc.borrow_mut();
         if let Some(body) = func.body.as_mut() {
             let root = body.root;
-            remove_dead_global_sets_block(body, root, used_globals, &type_table, &effects);
+            remove_dead_global_sets_block(body, root, used_globals, &type_table, effects);
         }
     }
 }

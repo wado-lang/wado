@@ -79,6 +79,7 @@ use field_scalarize::scalarize_hot_fields;
 use inline::inline_functions;
 use licm::apply_licm;
 use match_to_switch::{match_to_switch_all, match_to_switch_globals};
+use mod_ref::compute_fn_effects;
 use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
@@ -321,10 +322,18 @@ fn run_dce(project: &mut NirPackage, profiler: &dyn SpanEmitter) {
             .filter(|f| f.borrow().body.is_some())
             .count();
         let globals_before = project.globals.len();
-        unhoist_unobserved_globals(project);
+        let mut effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+        if unhoist_unobserved_globals(project, &effects) {
+            // The bodies it rewrote only lost work, so their real summaries are
+            // now smaller than this table says. Keeping it would refuse a
+            // deletion that no longer has a reason to be refused.
+            effects = compute_fn_effects(&project.functions, &project.builtin_registry);
+        }
         let analysis = analyze_dce(project);
+        // Clearing an unreachable function's body leaves its entry describing
+        // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
-        remove_unreachable_globals(project, &analysis.globals);
+        remove_unreachable_globals(project, &analysis.globals, &effects);
         let functions_after = project
             .functions
             .iter()
