@@ -1180,6 +1180,6 @@ fn test_lib_duplicate_type_name_rejected() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "library type `Node` is defined in more than one module",
+            "public type `Node` is defined in more than one module",
         ));
 }

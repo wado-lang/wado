@@ -1375,7 +1375,10 @@ fn compile_after_load<H: CompilerHost>(
             })
         });
 
-    if options.lib_world.is_some() {
+    // Every published type reaches the registry under one interface FQ, which
+    // registers each name once, so the check belongs to whoever synthesizes a
+    // world rather than to `--lib` alone.
+    if synth_world_fq.is_some() {
         let all_names: Vec<String> = entry_type_names
             .iter()
             .cloned()
@@ -1391,8 +1394,8 @@ fn compile_after_load<H: CompilerHost>(
                 logger,
                 Code::DuplicateDefinition,
                 format!(
-                    "library type `{dup}` is defined in more than one module; a \
-                     library's public types must have distinct names"
+                    "public type `{dup}` is defined in more than one module; the \
+                     types a component publishes must have distinct names"
                 ),
             ));
         }

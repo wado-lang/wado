@@ -186,6 +186,61 @@ test "a scalar operand to MatMul stops the build rather than trapping" {
     assert `${e}` == "Y = MatMul: a scalar operand has no axis to contract";
 }
 
+test "a declared output extent disagreeing with the produced one stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X, float[3, 10] W) => (float[2, 7] Y) {
+            Y = MatMul(X, W)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("X", ["A", "K"]),
+            rule("W", ["K", "B"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y: axis B is declared 7 and produced 10";
+}
+
+test "a declared output rank disagreeing with the produced one stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y: the graph declares rank 1 and the nodes produce rank 2";
+}
+
+test "a declared `?` claims nothing about the produced extent" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[?, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+}
+
+test "a graph output no node produces stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y, float[2, 3] Z) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Z: no graph input, initializer or node defines this";
+}
+
 test "a node reading an undefined tensor stops the build" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {

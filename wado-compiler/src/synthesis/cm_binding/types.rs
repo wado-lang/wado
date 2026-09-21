@@ -141,6 +141,8 @@ impl LiftContext<'_> {
             .cm_decl_in(name, &module_source)
             // A lib-local type defined in a submodule: the interface FQ maps to
             // the entry module, so resolve via the type's own recorded module.
+            // One name reaches one declaration here, since a surface carrying
+            // the same public name twice is refused before synthesis.
             .or_else(|| {
                 let own = self.cm_interface_registry.lib_local_type_source(name)?;
                 type_table.cm_decl_in(name, own)
