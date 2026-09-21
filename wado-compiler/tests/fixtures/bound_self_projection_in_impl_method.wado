@@ -4,12 +4,12 @@
 // block's own type is what `Self` names, and a trait it implements elsewhere is
 // what binds the member.
 //
-// It reports `unknown type 'Self::Item'`, and so does the same bound spelled
-// `Uses<H::Item>`: a bound argument projecting off a concrete type is resolved
-// before the impl's associated types are registered. That is the blocker here,
-// not `Self` — the trait-method form
-// (bound_self_projection_in_trait_method.wado) passes. Module-level because the
-// file does not compile yet.
+// The declaration is accepted; `o.go(a)` in the body is what reports `unknown
+// type 'Self::Item'`. Reaching `go` reads `O`'s bound, and `bound_slots` takes
+// the trait's own `Self` — `O` here — as the scope for the bound's written
+// arguments too. `Self::Item` therefore asks `O::Item`, which `Uses` does not
+// declare. The argument was written in the enclosing impl's frame, where `Self`
+// is `H`. Module-level because the file does not compile yet.
 
 trait Uses<A> with () {
     fn go(&self, a: A) -> i32;
