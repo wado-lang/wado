@@ -1,5 +1,6 @@
 use {
     WireType,
+    to_bytes,
     read_fixed32,
     read_fixed64,
     read_varint,
@@ -12,6 +13,8 @@ use {
     write_varint,
     zigzag_64,
 } from "core:protobuf";
+
+use { Serialize, WireNumbered } from "core:serde";
 
 fn hex(bytes: &ByteList) -> String {
     let mut out = "";
@@ -107,4 +110,84 @@ test "a fixed field reads back to what was written" {
     assert read_fixed32(&slice, 0) matches { Some([305419896, 4]) };
     assert read_fixed64(&slice, 4) matches { Some([81985529216486895, 12]) };
     assert read_fixed32(&slice, 10) matches { None };
+}
+
+// The specification's own worked examples (`encoding.md`): `Test1 { a: 150 }`,
+// `Test2 { b: "testing" }`, and `Test3 { c: Test1 { a: 150 } }`.
+struct Test1 {
+    #[wire(number = 1)]
+    a: i32,
+}
+
+struct Test2 {
+    #[wire(number = 2)]
+    b: String,
+}
+
+struct Test3 {
+    #[wire(number = 3)]
+    c: Test1,
+}
+
+fn encode<T: Serialize + WireNumbered>(value: &T) -> String {
+    let Ok(bytes) = to_bytes(value) else {
+        panic("the message did not encode");
+    };
+    return hex(&bytes);
+}
+
+test "a message writes a tag and a varint" {
+    assert encode(&Test1 { a: 150 }) == "089601";
+}
+
+test "a string field is length-delimited" {
+    assert encode(&Test2 { b: "testing" }) == "1207" + "74657374696e67";
+}
+
+test "a submessage carries the length its size pass promised" {
+    assert encode(&Test3 {
+        c: Test1 { a: 150 },
+    }) == "1a03" + "089601";
+}
+
+test "a repeated field repeats its tag" {
+    struct Repeated {
+        #[wire(number = 4)]
+        items: List<i32>,
+        #[wire(number = 5)]
+        nested: List<Test1>,
+    }
+
+    assert encode(&Repeated {
+        items: [1, 2],
+        nested: [],
+    }) == "2001" + "2002";
+    assert encode(&Repeated {
+        items: [],
+        nested: [
+            Test1 { a: 1 },
+            Test1 { a: 2 },
+        ],
+    }) == "2a02" + "0801" + "2a02" + "0802";
+}
+
+test "the fixed-width and absent field forms" {
+    struct Mixed {
+        #[wire(number = 1)]
+        f: f32,
+        #[wire(number = 2)]
+        d: f64,
+        #[wire(number = 3)]
+        flag: bool,
+        #[wire(number = 4)]
+        raw: ByteList,
+        #[wire(number = 5)]
+        absent: Option<i32>,
+    }
+
+    assert encode(&Mixed { f: 1.0, d: 1.0, flag: true, raw: b"\x01\x02", absent: null }) == "0d0000803f" + "11000000000000f03f" + "1801" + "22020102";
+}
+
+test "a negative int32 is sign-extended to ten bytes" {
+    assert encode(&Test1 { a: -1 }) == "08" + "ffffffffffffffffff01";
 }
