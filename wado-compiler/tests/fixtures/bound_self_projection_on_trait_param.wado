@@ -1,0 +1,40 @@
+// A KNOWN GAP, recorded as what the compiler does rather than what it should.
+//
+// A bound on a trait's own type parameter may write `Self::Assoc`, where `Self`
+// is the implementing type. Writing `Uses<i32>` in place of `Uses<Self::Item>`
+// compiles and runs, so the projection is what fails, not the shape. `main`
+// rejects the same program, so closing this is its own change; the day it does,
+// this fixture fails and takes the expectation below with it.
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+struct Worker {}
+
+struct H {}
+
+impl Uses<i32> for Worker {
+    fn go(&self, a: i32) -> i32 {
+        return a + 1;
+    }
+}
+
+trait Host<O: Uses<Self::Item>> with () {
+    type Item;
+
+    fn drive(&self, w: O, a: Self::Item) -> i32 {
+        return w.go(a);
+    }
+}
+
+impl Host<Worker> for H {
+    type Item = i32;
+}
+
+test "Self::Assoc in a bound on a trait's own type parameter" {
+    assert H {}.drive(Worker {}, 41) == 42;
+}
+
+__DATA__
+{"test": {}, "compile_error": "no method 'go' found on type 'Worker'"}

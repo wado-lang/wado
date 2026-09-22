@@ -143,6 +143,38 @@ impl Deref for ScopedBound {
     }
 }
 
+/// A trait declaration's own parameter, as the `impl` supplying its argument
+/// sees it.
+pub(super) struct TraitParamFromImpl<'p, A> {
+    pub(super) param: &'p ast::GenericParam,
+    pub(super) arg: A,
+    pub(super) bounds: Vec<ScopedBound>,
+}
+
+/// Each parameter of a trait declaration paired with the argument an `impl`
+/// wrote for it, and the bounds it declares pinned to `implementing`.
+///
+/// [`ast::GenericParam::fills_impl_slot`] is the alignment written arguments
+/// have: a denser filter slides every parameter after an `fn`-bound one onto
+/// the wrong argument. The trait wrote the bounds in its own space, so their
+/// `Self` is the type standing under it.
+pub(super) fn trait_params_from_impl<'p, A: Copy>(
+    params: &'p [ast::GenericParam],
+    args: &[A],
+    implementing: Option<TypeId>,
+) -> Vec<TraitParamFromImpl<'p, A>> {
+    params
+        .iter()
+        .filter(|param| param.fills_impl_slot())
+        .zip(args)
+        .map(|(param, &arg)| TraitParamFromImpl {
+            param,
+            arg,
+            bounds: ScopedBound::pin_all(&param.real_bounds(), implementing),
+        })
+        .collect()
+}
+
 /// The node in `params` that declares `name`, when one does. The caller picks
 /// the list, since only it knows which item bound the name (#1932).
 pub(super) fn param_decl(params: &[ast::GenericParam], name: &str) -> Option<ast::AstId> {
@@ -707,7 +739,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// `T → i32` and `U → String` with their bounds. Impl-level type params must
     /// already be registered, the trait args being able to name them
     /// (`impl<X> Foo<Container<X>>`). Existing entries are left untouched.
-    pub(super) fn bind_trait_type_params_from_impl(&mut self, trait_type: &ast::Type) {
+    ///
+    /// `self_type` is what the trait declared these bounds' `Self` to mean, so
+    /// the caller passes the type it is implementing rather than leaving this to
+    /// read ambient state it may not have set yet.
+    pub(super) fn bind_trait_type_params_from_impl(
+        &mut self,
+        trait_type: &ast::Type,
+        self_type: TypeId,
+    ) {
         let trait_name = self.get_type_name(trait_type);
         let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
             return;
@@ -716,41 +756,30 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             ast::Type::Generic(g) => g.args.iter().collect(),
             _ => Vec::new(),
         };
-        for (i, tp) in trait_decl_type_params
-            .iter()
-            .filter(|p| !p.is_effect)
-            .enumerate()
-        {
+        let supplied =
+            trait_params_from_impl(&trait_decl_type_params, &trait_args, Some(self_type));
+        for TraitParamFromImpl { param, arg, bounds } in supplied {
             if self
                 .annotate_ctx
                 .trait_ctx
                 .type_params
-                .contains_key(&tp.name)
+                .contains_key(&param.name)
             {
                 continue;
             }
-            let Some(arg_ast) = trait_args.get(i) else {
-                continue;
-            };
-            let resolved_arg = self.resolve_type(arg_ast);
+            let resolved_arg = self.resolve_type(arg);
             let idx = self.annotate_ctx.trait_ctx.type_params.len() as u32;
             self.annotate_ctx.trait_ctx.type_params.insert(
-                tp.name.clone(),
-                BinderInScope::declared(idx, resolved_arg, tp.id),
+                param.name.clone(),
+                BinderInScope::declared(idx, resolved_arg, param.id),
             );
-            // An `fn` bound is realised in the argument itself and names no
-            // trait, as `register_generic_params` reads it.
-            let bounds = tp.real_bounds();
             if !bounds.is_empty() {
-                // The trait declared these bounds, so their `Self` is the
-                // trait's — which in this impl is the type being implemented.
-                let scoped = ScopedBound::pin_all(&bounds, self.annotate_ctx.trait_ctx.self_type);
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
-                    .entry(tp.name.clone())
+                    .entry(param.name.clone())
                     .or_default()
-                    .extend(scoped);
+                    .extend(bounds);
             }
         }
     }

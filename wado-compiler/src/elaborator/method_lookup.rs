@@ -1,6 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::{BinderInScope, ScopedBound};
+use super::scope::{BinderInScope, ScopedBound, trait_params_from_impl};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
 use std::rc::Rc;
@@ -530,18 +530,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
             return Vec::new();
         };
-        header
-            .type_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .zip(trait_args)
-            .filter(|(p, _)| !have.iter().any(|b| b.name == p.name))
-            .map(|(p, &arg)| DefaultTypeBinding {
-                name: p.name.clone(),
-                // The trait declared the bound, so its `Self` is the trait's —
-                // which at this impl is the receiver.
-                bounds: ScopedBound::pin_all(&p.bounds, receiver),
-                settled: SettledAs::Type(arg),
+        // The trait declared the bounds, so their `Self` is the trait's — which
+        // at this impl is the receiver.
+        trait_params_from_impl(&header.type_params, trait_args, receiver)
+            .into_iter()
+            .filter(|supplied| !have.iter().any(|b| b.name == supplied.param.name))
+            .map(|supplied| DefaultTypeBinding {
+                name: supplied.param.name.clone(),
+                bounds: supplied.bounds,
+                settled: SettledAs::Type(supplied.arg),
             })
             .collect()
     }

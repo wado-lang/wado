@@ -16,6 +16,18 @@ trait Two<A: Default, B: Default> with () {
     fn both(&self, a: A = A::default(), b: B = B::default()) -> String;
 }
 
+// An `fn`-bound parameter takes an argument position like any other, so a real
+// parameter behind one is paired with the argument the impl wrote for it.
+trait FnFirst<F: fn(i32) -> i32, A: Default> with () {
+    fn apply(&self, f: F, a: A = A::default()) -> i32;
+}
+
+// Its own parameter carries no bound, so the frame it is called in is what says
+// what the argument is bound by.
+fn tagged<X>(x: X, n: i32 = 7) -> i32 {
+    return n;
+}
+
 struct Box1<T> {
     v: T,
 }
@@ -28,6 +40,9 @@ impl<T: Default> One<T> for Box1<T> {
 
 impl<T: Default> Two<T, T> for Box1<T> {
     fn both(&self, a: T, b: T) -> String {
+        // `T`, `A` and `B` all name one type here, and `tagged` brings no bound
+        // of its own, so every name the frame knows it under has to answer.
+        assert tagged(a) == 7;
         return `${a:?}/${b:?}`;
     }
 }
@@ -38,6 +53,23 @@ struct Plain {}
 impl Two<i32, String> for Plain {
     fn both(&self, a: i32, b: String) -> String {
         return `${a:?}/${b:?}`;
+    }
+}
+
+// Both at one concrete type, so the frame knows that type under two names.
+struct Same {}
+
+impl Two<i32, i32> for Same {
+    fn both(&self, a: i32, b: i32) -> String {
+        return `${a:?}/${b:?}`;
+    }
+}
+
+struct Runner {}
+
+impl FnFirst<fn(i32) -> i32, i32> for Runner {
+    fn apply(&self, f: fn(i32) -> i32, a: i32) -> i32 {
+        return f(a);
     }
 }
 
@@ -57,6 +89,14 @@ test "two trait parameters the impl binds to one type" {
 
 test "two trait parameters at distinct concrete types" {
     assert Plain {}.both() == "0/\"\"";
+}
+
+test "two trait parameters at one concrete type" {
+    assert Same {}.both() == "0/0";
+}
+
+test "a real trait parameter behind an fn-bound one" {
+    assert Runner {}.apply(|x| x + 5) == 5;
 }
 
 __DATA__

@@ -865,12 +865,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // binds the trait's `T` to `i32`). Impl type params were registered
         // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
         // Foo<U>` resolves correctly.
-        if let Some(trait_t) = trait_type {
-            self.bind_trait_type_params_from_impl(trait_t);
-        }
-
         let resolved_self_type = self.resolve_type(impl_type);
         self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
+        if let Some(trait_t) = trait_type {
+            self.bind_trait_type_params_from_impl(trait_t, resolved_self_type);
+        }
         // The trait this block implements qualifies `Self::Assoc` inside the
         // signatures of the defaults it inherits, where `Self` is concrete and
         // carries no bound to read the declaring trait off.
