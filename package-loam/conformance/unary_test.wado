@@ -2,7 +2,7 @@
 //! operator each over `float[3, 4]`, checked against the outputs ONNX ships.
 
 use { assert_close, tensor_of } from "./oracle.wado";
-use exp from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/model.onnx"
+use exp from "../tests/onnx/pytorch-operator/test_operator_exp/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -16,7 +16,7 @@ use exp from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_ope
             },
         },
     };
-use sqrt from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/model.onnx"
+use sqrt from "../tests/onnx/pytorch-operator/test_operator_sqrt/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -33,10 +33,10 @@ use sqrt from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_op
 
 test "Exp reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
     );
 
     let got = exp::forward(&exp::Tensor::<f32, [exp::Row, exp::Col]> { data: x, extents: x_extents }, &exp::Weights {});
@@ -47,10 +47,10 @@ test "Exp reproduces the output ONNX ships" {
 
 test "Sqrt reproduces the output ONNX ships" {
     let [x, x_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/input_0.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
     );
 
     let got = sqrt::forward(

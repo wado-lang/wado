@@ -26,7 +26,7 @@ test "a model exported by a real tool reads" {
     // Two `Gemm` nodes over three declared inputs; no initializers, since
     // this exporter leaves the weights as graph inputs.
     let g = graph_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/model.onnx"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_addmm/model.onnx"),
     );
 
     assert g.name == "torch-jit-export";
@@ -45,7 +45,7 @@ test "a model exported by a real tool reads" {
 }
 
 test "a whole convolutional graph reads" {
-    let g = graph_of(#include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet.onnx"));
+    let g = graph_of(#include_bytes("../tests/onnx/light/light_bvlc_alexnet.onnx"));
 
     assert g.name == "bvlc_alexnet";
     assert g.nodes.len() == 40;
@@ -59,7 +59,7 @@ test "a whole convolutional graph reads" {
 test "a tensor attribute is present and its value is not" {
     // `ConstantOfShape` carries `value` as a `TensorProto`, which has no text
     // form. Nothing reads an attribute, so the model still reads.
-    let g = graph_of(#include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet.onnx"));
+    let g = graph_of(#include_bytes("../tests/onnx/light/light_bvlc_alexnet.onnx"));
 
     assert g.nodes[0].op == "ConstantOfShape";
     assert g.nodes[0].attrs[0].name == "value";
@@ -69,7 +69,7 @@ test "a tensor attribute is present and its value is not" {
 test "a bare TensorProto is the shape the backend test data stores" {
     // The oracle format: one `TensorProto` per file, holding its bytes in
     // `raw_data` rather than in the typed `float_data`.
-    let raw = #include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet_output_0.pb");
+    let raw = #include_bytes("../tests/onnx/light/light_bvlc_alexnet_output_0.pb");
     let Ok(t) = from_bytes::<TensorProto, ByteList>(raw) else {
         panic("the tensor did not decode");
     };

@@ -149,11 +149,6 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Loam's tests read the models and tensors ONNX ships, and a file an
-      # import names has to be there for the module to compile. Named one at a
-      # time: `submodules: true` would fetch wasmtime too.
-      - run: git submodule update --init --depth 1 vendor/onnx
-
       - run: mise run test-wado
 
       # The steps below reuse the `wado` binary built above. `--dry-run` builds

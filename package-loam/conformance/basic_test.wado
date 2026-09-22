@@ -3,12 +3,7 @@
 //! The graph is `Add`, `Mul`, `Tanh`, `Sigmoid` and `Neg` over `float[1]`.
 
 use { assert_close, tensor_of } from "./oracle.wado";
-use {
-    N,
-    Tensor,
-    Weights,
-    forward,
-} from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/model.onnx"
+use { N, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_basic/model.onnx"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -29,13 +24,13 @@ use {
 
 test "the generated graph reproduces the output ONNX ships" {
     let [a, a_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
     );
     let [b, b_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/input_1.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/input_1.pb"),
     );
     let [want, want_extents] = tensor_of(
-        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
     );
 
     let got = forward(
