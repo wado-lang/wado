@@ -341,14 +341,7 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         // refused rather than widening a `Gemm` past the two axes it has.
         let c = operand(node, shapes, 2)?;
         if c.rank() > product.rank() {
-            builtin::cold_path();
-            return Result::Err(InferError::OperandRank(OperandRankConflict {
-                node: node_name(node),
-                op: node.op,
-                operand: 2,
-                rank: c.rank(),
-                needed: product.rank(),
-            }));
+            return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
         }
         return at_node(node, product.elementwise(&c, op));
     }
@@ -408,19 +401,23 @@ pub fn gemm_options(node: &Node) -> Result<[f32, f32, bool, bool], InferError> {
     ]);
 }
 
+fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
+    builtin::cold_path();
+    return InferError::OperandRank(OperandRankConflict {
+        node: node_name(node),
+        op: node.op,
+        operand: index,
+        rank,
+        needed,
+    });
+}
+
 /// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
 /// `Gemm` over two-dimensional operands only.
 fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
     let shape = operand(node, shapes, index)?;
     if shape.rank() != 2 {
-        builtin::cold_path();
-        return Result::Err(InferError::OperandRank(OperandRankConflict {
-            node: node_name(node),
-            op: node.op,
-            operand: index,
-            rank: shape.rank(),
-            needed: 2,
-        }));
+        return Result::Err(operand_rank(node, index, shape.rank(), 2));
     }
     if transposed {
         return Result::Ok(shape.permute(&([1, 0] as List<i32>)));
