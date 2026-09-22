@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790038581668,
+  "lastUpdate": 1790039813975,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58137,6 +58137,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/299dbd687dae7fefce8f423b194f896a72de8ffe"
         },
         "date": 1790038580872,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "7fd5c619b3d71431a1583f0c8d1bfb57b02fa69a",
+          "message": "Merge pull request #2118 from wado-lang/claude/geas-wep-multiple-packs\n\nfeat(types): settle a type pack from what names it, not from where it is written",
+          "timestamp": "2026-09-22T09:58:02+09:00",
+          "tree_id": "e793091bf504b03ef9d4020c8f93c800fd88d0d3",
+          "url": "https://github.com/wado-lang/wado/commit/7fd5c619b3d71431a1583f0c8d1bfb57b02fa69a"
+        },
+        "date": 1790039813437,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
