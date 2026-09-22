@@ -62,20 +62,20 @@ A finding that changes a public API, a language rule, or a phase's contract is a
 proposal. Put it to the user with a recommendation and wait. Adopting it because
 a reviewer asked is how a design drifts without anyone deciding.
 
-## Then distill
+## Then invoke `/distill`
 
-Commit the fixes, then invoke `/distill`. This is not a decision. Do not ask
+Commit the fixes, then invoke the `/distill` skill. This is not a decision. Do not ask
 whether to run it, do not offer it as a next step, and do not stop before it:
 there is no case where the answer is no, and the moment you wonder is the
 moment to run it. A response that ends without it is unfinished.
 
-The distill is the last of the editing, not a phase that follows it. The order
-is commit, distill, test. One test run covers the fixes and the distill
-together, which is what `/distill` ends with. A run before the distill and
-another after it is the same hour spent twice.
+`/distill` is the last of the editing, not a phase that follows it. The order is
+commit, `/distill`, test. One test run covers the fixes and what `/distill`
+edited, which is what the skill ends with. A run before it and another after it
+is the same hour spent twice.
 
-Run it even when the fixes were small, even when you distilled this branch an
-hour ago, and even when you are confident there is nothing to cut. Finding
+Run it even when the fixes were small, even when you invoked `/distill` on this
+branch an hour ago, and even when you are confident there is nothing to cut. Finding
 nothing is the outcome that ends the cycle, and you only know it by running.
 
 A fix written to satisfy a reviewer arrives in the reviewer's framing: their
@@ -87,7 +87,7 @@ as always, not the fixes alone.
 
 This is the second of the two reports, not the first. The class report goes out
 before any fix is written, under §"Start with the classes". This one is written
-after the distill, so what it describes is the code as it stands.
+after `/distill`, so what it describes is the code as it stands.
 
 One comment on the pull request: what was fixed, and what was skipped with its
 reason. The skips are half the answer, not an omission from it. A review that

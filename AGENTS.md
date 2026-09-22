@@ -31,14 +31,14 @@ mise run on-task-started   # install project tools
 
 ### The Cycle
 
-Write the change, commit it, distill, then test. The distill is the last of the
-editing rather than a phase after it, so one full test run at the end answers
-for the change and the distill together. A run on either side of the distill is
-the same hour spent twice.
+Write the change, commit it, invoke the `/distill` skill, then test. `/distill`
+is the last of the editing rather than a phase after it, so one full test run at
+the end answers for the change and for what `/distill` edited. A run on either
+side of it is the same hour spent twice.
 
-Having distilled this branch an hour ago is not a reason to skip the next one.
-The scope is the whole branch every time, and what the commits since then made
-stale is spread across everything the branch touched.
+Having invoked `/distill` on this branch an hour ago is not a reason to skip the
+next one. The scope is the whole branch every time, and what the commits since
+then made stale is spread across everything the branch touched.
 
 ### Common Development Tasks
 
