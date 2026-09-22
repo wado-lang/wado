@@ -263,12 +263,25 @@ global DECLARATION_KEYWORDS: List<String> = [
     "fn ", "struct ", "trait ", "interface ", "type ", "enum ", "variant ", "flags ", "global ",
 ];
 
+/// The modifiers a declaration carries before its keyword. `export` is absent
+/// because the runtime is inlined rather than lowered at a CM boundary.
+global VISIBILITY_PREFIXES: List<String> = ["pub ", "internal "];
+
 /// Every module-level name a Wado source declares, by the one shape the
 /// runtime is written in: a declaration at column zero.
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
-        let declaration = line.strip_prefix("pub ").unwrap_or(line.as_str_slice());
+        // The runtime is one self-contained file, which is what lets the
+        // reserved set be read off it. An import would bind a name from
+        // somewhere this never looks.
+        assert !line.starts_with("use ");
+        let mut declaration = line.as_str_slice();
+        for let prefix of VISIBILITY_PREFIXES {
+            if let Some(rest) = declaration.strip_prefix(prefix) {
+                declaration = rest;
+            }
+        }
         for let keyword of DECLARATION_KEYWORDS {
             let Some(rest) = declaration.strip_prefix(keyword) else {
                 continue;
