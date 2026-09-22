@@ -644,6 +644,10 @@ fn undecodable<S: AsStrSlice>(what: S, offset: i32) -> DeserializeError {
     return DeserializeError::unexpected_type(`protobuf cannot decode ${what}`, offset as i64);
 }
 
+fn partial_element(offset: i32) -> DeserializeError {
+    return DeserializeError::malformed("a packed run that is not whole elements", offset as i64);
+}
+
 /// The bytes, the region the current message ends at, and what the last tag
 /// said follows it.
 struct ProtobufReader {
@@ -730,9 +734,14 @@ impl ProtobufReader {
         return Result::Ok(true);
     }
 
-    /// Where the last element of the run being read starts.
+    /// Where the last element of the run being read starts. A run holds whole
+    /// elements, and one that does not is malformed rather than a last element
+    /// read from before the run or past it.
     fn last_packed(&self, width: i32) -> Result<i32, DeserializeError> {
         if width > 0 {
+            if (self.packed_end - self.pos) % width != 0 {
+                return Result::Err(partial_element(self.pos));
+            }
             return Result::Ok(self.packed_end - width);
         }
         let mut at = self.pos;
@@ -741,6 +750,9 @@ impl ProtobufReader {
             let Some([_, next]) = read_varint(&self.input, at) else {
                 return Result::Err(DeserializeError::eof(at as i64));
             };
+            if next > self.packed_end {
+                return Result::Err(partial_element(at));
+            }
             last = at;
             at = next;
         }

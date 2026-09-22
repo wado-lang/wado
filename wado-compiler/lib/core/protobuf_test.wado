@@ -353,3 +353,25 @@ test "a packed run reaching a field that is not repeated takes the last element"
     assert empty.v == 0;
     assert empty.tail == 9;
 }
+
+test "a packed run too short for its element type is malformed" {
+    struct Fixed {
+        #[wire(number = 1)]
+        v: f32 = 0.0,
+    }
+
+    // A `LEN` run of two bytes under a field whose element is four wide. The
+    // run holds no whole element, so there is no last one to take.
+    assert from_bytes::<Fixed, ByteList>(b"\x0a\x02\x00\x00") matches { Err(_) };
+}
+
+test "a packed run whose last varint runs past it is malformed" {
+    struct Singular {
+        #[wire(number = 1)]
+        v: i32 = 0,
+    }
+
+    // A run of two bytes whose second is a varint continuation: the element
+    // would read past the run's end into whatever follows.
+    assert from_bytes::<Singular, ByteList>(b"\x0a\x02\x01\x80\x01") matches { Err(_) };
+}
