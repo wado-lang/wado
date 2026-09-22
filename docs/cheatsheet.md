@@ -199,9 +199,9 @@ i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
-// `==` / `!=` answer what f32 answers for the widened value. The ordering
-// operators have no instruction, so they reach `Ord` and are total: a NaN
-// sorts at an end rather than comparing false, where f32's `<` is IEEE.
+// Every comparison hands the widened value to f32's. `<` has no instruction
+// to lower to, so it reaches `Ord` and is the total order: a NaN sorts at an
+// end, where f32's own `<` is an instruction and answers false.
 f16, bf16
 
 // Composites

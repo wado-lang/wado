@@ -2692,9 +2692,8 @@ impl Ord for u64 {
     }
 }
 
-/// A float's bits as a key that sorts by IEEE 754-2019 `totalOrder`, which is
-/// what C++20's `std::strong_order` computes. Sign-magnitude counts the wrong
-/// way below zero, so a negative flips whole and a positive flips its sign bit.
+/// A float's bits reordered into IEEE 754-2019 `totalOrder`, which is C++20's
+/// `std::strong_order`: a negative flips whole, a positive flips its sign bit.
 fn total_order_key_32(bits: u32) -> u32 {
     if bits & 0x8000_0000 != 0 {
         return ~bits;

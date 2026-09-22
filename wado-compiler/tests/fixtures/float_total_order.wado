@@ -7,14 +7,10 @@
 // everything and the two zeroes are one value. C++20 splits them the same way:
 // `operator<=>` on a float yields `partial_ordering`, `strong_order` does not.
 
-fn f32_bits(bits: u32) -> f32 {
-    return f32::from_bits(bits);
-}
-
 export fn run() {
-    let neg_nan = f32_bits(0xFFC0_0000);
-    let pos_nan = f32_bits(0x7FC0_0000);
-    let neg_zero = f32_bits(0x8000_0000);
+    let neg_nan = f32::from_bits(0xFFC0_0000);
+    let pos_nan = f32::from_bits(0x7FC0_0000);
+    let neg_zero = f32::from_bits(0x8000_0000);
     let pos_zero = 0.0 as f32;
     let neg_inf = -f32::INFINITY;
     let pos_inf = f32::INFINITY;

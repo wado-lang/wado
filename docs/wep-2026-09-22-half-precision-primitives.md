@@ -47,20 +47,19 @@ grows half precision arithmetic later is open; nothing decided here forecloses
 it.
 
 The comparisons are the exception, and they are not arithmetic. `Eq` and `Ord`
-are written in `core:prelude/half.wado`, and each answers what `f32` answers for
-the widened value. Widening is exact, so that is a rule rather than a convention
-to remember: a NaN equals nothing and the two zeroes are one value. Comparing
-the bits would say the opposite of both. `Default` is there too, and is the zero.
+are written in `core:prelude/half.wado`, and each hands the widened value to
+`f32`'s. Widening is exact and order-preserving, so a half never has an answer
+of its own to get wrong: `Eq` is IEEE, where a NaN equals nothing and the two
+zeroes are one value, and `Ord` is the total order `f32`'s is. `Default` is
+there too, and is the zero.
 
-The ordering operators are where the rule stops. `Ord` is IEEE 754-2019
-`totalOrder` for every float, so `<` on a half sorts a NaN at an end rather than
-answering `false`. `f32` keeps IEEE there only because its own `<` is a Wasm
-instruction that never consults `cmp`; reached through a `T: Ord` bound it
-answers as a half does. Wasm has no half comparison, so a half has nothing else
-to reach.
-
-These are the only primitives whose comparison operator dispatches to an impl,
-which is why they are the only ones where the two orders are visible at once.
+Where a half differs from `f32` is which of those an operator reaches. `f32`
+lowers `<` to a Wasm instruction and never consults `cmp`; a half has no such
+instruction, so its `<` is the total order and sorts a NaN at an end rather than
+answering `false`. `f32` answers as a half does as soon as it is reached through
+a `T: Ord` bound. These are the only primitives whose comparison operator
+dispatches to an impl, which is why they are the only ones where both orders are
+visible at once.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -210,9 +209,10 @@ does not. Closing it means lowering a half's ordering operators to the widened
 `f32` comparison, so that `<` means one thing across the four float types.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
-An implementation that never widens exists: equal bits are equal values unless
-both are NaN, and different bits are different values unless both are zero.
-Nothing measured has asked for it.
+Both have an implementation that never widens: `Eq` reads the bits, since equal
+bits are equal values unless both are NaN and different bits are different
+values unless both are zero, and `Ord` takes the sign-magnitude key `f32`'s own
+uses at sixteen bits. Nothing measured has asked for either.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.
