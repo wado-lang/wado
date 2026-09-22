@@ -452,7 +452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
-                .filter(|bound| bound.fn_signature.is_none())
+                .filter(|bound| bound.names_a_trait())
                 .map(|bound| self.tysys.bound_named_written(bound))
                 .collect();
             if bounds.is_empty() {
@@ -2820,7 +2820,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let bounds = ScopedBound::pin_all(&param.bounds, self_binding.map(|b| b.type_id));
+                let bounds = ScopedBound::pin_declared(param, self_binding.map(|b| b.type_id));
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
@@ -3243,7 +3243,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
-                        .extend(ScopedBound::pin_all(&param.bounds, Some(concrete_type_id)));
+                        .extend(ScopedBound::pin_declared(param, Some(concrete_type_id)));
                 }
             }
 

@@ -379,7 +379,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         if !param.bounds.is_empty() {
                             scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
                                 param.name.clone(),
-                                ScopedBound::pin_all(&param.bounds, self_type),
+                                ScopedBound::pin_declared(param, self_type),
                             );
                         }
                         method_type_param_names.push(param.name.clone());

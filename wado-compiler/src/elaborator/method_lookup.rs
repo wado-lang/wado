@@ -1387,7 +1387,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
             {
                 // The declaration is a method's, so its `Self` is the receiver.
-                binding.bounds = ScopedBound::pin_all(&param.bounds, Some(receiver));
+                binding.bounds = ScopedBound::pin_declared(param, Some(receiver));
             }
         }
         bindings
@@ -2269,7 +2269,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !type_param.bounds.is_empty() {
                     scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
                         type_param.name.clone(),
-                        ScopedBound::pin_all(&type_param.bounds, self_type),
+                        ScopedBound::pin_declared(type_param, self_type),
                     );
                 }
             }

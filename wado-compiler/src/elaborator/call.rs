@@ -2452,7 +2452,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 },
                 // A free function's declaration binds no `Self`, so a bound of
                 // its own writes none.
-                bounds: ScopedBound::pin_all(&param.bounds, None),
+                bounds: ScopedBound::pin_declared(&param, None),
                 name: param.name,
             })
             .collect()

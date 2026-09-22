@@ -3763,6 +3763,12 @@ pub struct TraitBound {
 }
 
 impl TraitBound {
+    /// Whether the bound names a trait to check against. An `fn(…)` bound names
+    /// none: it is already realised in the bounded parameter's own type.
+    pub fn names_a_trait(&self) -> bool {
+        self.fn_signature.is_none()
+    }
+
     /// Whether any type the bound writes is rooted at `Self`, so reading it
     /// needs the frame that wrote it.
     pub fn writes_self(&self) -> bool {
@@ -3799,7 +3805,7 @@ impl GenericParam {
     pub fn real_bounds(&self) -> Vec<TraitBound> {
         self.bounds
             .iter()
-            .filter(|b| b.fn_signature.is_none())
+            .filter(|b| b.names_a_trait())
             .cloned()
             .collect()
     }

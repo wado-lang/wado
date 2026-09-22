@@ -13,7 +13,6 @@ use super::Elaborator;
 use super::infer::unify;
 use super::trait_query::SelfBinding;
 use super::types::TypeError;
-use crate::ast;
 use crate::ast::{AstId, GenericParam};
 use crate::elaborator::sem::TypeAnnotations;
 use crate::elaborator::sem::types::{
@@ -116,13 +115,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         param: &GenericParam,
         self_binding: Option<SelfBinding>,
     ) -> Vec<DeclaredBound> {
-        let bounds: Vec<ast::TraitBound> = param
-            .bounds
-            .iter()
-            .filter(|b| b.fn_signature.is_none())
-            .cloned()
-            .collect();
-        bounds
+        param
+            .real_bounds()
             .into_iter()
             .filter_map(|b| {
                 let trait_ = self.tysys.bound_written(&b)?;

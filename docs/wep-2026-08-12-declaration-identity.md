@@ -588,7 +588,23 @@ through `T: Derived` was written in `Derived`'s frame, so `Item = A` there is
 naming the writer's own parameters stays abstract rather than binding to a name
 the asking frame happens to share.
 
-Fixture: `supertrait_binding_keeps_writer_frame.wado`.
+`Self` is the other half of that frame, and it travels with the bound for the
+same reason its parameter space does. A bound written on a parameter means the
+`Self` of the declaration that wrote it. A supertrait clause and a declared
+parameter default (`Eq<Rhs = Self>`) are written in the trait's own space
+instead, where `Self` is whichever type the bound stands on. The two are carried
+apart because a reader supplying one for the other projects off the wrong
+receiver.
+
+A free function declares no `Self`. A bound there that writes one is rejected at
+the declaration, naming the type parameter to write instead, at every position: a
+trait argument, and an associated-type constraint nested under one.
+
+Fixtures: `supertrait_binding_keeps_writer_frame.wado`,
+`bound_self_projection_in_trait_method.wado`,
+`bound_self_projection_in_impl_method.wado`,
+`bound_self_projection_in_trait_argument.wado`,
+`assoc_type_constraint_fn_over_self.wado`.
 
 ### What a derivation may not be
 
@@ -800,3 +816,13 @@ names no instantiation, so the scrutinee's argument has nothing to disagree with
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
+
+## Known gap: `Self::Assoc` in a bound on a trait's own type parameter
+
+`trait Host<O: Uses<Self::Item>>` pins the bound to the implementing type, and
+`Self::Item` resolves to what the `impl` bound it to. The impl's instantiation of
+a default body that dispatches through that bound still rejects the call. Writing
+the argument out (`Uses<i32>`) compiles and runs, so the projection is what
+fails, not the shape.
+
+Fixture: `bound_self_projection_on_trait_param.wado`.

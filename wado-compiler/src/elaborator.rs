@@ -220,14 +220,14 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 }
                 slot += 1;
             }
-            if !param.bounds.is_empty() {
-                let self_type = self.annotate_ctx.trait_ctx.self_type;
+            let bounds = self.scoped_bounds(param);
+            if !bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .entry(param.name.clone())
                     .or_default()
-                    .extend(scope::ScopedBound::pin_all(&param.bounds, self_type));
+                    .extend(bounds);
             }
         }
     }

@@ -113,6 +113,13 @@ impl ScopedBound {
         Self { bound, self_type }
     }
 
+    /// What `param` declares, pinned to one frame's `Self`. An `fn` bound is left
+    /// out: it is realised in the parameter's own type, so nothing reaches it
+    /// through a trait name, which is the only way `type_param_bounds` is read.
+    pub(super) fn pin_declared(param: &ast::GenericParam, self_type: Option<TypeId>) -> Vec<Self> {
+        Self::pin_all(&param.real_bounds(), self_type)
+    }
+
     /// Pin every bound in `bounds` to one frame's `Self`.
     pub(super) fn pin_all(bounds: &[ast::TraitBound], self_type: Option<TypeId>) -> Vec<Self> {
         bounds
@@ -170,7 +177,7 @@ pub(super) fn trait_params_from_impl<'p, A: Copy>(
         .map(|(param, &arg)| TraitParamFromImpl {
             param,
             arg,
-            bounds: ScopedBound::pin_all(&param.real_bounds(), implementing),
+            bounds: ScopedBound::pin_declared(param, implementing),
         })
         .collect()
 }
@@ -483,7 +490,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let known = IndexMap::default();
         bounds
             .iter()
-            .filter(|bound| bound.fn_signature.is_none())
+            .filter(|bound| bound.names_a_trait())
             .filter_map(|bound| Some((bound, self.bound_decl(bound, &known)?)))
             .flat_map(|(bound, root)| {
                 self.supertraits_of_bound(bound, &known)
@@ -689,15 +696,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 tp.name.clone(),
                 BinderInScope::declared(idx, type_id, tp.id),
             );
-            // Filter out `fn`/`fn mut` bounds before recording (they're already
-            // realised in the bound type itself); only "real" trait bounds need
-            // remembering for method lookup.
-            let real_bounds = self.scoped_bounds(tp);
-            if !real_bounds.is_empty() {
+            let bounds = self.scoped_bounds(tp);
+            if !bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
-                    .insert(tp.name.clone(), real_bounds);
+                    .insert(tp.name.clone(), bounds);
             }
             if consumed_index {
                 idx += 1;
@@ -706,21 +710,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         idx
     }
 
-    /// `param`'s real bounds, each pinned to the `Self` this frame binds — what
-    /// their written types mean, whatever frame later reads them.
-    fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
+    /// What `param` declares, pinned to the `Self` this frame binds — what the
+    /// bounds' written types mean, whatever frame later reads them.
+    pub(super) fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
         let self_type = self.annotate_ctx.trait_ctx.self_type;
-        let bounds = param.real_bounds();
+        let bounds = ScopedBound::pin_declared(param, self_type);
         if self_type.is_none() {
             self.reject_self_in_bounds(&param.name, &bounds);
         }
-        ScopedBound::pin_all(&bounds, self_type)
+        bounds
     }
 
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.
-    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ast::TraitBound]) {
+    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ScopedBound]) {
         let written: Vec<Span> = bounds
             .iter()
             .filter(|bound| bound.writes_self())
