@@ -73,25 +73,45 @@ Fallible conversion trait returning `Result`:
 
 ```wado
 pub trait TryFrom<T> {
-    type Error;
-    fn try_from(value: T) -> Result<Self, Self::Error>;
+    type Err: Error;
+    fn try_from(value: T) -> Result<Self, Self::Err>;
+}
+```
+
+The associated type is `Err`, as `FromStr`'s is: it names the `Result`'s `Err`
+side, and `type Error` would give the name two meanings inside an impl that
+also has the `Error` trait in scope.
+
+`Err: Error` makes every conversion failure reportable. Through the bound there
+is no impl to read, so without it a generic caller holds a value it cannot
+word:
+
+```wado
+fn reason<T: TryFrom<i32>>(value: i32) -> String {
+    return match T::try_from(value) {
+        Ok(_) => "converted",
+        Err(e) => `${e}`,       // `Error: Display`
+    };
 }
 ```
 
 ```wado
 impl TryFrom<i64> for u8 {
-    type Error = String;
-    fn try_from(value: i64) -> Result<u8, String> {
+    type Err = ConvertError;
+    fn try_from(value: i64) -> Result<u8, ConvertError> {
         if value < 0 || value > 255 {
-            return Result::<u8, String>::Err(`${value} out of range for u8`);
+            return Result::Err(ConvertError::new(`${value} out of range for u8`));
         }
-        return Result::<u8, String>::Ok(value as u8);
+        return Result::Ok(value as u8);
     }
 }
 
 let n = u8::try_from(42 as i64)?;  // Ok(42)
 let n = u8::try_from(999 as i64)?; // Err("999 out of range for u8")
 ```
+
+`ConvertError` is what every stdlib impl uses. A type of one's own is fine, and
+owes `impl Display` plus the empty `impl Error for T;`.
 
 ### 3. `?` Operator
 
