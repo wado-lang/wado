@@ -239,14 +239,8 @@ impl TypeSystem {
         ) && table.is_boxed_reference_target(table.representation_head(type_id))
     }
 
-    /// For an inherent `impl` on a possibly-generic type, check that any
-    /// concrete type arguments written in the impl header (e.g. the `u8` in
-    /// `impl List<u8>`) match the receiver's actual type arguments. Type
-    /// parameters (e.g. `T` in `impl List<T>`) match any argument. This is
-    /// what keeps `impl List<u8>` from applying to a `List<i32>` receiver.
-    ///
-    /// Non-generic impls (e.g. `impl i32`) impose no constraint here; the
-    /// struct-name match already pinned the receiver type.
+    /// Whether a receiver reaches this `impl`: every position the target pins
+    /// must be what the receiver supplies there (WEP 2026-08-12).
     pub(crate) fn inherent_impl_type_args_match(
         &self,
         impl_ty: &Type,

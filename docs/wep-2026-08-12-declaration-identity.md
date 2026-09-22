@@ -775,11 +775,12 @@ Registering a block's associated types without it files
 build order then decides both, which is the pick this WEP forbids.
 
 A reference target is where a reading comes apart most easily. Every impl on one
-is filed under a single receiver key, so the arguments are what choose between
-them, and `impl_target_args` reads through the reference to the pointee's. Those
-are the positions `ImplParamSlots` numbers, so they are what a receiver supplies:
-`TypeSystem::impl_position_args` is the one answer, and a caller handing the
-pointee whole instead makes the match disagree with the binding.
+is filed under a single receiver key, so the written arguments are what choose
+between them. `impl_target_args` reads through the reference to the pointee's
+arguments, and `ImplParamSlots` numbers the block's parameters by those
+positions, so that is what a receiver supplies there.
+`TypeSystem::impl_position_args` is the one answer. A caller handing the pointee
+whole instead makes the match contradict the binding.
 
 A blanket `impl<T: Bound> Trait for &T` writes no position at all, so its `T`
 stands for the receiver's pointee rather than for an argument of it. The bound is
@@ -897,12 +898,11 @@ reference to a generic head.
 
 ## Known gap: a reference impl target has no name of its own
 
-`name::Receiver::Ref` spells the reference kind and nothing else, with the
-pointee riding in the type-argument list. That is the blanket
-`impl<T> Trait for &T` written out, and it is the only reference target the
-naming layer can say. A target that is a reference to a named head has no
-spelling of its own, so its definition and its call sites mint two different
-names for one method.
+`name::Receiver::Ref` spells the reference kind and nothing else. The pointee
+rides in the type-argument list, which is the blanket `impl<T> Trait for &T`
+written out, and it is the only reference target the naming layer can say. A
+target that is a reference to a named head has no spelling of its own, so its
+definition and its call sites mint two different names for one method.
 
 What it admits is a reference impl on a named head that is unreachable wherever
 the two names differ. `impl Show for &Wrap<i32>` called directly on a

@@ -1,10 +1,10 @@
 // An impl whose target is a reference to a generic head. Every such impl is
-// filed under one receiver key, and the pointee is the single argument that
-// chooses between them, so `&Wrap<i32>` and `&Wrap<bool>` reach their own.
+// filed under one receiver key, so the written arguments are what choose
+// between them, and `&Wrap<i32>` and `&Wrap<bool>` reach their own.
 //
-// The written target names that pointee whole: reading its arguments instead
-// compares a nesting level too deep, and the trait solver, which keeps the
-// reference, then contradicts the answer.
+// The target is read through the reference to the pointee's arguments, which
+// is where the receiver supplies its own. Comparing the pointee whole instead
+// is a nesting level off, and the solver then contradicts the binding.
 
 trait Show with () {
     fn show(&self) -> i32;

@@ -2652,8 +2652,8 @@ impl TypeSystem {
             _ => vec![type_arg],
         }
     }
-    /// Check if an impl block's type parameter bounds are satisfied by the given type args.
-    /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
+    /// Whether what the receiver substitutes for an `impl` block's parameters
+    /// satisfies their bounds: `impl<T: Ord> List<T>` wants an `Ord` element.
     pub(super) fn check_impl_block_bounds(
         &self,
         ctx: &Scope,
@@ -2667,11 +2667,6 @@ impl TypeSystem {
         if type_params.iter().all(|p| p.bounds.is_empty()) {
             return true;
         }
-
-        let Some(type_args) = type_args else {
-            // No type args to check (non-generic receiver) → skip bounds check
-            return true;
-        };
 
         // The bound's own site says which trait it names and what it writes for
         // that trait's parameters, so the check compares declarations rather
@@ -2690,17 +2685,25 @@ impl TypeSystem {
             })
             .collect();
 
-        // Match type params to receiver type args via generic type arg positions
-        let inner_type_name: Option<&str> =
-            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty {
-                if let ast::Type::Named(inner) = boxed.as_ref() {
-                    Some(&inner.name)
-                } else {
-                    None
-                }
-            } else {
-                None
+        // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
+        // the receiver's pointee rather than for an argument of it.
+        if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty
+            && let ast::Type::Named(inner) = boxed.as_ref()
+        {
+            let Some(bounds) = bounds_map.get(inner.name.as_str()) else {
+                return true;
             };
+            let Some(pointee) = receiver.and_then(|id| self.pointee_of(id)) else {
+                return true;
+            };
+            return self.bounds_hold(ctx, scope, pointee, bounds);
+        }
+
+        let Some(type_args) = type_args else {
+            // An existence or bounds check that threaded no positions has
+            // nothing to compare against.
+            return true;
+        };
 
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
@@ -2711,15 +2714,6 @@ impl TypeSystem {
                 {
                     return false;
                 }
-            }
-        } else if let Some(inner_name) = inner_type_name {
-            // `impl<T: Bound> Trait for &T` writes no position, so `T` stands
-            // for the receiver's pointee rather than for an argument of it.
-            if let Some(bounds) = bounds_map.get(inner_name)
-                && let Some(pointee) = receiver.and_then(|id| self.pointee_of(id))
-                && !self.bounds_hold(ctx, scope, pointee, bounds)
-            {
-                return false;
             }
         } else if let ast::Type::Tuple(elements) = impl_ty {
             // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
