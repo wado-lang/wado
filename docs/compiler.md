@@ -9,24 +9,9 @@ The Wado compiler (`wado-compiler/`) translates `.wado` source into a Wasm compo
 
 ## Pipeline
 
-```
-Source (.wado)
-  → Lex → Parse → Bind                    (per module, in loader)
-  → Analyze → Resolve
-  → Annotate (decls, then bodies) → Liveness → Reify (TIR)
-  → Default-purity Check
-  → Synthesis (auto-derives, template, From, serde, pre-CM effect dispatch, CM bindings)
-  → Effect Check
-  → Effect Dispatch (post-check: WithHandler / Resume desugaring)
-  → Link (Package → FlatPackage)
-  → Monomorphize → Erase Newtypes & Flags → Reflect Bridges
-  → Lower
-  → Optimize
-  → WIR Build → WIR Optimize → Codegen
-  → Wasm component bytes
-```
-
-The driver is `compile_after_load` in `src/lib.rs`.
+A source file enters as `.wado` text and leaves as Wasm component bytes. The
+driver is `compile_after_load` in `src/lib.rs`; the loader runs lex, parse and
+bind per module ahead of it.
 
 | Phase                  | Output          | Module(s)                                        |
 | ---------------------- | --------------- | ------------------------------------------------ |
@@ -168,6 +153,10 @@ A body-less marker is itself an `Item::Impl` and lands in `TraitEnv`'s impl inde
 - `type_table.erase_newtypes_and_flags()` then collapses newtypes to their base type and flag types to `u32`. The distinction is needed during monomorphize for trait dispatch but not afterwards.
 
 ## Lower
+
+`prelower_reach.rs` runs first, dropping every function no root reaches so that
+`lower` never translates it. See
+[WEP 2026-05-26](./wep-2026-05-26-elaborator-rearchitecture.md).
 
 `lower.rs` runs `FlatPackage` (TIR-shaped) → `NirPackage` as planner + translator: the planner ([`lower::plan::plan`]) runs the TIR-mutating sub-passes and produces a `LowerPlan` of facts; the translator ([`lower::translate::translate`]) is a single fold from TIR to NIR. See `docs/wep-2026-05-11-nir.md`.
 

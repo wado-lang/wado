@@ -376,21 +376,17 @@ fn extend_reachable_for_optimizer_passes(
     // inner helpers for chains like `List<List<List<T>>>`, panicking
     // codegen with `WirInstr::ArrayClone references unknown helper ...`.
     loop {
-        let mut added_this_round = false;
-        for (func_id, helpers) in &candidates {
-            if !reachable.contains(func_id) {
-                continue;
-            }
-            for helper_id in helpers {
-                if !reachable.contains(helper_id) {
-                    reachable.extend(compute_reachable(call_graph, [helper_id.clone()]));
-                    added_this_round = true;
-                }
-            }
-        }
-        if !added_this_round {
+        let fresh: Vec<FunctionId> = candidates
+            .iter()
+            .filter(|(func_id, _)| reachable.contains(func_id))
+            .flat_map(|(_, helpers)| helpers)
+            .filter(|helper_id| !reachable.contains(*helper_id))
+            .cloned()
+            .collect();
+        if fresh.is_empty() {
             break;
         }
+        reachable.extend(compute_reachable(call_graph, fresh));
     }
 }
 

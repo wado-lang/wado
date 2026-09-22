@@ -560,9 +560,9 @@ every compiler-item trait leaves 693 functions pruned instead of 11825, because
 
 Enumerating the minters is not a fix for the class, since the next one added
 breaks it again. The net goes in `Interner::resolve`, where every minted call
-lands: a debug build asserts there that it never stubs a name the prune dropped,
-and the panic names the callee and the minting stack. A new minter then fails in
-CI on the first fixture that exercises it, rather than surfacing as an
+lands: a debug build asserts there that it never stubs a name the prune dropped, and
+the panic names the callee and what `is_root` owes it. A new minter then fails
+in CI on the first fixture that exercises it, rather than surfacing as an
 unresolved call at WIR build. `WADO_NO_PRELOWER_PRUNE` holds the prune back, so
 a missing root is a flag to flip rather than a compiler to rebuild.
 
