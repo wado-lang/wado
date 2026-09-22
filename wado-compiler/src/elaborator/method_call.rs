@@ -275,13 +275,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .nominal_head(base_type_id)
                 .expect("a nominal type names a declaration"),
-            // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (
+            // `v128` has no prelude impl block of its own, and lookup finds its
+            // `core:simd` methods by name from this key anyway.
+            ResolvedType::Primitive(prim) => (
                 self.tysys
                     .type_table
                     .borrow()
                     .mangle_type_name(base_type_id),
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (
@@ -1130,9 +1131,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .nominal_head(base_id)
                             .map(|(_, m)| m),
-                        ResolvedType::Primitive(_) | ResolvedType::Unit => {
-                            Some(ModuleSource::primitive())
-                        }
+                        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+                        ResolvedType::Unit => Some(ModuleSource::primitive()),
                         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
@@ -2163,7 +2163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 ResolvedType::Primitive(prim) => (
                     prim.as_str().to_string(),
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(*prim),
                     FqTypeName::builtin(prim.as_str()),
                     vec![],
                 ),
@@ -2297,7 +2297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             ResolvedType::Primitive(prim) => (
                                 prim.as_str().to_string(),
-                                ModuleSource::primitive(),
+                                ModuleSource::of_primitive(prim),
                                 FqTypeName::builtin(prim.as_str()),
                                 vec![],
                             ),

@@ -90,6 +90,14 @@ A command-line parse failure.
 
 #### `message: String`
 
+#### `impl Display for ArgsError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+#### `impl From<DeserializeError> for ArgsError`
+
+##### `fn from(e: DeserializeError) -> ArgsError`
+
 ### `pub struct ArgvDeserializer`
 
 The argv `Deserializer`. Holds the token stream and the plumbing that serves

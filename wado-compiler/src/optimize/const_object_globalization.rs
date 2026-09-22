@@ -35,7 +35,8 @@ use crate::optimize::arena_query::{
 use crate::optimize::mod_ref::compute_fn_effects;
 use crate::optimize::multi_value_return::aggregate_field_info;
 use crate::optimize::shared_escape::SharedEscape;
-use crate::tir::{GlobalInit, PrimitiveType};
+use crate::primitive::PrimitiveType;
+use crate::tir::GlobalInit;
 use crate::token::Span;
 use crate::wir_build::packed_array_is_eager;
 use crate::wir_optimize::array::ARRAY_NEW_FIXED_LIMIT;

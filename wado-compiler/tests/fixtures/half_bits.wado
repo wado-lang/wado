@@ -1,0 +1,28 @@
+// `f16` and `bf16` are a `u16` in every position: `to_bits` / `from_bits`
+// round trip, and a `List` of either is the same packed 16-bit array a
+// `List<u16>` is, read with an unsigned element load and no boxing.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let one = f16::from_bits(0x3C00);
+    assert one.to_bits() == 0x3C00;
+
+    let neg = bf16::from_bits(0xBF80);
+    assert neg.to_bits() == 0xBF80;
+
+    let mut weights: List<f16> = [];
+    weights.push(f16::from_bits(0x3C00));
+    weights.push(f16::from_bits(0x4000));
+    weights.push(f16::from_bits(0xC000));
+    assert weights.len() == 3;
+    assert weights[2].to_bits() == 0xC000;
+
+    println(`${weights[1].to_bits()}`);
+}
+
+__DATA__
+{
+    "stdout": "16384\n",
+    "wir_expect:O2": ["array Array<f16> (mut u16)", "builtin::array_get_value<u16>"]
+}

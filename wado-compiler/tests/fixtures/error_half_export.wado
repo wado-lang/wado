@@ -1,0 +1,13 @@
+// The Component Model has no half precision type. Lowering one as a `u16`
+// would put a bit pattern on the wire under a name that says integer, so an
+// exported signature naming it is refused rather than reinterpreted.
+
+export fn take(x: f16) -> u16 {
+    return x.to_bits();
+}
+
+export fn run() {
+}
+
+__DATA__
+{"compile_error": "`f16` has no Component Model value representation"}

@@ -447,6 +447,10 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `message: String`
 
+#### `impl Display for SerializeError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct DeserializeError`
 
 #### `kind: DeserializeErrorKind`
@@ -455,23 +459,30 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `offset: i64`
 
-#### `pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
+Byte offset into the input, or `-1` where the failure has no position —
+a whole-value rejection, or a format that counts nothing.
+
+#### `pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
 #### `pub fn missing_field<S: AsStrSlice>(name: S) -> DeserializeError`
 
-#### `pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
+#### `pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
-#### `pub fn malformed<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
+#### `pub fn malformed<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
 #### `pub fn eof(offset: i64) -> DeserializeError`
 
 #### `pub fn trailing(offset: i64) -> DeserializeError`
 
-#### `pub fn overflow<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
+#### `pub fn overflow<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
-#### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
+#### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError`
 
 #### `pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError`
+
+#### `impl Display for DeserializeError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct IgnoredAny`
 

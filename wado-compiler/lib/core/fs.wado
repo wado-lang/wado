@@ -82,7 +82,7 @@ pub variant FsErrorKind {
     /// The path names nothing.
     NotFound,
     /// The bytes read are not UTF-8 (`read_to_string` only).
-    NotUtf8,
+    NotUtf8(Utf8Error),
     Io(ErrorCode),
 }
 
@@ -96,12 +96,15 @@ impl Display for FsError {
     }
 }
 
+impl Error for FsError {
+}
+
 impl FsErrorKind {
     fn message(&self) -> String {
         return match *self {
             NoPreopen => "no preopened directory available",
             NotFound => "no such file or directory",
-            NotUtf8 => "not valid UTF-8",
+            NotUtf8(e) => `not valid UTF-8: ${e}`,
             Io(code) => `${code:?}`,
         };
     }
@@ -178,7 +181,10 @@ pub fn read_to_string<S: AsStrSlice>(path: S) -> Result<String, FsError> with Pr
     let bytes = read(path)?;
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
-        Err(_) => Result::Err(FsError { path: path.to_string(), kind: FsErrorKind::NotUtf8 }),
+        Err(e) => Result::Err(FsError {
+            path: path.to_string(),
+            kind: FsErrorKind::NotUtf8(e),
+        }),
     };
 }
 

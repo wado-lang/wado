@@ -180,14 +180,11 @@ fn "opt_sroa_variant_return_try_in_arm.wado/check_whole"(v) {
 fn "opt_sroa_variant_return_try_in_arm.wado/to_i64"(text) {
     let $qm_e: ref "opt_sroa_variant_return_try_in_arm.wado//NumError";
     let checked: f64;
-    let s_9: ref "core:prelude/string.wado//StrSlice";
     let repr: ref Array<u8>;
-    repr = text.repr;
-    s_9 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: text.used };
     let $mv$$vr_5$0: i32;
     let $mv$$vr_5$1: f64;
     let $mv$$vr_5$2: ref null "core:prelude/intparse.wado//ParseFloatError";
-    multivalue_bind [$mv$$vr_5$0, $mv$$vr_5$1, $mv$$vr_5$2] = "core:prelude/intparse.wado/parse_f64_from_str"(s_9);
+    multivalue_bind [$mv$$vr_5$0, $mv$$vr_5$1, $mv$$vr_5$2] = "core:prelude/intparse.wado/parse_f64_from_str"(repr = text.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr, start: 0, end: text.used });
     if $mv$$vr_5$0 == 0 {
         let $mv$$vr_6$0: i32;
         let $mv$$vr_6$1: f64;

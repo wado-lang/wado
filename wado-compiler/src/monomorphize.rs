@@ -231,7 +231,8 @@ fn module_source_for_trait_impl(type_table: &TypeTable, type_id: TypeId) -> Opti
         // `()` is a builtin like the primitives: it names no declaring module,
         // and an `impl Trait for ()` is reached through the same hint-then-scan
         // lookup they are.
-        ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+        ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         ResolvedType::Struct { .. }
         | ResolvedType::GenericInstance { .. }

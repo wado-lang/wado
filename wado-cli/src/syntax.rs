@@ -432,11 +432,11 @@ fn generate_textmate_grammar(def: &SyntaxDefinition) -> serde_json::Value {
                 "patterns": [
                     {
                         "name": "storage.type.primitive.wado",
-                        "match": "\\b(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|bool|char)\\b"
+                        "match": keyword_pattern(&def.primitive_types)
                     },
                     {
                         "name": "storage.type.builtin.wado",
-                        "match": "\\b(String|List|Option|Result|Dict|Fn)\\b"
+                        "match": keyword_pattern(&def.builtin_types)
                     },
                     {
                         "name": "entity.name.type.wado",

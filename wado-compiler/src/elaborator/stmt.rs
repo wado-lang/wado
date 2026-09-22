@@ -6,7 +6,8 @@ use crate::ast::{
     Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
@@ -3324,23 +3325,16 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Infer(_)
         | Type::Error(_) => return None,
     };
-    match (ty_name, const_name) {
-        ("i8", "MAX") => Some(i128::from(i8::MAX)),
-        ("i8", "MIN") => Some(i128::from(i8::MIN)),
-        ("i16", "MAX") => Some(i128::from(i16::MAX)),
-        ("i16", "MIN") => Some(i128::from(i16::MIN)),
-        ("i32", "MAX") => Some(i128::from(i32::MAX)),
-        ("i32", "MIN") => Some(i128::from(i32::MIN)),
-        ("i64", "MAX") => Some(i128::from(i64::MAX)),
-        ("i64", "MIN") => Some(i128::from(i64::MIN)),
-        ("u8", "MAX") => Some(i128::from(u8::MAX)),
-        ("u8", "MIN") => Some(i128::from(u8::MIN)),
-        ("u16", "MAX") => Some(i128::from(u16::MAX)),
-        ("u16", "MIN") => Some(i128::from(u16::MIN)),
-        ("u32", "MAX") => Some(i128::from(u32::MAX)),
-        ("u32", "MIN") => Some(i128::from(u32::MIN)),
-        ("u64", "MAX") => Some(i128::from(u64::MAX)),
-        ("u64", "MIN") => Some(i128::from(u64::MIN)),
+    primitive_int_bound(ty_name, const_name)
+}
+
+/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
+/// are written with. `None` for every other pair.
+pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
+    let (min, max) = PrimitiveType::from_name(ty_name)?.int_range()?;
+    match const_name {
+        "MIN" => Some(min),
+        "MAX" => Some(max),
         _ => None,
     }
 }
