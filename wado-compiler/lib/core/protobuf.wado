@@ -195,10 +195,8 @@ global NO_FIELD: i32 = 0;
 global FIELD_NUMBER_MIN: i32 = 1;
 global FIELD_NUMBER_MAX: i32 = 536870911;
 
-/// Whether a number can key a field on the wire. `WireNumbered` answers for the
-/// type a call names, and a field holding another message is bound by nothing,
-/// so this is what stands between an unnumbered submessage and bytes that
-/// decode as something else.
+/// Whether a number can key a field on the wire. `WireNumbered` answers for
+/// the type a call names; a field holding another message is bound by nothing.
 fn is_field_number(number: i64) -> bool {
     return FIELD_NUMBER_MIN as i64 <= number <= FIELD_NUMBER_MAX as i64;
 }

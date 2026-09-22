@@ -64,12 +64,26 @@ a reviewer asked is how a design drifts without anyone deciding.
 
 ## Then distill
 
-Run `/distill` as its own step once the fixes land. A fix written to satisfy a
-reviewer arrives in the reviewer's framing — their wording in its comments, an
-explanation of the bug beside the code, a helper the codebase already had. Scope
-is the whole branch, as always, not the fixes alone.
+Once the fixes land, invoke `/distill`. This is not a decision. Do not ask
+whether to run it, do not offer it as a next step, and do not stop before it:
+there is no case where the answer is no, and the moment you wonder is the
+moment to run it. A response that ends without it is unfinished, however green
+the tests are.
 
-## Report
+Run it even when the fixes were small, even when you distilled this branch an
+hour ago, and even when you are confident there is nothing to cut. Finding
+nothing is the outcome that ends the cycle, and you only know it by running.
+
+A fix written to satisfy a reviewer arrives in the reviewer's framing: their
+wording in its comments, an explanation of the bug beside the code, a helper the
+codebase already had. That is what the pass is for. Scope is the whole branch,
+as always, not the fixes alone.
+
+## Close with a report
+
+This is the second of the two reports, not the first. The class report goes out
+before any fix is written, under §"Start with the classes". This one is written
+after the distill, so what it describes is the code as it stands.
 
 One comment on the pull request: what was fixed, and what was skipped with its
 reason. The skips are half the answer, not an omission from it. A review that

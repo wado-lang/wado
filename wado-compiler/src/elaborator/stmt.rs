@@ -2373,14 +2373,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         by_ref: bool,
         ctx: &mut FunctionContext,
     ) {
-        // Validate: no break/continue/return in variadic for-of
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a variadic for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "variadic") {
             return;
         }
 
@@ -2522,15 +2515,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let span = for_of.span;
 
-        // Validate: break, continue, and return are not allowed inside tuple for-of
-        // because the loop is expanded at compile time into sequential blocks.
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "tuple") {
             return;
         }
         let unique_id = ctx.fresh_serial();
@@ -2874,22 +2859,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check if a block contains `break`, `continue`, or `return` at the top level
-    /// (not inside nested loops/functions where they would be valid).
-    /// Returns the kind name and span of the first offending statement.
-    fn find_control_flow_in_block(block: &Block) -> Option<(&'static str, Span)> {
-        for stmt in &block.stmts {
-            if let Some(found) = Self::find_control_flow_in_stmt(stmt) {
-                return Some(found);
-            }
-        }
-        None
-    }
-
-    fn find_control_flow_in_stmt(stmt: &Stmt) -> Option<(&'static str, Span)> {
+    /// Report a `break` or `continue` written in a for-of the compiler expands,
+    /// which leaves neither a loop to name. `kind` names the for-of.
+    fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
         let mut finder = LoopControlFlowFinder { found: None };
-        finder.visit_stmt(stmt);
-        finder.found
+        finder.visit_block(body);
+        let Some((written, span)) = finder.found else {
+            return false;
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!(
+                "`{written}` is not allowed inside a {kind} for-of loop (the loop is expanded at compile time)"
+            ),
+            span,
+        });
+        true
     }
 
     pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
