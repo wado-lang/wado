@@ -1,66 +1,11 @@
-//! An ONNX graph as the textual format states it, read off the parse tree.
-//! Dimensions are extents without identity, since an ONNX shape is positional.
+//! The ONNX textual format, read off the parse tree into `graph.wado`'s types.
 
 use onnx from "../grammar/Onnx.g4"
     with {
         generator: { module: "../../package-gale/src/generator.wado" },
     };
 
-/// One dimension as the file spells it. `Unknown` is ONNX's `?`, a dimension
-/// the exporter left open and no symbol stands for.
-pub variant Dim {
-    Static(i32),
-    Symbol(String),
-    Unknown,
-}
-
-/// A tensor type's rank. ONNX separates a scalar from a tensor whose rank it
-/// does not state, so the two are separate cases rather than an empty list.
-pub variant Rank {
-    Scalar,
-    Unranked,
-    Dims(List<Dim>),
-}
-
-pub struct ValueInfo {
-    pub name: String,
-    pub dtype: String,
-    pub rank: Rank,
-}
-
-/// An attribute's values as written. ONNX types an attribute by the operator's
-/// schema rather than by the syntax, so the text is kept and the operator
-/// reads it.
-pub struct Attr {
-    pub name: String,
-    pub values: List<String>,
-    pub is_list: bool,
-}
-
-pub struct Node {
-    pub op: String,
-    pub outputs: List<String>,
-    pub inputs: List<String>,
-    pub attrs: List<Attr>,
-}
-
-pub struct Graph {
-    pub name: String,
-    pub inputs: List<ValueInfo>,
-    pub outputs: List<ValueInfo>,
-    pub initializers: List<ValueInfo>,
-    pub nodes: List<Node>,
-}
-
-impl Display for Dim {
-    fn fmt(&self, f: &mut Formatter) {
-        match self {
-            Static(n) => f.write_str(`${n}`),
-            Symbol(s) => f.write_str(s),
-            Unknown => f.write_str("?"),
-        }
-    }
-}
+use { Attr, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.

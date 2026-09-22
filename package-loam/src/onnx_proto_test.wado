@@ -1,0 +1,175 @@
+use { from_bytes, to_bytes } from "core:protobuf";
+use { Dim, Graph, Rank } from "./graph.wado";
+use {
+    GraphProto,
+    ModelProto,
+    NodeProto,
+    TensorProto,
+    TensorShapeProto,
+    TensorShapeProtoDimension,
+    TypeProto,
+    TypeProtoTensor,
+    ValueInfoProto,
+    read,
+} from "./onnx_proto.wado";
+
+fn graph_of(bytes: ByteList) -> Graph {
+    return match read(bytes) {
+        Ok(g) => g,
+        Err(e) => {
+            panic(e);
+        },
+    };
+}
+
+test "a model exported by a real tool reads" {
+    // Two `Gemm` nodes over three declared inputs; no initializers, since
+    // this exporter leaves the weights as graph inputs.
+    let g = graph_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/model.onnx"),
+    );
+
+    assert g.name == "torch-jit-export";
+    assert g.inputs.len() == 3;
+    assert g.inputs[1].name == "1";
+    assert g.inputs[1].dtype == "float";
+    assert g.inputs[1].rank matches { Dims(d) && d.len() == 2 };
+    assert g.outputs.len() == 1;
+    assert g.outputs[0].rank matches { Dims(d) && d[0] matches { Static(2) } && d[1] matches { Static(4) } };
+    assert g.nodes.len() == 2;
+    assert g.nodes[0].op == "Gemm";
+    assert g.nodes[0].inputs.len() == 3;
+    assert g.nodes[1].outputs[0] == "4";
+    assert g.nodes[1].attrs[0].name == "alpha";
+    assert g.nodes[1].attrs[0].values[0] == "1";
+}
+
+test "a whole convolutional graph reads" {
+    let g = graph_of(#include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet.onnx"));
+
+    assert g.name == "bvlc_alexnet";
+    assert g.nodes.len() == 40;
+    assert g.initializers.len() == 17;
+    assert g.outputs.len() == 1;
+    assert g.nodes[g.nodes.len() - 1].op == "Softmax";
+    assert g.inputs[0].name == "data_0";
+    assert g.inputs[0].rank matches { Dims(d) && d.len() == 4 };
+}
+
+test "a tensor attribute is present and its value is not" {
+    // `ConstantOfShape` carries `value` as a `TensorProto`, which has no text
+    // form. Nothing reads an attribute, so the model still reads.
+    let g = graph_of(#include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet.onnx"));
+
+    assert g.nodes[0].op == "ConstantOfShape";
+    assert g.nodes[0].attrs[0].name == "value";
+    assert g.nodes[0].attrs[0].values.is_empty();
+}
+
+test "a bare TensorProto is the shape the backend test data stores" {
+    // The oracle format: one `TensorProto` per file, holding its bytes in
+    // `raw_data` rather than in the typed `float_data`.
+    let raw = #include_bytes("../../vendor/onnx/onnx/backend/test/data/light/light_bvlc_alexnet_output_0.pb");
+    let Ok(t) = from_bytes::<TensorProto, ByteList>(raw) else {
+        panic("the tensor did not decode");
+    };
+
+    assert t.dims.len() == 2;
+    assert t.dims[1] == 1000;
+    assert t.data_type == 1;
+    assert t.raw_data.len() == 4000;
+    assert t.float_data.is_empty();
+}
+
+test "a model round-trips through the declarations" {
+    let weight = TensorProto {
+        dims: [4, 2],
+        data_type: 1,
+        name: "W",
+        float_data: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],
+    };
+    let x = ValueInfoProto {
+        name: "X",
+        type_: Option::Some(TypeProto {
+            tensor_type: Option::Some(TypeProtoTensor {
+                elem_type: 1,
+                shape: Option::Some(TensorShapeProto {
+                    dim: [
+                        TensorShapeProtoDimension { dim_param: "N" },
+                        TensorShapeProtoDimension { dim_value: 4 },
+                    ],
+                }),
+            }),
+        }),
+    };
+    let model = ModelProto {
+        ir_version: 7,
+        graph: Option::Some(GraphProto {
+            name: "round",
+            node: [
+                NodeProto {
+                    op_type: "MatMul",
+                    input: ["X", "W"],
+                    output: ["Y"],
+                },
+            ],
+            initializer: [weight],
+            input: [x],
+            output: [
+                ValueInfoProto { ..x, name: "Y" },
+            ],
+        }),
+    };
+
+    let Ok(bytes) = to_bytes(&model) else {
+        panic("the model did not encode");
+    };
+    let g = graph_of(bytes);
+
+    assert g.name == "round";
+    assert g.inputs[0].name == "X";
+    assert g.inputs[0].dtype == "float";
+    assert g.inputs[0].rank matches { Dims(d) && d[0] matches { Symbol("N") } && d[1] matches { Static(4) } };
+    assert g.initializers.len() == 1;
+    assert g.initializers[0].name == "W";
+    assert g.initializers[0].rank matches { Dims(d) && d[0] matches { Static(4) } && d[1] matches { Static(2) } };
+    assert g.nodes[0].op == "MatMul";
+    assert g.nodes[0].inputs[1] == "W";
+}
+
+test "a value the subset cannot type names itself" {
+    let model = ModelProto {
+        graph: Option::Some(GraphProto {
+            name: "untyped",
+            input: [
+                ValueInfoProto { name: "X" },
+            ],
+        }),
+    };
+    let Ok(bytes) = to_bytes(&model) else {
+        panic("the model did not encode");
+    };
+
+    assert read(bytes) matches { Err(e) && e == "X: a value with no type" };
+}
+
+test "an element type outside the mapping names itself" {
+    let model = ModelProto {
+        graph: Option::Some(GraphProto {
+            name: "exotic",
+            input: [
+                ValueInfoProto {
+                    name: "X",
+                    type_: Option::Some(TypeProto {
+                        tensor_type: Option::Some(TypeProtoTensor { elem_type: 21 }),
+                    }),
+                },
+            ],
+        }),
+    };
+    let Ok(bytes) = to_bytes(&model) else {
+        panic("the model did not encode");
+    };
+
+    assert read(bytes) matches { Err(e) && e == "X: element type 21" };
+}
