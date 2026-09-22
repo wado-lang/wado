@@ -136,11 +136,20 @@ impl SettledAs {
 /// knows the type under. Empty where it knows of no such name, which is every
 /// argument that is not one of its own parameters.
 fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
-    enclosing
+    let mut knows_it_as = enclosing
         .type_params
         .iter()
-        .find(|(_, binder)| binder.type_id == type_id)
-        .and_then(|(name, _)| enclosing.type_param_bounds.get(name))
+        .filter(|(_, binder)| binder.type_id == type_id)
+        .map(|(name, _)| name);
+    let name = knows_it_as.next();
+    // One name per type, or the pick below is a coin toss between two sets of
+    // bounds. Distinct parameters take distinct slots, and a binder interns by
+    // its slot, so nothing a frame holds can collide.
+    assert!(
+        knows_it_as.next().is_none(),
+        "{type_id:?} reaches the frame under two names, {name:?} among them"
+    );
+    name.and_then(|name| enclosing.type_param_bounds.get(name))
         .cloned()
         .unwrap_or_default()
 }

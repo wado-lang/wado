@@ -6,8 +6,7 @@ The Wado compiler crate.
 
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
   are denied at the crate root. A user-facing message goes through `Logger` and
-  a developer trace through `compiler_trace!`. An `assert!` is for what only a
-  broken stdlib can reach.
+  a developer trace through `compiler_trace!`.
 - A phase error words itself once, in its `Diagnostic`. It carries no `Display`:
   nothing in the crate can print one, and a second wording drifts from the one
   the user reads. `Display` is for an error the CLI prints itself
