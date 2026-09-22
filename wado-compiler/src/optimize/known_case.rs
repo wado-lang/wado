@@ -6,7 +6,8 @@ use crate::nir_arena::{
     ArmData, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_engine::{Engine, Rule};
-use crate::tir::{PrimitiveType, TypeId};
+use crate::primitive::PrimitiveType;
+use crate::tir::TypeId;
 
 use super::arena_query::{is_pure_nontrapping_operand_typed, single_payload_binding};
 

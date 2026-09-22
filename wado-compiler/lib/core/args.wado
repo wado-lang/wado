@@ -99,6 +99,15 @@ impl Eq for ArgsErrorKind;
 
 impl Eq for ArgsError;
 
+impl Display for ArgsError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for ArgsError {
+}
+
 /// The argv `Deserializer`. Holds the token stream and the plumbing that serves
 /// the current field's value to the `deserialize_*` methods.
 pub struct ArgvDeserializer {
@@ -625,21 +634,23 @@ impl Deserializer for ArgvDeserializer {
     }
 }
 
-/// Map a `DeserializeError` from the generated `Deserialize` code into an
-/// `ArgsError`. Argv-specific failures are recorded in `de.err` and take
-/// priority; this only translates the kinds the generated code itself raises.
-fn map_error(e: DeserializeError) -> ArgsError {
-    let kind = match e.kind {
-        DeserializeErrorKind::MissingField => ArgsErrorKind::MissingArgument,
-        DeserializeErrorKind::InvalidValue => ArgsErrorKind::InvalidValue,
-        DeserializeErrorKind::Overflow => ArgsErrorKind::InvalidValue,
-        DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
-        _ => ArgsErrorKind::InvalidValue,
-    };
-    return ArgsError {
-        kind,
-        message: e.message,
-    };
+/// Only the kinds the generated `Deserialize` code itself raises are
+/// translated; an argv-specific failure is recorded in `ArgvDeserializer.err`
+/// and takes priority over this.
+impl From<DeserializeError> for ArgsError {
+    fn from(e: DeserializeError) -> ArgsError {
+        let kind = match e.kind {
+            DeserializeErrorKind::MissingField => ArgsErrorKind::MissingArgument,
+            DeserializeErrorKind::InvalidValue => ArgsErrorKind::InvalidValue,
+            DeserializeErrorKind::Overflow => ArgsErrorKind::InvalidValue,
+            DeserializeErrorKind::UnknownVariant => ArgsErrorKind::UnknownSubcommand,
+            _ => ArgsErrorKind::InvalidValue,
+        };
+        return ArgsError {
+            kind,
+            message: e.message,
+        };
+    }
 }
 
 /// Parse `argv` (excluding the program name) into `T`. Effect-free and testable;
@@ -666,13 +677,7 @@ pub fn parse<T: Deserialize>(argv: List<String>) -> Result<T, ArgsError> {
     if let Some(e) = de.err {
         return Result::Err(e);
     }
-    if let Ok(v) = r {
-        return Result::Ok(v);
-    }
-    if let Err(de_err) = r {
-        return Result::Err(map_error(de_err));
-    }
-    unreachable();
+    return Result::Ok(r?);
 }
 
 /// Parse the process arguments (from `core:cli::args()`, with the program name

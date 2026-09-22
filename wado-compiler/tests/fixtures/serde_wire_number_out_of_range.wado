@@ -1,0 +1,12 @@
+// A field number runs from 1 to 536870911. Zero is the one people reach for
+// first, and it is the one the wire format cannot carry.
+
+struct Point {
+    #[wire(number = 0)] x: i32,
+    #[wire(number = 2)] y: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`#[wire(number = 0)]`: a field number runs from 1 to 536870911", "compile_error_codes": ["WIRE_NUMBER"]}

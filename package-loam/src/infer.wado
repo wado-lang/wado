@@ -4,7 +4,7 @@
 use { TreeMap } from "core:collections";
 use { Extent } from "./extent.wado";
 use { Axis, ExtentConflict, Shape } from "./shape.wado";
-use { Dim, Graph, Node, Rank, ValueInfo } from "./onnx_text.wado";
+use { Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { Schema } from "./schema.wado";
 
 /// A tensor the schema does not reach. Loam does not fall back to positional
@@ -50,6 +50,24 @@ pub struct OperandCountConflict {
     pub needed: i32,
 }
 
+/// An operand is not the rank the operator is defined for.
+pub struct OperandRankConflict {
+    pub node: String,
+    pub op: String,
+    pub operand: i32,
+    pub rank: i32,
+    pub needed: i32,
+}
+
+/// An operator's attribute is not one this Loam can act on: absent where the
+/// operator requires it, or a value the graph cannot mean.
+pub struct AttributeConflict {
+    pub node: String,
+    pub op: String,
+    pub attr: String,
+    pub reason: String,
+}
+
 /// Every operator Loam carries produces one value, so a node naming any other
 /// number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
@@ -67,6 +85,8 @@ pub variant InferError {
     ScalarOperand(String),
     OperandCount(OperandCountConflict),
     OutputCount(OutputCountConflict),
+    Attribute(AttributeConflict),
+    OperandRank(OperandRankConflict),
     DeclaredRank(DeclaredRankConflict),
     Declared(DeclaredConflict),
     Node(NodeConflict),
@@ -106,6 +126,20 @@ impl Display for OutputCountConflict {
     }
 }
 
+impl Display for OperandRankConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(
+            `${self.node} = ${self.op}: operand ${self.operand} has rank ${self.rank} and the operator reads rank ${self.needed}`,
+        );
+    }
+}
+
+impl Display for AttributeConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: attribute ${self.attr} ${self.reason}`);
+    }
+}
+
 impl Display for DeclaredRankConflict {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(
@@ -133,6 +167,8 @@ impl Display for InferError {
             ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
             OutputCount(e) => e.fmt(f),
+            Attribute(e) => e.fmt(f),
+            OperandRank(e) => e.fmt(f),
             DeclaredRank(e) => e.fmt(f),
             Declared(e) => e.fmt(f),
             Node(e) => e.fmt(f),
@@ -286,12 +322,185 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         let [a, b] = binary_operands(node, shapes)?;
         return at_node(node, a.elementwise(&b, op));
     }
+    if op == "Constant" {
+        constant_value(node)?;
+        // A one-element constant has no axis to name, so it broadcasts into
+        // whatever reads it and needs no layout rule of its own.
+        return Result::Ok(Shape { axes: [] });
+    }
+    if op == "Gemm" {
+        arity(node, 2)?;
+        let [_, _, trans_a, trans_b] = gemm_options(node)?;
+        let a = gemm_matrix(node, shapes, 0, trans_a)?;
+        let b = gemm_matrix(node, shapes, 1, trans_b)?;
+        let product = at_node(node, a.matmul(&b, op))?;
+        if !has_bias(node) {
+            return Result::Ok(product);
+        }
+        // ONNX broadcasts `C` into the product, so a bias of higher rank is
+        // refused rather than widening a `Gemm` past the two axes it has.
+        let c = operand(node, shapes, 2)?;
+        if c.rank() > product.rank() {
+            return Result::Err(operand_rank(node, 2, c.rank(), product.rank()));
+        }
+        return at_node(node, product.elementwise(&c, op));
+    }
+    if op == "Transpose" {
+        arity(node, 1)?;
+        let shape = operand(node, shapes, 0)?;
+        let perm = transpose_perm(node, shape.rank())?;
+        return Result::Ok(shape.permute(&perm));
+    }
     if is_unary_elementwise(&op) {
         arity(node, 1)?;
         return operand(node, shapes, 0);
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
+}
+
+/// A `Constant`'s single element. Loam reads the one-element case, which is
+/// how an exporter writes a scalar an operator combines with a whole tensor;
+/// a constant with more elements has axes nothing names, and stops the build.
+pub fn constant_value(node: &Node) -> Result<f32, InferError> {
+    let Some(attr) = node.attr("value") else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, "value", "is absent and the operator reads it"));
+    };
+    let Some(tensor) = &attr.tensor else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, "value", "is not a tensor this reader carries"));
+    };
+    if tensor.data.len() != 1 {
+        builtin::cold_path();
+        return Result::Err(attribute_error(
+            node,
+            "value",
+            `holds ${tensor.data.len()} elements and only a single one broadcasts`,
+        ));
+    }
+    return Result::Ok(tensor.data[0]);
+}
+
+/// Whether a `Gemm` was given its `C` operand. ONNX writes an absent optional
+/// operand as an empty name where a later one follows it, and omits it
+/// otherwise.
+pub fn has_bias(node: &Node) -> bool {
+    return node.inputs.len() >= 3 && node.inputs[2] != "";
+}
+
+/// `Gemm`'s `alpha`, `beta`, `transA` and `transB`, each defaulted as ONNX
+/// defaults it. `emit` reads them again to pick its kernels, so this is where
+/// they are understood rather than in either stage alone.
+pub fn gemm_options(node: &Node) -> Result<[f32, f32, bool, bool], InferError> {
+    return Result::Ok([
+        float_attr(node, "alpha", 1.0)?,
+        float_attr(node, "beta", 1.0)?,
+        int_attr(node, "transA", 0)? != 0,
+        int_attr(node, "transB", 0)? != 0,
+    ]);
+}
+
+fn operand_rank(node: &Node, index: i32, rank: i32, needed: i32) -> InferError {
+    builtin::cold_path();
+    return InferError::OperandRank(OperandRankConflict {
+        node: node_name(node),
+        op: node.op,
+        operand: index,
+        rank,
+        needed,
+    });
+}
+
+/// One `Gemm` matrix operand, transposed where its flag says so. ONNX defines
+/// `Gemm` over two-dimensional operands only.
+fn gemm_matrix(node: &Node, shapes: &TreeMap<String, Shape>, index: i32, transposed: bool) -> Result<Shape, InferError> {
+    let shape = operand(node, shapes, index)?;
+    if shape.rank() != 2 {
+        return Result::Err(operand_rank(node, index, shape.rank(), 2));
+    }
+    if transposed {
+        return Result::Ok(shape.permute(&([1, 0] as List<i32>)));
+    }
+    return Result::Ok(shape);
+}
+
+fn single_attr(node: &Node, name: String) -> Result<Option<String>, InferError> {
+    let Some(attr) = node.attr(name) else {
+        return Result::Ok(null);
+    };
+    if attr.values.len() != 1 {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, name, "is a list and the operator reads one value"));
+    }
+    return Result::Ok(Option::Some(attr.values[0]));
+}
+
+fn float_attr(node: &Node, name: String, fallback: f32) -> Result<f32, InferError> {
+    let Some(text) = single_attr(node, name)? else {
+        return Result::Ok(fallback);
+    };
+    let Ok(value) = f32::from_str(&text) else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, name, `holds '${text}', which is not a number`));
+    };
+    return Result::Ok(value);
+}
+
+fn int_attr(node: &Node, name: String, fallback: i64) -> Result<i64, InferError> {
+    let Some(text) = single_attr(node, name)? else {
+        return Result::Ok(fallback);
+    };
+    let Ok(value) = i64::from_str(&text) else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, name, `holds '${text}', which is not an integer`));
+    };
+    return Result::Ok(value);
+}
+
+/// `Transpose`'s `perm`: the axis order the output takes. ONNX defaults it to
+/// the reversed order, and `emit` reads it again to pick the kernel, so this
+/// is where the attribute is understood rather than in either stage alone.
+pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
+    let Some(attr) = node.attr("perm") else {
+        let mut reversed: List<i32> = [];
+        for let mut i = rank - 1; i >= 0; i -= 1 {
+            reversed.push(i);
+        }
+        return Result::Ok(reversed);
+    };
+    if attr.values.len() != rank {
+        builtin::cold_path();
+        return Result::Err(attribute_error(
+            node,
+            "perm",
+            `names ${attr.values.len()} axes and the operand has ${rank}`,
+        ));
+    }
+    let mut perm: List<i32> = [];
+    let mut taken: List<bool> = List::filled(rank, false);
+    for let text of attr.values {
+        let Ok(axis) = i32::from_str(&text) else {
+            builtin::cold_path();
+            return Result::Err(attribute_error(node, "perm", `holds '${text}', which is not an axis`));
+        };
+        if !(0 <= axis < rank) || taken[axis] {
+            builtin::cold_path();
+            return Result::Err(attribute_error(node, "perm", `is not a permutation of ${rank} axes`));
+        }
+        taken[axis] = true;
+        perm.push(axis);
+    }
+    return Result::Ok(perm);
+}
+
+fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
+    return InferError::Attribute(AttributeConflict {
+        node: node_name(node),
+        op: node.op,
+        attr,
+        reason,
+    });
 }
 
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {

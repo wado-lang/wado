@@ -1997,9 +1997,7 @@ fn write_oracle_pending_files<S: AsStrSlice, S1: AsStrSlice>(
     start_filename: S1,
     parsed: &ParsedDescriptor,
 ) -> Result<(), ErrorCode> {
-    if let Err(e) = write_file_string(dir, input_filename, &parsed.input) {
-        return Result::Err(e);
-    }
+    write_file_string(dir, input_filename, &parsed.input)?;
     if let Err(e) = write_file_string(dir, start_filename, &parsed.start) {
         let _ = remove_file(dir, input_filename);
         return Result::Err(e);

@@ -95,9 +95,9 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 
 global global:core:json::$const_obj_0: ref null Array<u8> = array.new_fixed<u8>(102, 97, 108, 115, 101);
 global global:core:json::$const_obj_1: ref null Array<u8> = array.new_fixed<u8>(116, 114, 117, 101);
-global global:core:serde::$const_obj_22: ref null Array<u8> = array.new_fixed<u8>(125);
-global global:core:serde::$const_obj_23: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
-global global:core:serde::$const_obj_24: ref null Array<u8> = array.new_fixed<u8>(123);
+global global:core:serde::$const_obj_19: ref null Array<u8> = array.new_fixed<u8>(125);
+global global:core:serde::$const_obj_20: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(111, 107), used: 2 };
+global global:core:serde::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(123);
 global global:core:json::$const_obj_32: ref null Array<u8> = array.new_fixed<u8>(34, 58);
 global global:core:json::$const_obj_34: ref null Array<u8> = array.new_fixed<u8>(44, 34);
 
@@ -427,8 +427,8 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     let new_used_29: i32;
     let start_30: i32;
     let v_40: bool;
-    let new_used_52: i32;
-    let start_53: i32;
+    let new_used_57: i32;
+    let start_58: i32;
     let r: ref null "core:serde//SerializeError";
     let $sroa_st_buf: ref "core:prelude/string.wado//String";
     self_19 = s.buf;
@@ -439,10 +439,10 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
     }
     start_30 = self_19.used;
     self_19.used = new_used_29;
-    builtin::array_copy<u8>(self_19.repr, start_30, global:core:serde::$const_obj_24, 0, 1);
+    builtin::array_copy<u8>(self_19.repr, start_30, global:core:serde::$const_obj_21, 0, 1);
     $sroa_st_buf = s.buf;
     v_40 = self.ok;
-    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf, global:core:serde::$const_obj_23, 0);
+    "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"($sroa_st_buf, global:core:serde::$const_obj_20, 0);
     r = "core:json/write_json_bool"($sroa_st_buf, v_40);
     if @likely(ref.is_null(r)) {
     } else {
@@ -450,10 +450,10 @@ fn "core:serde/serde_ndjson_wrapper.wado/Message^core:serde/Serialize::serialize
         cold_path;
         return $qm_e_11;
     }
-    return new_used_52 = $sroa_st_buf.used + 1, if @unlikely(new_used_52 > builtin::array_len($sroa_st_buf.repr)) {
+    return new_used_57 = $sroa_st_buf.used + 1, if @unlikely(new_used_57 > builtin::array_len($sroa_st_buf.repr)) {
         cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf, new_used_52);
-    }, start_53 = $sroa_st_buf.used, $sroa_st_buf.used = new_used_52, builtin::array_copy<u8>($sroa_st_buf.repr, start_53, global:core:serde::$const_obj_22, 0, 1), ref.null none;
+        "core:prelude/string.wado/core:prelude/string.wado/String::grow"($sroa_st_buf, new_used_57);
+    }, start_58 = $sroa_st_buf.used, $sroa_st_buf.used = new_used_57, builtin::array_copy<u8>($sroa_st_buf.repr, start_58, global:core:serde::$const_obj_19, 0, 1), ref.null none;
 }
 
 export fn "serde_ndjson_wrapper.wado/$cm_export__run" as "run"

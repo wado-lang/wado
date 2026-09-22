@@ -3672,7 +3672,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`String`, `char`, the integer types, `f32`/`f64`, `bool`) implement both.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)
@@ -3685,7 +3685,7 @@ f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr::from_str` takes any `AsStrSlice` — a `StrSlice` among them, so a field is parsed out of a larger buffer with no substring allocation. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 

@@ -840,47 +840,11 @@ impl Deserializer for PathParamsDeserializer {
     }
 
     fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
-        self.require_active_param()?;
-        let [s, e] = self.current_range();
-        let len = e - s;
-        if len == 4 && self.path_bytes_eq(s, "true") {
-            return Result::Ok(true);
-        }
-        if len == 5 && self.path_bytes_eq(s, "false") {
-            return Result::Ok(false);
-        }
-        return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
+        return self.parse_scalar::<bool>("bool");
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
-        self.require_active_param()?;
-        let [s, e] = self.current_range();
-        let len = e - s;
-        if len == 0 {
-            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
-        }
-        // Determine the UTF-8 sequence length from the leading byte and
-        // verify the captured slice encodes exactly one codepoint.
-        // `String::char_at_byte` decodes without substring allocation.
-        let b0 = self.src.path.get_byte_unchecked(s);
-        let expected = if b0 < 0x80 {
-            1;
-        } else if b0 < 0xC0 {
-            0;
-        } else if b0 < 0xE0 {
-            2;
-        } else if b0 < 0xF0 {
-            3;
-        } else {
-            4;
-        };
-        if expected == 0 || len != expected {
-            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
-        }
-        return match self.src.path.char_at_byte(s) {
-            Some(c) => Result::Ok(c),
-            None => Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64)),
-        };
+        return self.parse_scalar::<char>("char");
     }
 
     fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
@@ -960,39 +924,24 @@ impl PathParamsDeserializer {
         return Result::Ok(());
     }
 
-    /// Byte-by-byte comparison of `path[start..<start + pat.len()]` with
-    /// `pat`. Used by `deserialize_bool` to avoid a substring allocation
-    /// when checking against the constants `"true"` / `"false"`.
-    fn path_bytes_eq<S: AsStrSlice>(&self, start: i32, pat: S) -> bool {
-        let plen = pat.len();
-        for let mut i = 0; i < plen; i += 1 {
-            if self.src.path.get_byte_unchecked(start + i) != pat.get_byte_unchecked(i) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    /// Format an `invalid_value` error message including the param name and
-    /// the captured slice, e.g.
-    /// `path param 'id' is not a valid u64: 'abc'`.
-    fn format_error<S: AsStrSlice>(&self, type_name: S) -> String {
-        let i = self.cursor - 1;
-        let name = &self.src.names[i];
+    /// The `invalid_value` error for the active param, e.g. `path param 'id'
+    /// is not a valid u64: 'abc' (invalid digit found in string)`.
+    fn invalid_param<S: AsStrSlice, R: AsStrSlice>(&self, type_name: S, reason: R) -> DeserializeError {
+        let name = &self.src.names[self.cursor - 1];
         let [s, e] = self.current_range();
         let value = self.src.path.substr_bytes(s, e);
-        return `path param '${*name}' is not a valid ${type_name}: '${value}'`;
+        let message = `path param '${*name}' is not a valid ${type_name}: '${value}' (${reason})`;
+        return DeserializeError::invalid_value(message, s as i64);
     }
 
     /// Parse the active param's byte range into `T` via `FromStr`.
-    /// Shared body of every scalar `deserialize_*` arm — keeps the per-type
-    /// methods to a single line each.
+    /// The shared body of every scalar `deserialize_*` arm.
     fn parse_scalar<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();
-        return match T::from_str_slice(&self.src.path.as_str_slice().sub(s, e)) {
+        return match T::from_str(self.src.path.as_str_slice().sub(s, e)) {
             Ok(v) => Result::Ok(v),
-            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
+            Err(reason) => Result::Err(self.invalid_param(type_name, `${reason}`)),
         };
     }
 }

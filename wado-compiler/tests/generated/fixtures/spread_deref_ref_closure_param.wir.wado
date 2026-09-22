@@ -57,6 +57,7 @@ struct core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut has_default: bool,
     mut is_secret: bool,
+    mut wire_number: i32,
 }
 
 struct core:prelude/traits.wado//IterMap<core:prelude/slice.wado/SliceRefIter<spread_deref_ref_closure_param.wado/S>,spread_deref_ref_closure_param.wado/S> {  // TypeId(12)
@@ -150,9 +151,9 @@ type "functype//core:prelude/list.wado/core:prelude/list.wado/List<spread_deref_
 
 type "functype//spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/$Closure_0::$call" = fn(ref "spread_deref_ref_closure_param.wado//S") -> ref "spread_deref_ref_closure_param.wado//S";  // TypeId(50)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(51)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(51)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(52)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(52)
 
 type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", ref Array<u8>, i32);  // TypeId(53)
 
@@ -1899,7 +1900,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/S^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
+    return struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(97), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 }, struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(98), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 }, struct.new "core:prelude/traits.wado//StructField<spread_deref_ref_closure_param.wado/S,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(99), used: 1 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<spread_deref_ref_closure_param.wado/S>^core:prelude/traits.wado/Inspect::inspect"(self, f) {
@@ -2572,10 +2573,6 @@ fn "spread_deref_ref_closure_param.wado/spread_deref_ref_closure_param.wado/$Clo
     return struct.new "spread_deref_ref_closure_param.wado//S" { a: s.a, b: s.b + 10, c: s.c };
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -2610,6 +2607,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l222;
         };
     };
+}
+
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::pad<core:prelude/string.wado/String>$spec0$scalar"(self, $mv$content$repr, $mv$content$used) {

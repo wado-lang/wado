@@ -4084,6 +4084,11 @@ fn unparse_attr_arg_into(arg: &AttrArg, output: &mut String) {
                 out.push_str(&quoted(v));
             });
         }
+        AttrArg::KeyNumber(k, v) => {
+            output.push_str(k);
+            output.push_str(" = ");
+            output.push_str(v);
+        }
         AttrArg::KeyIdent(k, v) => {
             output.push_str(k);
             output.push_str(" = ");

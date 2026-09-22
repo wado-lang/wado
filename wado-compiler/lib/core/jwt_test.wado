@@ -212,3 +212,9 @@ test "an alg cannot break out of the header JSON" {
     let key = NamedKey { name: `hs","typ":"x` };
     assert verify(&sign(&`{"sub":"joe"}`, &key), &key) matches { Ok(_) };
 }
+
+test "JwtError renders its reason" {
+    assert `${JwtError::Malformed}` == "malformed token";
+    assert `${JwtError::InvalidSignature}` == "invalid signature";
+    assert `${JwtError::Expired}` == "token has expired";
+}

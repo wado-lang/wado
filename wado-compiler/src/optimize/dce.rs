@@ -1121,7 +1121,7 @@ impl<'a> DceWalker<'a> {
                     add_to_string_callee(receiver_type, self.type_table, &mut self.analysis);
                 }
                 let method_id = FunctionId::Method(MethodName::new(
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(prim),
                     FqTypeName::builtin(prim.as_str()),
                     trait_name,
                     method_name,
@@ -1376,7 +1376,7 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     match type_table.get(type_id) {
         ResolvedType::Primitive(prim) => {
             let method_id = FunctionId::Method(MethodName::new(
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
                 FqTypeName::builtin(prim.as_str()),
                 None,
                 "to_string".to_string(),

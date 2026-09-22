@@ -1156,7 +1156,7 @@ pub async fn run(opts: ServeOptions) -> Result<(), CliExit> {
     // http/service world through the shared build core (metadata embedded,
     // written to build/), then serves it; a bare file with no project stays on
     // the in-memory compile primitive.
-    let wasm = build_for_driver(&opts.input, "wasi:http/service", &flags).await?;
+    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:http/service", &flags)).await?;
 
     let timeout = Duration::from_secs(opts.timeout_secs);
     // An explicit `--workers` is already validated against an explicit

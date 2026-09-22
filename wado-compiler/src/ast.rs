@@ -2,7 +2,7 @@
 
 use crate::attribute::{
     ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
-    WASM_MODULE,
+    WASM_MODULE, WIRE,
 };
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1474,6 +1474,9 @@ pub enum AttrArg {
     /// A `key = ident` pair, whose value names something in the source rather
     /// than carrying text, e.g. `part_of = arr`.
     KeyIdent(String, String),
+    /// A `key = 3` pair, whose value is a number rather than text, e.g.
+    /// `#[wire(number = 3)]`.
+    KeyNumber(String, String),
 }
 
 impl AttrArg {
@@ -1482,7 +1485,7 @@ impl AttrArg {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(_, v) | Self::KeyIdent(_, v) => v,
+            Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
             Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
@@ -1493,9 +1496,48 @@ impl AttrArg {
     pub fn name(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(k, _) | Self::KeyArray(k, _) | Self::KeyIdent(k, _) => k,
+            Self::KeyValue(k, _)
+            | Self::KeyArray(k, _)
+            | Self::KeyIdent(k, _)
+            | Self::KeyNumber(k, _) => k,
         }
     }
+}
+
+/// The field numbers the wire format admits, from the protobuf specification's
+/// "Assigning Field Numbers".
+pub const WIRE_NUMBER_MIN: u32 = 1;
+pub const WIRE_NUMBER_MAX: u32 = 536_870_911;
+pub const WIRE_NUMBER_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+
+/// The `#[wire(number = …)]` text these attributes carry, as written. Every
+/// `#[wire]` is read, since a field may spell one adjustment per attribute.
+#[must_use]
+pub fn wire_number_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_number("number")
+        } else {
+            None
+        }
+    })
+}
+
+/// The `#[wire(number = N)]` these attributes carry, where it is a number the
+/// wire format admits. The diagnostics for one it does not are the
+/// elaborator's, which is where a declaration is checked.
+#[must_use]
+pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
+    wire_number_written(attrs)
+        .and_then(|written| written.parse::<u32>().ok())
+        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
+        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
+}
+
+/// One entry per field, in declaration order, as `StructInfo` holds them.
+#[must_use]
+pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
+    fields.iter().map(|f| wire_number_of(&f.attrs)).collect()
 }
 
 /// Attribute like #[cm("...")]
@@ -1556,6 +1598,19 @@ impl Attribute {
     pub fn kv_value(&self, key: &str) -> Option<&str> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The literal text of a `key = <number>` argument, as written.
+    ///
+    /// For `#[wire(number = 3)]`, `attr.kv_number("number")` returns `Some("3")`.
+    pub fn kv_number(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyNumber(k, v) = arg {
                 if k == key { Some(v.as_str()) } else { None }
             } else {
                 None

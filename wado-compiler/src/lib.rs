@@ -51,6 +51,7 @@ pub mod param_resolution;
 pub mod parser;
 pub mod path;
 mod prelower_reach;
+pub mod primitive;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;

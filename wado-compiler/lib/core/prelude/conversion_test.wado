@@ -143,7 +143,7 @@ struct EvenNumber {
 }
 
 impl TryFrom<i32> for EvenNumber {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: i32) -> Result<EvenNumber, ConvertError> {
         if value % 2 != 0 {
@@ -159,8 +159,8 @@ test "user-defined TryFrom: Ok" {
 }
 
 test "user-defined TryFrom: Err" {
-    assert EvenNumber::try_from(3) matches { Err(_) };
-    assert EvenNumber::try_from(-1) matches { Err(_) };
+    assert EvenNumber::try_from(3) matches { Err(e) && e.message == "3 is not even" };
+    assert EvenNumber::try_from(-1) matches { Err(e) && e.message == "-1 is not even" };
 }
 
 test "TryFrom<i64> for i32: in range" {
@@ -301,7 +301,7 @@ enum Direction {
 }
 
 impl TryFrom<i32> for Direction {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: i32) -> Result<Direction, ConvertError> {
         return match value {
@@ -358,7 +358,7 @@ impl From<AccessFlags> for u32 {
 }
 
 impl TryFrom<u32> for AccessFlags {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     fn try_from(value: u32) -> Result<AccessFlags, ConvertError> {
         if value > 7 as u32 {
@@ -518,4 +518,52 @@ test "u128 accumulation round-trip via From / TryFrom" {
     }
     // 4 × (2^32 - 1) = 17_179_869_180, fits in u64
     assert u64::try_from(acc) matches { Ok(n) && n == 17179869180 as u64 };
+}
+
+test "ConvertError renders its message" {
+    assert `${EvenNumber::try_from(3).unwrap_err()}` == "3 is not even";
+}
+
+variant PortError {
+    Digits(ParseIntError),
+    OutOfRange,
+}
+
+impl Display for PortError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            Digits(e) => `bad port: ${e}`,
+            OutOfRange => "port out of range",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for PortError {
+}
+
+impl From<ParseIntError> for PortError;
+
+fn parse_port(s: String) -> Result<i32, PortError> {
+    let n = i32::from_str(&s)?;
+    if n < 0 || n > 65535 {
+        return Result::Err(PortError::OutOfRange);
+    }
+    return Result::Ok(n);
+}
+
+test "`?` widens an error through From" {
+    assert parse_port("8080") matches { Ok(8080) };
+    assert `${parse_port("http").unwrap_err()}` == "bad port: invalid digit found in string";
+    assert `${parse_port("70000").unwrap_err()}` == "port out of range";
+}
+
+fn reason<E: Error>(e: E) -> String {
+    return `${e}`;
+}
+
+test "Error bounds any type that reports a reason" {
+    assert reason(i32::from_str("x").unwrap_err()) == "invalid digit found in string";
+    assert reason(String::from_utf8([0xFF] as List<u8>).unwrap_err()) == "invalid utf-8 sequence of 1 bytes from index 0";
+    assert reason(PortError::OutOfRange) == "port out of range";
 }

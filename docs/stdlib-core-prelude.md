@@ -425,6 +425,11 @@ All format traits write to a `Formatter` that wraps `&mut String`.
 
 Formats the value and writes to the given formatter.
 
+### `pub trait Error: Display with ()`
+
+What every standard library error type is: a failure carrying a reason a
+person can read. It adds nothing to `Display`, so a bound on it says only that.
+
 ### `pub trait Inspect with ()`
 
 Trait for debug/inspect formatting.
@@ -637,10 +642,10 @@ Converts a value of type `T` into `Self`.
 
 ### `pub trait TryFrom<T> with ()`
 
-Fallible conversion trait.
-Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
+Fallible conversion trait. `Err: Error`, so a caller reaching the failure
+through the bound can always report its reason.
 
-#### `fn try_from(value: T) -> Result<Self, Self::Error>`
+#### `fn try_from(value: T) -> Result<Self, Self::Err>`
 
 Attempts to convert a value of type `T` into `Self`.
 
@@ -682,15 +687,9 @@ wins. A target without this impl rejects `..base` where it is written.
 
 ### `pub trait FromStr with ()`
 
-Parse a value from a string.
-
-`from_str_slice` is the fundamental operation: a `StrSlice` names part of a
-string without allocating a substring, so parsing a field out of a larger
-buffer copies nothing. `from_str` is a default that views the whole string.
-
-#### `fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>`
-
-Parse the view as `Self`.
+Parse a value from text that may not denote one, where `From<String>` is
+for text that always does. The parameter takes a `StrSlice` among the rest,
+so a field is parsed out of a larger buffer with no substring allocation.
 
 #### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
@@ -1167,972 +1166,6 @@ An owned, fixed-length byte buffer.
 
 ## Primitive Types
 
-### `bool`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `impl LenientFromStr for bool`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bool, LenientParseError>`
-
-#### `impl Display for bool`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for bool`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl Eq for bool`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for bool`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for bool`
-
-##### `pub fn default() -> bool`
-
-#### `impl From<bool> for bool`
-
-##### `pub fn from(value: bool) -> bool`
-
-### `char`
-
-#### `pub fn from_u32(value: u32) -> Option<char>`
-
-Converts a Unicode scalar value (u32) to a char.
-Returns null if the value is not a valid Unicode scalar value
-(i.e., surrogates 0xD800..=0xDFFF or values > 0x10FFFF).
-
-#### `pub fn from_i32(value: i32) -> Option<char>`
-
-Converts a signed integer to a char.
-Returns null if the value is negative or not a valid Unicode scalar value.
-
-#### `pub fn from_u32_unchecked(value: u32) -> char`
-
-Converts a u32 to a char without validation.
-The caller must ensure the value is a valid Unicode scalar value
-(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
-results in an invalid char, which may cause incorrect behavior
-in string operations.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn is_ascii_whitespace(&self) -> bool`
-
-Returns true if the character is ASCII whitespace, as POSIX `isspace()`
-has it: SP, HT, LF, VT, FF, CR.
-
-#### `pub fn is_whitespace(&self) -> bool`
-
-Returns true if the character is Unicode whitespace: ASCII whitespace,
-U+0085 (NEXT LINE), and the Zs/Zl/Zp code points.
-
-#### `pub fn is_ascii_lowercase(&self) -> bool`
-
-Returns true if the character is an ASCII lowercase letter: a-z.
-
-#### `pub fn is_ascii_uppercase(&self) -> bool`
-
-Returns true if the character is an ASCII uppercase letter: A-Z.
-
-#### `pub fn to_ascii_lowercase(&self) -> char`
-
-Converts an ASCII uppercase letter to lowercase. Non-ASCII and
-non-uppercase characters are returned unchanged.
-
-#### `pub fn to_ascii_uppercase(&self) -> char`
-
-Converts an ASCII lowercase letter to uppercase. Non-ASCII and
-non-lowercase characters are returned unchanged.
-
-#### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
-
-Checks that two characters are an ASCII case-insensitive match.
-
-#### `pub fn is_ascii_digit(&self) -> bool`
-
-Returns true if the character is an ASCII digit: 0-9.
-
-#### `pub fn is_ascii_alphabetic(&self) -> bool`
-
-Returns true if the character is an ASCII letter: a-z or A-Z.
-
-#### `pub fn is_ascii_alphanumeric(&self) -> bool`
-
-Returns true if the character is an ASCII letter or digit: a-z, A-Z, 0-9.
-
-#### `pub fn is_hexdigit(&self) -> bool`
-
-Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
-
-#### `pub fn hex_digit_value(&self) -> i32`
-
-Returns the numeric value of an ASCII hexadecimal digit (0–15).
-Panics if the character is not a valid hex digit.
-
-#### `pub fn len_utf8(&self) -> i32`
-
-Returns the number of bytes this character needs in UTF-8 encoding.
-
-#### `pub fn encode_utf8(&self) -> ByteList`
-
-Encodes this character as UTF-8, returning the bytes.
-
-#### `impl LenientFromStr for char`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError>`
-
-#### `impl Display for char`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for char`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl Eq for char`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for char`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for char`
-
-##### `pub fn default() -> char`
-
-#### `impl Step for char`
-
-##### `fn next_step(&self) -> Option<char>`
-
-### `i8`
-
-#### `pub const MAX: i8`
-
-#### `pub const MIN: i8`
-
-#### `pub fn max(a: i8, b: i8) -> i8`
-
-#### `pub fn min(a: i8, b: i8) -> i8`
-
-#### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>`
-
-#### `impl FromStr for i8`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError>`
-
-#### `impl LenientFromStr for i8`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError>`
-
-#### `impl Display for i8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i8`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i8`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i8`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i8`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i8`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i8`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i8`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i8`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i8`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i8`
-
-##### `pub fn default() -> i8`
-
-#### `impl TryFrom<i64> for i8`
-
-##### `pub fn try_from(value: i64) -> Result<i8, ConvertError>`
-
-#### `impl TryFrom<i32> for i8`
-
-##### `pub fn try_from(value: i32) -> Result<i8, ConvertError>`
-
-#### `impl TryFrom<i16> for i8`
-
-##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
-
-#### `impl Step for i8`
-
-##### `fn next_step(&self) -> Option<i8>`
-
-### `u8`
-
-#### `pub const MAX: u8`
-
-#### `pub const MIN: u8`
-
-#### `pub fn max(a: u8, b: u8) -> u8`
-
-#### `pub fn min(a: u8, b: u8) -> u8`
-
-#### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn is_ascii_digit(&self) -> bool`
-
-Returns true if the byte is an ASCII digit: 0-9.
-
-#### `pub fn is_ascii_alphabetic(&self) -> bool`
-
-Returns true if the byte is an ASCII letter: a-z or A-Z.
-
-#### `pub fn is_ascii_alphanumeric(&self) -> bool`
-
-Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
-
-#### `pub fn is_ascii_lowercase(&self) -> bool`
-
-Returns true if the byte is an ASCII lowercase letter: a-z.
-
-#### `pub fn is_ascii_uppercase(&self) -> bool`
-
-Returns true if the byte is an ASCII uppercase letter: A-Z.
-
-#### `pub fn is_ascii_whitespace(&self) -> bool`
-
-Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
-
-#### `pub fn is_hexdigit(&self) -> bool`
-
-Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
-
-#### `pub fn to_ascii_lowercase(&self) -> u8`
-
-Converts an ASCII uppercase letter to lowercase, leaving every other
-byte unchanged.
-
-#### `pub fn to_ascii_uppercase(&self) -> u8`
-
-Converts an ASCII lowercase letter to uppercase, leaving every other
-byte unchanged.
-
-#### `pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool`
-
-Checks that two bytes are an ASCII case-insensitive match.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>`
-
-#### `impl FromStr for u8`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError>`
-
-#### `impl LenientFromStr for u8`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError>`
-
-#### `impl Display for u8`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u8`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u8`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u8`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u8`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u8`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u8`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u8`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u8`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u8`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u8`
-
-##### `pub fn default() -> u8`
-
-#### `impl TryFrom<u32> for u8`
-
-##### `pub fn try_from(value: u32) -> Result<u8, ConvertError>`
-
-#### `impl TryFrom<u16> for u8`
-
-##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
-
-#### `impl Step for u8`
-
-##### `fn next_step(&self) -> Option<u8>`
-
-### `i16`
-
-#### `pub const MAX: i16`
-
-#### `pub const MIN: i16`
-
-#### `pub fn max(a: i16, b: i16) -> i16`
-
-#### `pub fn min(a: i16, b: i16) -> i16`
-
-#### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>`
-
-#### `impl FromStr for i16`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError>`
-
-#### `impl LenientFromStr for i16`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError>`
-
-#### `impl Display for i16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i16`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i16`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i16`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i16`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i16`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i16`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i16`
-
-##### `pub fn default() -> i16`
-
-#### `impl From<i8> for i16`
-
-##### `pub fn from(value: i8) -> i16`
-
-#### `impl From<u8> for i16`
-
-##### `pub fn from(value: u8) -> i16`
-
-#### `impl TryFrom<i64> for i16`
-
-##### `pub fn try_from(value: i64) -> Result<i16, ConvertError>`
-
-#### `impl TryFrom<i32> for i16`
-
-##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
-
-#### `impl Step for i16`
-
-##### `fn next_step(&self) -> Option<i16>`
-
-### `u16`
-
-#### `pub const MAX: u16`
-
-#### `pub const MIN: u16`
-
-#### `pub fn max(a: u16, b: u16) -> u16`
-
-#### `pub fn min(a: u16, b: u16) -> u16`
-
-#### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>`
-
-#### `impl FromStr for u16`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError>`
-
-#### `impl LenientFromStr for u16`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError>`
-
-#### `impl Display for u16`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u16`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u16`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u16`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u16`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u16`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u16`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u16`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u16`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u16`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u16`
-
-##### `pub fn default() -> u16`
-
-#### `impl From<u8> for u16`
-
-##### `pub fn from(value: u8) -> u16`
-
-#### `impl TryFrom<u32> for u16`
-
-##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
-
-#### `impl Step for u16`
-
-##### `fn next_step(&self) -> Option<u16>`
-
-### `i32`
-
-#### `pub const MAX: i32`
-
-#### `pub const MIN: i32`
-
-#### `pub fn max(a: i32, b: i32) -> i32`
-
-#### `pub fn min(a: i32, b: i32) -> i32`
-
-#### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn clz(x: i32) -> i32`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i32) -> i32`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i32) -> i32`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>`
-
-#### `impl FromStr for i32`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError>`
-
-#### `impl LenientFromStr for i32`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError>`
-
-#### `impl Display for i32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i32`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i32`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i32`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i32`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i32`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i32`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i32`
-
-##### `pub fn default() -> i32`
-
-#### `impl From<i8> for i32`
-
-##### `pub fn from(value: i8) -> i32`
-
-#### `impl From<i16> for i32`
-
-##### `pub fn from(value: i16) -> i32`
-
-#### `impl From<u8> for i32`
-
-##### `pub fn from(value: u8) -> i32`
-
-#### `impl From<u16> for i32`
-
-##### `pub fn from(value: u16) -> i32`
-
-#### `impl From<bool> for i32`
-
-##### `pub fn from(value: bool) -> i32`
-
-#### `impl TryFrom<i64> for i32`
-
-##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
-
-#### `impl Step for i32`
-
-##### `fn next_step(&self) -> Option<i32>`
-
-### `u32`
-
-#### `pub const MAX: u32`
-
-#### `pub const MIN: u32`
-
-#### `pub fn max(a: u32, b: u32) -> u32`
-
-#### `pub fn min(a: u32, b: u32) -> u32`
-
-#### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>`
-
-#### `impl FromStr for u32`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError>`
-
-#### `impl LenientFromStr for u32`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError>`
-
-#### `impl Display for u32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u32`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u32`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u32`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u32`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u32`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u32`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u32`
-
-##### `pub fn default() -> u32`
-
-#### `impl From<u8> for u32`
-
-##### `pub fn from(value: u8) -> u32`
-
-#### `impl From<u16> for u32`
-
-##### `pub fn from(value: u16) -> u32`
-
-#### `impl TryFrom<i32> for u32`
-
-##### `pub fn try_from(value: i32) -> Result<u32, ConvertError>`
-
-#### `impl TryFrom<i64> for u32`
-
-##### `pub fn try_from(value: i64) -> Result<u32, ConvertError>`
-
-#### `impl TryFrom<u64> for u32`
-
-##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
-
-#### `impl Step for u32`
-
-##### `fn next_step(&self) -> Option<u32>`
-
-### `i64`
-
-#### `pub const MAX: i64`
-
-#### `pub const MIN: i64`
-
-#### `pub fn max(a: i64, b: i64) -> i64`
-
-#### `pub fn min(a: i64, b: i64) -> i64`
-
-#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn clz(x: i64) -> i64`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i64) -> i64`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i64) -> i64`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
-
-#### `impl FromStr for i64`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError>`
-
-#### `impl LenientFromStr for i64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
-
-#### `impl Display for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i64`
-
-##### `pub fn default() -> i64`
-
-#### `impl From<i8> for i64`
-
-##### `pub fn from(value: i8) -> i64`
-
-#### `impl From<i16> for i64`
-
-##### `pub fn from(value: i16) -> i64`
-
-#### `impl From<i32> for i64`
-
-##### `pub fn from(value: i32) -> i64`
-
-#### `impl From<u8> for i64`
-
-##### `pub fn from(value: u8) -> i64`
-
-#### `impl From<u16> for i64`
-
-##### `pub fn from(value: u16) -> i64`
-
-#### `impl From<u32> for i64`
-
-##### `pub fn from(value: u32) -> i64`
-
-#### `impl TryFrom<u64> for i64`
-
-##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<u128> for i64`
-
-##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<i128> for i64`
-
-##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
-
-#### `impl Step for i64`
-
-##### `fn next_step(&self) -> Option<i64>`
-
-### `u64`
-
-#### `pub const MAX: u64`
-
-#### `pub const MIN: u64`
-
-#### `pub fn max(a: u64, b: u64) -> u64`
-
-#### `pub fn min(a: u64, b: u64) -> u64`
-
-#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
-
-#### `impl FromStr for u64`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError>`
-
-#### `impl LenientFromStr for u64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
-
-#### `impl Display for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u64`
-
-##### `pub fn default() -> u64`
-
-#### `impl From<u8> for u64`
-
-##### `pub fn from(value: u8) -> u64`
-
-#### `impl From<u16> for u64`
-
-##### `pub fn from(value: u16) -> u64`
-
-#### `impl From<u32> for u64`
-
-##### `pub fn from(value: u32) -> u64`
-
-#### `impl TryFrom<i64> for u64`
-
-##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<u128> for u64`
-
-##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<i128> for u64`
-
-##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
-
-#### `impl Step for u64`
-
-##### `fn next_step(&self) -> Option<u64>`
-
 ### `f32`
 
 #### `pub const PI: f32`
@@ -2324,17 +1357,33 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_finite(&self) -> bool`
 
-#### `pub fn to_bits(&self) -> i32`
+#### `pub fn to_bits(&self) -> u32`
 
-Reinterprets the bits of this f32 as an i32.
+Reinterprets the bits of this f32 as a u32.
 
-#### `pub fn from_bits(bits: i32) -> f32`
+#### `pub fn from_bits(bits: u32) -> f32`
 
 Creates an f32 from its bit representation.
 
+#### `impl From<f16> for f32`
+
+##### `fn from(value: f16) -> f32`
+
+#### `impl From<bf16> for f32`
+
+##### `fn from(value: bf16) -> f32`
+
+#### `impl TryFrom<i128> for f32`
+
+##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u128> for f32`
+
+##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
+
 #### `impl FromStr for f32`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError>`
 
 #### `impl LenientFromStr for f32`
 
@@ -2375,14 +1424,6 @@ Creates an f32 from its bit representation.
 #### `impl TryFrom<u64> for f32`
 
 ##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<i128> for f32`
-
-##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u128> for f32`
-
-##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
 
 ### `f64`
 
@@ -2585,17 +1626,33 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_finite(&self) -> bool`
 
-#### `pub fn to_bits(&self) -> i64`
+#### `pub fn to_bits(&self) -> u64`
 
-Reinterprets the bits of this f64 as an i64.
+Reinterprets the bits of this f64 as a u64.
 
-#### `pub fn from_bits(bits: i64) -> f64`
+#### `pub fn from_bits(bits: u64) -> f64`
 
 Creates an f64 from its bit representation.
 
+#### `impl From<f16> for f64`
+
+##### `fn from(value: f16) -> f64`
+
+#### `impl From<bf16> for f64`
+
+##### `fn from(value: bf16) -> f64`
+
+#### `impl TryFrom<i128> for f64`
+
+##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u128> for f64`
+
+##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
+
 #### `impl FromStr for f64`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError>`
 
 #### `impl LenientFromStr for f64`
 
@@ -2641,13 +1698,1055 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
 
-#### `impl TryFrom<i128> for f64`
+### `f16`
 
-##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+#### `pub fn to_bits(&self) -> u16`
 
-#### `impl TryFrom<u128> for f64`
+Reinterprets the bits of this f16 as a u16.
 
-##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
+#### `pub fn from_bits(bits: u16) -> f16`
+
+Creates an f16 from its bit representation.
+
+#### `pub fn from_f32(v: f32) -> f16`
+
+Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
+Use `f16::try_from` where an inexact value should be refused instead.
+
+#### `pub fn is_nan(&self) -> bool`
+
+True for a NaN, quiet or signaling.
+
+#### `impl TryFrom<f32> for f16`
+
+##### `pub fn try_from(value: f32) -> Result<f16, ConvertError>`
+
+#### `impl TryFrom<f64> for f16`
+
+##### `pub fn try_from(value: f64) -> Result<f16, ConvertError>`
+
+#### `impl Display for f16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+### `bf16`
+
+#### `pub fn to_bits(&self) -> u16`
+
+Reinterprets the bits of this bf16 as a u16.
+
+#### `pub fn from_bits(bits: u16) -> bf16`
+
+Creates a bf16 from its bit representation.
+
+#### `pub fn from_f32(v: f32) -> bf16`
+
+Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
+field as is, so the top 16 bits are the result and only the mantissa rounds.
+
+#### `pub fn is_nan(&self) -> bool`
+
+True for a NaN, quiet or signaling.
+
+#### `impl TryFrom<f32> for bf16`
+
+##### `pub fn try_from(value: f32) -> Result<bf16, ConvertError>`
+
+#### `impl TryFrom<f64> for bf16`
+
+##### `pub fn try_from(value: f64) -> Result<bf16, ConvertError>`
+
+#### `impl Display for bf16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for bf16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+### `i64`
+
+#### `pub const MAX: i64`
+
+#### `pub const MIN: i64`
+
+#### `pub fn max(a: i64, b: i64) -> i64`
+
+#### `pub fn min(a: i64, b: i64) -> i64`
+
+#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn clz(x: i64) -> i64`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i64) -> i64`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i64) -> i64`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
+
+#### `impl TryFrom<u128> for i64`
+
+##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
+
+#### `impl TryFrom<i128> for i64`
+
+##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
+
+#### `impl FromStr for i64`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
+
+#### `impl LenientFromStr for i64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
+
+#### `impl Display for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i64`
+
+##### `pub fn default() -> i64`
+
+#### `impl From<i8> for i64`
+
+##### `pub fn from(value: i8) -> i64`
+
+#### `impl From<i16> for i64`
+
+##### `pub fn from(value: i16) -> i64`
+
+#### `impl From<i32> for i64`
+
+##### `pub fn from(value: i32) -> i64`
+
+#### `impl From<u8> for i64`
+
+##### `pub fn from(value: u8) -> i64`
+
+#### `impl From<u16> for i64`
+
+##### `pub fn from(value: u16) -> i64`
+
+#### `impl From<u32> for i64`
+
+##### `pub fn from(value: u32) -> i64`
+
+#### `impl TryFrom<u64> for i64`
+
+##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
+
+#### `impl Step for i64`
+
+##### `fn next_step(&self) -> Option<i64>`
+
+### `u64`
+
+#### `pub const MAX: u64`
+
+#### `pub const MIN: u64`
+
+#### `pub fn max(a: u64, b: u64) -> u64`
+
+#### `pub fn min(a: u64, b: u64) -> u64`
+
+#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
+
+#### `impl TryFrom<u128> for u64`
+
+##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<i128> for u64`
+
+##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
+
+#### `impl FromStr for u64`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
+
+#### `impl LenientFromStr for u64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
+
+#### `impl Display for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u64`
+
+##### `pub fn default() -> u64`
+
+#### `impl From<u8> for u64`
+
+##### `pub fn from(value: u8) -> u64`
+
+#### `impl From<u16> for u64`
+
+##### `pub fn from(value: u16) -> u64`
+
+#### `impl From<u32> for u64`
+
+##### `pub fn from(value: u32) -> u64`
+
+#### `impl TryFrom<i64> for u64`
+
+##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
+
+#### `impl Step for u64`
+
+##### `fn next_step(&self) -> Option<u64>`
+
+### `i8`
+
+#### `pub const MAX: i8`
+
+#### `pub const MIN: i8`
+
+#### `pub fn max(a: i8, b: i8) -> i8`
+
+#### `pub fn min(a: i8, b: i8) -> i8`
+
+#### `pub fn clamp(value: i8, low: i8, high: i8) -> i8`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError>`
+
+#### `impl FromStr for i8`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
+
+#### `impl LenientFromStr for i8`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError>`
+
+#### `impl Display for i8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i8`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i8`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i8`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i8`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i8`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i8`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i8`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i8`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i8`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i8`
+
+##### `pub fn default() -> i8`
+
+#### `impl TryFrom<i64> for i8`
+
+##### `pub fn try_from(value: i64) -> Result<i8, ConvertError>`
+
+#### `impl TryFrom<i32> for i8`
+
+##### `pub fn try_from(value: i32) -> Result<i8, ConvertError>`
+
+#### `impl TryFrom<i16> for i8`
+
+##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
+
+#### `impl Step for i8`
+
+##### `fn next_step(&self) -> Option<i8>`
+
+### `i16`
+
+#### `pub const MAX: i16`
+
+#### `pub const MIN: i16`
+
+#### `pub fn max(a: i16, b: i16) -> i16`
+
+#### `pub fn min(a: i16, b: i16) -> i16`
+
+#### `pub fn clamp(value: i16, low: i16, high: i16) -> i16`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError>`
+
+#### `impl FromStr for i16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
+
+#### `impl LenientFromStr for i16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError>`
+
+#### `impl Display for i16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i16`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i16`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i16`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i16`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i16`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i16`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i16`
+
+##### `pub fn default() -> i16`
+
+#### `impl From<i8> for i16`
+
+##### `pub fn from(value: i8) -> i16`
+
+#### `impl From<u8> for i16`
+
+##### `pub fn from(value: u8) -> i16`
+
+#### `impl TryFrom<i64> for i16`
+
+##### `pub fn try_from(value: i64) -> Result<i16, ConvertError>`
+
+#### `impl TryFrom<i32> for i16`
+
+##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
+
+#### `impl Step for i16`
+
+##### `fn next_step(&self) -> Option<i16>`
+
+### `i32`
+
+#### `pub const MAX: i32`
+
+#### `pub const MIN: i32`
+
+#### `pub fn max(a: i32, b: i32) -> i32`
+
+#### `pub fn min(a: i32, b: i32) -> i32`
+
+#### `pub fn clamp(value: i32, low: i32, high: i32) -> i32`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn clz(x: i32) -> i32`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i32) -> i32`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i32) -> i32`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError>`
+
+#### `impl FromStr for i32`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
+
+#### `impl LenientFromStr for i32`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError>`
+
+#### `impl Display for i32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i32`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i32`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i32`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i32`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i32`
+
+##### `pub fn default() -> i32`
+
+#### `impl From<i8> for i32`
+
+##### `pub fn from(value: i8) -> i32`
+
+#### `impl From<i16> for i32`
+
+##### `pub fn from(value: i16) -> i32`
+
+#### `impl From<u8> for i32`
+
+##### `pub fn from(value: u8) -> i32`
+
+#### `impl From<u16> for i32`
+
+##### `pub fn from(value: u16) -> i32`
+
+#### `impl From<bool> for i32`
+
+##### `pub fn from(value: bool) -> i32`
+
+#### `impl TryFrom<i64> for i32`
+
+##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
+
+#### `impl Step for i32`
+
+##### `fn next_step(&self) -> Option<i32>`
+
+### `u8`
+
+#### `pub const MAX: u8`
+
+#### `pub const MIN: u8`
+
+#### `pub fn max(a: u8, b: u8) -> u8`
+
+#### `pub fn min(a: u8, b: u8) -> u8`
+
+#### `pub fn clamp(value: u8, low: u8, high: u8) -> u8`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the byte is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the byte is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the byte is an ASCII letter or digit: a-z, A-Z, 0-9.
+
+#### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the byte is an ASCII lowercase letter: a-z.
+
+#### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the byte is an ASCII uppercase letter: A-Z.
+
+#### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the byte is ASCII whitespace: SP, HT, LF, VT, FF, CR.
+
+#### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the byte is a hexadecimal digit: 0-9, a-f, A-F.
+
+#### `pub fn to_ascii_lowercase(&self) -> u8`
+
+Converts an ASCII uppercase letter to lowercase, leaving every other
+byte unchanged.
+
+#### `pub fn to_ascii_uppercase(&self) -> u8`
+
+Converts an ASCII lowercase letter to uppercase, leaving every other
+byte unchanged.
+
+#### `pub fn eq_ignore_ascii_case(&self, other: &u8) -> bool`
+
+Checks that two bytes are an ASCII case-insensitive match.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError>`
+
+#### `impl FromStr for u8`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
+
+#### `impl LenientFromStr for u8`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError>`
+
+#### `impl Display for u8`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u8`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u8`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u8`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u8`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u8`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u8`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u8`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u8`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u8`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u8`
+
+##### `pub fn default() -> u8`
+
+#### `impl TryFrom<u32> for u8`
+
+##### `pub fn try_from(value: u32) -> Result<u8, ConvertError>`
+
+#### `impl TryFrom<u16> for u8`
+
+##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
+
+#### `impl Step for u8`
+
+##### `fn next_step(&self) -> Option<u8>`
+
+### `u16`
+
+#### `pub const MAX: u16`
+
+#### `pub const MIN: u16`
+
+#### `pub fn max(a: u16, b: u16) -> u16`
+
+#### `pub fn min(a: u16, b: u16) -> u16`
+
+#### `pub fn clamp(value: u16, low: u16, high: u16) -> u16`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError>`
+
+#### `impl FromStr for u16`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
+
+#### `impl LenientFromStr for u16`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError>`
+
+#### `impl Display for u16`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u16`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u16`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u16`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u16`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u16`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u16`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u16`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u16`
+
+##### `pub fn default() -> u16`
+
+#### `impl From<u8> for u16`
+
+##### `pub fn from(value: u8) -> u16`
+
+#### `impl TryFrom<u32> for u16`
+
+##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
+
+#### `impl Step for u16`
+
+##### `fn next_step(&self) -> Option<u16>`
+
+### `u32`
+
+#### `pub const MAX: u32`
+
+#### `pub const MIN: u32`
+
+#### `pub fn max(a: u32, b: u32) -> u32`
+
+#### `pub fn min(a: u32, b: u32) -> u32`
+
+#### `pub fn clamp(value: u32, low: u32, high: u32) -> u32`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError>`
+
+#### `impl FromStr for u32`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
+
+#### `impl LenientFromStr for u32`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError>`
+
+#### `impl Display for u32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u32`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u32`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u32`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u32`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u32`
+
+##### `pub fn default() -> u32`
+
+#### `impl From<u8> for u32`
+
+##### `pub fn from(value: u8) -> u32`
+
+#### `impl From<u16> for u32`
+
+##### `pub fn from(value: u16) -> u32`
+
+#### `impl TryFrom<i32> for u32`
+
+##### `pub fn try_from(value: i32) -> Result<u32, ConvertError>`
+
+#### `impl TryFrom<i64> for u32`
+
+##### `pub fn try_from(value: i64) -> Result<u32, ConvertError>`
+
+#### `impl TryFrom<u64> for u32`
+
+##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
+
+#### `impl Step for u32`
+
+##### `fn next_step(&self) -> Option<u32>`
+
+### `bool`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `impl FromStr for bool`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bool, ParseBoolError>`
+
+#### `impl LenientFromStr for bool`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<bool, LenientParseError>`
+
+#### `impl Display for bool`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for bool`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Eq for bool`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for bool`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for bool`
+
+##### `pub fn default() -> bool`
+
+#### `impl From<bool> for bool`
+
+##### `pub fn from(value: bool) -> bool`
+
+### `char`
+
+#### `pub fn from_u32(value: u32) -> Option<char>`
+
+Converts a Unicode scalar value (u32) to a char.
+Returns null if the value is not a valid Unicode scalar value
+(i.e., surrogates 0xD800..=0xDFFF or values > 0x10FFFF).
+
+#### `pub fn from_i32(value: i32) -> Option<char>`
+
+Converts a signed integer to a char.
+Returns null if the value is negative or not a valid Unicode scalar value.
+
+#### `pub fn from_u32_unchecked(value: u32) -> char`
+
+Converts a u32 to a char without validation.
+The caller must ensure the value is a valid Unicode scalar value
+(0..=0xD7FF or 0xE000..=0x10FFFF). Passing an invalid value
+results in an invalid char, which may cause incorrect behavior
+in string operations.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn is_ascii_whitespace(&self) -> bool`
+
+Returns true if the character is ASCII whitespace, as POSIX `isspace()`
+has it: SP, HT, LF, VT, FF, CR.
+
+#### `pub fn is_whitespace(&self) -> bool`
+
+Returns true if the character is Unicode whitespace: ASCII whitespace,
+U+0085 (NEXT LINE), and the Zs/Zl/Zp code points.
+
+#### `pub fn is_ascii_lowercase(&self) -> bool`
+
+Returns true if the character is an ASCII lowercase letter: a-z.
+
+#### `pub fn is_ascii_uppercase(&self) -> bool`
+
+Returns true if the character is an ASCII uppercase letter: A-Z.
+
+#### `pub fn to_ascii_lowercase(&self) -> char`
+
+Converts an ASCII uppercase letter to lowercase. Non-ASCII and
+non-uppercase characters are returned unchanged.
+
+#### `pub fn to_ascii_uppercase(&self) -> char`
+
+Converts an ASCII lowercase letter to uppercase. Non-ASCII and
+non-lowercase characters are returned unchanged.
+
+#### `pub fn eq_ignore_ascii_case(&self, other: &char) -> bool`
+
+Checks that two characters are an ASCII case-insensitive match.
+
+#### `pub fn is_ascii_digit(&self) -> bool`
+
+Returns true if the character is an ASCII digit: 0-9.
+
+#### `pub fn is_ascii_alphabetic(&self) -> bool`
+
+Returns true if the character is an ASCII letter: a-z or A-Z.
+
+#### `pub fn is_ascii_alphanumeric(&self) -> bool`
+
+Returns true if the character is an ASCII letter or digit: a-z, A-Z, 0-9.
+
+#### `pub fn is_hexdigit(&self) -> bool`
+
+Returns true if the character is a hexadecimal digit: 0-9, a-f, A-F.
+
+#### `pub fn hex_digit_value(&self) -> i32`
+
+Returns the numeric value of an ASCII hexadecimal digit (0–15).
+Panics if the character is not a valid hex digit.
+
+#### `pub fn len_utf8(&self) -> i32`
+
+Returns the number of bytes this character needs in UTF-8 encoding.
+
+#### `pub fn encode_utf8(&self) -> ByteList`
+
+Encodes this character as UTF-8, returning the bytes.
+
+#### `impl FromStr for char`
+
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<char, ParseCharError>`
+
+#### `impl LenientFromStr for char`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError>`
+
+#### `impl Display for char`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for char`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl Eq for char`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for char`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for char`
+
+##### `pub fn default() -> char`
+
+#### `impl Step for char`
+
+##### `fn next_step(&self) -> Option<char>`
+
+### `v128`
+
+#### `impl Inspect for v128`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
 
 ## Structs
 
@@ -2773,6 +2872,10 @@ Error type returned by fallible conversions.
 
 #### `pub fn new(message: String) -> ConvertError`
 
+#### `impl Display for ConvertError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct LenientParseError`
 
 Error returned by the lenient string parsers (`LenientFromStr`). All
@@ -2786,6 +2889,10 @@ _Fields are private._
 #### `pub fn reason(&self) -> String`
 
 A short description of why parsing failed.
+
+#### `impl Display for LenientParseError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct Formatter`
 
@@ -3036,7 +3143,7 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl FromStr for u128`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u128, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u128, ParseIntError>`
 
 #### `impl LenientFromStr for u128`
 
@@ -3267,7 +3374,7 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl FromStr for i128`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i128, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i128, ParseIntError>`
 
 #### `impl LenientFromStr for i128`
 
@@ -3484,7 +3591,9 @@ Error returned by integer parsing.
 
 #### `pub fn kind(&self) -> IntErrorKind`
 
-Returns the kind of this error.
+#### `impl Display for ParseIntError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct ParseFloatError`
 
@@ -3496,7 +3605,31 @@ Error returned by float parsing.
 
 #### `pub fn kind(&self) -> FloatErrorKind`
 
-Returns the kind of this error.
+#### `impl Display for ParseFloatError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct ParseBoolError`
+
+Error returned by `bool::from_str`, which takes `true` and `false` alone.
+
+#### `impl Display for ParseBoolError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct ParseCharError`
+
+Error returned by char parsing.
+
+#### `kind: CharErrorKind`
+
+#### `pub fn new(kind: CharErrorKind) -> ParseCharError`
+
+#### `pub fn kind(&self) -> CharErrorKind`
+
+#### `impl Display for ParseCharError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct Slice<T>`
 
@@ -3663,6 +3796,40 @@ _Fields are private._
 #### `impl IntoIterator for SliceChunks<T>`
 
 ##### `fn into_iter(&self) -> SliceChunks<T>`
+
+### `pub struct Utf8Error`
+
+Why a byte sequence is not valid UTF-8: where the valid part ends, and
+whether what follows is malformed or merely cut short.
+
+_Fields are private._
+
+#### `pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error`
+
+A sequence no further byte could complete, `len` bytes long.
+
+#### `pub fn incomplete(valid_up_to: i32) -> Utf8Error`
+
+A sequence the input ends in the middle of.
+
+#### `pub fn valid_up_to(&self) -> i32`
+
+Byte offset at which the first invalid sequence begins.
+
+#### `pub fn error_len(&self) -> Option<i32>`
+
+Length of the invalid sequence, or `None` when the input just ends short
+and more bytes could still complete it.
+
+#### `pub fn rebased(&self, base: i32) -> Utf8Error`
+
+The same failure, with its offset read from `base` instead of from the
+start of the decoded buffer. A caller decoding a stream in pieces owes
+this, or it reports a position into a buffer its own caller never saw.
+
+#### `impl Display for Utf8Error`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct String`
 
@@ -3967,24 +4134,25 @@ If `count` is negative, replaces all occurrences.
 
 Build a `String` from an iterable of chars.
 
-#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
+#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error>`
 
 Build a `String` from an iterable of bytes, validating UTF-8.
-`Ok(String)` on success, `Err(message)` on invalid UTF-8.
 
-#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String>`
+#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error>`
 
-Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
+Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
+sequence cut short at the end fails too, with `error_len() == None`.
 
-#### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String>`
+#### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error>`
 
 Append the longest prefix of `bytes` that is complete, valid UTF-8, and
 answer how many bytes that was. A trailing sequence cut short is left
 behind rather than rejected, so a caller decoding a stream carries those
 bytes into its next chunk.
 
-`Err` names a sequence no further byte could complete, and leaves this
-string untouched: the prefix is validated before any of it is appended.
+`Err` names a sequence no further byte could complete, offset from the
+start of `bytes` — a stream decoder owes it `Utf8Error::rebased`. This
+string is untouched: the prefix is validated before any of it is appended.
 
 #### `pub fn is_valid_utf8(bytes: ByteSlice) -> bool`
 
@@ -4729,3 +4897,15 @@ The input string was empty.
 #### `Invalid`
 
 The input was malformed.
+
+### `pub enum CharErrorKind`
+
+Kind of failure returned by char parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `TooManyChars`
+
+The input held more than one Unicode scalar.

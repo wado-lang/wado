@@ -8,7 +8,8 @@ use crate::name::{MangledName, global_name, multi_value_split_local};
 use crate::nir::{NirFunction, NirUnaryOp};
 use crate::nir_arena::{Body, ExprKind, Operand};
 use crate::nir_value_graph::ValueKind;
-use crate::tir::{PrimitiveType, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::TypeTable;
 use crate::wir::{
     WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
 };

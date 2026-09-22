@@ -294,7 +294,7 @@ pub async fn run(opts: RunOptions) -> Result<(), CliExit> {
     // builds the cli/command world through the shared build core (metadata
     // embedded, written to build/), then executes it; a bare file with no
     // project stays on the in-memory compile primitive.
-    let wasm = build_for_driver(&opts.input, "wasi:cli/command", &flags).await?;
+    let wasm = Box::pin(build_for_driver(&opts.input, "wasi:cli/command", &flags)).await?;
 
     run_cli_component(
         &wasm,

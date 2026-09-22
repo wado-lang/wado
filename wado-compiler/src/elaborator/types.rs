@@ -42,6 +42,9 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
+    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
+    /// every field or none, which `WireNumbered` is the bound for.
+    pub(super) field_wire_numbers: Vec<Option<u32>>,
     /// The declaration's real type parameters. Bounds, defaults and arity are
     /// all read from here, never from a projection of it.
     pub(super) type_params: RealTypeParams,
@@ -899,6 +902,30 @@ pub enum TypeError {
         /// Whether the trait declares a receiver, and whether the impl does.
         expected: bool,
         found: bool,
+        span: Span,
+    },
+
+    /// An `impl` leaves one of its trait's associated types unbound. None
+    /// declares a default, so the projection reaches codegen unsubstituted.
+    ImplMissingAssocType {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a name its trait does not declare — a typo for one it
+    /// does, which leaves the real associated type unbound.
+    ImplAssocTypeNotInTrait {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` leaves a method its trait requires undefined. A trait method
+    /// written with a body is a default and is not required.
+    ImplMissingMethod {
+        trait_name: String,
+        method_name: String,
         span: Span,
     },
 
@@ -1983,6 +2010,33 @@ impl TypeError {
                         receiver(*expected)
                     )
                 },
+                *span,
+            ),
+            TypeError::ImplMissingAssocType {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeNotInTrait {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplMissingMethod {
+                trait_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (

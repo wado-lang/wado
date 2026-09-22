@@ -329,7 +329,7 @@ test "fixed_width_for_prec matches the two-phase reference over every magnitude"
         let mantissa = state >> 12 & 0x000FFFFFFFFFFFFF;
         // Biased exponents 1 (smallest normal) through 2046 (largest finite).
         let biased_exp = (i * 743 % 2046 + 1) as u64;
-        assert_matches_reference(f64::from_bits((biased_exp << 52 | mantissa) as i64));
+        assert_matches_reference(f64::from_bits(biased_exp << 52 | mantissa));
     }
 }
 

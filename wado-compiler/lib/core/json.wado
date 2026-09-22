@@ -916,8 +916,8 @@ fn checked_int_f64<S: AsStrSlice>(
 }
 
 /// Maps an integer `from_str` failure onto a deserialize error.
-fn int_from_str_error<S: AsStrSlice>(kind: IntErrorKind, range_msg: S, start: i64) -> DeserializeError {
-    return match kind {
+fn int_from_str_error<S: AsStrSlice>(e: ParseIntError, range_msg: S, start: i64) -> DeserializeError {
+    return match e.kind() {
         PosOverflow | NegOverflow => DeserializeError::overflow(range_msg, start),
         _ => DeserializeError::invalid_value("invalid digit in number", start),
     };
@@ -933,9 +933,9 @@ fn parse_i64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<i64, DeserializeE
                 let checked = checked_int_f64(v, -TWO_POW_63, TWO_POW_63, "value out of range for i64", start)?;
                 Result::Ok(checked as i64);
             },
-            Err(_) => {
+            Err(e) => {
                 builtin::cold_path();
-                Result::Err(DeserializeError::invalid_value("invalid number", start));
+                Result::Err(DeserializeError::invalid_value(`invalid number: ${e}`, start));
             },
         };
     }
@@ -943,7 +943,7 @@ fn parse_i64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<i64, DeserializeE
         Ok(v) => Result::Ok(v),
         Err(e) => {
             builtin::cold_path();
-            Result::Err(int_from_str_error(e.kind(), "value out of range for i64", start));
+            Result::Err(int_from_str_error(e, "value out of range for i64", start));
         },
     };
 }
@@ -963,9 +963,9 @@ fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeE
                 let checked = checked_int_f64(v, 0.0, TWO_POW_64, "value out of range for u64", start)?;
                 Result::Ok(checked as u64);
             },
-            Err(_) => {
+            Err(e) => {
                 builtin::cold_path();
-                Result::Err(DeserializeError::invalid_value("invalid number", start));
+                Result::Err(DeserializeError::invalid_value(`invalid number: ${e}`, start));
             },
         };
     }
@@ -973,7 +973,7 @@ fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeE
         Ok(v) => Result::Ok(v),
         Err(e) => {
             builtin::cold_path();
-            Result::Err(int_from_str_error(e.kind(), "value out of range for u64", start));
+            Result::Err(int_from_str_error(e, "value out of range for u64", start));
         },
     };
 }
@@ -2192,7 +2192,7 @@ impl Deserializer for JsonDeserializer {
             Ok(v) => Result::Ok(v),
             Err(e) => {
                 builtin::cold_path();
-                Result::Err(int_from_str_error(e.kind(), "value out of range for i128", start));
+                Result::Err(int_from_str_error(e, "value out of range for i128", start));
             },
         };
     }
@@ -2209,7 +2209,7 @@ impl Deserializer for JsonDeserializer {
             Ok(v) => Result::Ok(v),
             Err(e) => {
                 builtin::cold_path();
-                Result::Err(int_from_str_error(e.kind(), "value out of range for u128", start));
+                Result::Err(int_from_str_error(e, "value out of range for u128", start));
             },
         };
     }

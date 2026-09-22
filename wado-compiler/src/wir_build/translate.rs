@@ -8,7 +8,8 @@ use crate::hashmap::{IndexMap, IndexSet};
 use crate::module_source::ModuleSource;
 use crate::name::global_name;
 use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirParam, NirUnaryOp};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirName, WirType, WirTypeDef, WirTypeId};
 
 use super::context::WirContext;

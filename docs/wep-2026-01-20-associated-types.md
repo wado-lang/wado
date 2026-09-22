@@ -34,6 +34,19 @@ impl Container for IntArray {
 }
 ```
 
+### Conformance
+
+An associated type declares no default, so an impl binds every one its trait
+declares, and binds no name the trait does not. An unbound type leaves the
+projection with nothing to resolve to, so it reaches code generation
+unsubstituted. A name the trait never declared is a typo for one it did, which
+is how the real type came to be unbound.
+
+A derivation request (`impl Trait for Type;`) writes no members at all, so it
+owes none. A supertrait's associated type belongs to the impl answering
+`T: Super`, not to the subtrait's: `impl Ord for T` neither owes nor may bind
+one `Eq` declares ([Super Traits](./wep-2026-07-27-super-traits.md)).
+
 ### Resolution
 
 Associated types are resolved via `Self::TypeName` syntax:
@@ -76,15 +89,22 @@ When resolving `Self::TypeName`:
 2. If found, return the bound type
 3. If not found, report an error
 
-### Constraints (Not Yet Implemented)
+### Bounds
 
-Future work may add trait bounds on associated types:
+An associated type carries trait bounds, enforced against each impl's binding:
 
 ```wado
 trait Container {
-    type Item: Display;  // Item must implement Display
+    type Item: Display;
 }
 ```
+
+A binding that does not satisfy them is rejected. A still-parametric binding is
+left to the instantiation that settles it.
+
+A caller reaching `Self::Item` through `T: Container` has no impl to read, so
+the bound is all it may rely on. `FromStr::Err` and `TryFrom::Err` are both
+`: Error` for that reason.
 
 ## Consequences
 
@@ -96,8 +116,8 @@ trait Container {
 
 ### Trade-offs
 
-1. **No bounds yet**: Cannot constrain associated types with trait bounds
-2. **Single binding**: Each impl can only bind one type per associated type name
+1. **Single binding**: Each impl can only bind one type per associated type name
+2. **No defaults**: A trait supplies no fallback, so every impl binds every one
 
 ### Implementation Status
 
@@ -106,7 +126,8 @@ trait Container {
 - [x] Elaborator: `Self::TypeName` resolution
 - [x] Desugar: Pass-through of associated types
 - [x] Unparse: Output associated types
-- [ ] Trait bounds on associated types
+- [x] Trait bounds on associated types
+- [x] Impl conformance: every declared type bound, and no other
 - [ ] Default associated types
 
 ## Related

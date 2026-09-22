@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Module, Type, declares_unrestricted};
+use crate::ast::{self, Item, Module, Type, declares_unrestricted, wire_numbers_of};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -50,12 +50,13 @@ use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, 
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
+use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
 use crate::signature_reach;
 use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
-use crate::tir::{AnonStructId, PrimitiveType, StructDef, TirFunction, TraitRef};
+use crate::tir::{AnonStructId, StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;
@@ -454,6 +455,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
+                                    field_wire_numbers: Vec::new(),
                                     type_params: RealTypeParams::of(&struct_decl.type_params),
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
@@ -816,6 +818,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
+                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
                             type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         };
@@ -1060,26 +1063,74 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // An `impl` method whose parameter list differs from the trait's is
-        // never rejected downstream: the call is built to the trait's shape and
-        // only fails Wasm validation. Compare the two here, where every
-        // declaration and impl is in hand. The receiver counts as much as the
-        // rest, since no call site writes one the trait did not declare.
+        // Nothing downstream rejects an impl that disagrees with its trait: an
+        // unbound associated type reaches codegen unsubstituted, a wrong arity
+        // only fails Wasm validation.
         //
-        // The impl's trait is the one its header resolved to, so a module
-        // implementing its own `Encode` is never checked against another
-        // module's declaration of that name.
+        // The trait is the one the impl's header resolved to, so a module
+        // implementing its own `Encode` is never checked against another's.
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
             }
-            let Some(decl) = header
-                .trait_key()
-                .and_then(|key| trait_env.trait_decl_header(key))
-            else {
+            let Some(ImplTargetKey::Decl(decl_key)) = header.trait_key() else {
                 continue;
             };
+            let Some(decl) = trait_env.decl_header_of(decl_key) else {
+                continue;
+            };
+            // A derivation request asks for an impl rather than writing one, so
+            // it has no members to compare.
+            if header.is_synthesize_request {
+                debug_assert!(header.associated_types.is_empty() && header.methods.is_empty());
+                continue;
+            }
+            for declared in &decl.assoc_types {
+                if header
+                    .associated_types
+                    .iter()
+                    .all(|bound| bound.name != declared.name)
+                {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingAssocType {
+                            trait_name: decl.name.clone(),
+                            assoc_name: declared.name.clone(),
+                            span: header.span,
+                        },
+                    );
+                }
+            }
+            // A supertrait's associated type belongs to the impl answering
+            // `T: Super`, so binding it here would record it where no
+            // projection reads it (WEP 2026-07-27).
+            for binding in &header.associated_types {
+                if !trait_env.declares_assoc_type(decl_key, &binding.name) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplAssocTypeNotInTrait {
+                            trait_name: decl.name.clone(),
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        },
+                    );
+                }
+            }
+            for required in decl.methods.iter().filter(|m| !m.has_body) {
+                if header.methods.iter().all(|m| m.name != required.name) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingMethod {
+                            trait_name: decl.name.clone(),
+                            method_name: required.name.clone(),
+                            span: header.span,
+                        },
+                    );
+                }
+            }
             for method in &header.methods {
+                // An impl may declare a method the trait does not: a helper its
+                // own bodies call on `self` (WEP 2026-09-01).
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
@@ -1107,6 +1158,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                 }
+                // The receiver counts as much as the parameters, since no call
+                // site writes one the trait did not declare.
                 if declared.has_receiver != method.has_receiver {
                     let _ = logger.error_in(
                         &header.module,
@@ -3317,48 +3370,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return type_table.make_type_param(named.name.clone(), index as u32);
                 }
 
-                // Built-in primitives
-                match named.name.as_str() {
-                    "bool" => TypeTable::BOOL,
-                    "char" => TypeTable::CHAR,
-                    "v128" => TypeTable::V128,
-                    "i8" => TypeTable::I8,
-                    "i16" => TypeTable::I16,
-                    "i32" => TypeTable::I32,
-                    "i64" => TypeTable::I64,
-                    "u8" => TypeTable::U8,
-                    "u16" => TypeTable::U16,
-                    "u32" => TypeTable::U32,
-                    "u64" => TypeTable::U64,
-                    "f32" => TypeTable::F32,
-                    "f64" => TypeTable::F64,
-                    "()" => TypeTable::UNIT,
-                    "!" => TypeTable::NEVER,
-                    // `resolve_type_static[_with_params]` runs before the
-                    // elaborator instance exists — including the newtype
-                    // pre-pass (`annotate_modules`), which resolves newtype
-                    // base types *before* `intern_all_decl_types` mints and
-                    // registers struct/variant/enum/resource `TypeId`s. So
-                    // this one cannot reach an identity through a type that
-                    // may not be interned yet: it reads the declaring node
-                    // each registry entry already carries, which is the same
-                    // answer at every point in the bootstrap.
-                    _ => {
-                        let Some(def) = def else {
-                            return TypeTable::UNKNOWN;
-                        };
-                        if lookup.struct_fields_of(def).is_some() {
-                            type_table.make_struct(StructDef::Decl(def))
-                        } else if lookup.resource_type_of(def).is_some() {
-                            type_table.make_resource(def)
-                        } else if lookup.variant_cases_of(def).is_some() {
-                            type_table.make_variant(def)
-                        } else if lookup.enum_cases_of(def).is_some() {
-                            type_table.make_enum(def)
-                        } else {
-                            TypeTable::UNKNOWN
-                        }
-                    }
+                if let Some(primitive) = TypeTable::primitive_by_name(&named.name) {
+                    return primitive;
+                }
+
+                // `resolve_type_static[_with_params]` runs before the
+                // elaborator instance exists — including the newtype
+                // pre-pass (`annotate_modules`), which resolves newtype
+                // base types *before* `intern_all_decl_types` mints and
+                // registers struct/variant/enum/resource `TypeId`s. So
+                // this one cannot reach an identity through a type that
+                // may not be interned yet: it reads the declaring node
+                // each registry entry already carries, which is the same
+                // answer at every point in the bootstrap.
+                let Some(def) = def else {
+                    return TypeTable::UNKNOWN;
+                };
+                if lookup.struct_fields_of(def).is_some() {
+                    type_table.make_struct(StructDef::Decl(def))
+                } else if lookup.resource_type_of(def).is_some() {
+                    type_table.make_resource(def)
+                } else if lookup.variant_cases_of(def).is_some() {
+                    type_table.make_variant(def)
+                } else if lookup.enum_cases_of(def).is_some() {
+                    type_table.make_enum(def)
+                } else {
+                    TypeTable::UNKNOWN
                 }
             }
             Type::Generic(generic) => match generic.name.as_str() {

@@ -275,6 +275,7 @@ impl TypeBuilder {
                 wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
+                serde_number: None,
                 default_expr: None,
             }],
             span: Span::new(0, 0, 0, 0),

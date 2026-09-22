@@ -97,6 +97,10 @@ struct Scopes {
     /// hide the prelude's `List`.
     cases: IndexMap<ModuleSource, IndexMap<String, DefId>>,
     prelude_cases: IndexMap<String, DefId>,
+    /// Every case name the tiers above hold, from whichever module holds it.
+    /// A bare case pattern reads against the scrutinee's type, which the
+    /// pattern's module need not import, so this is what a pattern can mean.
+    case_names: hashmap::IndexSet<String>,
 }
 
 impl Scopes {
@@ -199,6 +203,7 @@ impl Scopes {
         }
         out.prelude = surface;
         out.prelude_cases = Self::collect_cases(defs, &out.prelude);
+        out.case_names.extend(out.prelude_cases.keys().cloned());
 
         for module in modules.keys() {
             let imports: IndexMap<String, DefId> = symbols
@@ -223,6 +228,7 @@ impl Scopes {
             for (name, def) in Self::collect_cases(defs, &own) {
                 cases.entry(name).or_insert(def);
             }
+            out.case_names.extend(cases.keys().cloned());
             out.imports.insert(module.clone(), imports);
             out.own.insert(module.clone(), own);
             out.cases.insert(module.clone(), cases);
@@ -556,12 +562,15 @@ impl Resolver<'_> {
     /// those matches by value instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
-    /// reference: a pattern is read against the scrutinee's type.
+    /// reference, and even where the module does not import its type: only the
+    /// elaborator knows the scrutinee's type. `case_names` rather than the
+    /// module's own tier, since the lint this feeds had better miss a binder
+    /// than order a rename of a pattern that binds nothing.
     fn pattern_binds(&self, pat: &ast::Pattern, name: &str) -> bool {
         if self.irrefutable_pattern || matches!(pat, ast::Pattern::MutIdent { .. }) {
             return true;
         }
-        if self.scopes.case(self.module, name).is_some() {
+        if self.scopes.case_names.contains(name) {
             return false;
         }
         match self.resolve_value_name(name) {

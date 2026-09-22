@@ -30,7 +30,8 @@ use crate::niri::{
 };
 use crate::optimize::alias::alias_classes;
 use crate::optimize::arena_query::projected_const_field;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 /// The whole-program maps [`fold_constants`] feeds its interpreter. Membership

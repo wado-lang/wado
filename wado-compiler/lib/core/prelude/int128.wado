@@ -11,7 +11,6 @@ use {
     split_plus,
     assert_radix,
     lenient_int_preprocess,
-    lenient_int_error,
 } from "core:prelude/intparse.wado";
 use { count_digits_u64, write_decimal_digits } from "core:prelude/primitive.wado";
 use { u64_bit_len } from "core:prelude/fpfmt.wado";
@@ -453,8 +452,8 @@ impl u128 {
 impl FromStr for u128 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u128, ParseIntError> {
-        return u128::from_str_radix_slice(s, 10);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u128, ParseIntError> {
+        return u128::from_str_radix_slice(&s.as_str_slice(), 10);
     }
 }
 
@@ -462,16 +461,8 @@ impl LenientFromStr for u128 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u128, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u128::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u128::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1043,8 +1034,8 @@ impl i128 {
 impl FromStr for i128 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i128, ParseIntError> {
-        return i128::from_str_radix_slice(s, 10);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i128, ParseIntError> {
+        return i128::from_str_radix_slice(&s.as_str_slice(), 10);
     }
 }
 
@@ -1052,16 +1043,8 @@ impl LenientFromStr for i128 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i128, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i128::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i128::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1411,7 +1394,7 @@ impl From<i64> for i128 {
 }
 
 impl TryFrom<u128> for u64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<u64, ConvertError> {
         if value.high() != 0 {
@@ -1422,7 +1405,7 @@ impl TryFrom<u128> for u64 {
 }
 
 impl TryFrom<u128> for i64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<i64, ConvertError> {
         if value.high() != 0 || value.low() > i64::MAX as u64 {
@@ -1433,7 +1416,7 @@ impl TryFrom<u128> for i64 {
 }
 
 impl TryFrom<u128> for i128 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<i128, ConvertError> {
         if value.high() > i64::MAX as u64 {
@@ -1444,7 +1427,7 @@ impl TryFrom<u128> for i128 {
 }
 
 impl TryFrom<i128> for i64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<i64, ConvertError> {
         let min: i128 = i64::MIN as i128;
@@ -1457,7 +1440,7 @@ impl TryFrom<i128> for i64 {
 }
 
 impl TryFrom<i128> for u64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<u64, ConvertError> {
         // In range exactly when the value is in [0, 2^64): the high half
@@ -1470,7 +1453,7 @@ impl TryFrom<i128> for u64 {
 }
 
 impl TryFrom<i128> for u128 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<u128, ConvertError> {
         if value.is_negative() {
@@ -1481,7 +1464,7 @@ impl TryFrom<i128> for u128 {
 }
 
 impl TryFrom<i128> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<f64, ConvertError> {
         let max: i128 = 9007199254740992;
@@ -1494,7 +1477,7 @@ impl TryFrom<i128> for f64 {
 }
 
 impl TryFrom<i128> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<f32, ConvertError> {
         let max: i128 = 16777216;
@@ -1507,7 +1490,7 @@ impl TryFrom<i128> for f32 {
 }
 
 impl TryFrom<u128> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<f64, ConvertError> {
         let max: u128 = 9007199254740992;
@@ -1519,7 +1502,7 @@ impl TryFrom<u128> for f64 {
 }
 
 impl TryFrom<u128> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<f32, ConvertError> {
         let max: u128 = 16777216;

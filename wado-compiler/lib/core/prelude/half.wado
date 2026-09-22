@@ -1,0 +1,227 @@
+#![no_prelude]
+#![stdlib("core:prelude/half.wado")]
+//! `f16` and `bf16`: half precision as an interchange format, bits and no
+//! arithmetic. See [WEP: Half-Precision Primitives](../../../../docs/wep-2026-09-22-half-precision-primitives.md).
+
+use { ConvertError, Display, From, Inspect, TryFrom } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
+use { Result } from "core:prelude/types.wado";
+
+global F16_SIGN: u16 = 0x8000;
+global F16_EXP: u16 = 0x7C00;
+global F16_MANTISSA: u16 = 0x03FF;
+
+/// `2^-14` as an `f32`, the magnitude that turns a subnormal binary16
+/// mantissa into the normal `f32` of the same value when subtracted back out.
+global F16_SUBNORMAL_MAGIC: u32 = 0x3880_0000;
+
+impl f16 {
+    /// Reinterprets the bits of this f16 as a u16.
+    pub fn to_bits(&self) -> u16 {
+        return builtin::u16_reinterpret_f16(*self);
+    }
+
+    /// Creates an f16 from its bit representation.
+    pub fn from_bits(bits: u16) -> f16 {
+        return builtin::f16_reinterpret_u16(bits);
+    }
+
+    /// Rounds `v` to the nearest f16, ties to even, saturating to an infinity.
+    /// Use `f16::try_from` where an inexact value should be refused instead.
+    pub fn from_f32(v: f32) -> f16 {
+        let bits = v.to_bits();
+        let sign = (bits >> 16 & 0x8000) as u16;
+        let exp = (bits >> 23 & 0xFF) as i32;
+        let mantissa = bits & 0x007F_FFFF;
+
+        if exp == 0xFF {
+            let payload: u16 = if mantissa == 0 { 0 } else { 0x0200 };
+            return f16::from_bits(sign | F16_EXP | payload);
+        }
+        // Unbiased by f32's 127 and rebiased by f16's 15.
+        let half_exp = exp - 112;
+        if half_exp >= 0x1F {
+            return f16::from_bits(sign | F16_EXP);
+        }
+        if half_exp <= 0 {
+            if half_exp < -10 {
+                return f16::from_bits(sign);
+            }
+            // The implicit bit joins the mantissa, and the shift carries both
+            // the subnormal offset and the 13 bits binary16 does not keep.
+            let full = mantissa | 0x0080_0000;
+            let shift = (14 - half_exp) as u32;
+            let kept = (full >> shift) as u16;
+            let rounded = round_to_even(kept, full, shift);
+            return f16::from_bits(sign | rounded);
+        }
+        let kept = (half_exp as u32 << 10 | mantissa >> 13) as u16;
+        let rounded = round_to_even(kept, mantissa, 13);
+        return f16::from_bits(sign | rounded);
+    }
+
+    /// True for a NaN, quiet or signaling.
+    pub fn is_nan(&self) -> bool {
+        let bits = self.to_bits();
+        return bits & F16_EXP == F16_EXP && bits & F16_MANTISSA != 0;
+    }
+}
+
+/// `kept` plus the round-to-nearest-ties-to-even increment for `dropped`'s low
+/// `shift` bits. A mantissa carry walks into the exponent `kept` also holds.
+fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
+    let half = 1 as u32 << shift - 1;
+    let remainder = dropped & (1 as u32 << shift) - 1;
+    if remainder > half {
+        return kept + 1;
+    }
+    if remainder == half && kept & 1 == 1 {
+        return kept + 1;
+    }
+    return kept;
+}
+
+impl bf16 {
+    /// Reinterprets the bits of this bf16 as a u16.
+    pub fn to_bits(&self) -> u16 {
+        return builtin::u16_reinterpret_bf16(*self);
+    }
+
+    /// Creates a bf16 from its bit representation.
+    pub fn from_bits(bits: u16) -> bf16 {
+        return builtin::bf16_reinterpret_u16(bits);
+    }
+
+    /// Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
+    /// field as is, so the top 16 bits are the result and only the mantissa rounds.
+    pub fn from_f32(v: f32) -> bf16 {
+        let bits = v.to_bits();
+        if v.is_nan() {
+            return bf16::from_bits((bits >> 16) as u16 | 0x0040);
+        }
+        let kept = (bits >> 16) as u16;
+        return bf16::from_bits(round_to_even(kept, bits, 16));
+    }
+
+    /// True for a NaN, quiet or signaling.
+    pub fn is_nan(&self) -> bool {
+        let bits = self.to_bits();
+        return bits & 0x7F80 == 0x7F80 && bits & 0x007F != 0;
+    }
+}
+
+impl From<f16> for f32 {
+    fn from(value: f16) -> f32 {
+        let bits = value.to_bits();
+        let sign = (bits & F16_SIGN) as u32 << 16;
+        let exp = (bits & F16_EXP) as u32 >> 10;
+        let mantissa = (bits & F16_MANTISSA) as u32;
+
+        if exp == 0 {
+            if mantissa == 0 {
+                return f32::from_bits(sign);
+            }
+            // Subtracting the magnitude back out normalizes the subnormal
+            // without a loop, and every step of it is exact in f32. The sign
+            // is OR'd back on, since adding `-0.0` would drop it.
+            let magic = f32::from_bits(F16_SUBNORMAL_MAGIC);
+            let shifted = f32::from_bits(F16_SUBNORMAL_MAGIC | mantissa << 13);
+            return f32::from_bits(sign | (shifted - magic).to_bits());
+        }
+        if exp == 0x1F {
+            return f32::from_bits(sign | 0x7F80_0000 | mantissa << 13);
+        }
+        // Unbiased by f16's 15 and rebiased by f32's 127.
+        return f32::from_bits(sign | exp + 112 << 23 | mantissa << 13);
+    }
+}
+
+impl From<f16> for f64 {
+    fn from(value: f16) -> f64 {
+        return f32::from(value) as f64;
+    }
+}
+
+impl From<bf16> for f32 {
+    fn from(value: bf16) -> f32 {
+        return f32::from_bits(value.to_bits() as u32 << 16);
+    }
+}
+
+impl From<bf16> for f64 {
+    fn from(value: bf16) -> f64 {
+        return f32::from(value) as f64;
+    }
+}
+
+impl TryFrom<f32> for f16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: f32) -> Result<f16, ConvertError> {
+        let half = f16::from_f32(value);
+        if f32::from(half) == value || half.is_nan() && value.is_nan() {
+            return Result::Ok(half);
+        }
+        return Result::Err(ConvertError::new("value is not exact in f16"));
+    }
+}
+
+impl TryFrom<f64> for f16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: f64) -> Result<f16, ConvertError> {
+        let half = f16::from_f32(value as f32);
+        if f64::from(half) == value || half.is_nan() && value.is_nan() {
+            return Result::Ok(half);
+        }
+        return Result::Err(ConvertError::new("value is not exact in f16"));
+    }
+}
+
+impl TryFrom<f32> for bf16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: f32) -> Result<bf16, ConvertError> {
+        let half = bf16::from_f32(value);
+        if f32::from(half) == value || half.is_nan() && value.is_nan() {
+            return Result::Ok(half);
+        }
+        return Result::Err(ConvertError::new("value is not exact in bf16"));
+    }
+}
+
+impl TryFrom<f64> for bf16 {
+    type Err = ConvertError;
+
+    pub fn try_from(value: f64) -> Result<bf16, ConvertError> {
+        let half = bf16::from_f32(value as f32);
+        if f64::from(half) == value || half.is_nan() && value.is_nan() {
+            return Result::Ok(half);
+        }
+        return Result::Err(ConvertError::new("value is not exact in bf16"));
+    }
+}
+
+impl Display for f16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f32::from(*self).fmt(f);
+    }
+}
+
+impl Display for bf16 {
+    pub fn fmt(&self, f: &mut Formatter) {
+        f32::from(*self).fmt(f);
+    }
+}
+
+impl Inspect for f16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f32::from(*self).fmt_lower_exp(f);
+    }
+}
+
+impl Inspect for bf16 {
+    pub fn inspect(&self, f: &mut Formatter) {
+        f32::from(*self).fmt_lower_exp(f);
+    }
+}
