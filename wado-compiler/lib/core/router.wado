@@ -849,7 +849,7 @@ impl Deserializer for PathParamsDeserializer {
         if len == 5 && self.path_bytes_eq(s, "false") {
             return Result::Ok(false);
         }
-        return Result::Err(DeserializeError::invalid_value(self.format_error("bool"), s as i64));
+        return Result::Err(self.invalid_param("bool", "expected `true` or `false`"));
     }
 
     fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
@@ -857,7 +857,7 @@ impl Deserializer for PathParamsDeserializer {
         let [s, e] = self.current_range();
         let len = e - s;
         if len == 0 {
-            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
+            return Result::Err(self.invalid_param("char", "the param is empty"));
         }
         // Determine the UTF-8 sequence length from the leading byte and
         // verify the captured slice encodes exactly one codepoint.
@@ -875,11 +875,11 @@ impl Deserializer for PathParamsDeserializer {
             4;
         };
         if expected == 0 || len != expected {
-            return Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64));
+            return Result::Err(self.invalid_param("char", "expected exactly one character"));
         }
         return match self.src.path.char_at_byte(s) {
             Some(c) => Result::Ok(c),
-            None => Result::Err(DeserializeError::invalid_value(self.format_error("char"), s as i64)),
+            None => Result::Err(self.invalid_param("char", "not valid UTF-8")),
         };
     }
 
@@ -973,15 +973,15 @@ impl PathParamsDeserializer {
         return true;
     }
 
-    /// Format an `invalid_value` error message including the param name and
-    /// the captured slice, e.g.
-    /// `path param 'id' is not a valid u64: 'abc'`.
-    fn format_error<S: AsStrSlice>(&self, type_name: S) -> String {
-        let i = self.cursor - 1;
-        let name = &self.src.names[i];
+    /// The `invalid_value` error for the active param, naming it, the captured
+    /// slice and why the parse failed, e.g.
+    /// `path param 'id' is not a valid u64: 'abc' (invalid digit found in string)`.
+    fn invalid_param<S: AsStrSlice, R: AsStrSlice>(&self, type_name: S, reason: R) -> DeserializeError {
+        let name = &self.src.names[self.cursor - 1];
         let [s, e] = self.current_range();
         let value = self.src.path.substr_bytes(s, e);
-        return `path param '${*name}' is not a valid ${type_name}: '${value}'`;
+        let message = `path param '${*name}' is not a valid ${type_name}: '${value}' (${reason})`;
+        return DeserializeError::invalid_value(message, s as i64);
     }
 
     /// Parse the active param's byte range into `T` via `FromStr`.
@@ -992,9 +992,7 @@ impl PathParamsDeserializer {
         let [s, e] = self.current_range();
         return match T::from_str_slice(&self.src.path.as_str_slice().sub(s, e)) {
             Ok(v) => Result::Ok(v),
-            // `FromStr::Err` carries no `Display` bound, so only the expected
-            // type is reportable here.
-            Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
+            Err(reason) => Result::Err(self.invalid_param(type_name, `${reason}`)),
         };
     }
 }

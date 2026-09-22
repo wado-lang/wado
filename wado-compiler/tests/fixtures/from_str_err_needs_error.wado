@@ -1,0 +1,27 @@
+// `FromStr::Err` is bounded by `Error`, so a caller through the trait can
+// always report why a parse failed. An `Err` without one is rejected here.
+
+struct Bare {
+}
+
+struct Port {
+    n: i32,
+}
+
+impl FromStr for Port {
+    type Err = Bare;
+
+    fn from_str_slice(s: &StrSlice) -> Result<Port, Bare> {
+        return Result::Err(Bare {});
+    }
+}
+
+export fn run() {
+    let _ = Port::from_str("8080");
+}
+
+__DATA__
+{
+    "compile_error": "type 'Bare' does not implement trait 'Error' required by bound on 'Err'",
+    "compile_error_codes": ["TRAIT_BOUND_NOT_SATISFIED"]
+}

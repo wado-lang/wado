@@ -372,6 +372,9 @@ test "router: deserialize fails on invalid integer" {
     let m = r.match_path(Method::Get, &"/users/notanumber").unwrap();
     let result: Result<GetUserParams, DeserializeError> = m.params.deserialize();
     assert result matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
+    assert `${result.unwrap_err()}`.starts_with(
+        "path param 'id' is not a valid u64: 'notanumber' (invalid digit found in string)",
+    );
 }
 
 test "router: params.get returns Option" {

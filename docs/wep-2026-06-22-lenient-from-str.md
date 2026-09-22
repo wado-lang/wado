@@ -14,12 +14,13 @@ Add `LenientFromStr` to `core:prelude` (auto-imported), the forgiving sibling of
 
 ```wado
 pub trait LenientFromStr {
-    type Err;
+    type Err: Error;
     fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
 }
 ```
 
 - Returns `Result`: leniency widens the accepted _spellings_, it does not salvage invalid input. An undenotable string still yields `Err`.
+- `Err: Error`, as `FromStr` bounds its own: a caller reaching the failure through the bound can report the reason rather than only the expected type.
 - No view variant — its consumers (args, env, config, params) are not the allocation-sensitive paths `FromStr::from_str_slice` serves.
 - `from_str_lenient` sits beside `from_str` in method completion.
 

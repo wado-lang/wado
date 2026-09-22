@@ -1124,9 +1124,10 @@ pub trait Error: Display { }
 
 // For parsing a value from a string. `from_str_slice` is the required
 // fundamental operation, so parsing a field out of a larger buffer allocates
-// no substring; `from_str` is defaulted to view the whole string.
+// no substring; `from_str` is defaulted to view the whole string. `Err: Error`,
+// so a caller reaching it through the bound can always report the reason.
 pub trait FromStr {
-    type Err;
+    type Err: Error;
     fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
     fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
 }
@@ -1135,7 +1136,7 @@ pub trait FromStr {
 // radix prefixes (0x/0o/0b), `_` digit separators, and alternate bool words
 // (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
 pub trait LenientFromStr {
-    type Err;  // built-in impls all use LenientParseError
+    type Err: Error;  // built-in impls all use LenientParseError
     fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
 }
 ```

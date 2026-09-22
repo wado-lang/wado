@@ -1595,7 +1595,7 @@ pub trait LiteralSpread with () {
 /// string without allocating a substring, so parsing a field out of a larger
 /// buffer copies nothing. `from_str` is a default that views the whole string.
 pub trait FromStr with () {
-    type Err;
+    type Err: Error;
 
     /// Parse the view as `Self`.
     fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
@@ -1640,7 +1640,7 @@ impl Error for LenientParseError {
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
 pub trait LenientFromStr with () {
-    type Err;
+    type Err: Error;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
