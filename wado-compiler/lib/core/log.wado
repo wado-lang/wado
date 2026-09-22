@@ -177,9 +177,8 @@ pub fn log_level() -> Level {
     return RUNTIME_LEVEL;
 }
 
-/// `Null` degrades the event to fieldless rather than inventing field content
-/// that was never there; the failure itself still reaches the operator, the
-/// same way a handler's own write and serialize errors do, via `log_stderr`.
+/// The fields as a `Value`, or `Null` when they will not serialize: degrading
+/// to fieldless beats inventing content that was never there.
 fn box_fields<T: Serialize>(fields: T) -> Value {
     return match to_value(&fields) {
         Ok(v) => v,
@@ -644,8 +643,7 @@ impl<C: Clock> JsonSink<C> {
 }
 
 /// A one-field JSON object naming why the event could not be encoded. Built
-/// through the encoder so the reason is escaped; a reason that will not encode
-/// either leaves the object empty rather than emitting broken JSON.
+/// through the encoder so the reason is escaped, and empty if even that fails.
 fn json_error_line(reason: SerializeError) -> String {
     let mut obj = TreeMap::<String, Value>::new();
     obj["error"] = Value::String(`${reason}`);

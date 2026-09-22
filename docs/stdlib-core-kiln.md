@@ -24,8 +24,7 @@ it early.
 ### `pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error>`
 
 Read an input file's content to the end as text, decoding as it goes so no
-second copy of the file exists. `Err` carries the decode failure, which is a
-malformed input rather than a generator bug.
+second copy of the file exists. `Err` is a malformed input, not a bug.
 
 ## Effects
 

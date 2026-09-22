@@ -4017,10 +4017,8 @@ Build a `String` from an iterable of bytes, validating UTF-8.
 
 #### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error>`
 
-Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
-
-`bytes` is the whole input, so a sequence merely cut short at its end
-still fails — with `error_len() == None`, which says so.
+Validate a contiguous byte slice as UTF-8 and wrap it as a `String`. A
+sequence cut short at the end fails too, with `error_len() == None`.
 
 #### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error>`
 

@@ -51,8 +51,7 @@ pub fn read_all(content: Stream<u8>) -> ByteList {
 }
 
 /// Read an input file's content to the end as text, decoding as it goes so no
-/// second copy of the file exists. `Err` carries the decode failure, which is a
-/// malformed input rather than a generator bug.
+/// second copy of the file exists. `Err` is a malformed input, not a bug.
 pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
     let mut out = String::with_capacity(READ_CHUNK);
     // Whatever the last chunk ended mid-character with; at most three bytes

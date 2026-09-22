@@ -65,7 +65,7 @@ impl Eq for ParseError {
             [InvalidPort, InvalidPort] => true,
             [InvalidPath, InvalidPath] => true,
             [InvalidPercentEncoding, InvalidPercentEncoding] => true,
-            [InvalidUtf8(a), InvalidUtf8(b)] => a.valid_up_to() == b.valid_up_to() && a.error_len() == b.error_len(),
+            [InvalidUtf8(a), InvalidUtf8(b)] => a == b,
             _ => false,
         };
     }
@@ -515,7 +515,7 @@ impl Url {
             fragment: fragment,
         };
         if !authority.is_empty() {
-            if let Err(_) = parse_authority(&authority, &mut url) {
+            if parse_authority(&authority, &mut url).is_err() {
                 url.host = authority.to_string();
             }
         }

@@ -120,14 +120,10 @@ test "bool errors" {
 }
 
 test "LenientParseError reason" {
-    let r = i32::from_str_lenient("eighty");
-    assert r matches { Err(e) && e.reason().len() > 0 };
+    let e = i32::from_str_lenient("eighty").unwrap_err();
+    assert e.reason().len() > 0;
+    assert `${e}` == e.reason();
 }
 
 __DATA__
 {"test": {}}
-
-test "LenientParseError renders its reason" {
-    let e = bool::from_str_lenient("maybe").unwrap_err();
-    assert `${e}` == e.reason();
-}
