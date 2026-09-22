@@ -243,6 +243,18 @@ pub trait SerializeStruct with () {
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
+    /// The same field, with the numeric wire key `#[wire(number = N)]` gave
+    /// it, or `0` where it has none. A format keyed by name drops the number,
+    /// which is what this default does.
+    fn field_numbered<T: Serialize, S: AsStrSlice>(
+        &mut self,
+        number: i32,
+        name: S,
+        value: &T,
+    ) -> Result<(), SerializeError> {
+        return self.field(name, value);
+    }
+
 
     #[compiler_item("serialize_struct_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -390,6 +402,11 @@ pub trait FieldSchema with () {
     /// declaration order), or `null` when `rank` is out of range. Returns
     /// `null` for every `rank` when the type has no positional fields.
     fn positional_at(rank: i32) -> Option<i32>;
+
+    /// Field index of the field `#[wire(number = N)]` gave `number` to.
+    /// Returns `null` for every number when the type carries none, which a
+    /// format keyed by numbers rules out through `WireNumbered`.
+    fn by_number(number: i32) -> Option<i32>;
 }
 
 #[compiler_item("deserialize_struct")]
@@ -969,7 +986,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
         for let f of members {
             let name = wire_name(&f, policy);
             let value = f.get(self);
-            st.field(&name, &value)?;
+            st.field_numbered(f.wire_number(), &name, &value)?;
         }
         return st.end();
     }

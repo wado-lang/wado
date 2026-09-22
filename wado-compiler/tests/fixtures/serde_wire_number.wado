@@ -18,9 +18,32 @@ struct Event {
 }
 impl Serialize for Event;
 
+struct Plain {
+    a: i32,
+    b: i32,
+}
+impl Serialize for Plain;
+impl Deserialize for Plain;
+
 test "a number changes nothing a name-based format does" {
     assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == `\{"x":1,"y":2\}` };
     assert from_string::<Point>(`\{"x":3,"y":4\}`) matches { Ok(p) && p.x == 3 && p.y == 4 };
+}
+
+test "the number reaches the field handle a format reads" {
+    let mut out = "";
+    for let f of ReflectStruct::<Event>::members() {
+        out = `${out}${f.wire_number()};`;
+    }
+    assert out == "1;7;";
+}
+
+test "a field carrying no number reports the format's own non-number" {
+    let mut out = "";
+    for let f of ReflectStruct::<Plain>::members() {
+        out = `${out}${f.wire_number()};`;
+    }
+    assert out == "0;0;";
 }
 
 test "a number and a name policy do not interfere" {

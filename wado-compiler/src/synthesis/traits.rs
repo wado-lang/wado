@@ -491,6 +491,9 @@ struct ReflectFieldInfo {
     type_id: TypeId,
     index: u32,
     wire_name_override: Option<String>,
+    /// `#[wire(number = N)]`, or `0` where the field carries none. Zero is the
+    /// wire format's own non-number: a field number starts at 1.
+    wire_number: i32,
     is_secret: bool,
     has_default: bool,
     /// The declared default (`f: T = expr`), reified in the struct's own
@@ -541,6 +544,7 @@ fn collect_reflect_targets(module: &TirModule) -> Vec<ReflectTarget> {
                     type_id: f.type_id,
                     index: f.index,
                     wire_name_override: f.wire_name_override.clone(),
+                    wire_number: f.serde_number.unwrap_or(0) as i32,
                     is_secret: f.is_secret,
                     has_default: f.default_expr.is_some(),
                     default_expr: f.default_expr.clone(),
@@ -998,6 +1002,15 @@ fn generate_struct_members_fn(
                     ),
                     field_index: 4,
                 },
+                reflect_meta_int_field(
+                    "wire_number",
+                    u64::try_from(f.wire_number).unwrap_or_else(|_| {
+                        unreachable!("reify rejects a field number outside 1..=536870911")
+                    }),
+                    TypeTable::I32,
+                    5,
+                    span,
+                ),
             ];
             TirExpr::new(
                 TirExprKind::StructLiteral {
