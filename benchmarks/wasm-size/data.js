@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790034953736,
+  "lastUpdate": 1790038581668,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58093,6 +58093,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/aa8c85d5297ca37eda20a0491deffd6b86758e07"
         },
         "date": 1790034952844,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "299dbd687dae7fefce8f423b194f896a72de8ffe",
+          "message": "Merge pull request #2117 from wado-lang/claude/multiple-pack-type-parameters-ib0mc5\n\nfix(compiler): a tuple zip over type packs can be bound to a local",
+          "timestamp": "2026-09-22T09:39:00+09:00",
+          "tree_id": "f5cc8913a3f0d348a058f095ed04c1a6dba36de5",
+          "url": "https://github.com/wado-lang/wado/commit/299dbd687dae7fefce8f423b194f896a72de8ffe"
+        },
+        "date": 1790038580872,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
