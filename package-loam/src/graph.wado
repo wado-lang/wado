@@ -39,6 +39,17 @@ pub struct Node {
     pub attrs: List<Attr>,
 }
 
+impl Node {
+    pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
+        for let a of self.attrs {
+            if a.name.as_str_slice() == name.as_str_slice() {
+                return Option::Some(a);
+            }
+        }
+        return null;
+    }
+}
+
 pub struct Graph {
     pub name: String,
     pub inputs: List<ValueInfo>,

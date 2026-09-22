@@ -50,6 +50,15 @@ pub struct OperandCountConflict {
     pub needed: i32,
 }
 
+/// An operator's attribute is not one this Loam can act on: absent where the
+/// operator requires it, or a value the graph cannot mean.
+pub struct AttributeConflict {
+    pub node: String,
+    pub op: String,
+    pub attr: String,
+    pub reason: String,
+}
+
 /// Every operator Loam carries produces one value, so a node naming any other
 /// number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
@@ -67,6 +76,7 @@ pub variant InferError {
     ScalarOperand(String),
     OperandCount(OperandCountConflict),
     OutputCount(OutputCountConflict),
+    Attribute(AttributeConflict),
     DeclaredRank(DeclaredRankConflict),
     Declared(DeclaredConflict),
     Node(NodeConflict),
@@ -106,6 +116,12 @@ impl Display for OutputCountConflict {
     }
 }
 
+impl Display for AttributeConflict {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: attribute ${self.attr} ${self.reason}`);
+    }
+}
+
 impl Display for DeclaredRankConflict {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(
@@ -133,6 +149,7 @@ impl Display for InferError {
             ScalarOperand(name) => f.write_str(`${name} = MatMul: a scalar operand has no axis to contract`),
             OperandCount(e) => e.fmt(f),
             OutputCount(e) => e.fmt(f),
+            Attribute(e) => e.fmt(f),
             DeclaredRank(e) => e.fmt(f),
             Declared(e) => e.fmt(f),
             Node(e) => e.fmt(f),
@@ -286,12 +303,63 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         let [a, b] = binary_operands(node, shapes)?;
         return at_node(node, a.elementwise(&b, op));
     }
+    if op == "Transpose" {
+        arity(node, 1)?;
+        let shape = operand(node, shapes, 0)?;
+        let perm = transpose_perm(node, shape.rank())?;
+        return Result::Ok(shape.permute(&perm));
+    }
     if is_unary_elementwise(&op) {
         arity(node, 1)?;
         return operand(node, shapes, 0);
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
+}
+
+/// `Transpose`'s `perm`: the axis order the output takes. ONNX defaults it to
+/// the reversed order, and `emit` reads it again to pick the kernel, so this
+/// is where the attribute is understood rather than in either stage alone.
+pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
+    let Some(attr) = node.attr("perm") else {
+        let mut reversed: List<i32> = [];
+        for let mut i = rank - 1; i >= 0; i -= 1 {
+            reversed.push(i);
+        }
+        return Result::Ok(reversed);
+    };
+    if attr.values.len() != rank {
+        builtin::cold_path();
+        return Result::Err(attribute_error(
+            node,
+            "perm",
+            `names ${attr.values.len()} axes and the operand has ${rank}`,
+        ));
+    }
+    let mut perm: List<i32> = [];
+    let mut taken: List<bool> = List::filled(rank, false);
+    for let text of attr.values {
+        let Ok(axis) = i32::from_str(&text) else {
+            builtin::cold_path();
+            return Result::Err(attribute_error(node, "perm", `holds '${text}', which is not an axis`));
+        };
+        if axis < 0 || axis >= rank || taken[axis] {
+            builtin::cold_path();
+            return Result::Err(attribute_error(node, "perm", `is not a permutation of ${rank} axes`));
+        }
+        taken[axis] = true;
+        perm.push(axis);
+    }
+    return Result::Ok(perm);
+}
+
+fn attribute_error(node: &Node, attr: String, reason: String) -> InferError {
+    return InferError::Attribute(AttributeConflict {
+        node: node_name(node),
+        op: node.op,
+        attr,
+        reason,
+    });
 }
 
 fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shape, Shape], InferError> {

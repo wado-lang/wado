@@ -4,6 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, ValueInfo } from "./graph.wado";
+use { transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -305,6 +306,26 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         builtin::cold_path();
         return Result::Err(broadcast_error(node, &left, &right));
     }
+    if op == "Transpose" {
+        let a = exprs.reference(&node.inputs[0]);
+        let shape = shapes.get(node.inputs[0]).unwrap();
+        let Ok(perm) = transpose_perm(node, shape.rank()) else {
+            // Stage 0 read the same attribute and stopped the build there.
+            unreachable();
+        };
+        if perm.len() == 2 && perm[0] == 1 {
+            return Result::Ok(`transpose2(${a})`);
+        }
+        // A permutation that leaves every axis alone computes the operand.
+        if is_identity(&perm) {
+            return Result::Ok(a);
+        }
+        builtin::cold_path();
+        return Result::Err(EmitError::Operator(UnimplementedOperator {
+            node: node.outputs[0],
+            op,
+        }));
+    }
     if let Some(body) = unary_body(&op) {
         return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
     }
@@ -323,6 +344,15 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
         shapes.get(node.inputs[0]).unwrap(),
         shapes.get(node.inputs[1]).unwrap(),
     ];
+}
+
+fn is_identity(perm: &List<i32>) -> bool {
+    for let [i, axis] of perm.into_iter().enumerate() {
+        if *axis != i {
+            return false;
+        }
+    }
+    return true;
 }
 
 fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {

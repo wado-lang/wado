@@ -91,6 +91,22 @@ fn suffix_period(whole: &List<i32>, suffix: &List<i32>) -> i32 {
     return element_count(suffix);
 }
 
+pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
+    assert t.extents.len() == 2;
+    let rows = t.extents[0];
+    let cols = t.extents[1];
+    let mut out = List::<f32>::with_capacity(t.data.len());
+    for let mut c = 0; c < cols; c += 1 {
+        for let mut r = 0; r < rows; r += 1 {
+            out.push(t.data[r * cols + c]);
+        }
+    }
+    return Tensor {
+        data: out,
+        extents: [cols, rows],
+    };
+}
+
 pub fn map<Axes>(t: &Tensor<f32, Axes>, op: fn(f32) -> f32) -> Tensor<f32, Axes> {
     let mut out = List::<f32>::with_capacity(t.data.len());
     for let v of t.data {

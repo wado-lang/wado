@@ -140,6 +140,45 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
 }
 
+test "a rank-2 Transpose lowers to the kernel" {
+    let source = `
+g (float[2, 3] X) => (float[3, 2] Y)
+<>
+{
+    Y = Transpose <perm = [1, 0]> (X)
+}
+`;
+    let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
+
+    assert out.contains("transpose2(");
+}
+
+test "a Transpose that moves no axis is its operand" {
+    let source = `
+g (float[2, 3] X) => (float[2, 3] Y)
+<>
+{
+    Y = Transpose <perm = [0, 1]> (X)
+}
+`;
+    let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
+
+    assert !out.contains("transpose2(");
+}
+
+test "a Transpose no kernel covers names itself" {
+    let source = `
+g (float[2, 3, 4] X) => (float[4, 3, 2] Y)
+<>
+{
+    Y = Transpose <perm = [2, 1, 0]> (X)
+}
+`;
+    let e = generate(source, [rule("*", ["A", "B", "C"])]).unwrap_err();
+
+    assert `${e}` == "Y = Transpose: no kernel for this operator";
+}
+
 test "an element type the kernels cannot compute in names itself" {
     let source = `
 g (int32[N, 2] X) => (int32[N, 2] Y)

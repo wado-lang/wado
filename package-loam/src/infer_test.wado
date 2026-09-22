@@ -269,6 +269,60 @@ test "a graph output no node produces stops the build" {
     assert `${e}` == "Z: no graph input, initializer or node defines this";
 }
 
+test "Transpose reorders the axes its perm names" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+    assert shapes["Y"].axes[1].name == "A";
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(3));
+}
+
+test "Transpose with no perm reverses the axes, as ONNX defaults it" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+}
+
+test "a perm that is not a permutation stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 1]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm is not a permutation of 2 axes";
+}
+
+test "a perm naming the wrong number of axes stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
+}
+
 test "a node reading an undefined tensor stops the build" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {
