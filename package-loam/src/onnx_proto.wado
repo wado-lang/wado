@@ -237,7 +237,7 @@ fn dtype_name(elem_type: i32) -> Option<String> {
 /// `int64` and no tensor that fits in memory needs one, so narrowing it is
 /// where a file says something no graph can mean.
 fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
-    if dim < 0 || dim > i32::MAX as i64 {
+    if !(0 <= dim <= i32::MAX as i64) {
         return Result::Err(`${tensor}: dimension ${dim}`);
     }
     return Result::Ok(dim as i32);

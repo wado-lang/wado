@@ -474,7 +474,7 @@ pub fn transpose_perm(node: &Node, rank: i32) -> Result<List<i32>, InferError> {
             builtin::cold_path();
             return Result::Err(attribute_error(node, "perm", `holds '${text}', which is not an axis`));
         };
-        if axis < 0 || axis >= rank || taken[axis] {
+        if !(0 <= axis < rank) || taken[axis] {
             builtin::cold_path();
             return Result::Err(attribute_error(node, "perm", `is not a permutation of ${rank} axes`));
         }
