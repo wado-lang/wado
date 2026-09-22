@@ -1122,14 +1122,13 @@ pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify wit
 // only that the failure has a readable reason.
 pub trait Error: Display { }
 
-// For parsing a value from a string. `from_str_slice` is the required
-// fundamental operation, so parsing a field out of a larger buffer allocates
-// no substring; `from_str` is defaulted to view the whole string. `Err: Error`,
-// so a caller reaching it through the bound can always report the reason.
+// For parsing a value from a string. The parameter takes a `StrSlice` among
+// the rest, so parsing a field out of a larger buffer allocates no substring.
+// `Err: Error`, so a caller reaching it through the bound can always report
+// the reason.
 pub trait FromStr {
     type Err: Error;
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
-    fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 // Forgiving sibling of FromStr for human-supplied strings: accepts casing,
@@ -1246,7 +1245,7 @@ f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>
 i32::from_str_hex("ff")               // Result<i32, ParseIntError> (radix 16)
 i32::from_str_radix("1010", 2)        // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str_slice(&"xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
+i32::from_str("xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi

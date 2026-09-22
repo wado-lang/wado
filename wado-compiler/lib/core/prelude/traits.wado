@@ -1591,19 +1591,13 @@ pub trait LiteralSpread with () {
 
 /// Parse a value from a string.
 ///
-/// `from_str_slice` is the fundamental operation: a `StrSlice` names part of a
-/// string without allocating a substring, so parsing a field out of a larger
-/// buffer copies nothing. `from_str` is a default that views the whole string.
+/// The parameter takes a `StrSlice` among the rest, so a field is parsed out
+/// of a larger buffer with no substring allocation.
 pub trait FromStr with () {
     type Err: Error;
 
-    /// Parse the view as `Self`.
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
-
     /// Parse the whole of any `AsStrSlice` text as `Self`.
-    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err> {
-        return Self::from_str_slice(&s.as_str_slice());
-    }
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 /// Error returned by the lenient string parsers (`LenientFromStr`). All

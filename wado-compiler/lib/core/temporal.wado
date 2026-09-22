@@ -484,16 +484,16 @@ impl Instant {
 impl FromStr for Instant {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<Instant, DeserializeError> {
-        return Result::Ok(parse_iso_zoned(s)?.instant);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Instant, DeserializeError> {
+        return Result::Ok(parse_iso_zoned(&s.as_str_slice())?.instant);
     }
 }
 
 impl FromStr for ZonedDateTime {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<ZonedDateTime, DeserializeError> {
-        return parse_iso_zoned(s);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<ZonedDateTime, DeserializeError> {
+        return parse_iso_zoned(&s.as_str_slice());
     }
 }
 
@@ -1654,8 +1654,8 @@ impl Serialize for Duration {
 impl FromStr for Duration {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<Duration, DeserializeError> {
-        return parse_iso_duration(s);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Duration, DeserializeError> {
+        return parse_iso_duration(&s.as_str_slice());
     }
 }
 
@@ -2194,7 +2194,7 @@ impl PlainDate {
 
     /// Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
     pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDate, DeserializeError> {
-        return PlainDate::from_str_slice(&text.as_str_slice());
+        return PlainDate::from_str(text);
     }
 
     /// Days since 1970-01-01, negative before it.
@@ -2351,7 +2351,7 @@ impl PlainTime {
 
     /// Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
     pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainTime, DeserializeError> {
-        return PlainTime::from_str_slice(&text.as_str_slice());
+        return PlainTime::from_str(text);
     }
 
     /// Whether every component is in the range the ISO 8601 clock allows.
@@ -2466,7 +2466,7 @@ impl PlainDateTime {
     /// Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
     /// the separator and no offset.
     pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDateTime, DeserializeError> {
-        return PlainDateTime::from_str_slice(&text.as_str_slice());
+        return PlainDateTime::from_str(text);
     }
 
     /// Move forward by `duration`: the date components first, constraining a
@@ -2548,7 +2548,7 @@ impl PlainYearMonth {
 
     /// Parse `YYYY-MM`.
     pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainYearMonth, DeserializeError> {
-        return PlainYearMonth::from_str_slice(&text.as_str_slice());
+        return PlainYearMonth::from_str(text);
     }
 
     /// Number of days in this month, `28..=31`.
@@ -2641,7 +2641,7 @@ impl PlainMonthDay {
 
     /// Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
     pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainMonthDay, DeserializeError> {
-        return PlainMonthDay::from_str_slice(&text.as_str_slice());
+        return PlainMonthDay::from_str(text);
     }
 
     /// Land this month-day in `year`, clamping February 29 to the 28th outside
@@ -2809,7 +2809,8 @@ impl Deserialize for PlainDate {
 impl FromStr for PlainDate {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<PlainDate, DeserializeError> {
+    fn from_str<S: AsStrSlice>(s: S) -> Result<PlainDate, DeserializeError> {
+        let s = &s.as_str_slice();
         let end = s.len();
         let [date, after] = parse_iso_date(s, 0)?;
         require_end(after, end)?;
@@ -2882,7 +2883,8 @@ impl Deserialize for PlainTime {
 impl FromStr for PlainTime {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<PlainTime, DeserializeError> {
+    fn from_str<S: AsStrSlice>(s: S) -> Result<PlainTime, DeserializeError> {
+        let s = &s.as_str_slice();
         let end = s.len();
         let [time, after] = parse_iso_time(s, 0)?;
         require_end(after, end)?;
@@ -2958,7 +2960,8 @@ impl Deserialize for PlainDateTime {
 impl FromStr for PlainDateTime {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<PlainDateTime, DeserializeError> {
+    fn from_str<S: AsStrSlice>(s: S) -> Result<PlainDateTime, DeserializeError> {
+        let s = &s.as_str_slice();
         let end = s.len();
         let [date, after_date] = parse_iso_date(s, 0)?;
         if after_date >= end {
@@ -3042,7 +3045,8 @@ impl Deserialize for PlainYearMonth {
 impl FromStr for PlainYearMonth {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<PlainYearMonth, DeserializeError> {
+    fn from_str<S: AsStrSlice>(s: S) -> Result<PlainYearMonth, DeserializeError> {
+        let s = &s.as_str_slice();
         let end = s.len();
         let [year, after_year] = parse_iso_year(s, 0)?;
         let i = expect_byte(s, after_year, b'-')?;
@@ -3123,7 +3127,8 @@ impl Deserialize for PlainMonthDay {
 impl FromStr for PlainMonthDay {
     type Err = DeserializeError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<PlainMonthDay, DeserializeError> {
+    fn from_str<S: AsStrSlice>(s: S) -> Result<PlainMonthDay, DeserializeError> {
+        let s = &s.as_str_slice();
         let end = s.len();
         let mut i = 0;
         if end >= 2 && s.get_byte_unchecked(0) == b'-' && s.get_byte_unchecked(1) == b'-' {

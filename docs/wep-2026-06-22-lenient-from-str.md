@@ -4,7 +4,7 @@
 
 Human-supplied strings become typed values throughout a program: CLI arguments (`core:cli::args()`), environment variables, config entries, query strings, compile-time parameters ([Compile-Time Parameters](./wep-2026-04-26-compile-time-params.md), v2). Being human-typed, they carry surface variation a strict parser rejects — casing, alternate spellings (`1` / `0` for a boolean), radix prefixes, digit separators.
 
-`core:prelude` already has `FromStr`, but it is strict by design: it backs hot, machine-facing paths (router path segments, the JSON deserializer's `from_str_slice`) where `"TRUE"` or `"0x2A"` must be rejected. Loosening it would break those.
+`core:prelude` already has `FromStr`, but it is strict by design: it backs hot, machine-facing paths (router path segments, the JSON deserializer) where `"TRUE"` or `"0x2A"` must be rejected. Loosening it would break those.
 
 So a parallel, forgiving conversion is missing. `core:cli::args()` returns a raw `List<String>`; every caller parses by hand.
 
@@ -21,7 +21,7 @@ pub trait LenientFromStr {
 
 - Returns `Result`: leniency widens the accepted _spellings_, it does not salvage invalid input. An undenotable string still yields `Err`.
 - `Err: Error`, as `FromStr` bounds its own: a caller reaching the failure through the bound can report the reason rather than only the expected type.
-- No view variant — its consumers (args, env, config, params) are not the allocation-sensitive paths `FromStr::from_str_slice` serves.
+- One method, as `FromStr::from_str` is: `AsStrSlice` already admits an owned `String`, a reference to one, and a view.
 - `from_str_lenient` sits beside `from_str` in method completion.
 
 ### A Separate Trait, Not `FromStr` or `TryFrom<&String>`

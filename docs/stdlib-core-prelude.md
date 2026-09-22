@@ -689,13 +689,8 @@ wins. A target without this impl rejects `..base` where it is written.
 
 Parse a value from a string.
 
-`from_str_slice` is the fundamental operation: a `StrSlice` names part of a
-string without allocating a substring, so parsing a field out of a larger
-buffer copies nothing. `from_str` is a default that views the whole string.
-
-#### `fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>`
-
-Parse the view as `Self`.
+The parameter takes a `StrSlice` among the rest, so a field is parsed out
+of a larger buffer with no substring allocation.
 
 #### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 
@@ -1214,7 +1209,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for i64`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
 
 #### `impl LenientFromStr for i64`
 
@@ -1326,7 +1321,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for u64`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
 
 #### `impl LenientFromStr for u64`
 
@@ -1605,7 +1600,7 @@ Creates an f32 from its bit representation.
 
 #### `impl FromStr for f32`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError>`
 
 #### `impl LenientFromStr for f32`
 
@@ -1866,7 +1861,7 @@ Creates an f64 from its bit representation.
 
 #### `impl FromStr for f64`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError>`
 
 #### `impl LenientFromStr for f64`
 
@@ -1918,7 +1913,7 @@ Creates an f64 from its bit representation.
 
 #### `impl FromStr for bool`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<bool, ParseBoolError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<bool, ParseBoolError>`
 
 #### `impl LenientFromStr for bool`
 
@@ -2034,7 +2029,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl FromStr for char`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<char, ParseCharError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<char, ParseCharError>`
 
 #### `impl LenientFromStr for char`
 
@@ -2086,7 +2081,7 @@ Encodes this character as UTF-8, returning the bytes.
 
 #### `impl FromStr for i8`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError>`
 
 #### `impl LenientFromStr for i8`
 
@@ -2216,7 +2211,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for u8`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError>`
 
 #### `impl LenientFromStr for u8`
 
@@ -2300,7 +2295,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for i16`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError>`
 
 #### `impl LenientFromStr for i16`
 
@@ -2392,7 +2387,7 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 #### `impl FromStr for u16`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError>`
 
 #### `impl LenientFromStr for u16`
 
@@ -2488,7 +2483,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for i32`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError>`
 
 #### `impl LenientFromStr for i32`
 
@@ -2588,7 +2583,7 @@ Counts the number of set bits (population count).
 
 #### `impl FromStr for u32`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError>`
 
 #### `impl LenientFromStr for u32`
 
@@ -3057,7 +3052,7 @@ Convert u128 to String (for template string interpolation)
 
 #### `impl FromStr for u128`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<u128, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<u128, ParseIntError>`
 
 #### `impl LenientFromStr for u128`
 
@@ -3288,7 +3283,7 @@ Convert i128 to String (for template string interpolation)
 
 #### `impl FromStr for i128`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<i128, ParseIntError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<i128, ParseIntError>`
 
 #### `impl LenientFromStr for i128`
 

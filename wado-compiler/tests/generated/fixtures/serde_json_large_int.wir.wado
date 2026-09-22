@@ -342,13 +342,13 @@ type "functype//core:prelude/string.wado/core:prelude/string.wado/String::push_s
 
 type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$scalar" = fn("core:prelude/intparse.wado//enum:IntErrorKind") -> "core:prelude/intparse.wado//enum:IntErrorKind";  // TypeId(133)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(134)
+type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/intparse.wado//ParseFloatError", ref "core:prelude/string.wado//String");  // TypeId(134)
 
-type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(135)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar" = fn(ref Array<u8>, i32, ref "core:prelude/string.wado//String", i32);  // TypeId(135)
 
-type "functype//core:prelude/intparse.wado/core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Display::fmt$scalar" = fn(ref "core:prelude/intparse.wado//ParseFloatError", ref "core:prelude/string.wado//String");  // TypeId(136)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(136)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(137)
+type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar" = fn(u8, u8) -> bool;  // TypeId(137)
 
 type "functype//core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar$spec0" = fn(u8) -> bool;  // TypeId(138)
 
@@ -452,7 +452,7 @@ global global:core:prelude/list.wado::$const_obj_107: ref null Array<u8> = array
 global global:core:prelude/list.wado::$const_obj_108: ref null Array<u8> = array.new_fixed<u8>(58, 32);
 global global:core:prelude/list.wado::$const_obj_110: ref null Array<u8> = array.new_fixed<u8>(99, 111, 114, 101, 58, 112, 114, 101, 108, 117, 100, 101, 47, 108, 105, 115, 116, 46, 119, 97, 100, 111);
 global global:core:prelude/list.wado::$const_obj_112: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 58, 58, 105, 110, 100, 101, 120, 95, 118, 97, 108, 117, 101);
-global global:core:prelude/primitive.wado::$const_obj_117: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_116: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "serde_json_large_int.wado/$test_0_i64_small_value_as_number"() {
     let s: ref "core:prelude/string.wado//String";
@@ -2427,13 +2427,11 @@ fn "core:json/core/json/parse_u64_from<&core:prelude/string.wado/String>"(raw, s
     let e_8: ref "core:prelude/intparse.wado//ParseIntError";
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
-    let s_22: ref "core:prelude/string.wado//StrSlice";
-    let repr_25: ref Array<u8>;
-    let s_34: ref "core:prelude/string.wado//StrSlice";
-    let repr_37: ref Array<u8>;
-    let $sroa_slot_40: i32;
-    let $sroa_slot_41: f64;
-    let $sroa_slot_42: ref null "core:serde//DeserializeError";
+    let repr_24: ref Array<u8>;
+    let repr_35: ref Array<u8>;
+    let $sroa_slot_38: i32;
+    let $sroa_slot_39: f64;
+    let $sroa_slot_40: ref null "core:serde//DeserializeError";
     if @unlikely((if raw.used > 0 -> i32 {
         builtin::array_get_value<u8>(raw.repr, 0) == 45;
     } else {
@@ -2443,42 +2441,40 @@ fn "core:json/core/json/parse_u64_from<&core:prelude/string.wado/String>"(raw, s
         return 1, 0_i64, "core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("negative value for u64"), used: 22 }, start);
     }
     if "core:json/core/json/has_exp_or_dot<&core:prelude/string.wado/String>"(raw) {
-        repr_25 = raw.repr;
-        s_22 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_25, start: 0, end: raw.used };
         let $mv$$vr_11$0: i32;
         let $mv$$vr_11$1: f64;
         let $mv$$vr_11$2: ref null "core:prelude/intparse.wado//ParseFloatError";
-        multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:prelude/intparse.wado/parse_f64_from_str"(s_22);
+        multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:prelude/intparse.wado/parse_f64_from_str"(repr_24 = raw.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_24, start: 0, end: raw.used });
         if $mv$$vr_11$0 == 0 {
-            $sroa_slot_40 = 0;
-            $sroa_slot_41 = 0;
-            $sroa_slot_42 = ref.null none;
+            $sroa_slot_38 = 0;
+            $sroa_slot_39 = 0;
+            $sroa_slot_40 = ref.null none;
             $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec1_3: block {
                 if @unlikely($mv$$vr_11$1 != builtin::f64_floor($mv$$vr_11$1)) {
                     cold_path;
-                    $sroa_slot_40 = 1;
-                    $sroa_slot_41 = 0;
-                    $sroa_slot_42 = ref.as_non_null("core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start));
+                    $sroa_slot_38 = 1;
+                    $sroa_slot_39 = 0;
+                    $sroa_slot_40 = ref.as_non_null("core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start));
                     break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec1_3;
                 }
                 if @unlikely(((0 <= $mv$$vr_11$1) & ($mv$$vr_11$1 < 18446744073709552000)) == 0) {
                     cold_path;
-                    $sroa_slot_40 = 1;
-                    $sroa_slot_41 = 0;
-                    $sroa_slot_42 = ref.as_non_null("core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for u64"), used: 26 }, start));
+                    $sroa_slot_38 = 1;
+                    $sroa_slot_39 = 0;
+                    $sroa_slot_40 = ref.as_non_null("core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for u64"), used: 26 }, start));
                     break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec1_3;
                 }
-                $sroa_slot_40 = 0;
-                $sroa_slot_41 = $mv$$vr_11$1;
-                $sroa_slot_42 = ref.null none;
+                $sroa_slot_38 = 0;
+                $sroa_slot_39 = $mv$$vr_11$1;
+                $sroa_slot_40 = ref.null none;
                 break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec1_3;
             };
             let $match_scrut_1: i32;
-            $match_scrut_1 = $sroa_slot_40;
+            $match_scrut_1 = $sroa_slot_38;
             checked = (if $match_scrut_1 == 0 -> f64 {
-                $sroa_slot_41;
+                $sroa_slot_39;
             } else if @unlikely($match_scrut_1 == 1) -> f64 {
-                $qm_e = ref.as_non_null($sroa_slot_42);
+                $qm_e = ref.as_non_null($sroa_slot_40);
                 cold_path;
                 return 1, 0_i64, $qm_e;
             } else {
@@ -2493,12 +2489,10 @@ fn "core:json/core/json/parse_u64_from<&core:prelude/string.wado/String>"(raw, s
             unreachable;
         }
     }
-    repr_37 = raw.repr;
-    s_34 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_37, start: 0, end: raw.used };
     let $mv$$vr_13$0: i32;
     let $mv$$vr_13$1: u64;
     let $mv$$vr_13$2: ref null "core:prelude/intparse.wado//ParseIntError";
-    multivalue_bind [$mv$$vr_13$0, $mv$$vr_13$1, $mv$$vr_13$2] = "core:prelude/intparse.wado/parse_u64_radix"(s_34);
+    multivalue_bind [$mv$$vr_13$0, $mv$$vr_13$1, $mv$$vr_13$2] = "core:prelude/intparse.wado/parse_u64_radix"(repr_35 = raw.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_35, start: 0, end: raw.used });
     if $mv$$vr_13$0 == 0 {
         return 0, $mv$$vr_13$1, ref.null none;
     } else if @unlikely($mv$$vr_13$0 == 1) {
@@ -2517,50 +2511,46 @@ fn "core:json/core/json/parse_i64_from<&core:prelude/string.wado/String>"(raw, s
     let e_8: ref "core:prelude/intparse.wado//ParseIntError";
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
-    let s_15: ref "core:prelude/string.wado//StrSlice";
-    let repr_18: ref Array<u8>;
-    let s_27: ref "core:prelude/string.wado//StrSlice";
-    let repr_30: ref Array<u8>;
-    let $sroa_slot_33: i32;
-    let $sroa_slot_34: f64;
-    let $sroa_slot_35: ref null "core:serde//DeserializeError";
+    let repr_17: ref Array<u8>;
+    let repr_28: ref Array<u8>;
+    let $sroa_slot_31: i32;
+    let $sroa_slot_32: f64;
+    let $sroa_slot_33: ref null "core:serde//DeserializeError";
     if "core:json/core/json/has_exp_or_dot<&core:prelude/string.wado/String>"(raw) {
-        repr_18 = raw.repr;
-        s_15 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_18, start: 0, end: raw.used };
         let $mv$$vr_11$0: i32;
         let $mv$$vr_11$1: f64;
         let $mv$$vr_11$2: ref null "core:prelude/intparse.wado//ParseFloatError";
-        multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:prelude/intparse.wado/parse_f64_from_str"(s_15);
+        multivalue_bind [$mv$$vr_11$0, $mv$$vr_11$1, $mv$$vr_11$2] = "core:prelude/intparse.wado/parse_f64_from_str"(repr_17 = raw.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_17, start: 0, end: raw.used });
         if $mv$$vr_11$0 == 0 {
-            $sroa_slot_33 = 0;
-            $sroa_slot_34 = 0;
-            $sroa_slot_35 = ref.null none;
+            $sroa_slot_31 = 0;
+            $sroa_slot_32 = 0;
+            $sroa_slot_33 = ref.null none;
             $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec0_1: block {
                 if @unlikely($mv$$vr_11$1 != builtin::f64_floor($mv$$vr_11$1)) {
                     cold_path;
-                    $sroa_slot_33 = 1;
-                    $sroa_slot_34 = 0;
-                    $sroa_slot_35 = ref.as_non_null("core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start));
+                    $sroa_slot_31 = 1;
+                    $sroa_slot_32 = 0;
+                    $sroa_slot_33 = ref.as_non_null("core:serde/core:serde/DeserializeError::unexpected_type<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("expected integer, got float"), used: 27 }, start));
                     break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec0_1;
                 }
                 if @unlikely(((-9223372036854776000 <= $mv$$vr_11$1) & ($mv$$vr_11$1 < 9223372036854776000)) == 0) {
                     cold_path;
-                    $sroa_slot_33 = 1;
-                    $sroa_slot_34 = 0;
-                    $sroa_slot_35 = ref.as_non_null("core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i64"), used: 26 }, start));
+                    $sroa_slot_31 = 1;
+                    $sroa_slot_32 = 0;
+                    $sroa_slot_33 = ref.as_non_null("core:serde/core:serde/DeserializeError::overflow<core:prelude/string.wado/String>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("value out of range for i64"), used: 26 }, start));
                     break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec0_1;
                 }
-                $sroa_slot_33 = 0;
-                $sroa_slot_34 = $mv$$vr_11$1;
-                $sroa_slot_35 = ref.null none;
+                $sroa_slot_31 = 0;
+                $sroa_slot_32 = $mv$$vr_11$1;
+                $sroa_slot_33 = ref.null none;
                 break $inline_core_json_checked_int_f64_core_prelude_string_wado_String__spec0_1;
             };
             let $match_scrut_1: i32;
-            $match_scrut_1 = $sroa_slot_33;
+            $match_scrut_1 = $sroa_slot_31;
             checked = (if $match_scrut_1 == 0 -> f64 {
-                $sroa_slot_34;
+                $sroa_slot_32;
             } else if @unlikely($match_scrut_1 == 1) -> f64 {
-                $qm_e = ref.as_non_null($sroa_slot_35);
+                $qm_e = ref.as_non_null($sroa_slot_33);
                 cold_path;
                 return 1, 0_i64, $qm_e;
             } else {
@@ -2575,12 +2565,10 @@ fn "core:json/core/json/parse_i64_from<&core:prelude/string.wado/String>"(raw, s
             unreachable;
         }
     }
-    repr_30 = raw.repr;
-    s_27 = struct.new "core:prelude/string.wado//StrSlice" { repr: repr_30, start: 0, end: raw.used };
     let $mv$$vr_13$0: i32;
     let $mv$$vr_13$1: i64;
     let $mv$$vr_13$2: ref null "core:prelude/intparse.wado//ParseIntError";
-    multivalue_bind [$mv$$vr_13$0, $mv$$vr_13$1, $mv$$vr_13$2] = "core:prelude/intparse.wado/parse_i64_radix"(s_27);
+    multivalue_bind [$mv$$vr_13$0, $mv$$vr_13$1, $mv$$vr_13$2] = "core:prelude/intparse.wado/parse_i64_radix"(repr_28 = raw.repr; struct.new "core:prelude/string.wado//StrSlice" { repr: repr_28, start: 0, end: raw.used });
     if $mv$$vr_13$0 == 0 {
         return 0, $mv$$vr_13$1, ref.null none;
     } else if @unlikely($mv$$vr_13$0 == 1) {
@@ -2997,7 +2985,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0"(low, high) {
     offset_31 = 0 + 61;
     builtin::array_copy<u8>(self_30, offset_31, global:core:json::$const_obj_42, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(874, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(958, $local_5.buf);
     new_used_41 = $local_4.used + 29;
     if @unlikely(new_used_41 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -3171,7 +3159,7 @@ fn "core:prelude/primitive.wado/i32::clamp$cold0$spec0"(high) {
     offset_30 = 0 + 61;
     builtin::array_copy<u8>(self_29, offset_30, global:core:json::$const_obj_42, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(874, $local_5.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(958, $local_5.buf);
     new_used_40 = $local_4.used + 29;
     if @unlikely(new_used_40 > builtin::array_len($local_4.repr)) {
         cold_path;
@@ -5717,14 +5705,6 @@ fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseIntError::kind$sc
     return self;
 }
 
-fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
-    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
-}
-
-fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
-    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
-}
-
 fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Display::fmt$scalar"(self, f) {
     let message: ref "core:prelude/string.wado//String";
     let n_13: i32;
@@ -5751,6 +5731,10 @@ fn "core:prelude/intparse.wado/core:prelude/intparse.wado/ParseFloatError^core:p
     };
 }
 
+fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"(self, offset, s, n) {
+    builtin::array_copy<u8>(self, offset, s.repr, 0, n);
+}
+
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     let is_negative: bool;
     let abs_val: u64;
@@ -5767,7 +5751,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_117;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_116;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;
@@ -5785,6 +5769,10 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
             continue l616;
         };
     };
+}
+
+fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar"(self, other) {
+    return (self | (((self - 65) <u 26) * 32)) == (other | (((other - 65) <u 26) * 32));
 }
 
 fn "core:prelude/primitive.wado/u8::eq_ignore_ascii_case$scalar$spec0"(self) {
