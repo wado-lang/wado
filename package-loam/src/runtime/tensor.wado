@@ -125,36 +125,45 @@ pub fn sigmoid_f32(v: f32) -> f32 {
     return e / (1.0 + e);
 }
 
-/// A half-precision tensor as the f32 one the kernels compute in. Wado's `f16`
-/// and `bf16` are storage only, so every half operand arrives through one.
-pub fn widen_f16<Axes>(t: &Tensor<f16, Axes>) -> Tensor<f32, Axes> {
+/// An element type a tensor is held in and no kernel computes in. Wado's half
+/// precision carries bits and no arithmetic, so f32 is the only side with any.
+pub trait Held with () {
+    fn to_wide(&self) -> f32;
+    fn from_wide(v: f32) -> Self;
+}
+
+impl Held for f16 {
+    fn to_wide(&self) -> f32 {
+        return f32::from(*self);
+    }
+
+    fn from_wide(v: f32) -> f16 {
+        return f16::from_f32(v);
+    }
+}
+
+impl Held for bf16 {
+    fn to_wide(&self) -> f32 {
+        return f32::from(*self);
+    }
+
+    fn from_wide(v: f32) -> bf16 {
+        return bf16::from_f32(v);
+    }
+}
+
+pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
     let mut out = List::<f32>::with_capacity(t.data.len());
     for let v of t.data {
-        out.push(f32::from(v));
+        out.push(v.to_wide());
     }
     return Tensor { data: out, extents: t.extents };
 }
 
-pub fn narrow_f16<Axes>(t: &Tensor<f32, Axes>) -> Tensor<f16, Axes> {
-    let mut out = List::<f16>::with_capacity(t.data.len());
+pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
+    let mut out = List::<E>::with_capacity(t.data.len());
     for let v of t.data {
-        out.push(f16::from_f32(v));
-    }
-    return Tensor { data: out, extents: t.extents };
-}
-
-pub fn widen_bf16<Axes>(t: &Tensor<bf16, Axes>) -> Tensor<f32, Axes> {
-    let mut out = List::<f32>::with_capacity(t.data.len());
-    for let v of t.data {
-        out.push(f32::from(v));
-    }
-    return Tensor { data: out, extents: t.extents };
-}
-
-pub fn narrow_bf16<Axes>(t: &Tensor<f32, Axes>) -> Tensor<bf16, Axes> {
-    let mut out = List::<bf16>::with_capacity(t.data.len());
-    for let v of t.data {
-        out.push(bf16::from_f32(v));
+        out.push(E::from_wide(v));
     }
     return Tensor { data: out, extents: t.extents };
 }

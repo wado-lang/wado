@@ -264,6 +264,12 @@ g (float[N, 2] X) => (float[N, 2] Y)
     let e = generate(source, [rule("*", ["Batch", "Tensor"])]).unwrap_err();
 
     assert `${e}` == "Tensor: an axis cannot be named as the generated module names something";
+
+    // Every declaration keyword reserves what it names, not `fn` and `struct`
+    // alone: `Held` is the runtime's trait.
+    let t = generate(source, [rule("*", ["Batch", "Held"])]).unwrap_err();
+
+    assert `${t}` == "Held: an axis cannot be named as the generated module names something";
 }
 
 test "a broadcast that stretches an extent of one names both operands" {
@@ -338,18 +344,18 @@ test "a half precision boundary states its own element type" {
 test "a half precision boundary is widened into the f32 the kernels compute in" {
     let out = generate(half_mlp("float16"), mlp_layout()).unwrap();
 
-    assert out.contains("let X = widen_f16(X);");
-    assert out.contains("let W1 = widen_f16(&weights.W1);");
+    assert out.contains("let X = widen(X);");
+    assert out.contains("let W1 = widen(&weights.W1);");
     assert out.contains("let H = matmul(&X, &W1);");
-    assert out.contains("return narrow_f16(&Y);");
+    assert out.contains("return narrow(&Y);");
 }
 
 test "bfloat16 is the same boundary with the other primitive" {
     let out = generate(half_mlp("bfloat16"), mlp_layout()).unwrap();
 
     assert out.contains("pub fn forward(X: &Tensor<bf16, [Batch, In]>");
-    assert out.contains("let X = widen_bf16(X);");
-    assert out.contains("return narrow_bf16(&Y);");
+    assert out.contains("let X = widen(X);");
+    assert out.contains("return narrow(&Y);");
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is

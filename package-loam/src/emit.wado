@@ -134,11 +134,15 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     return Result::Ok(out);
 }
 
+/// The one element type the kernels have arithmetic for. Everything a node
+/// produces is in it, and a boundary held in another is converted past it.
+global KERNEL_ELEMENT: String = "f32";
+
 /// The Wado primitive a boundary tensor is held in, or `None` for an element
 /// type no kernel reaches. Half precision is held and widened, never computed.
 fn element_of(dtype: &String) -> Option<String> {
     return match dtype.as_str_slice() {
-        "float" => Option::Some("f32"),
+        "float" => Option::Some(KERNEL_ELEMENT),
         "float16" => Option::Some("f16"),
         "bfloat16" => Option::Some("bf16"),
         _ => null,
@@ -253,13 +257,19 @@ fn module_idents() -> TreeSet<String> {
     return reserved;
 }
 
+/// Every keyword a Wado declaration can open with. An `impl` is left out: it
+/// declares no name of its own, and its methods are reached through a type.
+global DECLARATION_KEYWORDS: List<String> = [
+    "fn ", "struct ", "trait ", "interface ", "type ", "enum ", "variant ", "flags ", "global ",
+];
+
 /// Every module-level name a Wado source declares, by the one shape the
-/// runtime is written in: a `fn` or a `struct` at column zero.
+/// runtime is written in: a declaration at column zero.
 fn declared_in(source: &String) -> List<String> {
     let mut names: List<String> = [];
     for let line of source.lines() {
         let declaration = line.strip_prefix("pub ").unwrap_or(line.as_str_slice());
-        for let keyword of ["fn ", "struct "] as List<String> {
+        for let keyword of DECLARATION_KEYWORDS {
             let Some(rest) = declaration.strip_prefix(keyword) else {
                 continue;
             };
@@ -361,16 +371,16 @@ fn emit_forward(
         params.push(`${ident}: &${tensor_type(shapes, held, &vi.name)}`);
         exprs.values[vi.name] = ident;
         exprs.already_reference.insert(vi.name);
-        if let Some(line) = widen(&vi.name, ident, ident, held) {
-            widened.push(line);
+        if converted(&vi.name, held) {
+            widened.push(`    let ${ident} = widen(${ident});\n`);
             exprs.already_reference.remove(vi.name);
         }
     }
     for let vi of &graph.initializers {
         let ident = names.get(&vi.name);
         exprs.values[vi.name] = `weights.${ident}`;
-        if let Some(line) = widen(&vi.name, ident, `&weights.${ident}`, held) {
-            widened.push(line);
+        if converted(&vi.name, held) {
+            widened.push(`    let ${ident} = widen(&weights.${ident});\n`);
             exprs.values[vi.name] = ident;
         }
     }
@@ -400,31 +410,22 @@ fn emit_forward(
         builtin::cold_path();
         return Result::Err(EmitError::ReturnedConstant(result));
     }
-    let element = held.get(result).unwrap();
-    let returned = if element == "f32" {
-        exprs.value(&result);
-    } else {
-        `narrow_${element}(${exprs.reference(&result)})`;
-    };
+    let returned = if converted(&result, held) { `narrow(${exprs.reference(&result)})` } else { exprs.value(&result) };
     out.push_str(`    return ${returned};\n}\n`);
     return Result::Ok(());
 }
 
-/// The line binding `tensor` to the f32 the kernels compute in, or `None`
-/// where it is already f32 and the operand stands as it is.
-fn widen(tensor: &String, ident: String, operand: String, held: &TreeMap<String, String>) -> Option<String> {
-    let element = held.get(*tensor).unwrap();
-    if element == "f32" {
-        return null;
-    }
-    return Option::Some(`    let ${ident} = widen_${element}(${operand});\n`);
+/// Whether a boundary tensor is held in something no kernel computes in, so
+/// `forward` converts it on the way past.
+fn converted(tensor: &String, held: &TreeMap<String, String>) -> bool {
+    return held.get(*tensor).unwrap() != KERNEL_ELEMENT;
 }
 
 /// A tensor's type, as the axis marker types name it. A tensor the boundary
 /// does not declare is one a node produced, which is f32.
 fn tensor_type(shapes: &TreeMap<String, Shape>, held: &TreeMap<String, String>, tensor: &String) -> String {
     let shape = shapes.get(*tensor).unwrap();
-    let element = held.get(*tensor).unwrap_or("f32");
+    let element = held.get(*tensor).unwrap_or(KERNEL_ELEMENT);
     return `Tensor<${element}, [${axis_list(&shape)}]>`;
 }
 

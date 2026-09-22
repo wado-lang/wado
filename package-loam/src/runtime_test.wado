@@ -2,12 +2,10 @@ use {
     Tensor,
     map,
     matmul,
-    narrow_bf16,
-    narrow_f16,
+    narrow,
     sigmoid_f32,
     transpose2,
-    widen_bf16,
-    widen_f16,
+    widen,
     zip,
     zip_suffix,
     zip_suffix_lhs,
@@ -114,13 +112,13 @@ test "widening and narrowing keep a value f16 holds exactly" {
         extents: [1, 3],
     };
 
-    let wide = widen_f16(&half);
+    let wide = widen(&half);
     assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
     assert wide.extents == half.extents;
 
     // `f16` has no `Eq`, so the round trip is compared where it is wide.
-    let back = narrow_f16(&wide);
-    assert widen_f16(&back).data == wide.data;
+    let back: Tensor<f16, [Row, Col]> = narrow(&wide);
+    assert widen(&back).data == wide.data;
 }
 
 test "bf16 widens and narrows over the same axes" {
@@ -133,9 +131,9 @@ test "bf16 widens and narrows over the same axes" {
         extents: [1, 3],
     };
 
-    let wide = widen_bf16(&half);
+    let wide = widen(&half);
     assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
 
-    let back = narrow_bf16(&wide);
-    assert widen_bf16(&back).data == wide.data;
+    let back: Tensor<bf16, [Row, Col]> = narrow(&wide);
+    assert widen(&back).data == wide.data;
 }
