@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790080164120,
+  "lastUpdate": 1790088445908,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58401,6 +58401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0bdcf6850267caff3c8c3ba65230c66b1478b8ca"
         },
         "date": 1790080163470,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "51329236232652e17ccc2a79b0bcd9242c75b152",
+          "message": "Merge pull request #2124 from wado-lang/claude/loam-kernels\n\nfeat(loam,protobuf): compile an ONNX model to shape-checked Wado, over a new core:protobuf",
+          "timestamp": "2026-09-22T23:29:45+09:00",
+          "tree_id": "64e9bfcff63c5421fe46a725096387df995dfabc",
+          "url": "https://github.com/wado-lang/wado/commit/51329236232652e17ccc2a79b0bcd9242c75b152"
+        },
+        "date": 1790088445335,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
