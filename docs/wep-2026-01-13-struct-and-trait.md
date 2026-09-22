@@ -171,6 +171,14 @@ impl<T: Display> Display for Pair<T, T> {
 }
 ```
 
+An impl defines every method its trait declares without a body. A trait method
+written with a body is a default, and an impl may take it or replace it.
+
+An impl may also declare a method the trait does not. It is a helper its own
+bodies call on `self`, reachable through that impl alone. This is where methods
+part from associated types, which an impl binds one-for-one with the
+declaration.
+
 ### 7. Trait Bounds
 
 ```wado

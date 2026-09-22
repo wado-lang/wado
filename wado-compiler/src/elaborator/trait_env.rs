@@ -407,6 +407,9 @@ pub(super) struct ImplMethodHeader {
     pub(super) has_receiver: bool,
     /// The member's declared rung; consulted only on an inherent impl.
     pub(super) visibility: ast::Visibility,
+    /// Whether the method is written with a body. On a trait declaration that
+    /// is what separates a default from a method every impl owes.
+    pub(super) has_body: bool,
 }
 
 /// Digest each method a `trait` or `impl` block declares. One producer, so the
@@ -427,6 +430,7 @@ fn method_headers(defs: &DefTable, methods: &[ast::Function]) -> Vec<ImplMethodH
                 .count(),
             has_receiver: m.params.iter().any(|p| p.self_kind != ast::SelfKind::None),
             visibility: m.visibility,
+            has_body: m.body.is_some(),
         })
         .collect()
 }

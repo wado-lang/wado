@@ -1117,7 +1117,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
             }
+            for required in decl.methods.iter().filter(|m| !m.has_body) {
+                if header.methods.iter().all(|m| m.name != required.name) {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingMethod {
+                            trait_name: decl.name.clone(),
+                            method_name: required.name.clone(),
+                            span: header.span,
+                        },
+                    );
+                }
+            }
             for method in &header.methods {
+                // An impl may declare a method the trait does not: a helper its
+                // own bodies call on `self` (WEP 2026-09-01).
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
                 };
