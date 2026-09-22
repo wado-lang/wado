@@ -2324,11 +2324,11 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_finite(&self) -> bool`
 
-#### `pub fn to_bits(&self) -> i32`
+#### `pub fn to_bits(&self) -> u32`
 
-Reinterprets the bits of this f32 as an i32.
+Reinterprets the bits of this f32 as a u32.
 
-#### `pub fn from_bits(bits: i32) -> f32`
+#### `pub fn from_bits(bits: u32) -> f32`
 
 Creates an f32 from its bit representation.
 
@@ -2585,11 +2585,11 @@ implementation — slower than `x * y + z`.
 
 #### `pub fn is_finite(&self) -> bool`
 
-#### `pub fn to_bits(&self) -> i64`
+#### `pub fn to_bits(&self) -> u64`
 
-Reinterprets the bits of this f64 as an i64.
+Reinterprets the bits of this f64 as a u64.
 
-#### `pub fn from_bits(bits: i64) -> f64`
+#### `pub fn from_bits(bits: u64) -> f64`
 
 Creates an f64 from its bit representation.
 
