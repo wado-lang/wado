@@ -308,12 +308,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `field_defaults` below) and resolved into TIR by
         // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
         // split for a top-level struct.
+        let mut field_ctx =
+            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
-            let type_id = scope.resolve_type(&field.ty);
-            scope.reject_written_annotation(&field.ty);
+            let type_id = scope.resolve_struct_field(field, &mut field_ctx);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());

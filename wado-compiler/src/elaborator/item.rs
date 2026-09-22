@@ -1480,6 +1480,34 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// One field's declared type, with what the declaration cannot mean
+    /// reported and its default expression resolved against that type. A local
+    /// struct resolves its fields through here too, so a default coerces the
+    /// same way wherever the struct is written.
+    pub(super) fn resolve_struct_field(
+        &mut self,
+        field: &ast::StructField,
+        field_ctx: &mut FunctionContext,
+    ) -> TypeId {
+        let type_id = self.resolve_type(&field.ty);
+        self.reject_written_annotation(&field.ty);
+        if let Some(serde_default) = field
+            .attrs
+            .iter()
+            .find(|a| a.name == WIRE && a.has_arg("default"))
+        {
+            let _ = self.emit(TypeError::WireDefaultAttr {
+                field: field.name.clone(),
+                span: serde_default.span,
+            });
+        }
+        if let Some(default_ast) = &field.default {
+            let resolved = self.resolve_expr(default_ast, field_ctx, Some(type_id));
+            self.typecheck(resolved, type_id, default_ast.span());
+        }
+        type_id
+    }
+
     pub(super) fn resolve_struct(&mut self, struct_decl: &ast::StructDecl) -> TirStruct {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1491,23 +1519,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut struct_field_types: Vec<TypeId> = Vec::with_capacity(struct_decl.fields.len());
         for field in &struct_decl.fields {
-            let type_id = scope.resolve_type(&field.ty);
-            scope.reject_written_annotation(&field.ty);
-            if let Some(serde_default) = field
-                .attrs
-                .iter()
-                .find(|a| a.name == WIRE && a.has_arg("default"))
-            {
-                let _ = scope.emit(TypeError::WireDefaultAttr {
-                    field: field.name.clone(),
-                    span: serde_default.span,
-                });
-            }
-            if let Some(default_ast) = &field.default {
-                let resolved = scope.resolve_expr(default_ast, &mut field_ctx, Some(type_id));
-                scope.typecheck(resolved, type_id, default_ast.span());
-            }
-            struct_field_types.push(type_id);
+            struct_field_types.push(scope.resolve_struct_field(field, &mut field_ctx));
         }
 
         let type_params: Vec<TirTypeParam> = struct_decl
