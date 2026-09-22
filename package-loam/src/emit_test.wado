@@ -1,0 +1,154 @@
+use { EmitError, emit } from "./emit.wado";
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+
+fn rule(pattern: String, axes: List<String>) -> LayoutRule {
+    return LayoutRule { pattern, axes };
+}
+
+fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitError> {
+    let graph = read(&source).unwrap();
+    let shapes = infer(&graph, &Schema { layout }).unwrap();
+    return emit(&graph, &shapes);
+}
+
+global MLP: String = `
+mlp (float[N, 4] X) => (float[N, 2] Y)
+<float[4, 3] W1, float[3] B1, float[3, 2] W2, float[2] B2>
+{
+    H = MatMul(X, W1)
+    HB = Add(H, B1)
+    A = Relu(HB)
+    T = MatMul(A, W2)
+    Y = Add(T, B2)
+}
+`;
+
+fn mlp_layout() -> List<LayoutRule> {
+    return [
+        rule("X", ["Batch", "In"]),
+        rule("W1", ["In", "Hidden"]),
+        rule("B1", ["Hidden"]),
+        rule("W2", ["Hidden", "Out"]),
+        rule("B2", ["Out"]),
+    ];
+}
+
+test "the forward pass is one kernel call per operator" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains(
+        "pub fn forward(X: &Tensor<f32, [Batch, In]>, weights: &Weights) -> Tensor<f32, [Batch, Out]> {",
+    );
+    assert out.contains("let H = matmul(X, &weights.W1);");
+    assert out.contains("let HB = zip_suffix::<[Batch], [Hidden]>(&H, &weights.B1, |x, y| x + y);");
+    assert out.contains("let A = map(&HB, |v| f32::max(v, 0.0));");
+    assert out.contains("let T = matmul(&A, &weights.W2);");
+    assert out.contains("return Y;");
+}
+
+test "the initializers become the weights struct" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains("pub struct Weights {");
+    assert out.contains("pub W1: Tensor<f32, [In, Hidden]>,");
+    assert out.contains("pub B2: Tensor<f32, [Out]>,");
+}
+
+test "every axis the graph mentions becomes a marker type" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains("pub struct Batch {}");
+    assert out.contains("pub struct Hidden {}");
+}
+
+test "the kernels are inlined into the generated module" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    assert out.contains("pub fn matmul<..Bs, M, K, N>(");
+    assert out.contains("pub fn zip_suffix<..Pre, ..Suf>(");
+}
+
+test "a name a Wado identifier cannot carry is sanitized" {
+    let source = `
+g (float[N, 2] "/model/input.0") => (float[N, 2] out)
+<>
+{
+    out = Relu("/model/input.0")
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("pub fn forward(_model_input_0: &Tensor<f32, [Batch, Unit]>");
+    assert out.contains("let out = map(_model_input_0, |v| f32::max(v, 0.0));");
+}
+
+test "a graph that returns its own input copies it out" {
+    let source = `
+g (float[N, 2] X) => (float[N, 2] X)
+<>
+{
+}
+`;
+    let out = generate(source, [rule("X", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("return *X;");
+}
+
+test "two names that sanitize to one identifier stop the build" {
+    let source = `
+g (float[N, 2] "a.b", float[N, 2] "a/b") => (float[N, 2] out)
+<>
+{
+    out = Add("a.b", "a/b")
+}
+`;
+    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+
+    assert `${e}` == "a/b and a.b both name `a_b`";
+}
+
+test "an operator with no kernel names itself" {
+    let source = `
+g (float[N, 2] X) => (float[N, 2] Y)
+<>
+{
+    Y = Erf(X)
+}
+`;
+    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+
+    assert `${e}` == "Y = Erf: no kernel for this operator";
+}
+
+test "a broadcast no kernel covers names both operands" {
+    let source = `
+g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
+<>
+{
+    Y = Add(X, Z)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("X", ["Batch", "One"]),
+        rule("Z", ["Batch", "Wide"]),
+        rule("Y", ["Batch", "Wide"]),
+    ];
+    let e = generate(source, layout).unwrap_err();
+
+    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
+}
+
+test "an element type the kernels cannot compute in names itself" {
+    let source = `
+g (int32[N, 2] X) => (int32[N, 2] Y)
+<>
+{
+    Y = Relu(X)
+}
+`;
+    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+
+    assert `${e}` == "X: the kernels compute in f32 and this tensor is int32";
+}

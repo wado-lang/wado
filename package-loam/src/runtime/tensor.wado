@@ -1,0 +1,108 @@
+pub struct Tensor<E, Axes> {
+    pub data: List<E>,
+    pub extents: List<i32>,
+}
+
+fn element_count(extents: &List<i32>) -> i32 {
+    let mut count = 1;
+    for let e of *extents {
+        assert e >= 0;
+        count *= e;
+    }
+    return count;
+}
+
+pub fn matmul<..Bs, M, K, N>(a: &Tensor<f32, [..Bs, M, K]>, b: &Tensor<f32, [..Bs, K, N]>) -> Tensor<f32, [..Bs, M, N]> {
+    let ra = a.extents.len();
+    let rb = b.extents.len();
+    assert ra >= 2 && ra == rb;
+    let rows = a.extents[ra - 2];
+    let inner = a.extents[ra - 1];
+    let cols = b.extents[rb - 1];
+    assert inner == b.extents[rb - 2];
+
+    let mut extents: List<i32> = [];
+    for let mut i = 0; i < ra - 2; i += 1 {
+        assert a.extents[i] == b.extents[i];
+        extents.push(a.extents[i]);
+    }
+    let batch = element_count(&extents);
+    extents.push(rows);
+    extents.push(cols);
+
+    let mut out = List::<f32>::filled(batch * rows * cols, 0.0);
+    for let mut s = 0; s < batch; s += 1 {
+        let a_base = s * rows * inner;
+        let b_base = s * inner * cols;
+        let out_base = s * rows * cols;
+        for let mut r = 0; r < rows; r += 1 {
+            for let mut k = 0; k < inner; k += 1 {
+                let lhs = a.data[a_base + r * inner + k];
+                for let mut c = 0; c < cols; c += 1 {
+                    out[out_base + r * cols + c] += lhs * b.data[b_base + k * cols + c];
+                }
+            }
+        }
+    }
+    return Tensor { data: out, extents };
+}
+
+pub fn zip<Axes>(a: &Tensor<f32, Axes>, b: &Tensor<f32, Axes>, op: fn(f32, f32) -> f32) -> Tensor<f32, Axes> {
+    assert a.extents == b.extents;
+    let mut out = List::<f32>::with_capacity(a.data.len());
+    for let [i, v] of a.data.into_iter().enumerate() {
+        out.push(op(v, b.data[i]));
+    }
+    return Tensor { data: out, extents: a.extents };
+}
+
+pub fn zip_suffix<..Pre, ..Suf>(
+    a: &Tensor<f32, [..Pre, ..Suf]>,
+    b: &Tensor<f32, [..Suf]>,
+    op: fn(f32, f32) -> f32,
+) -> Tensor<f32, [..Pre, ..Suf]> {
+    let period = suffix_period(&a.extents, &b.extents);
+    let mut out = List::<f32>::with_capacity(a.data.len());
+    for let [i, v] of a.data.into_iter().enumerate() {
+        out.push(op(v, b.data[i % period]));
+    }
+    return Tensor { data: out, extents: a.extents };
+}
+
+pub fn zip_suffix_lhs<..Pre, ..Suf>(
+    a: &Tensor<f32, [..Suf]>,
+    b: &Tensor<f32, [..Pre, ..Suf]>,
+    op: fn(f32, f32) -> f32,
+) -> Tensor<f32, [..Pre, ..Suf]> {
+    let period = suffix_period(&b.extents, &a.extents);
+    let mut out = List::<f32>::with_capacity(b.data.len());
+    for let [i, v] of b.data.into_iter().enumerate() {
+        out.push(op(a.data[i % period], v));
+    }
+    return Tensor { data: out, extents: b.extents };
+}
+
+fn suffix_period(whole: &List<i32>, suffix: &List<i32>) -> i32 {
+    assert suffix.len() <= whole.len();
+    let offset = whole.len() - suffix.len();
+    for let mut i = 0; i < suffix.len(); i += 1 {
+        assert whole[offset + i] == suffix[i];
+    }
+    return element_count(suffix);
+}
+
+pub fn map<Axes>(t: &Tensor<f32, Axes>, op: fn(f32) -> f32) -> Tensor<f32, Axes> {
+    let mut out = List::<f32>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(op(v));
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+pub fn sigmoid_f32(v: f32) -> f32 {
+    if v >= 0.0 {
+        return 1.0 / (1.0 + f32::exp(-v));
+    }
+    let e = f32::exp(v);
+    return e / (1.0 + e);
+}
