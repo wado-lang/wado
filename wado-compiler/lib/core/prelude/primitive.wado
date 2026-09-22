@@ -362,6 +362,34 @@ impl bool {
     }
 }
 
+/// Error returned by `bool::from_str`, which takes `true` and `false` alone.
+pub struct ParseBoolError {
+}
+
+impl Display for ParseBoolError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("provided string was not `true` or `false`");
+    }
+}
+
+impl Error for ParseBoolError {
+}
+
+impl FromStr for bool {
+    type Err = ParseBoolError;
+
+    fn from_str_slice(s: &StrSlice) -> Result<bool, ParseBoolError> {
+        if *s == "true" {
+            return Result::Ok(true);
+        }
+        if *s == "false" {
+            return Result::Ok(false);
+        }
+        builtin::cold_path();
+        return Result::Err(ParseBoolError {});
+    }
+}
+
 impl LenientFromStr for bool {
     type Err = LenientParseError;
 
@@ -568,20 +596,76 @@ impl char {
     }
 }
 
+/// Kind of failure returned by char parsing.
+pub enum CharErrorKind {
+    /// The input string was empty.
+    Empty,
+    /// The input held more than one Unicode scalar.
+    TooManyChars,
+}
+
+/// Error returned by char parsing.
+pub struct ParseCharError {
+    pub kind: CharErrorKind,
+}
+
+impl ParseCharError {
+    pub fn new(kind: CharErrorKind) -> ParseCharError {
+        return ParseCharError { kind };
+    }
+
+    /// Returns the kind of this error.
+    pub fn kind(&self) -> CharErrorKind {
+        return self.kind;
+    }
+}
+
+impl Display for ParseCharError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse char from empty string",
+            TooManyChars => "too many characters in string",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseCharError {
+}
+
+impl From<ParseCharError> for LenientParseError {
+    fn from(e: ParseCharError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty char string",
+            TooManyChars => "char string holds more than one character",
+        };
+        return LenientParseError::new(reason);
+    }
+}
+
+impl FromStr for char {
+    type Err = ParseCharError;
+
+    fn from_str_slice(s: &StrSlice) -> Result<char, ParseCharError> {
+        let mut iter = s.chars();
+        let Some(first) = iter.next() else {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::Empty));
+        };
+        if iter.next() matches { Some(_) } {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::TooManyChars));
+        }
+        return Result::Ok(first);
+    }
+}
+
+/// Leniency adds nothing here: one Unicode scalar has one spelling.
 impl LenientFromStr for char {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError> {
-        let mut iter = s.as_str_slice().chars();
-        let Some(first) = iter.next() else {
-            builtin::cold_path();
-            return Result::Err(LenientParseError::new("expected exactly one character, got none"));
-        };
-        if iter.next() matches { Some(_) } {
-            builtin::cold_path();
-            return Result::Err(LenientParseError::new("expected exactly one character, got more"));
-        }
-        return Result::Ok(first);
+        return Result::Ok(char::from_str(s)?);
     }
 }
 

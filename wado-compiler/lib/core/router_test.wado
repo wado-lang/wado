@@ -302,6 +302,12 @@ struct InstantParam {
 }
 impl Deserialize for InstantParam;
 
+struct FlagParams {
+    on: bool,
+    grade: char,
+}
+impl Deserialize for FlagParams;
+
 test "router: deserialize a param type that asks for any" {
     let mut r = Router::<i32>::new();
     r.get("/users/:id", 1);
@@ -374,6 +380,38 @@ test "router: deserialize fails on invalid integer" {
     assert result matches { Err(e) && e.kind == DeserializeErrorKind::InvalidValue };
     assert `${result.unwrap_err()}`.starts_with(
         "path param 'id' is not a valid u64: 'notanumber' (invalid digit found in string)",
+    );
+}
+
+test "router: deserialize bool and char params" {
+    let mut r = Router::<i32>::new();
+    r.get("/flags/:on/:grade", 1);
+
+    let m = r.match_path(Method::Get, &"/flags/true/A").unwrap();
+    let p = m.params.deserialize::<FlagParams>().unwrap();
+    assert p.on == true;
+    assert p.grade == 'A';
+
+    let multibyte = r.match_path(Method::Get, &"/flags/false/あ").unwrap();
+    let q = multibyte.params.deserialize::<FlagParams>().unwrap();
+    assert q.on == false;
+    assert q.grade == 'あ';
+}
+
+test "router: deserialize fails on a bool or char param it cannot parse" {
+    let mut r = Router::<i32>::new();
+    r.get("/flags/:on/:grade", 1);
+
+    let bad_bool = r.match_path(Method::Get, &"/flags/TRUE/A").unwrap();
+    let e: Result<FlagParams, DeserializeError> = bad_bool.params.deserialize();
+    assert `${e.unwrap_err()}`.starts_with(
+        "path param 'on' is not a valid bool: 'TRUE' (provided string was not `true` or `false`)",
+    );
+
+    let long_char = r.match_path(Method::Get, &"/flags/true/AB").unwrap();
+    let f: Result<FlagParams, DeserializeError> = long_char.params.deserialize();
+    assert `${f.unwrap_err()}`.starts_with(
+        "path param 'grade' is not a valid char: 'AB' (too many characters in string)",
     );
 }
 

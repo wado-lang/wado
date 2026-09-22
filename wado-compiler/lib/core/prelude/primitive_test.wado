@@ -686,3 +686,27 @@ test "ParseIntError and ParseFloatError render their reason" {
     assert `${f64::from_str("").unwrap_err()}` == "cannot parse float from empty string";
     assert `${f64::from_str("x").unwrap_err()}` == "invalid float literal";
 }
+
+test "bool::from_str takes only the two exact spellings" {
+    assert bool::from_str("true") matches { Ok(v) && v == true };
+    assert bool::from_str("false") matches { Ok(v) && v == false };
+    assert bool::from_str("TRUE") matches { Err(_) };
+    assert bool::from_str("1") matches { Err(_) };
+    assert bool::from_str("") matches { Err(_) };
+    assert bool::from_str(" true") matches { Err(_) };
+    assert `${bool::from_str("yes").unwrap_err()}` == "provided string was not `true` or `false`";
+}
+
+test "char::from_str takes exactly one scalar" {
+    assert char::from_str("a") matches { Ok(v) && v == 'a' };
+    assert char::from_str("あ") matches { Ok(v) && v == 'あ' };
+    assert char::from_str(" ") matches { Ok(v) && v == ' ' };
+    assert `${char::from_str("").unwrap_err()}` == "cannot parse char from empty string";
+    assert `${char::from_str("ab").unwrap_err()}` == "too many characters in string";
+}
+
+test "from_str reads a view without copying out of it" {
+    let view = "id=42,on=true,k=x".as_str_slice();
+    assert bool::from_str_slice(&view.sub(9, 13)) matches { Ok(v) && v == true };
+    assert char::from_str_slice(&view.sub(16, 17)) matches { Ok(v) && v == 'x' };
+}

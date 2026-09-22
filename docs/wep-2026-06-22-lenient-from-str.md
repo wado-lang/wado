@@ -47,7 +47,7 @@ It does not touch whitespace. `from_str_lenient` does not trim, so surrounding w
 
 - Integers and floats ignore `_` anywhere in the digit body (`1_000`, `0xFF_FF`). `,` is _not_ a separator — it collides with the locale decimal comma and with future list/tuple delimiters; `_` matches Wado's own numeric literals.
 - A leading zero is not octal: `010` is `10`, only `0o12` is octal.
-- Numeric impls preprocess (strip `_`, split off sign / radix prefix) then delegate to `from_str_radix` / `from_str` (the float `FromStr` already accepts `nan` / `inf` / `infinity`); `bool` and `char` are handled directly. No impl alters whitespace.
+- Numeric impls preprocess (strip `_`, split off sign / radix prefix) then delegate to `from_str_radix` / `from_str` (the float `FromStr` already accepts `nan` / `inf` / `infinity`). `char` delegates to its `FromStr` unchanged — one Unicode scalar has one spelling, so there is nothing for leniency to add. Only `bool` parses directly, for the spellings `FromStr` refuses. No impl alters whitespace.
 
 Future WEPs may extend the set (e.g. `core:temporal` multi-format dates).
 

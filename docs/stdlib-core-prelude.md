@@ -1172,9 +1172,753 @@ An owned, fixed-length byte buffer.
 
 ## Primitive Types
 
+### `i64`
+
+#### `pub const MAX: i64`
+
+#### `pub const MIN: i64`
+
+#### `pub fn max(a: i64, b: i64) -> i64`
+
+#### `pub fn min(a: i64, b: i64) -> i64`
+
+#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn clz(x: i64) -> i64`
+
+Counts the leading zeros in this integer.
+
+#### `pub fn ctz(x: i64) -> i64`
+
+Counts the trailing zeros in this integer.
+
+#### `pub fn popcnt(x: i64) -> i64`
+
+Counts the number of set bits (population count).
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
+
+#### `impl TryFrom<u128> for i64`
+
+##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
+
+#### `impl TryFrom<i128> for i64`
+
+##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
+
+#### `impl FromStr for i64`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError>`
+
+#### `impl LenientFromStr for i64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
+
+#### `impl Display for i64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for i64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for i64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for i64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for i64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for i64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for i64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for i64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for i64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for i64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for i64`
+
+##### `pub fn default() -> i64`
+
+#### `impl From<i8> for i64`
+
+##### `pub fn from(value: i8) -> i64`
+
+#### `impl From<i16> for i64`
+
+##### `pub fn from(value: i16) -> i64`
+
+#### `impl From<i32> for i64`
+
+##### `pub fn from(value: i32) -> i64`
+
+#### `impl From<u8> for i64`
+
+##### `pub fn from(value: u8) -> i64`
+
+#### `impl From<u16> for i64`
+
+##### `pub fn from(value: u16) -> i64`
+
+#### `impl From<u32> for i64`
+
+##### `pub fn from(value: u32) -> i64`
+
+#### `impl TryFrom<u64> for i64`
+
+##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
+
+#### `impl Step for i64`
+
+##### `fn next_step(&self) -> Option<i64>`
+
+### `u64`
+
+#### `pub const MAX: u64`
+
+#### `pub const MIN: u64`
+
+#### `pub fn max(a: u64, b: u64) -> u64`
+
+#### `pub fn min(a: u64, b: u64) -> u64`
+
+#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
+
+`value` confined to `low..=high`. Traps when `low > high`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
+
+#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
+
+#### `impl TryFrom<u128> for u64`
+
+##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
+
+#### `impl TryFrom<i128> for u64`
+
+##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
+
+#### `impl FromStr for u64`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError>`
+
+#### `impl LenientFromStr for u64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
+
+#### `impl Display for u64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for u64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for u64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for u64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Binary for u64`
+
+##### `pub fn fmt_binary(&self, f: &mut Formatter)`
+
+#### `impl Octal for u64`
+
+##### `pub fn fmt_octal(&self, f: &mut Formatter)`
+
+#### `impl LowerHex for u64`
+
+##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
+
+#### `impl UpperHex for u64`
+
+##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
+
+#### `impl Eq for u64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for u64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for u64`
+
+##### `pub fn default() -> u64`
+
+#### `impl From<u8> for u64`
+
+##### `pub fn from(value: u8) -> u64`
+
+#### `impl From<u16> for u64`
+
+##### `pub fn from(value: u16) -> u64`
+
+#### `impl From<u32> for u64`
+
+##### `pub fn from(value: u32) -> u64`
+
+#### `impl TryFrom<i64> for u64`
+
+##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
+
+#### `impl Step for u64`
+
+##### `fn next_step(&self) -> Option<u64>`
+
+### `f32`
+
+#### `pub const PI: f32`
+
+#### `pub const TAU: f32`
+
+#### `pub const E: f32`
+
+#### `pub const LN2: f32`
+
+#### `pub const LN10: f32`
+
+#### `pub const LOG2_E: f32`
+
+#### `pub const LOG10_E: f32`
+
+#### `pub const SQRT2: f32`
+
+#### `pub const FRAC_1_SQRT2: f32`
+
+#### `pub const FRAC_PI_2: f32`
+
+#### `pub const FRAC_PI_4: f32`
+
+#### `pub const INFINITY: f32`
+
+#### `pub const NEG_INFINITY: f32`
+
+#### `pub const NAN: f32`
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f32) -> f32`
+
+Absolute value
+
+#### `pub fn ceil(x: f32) -> f32`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f32) -> f32`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f32) -> f32`
+
+Truncate toward zero
+
+#### `pub fn round(x: f32) -> f32`
+
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f32) -> f32`
+
+Round to nearest, breaking ties toward the even neighbour
+
+#### `pub fn sqrt(x: f32) -> f32`
+
+Square root
+
+#### `pub fn min(x: f32, y: f32) -> f32`
+
+Minimum of two values
+
+#### `pub fn max(x: f32, y: f32) -> f32`
+
+Maximum of two values
+
+#### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
+
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
+
+#### `pub fn copysign(x: f32, y: f32) -> f32`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f32) -> f32`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f32) -> f32`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f32) -> f32`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f32) -> f32`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f32) -> f32`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f32) -> f32`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f32, x: f32) -> f32`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f32) -> f32`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f32) -> f32`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f32) -> f32`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f32) -> f32`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f32) -> f32`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f32) -> f32`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f32) -> f32`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f32) -> f32`
+
+2 raised to the power x
+
+#### `pub fn exp10(x: f32) -> f32`
+
+10 raised to the power x
+
+#### `pub fn expm1(x: f32) -> f32`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f32) -> f32`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f32) -> f32`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f32) -> f32`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f32) -> f32`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f32, y: f32) -> f32`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f32) -> f32`
+
+Cube root
+
+#### `pub fn hypot(x: f32, y: f32) -> f32`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f32, y: f32) -> f32`
+
+Floating-point remainder of x/y
+
+#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn to_bits(&self) -> i32`
+
+Reinterprets the bits of this f32 as an i32.
+
+#### `pub fn from_bits(bits: i32) -> f32`
+
+Creates an f32 from its bit representation.
+
+#### `impl TryFrom<i128> for f32`
+
+##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u128> for f32`
+
+##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
+
+#### `impl FromStr for f32`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError>`
+
+#### `impl LenientFromStr for f32`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError>`
+
+#### `impl Display for f32`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f32`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f32`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f32`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Eq for f32`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f32`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for f32`
+
+##### `pub fn default() -> f32`
+
+#### `impl TryFrom<i64> for f32`
+
+##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
+
+#### `impl TryFrom<u64> for f32`
+
+##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
+
+### `f64`
+
+#### `pub const PI: f64`
+
+#### `pub const TAU: f64`
+
+#### `pub const E: f64`
+
+#### `pub const LN2: f64`
+
+#### `pub const LN10: f64`
+
+#### `pub const LOG2_E: f64`
+
+#### `pub const LOG10_E: f64`
+
+#### `pub const SQRT2: f64`
+
+#### `pub const FRAC_1_SQRT2: f64`
+
+#### `pub const FRAC_PI_2: f64`
+
+#### `pub const FRAC_PI_4: f64`
+
+#### `pub const INFINITY: f64`
+
+#### `pub const NEG_INFINITY: f64`
+
+#### `pub const NAN: f64`
+
+#### `pub const MAX_SAFE_INTEGER: f64`
+
+The largest integer exactly representable in f64: 2^53 - 1.
+Mirrors JS `Number.MAX_SAFE_INTEGER`.
+
+#### `pub const MIN_SAFE_INTEGER: f64`
+
+The smallest integer exactly representable in f64: -(2^53 - 1).
+Mirrors JS `Number.MIN_SAFE_INTEGER`.
+
+#### `pub fn to_string(&self) -> String`
+
+#### `pub fn abs(x: f64) -> f64`
+
+Absolute value
+
+#### `pub fn ceil(x: f64) -> f64`
+
+Ceiling (round toward +infinity)
+
+#### `pub fn floor(x: f64) -> f64`
+
+Floor (round toward -infinity)
+
+#### `pub fn trunc(x: f64) -> f64`
+
+Truncate toward zero
+
+#### `pub fn round(x: f64) -> f64`
+
+Round to nearest, breaking ties away from zero
+
+Wasm rounds the other way, so this is a software implementation —
+slower than `round_ties_even`.
+
+#### `pub fn round_ties_even(x: f64) -> f64`
+
+Round to nearest, breaking ties toward the even neighbour
+
+#### `pub fn sqrt(x: f64) -> f64`
+
+Square root
+
+#### `pub fn min(x: f64, y: f64) -> f64`
+
+Minimum of two values
+
+#### `pub fn max(x: f64, y: f64) -> f64`
+
+Maximum of two values
+
+#### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
+
+`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
+as `low > high` does.
+
+#### `pub fn copysign(x: f64, y: f64) -> f64`
+
+Copy sign from y to x
+
+#### `pub fn sin(x: f64) -> f64`
+
+Sine (in radians)
+
+#### `pub fn cos(x: f64) -> f64`
+
+Cosine (in radians)
+
+#### `pub fn tan(x: f64) -> f64`
+
+Tangent (in radians)
+
+#### `pub fn asin(x: f64) -> f64`
+
+Arc sine (returns radians)
+
+#### `pub fn acos(x: f64) -> f64`
+
+Arc cosine (returns radians)
+
+#### `pub fn atan(x: f64) -> f64`
+
+Arc tangent (returns radians)
+
+#### `pub fn atan2(y: f64, x: f64) -> f64`
+
+Arc tangent of y/x (returns radians)
+
+#### `pub fn sinh(x: f64) -> f64`
+
+Hyperbolic sine
+
+#### `pub fn cosh(x: f64) -> f64`
+
+Hyperbolic cosine
+
+#### `pub fn tanh(x: f64) -> f64`
+
+Hyperbolic tangent
+
+#### `pub fn asinh(x: f64) -> f64`
+
+Inverse hyperbolic sine
+
+#### `pub fn acosh(x: f64) -> f64`
+
+Inverse hyperbolic cosine
+
+#### `pub fn atanh(x: f64) -> f64`
+
+Inverse hyperbolic tangent
+
+#### `pub fn exp(x: f64) -> f64`
+
+e raised to the power x
+
+#### `pub fn exp2(x: f64) -> f64`
+
+2 raised to the power x
+
+#### `pub fn exp10(x: f64) -> f64`
+
+10 raised to the power x
+
+#### `pub fn expm1(x: f64) -> f64`
+
+e^x - 1 (more accurate for small x)
+
+#### `pub fn ln(x: f64) -> f64`
+
+Natural logarithm (base e)
+
+#### `pub fn log2(x: f64) -> f64`
+
+Logarithm base 2
+
+#### `pub fn log10(x: f64) -> f64`
+
+Logarithm base 10
+
+#### `pub fn ln1p(x: f64) -> f64`
+
+ln(1 + x) (more accurate for small x)
+
+#### `pub fn pow(x: f64, y: f64) -> f64`
+
+x raised to the power y
+
+#### `pub fn cbrt(x: f64) -> f64`
+
+Cube root
+
+#### `pub fn hypot(x: f64, y: f64) -> f64`
+
+Euclidean distance: sqrt(x^2 + y^2)
+
+#### `pub fn fmod(x: f64, y: f64) -> f64`
+
+Floating-point remainder of x/y
+
+#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
+
+`x * y + z`, rounded once instead of twice.
+
+Wasm has no scalar FMA instruction, so this is a software
+implementation — slower than `x * y + z`.
+
+#### `pub fn is_nan(&self) -> bool`
+
+#### `pub fn is_finite(&self) -> bool`
+
+#### `pub fn to_bits(&self) -> i64`
+
+Reinterprets the bits of this f64 as an i64.
+
+#### `pub fn from_bits(bits: i64) -> f64`
+
+Creates an f64 from its bit representation.
+
+#### `impl TryFrom<i128> for f64`
+
+##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u128> for f64`
+
+##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
+
+#### `impl FromStr for f64`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError>`
+
+#### `impl LenientFromStr for f64`
+
+##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError>`
+
+#### `impl Display for f64`
+
+##### `pub fn fmt(&self, f: &mut Formatter)`
+
+#### `impl Inspect for f64`
+
+##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl LowerExp for f64`
+
+##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
+
+#### `impl UpperExp for f64`
+
+##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
+
+#### `impl Eq for f64`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f64`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for f64`
+
+##### `pub fn default() -> f64`
+
+#### `impl From<f32> for f64`
+
+##### `pub fn from(value: f32) -> f64`
+
+#### `impl TryFrom<i64> for f64`
+
+##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
+
+#### `impl TryFrom<u64> for f64`
+
+##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
+
 ### `bool`
 
 #### `pub fn to_string(&self) -> String`
+
+#### `impl FromStr for bool`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<bool, ParseBoolError>`
 
 #### `impl LenientFromStr for bool`
 
@@ -1287,6 +2031,10 @@ Returns the number of bytes this character needs in UTF-8 encoding.
 #### `pub fn encode_utf8(&self) -> ByteList`
 
 Encodes this character as UTF-8, returning the bytes.
+
+#### `impl FromStr for char`
+
+##### `fn from_str_slice(s: &StrSlice) -> Result<char, ParseCharError>`
 
 #### `impl LenientFromStr for char`
 
@@ -1913,746 +2661,6 @@ Counts the number of set bits (population count).
 #### `impl Step for u32`
 
 ##### `fn next_step(&self) -> Option<u32>`
-
-### `i64`
-
-#### `pub const MAX: i64`
-
-#### `pub const MIN: i64`
-
-#### `pub fn max(a: i64, b: i64) -> i64`
-
-#### `pub fn min(a: i64, b: i64) -> i64`
-
-#### `pub fn clamp(value: i64, low: i64, high: i64) -> i64`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn clz(x: i64) -> i64`
-
-Counts the leading zeros in this integer.
-
-#### `pub fn ctz(x: i64) -> i64`
-
-Counts the trailing zeros in this integer.
-
-#### `pub fn popcnt(x: i64) -> i64`
-
-Counts the number of set bits (population count).
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i64, ParseIntError>`
-
-#### `impl FromStr for i64`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError>`
-
-#### `impl LenientFromStr for i64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError>`
-
-#### `impl Display for i64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for i64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for i64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for i64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for i64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for i64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for i64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for i64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for i64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for i64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for i64`
-
-##### `pub fn default() -> i64`
-
-#### `impl From<i8> for i64`
-
-##### `pub fn from(value: i8) -> i64`
-
-#### `impl From<i16> for i64`
-
-##### `pub fn from(value: i16) -> i64`
-
-#### `impl From<i32> for i64`
-
-##### `pub fn from(value: i32) -> i64`
-
-#### `impl From<u8> for i64`
-
-##### `pub fn from(value: u8) -> i64`
-
-#### `impl From<u16> for i64`
-
-##### `pub fn from(value: u16) -> i64`
-
-#### `impl From<u32> for i64`
-
-##### `pub fn from(value: u32) -> i64`
-
-#### `impl TryFrom<u64> for i64`
-
-##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<u128> for i64`
-
-##### `pub fn try_from(value: u128) -> Result<i64, ConvertError>`
-
-#### `impl TryFrom<i128> for i64`
-
-##### `pub fn try_from(value: i128) -> Result<i64, ConvertError>`
-
-#### `impl Step for i64`
-
-##### `fn next_step(&self) -> Option<i64>`
-
-### `u64`
-
-#### `pub const MAX: u64`
-
-#### `pub const MIN: u64`
-
-#### `pub fn max(a: u64, b: u64) -> u64`
-
-#### `pub fn min(a: u64, b: u64) -> u64`
-
-#### `pub fn clamp(value: u64, low: u64, high: u64) -> u64`
-
-`value` confined to `low..=high`. Traps when `low > high`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn from_str_hex<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError>`
-
-#### `pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u64, ParseIntError>`
-
-#### `impl FromStr for u64`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError>`
-
-#### `impl LenientFromStr for u64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError>`
-
-#### `impl Display for u64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for u64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for u64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for u64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Binary for u64`
-
-##### `pub fn fmt_binary(&self, f: &mut Formatter)`
-
-#### `impl Octal for u64`
-
-##### `pub fn fmt_octal(&self, f: &mut Formatter)`
-
-#### `impl LowerHex for u64`
-
-##### `pub fn fmt_lower_hex(&self, f: &mut Formatter)`
-
-#### `impl UpperHex for u64`
-
-##### `pub fn fmt_upper_hex(&self, f: &mut Formatter)`
-
-#### `impl Eq for u64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for u64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for u64`
-
-##### `pub fn default() -> u64`
-
-#### `impl From<u8> for u64`
-
-##### `pub fn from(value: u8) -> u64`
-
-#### `impl From<u16> for u64`
-
-##### `pub fn from(value: u16) -> u64`
-
-#### `impl From<u32> for u64`
-
-##### `pub fn from(value: u32) -> u64`
-
-#### `impl TryFrom<i64> for u64`
-
-##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<u128> for u64`
-
-##### `pub fn try_from(value: u128) -> Result<u64, ConvertError>`
-
-#### `impl TryFrom<i128> for u64`
-
-##### `pub fn try_from(value: i128) -> Result<u64, ConvertError>`
-
-#### `impl Step for u64`
-
-##### `fn next_step(&self) -> Option<u64>`
-
-### `f32`
-
-#### `pub const PI: f32`
-
-#### `pub const TAU: f32`
-
-#### `pub const E: f32`
-
-#### `pub const LN2: f32`
-
-#### `pub const LN10: f32`
-
-#### `pub const LOG2_E: f32`
-
-#### `pub const LOG10_E: f32`
-
-#### `pub const SQRT2: f32`
-
-#### `pub const FRAC_1_SQRT2: f32`
-
-#### `pub const FRAC_PI_2: f32`
-
-#### `pub const FRAC_PI_4: f32`
-
-#### `pub const INFINITY: f32`
-
-#### `pub const NEG_INFINITY: f32`
-
-#### `pub const NAN: f32`
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f32) -> f32`
-
-Absolute value
-
-#### `pub fn ceil(x: f32) -> f32`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f32) -> f32`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f32) -> f32`
-
-Truncate toward zero
-
-#### `pub fn round(x: f32) -> f32`
-
-Round to nearest, breaking ties away from zero
-
-Wasm rounds the other way, so this is a software implementation —
-slower than `round_ties_even`.
-
-#### `pub fn round_ties_even(x: f32) -> f32`
-
-Round to nearest, breaking ties toward the even neighbour
-
-#### `pub fn sqrt(x: f32) -> f32`
-
-Square root
-
-#### `pub fn min(x: f32, y: f32) -> f32`
-
-Minimum of two values
-
-#### `pub fn max(x: f32, y: f32) -> f32`
-
-Maximum of two values
-
-#### `pub fn clamp(x: f32, low: f32, high: f32) -> f32`
-
-`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-as `low > high` does.
-
-#### `pub fn copysign(x: f32, y: f32) -> f32`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f32) -> f32`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f32) -> f32`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f32) -> f32`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f32) -> f32`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f32) -> f32`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f32) -> f32`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f32, x: f32) -> f32`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f32) -> f32`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f32) -> f32`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f32) -> f32`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f32) -> f32`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f32) -> f32`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f32) -> f32`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f32) -> f32`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f32) -> f32`
-
-2 raised to the power x
-
-#### `pub fn exp10(x: f32) -> f32`
-
-10 raised to the power x
-
-#### `pub fn expm1(x: f32) -> f32`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f32) -> f32`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f32) -> f32`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f32) -> f32`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f32) -> f32`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f32, y: f32) -> f32`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f32) -> f32`
-
-Cube root
-
-#### `pub fn hypot(x: f32, y: f32) -> f32`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f32, y: f32) -> f32`
-
-Floating-point remainder of x/y
-
-#### `pub fn mul_add(x: f32, y: f32, z: f32) -> f32`
-
-`x * y + z`, rounded once instead of twice.
-
-Wasm has no scalar FMA instruction, so this is a software
-implementation — slower than `x * y + z`.
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn to_bits(&self) -> i32`
-
-Reinterprets the bits of this f32 as an i32.
-
-#### `pub fn from_bits(bits: i32) -> f32`
-
-Creates an f32 from its bit representation.
-
-#### `impl FromStr for f32`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError>`
-
-#### `impl LenientFromStr for f32`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError>`
-
-#### `impl Display for f32`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f32`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f32`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f32`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Eq for f32`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f32`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for f32`
-
-##### `pub fn default() -> f32`
-
-#### `impl TryFrom<i64> for f32`
-
-##### `pub fn try_from(value: i64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u64> for f32`
-
-##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<i128> for f32`
-
-##### `pub fn try_from(value: i128) -> Result<f32, ConvertError>`
-
-#### `impl TryFrom<u128> for f32`
-
-##### `pub fn try_from(value: u128) -> Result<f32, ConvertError>`
-
-### `f64`
-
-#### `pub const PI: f64`
-
-#### `pub const TAU: f64`
-
-#### `pub const E: f64`
-
-#### `pub const LN2: f64`
-
-#### `pub const LN10: f64`
-
-#### `pub const LOG2_E: f64`
-
-#### `pub const LOG10_E: f64`
-
-#### `pub const SQRT2: f64`
-
-#### `pub const FRAC_1_SQRT2: f64`
-
-#### `pub const FRAC_PI_2: f64`
-
-#### `pub const FRAC_PI_4: f64`
-
-#### `pub const INFINITY: f64`
-
-#### `pub const NEG_INFINITY: f64`
-
-#### `pub const NAN: f64`
-
-#### `pub const MAX_SAFE_INTEGER: f64`
-
-The largest integer exactly representable in f64: 2^53 - 1.
-Mirrors JS `Number.MAX_SAFE_INTEGER`.
-
-#### `pub const MIN_SAFE_INTEGER: f64`
-
-The smallest integer exactly representable in f64: -(2^53 - 1).
-Mirrors JS `Number.MIN_SAFE_INTEGER`.
-
-#### `pub fn to_string(&self) -> String`
-
-#### `pub fn abs(x: f64) -> f64`
-
-Absolute value
-
-#### `pub fn ceil(x: f64) -> f64`
-
-Ceiling (round toward +infinity)
-
-#### `pub fn floor(x: f64) -> f64`
-
-Floor (round toward -infinity)
-
-#### `pub fn trunc(x: f64) -> f64`
-
-Truncate toward zero
-
-#### `pub fn round(x: f64) -> f64`
-
-Round to nearest, breaking ties away from zero
-
-Wasm rounds the other way, so this is a software implementation —
-slower than `round_ties_even`.
-
-#### `pub fn round_ties_even(x: f64) -> f64`
-
-Round to nearest, breaking ties toward the even neighbour
-
-#### `pub fn sqrt(x: f64) -> f64`
-
-Square root
-
-#### `pub fn min(x: f64, y: f64) -> f64`
-
-Minimum of two values
-
-#### `pub fn max(x: f64, y: f64) -> f64`
-
-Maximum of two values
-
-#### `pub fn clamp(x: f64, low: f64, high: f64) -> f64`
-
-`x` confined to `low..=high`. A NaN `x` stays NaN; a NaN bound traps,
-as `low > high` does.
-
-#### `pub fn copysign(x: f64, y: f64) -> f64`
-
-Copy sign from y to x
-
-#### `pub fn sin(x: f64) -> f64`
-
-Sine (in radians)
-
-#### `pub fn cos(x: f64) -> f64`
-
-Cosine (in radians)
-
-#### `pub fn tan(x: f64) -> f64`
-
-Tangent (in radians)
-
-#### `pub fn asin(x: f64) -> f64`
-
-Arc sine (returns radians)
-
-#### `pub fn acos(x: f64) -> f64`
-
-Arc cosine (returns radians)
-
-#### `pub fn atan(x: f64) -> f64`
-
-Arc tangent (returns radians)
-
-#### `pub fn atan2(y: f64, x: f64) -> f64`
-
-Arc tangent of y/x (returns radians)
-
-#### `pub fn sinh(x: f64) -> f64`
-
-Hyperbolic sine
-
-#### `pub fn cosh(x: f64) -> f64`
-
-Hyperbolic cosine
-
-#### `pub fn tanh(x: f64) -> f64`
-
-Hyperbolic tangent
-
-#### `pub fn asinh(x: f64) -> f64`
-
-Inverse hyperbolic sine
-
-#### `pub fn acosh(x: f64) -> f64`
-
-Inverse hyperbolic cosine
-
-#### `pub fn atanh(x: f64) -> f64`
-
-Inverse hyperbolic tangent
-
-#### `pub fn exp(x: f64) -> f64`
-
-e raised to the power x
-
-#### `pub fn exp2(x: f64) -> f64`
-
-2 raised to the power x
-
-#### `pub fn exp10(x: f64) -> f64`
-
-10 raised to the power x
-
-#### `pub fn expm1(x: f64) -> f64`
-
-e^x - 1 (more accurate for small x)
-
-#### `pub fn ln(x: f64) -> f64`
-
-Natural logarithm (base e)
-
-#### `pub fn log2(x: f64) -> f64`
-
-Logarithm base 2
-
-#### `pub fn log10(x: f64) -> f64`
-
-Logarithm base 10
-
-#### `pub fn ln1p(x: f64) -> f64`
-
-ln(1 + x) (more accurate for small x)
-
-#### `pub fn pow(x: f64, y: f64) -> f64`
-
-x raised to the power y
-
-#### `pub fn cbrt(x: f64) -> f64`
-
-Cube root
-
-#### `pub fn hypot(x: f64, y: f64) -> f64`
-
-Euclidean distance: sqrt(x^2 + y^2)
-
-#### `pub fn fmod(x: f64, y: f64) -> f64`
-
-Floating-point remainder of x/y
-
-#### `pub fn mul_add(x: f64, y: f64, z: f64) -> f64`
-
-`x * y + z`, rounded once instead of twice.
-
-Wasm has no scalar FMA instruction, so this is a software
-implementation — slower than `x * y + z`.
-
-#### `pub fn is_nan(&self) -> bool`
-
-#### `pub fn is_finite(&self) -> bool`
-
-#### `pub fn to_bits(&self) -> i64`
-
-Reinterprets the bits of this f64 as an i64.
-
-#### `pub fn from_bits(bits: i64) -> f64`
-
-Creates an f64 from its bit representation.
-
-#### `impl FromStr for f64`
-
-##### `fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError>`
-
-#### `impl LenientFromStr for f64`
-
-##### `fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError>`
-
-#### `impl Display for f64`
-
-##### `pub fn fmt(&self, f: &mut Formatter)`
-
-#### `impl Inspect for f64`
-
-##### `pub fn inspect(&self, f: &mut Formatter)`
-
-#### `impl LowerExp for f64`
-
-##### `pub fn fmt_lower_exp(&self, f: &mut Formatter)`
-
-#### `impl UpperExp for f64`
-
-##### `pub fn fmt_upper_exp(&self, f: &mut Formatter)`
-
-#### `impl Eq for f64`
-
-##### `pub fn eq(&self, other: &Self) -> bool`
-
-#### `impl Ord for f64`
-
-##### `pub fn cmp(&self, other: &Self) -> Ordering`
-
-#### `impl Default for f64`
-
-##### `pub fn default() -> f64`
-
-#### `impl From<f32> for f64`
-
-##### `pub fn from(value: f32) -> f64`
-
-#### `impl TryFrom<i64> for f64`
-
-##### `pub fn try_from(value: i64) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u64> for f64`
-
-##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<i128> for f64`
-
-##### `pub fn try_from(value: i128) -> Result<f64, ConvertError>`
-
-#### `impl TryFrom<u128> for f64`
-
-##### `pub fn try_from(value: u128) -> Result<f64, ConvertError>`
 
 ## Structs
 
@@ -3516,6 +3524,30 @@ Error returned by float parsing.
 Returns the kind of this error.
 
 #### `impl Display for ParseFloatError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct ParseBoolError`
+
+Error returned by `bool::from_str`, which takes `true` and `false` alone.
+
+#### `impl Display for ParseBoolError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
+### `pub struct ParseCharError`
+
+Error returned by char parsing.
+
+#### `kind: CharErrorKind`
+
+#### `pub fn new(kind: CharErrorKind) -> ParseCharError`
+
+#### `pub fn kind(&self) -> CharErrorKind`
+
+Returns the kind of this error.
+
+#### `impl Display for ParseCharError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
 
@@ -4785,3 +4817,15 @@ The input string was empty.
 #### `Invalid`
 
 The input was malformed.
+
+### `pub enum CharErrorKind`
+
+Kind of failure returned by char parsing.
+
+#### `Empty`
+
+The input string was empty.
+
+#### `TooManyChars`
+
+The input held more than one Unicode scalar.
