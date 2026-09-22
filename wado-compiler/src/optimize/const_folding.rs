@@ -117,22 +117,22 @@ pub fn fold_constants(
     })
 }
 
-/// Post-loop variant: rebuilds the maps each call rather than reading the
-/// loop's cache, and gates on the caller's own fixpoint column.
+/// Post-loop variant: rebuilds the maps each call rather than reading the loop's
+/// cache. Ungated — its global facts reach readers the call graph never links.
 pub fn fold_constants_uncached(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let len = project.functions.len();
-    if !gate.any_pending(GatedPass::ConstFoldUncached, len) {
-        return false;
-    }
     let type_table = project.type_table.borrow();
     let maps = build_fold_maps(project, &type_table);
     let globals = build_global_view(project, &type_table, &maps);
     let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
-    gate.run_gated(GatedPass::ConstFoldUncached, len, |fid| {
-        let func = &project.functions[fid.index()];
-        fold_function(func, &mut visitor, &mut buffers, &type_table)
-    })
+    let mut changed = false;
+    for (i, func) in project.functions.iter().enumerate() {
+        if fold_function(func, &mut visitor, &mut buffers, &type_table) {
+            gate.mark_changed(FuncId::new(i));
+            changed = true;
+        }
+    }
+    changed
 }
 
 fn new_visitor<'a>(
