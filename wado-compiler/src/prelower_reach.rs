@@ -38,15 +38,13 @@ const MINTABLE: [CompilerItem; 3] = [
     CompilerItem::ReflectVariant,
 ];
 
-/// [`MINTABLE`] as declaration identities. An impl names the trait with this
-/// impl's type arguments (`Eq<String>` for `StrSlice`), so the spelling is not
-/// what settles which trait it is.
+/// [`MINTABLE`] as the set [`is_root`] tests an impl's trait against.
 fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
     let type_table = flat.type_table.borrow();
     let items = type_table.compiler_items();
     MINTABLE
         .iter()
-        .filter_map(|item| items.trait_fq_opt(*item)?.canonical())
+        .filter_map(|item| items.trait_def(*item))
         .collect()
 }
 

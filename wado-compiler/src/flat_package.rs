@@ -114,9 +114,8 @@ pub struct FlatPackage {
     /// value-copy planner elides the copy there.
     pub moved_local_spans: IndexSet<Span>,
 
-    /// What `prelower_reach` dropped. `lower` asserts it never mints a stub for
-    /// one of these: that is a callee it spelled from a node the reachability
-    /// walk could not read, and the walk owes a root for it.
+    /// What `prelower_reach` dropped. Minting a stub for one of these means the
+    /// walk owes it a root, which `lower`'s `Interner::resolve` asserts against.
     #[cfg(debug_assertions)]
     pub pruned: IndexSet<FunctionId>,
 }

@@ -174,8 +174,8 @@ pub(super) fn reachable_function_positions(
     reachable
 }
 
-/// One [`FunctionRef`] per function, appended to as functions are minted
-/// rather than rebuilt. The only way to a descriptor table.
+/// `NirPackage::callee_descriptors_from` held across the whole of optimization,
+/// appended to as functions are minted rather than rebuilt.
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
@@ -190,11 +190,8 @@ impl DescriptorCache {
             self.refs.len() <= project.functions.len(),
             "descriptor cache outlived a function removal"
         );
-        for func_rc in &project.functions[self.refs.len()..] {
-            let f = func_rc.borrow();
-            self.refs
-                .push(FunctionRef::from_resolved(&f, f.module_source.clone()));
-        }
+        self.refs
+            .extend(project.callee_descriptors_from(self.refs.len()));
         #[cfg(debug_assertions)]
         self.assert_one_fresh(project);
         &self.refs
@@ -221,9 +218,6 @@ impl DescriptorCache {
     }
 }
 
-/// The callee [`FunctionRef`] descriptor for every function, indexed by
-/// `func_id.index()` (== store position). Used so a call site's identity is read
-/// by its stamped `func_id` rather than the call node's own `FunctionRef`.
 /// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
 /// is total for every NIR call (born resolved): the field is a non-optional
 /// [`FuncId`].

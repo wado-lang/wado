@@ -46,6 +46,7 @@ The driver is `compile_after_load` in `src/lib.rs`.
 | Monomorphize           | `FlatPackage`   | `monomorphize/`                                  |
 | Erase Newtypes & Flags | `FlatPackage`   | `tir.rs`                                         |
 | Reflect Bridges (post) | `FlatPackage`   | `synthesis/reflect_bridge.rs`                    |
+| Pre-lower Prune        | `FlatPackage`   | `prelower_reach.rs`                              |
 | Lower                  | `NirPackage`    | `lower/`                                         |
 | Optimize               | `NirPackage`    | `optimize/`                                      |
 | WIR Build              | `WirPackage`    | `wir_build/`                                     |

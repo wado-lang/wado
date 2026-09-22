@@ -8,6 +8,7 @@ use std::fmt;
 
 use crate::ast::{AstId, Attribute};
 use crate::attribute::COMPILER_ITEM;
+use crate::defs::DefId;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
@@ -1953,6 +1954,14 @@ impl CompilerItems {
     pub fn trait_fq(&self, item: CompilerItem) -> FqTraitName {
         self.trait_fq_opt(item)
             .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
+    }
+
+    /// The trait's declaration identity, which is what an impl of it is matched
+    /// by: an impl writes the trait with its own type arguments (`Eq<String>`),
+    /// so the spelling does not settle which trait it is.
+    #[must_use]
+    pub fn trait_def(&self, item: CompilerItem) -> Option<DefId> {
+        self.trait_fq_opt(item)?.canonical()
     }
 
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not

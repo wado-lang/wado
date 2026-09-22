@@ -7,7 +7,9 @@ use std::ops::ControlFlow;
 use crate::compiler_trace;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, FunctionRef, NirFunction};
-use crate::nir_arena::{Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind};
+use crate::nir_arena::{
+    ArenaStructPatternField, Body, ExprId, ExprKind, NodeRef, Operand, PatId, PatKind, StmtKind,
+};
 use crate::nir_package::NirPackage;
 use crate::tir::TypeTable;
 
@@ -571,20 +573,23 @@ fn promoted_reference(body: &Body, type_table: &TypeTable, op: Operand) -> Promo
     PromotedRef::Unknown
 }
 
-/// The sub-patterns `pat` binds out of the field named `field`. Destructuring
-/// reads a field by naming it here, leaving no `ExprKind::FieldAccess` to match.
+/// The fields `pat` names. Destructuring reads a field by naming it here,
+/// leaving no `ExprKind::FieldAccess` to match.
+fn struct_pattern_fields(body: &Body, pat: PatId) -> &[ArenaStructPatternField] {
+    match &body.pats[pat].kind {
+        PatKind::Struct { fields, .. } => fields,
+        _ => &[],
+    }
+}
+
+/// The sub-patterns `pat` binds out of the field named `field`.
 fn pattern_field_reads<'a>(
     body: &'a Body,
     pat: PatId,
     field: Option<&'a str>,
 ) -> impl Iterator<Item = PatId> + 'a {
-    let fields = match (&body.pats[pat].kind, field) {
-        (PatKind::Struct { fields, .. }, Some(_)) => Some(fields),
-        _ => None,
-    };
-    fields
-        .into_iter()
-        .flatten()
+    struct_pattern_fields(body, pat)
+        .iter()
         .filter(move |f| field == Some(f.field_name.as_str()))
         .map(|f| f.pattern)
 }
@@ -615,10 +620,8 @@ impl BodyCensus {
                     _ => {}
                 },
                 NodeRef::Pat(p) => {
-                    if let PatKind::Struct { fields, .. } = &body.pats[p].kind {
-                        for f in fields {
-                            census.fields_read.insert(f.field_name.clone());
-                        }
+                    for f in struct_pattern_fields(body, p) {
+                        census.fields_read.insert(f.field_name.clone());
                     }
                 }
                 NodeRef::Stmt(_) | NodeRef::Block(_) => {}

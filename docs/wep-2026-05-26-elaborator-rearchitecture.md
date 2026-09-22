@@ -536,40 +536,45 @@ never passes through `Semantics`; it retires only from diagnostic emission.
 
 ### The prune before `lower`
 
-`liveness` answers source-level reachability; `prelower_reach` answers it again
-over the monomorphized TIR, where the population is a different one. It walks
-from the roots and drops every function no root reaches, so `lower` never
-translates it and `optimize` never walks it. Compiling the Gale generator, that
-is 11825 of 23267 functions, worth a second off `lower` and another off
-`optimize`.
+`liveness` answers source-level reachability. `prelower_reach` asks the same
+question again over the monomorphized TIR, which holds a different population.
+It walks from the roots and drops every function no root reaches, so `lower`
+never translates it and `optimize` never walks it. Compiling the Gale generator
+at `-O1`, that is 11825 of 23267 functions: `lower` falls from 3.76s to 2.89s
+and `optimize` from 19.75s to 18.27s.
 
 A root is a CM export, a `.wasm` asset's export, a compiler item, a per-type
 bridge, a global initializer, or an impl of `Eq`, `Ord` or `ReflectVariant`.
-Those three traits are what `lower` dispatches to from a node that names no
-callee — a match pattern, a wide-int literal comparison, a
-`builtin::variant_tag` marker — and every other such call it writes is spelled
-through a `CompilerItem`, which is a root already. Precision in the root set is
-not where the time is: rooting strictly rather than by trait gains 0.02s over
-450 fixtures.
+Those three traits are the ones `lower` dispatches to from a node that names no
+callee: a match pattern, a wide-int literal comparison, a `builtin::variant_tag`
+marker. Every other call `lower` writes is spelled through a `CompilerItem`,
+which is a root already.
+
+An impl is matched by the trait's declaration identity, not by its spelling,
+because an impl writes the trait with its own type arguments — `StrSlice`
+implements `Eq<String>`, which no spelling of `Eq` matches.
+
+The root set has to be this narrow to be worth anything. Rooting every impl of
+every compiler-item trait leaves 693 functions pruned instead of 11825, because
+`Inspect` alone is derived for every type and reaches 8837 of them.
 
 Enumerating the minters is not a fix for the class, since the next one added
-breaks it again. Every minted call lands in `Interner::resolve`, so that is
-where the net goes: a debug build asserts there that it never stubs a name the
-prune dropped, and the panic names the callee and the minting stack. A new
-minter therefore fails in CI on the first fixture that exercises it, rather
-than surfacing as an unresolved call at WIR build. `WADO_NO_PRELOWER_PRUNE`
-holds the prune back, so a missing root is a flag to flip rather than a
-compiler to rebuild.
+breaks it again. The net goes in `Interner::resolve`, where every minted call
+lands: a debug build asserts there that it never stubs a name the prune dropped,
+and the panic names the callee and the minting stack. A new minter then fails in
+CI on the first fixture that exercises it, rather than surfacing as an
+unresolved call at WIR build. `WADO_NO_PRELOWER_PRUNE` holds the prune back, so
+a missing root is a flag to flip rather than a compiler to rebuild.
 
 The two checks answer different questions and both are needed.
 `WADO_TRACE=prelower_reach` reports per compile how much of the TIR the walk
-reached, which is how to size a root set. Compiling every fixture with and
-without the prune and comparing the output bytes is the correctness check: 1996
-are byte-identical, none differ, and none fail in one arm alone. Around 840 fail
-to compile under `--world test` either way, so compare the arms rather than
-count failures. A larger program can still differ in the serial of a
-`$Closure_N` name, which `lower` hands out in translation order and so
-renumbers when the population shrinks; the code around it is the same.
+reached, which is how to size a root set. Comparing the output bytes of every
+fixture compiled both ways is the correctness check: 1996 are byte-identical,
+none differ, and none fail in one arm alone. Around 840 fail to compile under
+`--world test` either way, so compare the arms rather than count failures. A
+larger program can still differ in the serial of a `$Closure_N` name. `lower`
+hands those out in translation order, so a smaller population renumbers them;
+the code around them is the same.
 
 ### Naming
 

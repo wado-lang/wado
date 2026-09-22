@@ -995,14 +995,7 @@ pub fn unparse_nir(module: &NirModule) -> String {
 pub fn unparse_nir_package(package: &NirPackage) -> String {
     let type_table_ref = package.type_table.borrow();
     let mut unparser = NirUnparser::new(&type_table_ref);
-    unparser.callees = package
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            nir::FunctionRef::from_resolved(&f, f.module_source.clone())
-        })
-        .collect();
+    unparser.callees = package.callee_descriptors_from(0).collect();
 
     // Imports
     if !package.imports.is_empty() {

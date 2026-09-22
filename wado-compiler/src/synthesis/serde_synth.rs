@@ -168,12 +168,8 @@ fn distribute_bound_driven_requests(project: &mut Package) {
         let tt = type_table.borrow();
         let items = tt.compiler_items();
         (
-            items
-                .trait_fq_opt(CompilerItem::Serialize)
-                .and_then(|t| t.canonical()),
-            items
-                .trait_fq_opt(CompilerItem::Deserialize)
-                .and_then(|t| t.canonical()),
+            items.trait_def(CompilerItem::Serialize),
+            items.trait_def(CompilerItem::Deserialize),
         )
     };
 
