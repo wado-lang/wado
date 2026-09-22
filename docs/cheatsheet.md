@@ -199,7 +199,9 @@ i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
-// `==` and `<` answer what f32 answers for the widened value.
+// `==`, `!=`, `<` and `>` answer what f32 answers for the widened value.
+// `<=` / `>=` on a NaN say true: they go through `Ord::cmp`, which has no
+// unordered case. `f32` under a `T: Ord` bound answers the same way.
 f16, bf16
 
 // Composites

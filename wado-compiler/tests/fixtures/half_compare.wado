@@ -15,6 +15,11 @@ export fn run() {
     assert f16::from_f32(-2.0) < f16::from_f32(-1.0);
     assert f16::from_f32(65504.0) < f16::from_bits(0x7C00);
     assert f16::from_f32(2.0) >= f16::from_f32(2.0);
+    // `<=` and `>=` reach `Ord::cmp`, which has no unordered answer and calls
+    // a NaN `Equal`. f32's own `<=` is an instruction that never consults it,
+    // so this is the one comparison where the two disagree.
+    assert f16::from_bits(0x7E00) <= f16::from_bits(0x7E00);
+    assert !(f32::NAN <= f32::NAN);
 
     let mut xs: List<f16> = [f16::from_f32(3.0), f16::from_f32(-1.0), f16::from_f32(2.0)];
     xs.sort();
