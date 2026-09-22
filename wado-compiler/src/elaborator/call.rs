@@ -108,10 +108,8 @@ pub(super) struct DefaultTypeBinding {
     pub(super) settled: SettledAs,
 }
 
-/// Add each of `nearer` to `bindings`, replacing a same-named entry.
-///
-/// Two declarations reach one default's scope and may share a spelling, so what
-/// the name means is the nearer declaration's, never whichever was added first.
+/// Add each of `nearer` to `bindings`, replacing a same-named entry: several
+/// declarations reach one default's scope, and they may share a spelling.
 pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
     for binding in nearer {
         match bindings.iter_mut().find(|held| held.name == binding.name) {

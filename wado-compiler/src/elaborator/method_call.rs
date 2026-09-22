@@ -1886,21 +1886,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // last source is the one the block above cannot reach: it runs only
         // where the declaring block has slots of its own, and a block with none
         // leaves the method's unbound rather than wrong.
-        if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
-            static_type_bindings.extend(self.value_default_slot_bindings(
+        let own = if static_method_defaults.iter().any(|(_, d)| d.is_some()) {
+            self.value_default_slot_bindings(
                 &own_params,
                 &own_type_param_ids,
                 target_type_id,
                 method_type_args.clone(),
                 static_method_module.clone(),
-            ));
+            )
         } else {
-            static_type_bindings.extend(slot_type_bindings(
+            slot_type_bindings(
                 &self.tysys.type_table,
                 &own_type_param_ids,
                 &method_type_args,
-            ));
-        }
+            )
+        };
+        bind_nearer(&mut static_type_bindings, own);
         self.fill_trailing_defaults(
             &mut args,
             &param_types,

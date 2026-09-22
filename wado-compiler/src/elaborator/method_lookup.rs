@@ -2272,8 +2272,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_args = impl_sig.trait_type_args;
         // A trait-declared default spells the trait's own parameters: under
-        // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`. The
-        // trait declared it, so its names outrank the impl's same-named ones.
+        // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`.
         let declared = scope.trait_declared_bindings(trait_decl, &trait_args, receiver_type_id);
         bind_nearer(&mut impl_type_bindings, declared);
         let trait_name_of_impl = scope
