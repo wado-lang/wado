@@ -1,9 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
-    TaskReturnStmt, Type, WhileStmt,
+    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr,
+    ExprStmt, ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt,
+    Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::primitive::PrimitiveType;
@@ -13,7 +13,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use crate::ast::{RangeKind, StructPatternField};
+use crate::ast::{RangeKind, StructPatternField, wire_numbers_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -288,6 +288,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
+                field_wire_numbers: Vec::new(),
                 type_params: RealTypeParams::of(&struct_decl.type_params),
                 type_param_type_ids,
             },
@@ -308,12 +309,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `field_defaults` below) and resolved into TIR by
         // `reify_local_struct`, matching `resolve_struct`/`reify_struct`'s
         // split for a top-level struct.
+        let mut field_ctx =
+            FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
         let mut fields = Vec::new();
         let mut field_ast_ids = Vec::new();
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
-            let type_id = scope.resolve_type(&field.ty);
-            scope.reject_written_annotation(&field.ty);
+            let type_id = scope.resolve_struct_field(field, &mut field_ctx);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -352,6 +354,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         info.fields = fields;
         info.field_ast_ids = field_ast_ids;
         info.field_defaults = field_defaults;
+        info.field_wire_numbers = wire_numbers_of(&struct_decl.fields);
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and
@@ -2371,14 +2374,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         by_ref: bool,
         ctx: &mut FunctionContext,
     ) {
-        // Validate: no break/continue/return in variadic for-of
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a variadic for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "variadic") {
             return;
         }
 
@@ -2520,15 +2516,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) {
         let span = for_of.span;
 
-        // Validate: break, continue, and return are not allowed inside tuple for-of
-        // because the loop is expanded at compile time into sequential blocks.
-        if let Some((kind, bad_span)) = Self::find_control_flow_in_block(&for_of.body) {
-            let _ = self.emit(TypeError::InvalidPattern {
-                message: format!(
-                    "`{kind}` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
-                ),
-                span: bad_span,
-            });
+        if self.reject_expanded_control_flow(&for_of.body, "tuple") {
             return;
         }
         let unique_id = ctx.fresh_serial();
@@ -2872,39 +2860,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Check if a block contains `break`, `continue`, or `return` at the top level
-    /// (not inside nested loops/functions where they would be valid).
-    /// Returns the kind name and span of the first offending statement.
-    fn find_control_flow_in_block(block: &Block) -> Option<(&'static str, Span)> {
-        for stmt in &block.stmts {
-            if let Some(found) = Self::find_control_flow_in_stmt(stmt) {
-                return Some(found);
-            }
-        }
-        None
-    }
-
-    fn find_control_flow_in_stmt(stmt: &Stmt) -> Option<(&'static str, Span)> {
-        match stmt {
-            Stmt::Break(b) => Some(("break", b.span)),
-            Stmt::Continue(c) => Some(("continue", c.span)),
-            // return and task return are allowed — they exit the enclosing function,
-            // which is well-defined even in compile-time-expanded blocks.
-            Stmt::Return(_) | Stmt::TaskReturn(_) => None,
-            // Recurse into blocks that don't introduce a new loop/function scope
-            Stmt::If(if_stmt) => {
-                if let Some(found) = Self::find_control_flow_in_block(&if_stmt.then_block) {
-                    return Some(found);
-                }
-                if let Some(else_block) = &if_stmt.else_block {
-                    return Self::find_control_flow_in_block(else_block);
-                }
-                None
-            }
-            Stmt::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
-            // Don't recurse into loops/closures — break/continue/return there are valid
-            _ => None,
-        }
+    /// Report a `break` or `continue` written in a for-of the compiler expands:
+    /// the expansion leaves neither a loop to name. `kind` names the for-of.
+    fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
+        let mut finder = LoopControlFlowFinder { found: None };
+        finder.visit_block(body);
+        let Some((written, span)) = finder.found else {
+            return false;
+        };
+        let _ = self.emit(TypeError::InvalidPattern {
+            message: format!(
+                "`{written}` is not allowed inside a {kind} for-of loop (the loop is expanded at compile time)"
+            ),
+            span,
+        });
+        true
     }
 
     pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
@@ -3367,4 +3337,67 @@ pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i12
         "MAX" => Some(max),
         _ => None,
     }
+}
+
+/// The first statement in a for-of's body that names the loop itself. The
+/// compiler expands such a loop, so no such name survives.
+struct LoopControlFlowFinder {
+    found: Option<(&'static str, Span)>,
+}
+
+impl AstVisitor for LoopControlFlowFinder {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if self.found.is_some() {
+            return;
+        }
+        match stmt {
+            Stmt::Break(b) if b.label.is_none() => self.found = Some(("break", b.span)),
+            Stmt::Continue(c) => self.found = Some(("continue", c.span)),
+            // A loop owns the `break` and `continue` its body writes. What
+            // drives the loop is still the enclosing block's, so the header is
+            // walked and the body is not.
+            Stmt::While(w) => self.visit_condition(&w.condition),
+            Stmt::For(f) => {
+                if let Some(init) = &f.init {
+                    self.visit_stmt(init);
+                }
+                if let Some(condition) = &f.condition {
+                    self.visit_condition(condition);
+                }
+                if let Some(update) = &f.update {
+                    self.visit_expr(update);
+                }
+            }
+            Stmt::ForOf(f) => self.visit_expr(&f.iterable),
+            Stmt::Loop(_) => {}
+            // `return` and `task return` leave the enclosing function and
+            // `break LABEL` leaves a labeled block. Expansion moves none of
+            // those targets, so each is walked for what it carries.
+            Stmt::Break(_)
+            | Stmt::Let(_)
+            | Stmt::Expr(_)
+            | Stmt::Return(_)
+            | Stmt::TaskReturn(_)
+            | Stmt::If(_)
+            | Stmt::Match(_)
+            | Stmt::Assert(_)
+            | Stmt::LabeledBlock(_)
+            | Stmt::Item(_)
+            | Stmt::Error(_) => walk_stmt(self, stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if self.found.is_some() {
+            return;
+        }
+        // A closure is a function boundary, so what it writes is its own.
+        if matches!(expr, Expr::Closure(_)) {
+            return;
+        }
+        walk_expr(self, expr);
+    }
+
+    /// A declaration written in the body carries its own bodies.
+    fn visit_item(&mut self, _item: &Item) {}
 }

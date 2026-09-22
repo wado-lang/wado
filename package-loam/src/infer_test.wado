@@ -269,6 +269,113 @@ test "a graph output no node produces stops the build" {
     assert `${e}` == "Z: no graph input, initializer or node defines this";
 }
 
+test "Gemm contracts the axis its transpose flags leave facing" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y) {
+            Y = Gemm <transB = 1> (A, B, C)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["Batch", "In"]),
+            rule("B", ["Out", "In"]),
+            rule("C", ["Out"]),
+            rule("Y", ["Batch", "Out"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "Batch";
+    assert shapes["Y"].axes[1].name == "Out";
+}
+
+test "Gemm without its C operand is the product alone" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y) {
+            Y = Gemm(A, B)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["Batch", "In"]),
+            rule("B", ["In", "Out"]),
+            rule("Y", ["Batch", "Out"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
+}
+
+test "a Gemm operand that is not a matrix stops the build" {
+    let graph = read(
+        `agraph (float[3] A, float[3, 4] B) => (float[4] Y) {
+            Y = Gemm(A, B)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["In"]),
+            rule("B", ["In", "Out"]),
+            rule("Y", ["Out"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Gemm: operand 0 has rank 1 and the operator reads rank 2";
+}
+
+test "Transpose reorders the axes its perm names" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+    assert shapes["Y"].axes[1].name == "A";
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(3));
+}
+
+test "Transpose with no perm reverses the axes, as ONNX defaults it" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+}
+
+test "a perm that is not a permutation stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 1]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm is not a permutation of 2 axes";
+}
+
+test "a perm naming the wrong number of axes stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
+}
+
 test "a node reading an undefined tensor stops the build" {
     let graph = read(
         `agraph (float[2, 3] X) => (float[2, 3] Y) {

@@ -1,0 +1,48 @@
+//! Reading the tensors the ONNX backend test data ships beside each model.
+//! One `.pb` file is one bare `TensorProto`.
+
+use { from_bytes } from "core:protobuf";
+use { ModelProto, TensorProto, float_tensor } from "../src/onnx_proto.wado";
+
+/// A `.pb` file's elements and extents.
+pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
+    let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
+        panic("the tensor did not decode");
+    };
+    let Ok(Some(pair)) = float_tensor(&t) else {
+        panic("the tensor is not float");
+    };
+    return pair;
+}
+
+/// A model's first initializer, read straight out of the model. This is the
+/// seam Loam's checkpoint reader fills: what a reader produces is `Weights`.
+pub fn first_initializer(model_bytes: ByteList) -> [List<f32>, List<i32>] {
+    let Ok(model) = from_bytes::<ModelProto, ByteList>(model_bytes) else {
+        panic("the model did not decode");
+    };
+    let Some(graph) = &model.graph else {
+        panic("a model without a graph");
+    };
+    let Ok(Some(pair)) = float_tensor(&graph.initializer[0]) else {
+        panic("the initializer is not float");
+    };
+    return pair;
+}
+
+/// How far a generated kernel may sit from the output ONNX ships. A
+/// transcendental operator is where the two implementations part; the rest
+/// agree bit for bit.
+pub global TOLERANCE: f32 = 1e-6;
+
+/// `Sqrt` of a negative element is NaN, and the two implementations agreeing
+/// means agreeing on where those sit, which `==` never reports.
+pub fn assert_close(got: &List<f32>, want: &List<f32>) {
+    assert got.len() == want.len();
+    for let mut i = 0; i < want.len(); i += 1 {
+        assert got[i].is_nan() == want[i].is_nan();
+        if !want[i].is_nan() {
+            assert f32::abs(got[i] - want[i]) < TOLERANCE;
+        }
+    }
+}

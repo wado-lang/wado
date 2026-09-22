@@ -6754,6 +6754,10 @@ pub struct TirField {
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
     pub serde_positional: bool,
+    /// `#[wire(number = N)]` — the numeric wire key, which a format reads
+    /// instead of the name. A struct numbers every field or none, so this is
+    /// `Some` for all of a struct's fields or for none of them.
+    pub serde_number: Option<u32>,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,

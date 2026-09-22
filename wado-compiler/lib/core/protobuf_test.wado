@@ -1,0 +1,426 @@
+use {
+    WireType,
+    from_bytes,
+    to_bytes,
+    read_fixed32,
+    read_fixed64,
+    read_varint,
+    tag_len,
+    unzigzag_64,
+    varint_len,
+    write_fixed32,
+    write_fixed64,
+    write_tag,
+    write_varint,
+    zigzag_64,
+} from "core:protobuf";
+
+use { Deserialize, Serialize, WireNumbered } from "core:serde";
+
+fn hex(bytes: &ByteList) -> String {
+    let mut out = "";
+    for let b of *bytes {
+        out.push_str(`${b:02x}`);
+    }
+    return out;
+}
+
+fn varint(value: u64) -> String {
+    let mut buf = ByteList::with_capacity(10);
+    write_varint(&mut buf, value);
+    assert buf.len() == varint_len(value);
+    return hex(&buf);
+}
+
+test "a varint is seven bits a byte, low group first" {
+    // The specification's own worked example: 150 is `9601`.
+    assert varint(150) == "9601";
+    assert varint(1) == "01";
+    assert varint(0) == "00";
+    assert varint(127) == "7f";
+    assert varint(128) == "8001";
+}
+
+test "a varint of the largest 64-bit value takes ten bytes" {
+    assert varint_len(18446744073709551615) == 10;
+}
+
+test "a tag carries the field number and what follows it" {
+    let mut buf = ByteList::with_capacity(4);
+    write_tag(&mut buf, 1, WireType::Varint);
+    // `08` is `00001 000`: field 1, wire type 0.
+    assert hex(&buf) == "08";
+
+    let mut len_tag = ByteList::with_capacity(4);
+    write_tag(&mut len_tag, 2, WireType::Len);
+    // `12` is `00010 010`: field 2, wire type 2.
+    assert hex(&len_tag) == "12";
+
+    assert tag_len(1) == 1;
+    assert tag_len(15) == 1;
+    assert tag_len(16) == 2;
+}
+
+test "zigzag moves the sign into the low bit" {
+    assert zigzag_64(0) == 0;
+    assert zigzag_64(-1) == 1;
+    assert zigzag_64(1) == 2;
+    assert zigzag_64(-2) == 3;
+    assert unzigzag_64(zigzag_64(-4000000000)) == -4000000000;
+}
+
+test "a fixed field is little-endian" {
+    let mut buf = ByteList::with_capacity(8);
+    write_fixed32(&mut buf, 1);
+    assert hex(&buf) == "01000000";
+
+    let mut wide = ByteList::with_capacity(8);
+    write_fixed64(&mut wide, 1);
+    assert hex(&wide) == "0100000000000000";
+}
+
+test "a varint reads back to what was written" {
+    let mut buf = ByteList::with_capacity(16);
+    write_varint(&mut buf, 150);
+    write_varint(&mut buf, 1);
+    let slice = buf.as_byte_slice();
+
+    let Some([first, after_first]) = read_varint(&slice, 0) else {
+        panic("the first varint did not read");
+    };
+    assert first == 150;
+    let Some([second, after_second]) = read_varint(&slice, after_first) else {
+        panic("the second varint did not read");
+    };
+    assert second == 1;
+    assert after_second == buf.len();
+}
+
+test "a varint that runs off the end reads nothing" {
+    let mut buf = ByteList::with_capacity(4);
+    buf.push(0x80);
+    assert read_varint(&buf.as_byte_slice(), 0) matches { None };
+}
+
+test "a fixed field reads back to what was written" {
+    let mut buf = ByteList::with_capacity(16);
+    write_fixed32(&mut buf, 305419896);
+    write_fixed64(&mut buf, 81985529216486895);
+    let slice = buf.as_byte_slice();
+
+    assert read_fixed32(&slice, 0) matches { Some([305419896, 4]) };
+    assert read_fixed64(&slice, 4) matches { Some([81985529216486895, 12]) };
+    assert read_fixed32(&slice, 10) matches { None };
+}
+
+// The specification's own worked examples (`encoding.md`): `Test1 { a: 150 }`,
+// `Test2 { b: "testing" }`, and `Test3 { c: Test1 { a: 150 } }`.
+struct Test1 {
+    #[wire(number = 1)]
+    a: i32,
+}
+
+struct Test2 {
+    #[wire(number = 2)]
+    b: String,
+}
+
+struct Test3 {
+    #[wire(number = 3)]
+    c: Test1,
+}
+
+fn encode<T: Serialize + WireNumbered>(value: &T) -> String {
+    let Ok(bytes) = to_bytes(value) else {
+        panic("the message did not encode");
+    };
+    return hex(&bytes);
+}
+
+test "a message writes a tag and a varint" {
+    assert encode(&Test1 { a: 150 }) == "089601";
+}
+
+test "a string field is length-delimited" {
+    assert encode(&Test2 { b: "testing" }) == "1207" + "74657374696e67";
+}
+
+test "a submessage carries the length its size pass promised" {
+    assert encode(&Test3 {
+        c: Test1 { a: 150 },
+    }) == "1a03" + "089601";
+}
+
+test "a repeated field repeats its tag" {
+    struct Repeated {
+        #[wire(number = 4)]
+        items: List<i32>,
+        #[wire(number = 5)]
+        nested: List<Test1>,
+    }
+
+    assert encode(&Repeated {
+        items: [1, 2],
+        nested: [],
+    }) == "2001" + "2002";
+    assert encode(&Repeated {
+        items: [],
+        nested: [
+            Test1 { a: 1 },
+            Test1 { a: 2 },
+        ],
+    }) == "2a02" + "0801" + "2a02" + "0802";
+}
+
+test "the fixed-width and absent field forms" {
+    struct Mixed {
+        #[wire(number = 1)]
+        f: f32,
+        #[wire(number = 2)]
+        d: f64,
+        #[wire(number = 3)]
+        flag: bool,
+        #[wire(number = 4)]
+        raw: ByteList,
+        #[wire(number = 5)]
+        absent: Option<i32>,
+    }
+
+    assert encode(&Mixed { f: 1.0, d: 1.0, flag: true, raw: b"\x01\x02", absent: null }) == "0d0000803f" + "11000000000000f03f" + "1801" + "22020102";
+}
+
+test "a negative int32 is sign-extended to ten bytes" {
+    assert encode(&Test1 { a: -1 }) == "08" + "ffffffffffffffffff01";
+}
+
+fn decode<T: Deserialize + WireNumbered>(bytes: ByteList) -> T {
+    let Ok(value) = from_bytes::<T, ByteList>(bytes) else {
+        panic("the message did not decode");
+    };
+    return value;
+}
+
+test "the specification's own bytes decode to the message they describe" {
+    assert decode::<Test1>(b"\x08\x96\x01").a == 150;
+    assert decode::<Test2>(b"\x12\x07testing").b == "testing";
+    assert decode::<Test3>(b"\x1a\x03\x08\x96\x01").c.a == 150;
+}
+
+test "a packed repeated field is one length-delimited run" {
+    struct Packed {
+        #[wire(number = 4)]
+        items: List<i32> = [],
+    }
+
+    // The specification's own example: field 4 holding 3, 270 and 86942.
+    let m = decode::<Packed>(b"\x22\x06\x03\x8e\x02\x9e\xa7\x05");
+    assert m.items.len() == 3;
+    assert m.items[0] == 3;
+    assert m.items[1] == 270;
+    assert m.items[2] == 86942;
+}
+
+test "a message round-trips through both passes" {
+    struct Inner {
+        #[wire(number = 1)]
+        label: String = "",
+        #[wire(number = 2)]
+        weight: f64 = 0.0,
+    }
+
+    struct Outer {
+        #[wire(number = 1)]
+        name: String = "",
+        #[wire(number = 2)]
+        counts: List<i64> = [],
+        #[wire(number = 3)]
+        children: List<Inner> = [],
+        #[wire(number = 4)]
+        raw: ByteList = b"",
+        #[wire(number = 5)]
+        flag: bool = false,
+    }
+
+    let original = Outer {
+        name: "model",
+        counts: [1, -2, 300],
+        children: [
+            Inner { label: "a", weight: 0.5 },
+            Inner { label: "b", weight: -1.25 },
+        ],
+        raw: b"\x00\xff",
+        flag: true,
+    };
+    let Ok(bytes) = to_bytes(&original) else {
+        panic("the message did not encode");
+    };
+    let back = decode::<Outer>(bytes);
+
+    assert back.name == "model";
+    assert back.counts.len() == 3;
+    assert back.counts[1] == -2;
+    assert back.children.len() == 2;
+    assert back.children[1].label == "b";
+    assert back.children[1].weight == -1.25;
+    assert back.raw.len() == 2;
+    assert back.raw[1] == 255;
+    assert back.flag;
+}
+
+test "a field the type does not declare is skipped" {
+    struct Narrow {
+        #[wire(number = 2)]
+        b: String = "",
+    }
+
+    // Field 1 is a varint and field 3 a submessage; neither is declared.
+    let m = decode::<Narrow>(b"\x08\x96\x01\x12\x07testing\x1a\x03\x08\x96\x01");
+    assert m.b == "testing";
+}
+
+test "a truncated message is an error, not a trap" {
+    assert from_bytes::<Test1, ByteList>(b"\x08\x96") matches { Err(_) };
+    assert from_bytes::<Test3, ByteList>(b"\x1a\x08\x08\x96\x01") matches { Err(_) };
+}
+
+test "a length no message could hold is an error, not a trap" {
+    // 0x7fffffff, which added to a position overflows what an offset holds.
+    assert from_bytes::<Test2, ByteList>(b"\x12\xff\xff\xff\xff\x07") matches { Err(_) };
+    assert from_bytes::<Test3, ByteList>(b"\x1a\xff\xff\xff\xff\x07") matches { Err(_) };
+}
+
+test "a packed run holding nothing is an empty list" {
+    struct Packed {
+        #[wire(number = 4)]
+        items: List<i32> = [],
+        #[wire(number = 1)]
+        after: i32 = 0,
+    }
+
+    let m = decode::<Packed>(b"\x22\x00\x08\x96\x01");
+    assert m.items.is_empty();
+    assert m.after == 150;
+}
+
+test "a submessage carrying no field numbers is refused, not written as zero" {
+    struct Unnumbered {
+        a: i32 = 0,
+    }
+
+    struct Holder {
+        #[wire(number = 1)]
+        inner: Unnumbered = Unnumbered {},
+    }
+
+    assert to_bytes(&Holder {
+        inner: Unnumbered { a: 7 },
+    }) matches { Err(_) };
+}
+
+test "a tag whose field number the wire cannot carry is malformed" {
+    // Field number 0 under wire type 0, which no encoder writes.
+    assert from_bytes::<Test1, ByteList>(b"\x00\x2a") matches { Err(_) };
+    // A number past 536870911, reached by a tag of ten varint bytes.
+    assert from_bytes::<Test1, ByteList>(
+        b"\xf8\xff\xff\xff\xff\xff\xff\xff\xff\x01\x2a",
+    ) matches { Err(_) };
+}
+
+test "a message with no fields is an empty record" {
+    struct Ping {
+    }
+
+    assert hex(&to_bytes(&Ping {}).unwrap()) == "";
+    assert from_bytes::<Ping, ByteList>(b"") matches { Ok(_) };
+}
+
+test "a packed run reaching a field that is not repeated takes the last element" {
+    struct Singular {
+        #[wire(number = 1)]
+        v: i32 = 0,
+        #[wire(number = 2)]
+        tail: i32 = 0,
+    }
+
+    // Field 1 as a packed run of 1, 2, 3, then field 2 = 9. A field declared
+    // `repeated` and later made singular decodes as the last element.
+    let got = from_bytes::<Singular, ByteList>(b"\x0a\x03\x01\x02\x03\x10\x09").unwrap();
+    assert got.v == 3;
+    assert got.tail == 9;
+
+    // An empty run contributes no element, so the field keeps its default.
+    let empty = from_bytes::<Singular, ByteList>(b"\x0a\x00\x10\x09").unwrap();
+    assert empty.v == 0;
+    assert empty.tail == 9;
+}
+
+test "a packed run too short for its element type is malformed" {
+    struct Fixed {
+        #[wire(number = 1)]
+        v: f32 = 0.0,
+    }
+
+    // A `LEN` run of two bytes under a field whose element is four wide. The
+    // run holds no whole element, so there is no last one to take.
+    assert from_bytes::<Fixed, ByteList>(b"\x0a\x02\x00\x00") matches { Err(_) };
+}
+
+test "a packed run whose last varint runs past it is malformed" {
+    struct Singular {
+        #[wire(number = 1)]
+        v: i32 = 0,
+    }
+
+    // A run of two bytes whose second is a varint continuation: the element
+    // would read past the run's end into whatever follows.
+    assert from_bytes::<Singular, ByteList>(b"\x0a\x02\x01\x80\x01") matches { Err(_) };
+}
+
+test "an element of a repeated run is bounded by the run" {
+    struct Repeated {
+        #[wire(number = 1)]
+        items: List<i32> = [],
+        #[wire(number = 2)]
+        tail: i32 = 0,
+    }
+
+    // The run says two bytes and its second element is a varint continuation,
+    // so reading it would take the next field's tag as part of the value. The
+    // offset is what the run's bound buys: the straddling element, rather than
+    // whatever the tag that element ate turns out to mean.
+    let Err(e) = from_bytes::<Repeated, ByteList>(b"\x0a\x02\x01\x80\x10\x09") else {
+        panic("the run decoded");
+    };
+    assert e.offset == 3;
+}
+
+test "a varint whose tenth byte overflows u64 is malformed" {
+    // Nine continuation bytes and a tenth of `0x02`. Only bit 0 of the tenth
+    // byte fits, so the rest is a number the encoding cannot mean.
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02") matches { Err(_) };
+    // `0x01` is the largest tenth byte, and `u64::MAX` is what it spells.
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01") matches { Ok(_) };
+}
+
+test "a tag whose wire type is not the field's is refused" {
+    struct Ints {
+        #[wire(number = 1)]
+        a: i32 = 0,
+        #[wire(number = 2)]
+        b: i32 = 0,
+    }
+
+    // Field 1 tagged `Fixed32` (`0x0d`) over bytes that read as a varint and
+    // leave a whole field behind them: taking the tag at its word gives
+    // `{a: 1, b: 7}` from bytes that say no such thing.
+    assert from_bytes::<Ints, ByteList>(b"\x0d\x01\x10\x07") matches { Err(_) };
+
+    struct Float {
+        #[wire(number = 1)]
+        f: f32 = 0.0,
+    }
+
+    // The other direction: a `Fixed32` field tagged `Varint` (`0x08`), over
+    // four bytes that are exactly one `f32`.
+    assert from_bytes::<Float, ByteList>(b"\x08\x00\x00\x80\x3f") matches { Err(_) };
+}

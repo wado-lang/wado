@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use crate::hashmap::{IndexMap, IndexSet};
 
-use crate::ast::{self, Item, Module, Type, declares_unrestricted};
+use crate::ast::{self, Item, Module, Type, declares_unrestricted, wire_numbers_of};
 use crate::builtin_registry::BuiltinRegistry;
 use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
@@ -455,6 +455,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                                     fields: Vec::new(),
                                     field_ast_ids: Vec::new(),
                                     field_defaults: Vec::new(),
+                                    field_wire_numbers: Vec::new(),
                                     type_params: RealTypeParams::of(&struct_decl.type_params),
                                     type_param_type_ids: Vec::new(), // filled in second pass
                                 },
@@ -817,6 +818,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
+                            field_wire_numbers: wire_numbers_of(&struct_decl.fields),
                             type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         };

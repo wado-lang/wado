@@ -603,6 +603,7 @@ impl ClosureLowerer {
                     wire_name_override: None,
                     serde_default: false,
                     serde_positional: false,
+                    serde_number: None,
                     default_expr: None,
                 })
                 .collect();

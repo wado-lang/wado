@@ -1,0 +1,95 @@
+//! The ONNX graph Loam reads, in the shape the rest of the package consumes.
+//! Dimensions are extents without identity, since an ONNX shape is positional.
+
+/// One dimension as the model states it. `Unknown` is ONNX's `?`, a dimension
+/// the exporter left open and no symbol stands for.
+pub variant Dim {
+    Static(i32),
+    Symbol(String),
+    Unknown,
+}
+
+/// A tensor type's rank. ONNX separates a scalar from a tensor whose rank it
+/// does not state, so the two are separate cases rather than an empty list.
+pub variant Rank {
+    Scalar,
+    Unranked,
+    Dims(List<Dim>),
+}
+
+pub struct ValueInfo {
+    pub name: String,
+    pub dtype: String,
+    pub rank: Rank,
+}
+
+/// A tensor an attribute carries, which `Constant` is the operator of. It has
+/// no shape: the one element a reader folds has no axis to put in one.
+pub struct ConstTensor {
+    pub data: List<f32>,
+}
+
+/// An attribute's values as written. ONNX types an attribute by the operator's
+/// schema rather than by the syntax, so the text is kept and the operator
+/// reads it. A tensor payload has no text form and travels in `tensor`.
+pub struct Attr {
+    pub name: String,
+    pub values: List<String>,
+    pub is_list: bool,
+    pub tensor: Option<ConstTensor> = null,
+}
+
+pub struct Node {
+    pub op: String,
+    pub outputs: List<String>,
+    pub inputs: List<String>,
+    pub attrs: List<Attr>,
+}
+
+impl Node {
+    pub fn attr<S: AsStrSlice>(&self, name: S) -> Option<Attr> {
+        for let a of self.attrs {
+            if a.name.as_str_slice() == name.as_str_slice() {
+                return Option::Some(a);
+            }
+        }
+        return null;
+    }
+}
+
+/// `inputs` holds the parameters `forward` takes, so it never names an
+/// initializer: both readers pass theirs through `parameters` first.
+pub struct Graph {
+    pub name: String,
+    pub inputs: List<ValueInfo>,
+    pub outputs: List<ValueInfo>,
+    pub initializers: List<ValueInfo>,
+    pub nodes: List<Node>,
+}
+
+/// The declared inputs that are parameters. An initializer's name may also
+/// appear among them, where it supplies that input's default rather than a
+/// second value, and Loam's weights are the caller's either way.
+pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
+    let mut weights: List<String> = [];
+    for let vi of *initializers {
+        weights.push(vi.name);
+    }
+    let mut kept: List<ValueInfo> = [];
+    for let vi of inputs {
+        if !weights.contains_str(vi.name.as_str_slice()) {
+            kept.push(vi);
+        }
+    }
+    return kept;
+}
+
+impl Display for Dim {
+    fn fmt(&self, f: &mut Formatter) {
+        match self {
+            Static(n) => f.write_str(`${n}`),
+            Symbol(s) => f.write_str(s),
+            Unknown => f.write_str("?"),
+        }
+    }
+}

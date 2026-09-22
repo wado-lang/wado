@@ -4,7 +4,7 @@ set -euo pipefail
 # Sync all vendor submodules.
 #
 # - vendor/wasmtime: pinned to the exact version in Cargo.lock
-# - vendor/wasm, vendor/wasi, vendor/wasm-tools, vendor/component-model: updated to latest remote HEAD
+# - every other submodule: updated to latest remote HEAD
 #
 # Usage: mise run sync-vendor
 
@@ -53,7 +53,12 @@ fi
 
 # --- Other vendors: update to latest ---
 
-for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-model vendor/antlr4; do
+# Read from `.gitmodules`, so a submodule added there is synced without this
+# being edited too.
+others=$(git config -f .gitmodules --get-regexp '^submodule\..*\.path$' |
+    cut -d' ' -f2 | grep -v '^vendor/wasmtime$')
+
+for submodule in ${others}; do
     echo ""
     echo "==> Updating ${submodule} to latest"
     git submodule update --init --remote "${submodule}"

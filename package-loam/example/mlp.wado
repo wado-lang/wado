@@ -1,4 +1,4 @@
-//! A two-layer MLP checked at build time.
+//! A two-layer MLP checked at build time and run through the generated kernels.
 //!
 //! Loam reads `mlp.onnxtext` through Kiln, names each axis from the `layout`
 //! patterns, and discharges every operator's extent conditions before this
@@ -8,7 +8,7 @@
 //!     wado run package-loam/example/mlp.wado
 
 use { println, Stdout } from "core:cli";
-use { Batch, In, Out, Tensor } from "./mlp.onnxtext"
+use { Batch, Hidden, In, Out, Tensor, Weights, forward } from "./mlp.onnxtext"
     with {
         generator: {
             module: "../src/generator.wado",
@@ -46,14 +46,46 @@ fn batch_size(t: &Tensor<f32, [Batch, In]>) -> i32 {
     return t.extents[0];
 }
 
-export fn run() with Stdout {
-    let x = Tensor::<f32, [Batch, In]> {
-        data: [0.0] as List<f32>,
+/// Stand-ins for a checkpoint, which roadmap step 3 reads.
+fn weights() -> Weights {
+    return Weights {
+        W1: Tensor::<f32, [In, Hidden]> {
+            data: List::<f32>::filled(128 * 64, 1.0),
+            extents: [128, 64],
+        },
+        B1: Tensor::<f32, [Hidden]> {
+            data: List::<f32>::filled(64, 0.0),
+            extents: [64],
+        },
+        W2: Tensor::<f32, [Hidden, Out]> {
+            data: List::<f32>::filled(64 * 10, 0.5),
+            extents: [64, 10],
+        },
+        B2: Tensor::<f32, [Out]> {
+            data: List::<f32>::filled(10, 1.0),
+            extents: [10],
+        },
+    };
+}
+
+fn ones_input() -> Tensor<f32, [Batch, In]> {
+    return Tensor {
+        data: List::<f32>::filled(128, 1.0),
         extents: [1, 128],
     };
-    let y = Tensor::<f32, [Batch, Out]> {
-        data: [0.0] as List<f32>,
-        extents: [1, 10],
-    };
-    println(`batch ${batch_size(&x)}, output rank ${y.extents.len()}`);
+}
+
+export fn run() with Stdout {
+    let x = ones_input();
+    let y = forward(&x, &weights());
+    println(`batch ${batch_size(&x)}, logits ${y.extents[1]}, first ${y.data[0]}`);
+}
+
+test "the generated forward pass runs the graph's operators" {
+    let y = forward(&ones_input(), &weights());
+
+    assert y.extents == [1, 10] as List<i32>;
+    // Each hidden unit sums 128 ones, `Relu` keeps them, each logit sums 64
+    // of those at 0.5, and `B2` adds one.
+    assert y.data[0] == 128.0 * 64.0 * 0.5 + 1.0;
 }

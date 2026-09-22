@@ -446,6 +446,7 @@ pub struct StructField<T, F> {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 impl<T, F> StructField<T, F> {
@@ -462,6 +463,12 @@ impl<T, F> StructField<T, F> {
     /// Whether the field is marked `#[secret]`.
     pub fn is_secret(&self) -> bool {
         return self.is_secret;
+    }
+
+    /// The field's `#[wire(number = N)]`, or `0` where it carries none: a
+    /// field number starts at 1, so zero is the format's own non-number.
+    pub fn wire_number(&self) -> i32 {
+        return self.wire_number;
     }
 
     /// The value of this field in `v`.

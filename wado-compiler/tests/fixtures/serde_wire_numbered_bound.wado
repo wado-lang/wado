@@ -1,0 +1,30 @@
+// `WireNumbered` is the bound a format keyed by field numbers requires. It
+// holds for a struct whose every field carries one, so a format asking for it
+// refuses an unnumbered type where the call is written.
+use { WireNumbered } from "core:serde";
+
+struct Numbered {
+    #[wire(number = 1)] x: i32,
+    #[wire(number = 2)] y: i32,
+}
+
+struct Plain {
+    x: i32,
+}
+
+fn numbered_only<T: WireNumbered>(_value: &T) -> i32 {
+    return 1;
+}
+
+test "a fully numbered struct satisfies the bound" {
+    assert numbered_only(&Numbered { x: 1, y: 2 }) == 1;
+}
+
+test "a struct carrying no numbers is what the bound rules out" {
+    // `numbered_only(&Plain { x: 1 })` is a bound error, so the rejection
+    // lives in `serde_wire_numbered_bound_refused.wado`.
+    assert Plain { x: 1 }.x == 1;
+}
+
+__DATA__
+{"test": {}}

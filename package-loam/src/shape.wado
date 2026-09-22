@@ -37,6 +37,18 @@ impl Shape {
         return self.axes.len();
     }
 
+    /// The same axes in the order `perm` names, which is what `Transpose`
+    /// does. `perm` is a permutation of this shape's rank, which its reader
+    /// has already established.
+    pub fn permute(&self, perm: &List<i32>) -> Shape {
+        assert perm.len() == self.rank();
+        let mut axes: List<Axis> = [];
+        for let p of *perm {
+            axes.push(self.axes[p]);
+        }
+        return Shape { axes };
+    }
+
     /// The axis `back` positions from the end, `0` being the last.
     pub fn from_end(&self, back: i32) -> &Axis {
         assert 0 <= back < self.rank();
