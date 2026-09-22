@@ -1745,8 +1745,8 @@ Creates a bf16 from its bit representation.
 
 #### `pub fn from_f32(v: f32) -> bf16`
 
-Rounds `v` to the nearest bf16, ties to even. bf16 shares f32's
-exponent range, so nothing overflows and nothing becomes subnormal.
+Rounds `v` to the nearest bf16, ties to even. bf16 takes f32's exponent
+field as is, so the top 16 bits are the result and only the mantissa rounds.
 
 #### `pub fn is_nan(&self) -> bool`
 
