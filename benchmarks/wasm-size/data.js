@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790102963245,
+  "lastUpdate": 1790117690120,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58489,6 +58489,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/1d7e33b2cfa3bbc84ffd2c2adf488a4049366e6a"
         },
         "date": 1790102962573,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c1fd8d2b06f37cf365c5ed7a4499c14907be1d67",
+          "message": "Merge pull request #2127 from wado-lang/claude/package-gaes-cold-start-kv1y7p\n\nperf(compiler): 4.4s off a -O1 Kiln generator build — 33s to 28.5s",
+          "timestamp": "2026-09-23T07:37:55+09:00",
+          "tree_id": "0bd46eb677cd67f4e286348ba277598fab533761",
+          "url": "https://github.com/wado-lang/wado/commit/c1fd8d2b06f37cf365c5ed7a4499c14907be1d67"
+        },
+        "date": 1790117689473,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
