@@ -3280,28 +3280,19 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     ) -> StaticArgSurvey {
         let mut survey = StaticArgSurvey::default();
         for impl_def in self.trait_impls_for_receiver(recv.name, recv.key) {
+            let Some(trait_decl) = self.tysys.signatures.impl_trait(impl_def) else {
+                continue;
+            };
             // A qualified spelling names a trait, so another trait's impl is
-            // not a candidate to weigh against — the same rule the resolution
+            // not a candidate to weigh against: the same rule the resolution
             // applies, asked where the arguments are surveyed.
-            if let Some(required) = recv.required_trait
-                && self
-                    .tysys
-                    .signatures
-                    .impl_sig(impl_def)
-                    .and_then(|sig| sig.trait_decl)
-                    != Some(required)
+            if recv
+                .required_trait
+                .is_some_and(|required| required != trait_decl)
             {
                 continue;
             }
             let header = &self.tysys.trait_env.impl_headers[&impl_def];
-            let Some(trait_decl) = self
-                .tysys
-                .signatures
-                .impl_sig(impl_def)
-                .and_then(|sig| sig.trait_decl)
-            else {
-                continue;
-            };
             // The same walk the rules read, so a body the block inherits is a
             // candidate here too.
             let Some(offer) =

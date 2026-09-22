@@ -250,6 +250,21 @@ pub(super) struct SelfBinding {
     pub(super) declaring_trait: Option<DefId>,
 }
 
+impl TypeSystem {
+    /// [`SelfBinding`] for a call on `receiver`, read past its references to
+    /// the type an `impl` block targets.
+    pub(super) fn base_self_binding(
+        &self,
+        receiver: TypeId,
+        declaring_trait: Option<DefId>,
+    ) -> SelfBinding {
+        SelfBinding {
+            type_id: self.get_base_type(receiver),
+            declaring_trait,
+        }
+    }
+}
+
 /// The recorded declaration facts of the trait `decl` declares, for a caller
 /// holding the inputs rather than an `Elaborator` — reify's default-method
 /// pass. Reads the digest the decl pass recorded, never the declaring module's
@@ -3358,9 +3373,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for info in blanket_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
-            // Bind the blanket type param to the concrete type
-            // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
-            // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
+            // A blanket's target is its parameter, so the type registered for
+            // is what both `Self` and that parameter stand for.
             let implementing = SelfBinding {
                 type_id: concrete_type_id,
                 declaring_trait: Some(info.trait_key),

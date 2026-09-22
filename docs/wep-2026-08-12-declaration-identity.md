@@ -896,6 +896,18 @@ out of reach. What it admits is a reference impl that can carry methods but not
 an associated type, so a trait declaring one cannot be implemented on a
 reference to a generic head.
 
+## Known gap: the operator paths compare an impl target by spelling
+
+`inherent_impl_type_args_match` decides whether a receiver reaches an impl, and
+it compares structurally. The arithmetic and indexing lookups do not ask it.
+They ask `verify_impl_type_compatibility`, which compares a written argument's
+head against the receiver's rendered type name and reads a free parameter off a
+set of parameter names rather than off its reference site.
+
+What it admits is §8's hazard on those two paths: an alias spelled like a
+parameter, a qualified `ns::Tag`, and two declarations rendering alike are each
+decided by the rendering.
+
 ## Known gap: a reference impl target has no name of its own
 
 `name::Receiver::Ref` spells the reference kind and nothing else. The pointee

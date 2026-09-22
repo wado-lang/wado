@@ -1570,10 +1570,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         input: MethodInferenceInput<'_>,
     ) -> (Vec<TypeId>, SubstitutionContext) {
         let (slots, own_params, span) = (input.slots, input.own_params, input.span);
-        let self_binding = SelfBinding {
-            type_id: self.tysys.get_base_type(input.receiver_type),
-            declaring_trait: input.trait_decl,
-        };
+        let self_binding = self
+            .tysys
+            .base_self_binding(input.receiver_type, input.trait_decl);
         let reached = self.packs_args_reach(input.param_types, input.args.len());
         let (method_name, receiver_type) = (input.method_name.to_string(), input.receiver_type);
         let mut type_args = self.resolve_method_type_args(explicit, input);
@@ -1628,10 +1627,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return vec![];
         }
 
-        let self_binding = Some(SelfBinding {
-            type_id: self.tysys.get_base_type(receiver_type),
-            declaring_trait: trait_decl,
-        });
+        let self_binding = Some(self.tysys.base_self_binding(receiver_type, trait_decl));
         let inst = self.instantiate(
             slots,
             &Instantiation {
@@ -3462,10 +3458,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 name: &method_call.method,
                 span: method_call.span,
                 type_args: &type_args,
-                self_binding: Some(SelfBinding {
-                    type_id: self.tysys.get_base_type(output_type),
-                    declaring_trait: method_trait_name.as_ref().and_then(FqTraitName::canonical),
-                }),
+                self_binding: Some(self.tysys.base_self_binding(
+                    output_type,
+                    method_trait_name.as_ref().and_then(FqTraitName::canonical),
+                )),
             },
         );
 

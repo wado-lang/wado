@@ -99,13 +99,8 @@ impl BoundSelf {
     }
 }
 
-/// A bound together with what `Self` means where it was written.
-///
-/// A bound's arguments are written in the frame that declared the parameter,
-/// which is not the frame of whatever later reads them. Carrying that frame
-/// here is what keeps a reader from supplying its own (#2112). `Self` is a
-/// [`SelfBinding`] and not a bare type, since resolving `Self::Assoc` needs the
-/// trait that declared the name as well as the receiver it projects off.
+/// A bound together with what `Self` means where it was written, which is not
+/// the frame of whatever later reads it (#2112).
 #[derive(Clone, Debug)]
 pub(super) struct ScopedBound {
     pub(super) bound: ast::TraitBound,
@@ -182,13 +177,8 @@ pub(super) struct TraitParamFromImpl<'p, 'a, A> {
     pub(super) bounds: Vec<ScopedBound>,
 }
 
-/// Each parameter of a trait declaration paired with the argument a site wrote
-/// for it, the slot it occupies, and the bounds it declares pinned to
-/// `implementing`.
-///
-/// Both numberings are here, since reading one for the other slides every
-/// parameter after an `fn`-bound one. The trait wrote the bounds in its own
-/// space, so their `Self` is the type standing under it.
+/// Each parameter of a trait declaration with the argument a site wrote for
+/// it, both its numberings, and its bounds pinned to `implementing`.
 pub(super) fn trait_params_from_impl<'p, 'a, A>(
     params: &'p [ast::GenericParam],
     args: &'a [A],
@@ -482,10 +472,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         body(guard.elaborator)
     }
 
-    /// Make `Self` stand for `binding` for the rest of this scope, all of what
-    /// `Self` means together: a receiver without its trait answers `Self` and
-    /// not `Self::Assoc`, and stale bindings answer it off the wrong type.
-    /// Installing one part is the frame that leaks (#2112).
+    /// Make `Self` stand for `binding` for the rest of this scope, every part
+    /// of it at once: installing one part is the frame that leaks (#2112).
     pub(super) fn set_self_binding(&mut self, binding: SelfBinding) {
         self.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
         self.annotate_ctx.trait_ctx.self_trait = binding.declaring_trait;
@@ -519,8 +507,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     }
 
     /// [`Self::with_self_binding`] where there is a binding, and `body` as it
-    /// stands where there is none. Nothing written in a frame binding no `Self`
-    /// spells one, so there is nothing for this frame's own to answer.
+    /// stands where there is none.
     pub(super) fn under_self_binding<R>(
         &mut self,
         binding: Option<SelfBinding>,
