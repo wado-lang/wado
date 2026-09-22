@@ -40,8 +40,11 @@ compiler knows their representation as it knows `v128`'s: a `u16` in every
 position. A `List<f16>` is the same packed array as a `List<u16>`, and a struct
 field of either packs the same way.
 
-They carry no arithmetic. `+`, the bitwise operators and the comparisons are
-all rejected, on the same path that rejects them for `v128`.
+They carry no arithmetic today. `+`, the bitwise operators and the comparisons
+are all rejected, on the same path that rejects them for `v128`. Neither caller
+computes in half precision, and Wasm has no instruction to lower an operator to.
+Whether Wado grows half precision arithmetic later is open; nothing decided here
+forecloses it.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -167,9 +170,6 @@ preserves the value.
 
 ### What is deliberately absent
 
-Arithmetic. Wasm has no half precision instruction, and neither caller computes
-in half precision.
-
 `Eq` and `Ord`, because a comparison of bit patterns is not a comparison of
 floats: it answers that `-0.0` differs from `+0.0` and that a NaN equals
 itself. A comparison widens first and compares as `f32`.
@@ -187,6 +187,10 @@ Nothing outstanding. What the types do not yet reach is in Known gaps, and none
 of it is committed work.
 
 ## Known gaps
+
+No arithmetic, so every computation widens to `f32` and narrows again to store.
+An operator naming either type is a compile error rather than a slower path, and
+a generic body bounded on `Add` cannot be instantiated at one.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.
