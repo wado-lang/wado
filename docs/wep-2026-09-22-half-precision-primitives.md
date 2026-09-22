@@ -55,8 +55,8 @@ the bits would say the opposite of both. `Default` is there too, and is the zero
 `<=` and `>=` on a NaN are where the rule stops, and they say `true`. They reach
 `Ord::cmp`, which has three answers and no unordered one, so an incomparable
 pair comes back `Equal`. `f32` hides this by lowering its own `<=` to a Wasm
-instruction that never consults `cmp`, and answers the same way as a half as
-soon as it is reached through a `T: Ord` bound.
+instruction that never consults `cmp`. Reached through a `T: Ord` bound, it
+answers as a half does.
 
 Wasm has no half comparison either, so the operator dispatches to the impl the
 way a struct's does. These are the only primitives whose operator does.
