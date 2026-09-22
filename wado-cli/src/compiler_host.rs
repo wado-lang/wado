@@ -208,6 +208,16 @@ impl FilesystemCompilerHost {
         }
     }
 
+    /// The cached AOT compile, under a span of its own so a slow Kiln build
+    /// separates native compilation from what the generator then does.
+    fn aot(
+        &self,
+        component_wasm: &[u8],
+    ) -> Result<(wasmtime::Engine, wasmtime::component::Component), GeneratorRunnerError> {
+        let _span = KilnSpan::new(self, "kiln/aot");
+        self.run.components().get_or_compile(component_wasm)
+    }
+
     fn should_log(&self, severity: Severity) -> bool {
         match self.log_level {
             LogLevel::Off => false,
@@ -315,11 +325,8 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-        let (engine, component) = {
-            let _aot = KilnSpan::new(self, "kiln/aot");
-            self.run.components().get_or_compile(component_wasm)?
-        };
-        let _generate = KilnSpan::new(self, "kiln/generate");
+        let (engine, component) = self.aot(component_wasm)?;
+        let _span = KilnSpan::new(self, "kiln/generate");
         let (outcome, diagnostics) =
             kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
                 .await;
@@ -337,11 +344,8 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: &GeneratorRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
-        let (engine, component) = {
-            let _aot = KilnSpan::new(self, "kiln/aot");
-            self.run.components().get_or_compile(component_wasm)?
-        };
-        let _probe = KilnSpan::new(self, "kiln/probe");
+        let (engine, component) = self.aot(component_wasm)?;
+        let _span = KilnSpan::new(self, "kiln/probe");
         let (outcome, diagnostics) =
             kiln_runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
         for diag in diagnostics {

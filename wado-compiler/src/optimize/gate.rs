@@ -43,10 +43,9 @@ pub enum GatedPass {
     ScalarForward,
     LetBlockFlatten,
     /// The post-loop cleanup fixpoints ([`super::run_bounded_fixpoint`]). Each
-    /// such fixpoint owns a fresh gate, so a column is shared by two passes
-    /// that never appear in one fixpoint together.
+    /// owns a fresh gate, so `BranchPrune` serves both of its passes.
     StoreLoadForward,
-    ConstFoldAll,
+    ConstFoldUncached,
     BranchPrune,
     CondImplPostPromote,
 }
@@ -238,7 +237,7 @@ mod tests {
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
             GatedPass::StoreLoadForward,
-            GatedPass::ConstFoldAll,
+            GatedPass::ConstFoldUncached,
             GatedPass::BranchPrune,
             GatedPass::CondImplPostPromote,
         ];
@@ -261,7 +260,7 @@ mod tests {
                 | GatedPass::ScalarForward
                 | GatedPass::LetBlockFlatten
                 | GatedPass::StoreLoadForward
-                | GatedPass::ConstFoldAll
+                | GatedPass::ConstFoldUncached
                 | GatedPass::BranchPrune
                 | GatedPass::CondImplPostPromote => {}
             }

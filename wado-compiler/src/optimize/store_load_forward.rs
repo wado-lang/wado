@@ -23,11 +23,9 @@ use crate::optimize::extract::{extract_const, is_place_read};
 use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::tir::TypeTable;
 
-/// Forwards stores to loads in every function the gate still holds. Used by the post-`field_scalarize`
-/// cleanup so the scalarization shadow inits (`$hfs_x = obj.f`) get their fields
-/// forwarded to constants — the load→literal fold `field_scalarize` leaves to
-/// a later pass, and the only one that runs after it.
-pub fn forward_stores_to_loads_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+/// Forwards stores to loads in the functions `gate` still holds. The only pass
+/// after `field_scalarize`, so its shadow inits (`$hfs_x = obj.f`) fold here.
+pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);

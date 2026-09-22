@@ -35,9 +35,8 @@ impl PruneMode {
     }
 }
 
-/// Prune constant branches and simplify trivial blocks in all functions.
-/// Standalone engine session for the post-globalization cleanup caller; the
-/// in-loop run goes through [`super::peephole`] instead.
+/// Prunes constant branches and trivial blocks in the functions `gate` holds,
+/// in a standalone engine session; the in-loop run is [`super::peephole`].
 pub fn prune_constant_branches(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     run_rule(project, PruneMode::Fixpoint, gate)
 }

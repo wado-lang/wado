@@ -64,7 +64,7 @@ use crate::nir_arena::{NodeRef, PatKind, StmtKind};
 use crate::trace::filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::{ConstFoldCache, fold_constants, fold_constants_all};
+use const_folding::{ConstFoldCache, fold_constants, fold_constants_uncached};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -84,7 +84,7 @@ use scalar_forward::forward_scalar_temps;
 use sroa::scalar_replace_aggregates;
 use sroa_param::sroa_single_field_parameters;
 use sroa_variant_return::scalarize_variant_returns;
-use store_load_forward::forward_stores_to_loads_all;
+use store_load_forward::forward_stores_to_loads;
 use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
@@ -366,10 +366,8 @@ const POST_LOOP_FIXPOINT_CAP: u32 = 100;
 /// [`POST_LOOP_FIXPOINT_CAP`]. Returns whether any round changed the IR; emits a
 /// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
 ///
-/// `step` receives a gate of the fixpoint's own, so the first round processes
-/// every function and each later one only what the round before rewrote (and
-/// its 1-hop neighbours). Without it every round re-scans the whole module to
-/// find the handful of functions still moving.
+/// `step` gets a gate of the fixpoint's own: round 0 processes every function,
+/// each later round only what the one before rewrote.
 fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
@@ -850,8 +848,8 @@ fn run_optimization_passes(
         project,
         profiler,
         |p, g| {
-            forward_stores_to_loads_all(p, g)
-                | fold_constants_all(p, g)
+            forward_stores_to_loads(p, g)
+                | fold_constants_uncached(p, g)
                 | prune_constant_branches(p, g)
         },
     );
@@ -884,7 +882,7 @@ fn run_optimization_passes(
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
     run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
-        fold_constants_all(p, g) | prune_constant_branches(p, g)
+        fold_constants_uncached(p, g) | prune_constant_branches(p, g)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
