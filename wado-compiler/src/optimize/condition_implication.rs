@@ -10,9 +10,9 @@ use cranelift_entity::EntityRef;
 
 use super::arena_query::local_written_by;
 use crate::const_eval::Value;
-use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
+use crate::nir::{FuncId, NirBinaryOp, NirFunction, NirUnaryOp};
 use crate::nir_arena::{BlockId, ExprId, ExprKind, NodeRef, Operand, PatId, StmtId, StmtKind};
-use crate::nir_engine::Engine;
+use crate::nir_engine::{Engine, EngineBuffers};
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
 use crate::optimize::alias::{CallImmutability, builder_alias_sets, first_param_types};
@@ -85,8 +85,6 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
 /// never sees the promoted bound. The caller pairs this with `const_branch_prune`
 /// to fixpoint so the newly-`false` checks' panic blocks go too.
 pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    use crate::nir::NirFunction;
-    use crate::nir_engine::EngineBuffers;
     let len = project.functions.len();
     if !gate.any_pending(GatedPass::CondImplPostPromote, len) {
         return false;
