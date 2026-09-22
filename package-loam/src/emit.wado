@@ -7,11 +7,9 @@ use { Graph, Node, ValueInfo } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
-/// `wado` is the type Wado would hold it in, where Wado has one.
 pub struct UnmappedDtype {
     pub tensor: String,
     pub dtype: String,
-    pub wado: Option<String> = null,
 }
 
 /// A node whose operator stage 0 checks but no kernel computes.
@@ -63,9 +61,6 @@ pub variant EmitError {
 impl Display for UnmappedDtype {
     fn fmt(&self, f: &mut Formatter) {
         f.write_str(`${self.tensor}: the kernels compute in f32 and this tensor is ${self.dtype}`);
-        if let Some(wado) = &self.wado {
-            f.write_str(` (\`${wado}\`)`);
-        }
     }
 }
 
@@ -154,26 +149,7 @@ fn check_dtype(vi: &ValueInfo) -> Result<(), EmitError> {
         return Result::Ok(());
     }
     builtin::cold_path();
-    return Result::Err(EmitError::Dtype(UnmappedDtype {
-        tensor: vi.name,
-        dtype: vi.dtype,
-        wado: element_type(&vi.dtype),
-    }));
-}
-
-/// ONNX's element type as Wado's. `None` where Wado has no type for it, which
-/// is a different thing from a type no kernel computes in.
-fn element_type(dtype: &String) -> Option<String> {
-    return match dtype.as_str_slice() {
-        "float" => Option::Some("f32"),
-        "double" => Option::Some("f64"),
-        "float16" => Option::Some("f16"),
-        "bfloat16" => Option::Some("bf16"),
-        "int32" => Option::Some("i32"),
-        "int64" => Option::Some("i64"),
-        "bool" => Option::Some("bool"),
-        _ => null,
-    };
+    return Result::Err(EmitError::Dtype(UnmappedDtype { tensor: vi.name, dtype: vi.dtype }));
 }
 
 /// Every identifier the generated module declares, minted from one set: the

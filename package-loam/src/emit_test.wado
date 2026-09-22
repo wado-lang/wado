@@ -306,18 +306,15 @@ g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
 }
 
 test "an element type the kernels cannot compute in names itself" {
-    assert refused_dtype("int32") == "X: the kernels compute in f32 and this tensor is int32 (`i32`)";
-}
-
-// Half precision is the one roadmap step 2 is about, so the refusal names the
-// primitive a kernel will hold rather than treating it as an unknown type.
-test "a half precision tensor is refused naming the Wado primitive" {
-    assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16 (`f16`)";
-    assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16 (`bf16`)";
-}
-
-test "an element type Wado has no name for names only itself" {
+    assert refused_dtype("int32") == "X: the kernels compute in f32 and this tensor is int32";
     assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
+}
+
+// Half precision has Wado primitives and no kernel, which is what roadmap
+// step 2 closes. Until it does, such a graph stops the build like any other.
+test "a half precision boundary tensor is refused" {
+    assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16";
+    assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16";
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is
