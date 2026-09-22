@@ -568,18 +568,22 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
             // Initialized let: bind the initializer first (uses outer scope vars)
             self.bind_expr(value)?;
 
-            // Check if this is a same-scope shadowing with self-reference
-            // (e.g., `let x = x + 1`). The old binding must remain in scope
-            // during bind_expr above so the RHS can reference it. Now that
-            // the RHS is bound, remove the old binding before define() so it
-            // won't report a duplicate.
-            if let Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } = &let_stmt.pattern
-            {
+            // Same-scope shadowing that derives from the old binding, as
+            // `let x = x + 1` and `let Some(x) = x else …` both do. The old
+            // binding had to stay in scope for `bind_expr` above, so it is
+            // dropped here, before `define` would call it a duplicate. Every
+            // name the pattern binds is checked: a payload shadows exactly as
+            // a plain identifier does.
+            let mut bound: Vec<String> = Vec::new();
+            for_each_pattern_name(&let_stmt.pattern, &mut |name, _| {
+                bound.push(name.to_string());
+            });
+            for name in bound {
                 let is_duplicate_in_scope = self
                     .scopes
                     .last()
-                    .is_some_and(|scope| scope.bindings.contains_key(name));
-                if is_duplicate_in_scope && expr_references_var(value, name) {
+                    .is_some_and(|scope| scope.bindings.contains_key(&name));
+                if is_duplicate_in_scope && expr_references_var(value, &name) {
                     self.scopes
                         .last_mut()
                         .unwrap()

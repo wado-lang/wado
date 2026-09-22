@@ -37,6 +37,18 @@ export fn run() {
     };
     n += 41;
     assert n == 42;
+
+    assert unwrapped(Option::<i32>::Some(7)) == 7;
+    assert unwrapped(null) == -1;
+}
+
+/// A payload shadowing the name it derives from, which is `let x = x + 1`'s
+/// rule reaching into a pattern.
+fn unwrapped(found: Option<i32>) -> i32 {
+    let Some(found) = found else {
+        return -1;
+    };
+    return found;
 }
 
 __DATA__
