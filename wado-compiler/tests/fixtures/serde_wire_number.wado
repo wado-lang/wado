@@ -1,0 +1,29 @@
+// `#[wire(number = N)]` is the numeric wire key, the sibling of
+// `#[wire(name = "...")]`. A name-based format drops it, so a numbered type
+// serializes exactly as it would without one.
+use { Serialize, Deserialize } from "core:serde";
+use { to_string, from_string } from "core:json";
+
+struct Point {
+    #[wire(number = 1)] x: i32,
+    #[wire(number = 2)] y: i32,
+}
+impl Serialize for Point;
+impl Deserialize for Point;
+
+#[wire(name_policy = "camelCase")]
+struct Event {
+    #[wire(number = 1)] created_at: String,
+    #[wire(number = 7)] event_kind: i32,
+}
+impl Serialize for Event;
+
+test "a number changes nothing a name-based format does" {
+    assert to_string(&Point { x: 1, y: 2 }) matches { Ok(s) && s == `\{"x":1,"y":2\}` };
+    assert from_string::<Point>(`\{"x":3,"y":4\}`) matches { Ok(p) && p.x == 3 && p.y == 4 };
+}
+
+test "a number and a name policy do not interfere" {
+    let e = Event { created_at: "now", event_kind: 2 };
+    assert to_string(&e) matches { Ok(s) && s == `\{"createdAt":"now","eventKind":2\}` };
+}

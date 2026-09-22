@@ -355,6 +355,7 @@ fn synthesize_dispatch_struct(
         wire_name_override: None,
         serde_default: false,
         serde_positional: false,
+        serde_number: None,
         default_expr: None,
     });
 
@@ -377,6 +378,7 @@ fn synthesize_dispatch_struct(
             wire_name_override: None,
             serde_default: false,
             serde_positional: false,
+            serde_number: None,
             default_expr: None,
         });
         wrapper_names.insert(op.name.clone(), dispatch_wrapper_name(&label, &op.name));

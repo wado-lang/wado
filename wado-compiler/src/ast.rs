@@ -1474,6 +1474,9 @@ pub enum AttrArg {
     /// A `key = ident` pair, whose value names something in the source rather
     /// than carrying text, e.g. `part_of = arr`.
     KeyIdent(String, String),
+    /// A `key = 3` pair, whose value is a number rather than text, e.g.
+    /// `#[wire(number = 3)]`.
+    KeyNumber(String, String),
 }
 
 impl AttrArg {
@@ -1482,7 +1485,7 @@ impl AttrArg {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(_, v) | Self::KeyIdent(_, v) => v,
+            Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
             Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
@@ -1493,7 +1496,10 @@ impl AttrArg {
     pub fn name(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(k, _) | Self::KeyArray(k, _) | Self::KeyIdent(k, _) => k,
+            Self::KeyValue(k, _)
+            | Self::KeyArray(k, _)
+            | Self::KeyIdent(k, _)
+            | Self::KeyNumber(k, _) => k,
         }
     }
 }
@@ -1556,6 +1562,19 @@ impl Attribute {
     pub fn kv_value(&self, key: &str) -> Option<&str> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The literal text of a `key = <number>` argument, as written.
+    ///
+    /// For `#[wire(number = 3)]`, `attr.kv_number("number")` returns `Some("3")`.
+    pub fn kv_number(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyNumber(k, v) = arg {
                 if k == key { Some(v.as_str()) } else { None }
             } else {
                 None

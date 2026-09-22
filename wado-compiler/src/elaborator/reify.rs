@@ -6,6 +6,7 @@
 
 use super::sig::AssocConstSig;
 use std::cell::RefCell;
+use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
@@ -1025,6 +1026,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
 
+        let wire_numbers = self.wire_numbers_of(&struct_decl.fields);
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_types[index];
@@ -1054,6 +1056,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 wire_name_override,
                 serde_default,
                 serde_positional,
+                serde_number: wire_numbers[index],
                 default_expr,
             });
         }
@@ -1127,6 +1130,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (no self, no other fields in scope), matching `reify_struct`.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
+        let wire_numbers = self.wire_numbers_of(&struct_decl.fields);
         let fields: Vec<TirField> = info
             .fields
             .iter()
@@ -1150,6 +1154,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     serde_positional: attrs
                         .iter()
                         .any(|a| a.name == WIRE && a.has_arg("positional")),
+                    serde_number: wire_numbers.get(index).copied().flatten(),
                     default_expr,
                 }
             })
@@ -2017,6 +2022,86 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
     }
 
+    /// Report a malformed `#[wire(number = …)]` at the field it was written on.
+    fn wire_number_error(&self, span: &Span, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::WireNumber,
+                message,
+                span: Some(DiagnosticSpan::from_span(span, None)),
+            },
+        );
+    }
+
+    /// Each field's `#[wire(number = N)]`, by field position. A struct numbers
+    /// every field or none, so the result is all `Some` or all `None`, and
+    /// anything else is reported here. See
+    /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
+    fn wire_numbers_of(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
+        let written: Vec<Option<&str>> = fields
+            .iter()
+            .map(|field| {
+                field
+                    .attrs
+                    .iter()
+                    .find(|a| a.name == WIRE)
+                    .and_then(|a| a.kv_number("number"))
+            })
+            .collect();
+        self.check_numbers_are_all_or_none(fields, &written);
+
+        let mut numbers: Vec<Option<u32>> = Vec::with_capacity(fields.len());
+        let mut taken: Vec<(u32, &str)> = Vec::new();
+        for (field, written) in fields.iter().zip(&written) {
+            let Some(written) = *written else {
+                numbers.push(None);
+                continue;
+            };
+            let Some(number) = accepted_wire_number(written) else {
+                self.wire_number_error(&field.span, wire_number_fault(written));
+                numbers.push(None);
+                continue;
+            };
+            if let Some((_, owner)) = taken.iter().find(|(taken, _)| *taken == number) {
+                self.wire_number_error(
+                    &field.span,
+                    format!("`#[wire(number = {number})]` is already `{owner}`'s number"),
+                );
+                numbers.push(None);
+                continue;
+            }
+            taken.push((number, &field.name));
+            numbers.push(Some(number));
+        }
+        numbers
+    }
+
+    /// One numbered field makes the rest owe a number, since a format that
+    /// reads numbers has nothing to put on the wire for a field without one.
+    fn check_numbers_are_all_or_none(&self, fields: &[ast::StructField], written: &[Option<&str>]) {
+        let Some(numbered) = written
+            .iter()
+            .position(Option::is_some)
+            .map(|index| &fields[index].name)
+        else {
+            return;
+        };
+        for (field, written) in fields.iter().zip(written) {
+            if written.is_none() {
+                self.wire_number_error(
+                    &field.span,
+                    format!(
+                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: \
+                         a struct numbers every field or none",
+                        field.name
+                    ),
+                );
+            }
+        }
+    }
+
     /// Extract and structurally validate a `#[param]` attribute on a global.
     ///
     /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
@@ -2039,7 +2124,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
                 ast::AttrArg::KeyValue(k, _)
                 | ast::AttrArg::KeyArray(k, _)
-                | ast::AttrArg::KeyIdent(k, _) => {
+                | ast::AttrArg::KeyIdent(k, _)
+                | ast::AttrArg::KeyNumber(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
@@ -11275,6 +11361,38 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
             None
         }
     })
+}
+
+/// The field numbers the wire format admits, from the protobuf specification's
+/// "Assigning Field Numbers".
+const WIRE_NUMBER_MIN: u32 = 1;
+const WIRE_NUMBER_MAX: u32 = 536_870_911;
+const WIRE_NUMBER_RESERVED: RangeInclusive<u32> = 19_000..=19_999;
+
+/// A written field number, where it is one the wire format admits.
+fn accepted_wire_number(written: &str) -> Option<u32> {
+    written
+        .parse::<u32>()
+        .ok()
+        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
+        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
+}
+
+/// Why a written field number is not one, said to whoever wrote it.
+fn wire_number_fault(written: &str) -> String {
+    if written
+        .parse::<u32>()
+        .is_ok_and(|n| WIRE_NUMBER_RESERVED.contains(&n))
+    {
+        return format!(
+            "`#[wire(number = {written})]`: {} to {} are reserved by the wire format",
+            WIRE_NUMBER_RESERVED.start(),
+            WIRE_NUMBER_RESERVED.end()
+        );
+    }
+    format!(
+        "`#[wire(number = {written})]`: a field number runs from {WIRE_NUMBER_MIN} to {WIRE_NUMBER_MAX}"
+    )
 }
 
 /// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.

@@ -406,7 +406,9 @@ pub const ATTRIBUTES: &[AttributeSchema] = &[
     AttributeSchema {
         name: WIRE,
         targets: WIRE_TARGET,
-        args: AttrArgs::Read("`name = \"…\"`, `name_policy = \"…\"`, `positional`, or `default`"),
+        args: AttrArgs::Read(
+            "`name = \"…\"`, `name_policy = \"…\"`, `number = N`, `positional`, or `default`",
+        ),
         summary: "how serialization spells this declaration",
     },
 ];

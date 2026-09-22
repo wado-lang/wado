@@ -1380,6 +1380,10 @@ impl Parser {
                                 self.expect(&TokenKind::RBracket)?;
                                 AttrArg::KeyArray(value, items)
                             }
+                            TokenKind::NumberLit(number) => {
+                                self.advance();
+                                AttrArg::KeyNumber(value, number)
+                            }
                             _ => {
                                 // `part_of = arr` names something in the source,
                                 // so it stays unquoted and keeps its own shape.
@@ -1389,7 +1393,7 @@ impl Parser {
                                     let span = self.peek().span;
                                     return Err(self.error_at_span(
                                         span,
-                                        "expected a string, an array, or an identifier after `=`",
+                                        "expected a string, a number, an array, or an identifier after `=`",
                                     ));
                                 };
                                 self.mark_keyword_name();
@@ -6725,6 +6729,7 @@ fn serde_attr_advice(args: &[AttrArg]) -> String {
                 format!("{key} = [{}]", items.join(", "))
             }
             AttrArg::KeyIdent(key, named) => format!("{key} = {named}"),
+            AttrArg::KeyNumber(key, number) => format!("{key} = {number}"),
         })
         .collect();
 
