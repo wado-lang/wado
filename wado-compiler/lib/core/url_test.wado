@@ -2,10 +2,10 @@ use { Url, ParseError, percent_encode, percent_decode, parse_query, format_query
 use { TreeMap } from "core:collections";
 use { to_string, from_string } from "core:json";
 
-// --- Url::parse basic ---
+// --- Url::from_str basic ---
 
 test "parse simple http" {
-    if let Ok(url) = Url::parse("http://example.com") {
+    if let Ok(url) = Url::from_str("http://example.com") {
         assert url.scheme == "http";
         assert url.host == "example.com";
         assert url.path == "/";
@@ -20,7 +20,7 @@ test "parse simple http" {
 }
 
 test "parse https with path" {
-    if let Ok(url) = Url::parse("https://example.com/foo/bar") {
+    if let Ok(url) = Url::from_str("https://example.com/foo/bar") {
         assert url.scheme == "https";
         assert url.host == "example.com";
         assert url.path == "/foo/bar";
@@ -30,7 +30,7 @@ test "parse https with path" {
 }
 
 test "parse with query and fragment" {
-    if let Ok(url) = Url::parse("http://example.com/path?key=val&a=b#sec") {
+    if let Ok(url) = Url::from_str("http://example.com/path?key=val&a=b#sec") {
         assert url.path == "/path";
         assert url.query matches { Some("key=val&a=b") };
         assert url.fragment matches { Some("sec") };
@@ -40,7 +40,7 @@ test "parse with query and fragment" {
 }
 
 test "parse with userinfo" {
-    if let Ok(url) = Url::parse("https://user:pass@example.com/path") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com/path") {
         assert url.username == "user";
         assert url.password == "pass";
         assert url.host == "example.com";
@@ -50,14 +50,14 @@ test "parse with userinfo" {
 }
 
 test "the last @ delimits user info from the host" {
-    if let Ok(url) = Url::parse("http://user@name@example.com/") {
+    if let Ok(url) = Url::from_str("http://user@name@example.com/") {
         assert url.username == "user%40name";
         assert url.password == "";
         assert url.host == "example.com";
         // The serialized authority carries no raw `@`, so it parses back to
         // the same URL rather than to a different host.
         assert url.authority() == "user%40name@example.com";
-        if let Ok(again) = Url::parse(`http://${url.authority()}/`) {
+        if let Ok(again) = Url::from_str(`http://${url.authority()}/`) {
             assert again.username == url.username;
             assert again.host == url.host;
         } else {
@@ -69,7 +69,7 @@ test "the last @ delimits user info from the host" {
 }
 
 test "a @ inside user info does not move the password's colon" {
-    if let Ok(url) = Url::parse("http://u@s:p@example.com/") {
+    if let Ok(url) = Url::from_str("http://u@s:p@example.com/") {
         assert url.username == "u%40s";
         assert url.password == "p";
         assert url.host == "example.com";
@@ -77,7 +77,7 @@ test "a @ inside user info does not move the password's colon" {
         panic("parse failed");
     }
 
-    if let Ok(url) = Url::parse("http://u:p@s@example.com/") {
+    if let Ok(url) = Url::from_str("http://u:p@s@example.com/") {
         assert url.username == "u";
         assert url.password == "p%40s";
         assert url.host == "example.com";
@@ -89,28 +89,28 @@ test "a @ inside user info does not move the password's colon" {
 // A credential is stored in WHATWG's userinfo percent-encode set, so what
 // `authority()` writes parses back to the credential it came from.
 test "user info is stored percent-encoded" {
-    if let Ok(url) = Url::parse("http://u:p:q@example.com/") {
+    if let Ok(url) = Url::from_str("http://u:p:q@example.com/") {
         assert url.password == "p%3Aq";
         assert url.authority() == "u:p%3Aq@example.com";
     } else {
         panic("parse failed");
     }
 
-    if let Ok(url) = Url::parse("http://a b@example.com/") {
+    if let Ok(url) = Url::from_str("http://a b@example.com/") {
         assert url.username == "a%20b";
     } else {
         panic("parse failed");
     }
 
     // Non-ASCII goes out one `%XX` per UTF-8 byte.
-    if let Ok(url) = Url::parse("http://é@example.com/") {
+    if let Ok(url) = Url::from_str("http://é@example.com/") {
         assert url.username == "%C3%A9";
     } else {
         panic("parse failed");
     }
 
     // `%` is outside the set, so an already-encoded credential is unchanged.
-    if let Ok(url) = Url::parse("http://u:p%3Aq@example.com/") {
+    if let Ok(url) = Url::from_str("http://u:p%3Aq@example.com/") {
         assert url.password == "p%3Aq";
         assert url.authority() == "u:p%3Aq@example.com";
     } else {
@@ -119,7 +119,7 @@ test "user info is stored percent-encoded" {
 }
 
 test "parse with username only" {
-    if let Ok(url) = Url::parse("https://admin@example.com/") {
+    if let Ok(url) = Url::from_str("https://admin@example.com/") {
         assert url.username == "admin";
         assert url.password == "";
         assert url.host == "example.com";
@@ -129,7 +129,7 @@ test "parse with username only" {
 }
 
 test "parse with explicit port" {
-    if let Ok(url) = Url::parse("http://example.com:8080/path") {
+    if let Ok(url) = Url::from_str("http://example.com:8080/path") {
         assert url.host == "example.com";
         assert url.port matches { Some(8080) };
     } else {
@@ -138,7 +138,7 @@ test "parse with explicit port" {
 }
 
 test "parse default port normalized to None" {
-    if let Ok(url) = Url::parse("http://example.com:80/path") {
+    if let Ok(url) = Url::from_str("http://example.com:80/path") {
         assert url.port matches { None };
     } else {
         panic("parse failed");
@@ -146,7 +146,7 @@ test "parse default port normalized to None" {
 }
 
 test "parse https default port" {
-    if let Ok(url) = Url::parse("https://example.com:443/") {
+    if let Ok(url) = Url::from_str("https://example.com:443/") {
         assert url.port matches { None };
     } else {
         panic("parse failed");
@@ -154,7 +154,7 @@ test "parse https default port" {
 }
 
 test "parse ws scheme" {
-    if let Ok(url) = Url::parse("ws://localhost:9090/ws") {
+    if let Ok(url) = Url::from_str("ws://localhost:9090/ws") {
         assert url.scheme == "ws";
         assert url.host == "localhost";
         assert url.port matches { Some(9090) };
@@ -165,7 +165,7 @@ test "parse ws scheme" {
 }
 
 test "parse wss scheme" {
-    if let Ok(url) = Url::parse("wss://example.com/chat") {
+    if let Ok(url) = Url::from_str("wss://example.com/chat") {
         assert url.scheme == "wss";
         assert url.host == "example.com";
         assert url.path == "/chat";
@@ -175,7 +175,7 @@ test "parse wss scheme" {
 }
 
 test "parse case insensitive scheme" {
-    if let Ok(url) = Url::parse("HTTP://EXAMPLE.COM/PATH") {
+    if let Ok(url) = Url::from_str("HTTP://EXAMPLE.COM/PATH") {
         assert url.scheme == "http";
         assert url.host == "example.com";
     } else {
@@ -184,7 +184,7 @@ test "parse case insensitive scheme" {
 }
 
 test "parse IPv6 host" {
-    if let Ok(url) = Url::parse("http://[::1]:8080/path") {
+    if let Ok(url) = Url::from_str("http://[::1]:8080/path") {
         assert url.host == "::1";
         assert url.port matches { Some(8080) };
     } else {
@@ -193,7 +193,7 @@ test "parse IPv6 host" {
 }
 
 test "parse full URL with all components" {
-    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
         assert url.scheme == "https";
         assert url.username == "user";
         assert url.password == "pass";
@@ -210,37 +210,37 @@ test "parse full URL with all components" {
 // --- Parse errors ---
 
 test "parse empty input" {
-    assert Url::parse("") matches { Err(EmptyInput) };
+    assert Url::from_str("") matches { Err(EmptyInput) };
 }
 
 test "parse invalid scheme" {
-    assert Url::parse("mailto:user@host") matches { Err(InvalidScheme) };
+    assert Url::from_str("mailto:user@host") matches { Err(InvalidScheme) };
 }
 
 test "parse ftp rejected" {
-    assert Url::parse("ftp://files.example.com/") matches { Err(InvalidScheme) };
+    assert Url::from_str("ftp://files.example.com/") matches { Err(InvalidScheme) };
 }
 
 test "parse missing host" {
-    assert Url::parse("http://") matches { Err(MissingHost) };
+    assert Url::from_str("http://") matches { Err(MissingHost) };
 }
 
 test "parse no scheme" {
-    assert Url::parse("/path/to/resource") matches { Err(InvalidScheme) };
+    assert Url::from_str("/path/to/resource") matches { Err(InvalidScheme) };
 }
 
 test "parse invalid port" {
-    assert Url::parse("http://example.com:99999/") matches { Err(InvalidPort) };
+    assert Url::from_str("http://example.com:99999/") matches { Err(InvalidPort) };
 }
 
 test "parse non-numeric port" {
-    assert Url::parse("http://example.com:abc/") matches { Err(InvalidPort) };
+    assert Url::from_str("http://example.com:abc/") matches { Err(InvalidPort) };
 }
 
 // --- to_string ---
 
 test "to_string simple" {
-    if let Ok(url) = Url::parse("https://example.com/path") {
+    if let Ok(url) = Url::from_str("https://example.com/path") {
         assert url.to_string() == "https://example.com/path";
     } else {
         panic("parse failed");
@@ -248,7 +248,7 @@ test "to_string simple" {
 }
 
 test "to_string with query and fragment" {
-    if let Ok(url) = Url::parse("http://example.com/path?q=1#frag") {
+    if let Ok(url) = Url::from_str("http://example.com/path?q=1#frag") {
         assert url.to_string() == "http://example.com/path?q=1#frag";
     } else {
         panic("parse failed");
@@ -256,7 +256,7 @@ test "to_string with query and fragment" {
 }
 
 test "to_string with credentials" {
-    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/path") {
         assert url.to_string() == "https://user:pass@example.com:8443/path";
     } else {
         panic("parse failed");
@@ -264,7 +264,7 @@ test "to_string with credentials" {
 }
 
 test "to_string default port omitted" {
-    if let Ok(url) = Url::parse("http://example.com:80/path") {
+    if let Ok(url) = Url::from_str("http://example.com:80/path") {
         assert url.to_string() == "http://example.com/path";
     } else {
         panic("parse failed");
@@ -272,7 +272,7 @@ test "to_string default port omitted" {
 }
 
 test "to_string IPv6" {
-    if let Ok(url) = Url::parse("http://[::1]:8080/") {
+    if let Ok(url) = Url::from_str("http://[::1]:8080/") {
         assert url.to_string() == "http://[::1]:8080/";
     } else {
         panic("parse failed");
@@ -282,7 +282,7 @@ test "to_string IPv6" {
 // --- Derived accessors ---
 
 test "authority with credentials and port" {
-    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/path") {
         assert url.authority() == "user:pass@example.com:8443";
     } else {
         panic("parse failed");
@@ -290,7 +290,7 @@ test "authority with credentials and port" {
 }
 
 test "authority simple" {
-    if let Ok(url) = Url::parse("http://example.com/path") {
+    if let Ok(url) = Url::from_str("http://example.com/path") {
         assert url.authority() == "example.com";
     } else {
         panic("parse failed");
@@ -298,7 +298,7 @@ test "authority simple" {
 }
 
 test "origin" {
-    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/path") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/path") {
         assert url.origin() == "https://example.com:8443";
     } else {
         panic("parse failed");
@@ -306,7 +306,7 @@ test "origin" {
 }
 
 test "path_with_query with query" {
-    if let Ok(url) = Url::parse("http://example.com/api?key=val") {
+    if let Ok(url) = Url::from_str("http://example.com/api?key=val") {
         assert url.path_with_query() == "/api?key=val";
     } else {
         panic("parse failed");
@@ -314,7 +314,7 @@ test "path_with_query with query" {
 }
 
 test "path_with_query without query" {
-    if let Ok(url) = Url::parse("http://example.com/api") {
+    if let Ok(url) = Url::from_str("http://example.com/api") {
         assert url.path_with_query() == "/api";
     } else {
         panic("parse failed");
@@ -322,7 +322,7 @@ test "path_with_query without query" {
 }
 
 test "authority with port" {
-    if let Ok(url) = Url::parse("http://example.com:8080/") {
+    if let Ok(url) = Url::from_str("http://example.com:8080/") {
         assert url.authority() == "example.com:8080";
     } else {
         panic("parse failed");
@@ -330,7 +330,7 @@ test "authority with port" {
 }
 
 test "authority without port" {
-    if let Ok(url) = Url::parse("http://example.com/") {
+    if let Ok(url) = Url::from_str("http://example.com/") {
         assert url.authority() == "example.com";
     } else {
         panic("parse failed");
@@ -338,7 +338,7 @@ test "authority without port" {
 }
 
 test "effective_port explicit" {
-    if let Ok(url) = Url::parse("http://example.com:9090/") {
+    if let Ok(url) = Url::from_str("http://example.com:9090/") {
         assert url.effective_port() == 9090;
     } else {
         panic("parse failed");
@@ -346,7 +346,7 @@ test "effective_port explicit" {
 }
 
 test "effective_port default http" {
-    if let Ok(url) = Url::parse("http://example.com/") {
+    if let Ok(url) = Url::from_str("http://example.com/") {
         assert url.effective_port() == 80;
     } else {
         panic("parse failed");
@@ -354,7 +354,7 @@ test "effective_port default http" {
 }
 
 test "effective_port default https" {
-    if let Ok(url) = Url::parse("https://example.com/") {
+    if let Ok(url) = Url::from_str("https://example.com/") {
         assert url.effective_port() == 443;
     } else {
         panic("parse failed");
@@ -364,7 +364,7 @@ test "effective_port default https" {
 // --- Query parameters ---
 
 test "query_pairs" {
-    if let Ok(url) = Url::parse("http://example.com/?a=1&b=2&c=3") {
+    if let Ok(url) = Url::from_str("http://example.com/?a=1&b=2&c=3") {
         let pairs = url.query_pairs();
         assert pairs.len() == 3;
         assert pairs.get("a") matches { Some("1") };
@@ -380,7 +380,7 @@ test "query_pairs" {
 }
 
 test "query_get" {
-    if let Ok(url) = Url::parse("http://example.com/?name=Alice&age=30") {
+    if let Ok(url) = Url::from_str("http://example.com/?name=Alice&age=30") {
         assert url.query_get("name") matches { Some("Alice") };
         assert url.query_get("age") matches { Some("30") };
         assert url.query_get("missing") matches { None };
@@ -390,7 +390,7 @@ test "query_get" {
 }
 
 test "query_get duplicate keys last wins" {
-    if let Ok(url) = Url::parse("http://example.com/?tag=a&tag=b&tag=c") {
+    if let Ok(url) = Url::from_str("http://example.com/?tag=a&tag=b&tag=c") {
         assert url.query_get("tag") matches { Some("c") };
     } else {
         panic("parse failed");
@@ -398,7 +398,7 @@ test "query_get duplicate keys last wins" {
 }
 
 test "query_get_all duplicate keys" {
-    if let Ok(url) = Url::parse("http://example.com/?tag=a&tag=b&tag=c") {
+    if let Ok(url) = Url::from_str("http://example.com/?tag=a&tag=b&tag=c") {
         let vals = url.query_get_all("tag");
         assert vals.len() == 3;
         assert vals[0] == "a";
@@ -410,7 +410,7 @@ test "query_get_all duplicate keys" {
 }
 
 test "query_get_all missing key" {
-    if let Ok(url) = Url::parse("http://example.com/?a=1") {
+    if let Ok(url) = Url::from_str("http://example.com/?a=1") {
         assert url.query_get_all("missing").len() == 0;
     } else {
         panic("parse failed");
@@ -418,7 +418,7 @@ test "query_get_all missing key" {
 }
 
 test "query_pairs empty query" {
-    if let Ok(url) = Url::parse("http://example.com/") {
+    if let Ok(url) = Url::from_str("http://example.com/") {
         assert url.query_pairs().len() == 0;
     } else {
         panic("parse failed");
@@ -426,7 +426,7 @@ test "query_pairs empty query" {
 }
 
 test "with_query_pairs" {
-    if let Ok(url) = Url::parse("http://example.com/path") {
+    if let Ok(url) = Url::from_str("http://example.com/path") {
         let mut params: TreeMap<String, String> = TreeMap::new();
         params["key"] = "val";
         params["name"] = "Alice";
@@ -442,7 +442,7 @@ test "with_query_pairs" {
 // --- Resolve ---
 
 test "resolve absolute reference" {
-    if let Ok(base) = Url::parse("http://example.com/a/b") {
+    if let Ok(base) = Url::from_str("http://example.com/a/b") {
         if let Ok(resolved) = base.resolve("http://other.com/c") {
             assert resolved.host == "other.com";
             assert resolved.path == "/c";
@@ -455,7 +455,7 @@ test "resolve absolute reference" {
 }
 
 test "resolve absolute path" {
-    if let Ok(base) = Url::parse("http://example.com/a/b") {
+    if let Ok(base) = Url::from_str("http://example.com/a/b") {
         if let Ok(resolved) = base.resolve("/c/d") {
             assert resolved.host == "example.com";
             assert resolved.path == "/c/d";
@@ -468,7 +468,7 @@ test "resolve absolute path" {
 }
 
 test "resolve relative path" {
-    if let Ok(base) = Url::parse("http://example.com/a/b") {
+    if let Ok(base) = Url::from_str("http://example.com/a/b") {
         if let Ok(resolved) = base.resolve("c") {
             assert resolved.host == "example.com";
             assert resolved.path == "/a/c";
@@ -481,7 +481,7 @@ test "resolve relative path" {
 }
 
 test "resolve dot segments" {
-    if let Ok(base) = Url::parse("http://example.com/a/b/c") {
+    if let Ok(base) = Url::from_str("http://example.com/a/b/c") {
         if let Ok(resolved) = base.resolve("../d") {
             assert resolved.path == "/a/d";
         } else {
@@ -493,7 +493,7 @@ test "resolve dot segments" {
 }
 
 test "resolve double dot" {
-    if let Ok(base) = Url::parse("http://example.com/a/b/c") {
+    if let Ok(base) = Url::from_str("http://example.com/a/b/c") {
         if let Ok(resolved) = base.resolve("../../d") {
             assert resolved.path == "/d";
         } else {
@@ -505,7 +505,7 @@ test "resolve double dot" {
 }
 
 test "resolve empty reference preserves base" {
-    if let Ok(base) = Url::parse("http://example.com/path?q=1") {
+    if let Ok(base) = Url::from_str("http://example.com/path?q=1") {
         if let Ok(resolved) = base.resolve("") {
             assert resolved.path == "/path";
             assert resolved.query matches { Some("q=1") };
@@ -518,7 +518,7 @@ test "resolve empty reference preserves base" {
 }
 
 test "resolve query-only reference" {
-    if let Ok(base) = Url::parse("http://example.com/path?old=1") {
+    if let Ok(base) = Url::from_str("http://example.com/path?old=1") {
         if let Ok(resolved) = base.resolve("?new=2") {
             assert resolved.path == "/path";
             assert resolved.query matches { Some("new=2") };
@@ -531,7 +531,7 @@ test "resolve query-only reference" {
 }
 
 test "resolve fragment-only reference" {
-    if let Ok(base) = Url::parse("http://example.com/path") {
+    if let Ok(base) = Url::from_str("http://example.com/path") {
         if let Ok(resolved) = base.resolve("#section") {
             assert resolved.path == "/path";
             assert resolved.fragment matches { Some("section") };
@@ -544,7 +544,7 @@ test "resolve fragment-only reference" {
 }
 
 test "resolve with new authority" {
-    if let Ok(base) = Url::parse("http://example.com/a") {
+    if let Ok(base) = Url::from_str("http://example.com/a") {
         if let Ok(resolved) = base.resolve("//other.com/b") {
             assert resolved.scheme == "http";
             assert resolved.host == "other.com";
@@ -560,7 +560,7 @@ test "resolve with new authority" {
 // --- Parse-time normalization ---
 
 test "parse normalizes scheme and host to lowercase" {
-    if let Ok(url) = Url::parse("HTTP://EXAMPLE.COM/path") {
+    if let Ok(url) = Url::from_str("HTTP://EXAMPLE.COM/path") {
         assert url.scheme == "http";
         assert url.host == "example.com";
     } else {
@@ -569,7 +569,7 @@ test "parse normalizes scheme and host to lowercase" {
 }
 
 test "parse normalizes default port to None" {
-    if let Ok(url) = Url::parse("http://example.com:80/") {
+    if let Ok(url) = Url::from_str("http://example.com:80/") {
         assert url.port matches { None };
     } else {
         panic("parse failed");
@@ -577,7 +577,7 @@ test "parse normalizes default port to None" {
 }
 
 test "parse normalizes dot segments" {
-    if let Ok(url) = Url::parse("http://example.com/a/b/../c/./d") {
+    if let Ok(url) = Url::from_str("http://example.com/a/b/../c/./d") {
         assert url.path == "/a/c/d";
     } else {
         panic("parse failed");
@@ -585,7 +585,7 @@ test "parse normalizes dot segments" {
 }
 
 test "parse normalizes percent encoding" {
-    if let Ok(url) = Url::parse("http://example.com/%41%42%43") {
+    if let Ok(url) = Url::from_str("http://example.com/%41%42%43") {
         assert url.path == "/ABC";
     } else {
         panic("parse failed");
@@ -595,32 +595,32 @@ test "parse normalizes percent encoding" {
 // --- Eq ---
 
 test "eq same url" {
-    if let Ok(a) = Url::parse("http://example.com/path") {
-        if let Ok(b) = Url::parse("http://example.com/path") {
+    if let Ok(a) = Url::from_str("http://example.com/path") {
+        if let Ok(b) = Url::from_str("http://example.com/path") {
             assert a == b;
         }
     }
 }
 
 test "eq different case scheme and host" {
-    if let Ok(a) = Url::parse("HTTP://EXAMPLE.COM/path") {
-        if let Ok(b) = Url::parse("http://example.com/path") {
+    if let Ok(a) = Url::from_str("HTTP://EXAMPLE.COM/path") {
+        if let Ok(b) = Url::from_str("http://example.com/path") {
             assert a == b;
         }
     }
 }
 
 test "eq default port vs no port" {
-    if let Ok(a) = Url::parse("http://example.com:80/") {
-        if let Ok(b) = Url::parse("http://example.com/") {
+    if let Ok(a) = Url::from_str("http://example.com:80/") {
+        if let Ok(b) = Url::from_str("http://example.com/") {
             assert a == b;
         }
     }
 }
 
 test "not eq different paths" {
-    if let Ok(a) = Url::parse("http://example.com/a") {
-        if let Ok(b) = Url::parse("http://example.com/b") {
+    if let Ok(a) = Url::from_str("http://example.com/a") {
+        if let Ok(b) = Url::from_str("http://example.com/b") {
             assert !(a == b);
         }
     }
@@ -857,7 +857,7 @@ test "construct Url from fields" {
 // --- Display ---
 
 test "display via template string" {
-    if let Ok(url) = Url::parse("https://example.com/path") {
+    if let Ok(url) = Url::from_str("https://example.com/path") {
         assert `${url}` == "https://example.com/path";
     } else {
         panic("parse failed");
@@ -939,7 +939,7 @@ test "char encode_utf8" {
 // --- Serialize / Deserialize ---
 
 test "serialize Url to JSON" {
-    if let Ok(url) = Url::parse("https://example.com/path?q=1") {
+    if let Ok(url) = Url::from_str("https://example.com/path?q=1") {
         let r = to_string(&url);
         assert r matches { Ok(s) && s == `"https://example.com/path?q=1"` };
     } else {
@@ -960,7 +960,7 @@ test "deserialize Url from JSON" {
 }
 
 test "serialize deserialize Url roundtrip" {
-    if let Ok(original) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val#frag") {
+    if let Ok(original) = Url::from_str("https://user:pass@example.com:8443/api/v1?key=val#frag") {
         let json = to_string(&original);
         if let Ok(json_str) = json {
             let restored = from_string::<Url>(json_str);
@@ -983,8 +983,8 @@ test "deserialize Url invalid string" {
 }
 
 test "ParseError renders its reason" {
-    assert `${Url::parse("").unwrap_err()}` == "empty input";
-    assert `${Url::parse("http://").unwrap_err()}` == "missing host";
+    assert `${Url::from_str("").unwrap_err()}` == "empty input";
+    assert `${Url::from_str("http://").unwrap_err()}` == "missing host";
 }
 
 test "percent_decode reports the UTF-8 failure it found" {
