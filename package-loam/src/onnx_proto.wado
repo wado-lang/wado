@@ -187,16 +187,16 @@ pub struct ModelProto {
 /// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
 /// in the typed `float_data` or, as every exporter does, as little-endian
 /// bytes in `raw_data`. `None` where the tensor is some other element type.
-pub fn float_tensor(t: &TensorProto) -> Option<[List<f32>, List<i32>]> {
+pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, String> {
     if t.data_type != 1 {
-        return null;
+        return Result::Ok(null);
     }
     let mut extents: List<i32> = [];
     for let d of t.dims {
-        extents.push(extent(d, &t.name).unwrap());
+        extents.push(extent(d, &t.name)?);
     }
     if t.raw_data.is_empty() {
-        return Option::Some([t.float_data, extents]);
+        return Result::Ok(Option::Some([t.float_data, extents]));
     }
     let mut data: List<f32> = List::with_capacity(t.raw_data.len() / 4);
     let mut at = 0;
@@ -205,7 +205,7 @@ pub fn float_tensor(t: &TensorProto) -> Option<[List<f32>, List<i32>]> {
         data.push(f32::from_bits(bits));
         at += 4;
     }
-    return Option::Some([data, extents]);
+    return Result::Ok(Option::Some([data, extents]));
 }
 
 /// The element type names the textual format spells, indexed by
@@ -300,7 +300,7 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
 
 /// An attribute's values as text, so the two readers hand `Attr` the same
 /// thing. The declared `type` says which payload field holds them.
-fn read_attr(a: &AttributeProto) -> Attr {
+fn read_attr(a: &AttributeProto) -> Result<Attr, String> {
     let mut values: List<String> = [];
     let mut is_list = true;
     match a.type_ {
@@ -336,13 +336,13 @@ fn read_attr(a: &AttributeProto) -> Attr {
         ATTRIBUTE_TENSOR => {
             is_list = false;
             if let Some(t) = &a.t {
-                if let Some([data, _]) = float_tensor(t) {
-                    return Attr {
+                if let Some([data, _]) = float_tensor(t)? {
+                    return Result::Ok(Attr {
                         name: a.name,
                         values: [],
                         is_list: false,
                         tensor: Option::Some(ConstTensor { data }),
-                    };
+                    });
                 }
             }
         },
@@ -352,7 +352,7 @@ fn read_attr(a: &AttributeProto) -> Attr {
             is_list = false;
         },
     }
-    return Attr { name: a.name, values, is_list };
+    return Result::Ok(Attr { name: a.name, values, is_list });
 }
 
 /// ONNX declares a string attribute as `bytes`, and the specification says it
@@ -366,12 +366,12 @@ fn utf8(bytes: &ByteList) -> String {
     return out;
 }
 
-fn read_node(n: &NodeProto) -> Node {
+fn read_node(n: &NodeProto) -> Result<Node, String> {
     let mut attrs: List<Attr> = [];
     for let a of n.attribute {
-        attrs.push(read_attr(&a));
+        attrs.push(read_attr(&a)?);
     }
-    return Node { op: n.op_type, outputs: n.output, inputs: n.input, attrs };
+    return Result::Ok(Node { op: n.op_type, outputs: n.output, inputs: n.input, attrs });
 }
 
 /// Read a graph out of a serialized `ModelProto`. What the subset does not
@@ -408,7 +408,7 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     }
     let mut nodes: List<Node> = [];
     for let n of graph.node {
-        nodes.push(read_node(&n));
+        nodes.push(read_node(&n)?);
     }
     return Result::Ok(Graph {
         name: graph.name,

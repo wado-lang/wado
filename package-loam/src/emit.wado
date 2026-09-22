@@ -43,6 +43,10 @@ pub struct UnfoldedConstant {
 }
 
 pub variant EmitError {
+    /// An axis named as something the generated module already declares. A
+    /// tensor name comes from the model and is renamed; an axis is the
+    /// schema's word, so it is the author's to change.
+    ReservedAxis(String),
     Dtype(UnmappedDtype),
     Operator(UnimplementedOperator),
     Broadcast(UnimplementedBroadcast),
@@ -89,6 +93,9 @@ impl Display for UnfoldedConstant {
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
+            ReservedAxis(axis) => {
+                f.write_str(`${axis}: an axis cannot be named as the generated module names something`);
+            },
             Dtype(e) => e.fmt(f),
             Operator(e) => e.fmt(f),
             Broadcast(e) => e.fmt(f),
@@ -123,13 +130,13 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     out.push_str("//! share the type that names it.\n\n");
 
     let axes = axis_names(graph, shapes);
+    let names = Names::of(graph, &axes)?;
     for let axis of axes {
         out.push_str(`pub struct ${axis} {}\n`);
     }
     out.push('\n');
     out.push_str(&RUNTIME);
 
-    let names = Names::of(graph, &axes)?;
     emit_weights(&mut out, graph, shapes, &names);
     emit_forward(&mut out, graph, shapes, &names)?;
     return Result::Ok(out);
@@ -153,9 +160,17 @@ struct Names {
 
 impl Names {
     fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
+        let mut reserved = module_idents();
+        for let axis of *axes {
+            if reserved.contains(axis) {
+                builtin::cold_path();
+                return Result::Err(EmitError::ReservedAxis(axis));
+            }
+            reserved.insert(axis);
+        }
         let mut names = Names {
             idents: TreeMap::<String, String>::new(),
-            reserved: reserved_idents(axes),
+            reserved,
         };
         let mut taken = TreeMap::<String, String>::new();
         for let vi of &graph.inputs {
@@ -208,18 +223,16 @@ global KEYWORDS: List<String> = [
     "assert", "true", "false", "null", "matches", "self", "Self",
 ];
 
-/// The names the generated module already binds. The runtime's are read out of
-/// the runtime itself, so adding a kernel there cannot leave this behind.
-fn reserved_idents(axes: &List<String>) -> TreeSet<String> {
+/// The names the generated module binds before it names an axis or a tensor.
+/// The runtime's are read out of the runtime itself, so adding a kernel there
+/// cannot leave this behind.
+fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
     for let word of KEYWORDS {
         reserved.insert(word);
     }
     for let name of declared_in(&RUNTIME) {
         reserved.insert(name);
-    }
-    for let axis of *axes {
-        reserved.insert(axis);
     }
     reserved.insert("forward");
     reserved.insert("weights");

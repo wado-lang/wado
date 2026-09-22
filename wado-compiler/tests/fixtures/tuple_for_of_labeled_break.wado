@@ -1,0 +1,31 @@
+// `break LABEL` names a labeled block, never a loop, so expanding the for-of
+// leaves its target where it was. Both spellings are well defined inside an
+// expanded body: the label written inside it, and the one enclosing it.
+fn inner_label(t: [i32, i32]) -> i32 {
+    let mut seen = 0;
+    for let v of t {
+        let kept = pick: {
+            if v < 0 { break pick: 0; }
+            v
+        };
+        seen += kept;
+    }
+    return seen;
+}
+
+fn outer_label(t: [i32, i32]) -> i32 {
+    let mut seen = 0;
+    scan: {
+        for let v of t {
+            if v < 0 { break scan; }
+            seen += v;
+        }
+    }
+    return seen;
+}
+
+test "a labeled break survives the expansion" {
+    assert inner_label([3, -1]) == 3;
+    assert outer_label([3, 4]) == 7;
+    assert outer_label([3, -1]) == 3;
+}

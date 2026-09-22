@@ -325,3 +325,31 @@ test "a tag whose field number the wire cannot carry is malformed" {
         b"\xf8\xff\xff\xff\xff\xff\xff\xff\xff\x01\x2a",
     ) matches { Err(_) };
 }
+
+test "a message with no fields is an empty record" {
+    struct Ping {
+    }
+
+    assert hex(&to_bytes(&Ping {}).unwrap()) == "";
+    assert from_bytes::<Ping, ByteList>(b"") matches { Ok(_) };
+}
+
+test "a packed run reaching a field that is not repeated takes the last element" {
+    struct Singular {
+        #[wire(number = 1)]
+        v: i32 = 0,
+        #[wire(number = 2)]
+        tail: i32 = 0,
+    }
+
+    // Field 1 as a packed run of 1, 2, 3, then field 2 = 9. A field declared
+    // `repeated` and later made singular decodes as the last element.
+    let got = from_bytes::<Singular, ByteList>(b"\x0a\x03\x01\x02\x03\x10\x09").unwrap();
+    assert got.v == 3;
+    assert got.tail == 9;
+
+    // An empty run contributes no element, so the field keeps its default.
+    let empty = from_bytes::<Singular, ByteList>(b"\x0a\x00\x10\x09").unwrap();
+    assert empty.v == 0;
+    assert empty.tail == 9;
+}

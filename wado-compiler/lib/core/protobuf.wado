@@ -655,6 +655,9 @@ struct ProtobufReader {
     packed_end: i32,
     /// Whether the run just entered holds no elements.
     packed_empty: bool,
+    /// Whether the value being read is an element of a repeated field. A run
+    /// reaching any other field is one value, not a sequence.
+    in_seq: bool,
     number: i32,
     depth: i32,
     max_depth: i32,
@@ -699,28 +702,68 @@ impl ProtobufReader {
     }
 
     /// A scalar under a `LEN` tag is a packed repeated run, and this is where
-    /// that run is entered. Reading one scalar, the field is not repeated and
-    /// the tag is its own.
-    fn enter_packed(&mut self) -> Result<(), DeserializeError> {
-        if self.packed_end < 0 && self.pending matches { Some(Len) } {
-            self.packed_end = self.read_len()?;
+    /// that run is entered. `false` where the run holds no element and the
+    /// field keeps its default. `width` is a fixed element's, `0` for a varint.
+    fn enter_packed(&mut self, width: i32) -> Result<bool, DeserializeError> {
+        if self.packed_end >= 0 || !self.pending matches { Some(Len) } {
+            return Result::Ok(true);
+        }
+        self.packed_end = self.read_len()?;
+        if self.in_seq {
             if self.packed_end == self.pos {
                 // Only this read knew the tag was a run at all, so the flag is
                 // how `PbSeqAccess` learns there is nothing in it.
                 self.packed_empty = true;
                 return Result::Err(DeserializeError::eof(self.pos as i64));
             }
+            return Result::Ok(true);
         }
-        return Result::Ok(());
+        // The field is not repeated, so the run is one value: its last element.
+        // That is the `repeated` to singular path the wire format allows, and
+        // whoever entered the run is who leaves it.
+        if self.packed_end == self.pos {
+            self.leave_packed();
+            return Result::Ok(false);
+        }
+        let last = self.last_packed(width)?;
+        self.pos = last;
+        self.leave_packed();
+        return Result::Ok(true);
+    }
+
+    /// Where the last element of the run being read starts.
+    fn last_packed(&self, width: i32) -> Result<i32, DeserializeError> {
+        if width > 0 {
+            return Result::Ok(self.packed_end - width);
+        }
+        let mut at = self.pos;
+        let mut last = at;
+        while at < self.packed_end {
+            let Some([_, next]) = read_varint(&self.input, at) else {
+                return Result::Err(DeserializeError::eof(at as i64));
+            };
+            last = at;
+            at = next;
+        }
+        return Result::Ok(last);
+    }
+
+    fn leave_packed(&mut self) {
+        self.packed_end = -1;
+        self.pending = null;
     }
 
     fn scalar_varint(&mut self) -> Result<u64, DeserializeError> {
-        self.enter_packed()?;
+        if !self.enter_packed(0)? {
+            return Result::Ok(0);
+        }
         return self.varint();
     }
 
     fn scalar_fixed32(&mut self) -> Result<u32, DeserializeError> {
-        self.enter_packed()?;
+        if !self.enter_packed(4)? {
+            return Result::Ok(0);
+        }
         let Some([value, next]) = read_fixed32(&self.input, self.pos) else {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         };
@@ -732,7 +775,9 @@ impl ProtobufReader {
     }
 
     fn scalar_fixed64(&mut self) -> Result<u64, DeserializeError> {
-        self.enter_packed()?;
+        if !self.enter_packed(8)? {
+            return Result::Ok(0);
+        }
         let Some([value, next]) = read_fixed64(&self.input, self.pos) else {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         };
@@ -777,6 +822,7 @@ pub struct PbStructAccess {
     de: &mut ProtobufReader,
     outer_end: i32,
     outer_depth: i32,
+    outer_in_seq: bool,
 }
 
 pub struct PbMapAccess {
@@ -791,8 +837,7 @@ impl DeserializeSeq for PbSeqAccess {
     fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
         if self.de.packed_end >= 0 {
             if self.de.pos >= self.de.packed_end {
-                self.de.packed_end = -1;
-                self.de.pending = null;
+                self.de.leave_packed();
                 return Result::Ok(null);
             }
         } else if !self.first {
@@ -808,16 +853,18 @@ impl DeserializeSeq for PbSeqAccess {
             self.de.pending = Option::Some(wire_type);
         }
         self.first = false;
+        self.de.in_seq = true;
         let mut de = ProtobufDeserializer { de: self.de };
-        let value = match T::deserialize(&mut de) {
+        let outcome = T::deserialize(&mut de);
+        self.de.in_seq = false;
+        let value = match outcome {
             Ok(value) => value,
             Err(e) => {
                 if !self.de.packed_empty {
                     return Result::Err(e);
                 }
                 self.de.packed_empty = false;
-                self.de.packed_end = -1;
-                self.de.pending = null;
+                self.de.leave_packed();
                 return Result::Ok(null);
             },
         };
@@ -915,6 +962,7 @@ impl DeserializeStruct for PbStructAccess {
         }
         self.de.end = self.outer_end;
         self.de.depth = self.outer_depth;
+        self.de.in_seq = self.outer_in_seq;
         self.de.pending = null;
         return Result::Ok(());
     }
@@ -1016,6 +1064,10 @@ impl Deserializer for ProtobufDeserializer {
     fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<PbStructAccess, DeserializeError> {
         let outer_end = self.de.end;
         let outer_depth = self.de.depth;
+        // A message reached as an element is still a message: its own fields
+        // are repeated or not on their own declaration.
+        let outer_in_seq = self.de.in_seq;
+        self.de.in_seq = false;
         if self.de.pending matches { Some(_) } {
             self.de.end = self.de.read_len()?;
             self.de.depth = deeper(self.de.depth, self.de.max_depth, self.de.pos as i64)?;
@@ -1025,6 +1077,7 @@ impl Deserializer for ProtobufDeserializer {
             de: self.de,
             outer_end,
             outer_depth,
+            outer_in_seq,
         });
     }
 
@@ -1055,6 +1108,7 @@ pub fn from_bytes<T: Deserialize + WireNumbered, S: AsByteSlice>(
         pending: null,
         packed_end: -1,
         packed_empty: false,
+        in_seq: false,
         number: 0,
         depth: 0,
         max_depth,

@@ -1373,8 +1373,8 @@ impl TypeSystem {
     }
 
     /// The `WireNumbered` bound's eligibility: a struct whose every field
-    /// carries `#[wire(number = N)]`. A struct numbers all of its fields or
-    /// none, so one number is what the whole declaration turns on.
+    /// carries `#[wire(number = N)]`. A struct with no fields qualifies, and
+    /// encodes as the empty record protobuf reads it as.
     fn is_numbered_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
         let Some(def) = ({
             let tt = self.type_table.borrow();
@@ -1385,10 +1385,9 @@ impl TypeSystem {
         }) else {
             return false;
         };
-        scope.struct_fields_of(def).is_some_and(|info| {
-            !info.field_wire_numbers.is_empty()
-                && info.field_wire_numbers.iter().all(Option::is_some)
-        })
+        scope
+            .struct_fields_of(def)
+            .is_some_and(|info| info.field_wire_numbers.iter().all(Option::is_some))
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC

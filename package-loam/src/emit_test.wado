@@ -253,6 +253,19 @@ g (float[N, 2] Batch) => (float[N, 2] Y)
     assert out.contains("let Y = map(Batch_,");
 }
 
+test "an axis named as the generated module names something stops the build" {
+    let source = `
+g (float[N, 2] X) => (float[N, 2] Y)
+<>
+{
+    Y = Relu(X)
+}
+`;
+    let e = generate(source, [rule("*", ["Batch", "Tensor"])]).unwrap_err();
+
+    assert `${e}` == "Tensor: an axis cannot be named as the generated module names something";
+}
+
 test "a broadcast that stretches an extent of one names both operands" {
     let source = `
 g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)

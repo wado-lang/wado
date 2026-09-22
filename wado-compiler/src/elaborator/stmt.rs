@@ -3345,8 +3345,8 @@ pub(super) fn primitive_assoc_const_to_i128(
     }
 }
 
-/// The first `break` or `continue` a tuple for-of's body writes. The loop is
-/// expanded at compile time, so neither has a loop of its own to name.
+/// The first statement in a tuple for-of's body that names the loop itself.
+/// The loop is expanded at compile time, so no such name survives.
 struct LoopControlFlowFinder {
     found: Option<(&'static str, Span)>,
 }
@@ -3357,7 +3357,7 @@ impl AstVisitor for LoopControlFlowFinder {
             return;
         }
         match stmt {
-            Stmt::Break(b) => self.found = Some(("break", b.span)),
+            Stmt::Break(b) if b.label.is_none() => self.found = Some(("break", b.span)),
             Stmt::Continue(c) => self.found = Some(("continue", c.span)),
             // A loop owns the `break` and `continue` its body writes. What
             // drives the loop is still the enclosing block's, so the header is
@@ -3376,9 +3376,11 @@ impl AstVisitor for LoopControlFlowFinder {
             }
             Stmt::ForOf(f) => self.visit_expr(&f.iterable),
             Stmt::Loop(_) => {}
-            // `return` and `task return` leave the enclosing function, which is
-            // well defined in an expanded block; what they deliver is walked.
-            Stmt::Let(_)
+            // `return` and `task return` leave the enclosing function and
+            // `break LABEL` leaves a labeled block. Expansion moves none of
+            // those targets, so each is walked for what it carries.
+            Stmt::Break(_)
+            | Stmt::Let(_)
             | Stmt::Expr(_)
             | Stmt::Return(_)
             | Stmt::TaskReturn(_)

@@ -9,7 +9,7 @@ pub fn tensor_of(bytes: ByteList) -> [List<f32>, List<i32>] {
     let Ok(t) = from_bytes::<TensorProto, ByteList>(bytes) else {
         panic("the tensor did not decode");
     };
-    let Some(pair) = float_tensor(&t) else {
+    let Ok(Some(pair)) = float_tensor(&t) else {
         panic("the tensor is not float");
     };
     return pair;
@@ -24,7 +24,7 @@ pub fn first_initializer(model_bytes: ByteList) -> [List<f32>, List<i32>] {
     let Some(graph) = &model.graph else {
         panic("a model without a graph");
     };
-    let Some(pair) = float_tensor(&graph.initializer[0]) else {
+    let Ok(Some(pair)) = float_tensor(&graph.initializer[0]) else {
         panic("the initializer is not float");
     };
     return pair;
