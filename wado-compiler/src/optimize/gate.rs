@@ -45,13 +45,12 @@ pub enum GatedPass {
     /// The post-loop cleanup fixpoints ([`super::run_bounded_fixpoint`]). Each
     /// owns a fresh gate, so `BranchPrune` serves both of its passes.
     StoreLoadForward,
-    ConstFoldUncached,
     BranchPrune,
     CondImplPostPromote,
 }
 
 impl GatedPass {
-    const COUNT: usize = 20;
+    const COUNT: usize = 19;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -237,7 +236,6 @@ mod tests {
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
             GatedPass::StoreLoadForward,
-            GatedPass::ConstFoldUncached,
             GatedPass::BranchPrune,
             GatedPass::CondImplPostPromote,
         ];
@@ -260,7 +258,6 @@ mod tests {
                 | GatedPass::ScalarForward
                 | GatedPass::LetBlockFlatten
                 | GatedPass::StoreLoadForward
-                | GatedPass::ConstFoldUncached
                 | GatedPass::BranchPrune
                 | GatedPass::CondImplPostPromote => {}
             }
