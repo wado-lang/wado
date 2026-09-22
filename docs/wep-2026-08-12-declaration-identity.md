@@ -607,10 +607,17 @@ A free function declares no `Self`. A bound there that writes one is rejected at
 the declaration, naming the type parameter to write instead, at every position: a
 trait argument, and an associated-type constraint nested under one.
 
+A bound the trait solver's lowering cannot state — `O: Uses<Self::Item>`, whose
+argument is a projection it has no name for — narrows what can be answered about
+`O` alone. The frame is otherwise intact, so a question standing on any other
+type is answered as it would be without the bound. Declining the whole frame
+instead takes down every receiver in reach of the declaration.
+
 Fixtures: `supertrait_binding_keeps_writer_frame.wado`,
 `bound_self_projection_in_trait_method.wado`,
 `bound_self_projection_in_impl_method.wado`,
 `bound_self_projection_in_trait_argument.wado`,
+`bound_self_projection_on_trait_param.wado`,
 `assoc_type_constraint_fn_over_self.wado`.
 
 ### What a derivation may not be
@@ -824,12 +831,3 @@ What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
 
-## Known gap: `Self::Assoc` in a bound on a trait's own type parameter
-
-`trait Host<O: Uses<Self::Item>>` pins the bound to the implementing type, and
-`Self::Item` resolves to what the `impl` bound it to. The impl's instantiation of
-a default body that dispatches through that bound still rejects the call. Writing
-the argument out (`Uses<i32>`) compiles and runs, so the projection is what
-fails, not the shape.
-
-Fixture: `bound_self_projection_on_trait_param.wado`.
