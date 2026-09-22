@@ -202,3 +202,4 @@ omission goes in Decision.
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
 - [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
+- [Half-Precision Primitives (`f16` / `bf16`)](./wep-2026-09-22-half-precision-primitives.md)
