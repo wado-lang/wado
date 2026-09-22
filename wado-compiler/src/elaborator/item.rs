@@ -831,15 +831,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let saved_bounds = self.saved().type_param_bounds.clone();
         self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
-        // A slot the target never mentions is the block's too, numbered after
-        // the ones it does. `impl<T: Display> From<T> for ByAny` binds `T`, so
-        // `fn from(v: T)` reads a slot rather than no type at all. Only an
-        // argument can fill it — that is what makes the block a blanket — but a
-        // slot is what it is either way.
-        //
-        // Before the trait's parameters, since `From<T>`'s is spelled `T` too:
-        // binding the trait's first claims the name for an argument that does
-        // not resolve yet, and the block's own slot never gets made.
+        // Before the trait's parameters, since `impl<T> From<T> for ByAny`
+        // spells both `T`: binding the trait's first claims the name for an
+        // argument that does not resolve yet, and the block's own slot never
+        // gets made.
         let mut impl_type_params = impl_type_params;
         for param in impl_declared_params
             .iter()
@@ -869,13 +864,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
 
         // After the impl's own parameters, which `Maker<Container<U>>` names,
         // and before the trait's, whose bounds pin the `Self` they mean.
-        let implementing = SelfBinding {
-            type_id: self.resolve_type(impl_type),
-            declaring_trait: trait_type.and_then(|t| {
-                let name = self.get_type_name(t);
-                self.trait_decl_at(t.id()?, &name)
-            }),
-        };
+        let implementing = self.impl_self_binding(impl_type, trait_type);
         self.set_self_binding(implementing);
         if let Some(trait_t) = trait_type {
             self.bind_trait_type_params_from_impl(trait_t, implementing);
@@ -1238,8 +1227,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         block.annotate_ctx.trait_ctx.type_params.clear();
         block.annotate_ctx.trait_ctx.type_param_bounds.clear();
         block.register_impl_block_params(impl_block);
-
-        block.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
         let impl_is_concrete = block.impl_is_concrete_instantiation(&impl_block.ty);
 

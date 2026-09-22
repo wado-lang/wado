@@ -613,9 +613,9 @@ and a bound on one of them may project off that target
 (`impl<O: Uses<Self::Item>> Run for Wrap<O>`). So the names are bound first, the
 target resolved, and the bounds read last.
 
-Some bounds the trait solver's lowering cannot state. `O: Uses<Self::Item>` is
-one: the argument is a projection it has no name for. Such a bound narrows what
-can be answered about `O` alone, and the rest of the frame stands. A question
+The trait solver's lowering cannot state every bound. `O: Uses<Self::Item>` is
+one it cannot: the argument is a projection it has no name for. Such a bound
+silences the solver about `O` alone, and the rest of the frame stands. A question
 about any other type is answered as it would be without the bound. Declining the
 whole frame instead takes down every receiver the declaration reaches.
 
@@ -747,8 +747,8 @@ Nothing is spelled, so nothing can be spelled two ways.
 
 A parameter of an `impl` block is substituted against the instance's type
 arguments, so its number is the position the target writes it at.
-`impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1, and declaration order
-reads the instance's `Option<i32>` for it. A parameter the target does not name
+`impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1. Numbering by
+declaration order would put it at 0, where the instance carries `Option<i32>`. A parameter the target does not name
 takes a slot past the ones it assigned, which no instantiation reaches.
 
 One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the

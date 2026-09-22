@@ -3857,7 +3857,7 @@ impl GenericParam {
     /// Such params are erased before codegen, so they occupy no positional
     /// monomorphization slot.
     pub fn has_fn_bound(&self) -> bool {
-        self.bounds.iter().any(|b| b.fn_signature.is_some())
+        self.bounds.iter().any(|b| !b.names_a_trait())
     }
 
     /// Whether this param occupies a dense, positional slot — the "real" type

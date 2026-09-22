@@ -167,12 +167,12 @@ impl Deref for ScopedBound {
 
 /// A trait declaration's own parameter, as the site supplying its argument
 /// sees it.
-pub(super) struct TraitParamFromImpl<'p, A> {
+pub(super) struct TraitParamFromImpl<'p, 'a, A> {
     pub(super) param: &'p ast::GenericParam,
     /// What the site wrote at this parameter's argument position, `None` where
     /// it wrote none. What a missing argument means is the caller's: a default
     /// to expand, or a parameter to leave alone.
-    pub(super) arg: Option<A>,
+    pub(super) arg: Option<&'a A>,
     /// The slot the parameter occupies in the trait's own numbering, counted
     /// from 1 since slot 0 is the trait's `Self`.
     pub(super) slot: u32,
@@ -189,11 +189,11 @@ pub(super) struct TraitParamFromImpl<'p, A> {
 /// Both numberings are here, since reading one for the other slides every
 /// parameter after an `fn`-bound one. The trait wrote the bounds in its own
 /// space, so their `Self` is the type standing under it.
-pub(super) fn trait_params_from_impl<'p, A: Copy>(
+pub(super) fn trait_params_from_impl<'p, 'a, A>(
     params: &'p [ast::GenericParam],
-    args: &[A],
+    args: &'a [A],
     implementing: Option<SelfBinding>,
-) -> Vec<TraitParamFromImpl<'p, A>> {
+) -> Vec<TraitParamFromImpl<'p, 'a, A>> {
     let mut slot = 1;
     params
         .iter()
@@ -203,7 +203,7 @@ pub(super) fn trait_params_from_impl<'p, A: Copy>(
             let takes_a_slot = param.is_real_type_param();
             let this = TraitParamFromImpl {
                 param,
-                arg: args.get(at).copied(),
+                arg: args.get(at),
                 slot,
                 takes_a_slot,
                 bounds: ScopedBound::pin_declared(param, implementing),
@@ -794,6 +794,22 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         }
     }
 
+    /// What `Self` means inside an `impl` block: its target, under the trait
+    /// the block implements.
+    pub(super) fn impl_self_binding(
+        &mut self,
+        impl_type: &ast::Type,
+        trait_type: Option<&ast::Type>,
+    ) -> SelfBinding {
+        SelfBinding {
+            type_id: self.resolve_type(impl_type),
+            declaring_trait: trait_type.and_then(|t| {
+                let name = self.get_type_name(t);
+                self.trait_decl_at(t.id()?, &name)
+            }),
+        }
+    }
+
     /// Bind `name` to `binder` and to what it is bounded by, in one step.
     ///
     /// The two are one fact: a binder without its bounds dispatches on nothing,
@@ -879,12 +895,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let Some(trait_decl_type_params) = self.find_trait_decl_type_params(&trait_name) else {
             return;
         };
-        let trait_args: Vec<&ast::Type> = match trait_type {
-            ast::Type::Generic(g) => g.args.iter().collect(),
-            _ => Vec::new(),
+        let trait_args: &[ast::Type] = match trait_type {
+            ast::Type::Generic(g) => &g.args,
+            _ => &[],
         };
         let supplied =
-            trait_params_from_impl(&trait_decl_type_params, &trait_args, Some(implementing));
+            trait_params_from_impl(&trait_decl_type_params, trait_args, Some(implementing));
         for TraitParamFromImpl {
             param, arg, bounds, ..
         } in supplied

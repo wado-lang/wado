@@ -6010,7 +6010,7 @@ impl Parser {
         let supertraits = if self.check(&TokenKind::Colon) {
             self.advance();
             let bounds = self.parse_trait_bounds()?;
-            if let Some(bound) = bounds.iter().find(|b| b.fn_signature.is_some()) {
+            if let Some(bound) = bounds.iter().find(|b| !b.names_a_trait()) {
                 return Err(self.error_at_span(
                     bound.span,
                     "a `fn` signature cannot be a supertrait: only a trait a type can implement",

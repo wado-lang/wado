@@ -226,24 +226,12 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         }
         // Between the names and their bounds: the target is resolved from the
         // names, and a bound's `Self::Assoc` projects off the target.
-        self.set_impl_self_binding(impl_block);
+        let implementing = self.impl_self_binding(&impl_block.ty, impl_block.trait_type.as_ref());
+        self.set_self_binding(implementing);
         for param in &impl_block.type_params {
             let bounds = self.scoped_bounds(param);
             self.add_param_bounds(&param.name, bounds);
         }
-    }
-
-    /// Make `Self` the block's target, under the trait it implements.
-    fn set_impl_self_binding(&mut self, impl_block: &ast::ImplBlock) {
-        let type_id = self.resolve_type(&impl_block.ty);
-        let declaring_trait = impl_block.trait_type.as_ref().and_then(|t| {
-            let name = self.get_type_name(t);
-            self.trait_decl_at(t.id()?, &name)
-        });
-        self.set_self_binding(SelfBinding {
-            type_id,
-            declaring_trait,
-        });
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

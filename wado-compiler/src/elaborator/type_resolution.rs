@@ -1020,9 +1020,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         out.push((bound, Vec::new()));
                         continue;
                     };
-                    let type_args = bound.type_args.clone();
                     let written: Vec<TypeId> = e.in_bound_frame(&bound, &ParamSpace::new(), |e| {
-                        type_args.iter().map(|ty| e.resolve_type(ty)).collect()
+                        bound
+                            .type_args
+                            .iter()
+                            .map(|ty| e.resolve_type(ty))
+                            .collect()
                     });
                     let at_decl = e.param_space_of(decl, &written);
                     let args: Vec<TypeId> = at_decl.iter().map(|(_, id)| *id).collect();

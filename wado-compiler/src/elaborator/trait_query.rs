@@ -2894,9 +2894,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         else {
             return Vec::new();
         };
-        let written = found.type_args.clone();
         self.in_bound_frame(&found, &ParamSpace::new(), |e| {
-            written.iter().map(|ty| e.resolve_type(ty)).collect()
+            found
+                .type_args
+                .iter()
+                .map(|ty| e.resolve_type(ty))
+                .collect()
         })
     }
 
@@ -3009,9 +3012,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Slot 0 is the trait's `Self`. An argument the bound wrote means
         // whatever wrote it; a defaulted one (`Eq<Rhs = Self>`) is written in
         // the trait's space and means the bounded type.
-        let args: Vec<&ast::Type> = bound.type_args.iter().collect();
         let written: Vec<(u32, ast::Type, BoundSelf)> =
-            trait_params_from_impl(&trait_params, &args, None)
+            trait_params_from_impl(&trait_params, &bound.type_args, None)
                 .into_iter()
                 .filter(|supplied| supplied.takes_a_slot)
                 .filter_map(|supplied| match supplied.arg {

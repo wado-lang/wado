@@ -606,7 +606,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|supplied| {
                 Some(DefaultTypeBinding {
                     name: supplied.param.name.clone(),
-                    settled: SettledAs::Type(supplied.arg?),
+                    settled: SettledAs::Type(*supplied.arg?),
                     bounds: supplied.bounds,
                 })
             })
