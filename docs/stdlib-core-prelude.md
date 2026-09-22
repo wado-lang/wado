@@ -3500,8 +3500,6 @@ Error returned by integer parsing.
 
 #### `pub fn kind(&self) -> IntErrorKind`
 
-Returns the kind of this error.
-
 #### `impl Display for ParseIntError`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -3515,8 +3513,6 @@ Error returned by float parsing.
 #### `pub fn new(kind: FloatErrorKind) -> ParseFloatError`
 
 #### `pub fn kind(&self) -> FloatErrorKind`
-
-Returns the kind of this error.
 
 #### `impl Display for ParseFloatError`
 
@@ -3539,8 +3535,6 @@ Error returned by char parsing.
 #### `pub fn new(kind: CharErrorKind) -> ParseCharError`
 
 #### `pub fn kind(&self) -> CharErrorKind`
-
-Returns the kind of this error.
 
 #### `impl Display for ParseCharError`
 

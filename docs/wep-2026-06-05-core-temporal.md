@@ -205,6 +205,10 @@ serde wire form — `Instant` and `ZonedDateTime` under CBOR's date/time tag 0
 Deserialization of the two instant-bearing types also accepts an epoch-seconds
 number (tag 1 / JSON number), read as UTC. `FromStr` reads the same spellings.
 
+The `Plain*` types spell their parser twice on purpose. `from_str` is the trait
+a generic caller reaches through; `parse` is the type's own entry point, kept
+for the Temporal API shape and carrying the accepted format in its doc.
+
 `Instant` additionally carries RFC 7231 IMF-fixdate, the form an HTTP `Date`,
 `Expires`, or `Last-Modified` header takes. It renders that form and reads all
 three a recipient must accept: IMF-fixdate, the obsolete RFC 850 (whose

@@ -924,9 +924,8 @@ impl PathParamsDeserializer {
         return Result::Ok(());
     }
 
-    /// The `invalid_value` error for the active param, naming it, the captured
-    /// slice and why the parse failed, e.g.
-    /// `path param 'id' is not a valid u64: 'abc' (invalid digit found in string)`.
+    /// The `invalid_value` error for the active param, e.g. `path param 'id'
+    /// is not a valid u64: 'abc' (invalid digit found in string)`.
     fn invalid_param<S: AsStrSlice, R: AsStrSlice>(&self, type_name: S, reason: R) -> DeserializeError {
         let name = &self.src.names[self.cursor - 1];
         let [s, e] = self.current_range();
@@ -936,8 +935,7 @@ impl PathParamsDeserializer {
     }
 
     /// Parse the active param's byte range into `T` via `FromStr`.
-    /// Shared body of every scalar `deserialize_*` arm — keeps the per-type
-    /// methods to a single line each.
+    /// The shared body of every scalar `deserialize_*` arm.
     fn parse_scalar<T: FromStr, S: AsStrSlice>(&self, type_name: S) -> Result<T, DeserializeError> {
         self.require_active_param()?;
         let [s, e] = self.current_range();

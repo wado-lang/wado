@@ -3672,7 +3672,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)

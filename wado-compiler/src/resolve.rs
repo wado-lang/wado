@@ -562,11 +562,10 @@ impl Resolver<'_> {
     /// those matches by value instead.
     ///
     /// A case answers here even where a type of the same name outranks it for a
-    /// reference, and even where the module does not import its type: a pattern
-    /// is read against the scrutinee's type, which only the elaborator knows.
-    /// The lint this feeds had better miss a binder than order a rename of a
-    /// pattern that binds nothing, so `case_names` is read rather than the
-    /// module's own tier.
+    /// reference, and even where the module does not import its type: only the
+    /// elaborator knows the scrutinee's type. `case_names` rather than the
+    /// module's own tier, since the lint this feeds had better miss a binder
+    /// than order a rename of a pattern that binds nothing.
     fn pattern_binds(&self, pat: &ast::Pattern, name: &str) -> bool {
         if self.irrefutable_pattern || matches!(pat, ast::Pattern::MutIdent { .. }) {
             return true;

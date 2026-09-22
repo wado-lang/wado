@@ -15,7 +15,7 @@ Add `LenientFromStr` to `core:prelude` (auto-imported), the forgiving sibling of
 ```wado
 pub trait LenientFromStr {
     type Err: Error;
-    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 ```
 

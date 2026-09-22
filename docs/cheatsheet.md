@@ -1136,7 +1136,7 @@ pub trait FromStr {
 // (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
 pub trait LenientFromStr {
     type Err: Error;  // built-in impls all use LenientParseError
-    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 ```
 
