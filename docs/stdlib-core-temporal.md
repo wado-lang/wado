@@ -573,8 +573,8 @@ orders chronologically.
 #### `pub fn new(year: i32, month: i32, day: i32) -> PlainDate`
 
 A date, asserted to exist in the ISO 8601 calendar. Use `constrain` to
-clamp a day past the month's end instead, or `parse` for input that may
-be malformed.
+clamp a day past the month's end instead, or `from_str` for input that
+may be malformed.
 
 #### `pub fn constrain(year: i32, month: i32, day: i32) -> PlainDate`
 

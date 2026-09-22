@@ -361,6 +361,16 @@ fn apply_port(url: &mut Url, port_val: u16) {
     }
 }
 
+/// What follows the host's `:`, which the WHATWG port state reads only when it
+/// is not empty: `host:` and `[::1]:` alike name no port.
+fn apply_port_suffix<S: AsStrSlice>(url: &mut Url, port_str: S) -> Result<(), ParseError> {
+    if port_str.is_empty() {
+        return Result::Ok(());
+    }
+    apply_port(url, parse_port_str(port_str)?);
+    return Result::Ok(());
+}
+
 fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), ParseError> {
     let input = authority.as_str_slice();
     let mut rest = input;
@@ -387,8 +397,7 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
             let after = rest.substr_bytes(bracket_end + 1, rest.len());
             if !after.is_empty() {
                 if after.starts_with(":") {
-                    let port_str = after.substr_bytes(1, after.len());
-                    apply_port(url, parse_port_str(&port_str)?);
+                    apply_port_suffix(url, &after.substr_bytes(1, after.len()))?;
                 } else {
                     return Result::Err(ParseError::InvalidHost);
                 }
@@ -400,19 +409,11 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
     }
 
     if let Some([host_part, port_str]) = rest.rsplit_once(":") {
-        if port_str.is_empty() {
-            if host_part.is_empty() {
-                return Result::Err(ParseError::MissingHost);
-            }
-            url.host = host_part.to_ascii_lowercase();
-            return Result::Ok(());
-        }
         if host_part.is_empty() {
             return Result::Err(ParseError::MissingHost);
         }
-        let port_val = parse_port_str(&port_str)?;
+        apply_port_suffix(url, &port_str)?;
         url.host = host_part.to_ascii_lowercase();
-        apply_port(url, port_val);
         return Result::Ok(());
     }
 

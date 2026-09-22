@@ -556,6 +556,16 @@ it means resolving `Name<args>` against the resource declarations in the
 elaborator's main type resolution, as `resolve_type_static_with_params` already
 does for the struct-field pre-pass.
 
+### Known gap: a `Stream` or `Future` handle nothing drops
+
+Cleanup excludes `GenericResource` — `Stream<T>` and `Future<T>` — because those
+handles carry their own drop discipline, so every path out of a function holding
+one has to call `drop` itself. Nothing diagnoses a path that does not, and the
+handle leaks with no trace. The shape that admits it is a `?` or an early
+`return` inside the region holding the handle; the readers in `core:fs` and
+`core:kiln` avoid it by draining the stream, dropping the handle, and only then
+deciding what to return.
+
 ## Amendments to earlier WEPs
 
 - WEP 2026-04-28 (Resource Inheritance): its "value semantics, no borrow

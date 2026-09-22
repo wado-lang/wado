@@ -192,6 +192,11 @@ test "parse IPv6 host" {
     }
 }
 
+test "parse an empty port, which names no port" {
+    assert Url::from_str("http://example.com:/") matches { Ok(url) && url.port matches { None } };
+    assert Url::from_str("http://[::1]:/") matches { Ok(url) && url.host == "::1" && url.port matches { None } };
+}
+
 test "parse full URL with all components" {
     if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
         assert url.scheme == "https";

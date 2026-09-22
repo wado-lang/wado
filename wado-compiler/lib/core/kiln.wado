@@ -58,21 +58,34 @@ pub fn read_all(content: Stream<u8>) -> ByteList {
 /// second copy of the file exists. `Err` is a malformed input, not a bug.
 pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
     let mut out = String::with_capacity(READ_CHUNK);
-    // Whatever the last chunk ended mid-character with; at most three bytes
-    // once a chunk has been consumed.
     let mut pending: List<u8> = [];
-    loop {
-        let chunk = content.read(READ_CHUNK);
-        pending.extend(&chunk.items);
-        // Every byte read is either decoded into `out` or still in `pending`.
-        let pending_at = out.len();
-        let taken = out.push_utf8(&(pending as ByteList)).map_err(|e| e.rebased(pending_at))?;
-        pending = pending.as_slice().slice(taken, pending.len()).to_list();
-        if chunk.result != CopyResult::Completed {
-            break;
+    // A `Stream` handle is outside the compiler's drop elaboration, so the
+    // decode failure is carried out of the loop rather than propagated inside it.
+    let malformed: Option<Utf8Error> = decode: {
+        loop {
+            let chunk = content.read(READ_CHUNK);
+            pending.extend(&chunk.items);
+            // Every byte read is either decoded into `out` or still in `pending`.
+            let pending_at = out.len();
+            match out.push_utf8(&(pending as ByteList)) {
+                Ok(taken) => {
+                    pending = pending.as_slice().slice(taken, pending.len()).to_list();
+                    assert pending.len() <= 3;
+                },
+                Err(e) => {
+                    break decode: Option::Some(e.rebased(pending_at));
+                },
+            }
+            if chunk.result != CopyResult::Completed {
+                break;
+            }
         }
-    }
+        null;
+    };
     content.drop();
+    if let Some(e) = malformed {
+        return Result::Err(e);
+    }
     if !pending.is_empty() {
         return Result::Err(Utf8Error::incomplete(out.len()));
     }

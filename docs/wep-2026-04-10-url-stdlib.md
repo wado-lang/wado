@@ -98,6 +98,8 @@ pub struct Url {
 
 When parsing, if the port matches the default for the scheme, `port` is set to `None`. This follows WHATWG behavior: `http://example.com:80/` and `http://example.com/` produce the same `Url`.
 
+An empty port is `None` too. WHATWG's port state reads the buffer only when it is not empty, so `http://example.com:/` and `http://[::1]:/` name no port rather than failing.
+
 ### `ParseError` Variant
 
 ```wado
