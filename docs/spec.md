@@ -3740,6 +3740,14 @@ A bound that writes one asks for that argument. `T: Eq<String>` reaches
 An impl writing `Self` as a trait argument says its own target, so
 `impl Add<Self> for Feet` and `impl Add<Feet> for Feet` are one impl.
 
+`Self` in a bound names the type the surrounding declaration implements. A
+`trait`, an `impl` and a type declaration each bind one; a free function binds
+none, so `Self` anywhere in a free function's bounds is an error. The error names
+the type parameter to write instead. The position does not change that: a trait
+argument (`T: Uses<Self::Item>`) and an associated-type constraint nested under
+one (`T: Sink<Cb = fn(Self::Item) -> i32>`) are both rejected, and Rust rejects
+the same spelling.
+
 The rule is the same wherever a bound is written: on a type parameter, on a
 supertrait (`trait AsStrSlice: Eq<String>`), or on an associated type
 (`type Item: Eq<String>`). A bound's arguments are spelled where it is written,
