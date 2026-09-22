@@ -216,15 +216,25 @@ impl Eq for bf16 {
     }
 }
 
+/// The half of `total_order_key_32`'s rule that a 16-bit float needs. Widening
+/// would answer the same, and this keeps the two types' orders one rule.
+fn total_order_key_16(bits: u16) -> u16 {
+    if bits & 0x8000 != 0 {
+        return ~bits;
+    }
+    return bits | 0x8000;
+}
+
+// `Ord` is IEEE 754-2019 `totalOrder`, as `f32`'s is.
 impl Ord for f16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return f32::from(*self).cmp(&f32::from(*other));
+        return total_order_key_16(self.to_bits()).cmp(&total_order_key_16(other.to_bits()));
     }
 }
 
 impl Ord for bf16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        return f32::from(*self).cmp(&f32::from(*other));
+        return total_order_key_16(self.to_bits()).cmp(&total_order_key_16(other.to_bits()));
     }
 }
 

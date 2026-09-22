@@ -66,8 +66,8 @@ Returns true if self equals other.
 
 ### `pub trait Ord: Eq with ()`
 
-Trait for ordering comparisons.
-Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+A total order over the type, and what `<`, `<=`, `>` and `>=` mean where
+the operator has no instruction. A float's is IEEE 754-2019 `totalOrder`.
 
 #### `fn cmp(&self, other: &Self) -> Ordering`
 
@@ -1725,6 +1725,18 @@ True for a NaN, quiet or signaling.
 
 ##### `pub fn try_from(value: f64) -> Result<f16, ConvertError>`
 
+#### `impl Eq for f16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for f16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for f16`
+
+##### `pub fn default() -> f16`
+
 #### `impl Display for f16`
 
 ##### `pub fn fmt(&self, f: &mut Formatter)`
@@ -1759,6 +1771,18 @@ True for a NaN, quiet or signaling.
 #### `impl TryFrom<f64> for bf16`
 
 ##### `pub fn try_from(value: f64) -> Result<bf16, ConvertError>`
+
+#### `impl Eq for bf16`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
+
+#### `impl Ord for bf16`
+
+##### `pub fn cmp(&self, other: &Self) -> Ordering`
+
+#### `impl Default for bf16`
+
+##### `pub fn default() -> bf16`
 
 #### `impl Display for bf16`
 
@@ -2743,6 +2767,10 @@ Encodes this character as UTF-8, returning the bytes.
 ##### `fn next_step(&self) -> Option<char>`
 
 ### `v128`
+
+#### `impl Eq for v128`
+
+##### `pub fn eq(&self, other: &Self) -> bool`
 
 #### `impl Inspect for v128`
 

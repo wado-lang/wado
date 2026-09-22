@@ -42,8 +42,8 @@ impl<T> Eq for &mut T {
     }
 }
 
-/// Trait for ordering comparisons.
-/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+/// A total order over the type, and what `<`, `<=`, `>` and `>=` mean where
+/// the operator has no instruction. A float's is IEEE 754-2019 `totalOrder`.
 #[compiler_item("ord")]
 pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.

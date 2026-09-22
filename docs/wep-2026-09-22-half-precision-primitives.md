@@ -52,14 +52,15 @@ the widened value. Widening is exact, so that is a rule rather than a convention
 to remember: a NaN equals nothing and the two zeroes are one value. Comparing
 the bits would say the opposite of both. `Default` is there too, and is the zero.
 
-`<=` and `>=` on a NaN are where the rule stops, and they say `true`. They reach
-`Ord::cmp`, which has three answers and no unordered one, so an incomparable
-pair comes back `Equal`. `f32` hides this by lowering its own `<=` to a Wasm
-instruction that never consults `cmp`. Reached through a `T: Ord` bound, it
-answers as a half does.
+The ordering operators are where the rule stops. `Ord` is IEEE 754-2019
+`totalOrder` for every float, so `<` on a half sorts a NaN at an end rather than
+answering `false`. `f32` keeps IEEE there only because its own `<` is a Wasm
+instruction that never consults `cmp`; reached through a `T: Ord` bound it
+answers as a half does. Wasm has no half comparison, so a half has nothing else
+to reach.
 
-Wasm has no half comparison either, so the operator dispatches to the impl the
-way a struct's does. These are the only primitives whose operator does.
+These are the only primitives whose comparison operator dispatches to an impl,
+which is why they are the only ones where the two orders are visible at once.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -202,12 +203,11 @@ of it is committed work.
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
 
-`Ordering` cannot say that two values are incomparable, so `cmp` has no answer
-for a NaN and returns `Equal`. That is what makes a half's `<=` disagree with
-`f32`'s operator, and it is `Ord`'s shape rather than half precision's: sorting
-a `List<f32>` holding a NaN is already ordered by the same non-answer. Closing
-it means deciding what a float's total order is, which is a question about
-`core:prelude` and not about these two types.
+A half's `<` is its total order and `f32`'s is IEEE, so the same comparison
+written over the two types can differ on a NaN. `Ord` answers the same for both;
+only the operator diverges, because one of them has an instruction and the other
+does not. Closing it means lowering a half's ordering operators to the widened
+`f32` comparison, so that `<` means one thing across the four float types.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
 An implementation that never widens exists: equal bits are equal values unless

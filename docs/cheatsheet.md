@@ -199,9 +199,9 @@ i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
-// `==`, `!=`, `<` and `>` answer what f32 answers for the widened value.
-// `<=` / `>=` on a NaN say true: they go through `Ord::cmp`, which has no
-// unordered case. `f32` under a `T: Ord` bound answers the same way.
+// `==` / `!=` answer what f32 answers for the widened value. The ordering
+// operators have no instruction, so they reach `Ord` and are total: a NaN
+// sorts at an end rather than comparing false, where f32's `<` is IEEE.
 f16, bf16
 
 // Composites
@@ -1114,6 +1114,9 @@ trait Add<Rhs = Self> { type Output; fn add(&self, rhs: &Rhs) -> Self::Output; }
 trait Eq<Rhs = Self> { fn eq(&self, other: &Rhs) -> bool; }
 
 // For <, <=, >, >= operators
+// A total order. On a float it is IEEE 754-2019 `totalOrder`, as C++20's
+// `std::strong_order` is: -NaN < -Inf < -0 < +0 < +Inf < +NaN. `==` and `<`
+// keep IEEE's answers, so `sort()` and `<` can disagree about a NaN.
 trait Ord: Eq { fn cmp(&self, other: &Self) -> Ordering; }
 
 // For default value (implemented for primitives, String, List<T>,

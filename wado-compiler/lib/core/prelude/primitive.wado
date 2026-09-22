@@ -2692,27 +2692,36 @@ impl Ord for u64 {
     }
 }
 
+/// A float's bits as a key that sorts by IEEE 754-2019 `totalOrder`, which is
+/// what C++20's `std::strong_order` computes. Sign-magnitude counts the wrong
+/// way below zero, so a negative flips whole and a positive flips its sign bit.
+fn total_order_key_32(bits: u32) -> u32 {
+    if bits & 0x8000_0000 != 0 {
+        return ~bits;
+    }
+    return bits | 0x8000_0000;
+}
+
+fn total_order_key_64(bits: u64) -> u64 {
+    if bits & 0x8000_0000_0000_0000 != 0 {
+        return ~bits;
+    }
+    return bits | 0x8000_0000_0000_0000;
+}
+
+// `Ord` is a total order, so it separates the two zeroes and puts every NaN at
+// one end rather than calling it equal to whatever it met. `==` and `<` keep
+// IEEE's answers; C++20 splits them the same way, `partial_ordering` from
+// `operator<=>` against `strong_order`.
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other {
-            return Ordering::Less;
-        }
-        if *self > *other {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return total_order_key_32(self.to_bits()).cmp(&total_order_key_32(other.to_bits()));
     }
 }
 
 impl Ord for f64 {
     pub fn cmp(&self, other: &Self) -> Ordering {
-        if *self < *other {
-            return Ordering::Less;
-        }
-        if *self > *other {
-            return Ordering::Greater;
-        }
-        return Ordering::Equal;
+        return total_order_key_64(self.to_bits()).cmp(&total_order_key_64(other.to_bits()));
     }
 }
 
