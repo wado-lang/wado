@@ -201,4 +201,4 @@ omission goes in Decision.
 - [Random Number Generation (`core:prng`)](./wep-2026-09-18-core-prng.md)
 - [`wasi:webgpu` Bindings](./wep-2026-09-19-wasi-webgpu.md)
 - [External Subcommands](./wep-2026-09-19-external-subcommands.md)
-- [Geas — Tensor Compilation for Wado](./wep-2026-09-20-geas.md)
+- [Loam — Lowered Operators, Ahead-of-time Modules](./wep-2026-09-20-loam.md)
