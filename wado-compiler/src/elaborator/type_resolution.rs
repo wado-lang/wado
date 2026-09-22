@@ -1113,10 +1113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        match scoped.self_binding {
-            Some(binding) => self.in_space(space, |e| e.with_self_binding(binding, body)),
-            None => self.in_space(space, body),
-        }
+        let binding = scoped.self_binding;
+        self.in_space(space, |e| e.under_self_binding(binding, body))
     }
 
     /// `types` resolved with `space` answering for the names it was written in.

@@ -609,11 +609,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return trait_;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
-        self.with_type_params_bound(&names, type_args, |e| match self_binding {
-            Some(binding) => e.with_self_binding(binding, |e| {
+        self.with_type_params_bound(&names, type_args, |e| {
+            e.under_self_binding(self_binding, |e| {
                 e.trait_named_with_resolved_args(trait_, bound, &pick)
-            }),
-            None => e.trait_named_with_resolved_args(trait_, bound, &pick),
+            })
         })
     }
 
@@ -2990,10 +2989,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         for (slot, ty, scope) in written {
-            let resolved = match scope.at(self_type_id, decl) {
-                Some(binding) => self.with_self_binding(binding, |s| s.resolve_type(&ty)),
-                None => self.resolve_type(&ty),
-            };
+            let resolved =
+                self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
             slots.insert(slot, resolved);
         }
         slots

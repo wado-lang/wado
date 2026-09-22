@@ -1257,17 +1257,10 @@ impl SolverBridge {
         (out, variants)
     }
 
-    /// `type_id` lowered, and the bounds in force around it; `None` where the
-    /// lowering states nothing about the question.
-    ///
-    /// A generic body's `T: Tr` holds because its own signature says so, not
-    /// because any impl exists, so no query about `T` can be answered from the
-    /// program alone. A bound naming a trait the lowering never interned, or
-    /// written at an argument it cannot name (`O: Uses<Self::Item>`), leaves
-    /// that parameter's list short of what the source declares, so a receiver
-    /// standing on that parameter is declined rather than answered from a
-    /// bound the lowering never saw. Every other receiver is answered as it
-    /// would be without the bound.
+    /// `type_id` lowered, and the bounds in force around it. `None` where a
+    /// bound the lowering cannot state is on a parameter this receiver mentions:
+    /// its list is short of what the source declares, and answering from a short
+    /// list says more than the lowering saw.
     fn env_for(
         &self,
         tysys: &TypeSystem,

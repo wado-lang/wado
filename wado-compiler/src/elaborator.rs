@@ -205,32 +205,54 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         // argument can reach.
         let mut spare = target_arity(&impl_block.ty);
         for param in &impl_block.type_params {
-            let bounds = self.scoped_bounds(param);
             if !param.fills_impl_slot() {
-                // An effect parameter fills no type slot, so there is no binder
-                // to pair its bounds with.
-                self.add_param_bounds(&param.name, bounds);
                 continue;
             }
             // A name the enclosing frame already numbered keeps that number;
             // renumbering it here would give one parameter two indices.
-            let already = self.annotate_ctx.trait_ctx.type_params.get(&param.name);
-            let binder = if let Some(&existing) = already {
-                existing
-            } else {
-                let slot = target_arg_slot(&impl_block.ty, &param.name).unwrap_or_else(|| {
-                    spare += 1;
-                    spare - 1
-                });
-                let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
-                    param.name.clone(),
-                    slot,
-                    param.is_pack,
-                );
-                scope::BinderInScope::declared(slot, type_id, param.id)
-            };
-            self.bind_param(&param.name, binder, bounds);
+            if self
+                .annotate_ctx
+                .trait_ctx
+                .type_params
+                .contains_key(&param.name)
+            {
+                continue;
+            }
+            let slot = target_arg_slot(&impl_block.ty, &param.name).unwrap_or_else(|| {
+                spare += 1;
+                spare - 1
+            });
+            let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                param.name.clone(),
+                slot,
+                param.is_pack,
+            );
+            self.bind_param(
+                &param.name,
+                scope::BinderInScope::declared(slot, type_id, param.id),
+                Vec::new(),
+            );
         }
+        // Between the names and their bounds: the target is resolved from the
+        // names, and a bound's `Self::Assoc` projects off the target.
+        self.set_impl_self_binding(impl_block);
+        for param in &impl_block.type_params {
+            let bounds = self.scoped_bounds(param);
+            self.add_param_bounds(&param.name, bounds);
+        }
+    }
+
+    /// Make `Self` the block's target, under the trait it implements.
+    fn set_impl_self_binding(&mut self, impl_block: &ast::ImplBlock) {
+        let type_id = self.resolve_type(&impl_block.ty);
+        let declaring_trait = impl_block.trait_type.as_ref().and_then(|t| {
+            let name = self.get_type_name(t);
+            self.trait_decl_at(t.id()?, &name)
+        });
+        self.set_self_binding(SelfBinding {
+            type_id,
+            declaring_trait,
+        });
     }
 }
 impl<'a, H: CompilerHost> Elaborator<'a, H> {

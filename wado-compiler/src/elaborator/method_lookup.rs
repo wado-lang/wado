@@ -1357,13 +1357,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
-        // The declaration is a method's, so a `Self::Assoc` in a default projects
-        // off the receiver, under the trait this frame implements.
-        let receiver_self = SelfBinding {
-            type_id: receiver_type,
-            declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
-        };
-        self.with_self_binding(receiver_self, |s| {
+        self.with_self_binding(self.self_binding_on(receiver_type), |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1409,12 +1403,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // holds, never what it is — so `U::default()` dispatches on its bound
         // rather than on a receiver. The declaration wrote that bound, and
         // nothing at the call site carries it.
-        // The declaration is a method's, so its `Self` is the receiver, and the
-        // trait it projects `Self::Assoc` off is the one this frame implements.
-        let receiver_self = Some(SelfBinding {
-            type_id: receiver,
-            declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
-        });
+        let receiver_self = Some(self.self_binding_on(receiver));
         for binding in &mut bindings {
             if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
@@ -2298,11 +2287,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     index,
                     type_param_id,
                 );
-                if !type_param.bounds.is_empty() {
-                    scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
-                        type_param.name.clone(),
-                        ScopedBound::pin_declared(type_param, self_binding),
-                    );
+                let bounds = ScopedBound::pin_declared(type_param, self_binding);
+                if !bounds.is_empty() {
+                    scope
+                        .annotate_ctx
+                        .trait_ctx
+                        .type_param_bounds
+                        .insert(type_param.name.clone(), bounds);
                 }
             }
 

@@ -252,6 +252,14 @@ impl TraitContext {
     }
 }
 
+/// Everything [`Elaborator::set_self_binding`] installs, so a scoped install
+/// takes and restores what `Self` means as one.
+pub(super) struct SelfFrame {
+    assoc_type_bindings: IndexMap<String, TypeId>,
+    self_type: Option<TypeId>,
+    self_trait: Option<DefId>,
+}
+
 /// One open `type_implements_trait` question.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(super) struct TraitCheckFrame {
@@ -291,6 +299,23 @@ pub(super) struct Scope {
     /// where the default's own binders do not answer, so a `|a| …` it opens
     /// still wins. Empty outside such a walk.
     pub(super) default_arg_types: IndexMap<String, TypeId>,
+}
+
+impl Scope {
+    /// Take what `Self` means here, leaving the frame bound to nothing.
+    fn take_self_frame(&mut self) -> SelfFrame {
+        SelfFrame {
+            assoc_type_bindings: std::mem::take(&mut self.trait_ctx.assoc_type_bindings),
+            self_type: self.trait_ctx.self_type.take(),
+            self_trait: self.trait_ctx.self_trait.take(),
+        }
+    }
+
+    fn restore_self_frame(&mut self, frame: SelfFrame) {
+        self.trait_ctx.assoc_type_bindings = frame.assoc_type_bindings;
+        self.trait_ctx.self_type = frame.self_type;
+        self.trait_ctx.self_trait = frame.self_trait;
+    }
 }
 
 /// RAII guard restoring `Elaborator::trait_ctx` on drop, panic-safe. Derefs to
@@ -450,29 +475,44 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         self.annotate_ctx.trait_ctx.self_type = Some(binding.type_id);
     }
 
-    /// [`Self::set_self_binding`] for the duration of `body`.
+    /// [`Self::set_self_binding`] for the duration of `body`, restoring the
+    /// frame it replaced on return (panic-safe).
     pub(super) fn with_self_binding<R>(
         &mut self,
         binding: SelfBinding,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        self.with_scope_field(
-            |scope| &mut scope.trait_ctx.assoc_type_bindings,
-            IndexMap::default(),
-            |elaborator| {
-                elaborator.with_scope_field(
-                    |scope| &mut scope.trait_ctx.self_trait,
-                    binding.declaring_trait,
-                    |elaborator| {
-                        elaborator.with_scope_field(
-                            |scope| &mut scope.trait_ctx.self_type,
-                            Some(binding.type_id),
-                            body,
-                        )
-                    },
-                )
-            },
-        )
+        struct Restore<'r, 'a, H: CompilerHost> {
+            elaborator: &'r mut Elaborator<'a, H>,
+            saved: Option<SelfFrame>,
+        }
+        impl<H: CompilerHost> Drop for Restore<'_, '_, H> {
+            fn drop(&mut self) {
+                let saved = self.saved.take().expect("saved self frame present");
+                self.elaborator.annotate_ctx.restore_self_frame(saved);
+            }
+        }
+        let saved = self.annotate_ctx.take_self_frame();
+        self.set_self_binding(binding);
+        let guard = Restore {
+            elaborator: self,
+            saved: Some(saved),
+        };
+        body(guard.elaborator)
+    }
+
+    /// [`Self::with_self_binding`] where there is a binding, and `body` as it
+    /// stands where there is none. Nothing written in a frame binding no `Self`
+    /// spells one, so there is nothing for this frame's own to answer.
+    pub(super) fn under_self_binding<R>(
+        &mut self,
+        binding: Option<SelfBinding>,
+        body: impl FnOnce(&mut Self) -> R,
+    ) -> R {
+        match binding {
+            Some(binding) => self.with_self_binding(binding, body),
+            None => body(self),
+        }
     }
 
     /// Run `body` with [`Scope::resolving_home`] replaced by `module`. Unlike
@@ -724,10 +764,17 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// What `Self` means at this frame: the type it stands for and the trait
     /// that declares the names projected off it. `None` in a frame binding none.
     pub(super) fn self_binding(&self) -> Option<SelfBinding> {
-        Some(SelfBinding {
-            type_id: self.annotate_ctx.trait_ctx.self_type?,
+        Some(self.self_binding_on(self.annotate_ctx.trait_ctx.self_type?))
+    }
+
+    /// This frame's `Self`, standing on `type_id` instead. A method's
+    /// declaration projects `Self::Assoc` off its receiver, under the trait the
+    /// frame implements.
+    pub(super) fn self_binding_on(&self, type_id: TypeId) -> SelfBinding {
+        SelfBinding {
+            type_id,
             declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
-        })
+        }
     }
 
     /// Bind `name` to `binder` and to what it is bounded by, in one step.
@@ -798,9 +845,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// already be registered, the trait args being able to name them
     /// (`impl<X> Foo<Container<X>>`). Existing entries are left untouched.
     ///
-    /// `self_type` is what the trait declared these bounds' `Self` to mean, so
-    /// the caller passes the type it is implementing rather than leaving this to
-    /// read ambient state it may not have set yet.
+    /// `implementing` is what the trait declared these bounds' `Self` to mean.
+    /// The caller passes it rather than leaving this to read ambient state it
+    /// may not have set yet.
     pub(super) fn bind_trait_type_params_from_impl(
         &mut self,
         trait_type: &ast::Type,

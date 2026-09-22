@@ -3626,7 +3626,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 // arguments, so it is where the target names the parameter.
                 let param_at = |name: &str| {
                     let param = param_slots.iter().find(|p| p.name == name)?;
-                    Some((target_arg_slot(&impl_block.ty, name)? as usize, param))
+                    Some((target_arg_slot(&impl_block.ty, name)?, param))
                 };
 
                 for binding in &impl_block.associated_types {
@@ -3638,7 +3638,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             type_table
                                 .borrow_mut()
-                                .make_type_param(named.name.clone(), idx as u32)
+                                .make_type_param(named.name.clone(), idx)
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
@@ -3654,7 +3654,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             let inner_param_id = type_table
                                 .borrow_mut()
-                                .make_type_param(ns.namespace.clone(), idx as u32);
+                                .make_type_param(ns.namespace.clone(), idx);
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,

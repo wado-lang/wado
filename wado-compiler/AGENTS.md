@@ -7,6 +7,9 @@ The Wado compiler crate.
 - Nothing in this crate writes to a stream: `println!`, `eprintln!` and `dbg!`
   are denied at the crate root. A user-facing message goes through `Logger` and
   a developer trace through `compiler_trace!`.
+- An `assert!` states an invariant the compiler establishes for itself. What a
+  source file can violate is a `Diagnostic`: a panic on user input is a crash,
+  whatever it asserts.
 - A phase error words itself once, in its `Diagnostic`. It carries no `Display`:
   nothing in the crate can print one, and a second wording drifts from the one
   the user reads. `Display` is for an error the CLI prints itself
