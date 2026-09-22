@@ -18,7 +18,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::scope::{BinderInScope, TypeParamScope, param_decl};
+use super::scope::{BinderInScope, ScopedBound, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
 use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
@@ -1099,10 +1099,11 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             // already realised in the parameter's type itself.
             let real_bounds = param.real_bounds();
             if !real_bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .insert(param.name.clone(), real_bounds);
+                let self_type = self.annotate_ctx.trait_ctx.self_type;
+                self.annotate_ctx.trait_ctx.type_param_bounds.insert(
+                    param.name.clone(),
+                    ScopedBound::pin_all(&real_bounds, self_type),
+                );
             }
             if consumed_index {
                 next_idx += 1;
@@ -1595,18 +1596,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .insert("Self".to_string(), BinderInScope::undeclared(0, self_slot));
         scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
             "Self".to_string(),
-            vec![ast::TraitBound {
-                // The trait's own declaration node, which the resolution walk
-                // answers for: `Self` here is bounded by this trait, and a
-                // fresh id would be a reference site nothing resolved.
-                id: trait_decl.id,
-                name: trait_decl.name.clone(),
-                type_args: Vec::new(),
-                assoc_types: Vec::new(),
-                span: trait_decl.span,
-                fn_signature: None,
-                resolved: None,
-            }],
+            vec![ScopedBound::new(
+                ast::TraitBound {
+                    // The trait's own declaration node, which the resolution walk
+                    // answers for: `Self` here is bounded by this trait, and a
+                    // fresh id would be a reference site nothing resolved.
+                    id: trait_decl.id,
+                    name: trait_decl.name.clone(),
+                    type_args: Vec::new(),
+                    assoc_types: Vec::new(),
+                    span: trait_decl.span,
+                    fn_signature: None,
+                    resolved: None,
+                },
+                Some(self_slot),
+            )],
         );
         scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
         let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);

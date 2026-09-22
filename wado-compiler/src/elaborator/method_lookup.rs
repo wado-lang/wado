@@ -1,6 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::BinderInScope;
+use super::scope::{BinderInScope, BoundSelf, ScopedBound};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
 use std::rc::Rc;
@@ -544,7 +544,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })?;
         // The same slots the dispatch binds, so the hint and the call agree on
         // what the bound means.
-        let slots = self.bound_slots(bound, trait_, self_type_id);
+        let written_self = BoundSelf::Frame(bound.self_type);
+        let slots = self.bound_slots(bound, trait_, self_type_id, written_self);
         let substituted = self
             .tysys
             .type_table
@@ -1359,7 +1360,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
             {
-                binding.bounds = param.bounds.clone();
+                // The declaration is a method's, so its `Self` is the receiver.
+                binding.bounds = ScopedBound::pin_all(&param.bounds, Some(receiver));
             }
         }
         bindings
@@ -2213,6 +2215,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_slot_params.len(),
                 method_type_param_ids.len()
             );
+            let self_type = scope.annotate_ctx.trait_ctx.self_type;
             for (type_param, &type_param_id) in
                 method_slot_params.iter().zip(method_type_param_ids.iter())
             {
@@ -2229,11 +2232,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     type_param_id,
                 );
                 if !type_param.bounds.is_empty() {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .insert(type_param.name.clone(), type_param.bounds.clone());
+                    scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
+                        type_param.name.clone(),
+                        ScopedBound::pin_all(&type_param.bounds, self_type),
+                    );
                 }
             }
 

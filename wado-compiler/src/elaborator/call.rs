@@ -18,7 +18,7 @@ use super::expr::BareCase;
 use super::infer::InferCtx;
 use super::instantiate::{Instantiated, Instantiation};
 use super::method_call::{PreselectedArg, StaticReceiver};
-use super::scope::{BinderInScope, Scope, TraitContext};
+use super::scope::{BinderInScope, Scope, ScopedBound, TraitContext};
 use super::sem::types::{CalleeParams, IndirectCallee, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::StaticQuery;
@@ -104,7 +104,7 @@ pub(super) struct DefaultTypeBinding {
     pub(super) name: String,
     /// What a default dispatching on the parameter has to go on where the
     /// argument is itself a parameter.
-    pub(super) bounds: Vec<ast::TraitBound>,
+    pub(super) bounds: Vec<ScopedBound>,
     pub(super) settled: SettledAs,
 }
 
@@ -135,7 +135,7 @@ impl SettledAs {
 /// What `enclosing` declares `type_id` is bound by, found through the name it
 /// knows the type under. Empty where it knows of no such name, which is every
 /// argument that is not one of its own parameters.
-fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ast::TraitBound> {
+fn enclosing_bounds_of(enclosing: &TraitContext, type_id: TypeId) -> Vec<ScopedBound> {
     enclosing
         .type_params
         .iter()
@@ -2445,8 +2445,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 } else {
                     SettledAs::Type(type_id)
                 },
+                // A free function's declaration binds no `Self`, so a bound of
+                // its own writes none.
+                bounds: ScopedBound::pin_all(&param.bounds, None),
                 name: param.name,
-                bounds: param.bounds,
             })
             .collect()
     }
@@ -2476,7 +2478,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // stands for a parameter of the enclosing scope, that parameter's are
         // the ones in force: `T` *is* the caller's `X` here, so it is bound by
         // whatever `X` is bound by.
-        let installed: Vec<Option<Vec<ast::TraitBound>>> = {
+        let installed: Vec<Option<Vec<ScopedBound>>> = {
             let table = scope.tysys.type_table.borrow();
             bindings
                 .iter()

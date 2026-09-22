@@ -20,6 +20,7 @@ use super::infer::InferCtx;
 use super::instantiate::Instantiation;
 use super::method_lookup::MethodInferenceInput;
 use super::reflect::ReflectDispatch;
+use super::scope::ScopedBound;
 use super::sem::types::{CalleeParams, StaticMethodDispatch};
 use super::sig::{MethodSig, Param};
 use super::static_call::{CandidateKind, Selector, StaticLookup, StaticQuery};
@@ -532,23 +533,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // would collapse them back into one.
                     let mut resolved: hashmap::IndexMap<AstId, FqTraitName> =
                         hashmap::IndexMap::default();
-                    let bounds: Vec<ast::TraitBound> = named
+                    // Each carries no written argument, so no frame answers for
+                    // one: `None` is the whole truth here, not a default.
+                    let bounds: Vec<ScopedBound> = named
                         .iter()
                         .map(|b| {
                             let id = AstId::fresh();
                             resolved.insert(id, b.clone());
-                            ast::TraitBound {
-                                id,
-                                name: b.base_name().to_string(),
-                                type_args: Vec::new(),
-                                assoc_types: Vec::new(),
-                                span,
-                                fn_signature: None,
-                                // The referent this bound was rebuilt from.
-                                // Recorded on the bound, so nothing has to
-                                // resolve `name` at an id the walk never saw.
-                                resolved: b.canonical(),
-                            }
+                            ScopedBound::new(
+                                ast::TraitBound {
+                                    id,
+                                    name: b.base_name().to_string(),
+                                    type_args: Vec::new(),
+                                    assoc_types: Vec::new(),
+                                    span,
+                                    fn_signature: None,
+                                    // The referent this bound was rebuilt from.
+                                    // Recorded on the bound, so nothing has to
+                                    // resolve `name` at an id the walk never saw.
+                                    resolved: b.canonical(),
+                                },
+                                None,
+                            )
                         })
                         .collect();
                     self.find_method_in_trait_bounds_with(

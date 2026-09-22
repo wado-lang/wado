@@ -14,7 +14,9 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::{BinderInScope, ElaboratedBound, Scope, TraitCheckFrame};
+use super::scope::{
+    BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
+};
 use super::sig::Param;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
@@ -2259,7 +2261,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written bound qualifies.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
@@ -2280,11 +2282,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The space `elaborated`'s written types are read in: empty for a bound the
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
     /// writes down to the trait that declared it.
-    fn bound_space(
-        &mut self,
-        bounds: &[ast::TraitBound],
-        elaborated: &ElaboratedBound,
-    ) -> ParamSpace {
+    fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
         let Some((root, via)) = elaborated.inherited.clone() else {
             return ParamSpace::new();
         };
@@ -2298,9 +2296,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         candidate: &BoundCandidate,
         self_type_id: TypeId,
     ) -> IndexMap<u32, TypeId> {
-        let BoundCandidate { bound, space, decl } = candidate;
-        let (bound, decl) = (bound.clone(), *decl);
-        self.in_space(space, |e| e.bound_slots(&bound, decl, self_type_id))
+        let BoundCandidate {
+            bound,
+            space,
+            decl,
+            written_self,
+        } = candidate;
+        let (bound, decl, written_self) = (bound.clone(), *decl, *written_self);
+        self.in_space(space, |e| {
+            e.bound_slots(&bound, decl, self_type_id, written_self)
+        })
     }
 
     /// One bound per trait declaration. Several bounds on one trait are one
@@ -2437,7 +2442,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// two same-named traits stay two bounds.
     pub(super) fn find_method_in_trait_bounds_with(
         &mut self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         known: &IndexMap<AstId, FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
@@ -2490,6 +2495,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bound: elaborated.bound,
                 space,
                 decl,
+                written_self: elaborated.self_type,
             });
         }
         let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
@@ -2528,7 +2534,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let (candidate, (sig, trait_assoc_types)) = resolved?;
-        let BoundCandidate { bound, space, decl } = candidate;
+        let BoundCandidate {
+            bound,
+            space,
+            decl,
+            written_self,
+        } = candidate;
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
@@ -2551,7 +2562,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        let slots = self.in_space(&space, |e| e.bound_slots(&bound, decl, self_type_id));
+        let slots = self.in_space(&space, |e| {
+            e.bound_slots(&bound, decl, self_type_id, written_self)
+        });
         let fq_trait_name = self.trait_named_from_slots(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
@@ -2809,7 +2822,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let bounds = param.bounds.clone();
+                let bounds = ScopedBound::pin_all(&param.bounds, self_binding.map(|b| b.type_id));
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
@@ -2837,15 +2850,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What the bound on `bounds` naming `root` writes for `root`'s own
     /// parameters, resolved here. Empty where none of them names it.
-    fn trait_args_of_bound(&mut self, bounds: &[ast::TraitBound], root: DefId) -> Vec<TypeId> {
-        let Some(written) = bounds
+    fn trait_args_of_bound(&mut self, bounds: &[ScopedBound], root: DefId) -> Vec<TypeId> {
+        let Some(found) = bounds
             .iter()
             .find(|bound| self.trait_decl_at(bound.id, &bound.name) == Some(root))
-            .map(|bound| bound.type_args.clone())
+            .cloned()
         else {
             return Vec::new();
         };
-        written.iter().map(|ty| self.resolve_type(ty)).collect()
+        let written = found.type_args.clone();
+        self.in_bound_frame(&found, &ParamSpace::new(), |e| {
+            written.iter().map(|ty| e.resolve_type(ty)).collect()
+        })
     }
 
     /// [`written_for`] over a call's type arguments. A parameter the call leaves
@@ -2950,22 +2966,33 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bound: &ast::TraitBound,
         decl: DefId,
         self_type_id: TypeId,
+        written_self: BoundSelf,
     ) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::from_iter([(0, self_type_id)]);
         let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
             return slots;
         };
-        let written: Vec<(u32, ast::Type)> = trait_params
+        // Slot 0 is the trait's own `Self`, which is `self_type_id`. An argument
+        // the bound wrote means whatever wrote it; one the declaration defaulted
+        // (`Eq<Rhs = Self>`) is written in the trait's space and means the
+        // bounded type.
+        let written: Vec<(u32, ast::Type, BoundSelf)> = trait_params
             .iter()
             .filter(|p| p.is_real_type_param())
             .enumerate()
-            .filter_map(|(i, p)| {
-                let ty = bound.type_args.get(i).or(p.default.as_ref())?;
-                Some((1 + i as u32, ty.clone()))
+            .filter_map(|(i, p)| match bound.type_args.get(i) {
+                Some(ty) => Some((1 + i as u32, ty.clone(), written_self)),
+                None => p
+                    .default
+                    .as_ref()
+                    .map(|ty| (1 + i as u32, ty.clone(), BoundSelf::Bounded)),
             })
             .collect();
-        for (slot, ty) in written {
-            let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&ty));
+        for (slot, ty, scope) in written {
+            let resolved = match scope.at(self_type_id) {
+                Some(self_type) => self.with_self_type(self_type, |s| s.resolve_type(&ty)),
+                None => self.resolve_type(&ty),
+            };
             slots.insert(slot, resolved);
         }
         slots
@@ -3220,7 +3247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
-                        .extend(param.bounds.clone());
+                        .extend(ScopedBound::pin_all(&param.bounds, Some(concrete_type_id)));
                 }
             }
 
@@ -3316,11 +3343,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 info.blanket_param_name.clone(),
                 BinderInScope::undeclared(0, concrete_type_id),
             );
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
+            scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
+                info.blanket_param_name.clone(),
+                ScopedBound::pin_all(&info.blanket_param_bounds, Some(concrete_type_id)),
+            );
 
             // Resolve and register each associated type
             let trait_key = info.trait_key;
@@ -3548,6 +3574,8 @@ struct BoundCandidate {
     bound: ast::TraitBound,
     space: ParamSpace,
     decl: DefId,
+    /// Whose `Self` the bound's written arguments mean.
+    written_self: BoundSelf,
 }
 
 /// Whether a bound's argument names no type by its spelling, being written

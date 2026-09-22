@@ -67,6 +67,72 @@ impl BinderInScope {
 pub(super) struct ElaboratedBound {
     pub(super) bound: ast::TraitBound,
     pub(super) inherited: Option<(DefId, Vec<ViaClause>)>,
+    /// Whose `Self` this bound's written types mean.
+    pub(super) self_type: BoundSelf,
+}
+
+/// Whose `Self` a bound's written types mean. The two cases are not the same
+/// type, so a reader that supplies one for the other resolves a projection off
+/// the wrong receiver (#2112).
+#[derive(Clone, Copy, Debug)]
+pub(super) enum BoundSelf {
+    /// The frame that wrote the bound; `None` where that frame binds no `Self`.
+    Frame(Option<TypeId>),
+    /// The type being bounded. A supertrait clause and a declared parameter
+    /// default are both written in the trait's own space, where `Self` is
+    /// whichever type the bound is standing on.
+    Bounded,
+}
+
+impl BoundSelf {
+    /// The `Self` to resolve under, for a bound standing on `bounded`.
+    pub(super) fn at(self, bounded: TypeId) -> Option<TypeId> {
+        match self {
+            Self::Frame(self_type) => self_type,
+            Self::Bounded => Some(bounded),
+        }
+    }
+}
+
+/// A bound together with the `Self` its written types mean.
+///
+/// A bound's arguments are written in the frame that declared the parameter,
+/// which is not the frame of whatever later reads them. Carrying that frame
+/// here is what keeps a reader from supplying its own (#2112).
+#[derive(Clone, Debug)]
+pub(super) struct ScopedBound {
+    pub(super) bound: ast::TraitBound,
+    /// `Self` where the bound was written. `None` in a frame that binds none,
+    /// where a `Self`-rooted spelling is rejected at the declaration.
+    pub(super) self_type: Option<TypeId>,
+}
+
+impl ScopedBound {
+    pub(super) fn new(bound: ast::TraitBound, self_type: Option<TypeId>) -> Self {
+        Self { bound, self_type }
+    }
+
+    /// Pin every bound in `bounds` to one frame's `Self`.
+    pub(super) fn pin_all(bounds: &[ast::TraitBound], self_type: Option<TypeId>) -> Vec<Self> {
+        bounds
+            .iter()
+            .cloned()
+            .map(|bound| Self::new(bound, self_type))
+            .collect()
+    }
+
+    /// The bounds alone, for a caller that only reads their spellings.
+    pub(super) fn bares(bounds: &[Self]) -> Vec<ast::TraitBound> {
+        bounds.iter().map(|b| b.bound.clone()).collect()
+    }
+}
+
+impl Deref for ScopedBound {
+    type Target = ast::TraitBound;
+
+    fn deref(&self) -> &ast::TraitBound {
+        &self.bound
+    }
 }
 
 /// The node in `params` that declares `name`, when one does. The caller picks
@@ -86,9 +152,10 @@ pub(super) struct TraitContext {
     /// Type parameters currently in scope. Set when resolving generic structs,
     /// functions, or impl blocks.
     pub(super) type_params: IndexMap<String, BinderInScope>,
-    /// Trait bounds on type parameters in scope (name → full bounds with assoc types).
-    /// Used for resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
-    pub(super) type_param_bounds: IndexMap<String, Vec<ast::TraitBound>>,
+    /// Trait bounds on type parameters in scope (name → full bounds with assoc
+    /// types), each paired with the `Self` its written types mean. Used for
+    /// resolving trait methods on type params (e.g., `T.cmp()` when T: Ord).
+    pub(super) type_param_bounds: IndexMap<String, Vec<ScopedBound>>,
     /// Associated type bindings in scope (`Self::Name` → resolved type).
     /// Set when resolving trait implementations.
     pub(super) assoc_type_bindings: IndexMap<String, TypeId>,
@@ -396,14 +463,21 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// back to the spelling and collapse two same-named traits.
     pub(super) fn elaborate_bounds_with(
         &self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         known: &IndexMap<AstId, FqTraitName>,
     ) -> Vec<ElaboratedBound> {
         // Each entry carries the declaration it merged on, so a bound that has
         // none — a `fn(..)` bound — cannot shift the ones after it.
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
-        for bound in bounds {
-            self.merge_bound(&mut out, bound, None, known);
+        for scoped in bounds {
+            let bound = &scoped.bound;
+            self.merge_bound(
+                &mut out,
+                bound,
+                None,
+                BoundSelf::Frame(scoped.self_type),
+                known,
+            );
             if bound.fn_signature.is_some() {
                 continue;
             }
@@ -411,10 +485,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 continue;
             };
             for inherited in self.supertraits_of_bound(bound, known) {
+                // A supertrait clause is written in the declaring trait's own
+                // space, not in the frame that wrote the bound reaching it.
                 self.merge_bound(
                     &mut out,
                     &inherited.bound,
                     Some((root, inherited.via)),
+                    BoundSelf::Bounded,
                     known,
                 );
             }
@@ -434,11 +511,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         out: &mut Vec<(ElaboratedBound, Option<DefId>)>,
         bound: &ast::TraitBound,
         inherited: Option<(DefId, Vec<ViaClause>)>,
+        self_type: BoundSelf,
         known: &IndexMap<AstId, FqTraitName>,
     ) {
         let entry = || ElaboratedBound {
             bound: bound.clone(),
             inherited: inherited.clone(),
+            self_type,
         };
         if bound.fn_signature.is_some() {
             if !out
@@ -551,7 +630,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> u32 {
         let mut idx = offset;
         for tp in params.iter().filter(|p| !p.is_effect) {
-            self.reject_self_in_bounds(tp);
             // `<F: fn(...)>` binds the parameter directly to the bound's function
             // type: the bound is surface syntax for "F is exactly this
             // signature". Such params consume no `TypeParam` index slot, keeping
@@ -580,7 +658,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // Filter out `fn`/`fn mut` bounds before recording (they're already
             // realised in the bound type itself); only "real" trait bounds need
             // remembering for method lookup.
-            let real_bounds = tp.real_bounds();
+            let real_bounds = self.scoped_bounds(tp);
             if !real_bounds.is_empty() {
                 self.annotate_ctx
                     .trait_ctx
@@ -594,11 +672,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         idx
     }
 
+    /// `param`'s real bounds, each pinned to the `Self` this frame binds — what
+    /// their written types mean, whatever frame later reads them.
+    fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
+        let self_type = self.annotate_ctx.trait_ctx.self_type;
+        self.reject_self_in_bounds(param, self_type);
+        param
+            .real_bounds()
+            .into_iter()
+            .map(|bound| ScopedBound::new(bound, self_type))
+            .collect()
+    }
+
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.
-    fn reject_self_in_bounds(&mut self, param: &ast::GenericParam) {
-        if self.annotate_ctx.trait_ctx.self_type.is_some() {
+    fn reject_self_in_bounds(&mut self, param: &ast::GenericParam, self_type: Option<TypeId>) {
+        if self_type.is_some() {
             return;
         }
         let written: Vec<Span> = param
@@ -658,12 +748,15 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             // trait, as `register_generic_params` reads it.
             let bounds = tp.real_bounds();
             if !bounds.is_empty() {
+                // The trait declared these bounds, so their `Self` is the
+                // trait's — which in this impl is the type being implemented.
+                let scoped = ScopedBound::pin_all(&bounds, self.annotate_ctx.trait_ctx.self_type);
                 self.annotate_ctx
                     .trait_ctx
                     .type_param_bounds
                     .entry(tp.name.clone())
                     .or_default()
-                    .extend(bounds);
+                    .extend(scoped);
             }
         }
     }
