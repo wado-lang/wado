@@ -87,13 +87,16 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
 pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::CondImplPostPromote, len) {
+        return false;
+    }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
-    let len = project.functions.len();
     gate.run_gated(GatedPass::CondImplPostPromote, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {

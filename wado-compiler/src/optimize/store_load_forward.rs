@@ -26,13 +26,16 @@ use crate::tir::TypeTable;
 /// Forwards stores to loads in the functions `gate` still holds. The only pass
 /// after `field_scalarize`, so its shadow inits (`$hfs_x = obj.f`) fold here.
 pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::StoreLoadForward, len) {
+        return false;
+    }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let mut buffers = EngineBuffers::default();
-    let len = project.functions.len();
     gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         forward_one(

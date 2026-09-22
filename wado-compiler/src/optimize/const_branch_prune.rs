@@ -47,11 +47,14 @@ pub fn prune_template_block_wrappers(project: &mut NirPackage, gate: &mut Functi
 }
 
 fn run_rule(project: &mut NirPackage, mode: PruneMode, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::BranchPrune, len) {
+        return false;
+    }
     let rule = BranchPruneRule::new(mode);
     let mut buffers = EngineBuffers::default();
     let type_table = project.type_table.borrow();
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    let len = project.functions.len();
     gate.run_gated(GatedPass::BranchPrune, len, |fid| {
         let mut func = project.functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;

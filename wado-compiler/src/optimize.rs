@@ -367,7 +367,7 @@ const POST_LOOP_FIXPOINT_CAP: u32 = 100;
 /// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
 ///
 /// `step` gets a gate of the fixpoint's own: round 0 processes every function,
-/// each later round what the one before rewrote and its 1-hop neighbours.
+/// each later round processes what the one before rewrote and its neighbours.
 fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
