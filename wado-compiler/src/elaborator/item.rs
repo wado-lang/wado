@@ -21,14 +21,8 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
-<<<<<<< HEAD
 use super::trait_query::SelfBinding;
-use super::types::{FunctionContext, ReceivedPosition, TypeError};
-||||||| e8ddf204e
-use super::types::{FunctionContext, ReceivedPosition, TypeError};
-=======
 use super::types::{FunctionContext, TypeError};
->>>>>>> origin/main
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
