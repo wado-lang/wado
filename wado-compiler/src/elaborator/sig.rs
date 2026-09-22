@@ -113,6 +113,17 @@ impl Signatures {
         self.data_sections.get(module).map(String::as_str)
     }
 
+    /// Which trait this `impl` block implements, `None` for an inherent one.
+    pub(crate) fn impl_trait(&self, impl_def: DefId) -> Option<DefId> {
+        self.impl_sig(impl_def)?.trait_decl
+    }
+
+    /// Which trait declared `sig`'s method, where an `impl` block of one does.
+    /// A default it wrote means that trait's `Self`, whatever frame calls it.
+    pub(crate) fn declaring_trait(&self, sig: &MethodSig) -> Option<DefId> {
+        self.impl_trait(sig.declaring_impl?)
+    }
+
     /// Make a trait-`impl` method's parameters say what its trait declared,
     /// value and type parameters alike, names included: only the trait may
     /// declare a default (WEP 2026-04-11), and a default names its neighbours
@@ -123,8 +134,7 @@ impl Signatures {
             .values()
             .filter(|sig| !sig.params.is_empty() || !sig.own_params.is_empty())
             .filter_map(|sig| {
-                let trait_decl = self.impl_sig(sig.declaring_impl?)?.trait_decl?;
-                let declaring = self.trait_sig(trait_decl)?;
+                let declaring = self.trait_sig(self.declaring_trait(sig)?)?;
                 let declared = declaring.method(defs.name(sig.def))?;
                 Some((
                     sig.def,

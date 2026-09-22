@@ -22,6 +22,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitu
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
+use super::method_lookup::ImplParamSlots;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
     RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
@@ -3658,8 +3659,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if param_slots.is_empty() {
                     continue;
                 }
-                let param_at =
-                    |name: &str| param_slots.iter().enumerate().find(|(_, p)| p.name == name);
+                let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
+                let param_at = |name: &str| {
+                    let param = param_slots.iter().find(|p| p.name == name)?;
+                    Some((slots.of_name(name)?, param))
+                };
 
                 for binding in &impl_block.associated_types {
                     let type_param_id = match &binding.ty {
@@ -3670,7 +3674,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             type_table
                                 .borrow_mut()
-                                .make_type_param(named.name.clone(), idx as u32)
+                                .make_type_param(named.name.clone(), idx)
                         }
                         // Chained case: `type Item = I::InnerName` — I is a type param
                         Type::NamespacedGeneric(ns) if ns.args.is_empty() => {
@@ -3686,7 +3690,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                             };
                             let inner_param_id = type_table
                                 .borrow_mut()
-                                .make_type_param(ns.namespace.clone(), idx as u32);
+                                .make_type_param(ns.namespace.clone(), idx);
                             type_table.borrow_mut().make_assoc_type_projection(
                                 inner_param_id,
                                 owning_trait,

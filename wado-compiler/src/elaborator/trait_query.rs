@@ -15,7 +15,11 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::scope::{BinderInScope, ElaboratedBound, Scope, TraitCheckFrame};
+use super::method_lookup::ImplParamSlots;
+use super::scope::{
+    BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
+    trait_params_from_impl,
+};
 use super::sig::Param;
 use super::trait_env::{InheritedBound, ViaClause};
 use super::type_resolution::ParamSpace;
@@ -240,10 +244,25 @@ fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
 
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
 /// trait whose declaration wrote the constraint.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) struct SelfBinding {
     pub(super) type_id: TypeId,
     pub(super) declaring_trait: Option<DefId>,
+}
+
+impl TypeSystem {
+    /// [`SelfBinding`] for a call on `receiver`, read past its references to
+    /// the type an `impl` block targets.
+    pub(super) fn base_self_binding(
+        &self,
+        receiver: TypeId,
+        declaring_trait: Option<DefId>,
+    ) -> SelfBinding {
+        SelfBinding {
+            type_id: self.get_base_type(receiver),
+            declaring_trait,
+        }
+    }
 }
 
 /// The recorded declaration facts of the trait `decl` declares, for a caller
@@ -454,7 +473,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .trait_assoc_type_decl(&trait_decl, &binding.name)
                 .into_iter()
                 .flat_map(|decl| &decl.bounds)
-                .filter(|bound| bound.fn_signature.is_none())
+                .filter(|bound| bound.names_a_trait())
                 .map(|bound| self.tysys.bound_named_written(bound))
                 .collect();
             if bounds.is_empty() {
@@ -512,7 +531,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect();
-        let (_, args) = self.trait_params_at_impl(&params, &arg_ids, self_type);
+        let (_, args) = self.trait_params_at_impl(
+            &params,
+            &arg_ids,
+            SelfBinding {
+                type_id: self_type,
+                declaring_trait: Some(trait_decl),
+            },
+        );
         for (decl, bound, via) in clauses {
             let named = self
                 .tysys
@@ -563,7 +589,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         written: &[TypeId],
-        target: TypeId,
+        target: SelfBinding,
     ) -> (Vec<String>, Vec<TypeId>) {
         let mut names: Vec<String> = Vec::new();
         let mut args: Vec<TypeId> = Vec::new();
@@ -575,7 +601,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     break;
                 };
                 let (settled_names, settled_args) = (names.clone(), args.clone());
-                self.with_self_type(target, |e| {
+                self.with_self_binding(target, |e| {
                     e.with_type_param_args(&settled_names, &settled_args, |e| {
                         e.resolve_type(&default)
                     })
@@ -590,20 +616,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// `trait_` with every argument that reads an associated type resolved at
     /// `type_args`, what the site answers for `params`. `T::Assoc` denotes no
     /// type until `T` is one, so re-spelling it at the site drops its base.
-    fn bound_trait_at_args(
+    pub(super) fn bound_trait_at_args(
         &mut self,
         trait_: FqTraitName,
         bound: &ast::TraitBound,
         params: &[ast::GenericParam],
         type_args: &[TypeId],
+        self_binding: Option<SelfBinding>,
     ) -> FqTraitName {
-        let pick = self.args_reading_a_projection(bound, params);
+        let pick = self.args_reading_a_projection(bound, params, self_binding);
         if !pick.contains(&true) {
             return trait_;
         }
         let names: Vec<String> = params.iter().map(|param| param.name.clone()).collect();
         self.with_type_params_bound(&names, type_args, |e| {
-            e.trait_named_with_resolved_args(trait_, bound, &pick)
+            e.under_self_binding(self_binding, |e| {
+                e.trait_named_with_resolved_args(trait_, bound, &pick)
+            })
         })
     }
 
@@ -613,19 +642,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// resolves it at its own arguments rather than re-spelling it
     /// (WEP-2026-08-12).
     ///
-    /// Matched by the binder the projection stands on, not by its spelling. A
-    /// base the site does not supply — `Self` above all — answers only where it
-    /// is bound, which is not here.
+    /// Matched by the binder the projection stands on, not by its spelling.
+    /// `Self` is the one base no binder carries, and a receiver is what supplies
+    /// it, so an argument mentioning it is read only where one is bound.
     fn args_reading_a_projection(
         &self,
         bound: &ast::TraitBound,
         params: &[ast::GenericParam],
+        self_binding: Option<SelfBinding>,
     ) -> Vec<bool> {
         let binders: Vec<AstId> = params.iter().map(|param| param.id).collect();
         bound
             .type_args
             .iter()
-            .map(|ty| self.reads_a_projection(ty, &binders))
+            .map(|ty| {
+                self.reads_a_projection(ty, &binders)
+                    || (self_binding.is_some() && ty.mentions("Self"))
+            })
             .collect()
     }
 
@@ -1479,12 +1512,10 @@ impl TypeSystem {
             .chain(sig.decl.return_type.iter())
             .any(|t| table.contains_type_param_index(*t, 0));
         in_types
-            || sig.own_params.iter().any(|p| {
-                p.bounds
-                    .iter()
-                    .flat_map(|b| &b.assoc_types)
-                    .any(|c| c.ty.mentions("Self"))
-            })
+            || sig
+                .own_params
+                .iter()
+                .any(|p| p.bounds.iter().any(ast::TraitBound::writes_self))
     }
 
     fn type_implements_trait_inner(
@@ -1665,17 +1696,13 @@ impl TypeSystem {
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".
-            ResolvedType::BuiltinArray(elem) => (
+            ResolvedType::BuiltinArray(_) => (
                 FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
-                Some(vec![*elem]),
+                self.impl_position_args(type_id),
             ),
-            ResolvedType::GenericInstance { type_args, .. } => (
+            ResolvedType::GenericInstance { .. } => (
                 self.type_table.borrow().fq_base_type_name(type_id),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
+                self.impl_position_args(type_id),
             ),
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity
@@ -1692,7 +1719,7 @@ impl TypeSystem {
                     Some(type_id),
                     &Receiver::Ref(RefKind::Shared),
                     decl,
-                    Some(&[inner_id]),
+                    self.impl_position_args(type_id).as_deref(),
                     NewtypePeel::Follow,
                     wanted,
                 ) {
@@ -1714,7 +1741,7 @@ impl TypeSystem {
                     Some(type_id),
                     &Receiver::Ref(RefKind::Mut),
                     decl,
-                    Some(&[inner_id]),
+                    self.impl_position_args(type_id).as_deref(),
                     NewtypePeel::Follow,
                     wanted,
                 ) {
@@ -1873,6 +1900,7 @@ impl TypeSystem {
                         scope,
                         &header.type_params,
                         &header.ty,
+                        subject,
                         type_args,
                     )
                 {
@@ -2280,7 +2308,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// written bound qualifies.
     pub(super) fn find_method_in_trait_bounds(
         &mut self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         method_name: &str,
         self_type_id: TypeId,
         span: Span,
@@ -2301,11 +2329,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// The space `elaborated`'s written types are read in: empty for a bound the
     /// frame wrote itself, and for an inherited one the chain from what `bounds`
     /// writes down to the trait that declared it.
-    fn bound_space(
-        &mut self,
-        bounds: &[ast::TraitBound],
-        elaborated: &ElaboratedBound,
-    ) -> ParamSpace {
+    fn bound_space(&mut self, bounds: &[ScopedBound], elaborated: &ElaboratedBound) -> ParamSpace {
         let Some((root, via)) = elaborated.inherited.clone() else {
             return ParamSpace::new();
         };
@@ -2319,9 +2343,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         candidate: &BoundCandidate,
         self_type_id: TypeId,
     ) -> IndexMap<u32, TypeId> {
-        let BoundCandidate { bound, space, decl } = candidate;
-        let (bound, decl) = (bound.clone(), *decl);
-        self.in_space(space, |e| e.bound_slots(&bound, decl, self_type_id))
+        let BoundCandidate {
+            bound,
+            space,
+            decl,
+            written_self,
+        } = candidate;
+        let (bound, decl, written_self) = (bound.clone(), *decl, *written_self);
+        self.in_space(space, |e| {
+            e.bound_slots(&bound, decl, self_type_id, written_self)
+        })
     }
 
     /// One bound per trait declaration. Several bounds on one trait are one
@@ -2458,7 +2489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// two same-named traits stay two bounds.
     pub(super) fn find_method_in_trait_bounds_with(
         &mut self,
-        bounds: &[ast::TraitBound],
+        bounds: &[ScopedBound],
         known: &IndexMap<AstId, FqTraitName>,
         method_name: &str,
         self_type_id: TypeId,
@@ -2511,6 +2542,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 bound: elaborated.bound,
                 space,
                 decl,
+                written_self: elaborated.self_type,
             });
         }
         let candidates = self.one_bound_per_trait(candidates, method_name, self_type_id, args);
@@ -2549,7 +2581,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             });
         }
         let (candidate, (sig, trait_assoc_types)) = resolved?;
-        let BoundCandidate { bound, space, decl } = candidate;
+        let BoundCandidate {
+            bound,
+            space,
+            decl,
+            written_self,
+        } = candidate;
         // The bound answers with the trait its own reference site resolves to,
         // not the spelling it wrote: an aliased bound (`T: G` for
         // `use { Greet as G }`) must reach the impl that defines the method.
@@ -2572,7 +2609,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
 
         let answers = self.trait_assoc_answers(&trait_assoc_types, self_type_id);
-        let slots = self.in_space(&space, |e| e.bound_slots(&bound, decl, self_type_id));
+        let slots = self.in_space(&space, |e| {
+            e.bound_slots(&bound, decl, self_type_id, written_self)
+        });
         let fq_trait_name = self.trait_named_from_slots(fq_trait_name, &bound, &slots);
         let instantiated = sig.decl.instantiate_slots_with(
             &self.tysys.type_table,
@@ -2624,25 +2663,21 @@ impl TypeSystem {
             _ => vec![type_arg],
         }
     }
-    /// Check if an impl block's type parameter bounds are satisfied by the given type args.
-    /// For `impl<T: Ord> List<T>`, checks that the concrete type substituted for T implements Ord.
+    /// Whether what the receiver substitutes for an `impl` block's parameters
+    /// satisfies their bounds: `impl<T: Ord> List<T>` wants an `Ord` element.
     pub(super) fn check_impl_block_bounds(
         &self,
         ctx: &Scope,
         scope: &TypeLookup,
         type_params: &[ast::GenericParam],
         impl_ty: &ast::Type,
+        receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         // No type params with bounds → always OK
         if type_params.iter().all(|p| p.bounds.is_empty()) {
             return true;
         }
-
-        let Some(type_args) = type_args else {
-            // No type args to check (non-generic receiver) → skip bounds check
-            return true;
-        };
 
         // The bound's own site says which trait it names and what it writes for
         // that trait's parameters, so the check compares declarations rather
@@ -2661,17 +2696,25 @@ impl TypeSystem {
             })
             .collect();
 
-        // Match type params to receiver type args via generic type arg positions
-        let inner_type_name: Option<&str> =
-            if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty {
-                if let ast::Type::Named(inner) = boxed.as_ref() {
-                    Some(&inner.name)
-                } else {
-                    None
-                }
-            } else {
-                None
+        // `impl<T: Bound> Trait for &T` writes no position, so `T` stands for
+        // the receiver's pointee rather than for an argument of it.
+        if let ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) = impl_ty
+            && let ast::Type::Named(inner) = boxed.as_ref()
+        {
+            let Some(bounds) = bounds_map.get(inner.name.as_str()) else {
+                return true;
             };
+            let Some(pointee) = receiver.and_then(|id| self.pointee_of(id)) else {
+                return true;
+            };
+            return self.bounds_hold(ctx, scope, pointee, bounds);
+        }
+
+        let Some(type_args) = type_args else {
+            // An existence or bounds check that threaded no positions has
+            // nothing to compare against.
+            return true;
+        };
 
         if let ast::Type::Generic(generic) = impl_ty {
             for (i, arg) in generic.args.iter().enumerate() {
@@ -2682,15 +2725,6 @@ impl TypeSystem {
                 {
                     return false;
                 }
-            }
-        } else if let Some(inner_name) = inner_type_name {
-            // Handle `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`:
-            // type_args[0] is the inner type T.
-            if let Some(bounds) = bounds_map.get(inner_name)
-                && let Some(&type_arg) = type_args.first()
-                && !self.bounds_hold(ctx, scope, type_arg, bounds)
-            {
-                return false;
             }
         } else if let ast::Type::Tuple(elements) = impl_ty {
             // Variadic tuple impl (`impl<..T: Trait> Trait for [..T]`, e.g.
@@ -2785,14 +2819,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            for bound in &param.bounds.clone() {
-                if bound.fn_signature.is_some() {
-                    continue;
-                }
+            for bound in &param.real_bounds() {
                 let written = self
                     .tysys
                     .bound_written(bound)
-                    .map(|trait_| self.bound_trait_at_args(trait_, bound, params, type_args))
+                    .map(|trait_| {
+                        self.bound_trait_at_args(trait_, bound, params, type_args, self_binding)
+                    })
                     .and_then(|trait_| asked_at(trait_, &at_call));
                 for &subject in &subjects {
                     self.enforce_single_bound_args(
@@ -2828,7 +2861,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let bounds = param.bounds.clone();
+                let bounds = ScopedBound::pin_declared(param, self_binding);
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
@@ -2856,15 +2889,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
     /// What the bound on `bounds` naming `root` writes for `root`'s own
     /// parameters, resolved here. Empty where none of them names it.
-    fn trait_args_of_bound(&mut self, bounds: &[ast::TraitBound], root: DefId) -> Vec<TypeId> {
-        let Some(written) = bounds
+    fn trait_args_of_bound(&mut self, bounds: &[ScopedBound], root: DefId) -> Vec<TypeId> {
+        let Some(found) = bounds
             .iter()
             .find(|bound| self.trait_decl_at(bound.id, &bound.name) == Some(root))
-            .map(|bound| bound.type_args.clone())
+            .cloned()
         else {
             return Vec::new();
         };
-        written.iter().map(|ty| self.resolve_type(ty)).collect()
+        self.in_bound_frame(&found, &ParamSpace::new(), |e| {
+            found
+                .type_args
+                .iter()
+                .map(|ty| e.resolve_type(ty))
+                .collect()
+        })
     }
 
     /// [`written_for`] over a call's type arguments. A parameter the call leaves
@@ -2886,8 +2925,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether one concrete type argument meets one trait bound — the primitive
     /// every enforcement path funnels through. Registers the associated types on
     /// success, raises `TraitBoundNotSatisfied` on failure.
-    /// [`Self::enforce_single_bound`] for a bound writing arguments for the
-    /// trait's own parameters.
     pub(super) fn enforce_single_bound_args(
         &mut self,
         type_arg: TypeId,
@@ -2969,29 +3006,38 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         bound: &ast::TraitBound,
         decl: DefId,
         self_type_id: TypeId,
+        written_self: BoundSelf,
     ) -> IndexMap<u32, TypeId> {
         let mut slots = IndexMap::from_iter([(0, self_type_id)]);
         let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
             return slots;
         };
-        let written: Vec<(u32, ast::Type)> = trait_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .enumerate()
-            .filter_map(|(i, p)| {
-                let ty = bound.type_args.get(i).or(p.default.as_ref())?;
-                Some((1 + i as u32, ty.clone()))
-            })
-            .collect();
-        for (slot, ty) in written {
-            let resolved = self.with_self_type(self_type_id, |s| s.resolve_type(&ty));
+        // Slot 0 is the trait's `Self`. An argument the bound wrote means
+        // whatever wrote it; a defaulted one (`Eq<Rhs = Self>`) is written in
+        // the trait's space and means the bounded type.
+        let written: Vec<(u32, ast::Type, BoundSelf)> =
+            trait_params_from_impl(&trait_params, &bound.type_args, None)
+                .into_iter()
+                .filter(|supplied| supplied.takes_a_slot)
+                .filter_map(|supplied| match supplied.arg {
+                    Some(ty) => Some((supplied.slot, ty.clone(), written_self)),
+                    None => supplied
+                        .param
+                        .default
+                        .as_ref()
+                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded)),
+                })
+                .collect();
+        for (slot, ty, scope) in written {
+            let resolved =
+                self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
             slots.insert(slot, resolved);
         }
         slots
     }
 
     /// Check a bound's associated-type constraints (`T: Collect<Item = i32>`)
-    /// against the type argument. Runs after [`Self::enforce_single_bound`],
+    /// against the type argument. Runs after [`Self::enforce_single_bound_args`],
     /// which is what registers the argument's bindings.
     fn enforce_assoc_type_bounds(
         &mut self,
@@ -3153,8 +3199,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Collect matching impl block info (avoids borrow conflicts during resolution)
         struct ImplInfo {
-            type_params: Vec<ast::GenericParam>,
-            impl_ty_param_names: Vec<String>,
+            /// Each declared parameter and where the target names it, so the
+            /// instantiation binds it by position. `None` where the target
+            /// does not name it, leaving bounds with no binder to pair with.
+            type_params: Vec<(ast::GenericParam, Option<u32>)>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this block implements, as its own header names it —
             /// the key the registration must use.
@@ -3174,20 +3222,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     };
                     if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
-                        let impl_ty_param_names: Vec<String> = match &header.ty {
-                            ast::Type::Generic(g) => g
-                                .args
-                                .iter()
-                                .filter_map(|arg| {
-                                    if let ast::Type::Named(named) = arg {
-                                        Some(named.name.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect(),
-                            _ => vec![],
-                        };
+                        // The receiver is keyed by head, so every impl on
+                        // `List<_>` answers here, including ones implementing
+                        // an instantiation this one contradicts.
+                        if !self
+                            .tysys
+                            .inherent_impl_type_args_match(&header.ty, Some(&concrete_type_args))
+                        {
+                            continue;
+                        }
+                        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
+                        let type_params: Vec<(ast::GenericParam, Option<u32>)> = header
+                            .type_params
+                            .iter()
+                            .map(|param| (param.clone(), slots.of_name(&param.name)))
+                            .collect();
                         let Some(trait_key) = header
                             .fq_trait(&self.tysys.resolutions)
                             .and_then(|t| t.canonical())
@@ -3198,8 +3247,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             continue;
                         };
                         result.push(ImplInfo {
-                            type_params: header.type_params.clone(),
-                            impl_ty_param_names,
+                            type_params,
                             assoc_types: header.associated_types.clone(),
                             trait_key,
                             trait_type,
@@ -3215,31 +3263,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut scope = self.enter_inherited_type_param_scope();
 
             // `Self` in `type Output = Self;` is the type being registered for,
-            // not whatever the enclosing frame was implementing.
-            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
+            // not whatever the enclosing frame was implementing — and the trait
+            // it projects `Self::Assoc` off is the one this block implements.
+            let implementing = SelfBinding {
+                type_id: concrete_type_id,
+                declaring_trait: Some(info.trait_key),
+            };
+            scope.set_self_binding(implementing);
 
-            // Bind impl type params to concrete type args.
-            // For `impl<T> IntoIterator for List<T>` with List<u8>:
-            // impl_ty_param_names = ["T"], concrete_type_args = [u8_typeid]
-            // → set current_type_params["T"] = (0, u8_typeid)
-            for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
-                if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    scope.annotate_ctx.trait_ctx.type_params.insert(
-                        tp_name.clone(),
-                        BinderInScope::undeclared(i as u32, concrete_arg),
-                    );
-                }
-            }
-            // Add bounds from type param declarations
-            for param in &info.type_params {
-                if !param.bounds.is_empty() {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .entry(param.name.clone())
-                        .or_default()
-                        .extend(param.bounds.clone());
+            // `impl<T> IntoIterator for List<T>` registering for `List<u8>`
+            // binds `T` to `u8`: the slot is where the target names it.
+            for (param, slot) in &info.type_params {
+                let bounds = ScopedBound::pin_declared(param, Some(implementing));
+                let bound_to = slot.and_then(|slot| {
+                    let &arg = concrete_type_args.get(slot as usize)?;
+                    Some(BinderInScope::undeclared(slot, arg))
+                });
+                match bound_to {
+                    Some(binder) => scope.bind_param(&param.name, binder, bounds),
+                    None => scope.add_param_bounds(&param.name, bounds),
                 }
             }
 
@@ -3327,19 +3369,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for info in blanket_infos {
             let mut scope = self.enter_inherited_type_param_scope();
 
-            // Bind the blanket type param to the concrete type
-            // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
-            // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
-            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
-            scope.annotate_ctx.trait_ctx.type_params.insert(
-                info.blanket_param_name.clone(),
+            // A blanket's target is its parameter, so the type registered for
+            // is what both `Self` and that parameter stand for.
+            let implementing = SelfBinding {
+                type_id: concrete_type_id,
+                declaring_trait: Some(info.trait_key),
+            };
+            scope.set_self_binding(implementing);
+            scope.bind_param(
+                &info.blanket_param_name,
                 BinderInScope::undeclared(0, concrete_type_id),
+                ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
-            scope
-                .annotate_ctx
-                .trait_ctx
-                .type_param_bounds
-                .insert(info.blanket_param_name.clone(), info.blanket_param_bounds);
 
             // Resolve and register each associated type
             let trait_key = info.trait_key;
@@ -3567,6 +3608,8 @@ struct BoundCandidate {
     bound: ast::TraitBound,
     space: ParamSpace,
     decl: DefId,
+    /// Whose `Self` the bound's written arguments mean.
+    written_self: BoundSelf,
 }
 
 /// Whether a bound's argument names no type by its spelling, being written

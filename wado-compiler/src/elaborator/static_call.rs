@@ -686,7 +686,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     .tysys
                     .trait_env
                     .fq_trait_of_impl(header, &self.tysys.resolutions)?;
-                let trait_decl = self.tysys.signatures.impl_sig(impl_def)?.trait_decl?;
+                let trait_decl = self.tysys.signatures.impl_trait(impl_def)?;
                 let build = |method_id, kind, origin, selector| Candidate {
                     supply: Some(TraitSupply {
                         impl_def,
@@ -737,7 +737,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .filter_map(|blanket| {
                 let header = self.tysys.trait_env.impl_headers.get(&blanket.def)?;
                 let method_id = header.methods.iter().find(|m| m.name == method_name)?.def;
-                let trait_decl = self.tysys.signatures.impl_sig(blanket.def)?.trait_decl?;
+                let trait_decl = self.tysys.signatures.impl_trait(blanket.def)?;
                 Some(Candidate {
                     supply: Some(TraitSupply {
                         impl_def: blanket.def,

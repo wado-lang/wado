@@ -1,0 +1,47 @@
+// A method's type parameter shadowing its impl's. The name takes a new meaning,
+// so what the impl's parameter was bounded by goes with the old one: keeping it
+// would dispatch `tag` on both traits and report an ambiguity the source does
+// not have.
+
+trait Alpha with () {
+    fn tag(&self) -> i32;
+}
+
+trait Beta with () {
+    fn tag(&self) -> i32;
+}
+
+struct A {}
+
+impl Alpha for A {
+    fn tag(&self) -> i32 {
+        return 1;
+    }
+}
+
+struct B {}
+
+impl Beta for B {
+    fn tag(&self) -> i32 {
+        return 2;
+    }
+}
+
+struct Box2<T> {
+    v: T,
+}
+
+impl<T: Alpha> Box2<T> {
+    #[allow(shadowed_name)]
+    fn run<T: Beta>(&self, t: T) -> i32 {
+        return t.tag();
+    }
+}
+
+test "a shadowing method parameter carries only its own bounds" {
+    let b = Box2 { v: A {} };
+    assert b.run(B {}) == 2;
+}
+
+__DATA__
+{"test": {}}

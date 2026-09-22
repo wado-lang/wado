@@ -1,0 +1,24 @@
+// `Self` under an `fn` bound in a free function's parameter list. An `fn` bound
+// names no trait, but it writes types, and one rooted at `Self` is as unbound
+// here as in a trait argument: a free function binds no implementing type.
+
+trait Src with () {
+    type Item;
+}
+
+struct H {}
+
+impl Src for H {
+    type Item = i32;
+}
+
+fn drive<T: Src, F: fn(Self::Item) -> i32>(t: &T, f: F) -> i32 {
+    return f(1);
+}
+
+test "Self under an fn bound in a free function is rejected" {
+    assert drive(&H {}, |x| x + 1) == 2;
+}
+
+__DATA__
+{"test": {}, "compile_error": "names no implementing type here"}

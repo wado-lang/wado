@@ -5,7 +5,7 @@ use crate::compiler_host::CompilerHost;
 use crate::tir::TypeTable;
 
 use super::Elaborator;
-use super::scope::BinderInScope;
+use super::scope::{BinderInScope, ScopedBound};
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamSlot,
     RealTypeParams, StructFieldInfo, VariantCaseData, VariantInfo,
@@ -362,6 +362,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     // associated type projections can be resolved in the return type.
                     let mut method_type_param_names: Vec<String> = Vec::new();
                     let offset = scope.annotate_ctx.trait_ctx.type_params.len();
+                    let self_binding = scope.self_binding();
                     for (i, param) in method.type_params.iter().enumerate() {
                         let idx = (offset + i) as u32;
                         let type_id = scope.tysys.type_table.borrow_mut().make_declared_param(
@@ -369,17 +370,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             idx,
                             param.is_pack,
                         );
-                        scope.annotate_ctx.trait_ctx.type_params.insert(
-                            param.name.clone(),
+                        scope.bind_param(
+                            &param.name,
                             BinderInScope::declared(idx, type_id, param.id),
+                            ScopedBound::pin_declared(param, self_binding),
                         );
-                        if !param.bounds.is_empty() {
-                            scope
-                                .annotate_ctx
-                                .trait_ctx
-                                .type_param_bounds
-                                .insert(param.name.clone(), param.bounds.clone());
-                        }
                         method_type_param_names.push(param.name.clone());
                     }
 

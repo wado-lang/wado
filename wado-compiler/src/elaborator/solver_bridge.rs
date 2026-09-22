@@ -1258,20 +1258,22 @@ impl SolverBridge {
         (out, variants)
     }
 
-    /// The question `type_implements_trait` answered, as the solver reads it;
-    /// `None` where the lowering states nothing about it.
-    /// The bounds in force where a question is asked, and the parameter names
-    /// they are indexed by. A generic body's `T: Tr` holds because its own
-    /// signature says so, not because any impl exists, so no query about `T`
-    /// can be answered from the program alone. `None` where a bound names a
-    /// trait the lowering never interned, which the caller reads as "outside
-    /// what the lowering states".
-    fn env_at(&self, tysys: &TypeSystem, ctx: &scope::Scope) -> Option<(Env, Vec<String>)> {
+    /// `type_id` lowered, and the bounds in force around it. `None` where a
+    /// bound the lowering cannot state is on a parameter this receiver mentions:
+    /// its list is short of what the source declares, and answering from a short
+    /// list says more than the lowering saw.
+    fn env_for(
+        &self,
+        tysys: &TypeSystem,
+        ctx: &scope::Scope,
+        type_id: TypeId,
+    ) -> Option<(Env, SolverType)> {
         // Every parameter in scope takes a position, bounded or not: an
         // unbounded `T` still appears in a receiver such as `Array<T>`, and a
         // receiver the environment cannot place lowers to nothing.
         let mut env = Env::default();
-        for name in ctx.trait_ctx.type_params.keys() {
+        let mut unstated = Vec::new();
+        for (position, name) in ctx.trait_ctx.type_params.keys().enumerate() {
             let mut ids = Vec::new();
             for bound in ctx
                 .trait_ctx
@@ -1280,28 +1282,40 @@ impl SolverBridge {
                 .into_iter()
                 .flatten()
             {
-                let def = bound
+                let stated = bound
                     .resolved
-                    .or_else(|| tysys.resolutions.declared(bound.id))?;
-                // A bound whose arguments the lowering cannot say leaves the
-                // whole scope outside what it states, rather than a bound that
-                // would answer at arguments it never read.
-                let args = tysys
-                    .bound_written(bound)?
-                    .args()
-                    .iter()
-                    .map(|arg| self.lowering.named_arg(arg))
-                    .collect::<Option<Vec<_>>>()?;
-                ids.push(ParamBound {
-                    trait_: self.lowering.known_trait(def)?,
-                    args,
-                });
+                    .or_else(|| tysys.resolutions.declared(bound.id))
+                    .and_then(|def| {
+                        let args = tysys
+                            .bound_written(bound)?
+                            .args()
+                            .iter()
+                            .map(|arg| self.lowering.named_arg(arg))
+                            .collect::<Option<Vec<_>>>()?;
+                        Some(ParamBound {
+                            trait_: self.lowering.known_trait(def)?,
+                            args,
+                        })
+                    });
+                match stated {
+                    Some(bound) => ids.push(bound),
+                    None => unstated.push(position as u32),
+                }
             }
             env.param_bounds.push(ids);
         }
-        Some((env, ctx.trait_ctx.type_params.keys().cloned().collect()))
+        let names: Vec<String> = ctx.trait_ctx.type_params.keys().cloned().collect();
+        let ty =
+            self.lowering
+                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
+        unstated
+            .iter()
+            .all(|&position| !ty.mentions_param(position))
+            .then_some((env, ty))
     }
 
+    /// The question `type_implements_trait` answered, as the solver reads it;
+    /// `None` where the lowering states nothing about it.
     fn question(
         &self,
         tysys: &TypeSystem,
@@ -1318,10 +1332,7 @@ impl SolverBridge {
             return None;
         }
         let trait_ = self.lowering.known_trait(decl)?;
-        let (env, names) = self.env_at(tysys, ctx)?;
-        let ty =
-            self.lowering
-                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
         // A head the program names without members is one `derive` never saw,
         // so only the compiler answers for it.
         if ty.mentions_decl(&|h| self.lowering.opaque_heads.contains(&h)) {
@@ -1380,10 +1391,7 @@ impl SolverBridge {
             Some(def) => Some(self.lowering.known_trait(def)?),
             None => None,
         };
-        let (env, names) = self.env_at(tysys, ctx)?;
-        let ty =
-            self.lowering
-                .type_id(&tysys.type_table.borrow(), type_id, &param_index(&names))?;
+        let (env, ty) = self.env_for(tysys, ctx, type_id)?;
         let ty = match through_ref {
             Some(is_mut) => SolverType::Ref {
                 is_mut,
@@ -1482,7 +1490,7 @@ impl SolverBridge {
                     },
                 )
         };
-        // Positions are `env_at`'s: every parameter in scope, in order.
+        // Positions are `env_for`'s: every parameter in scope, in order.
         let env: Vec<(&String, Vec<String>)> = ctx
             .trait_ctx
             .type_params
@@ -1545,7 +1553,7 @@ pub(super) enum Ordered {
     Duplicated(Vec<Option<DefId>>),
 }
 
-/// Where each type parameter sits in the environment [`SolverBridge::env_at`]
+/// Where each type parameter sits in the environment [`SolverBridge::env_for`]
 /// built, which is what gives a rigid parameter its [`SolverType::Param`].
 fn param_index(names: &[String]) -> impl Fn(&str, u32) -> Option<u32> + '_ {
     move |name: &str, _: u32| {

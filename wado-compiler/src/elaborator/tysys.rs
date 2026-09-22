@@ -380,15 +380,7 @@ impl TypeSystem {
 
     /// Peel reference / mutable-reference wrappers to reach the underlying type.
     pub(crate) fn get_base_type(&self, type_id: TypeId) -> TypeId {
-        let mut current = type_id;
-        loop {
-            match self.type_table.borrow().get(current).clone() {
-                ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => {
-                    current = inner;
-                }
-                _ => return current,
-            }
-        }
+        self.type_table.borrow().peel_refs(type_id)
     }
 
     /// Whether `type_id` is a kind that participates in `Eq`/`Ord` auto-derive.

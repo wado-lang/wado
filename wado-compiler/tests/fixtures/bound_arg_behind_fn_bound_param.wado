@@ -1,0 +1,27 @@
+// A trait parameter behind an `fn`-bound one, read through a bound. A written
+// argument counts every parameter a site may write; a slot counts only those a
+// substitution fills, and an `fn`-bound parameter takes the first and not the
+// second. Reading one numbering for the other types `a: A` as the fn type.
+
+trait FnFirst<F: fn(i32) -> i32, A: Default> with () {
+    fn apply(&self, f: F, a: A) -> String;
+}
+
+struct Runner {}
+
+impl FnFirst<fn(i32) -> i32, i32> for Runner {
+    fn apply(&self, f: fn(i32) -> i32, a: i32) -> String {
+        return `${f(a)}`;
+    }
+}
+
+fn drive<T: FnFirst<fn(i32) -> i32, i32>>(t: &T) -> String {
+    return t.apply(|x| x + 1, 41);
+}
+
+test "a trait argument behind an fn-bound parameter, through a bound" {
+    assert drive(&Runner {}) == "42";
+}
+
+__DATA__
+{"test": {}}

@@ -1,0 +1,40 @@
+// A trait method's own bound may write `Self::Assoc` as a trait argument, and
+// `Self::Item` is the only spelling for the trait's associated type there — no
+// parameter names it.
+
+trait Uses<A> with () {
+    fn go(&self, a: A) -> i32;
+}
+
+trait Host with () {
+    type Item;
+
+    fn run<O: Uses<Self::Item>>(&self, o: &O, a: Self::Item) -> i32;
+}
+
+struct Worker {}
+
+impl Uses<i32> for Worker {
+    fn go(&self, a: i32) -> i32 {
+        return a * 2;
+    }
+}
+
+struct H {
+    n: i32,
+}
+
+impl Host for H {
+    type Item = i32;
+
+    fn run<O: Uses<i32>>(&self, o: &O, a: i32) -> i32 {
+        return self.n + o.go(a);
+    }
+}
+
+test "Self::Assoc as a trait argument in a trait method's bound" {
+    assert H { n: 1 }.run(&Worker {}, 2) == 5;
+}
+
+__DATA__
+{"test": {}}
