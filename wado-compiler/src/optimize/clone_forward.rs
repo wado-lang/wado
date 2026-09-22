@@ -500,7 +500,7 @@ pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut Descriptor
             continue;
         }
         let rule = CloneForwardRule {
-            descriptors: &descriptors,
+            descriptors,
             fpt: &fpt,
             type_table: &type_table,
         };

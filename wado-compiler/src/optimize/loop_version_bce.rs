@@ -154,7 +154,7 @@ pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCach
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
         let mut filled = false;
         for (plan, arm) in plans.iter().zip(&fast_arms) {
-            filled |= try_fill_idiom(&mut engine, &binds, &descriptors, fill_id, plan, arm);
+            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
         }
         if filled {
             engine.run(&rules);

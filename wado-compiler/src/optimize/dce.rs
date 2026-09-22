@@ -2172,7 +2172,7 @@ pub(super) fn unhoist_unobserved_globals(
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
-        descriptors: &descriptors,
+        descriptors,
         types: &types,
         effects,
         inert_functions: IndexSet::default(),
