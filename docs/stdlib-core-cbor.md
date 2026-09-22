@@ -55,7 +55,8 @@ Equal values produce byte-identical output regardless of map insertion order
 — use this for COSE/CWT signing or content addressing.
 
 Float caveat: nothing here emits a binary16, so the canonical float ladder
-stops at binary32. Output is byte-identical to a reference encoder for
+stops at binary32. Output is byte-identical to a reference deterministic
+encoder for
 integers, lengths, and map order, but may differ on float-bearing values.
 
 ### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`

@@ -2,7 +2,7 @@ global mut heap_offset: i32 = 8;
 
 global PAGE_SIZE: i32 = 65536;
 
-global NEG_ZERO_BITS: i64 = -9223372036854775808;
+global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
 global POW10: List<u64> = deferred null;
 
@@ -15,6 +15,14 @@ pub global PARSE_DIGITS_MAX: i32 = 19;
 pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
+
+global F16_SIGN: u16 = 32768;
+
+global F16_EXP: u16 = 31744;
+
+global F16_MANTISSA: u16 = 1023;
+
+global F16_SUBNORMAL_MAGIC: u32 = 947912704;
 
 global LOW32: u64 = 4294967295;
 
@@ -1374,6 +1382,14 @@ pub struct "VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/
     is_unit: bool,
 }
 
+pub struct "Box<f16>" {
+    value: f16,
+}
+
+pub struct "Box<bf16>" {
+    value: bf16,
+}
+
 pub struct "Box<bool>" {
     value: bool,
 }
@@ -1536,6 +1552,14 @@ pub struct "Box<core:prelude/types.wado/Result<core:prelude/string.wado/String,c
 
 pub struct "Box<core:prelude/types.wado/Option<f64>>" {
     value: Option<f64>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>" {
+    value: Result<f16, ConvertError>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>" {
+    value: Result<bf16, ConvertError>,
 }
 
 pub struct "Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>>" {
@@ -2265,6 +2289,14 @@ pub fn f64_reinterpret_i64(i: i64) -> f64;
 pub fn i32_reinterpret_f32(f: f32) -> i32;
 
 pub fn f32_reinterpret_i32(i: i32) -> f32;
+
+pub fn u16_reinterpret_f16(f: f16) -> u16;
+
+pub fn f16_reinterpret_u16(i: u16) -> f16;
+
+pub fn u16_reinterpret_bf16(f: bf16) -> u16;
+
+pub fn bf16_reinterpret_u16(i: u16) -> bf16;
 
 pub fn unreachable() -> !;
 
@@ -3068,7 +3100,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 123 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 124 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: greeting == \"Hello, Wado!\"\n", used: 39 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"greeting: ", used: 10 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3092,7 +3124,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 126 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 127 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.len() == 4\n", used: 30 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"primes: ", used: 8 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3121,7 +3153,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 127 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 128 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.get(1) matches { Some(v) && v == 3 }\n", used: 56 });
                 break $tmpl: $r;
             });
@@ -3142,7 +3174,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 128 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 129 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.get(9) matches { None }\n", used: 43 });
                 break $tmpl: $r;
             });
@@ -3164,7 +3196,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 131 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 132 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: decoded matches { Ok(s) && s == \"Wado\" }\n", used: 53 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"decoded: ", used: 9 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3754,7 +3786,7 @@ pub fn log2_pow10(x: i32) -> i32 {
 }
 
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
+    let bits: u64 = Box<f64> { value: f }.f64::to_bits();
     let mantissa_mask: u64 = 4503599627370495;
     let exp_mask: u64 = 2047;
     let shift: i32 = 11;
@@ -3777,7 +3809,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
+    let bits: u32 = Box<f32> { value: f }.f32::to_bits();
     let mantissa_mask: u32 = 8388607;
     let exp_mask: u32 = 255;
     let shift: i32 = 40;
@@ -4446,18 +4478,18 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 }
 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
-    let bits: i64 = Box<f64> { value: f }.f64::to_bits();
+    let bits: u64 = Box<f64> { value: f }.f64::to_bits();
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
     if (bits == core::prelude/fpfmt.wado::NEG_ZERO_BITS) {
         return [true, true, SpecialKind::Zero];
     }
-    let is_neg: bool = (bits < 0);
-    let exp_mask: i64 = 9218868437227405312;
+    let is_neg: bool = ((bits & core::prelude/fpfmt.wado::NEG_ZERO_BITS) != 0);
+    let exp_mask: u64 = 9218868437227405312;
     if ((bits & exp_mask) == exp_mask) {
         core::builtin::cold_path();
-        let mantissa_mask: i64 = 4503599627370495;
+        let mantissa_mask: u64 = 4503599627370495;
         if ((bits & mantissa_mask) != 0) {
             return [true, false, SpecialKind::NaN];
         }
@@ -4469,11 +4501,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52: u64 = 4503599627370496;
     if ((m & bit52) == 0) {
-        return "core::prelude/primitive.wado::f64::from_bits"(m as i64);
+        return "core::prelude/primitive.wado::f64::from_bits"(m);
     }
     let mantissa_bits: u64 = (m & ~bit52);
     let exp_bits: u64 = ((1075 + e) as u64 << 52);
-    return "core::prelude/primitive.wado::f64::from_bits"((mantissa_bits | exp_bits) as i64);
+    return "core::prelude/primitive.wado::f64::from_bits"((mantissa_bits | exp_bits));
 }
 
 pub fn parse(d: u64, p: i32) -> f64 {
@@ -4842,6 +4874,105 @@ pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Display::fm
         };
     };
 }
+
+pub fn f16::to_bits(self: Box<f16>) -> u16 {
+    return core::builtin::u16_reinterpret_f16(self.value);
+}
+
+pub fn bf16::to_bits(self: Box<bf16>) -> u16 {
+    return core::builtin::u16_reinterpret_bf16(self.value);
+}
+
+fn "f32^core:prelude/traits.wado/From<f16>::from"(value: f16) -> f32 {
+    let bits: u16 = Box<f16> { value: value }.f16::to_bits();
+    let sign: u32 = ((bits & core::prelude/half.wado::F16_SIGN) as u32 << 16);
+    let exp: u32 = ((bits & core::prelude/half.wado::F16_EXP) as u32 >> 10);
+    let mantissa: u32 = (bits & core::prelude/half.wado::F16_MANTISSA) as u32;
+    if (exp == 0) {
+        if (mantissa == 0) {
+            return "core::prelude/primitive.wado::f32::from_bits"(sign);
+        }
+        let magic: f32 = "core::prelude/primitive.wado::f32::from_bits"(core::prelude/half.wado::F16_SUBNORMAL_MAGIC);
+        let shifted: f32 = "core::prelude/primitive.wado::f32::from_bits"((core::prelude/half.wado::F16_SUBNORMAL_MAGIC | (mantissa << 13)));
+        return "core::prelude/primitive.wado::f32::from_bits"((sign | Box<f32> { value: (shifted - magic) }.f32::to_bits()));
+    }
+    if (exp == 31) {
+        return "core::prelude/primitive.wado::f32::from_bits"(((sign | 2139095040) | (mantissa << 13)));
+    }
+    return "core::prelude/primitive.wado::f32::from_bits"(((sign | ((exp + 112) << 23)) | (mantissa << 13)));
+}
+
+fn "f32^core:prelude/traits.wado/From<bf16>::from"(value: bf16) -> f32 {
+    return "core::prelude/primitive.wado::f32::from_bits"((Box<bf16> { value: value }.bf16::to_bits() as u32 << 16));
+}
+
+pub fn "f16^core:prelude/traits.wado/Display::fmt"(self: Box<f16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "bf16^core:prelude/traits.wado/Display::fmt"(self: Box<bf16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "f16^core:prelude/traits.wado/Inspect::inspect"(self: Box<f16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
+}
+
+pub fn "bf16^core:prelude/traits.wado/Inspect::inspect"(self: Box<bf16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
+}
+
+pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
+
+pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
+pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
+
+pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
+
+pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
+
+pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
 pub fn "core:prelude/int128.wado/u128::from_u64"(value: u64) -> u128 {
     return u128 { low: value, high: 0 };
@@ -6452,8 +6583,12 @@ fn f32::fmt_exp(self: Box<f32>, precision: i32, upper: i32, f: &mut Formatter) {
     Box<f64> { value: v64 }.f64::fmt_exp(precision, upper, f);
 }
 
-pub fn f32::to_bits(self: Box<f32>) -> i32 {
-    return core::builtin::i32_reinterpret_f32(self.value);
+pub fn f32::to_bits(self: Box<f32>) -> u32 {
+    return core::builtin::i32_reinterpret_f32(self.value) as u32;
+}
+
+pub fn f32::from_bits(bits: u32) -> f32 {
+    return core::builtin::f32_reinterpret_i32(bits as i32);
 }
 
 fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
@@ -6633,12 +6768,12 @@ fn f64::fmt_exp(self: Box<f64>, precision: i32, upper: i32, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::apply_padding"(mark);
 }
 
-pub fn f64::to_bits(self: Box<f64>) -> i64 {
-    return core::builtin::i64_reinterpret_f64(self.value);
+pub fn f64::to_bits(self: Box<f64>) -> u64 {
+    return core::builtin::i64_reinterpret_f64(self.value) as u64;
 }
 
-pub fn f64::from_bits(bits: i64) -> f64 {
-    return core::builtin::f64_reinterpret_i64(bits);
+pub fn f64::from_bits(bits: u64) -> f64 {
+    return core::builtin::f64_reinterpret_i64(bits as i64);
 }
 
 pub fn "()^core:prelude/traits.wado/Display::fmt"(self: &(), f: &mut Formatter) {
@@ -11819,6 +11954,94 @@ pub fn "$variant_tag$core:prelude/types.wado/Option<f64>"(self: Box<core:prelude
     return $variant_tag(self.value);
 }
 
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$f16"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>, index: i32) -> f16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$f16"(payload: f16, index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        0 => Result<f16, ConvertError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>, index: i32) -> ConvertError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        1 => Result<f16, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$bf16"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>, index: i32) -> bf16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$bf16"(payload: bf16, index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        0 => Result<bf16, ConvertError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>, index: i32) -> ConvertError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        1 => Result<bf16, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
 pub fn "$case_extract$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>$core:prelude/int128.wado/u128"(v: Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>>, index: i32) -> u128 {
     if ($variant_tag(v.value) != index) {
         core::builtin::unreachable();
@@ -15899,6 +16122,22 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,cor
     return match v {
         Ok($vc_payload_0) => Result<u128, ParseIntError>::Ok("ops.mess_dirty.wado::$value_copy$core:prelude/int128.wado/u128"($vc_payload_0)),
         Err($vc_payload_1) => Result<u128, ParseIntError>::Err("ops.mess_dirty.wado::$value_copy$core:prelude/intparse.wado/ParseIntError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>"(v: Result<bf16, ConvertError>) -> Result<bf16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<bf16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<bf16, ConvertError>::Err("ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>"(v: Result<f16, ConvertError>) -> Result<f16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f16, ConvertError>::Err("ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
     };
 }
 

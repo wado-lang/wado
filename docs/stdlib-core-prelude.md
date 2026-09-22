@@ -2688,7 +2688,7 @@ Use `f16::try_from` where an inexact value should be refused instead.
 
 #### `pub fn is_nan(&self) -> bool`
 
-True where the value is a NaN in either encoding.
+True for a NaN, quiet or signaling.
 
 #### `impl TryFrom<f32> for f16`
 
@@ -2723,7 +2723,7 @@ exponent range, so nothing overflows and nothing becomes subnormal.
 
 #### `pub fn is_nan(&self) -> bool`
 
-True where the value is a NaN in either encoding.
+True for a NaN, quiet or signaling.
 
 #### `impl TryFrom<f32> for bf16`
 
