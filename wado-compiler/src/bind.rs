@@ -647,8 +647,13 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
         span: Span,
     ) -> Result<(), Bail> {
         match pattern {
-            Pattern::Ident { name, .. } | Pattern::MutIdent { name, .. } => {
+            Pattern::Ident { name, .. } => {
                 self.define(name, is_mut, is_reactive, span)?;
+            }
+            // `let Some(mut n) = …` and `let { mut x } = …` carry the `mut` on
+            // the binding, where the statement's own is on every binding.
+            Pattern::MutIdent { name, .. } => {
+                self.define(name, true, is_reactive, span)?;
             }
             Pattern::Tuple(patterns, _) => {
                 for p in patterns {
@@ -668,13 +673,16 @@ impl<'a, H: CompilerHost> Binder<'a, H> {
                     self.bind_let_pattern(first, is_mut, is_reactive, span)?;
                 }
             }
-            Pattern::Literal(_)
-            | Pattern::Variant { .. }
-            | Pattern::Range { .. }
-            | Pattern::Error(_) => {
-                // Literal, variant, and range patterns are not valid in let statements
-                // This would be caught by the type checker.
-                // Pattern::Error is a parser recovery placeholder: nothing to bind.
+            // A `let ... else` takes a refutable pattern, and its bindings
+            // escape to the enclosing scope (WEP 2026-07-22).
+            Pattern::Variant { bindings, .. } => {
+                for p in bindings {
+                    self.bind_let_pattern(p, is_mut, is_reactive, span)?;
+                }
+            }
+            Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Error(_) => {
+                // An irrefutable `let` cannot carry these, and a `let ... else`
+                // binds nothing through one. `Error` is a parser placeholder.
             }
         }
         Ok(())
