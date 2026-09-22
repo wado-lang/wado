@@ -50,13 +50,29 @@ unchanged.
 
 ### Neither type crosses a component boundary
 
-The Component Model has no half precision type. Lowering one as a `u16` would
-put a bit pattern on the wire under a name that says integer, and no other
-language's bindings would read it back as a float.
+The Component Model has no half precision type. Its `defvaltype` runs from
+`bool` through the integer widths to `f32` and `f64`, and nothing narrower is
+proposed. Lowering one as a `u16` would put a bit pattern on the wire under a
+name that says integer, and no other language's bindings would read it back as
+a float.
 
 So an `export fn` naming either type is a compile error, as it is for `v128`,
 and a WIT emission naming one is refused. A component that wants to carry those
 bytes declares a `list<u16>`.
+
+### The representation does not wait on the FP16 proposal
+
+Core Wasm's half precision proposal is at phase 2. It adds an `f16` SIMD lane
+type, and it states that f16, like i8 and i16, is not a first class value type.
+No version of it gives Wado an f16 local, parameter or global. Wasm 3.0's
+packed storage types are `i8` and `i16`, and the proposal adds none, so a GC
+array of half precision values is an array of `i16` whatever ships.
+
+So `u16` in every position is settled rather than provisional, and so are the
+refusal at the component boundary and the whole API above it. What the proposal
+would reach is the body of the widening and of `from_f32`, one prelude function
+each. Its conversions run between `f16x8` and `f32x4`, and its scalar
+`f32.load_f16` reads linear memory, which is not where a `List<f16>` lives.
 
 ### What the compiler knows
 
@@ -199,9 +215,22 @@ module that exports one has to widen it or hand out its bytes.
 float-bearing values. The type it needed now exists; the encoder does not use
 it.
 
-`core:simd` and `wasi:webgpu` know nothing of these types. There is no half
-precision lane type in `v128`, and a GPU buffer of f16 is bytes on the Wado
-side.
+`core:simd` has no `f16x8`, so nothing widens eight weights at once. The FP16
+proposal's lane operations are where that would come from, and Loam's CPU arm
+is the caller that would ask for it.
+
+A `List<f16>` cannot be viewed as bytes. `AsByteSlice` covers the byte-element
+sequences and `String`, and WasmGC offers no way to read an `array i16` as an
+`array i8`, so anything that takes bytes takes a copy. `wasi:webgpu` writes a
+buffer from a `List<u8>`, which puts that copy between a tensor and the GPU.
+
+WGSL's `f16` is behind the `shader-f16` feature, which requires 16-bit access
+in uniform and storage buffers. Qualcomm devices do not offer that access, so
+the feature is unavailable there however well the hardware computes in f16.
+`unpack2x16float` is core WGSL and needs no feature.
+
+Neither WGSL nor the FP16 proposal has a bf16 type, so widening bf16 is a shift
+wherever it runs.
 
 The narrower dtypes stay out of the type system altogether. int4 packs two
 elements to a byte with a scale per block, and f8 ships with its scales too;
