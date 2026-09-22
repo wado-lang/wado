@@ -895,13 +895,13 @@ fn span_end<H: CompilerHost>(host: &H, name: &str) {
 /// which kept the Kiln driver's `?` flow free and avoided an extra
 /// `async fn` wrapper that would otherwise inflate the layout depth
 /// of `compile::run` past rustc's default recursion limit.
-struct KilnSpan<'a, H: CompilerHost> {
+pub(crate) struct KilnSpan<'a, H: CompilerHost> {
     host: &'a H,
     name: String,
 }
 
 impl<'a, H: CompilerHost> KilnSpan<'a, H> {
-    fn new(host: &'a H, name: impl Into<String>) -> Self {
+    pub(crate) fn new(host: &'a H, name: impl Into<String>) -> Self {
         let name = name.into();
         span_start(host, &name);
         Self { host, name }

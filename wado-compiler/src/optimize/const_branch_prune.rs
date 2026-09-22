@@ -4,12 +4,15 @@
 //! constant-condition folding to `const_folding`. The in-loop run rides the
 //! unified [`super::peephole`] session; the two standalone entries keep theirs.
 
+use cranelift_entity::EntityRef;
+
 use crate::nir::NirFunction;
 use crate::nir_arena::{
     BlockId, BlockRole, Body, ExprId, ExprKind, NodeRef, Operand, StmtId, StmtKind,
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
+use crate::optimize::gate::{FunctionGate, GatedPass};
 
 use super::arena_query::has_break_to;
 use crate::nir_value_graph::ValueKind;
@@ -32,36 +35,38 @@ impl PruneMode {
     }
 }
 
-/// Prune constant branches and simplify trivial blocks in all functions.
-/// Standalone engine session for the post-globalization cleanup caller; the
-/// in-loop run goes through [`super::peephole`] instead.
-pub fn prune_constant_branches(project: &mut NirPackage) -> bool {
-    run_rule(project, PruneMode::Fixpoint)
+/// Prunes constant branches and trivial blocks in the functions `gate` holds,
+/// in a standalone engine session; the in-loop run is [`super::peephole`].
+pub fn prune_constant_branches(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    run_rule(project, PruneMode::Fixpoint, gate)
 }
 
 /// Final post-fixpoint pass that flattens the template wrappers left standing.
-pub fn prune_template_block_wrappers(project: &mut NirPackage) -> bool {
-    run_rule(project, PruneMode::PostFixpoint)
+pub fn prune_template_block_wrappers(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    run_rule(project, PruneMode::PostFixpoint, gate)
 }
 
-fn run_rule(project: &mut NirPackage, mode: PruneMode) -> bool {
+fn run_rule(project: &mut NirPackage, mode: PruneMode, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::BranchPrune, len) {
+        return false;
+    }
     let rule = BranchPruneRule::new(mode);
-    let mut changed = false;
     let mut buffers = EngineBuffers::default();
     let type_table = project.type_table.borrow();
     let pure_builtin_callees = project.pure_builtin_callee_ids();
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    gate.run_gated(GatedPass::BranchPrune, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         let NirFunction { body, locals, .. } = &mut *func;
-        if let Some(body) = body.as_mut() {
-            let mut engine = Engine::new(body, &mut buffers, locals);
-            // A pruned break value that is a promoted constant is re-materialized.
-            engine.set_value_graph_type_table(&type_table);
-            engine.set_pure_builtin_callees(&pure_builtin_callees);
-            changed |= engine.run(&[&rule]);
-        }
-    }
-    changed
+        let Some(body) = body.as_mut() else {
+            return false;
+        };
+        let mut engine = Engine::new(body, &mut buffers, locals);
+        // A pruned break value that is a promoted constant is re-materialized.
+        engine.set_value_graph_type_table(&type_table);
+        engine.set_pure_builtin_callees(&pure_builtin_callees);
+        engine.run(&[&rule])
+    })
 }
 
 /// Engine rule for constant branch pruning. `mode` decides what
