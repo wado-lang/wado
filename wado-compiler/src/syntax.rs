@@ -366,9 +366,10 @@ impl SyntaxDefinition {
             builtin_types: vec![
                 "String",
                 "List",
+                "Dict",
+                "Fn",
                 "Option",
                 "Result",
-                "Default",
                 "Eq",
                 "Ord",
                 "Ordering",

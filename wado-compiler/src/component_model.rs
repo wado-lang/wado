@@ -501,7 +501,9 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
         PrimitiveType::F64 => CmScalarType::F64,
         PrimitiveType::Bool => CmScalarType::Bool,
         PrimitiveType::Char => CmScalarType::Char,
-        _ => return None,
+        // The Component Model's `defvaltype` stops at `f32` / `f64` and has
+        // nothing 128 bits wide, so these cross no boundary.
+        PrimitiveType::F16 | PrimitiveType::Bf16 | PrimitiveType::V128 => return None,
     })
 }
 

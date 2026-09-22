@@ -170,10 +170,6 @@ preserves the value.
 
 ### What is deliberately absent
 
-`Eq` and `Ord`, because a comparison of bit patterns is not a comparison of
-floats: it answers that `-0.0` differs from `+0.0` and that a NaN equals
-itself. A comparison widens first and compares as `f32`.
-
 Float literal coercion. `let x: f16 = 1.5;` would need the compiler to round,
 which means writing the prelude's `from_f32` a second time in Rust, and the two
 copies would drift. A literal value is written as its bits.
@@ -190,6 +186,12 @@ of it is committed work.
 
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
+
+No `Eq` or `Ord`. `==` on a half is a compile error, and so is one on a struct
+carrying a half field, since the derivation needs the field's own `Eq`.
+Comparing either means widening to `f32` first. A bitwise comparison would not
+answer the question a float comparison asks: it says `-0.0` differs from `+0.0`,
+and that a NaN equals itself.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.

@@ -3214,7 +3214,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
             PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
             PrimitiveType::Char => Some((0, 0x0010_FFFF)),
-            _ => None,
+            // No integer literal lands on these, so none has a range to check.
+            PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::F16
+            | PrimitiveType::Bf16
+            | PrimitiveType::Bool
+            | PrimitiveType::V128 => None,
         }
     }
 
