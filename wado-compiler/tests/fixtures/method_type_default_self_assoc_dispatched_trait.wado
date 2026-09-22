@@ -1,0 +1,58 @@
+// A method's type-parameter default may write `Self::Assoc`. The trait that
+// declares the name is the one the call dispatched to, not whatever trait the
+// calling frame happens to be implementing. Two traits declaring `Item` on one
+// receiver is what tells them apart.
+
+trait Named with () {
+    type Item;
+
+    fn name(&self) -> String;
+}
+
+trait Maker with () {
+    type Item;
+
+    fn make<T: Default = Self::Item>(&self, v: T = T::default()) -> String;
+}
+
+struct Wrap<A> {
+    a: A,
+}
+
+impl<A> Named for Wrap<A> {
+    type Item = bool;
+
+    fn name(&self) -> String {
+        return "wrap";
+    }
+}
+
+impl<A> Maker for Wrap<A> {
+    type Item = i32;
+
+    fn make<T: Default>(&self, v: T) -> String {
+        return `${v:?}`;
+    }
+}
+
+struct Caller {}
+
+// The frame is implementing `Named`, so its `Self::Item` is `bool`. The call
+// below dispatches to `Maker`, whose `Item` is `i32`.
+impl Named for Caller {
+    type Item = bool;
+
+    fn name(&self) -> String {
+        let w: Wrap<i32> = Wrap { a: 1 };
+        return w.make();
+    }
+}
+
+test "a method type default writing Self::Assoc reads the dispatched trait" {
+    let w: Wrap<i32> = Wrap { a: 1 };
+    assert w.make() == "0";
+    assert Caller {}.name() == "0";
+}
+
+__DATA__
+{"test": {}}

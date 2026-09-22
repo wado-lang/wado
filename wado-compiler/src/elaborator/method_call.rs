@@ -789,6 +789,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &method_own_params,
                 &method_type_param_ids,
                 base_type_id,
+                trait_name.as_ref().and_then(FqTraitName::canonical),
                 known,
                 defaults_module.clone(),
             );
@@ -1778,6 +1779,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut arg_spans: Vec<Span> = static_call.args.iter().map(Expr::span).collect();
 
         let declaring_impl = callee_sig.as_ref().and_then(|sig| sig.declaring_impl);
+        let declaring_trait = callee_sig
+            .as_ref()
+            .and_then(|sig| self.tysys.signatures.declaring_trait(sig));
         let own_type_param_ids = callee_sig
             .as_ref()
             .map(MethodSig::own_type_param_ids)
@@ -1891,6 +1895,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &own_params,
                 &own_type_param_ids,
                 target_type_id,
+                declaring_trait,
                 method_type_args.clone(),
                 static_method_module.clone(),
             )
@@ -3753,11 +3758,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Some(sig) => {
                 let own_ids = sig.own_type_param_ids();
                 let own_params = sig.own_params.clone();
+                let declaring_trait = self.tysys.signatures.declaring_trait(sig);
                 let receiver = self.resolve_unsited_type_name(&actual_struct_name, span);
                 self.value_default_slot_bindings(
                     &own_params,
                     &own_ids,
                     receiver,
+                    declaring_trait,
                     method_type_args.to_vec(),
                     callee_params.defaults_module.clone(),
                 )

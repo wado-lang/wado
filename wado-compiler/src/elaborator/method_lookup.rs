@@ -1350,6 +1350,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let defaults = self.resolve_method_type_param_defaults(
             method_type_params,
             receiver_type,
+            trait_decl,
             slots,
             declaring_module,
         );
@@ -1384,6 +1385,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
+        declaring_trait: Option<DefId>,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
     ) -> Vec<Option<TypeId>> {
@@ -1392,7 +1394,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
-        self.with_self_binding(self.self_binding_on(receiver_type), |s| {
+        let declaring = SelfBinding {
+            type_id: receiver_type,
+            declaring_trait,
+        };
+        self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1418,6 +1424,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         own_params: &[ast::GenericParam],
         own_ids: &[TypeId],
         receiver: TypeId,
+        declaring_trait: Option<DefId>,
         mut known: Vec<TypeId>,
         declaring_module: Option<ModuleSource>,
     ) -> Vec<DefaultTypeBinding> {
@@ -1429,6 +1436,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.method_type_args_for_value_defaults(
             own_params,
             receiver,
+            declaring_trait,
             own_ids,
             declaring_module,
             &mut known,
@@ -1438,7 +1446,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // holds, never what it is — so `U::default()` dispatches on its bound
         // rather than on a receiver. The declaration wrote that bound, and
         // nothing at the call site carries it.
-        let receiver_self = Some(self.self_binding_on(receiver));
+        let receiver_self = Some(SelfBinding {
+            type_id: receiver,
+            declaring_trait,
+        });
         for binding in &mut bindings {
             if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
@@ -1461,6 +1472,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         method_type_params: &[ast::GenericParam],
         receiver_type: TypeId,
+        declaring_trait: Option<DefId>,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         known: &mut [TypeId],
@@ -1477,6 +1489,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let defaults = self.resolve_method_type_param_defaults(
             method_type_params,
             receiver_type,
+            declaring_trait,
             slots,
             declaring_module,
         );
