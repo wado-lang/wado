@@ -334,6 +334,16 @@ fn run_program_args_keep_second_separator() {
     assert_eq!(opts.program_args, vec!["--", "arg"]);
 }
 
+/// A `--` ahead of the input has already ended `wado run`'s options, so the one
+/// after it is the guest's own.
+#[test]
+fn run_program_args_separator_before_input() {
+    let parser = Parser::from_args(&["--", "input.wado", "--", "arg"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.input, "input.wado");
+    assert_eq!(opts.program_args, vec!["--", "arg"]);
+}
+
 #[test]
 fn run_help() {
     let parser = Parser::from_args(&["--help"]);

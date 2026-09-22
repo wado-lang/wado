@@ -32,7 +32,7 @@ fn function_key(func: &TirFunction) -> FunctionId {
 /// The traits `lower` dispatches to from a node that names no callee — a match
 /// pattern, a wide-int literal comparison, a `builtin::variant_tag` marker — so
 /// an impl of one is reachable however unreachable the call graph says it is.
-const MINTABLE: [CompilerItem; 3] = [
+const MINTABLE: &[CompilerItem] = &[
     CompilerItem::Eq,
     CompilerItem::Ord,
     CompilerItem::ReflectVariant,
@@ -48,11 +48,9 @@ fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
         .collect()
 }
 
-/// The exports the emitted component keeps, matching `optimize::dce`'s entries,
-/// plus what a later phase may call without any TIR body naming it: a compiler
-/// item the compiler resolves itself, a per-type synthesized bridge, a global
-/// initializer, which `lower` splices into `$initialize_module`, and an impl of
-/// a trait `lower` can spell (see [`MINTABLE`]).
+/// Whether the program reaches `func` without any TIR body naming it: an
+/// export, a compiler item, a type bridge, a global initializer, a
+/// [`MINTABLE`] impl.
 fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))

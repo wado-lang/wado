@@ -1397,8 +1397,8 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     }
 }
 
-/// Worklist BFS over `call_graph` from every root in `entries` at once. One
-/// traversal per root instead re-walks whatever the roots share.
+/// Worklist BFS over `call_graph` from all of `entries` at once. A separate
+/// walk per root would re-visit whatever the roots share.
 fn compute_reachable(
     call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
     entries: impl IntoIterator<Item = FunctionId>,

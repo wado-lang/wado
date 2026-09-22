@@ -1965,9 +1965,9 @@ impl CompilerItems {
     }
 
     /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
-    /// registered.
-    #[must_use]
-    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
+    /// registered. Private, so matching an impl goes through [`Self::trait_def`]
+    /// rather than through a spelling.
+    fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
         match self.get(item)? {
             Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,

@@ -33,13 +33,10 @@ use crate::optimize::arena_query::projected_const_field;
 use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
-/// The whole-program maps [`fold_constants`] feeds its interpreter that depend
-/// on the *set* of functions and globals rather than on body content. Each is a
-/// fresh-per-build allocation ([`build_callee_map`] walks every function,
-/// [`build_global_env`] reduces every global's initializer), so rebuilding them
-/// on every fixed-point iteration is pure overhead. [`ConstFoldCache`] reuses
-/// them across iterations; what is read out of bodies is [`GlobalView`], built
-/// per pass.
+/// The whole-program maps [`fold_constants`] feeds its interpreter. Membership
+/// is read out of bodies — `is_ctfe_runnable` decides the [`CalleeMap`], and
+/// [`build_global_env`] reduces through it — so they are built per pass, as
+/// [`GlobalView`] is.
 struct FoldMaps {
     callees: CalleeMap,
     ctfe_builtins: CtfeBuiltinMap,
@@ -67,47 +64,18 @@ fn build_fold_maps(project: &NirPackage, type_table: &TypeTable) -> FoldMaps {
     }
 }
 
-/// Cross-iteration cache for [`FoldMaps`], owned by the fixed-point loop and
-/// threaded into each gated [`fold_constants`] call.
-///
-/// The cache is valid while the function and global counts are unchanged;
-/// `value_copy_demote` appending a specialization (function count grows) or DCE
-/// around the loop (global count changes) invalidates it, forcing a rebuild.
-/// The [`CalleeMap`]'s `Rc` handles track body edits with no rebuild at all.
-pub(super) struct ConstFoldCache {
-    funcs_len: usize,
-    globals_len: usize,
-    maps: FoldMaps,
-}
-
-/// Apply constant folding to all functions in the project.
-/// Flow-sensitive constant folding, gated: skips functions unchanged since this
-/// pass last ran. Used in the fixed-point loop, reusing `cache`'s [`FoldMaps`]
-/// unless the function/global counts changed since they were built.
-pub fn fold_constants(
-    project: &mut NirPackage,
-    gate: &mut FunctionGate,
-    cache: &mut Option<ConstFoldCache>,
+/// One folding pass: build the whole-program maps, then hand `drive` a folder
+/// to run over whichever functions it selects.
+fn fold_pass(
+    project: &NirPackage,
+    drive: impl FnOnce(&mut dyn FnMut(FuncId) -> bool) -> bool,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let funcs_len = project.functions.len();
-    let globals_len = project.globals.len();
-    let stale = cache
-        .as_ref()
-        .is_none_or(|c| c.funcs_len != funcs_len || c.globals_len != globals_len);
-    if stale {
-        *cache = Some(ConstFoldCache {
-            funcs_len,
-            globals_len,
-            maps: build_fold_maps(project, &type_table),
-        });
-    }
-    let maps = &cache.as_ref().expect("just populated").maps;
-    let globals = build_global_view(project, &type_table, maps);
-    let mut visitor = new_visitor(&type_table, maps, &globals);
+    let maps = build_fold_maps(project, &type_table);
+    let globals = build_global_view(project, &type_table, &maps);
+    let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
-    let len = project.functions.len();
-    gate.run_gated(GatedPass::ConstFold, len, |fid| {
+    drive(&mut |fid| {
         let func = &project.functions[fid.index()];
         let changed = fold_function(func, &mut visitor, &mut buffers, &type_table);
         if changed {
@@ -117,24 +85,30 @@ pub fn fold_constants(
     })
 }
 
-/// Post-loop variant: rebuilds the maps each call. Ungated — its global facts
-/// reach readers the call graph never links.
-// The loop's `ConstFoldCache` is keyed on the function and global counts alone,
-// so sharing it here serves maps the passes in between have already outdated.
-pub fn fold_constants_uncached(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
-    let type_table = project.type_table.borrow();
-    let maps = build_fold_maps(project, &type_table);
-    let globals = build_global_view(project, &type_table, &maps);
-    let mut visitor = new_visitor(&type_table, &maps, &globals);
-    let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for (i, func) in project.functions.iter().enumerate() {
-        if fold_function(func, &mut visitor, &mut buffers, &type_table) {
-            gate.mark_changed(FuncId::new(i));
-            changed = true;
+/// Flow-sensitive constant folding, gated: skips functions unchanged since this
+/// pass last ran.
+pub fn fold_constants(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    fold_pass(project, |fold| {
+        gate.run_gated(GatedPass::ConstFold, len, fold)
+    })
+}
+
+/// Ungated variant: folds every function. Its global facts reach readers the
+/// call graph never links, so the gate's dirty set would skip real work.
+pub fn fold_constants_all(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    fold_pass(project, |fold| {
+        let mut changed = false;
+        for i in 0..len {
+            let fid = FuncId::new(i);
+            if fold(fid) {
+                gate.mark_changed(fid);
+                changed = true;
+            }
         }
-    }
-    changed
+        changed
+    })
 }
 
 fn new_visitor<'a>(
@@ -376,8 +350,7 @@ fn const_seq_len(body: &Body, e: ExprId) -> Option<i32> {
 /// `GlobalVarSet`, so reading that store back is what lets it fold. A store's
 /// value is body content still being reduced, hence rebuilt per pass.
 struct GlobalView {
-    /// See [`MaterializingGlobals`]. Derived per call, since it reads body
-    /// contents, which the count-keyed [`ConstFoldCache`] does not track.
+    /// See [`MaterializingGlobals`].
     materializing: MaterializingGlobals,
     /// What each global holds. Seeded from [`FoldMaps::declared_globals`]; a
     /// global every store of which is the same constant overrides its

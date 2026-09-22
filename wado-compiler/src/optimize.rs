@@ -64,7 +64,7 @@ use crate::nir_arena::{NodeRef, PatKind, StmtKind};
 use crate::trace::filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::{ConstFoldCache, fold_constants, fold_constants_uncached};
+use const_folding::{fold_constants, fold_constants_all};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -331,12 +331,9 @@ fn run_dce(
     // round is a whole-module analysis, so it carries a span of its own.
     let mut round = 0;
     let analysis = loop {
-        profiler.span_start(&format!("nir/dce/round {round}"));
-        let functions_before = project
-            .functions
-            .iter()
-            .filter(|f| f.borrow().body.is_some())
-            .count();
+        let span = format!("nir/dce/round {round}");
+        profiler.span_start(&span);
+        let functions_before = live_bodies(project);
         let globals_before = project.globals.len();
         let mut effects = compute_fn_effects(&project.functions, &project.builtin_registry);
         if unhoist_unobserved_globals(project, descriptors, &effects) {
@@ -349,12 +346,8 @@ fn run_dce(
         // the body it had, which no surviving body calls.
         remove_unreachable_functions(project, &analysis.functions);
         remove_unreachable_globals(project, &analysis.globals, &effects);
-        let functions_after = project
-            .functions
-            .iter()
-            .filter(|f| f.borrow().body.is_some())
-            .count();
-        profiler.span_end(&format!("nir/dce/round {round}"));
+        let functions_after = live_bodies(project);
+        profiler.span_end(&span);
         round += 1;
         if functions_before == functions_after && globals_before == project.globals.len() {
             break analysis;
@@ -366,6 +359,16 @@ fn run_dce(
     remove_unreachable_closure_functors(project);
     project.rebuild_variant_indices();
     profiler.span_end("nir/dce");
+}
+
+/// How many functions still carry a body: what one DCE round is measured by,
+/// since removal clears the body and leaves the entry.
+fn live_bodies(project: &NirPackage) -> usize {
+    project
+        .functions
+        .iter()
+        .filter(|f| f.borrow().body.is_some())
+        .count()
 }
 
 /// Defensive iteration cap for the post-loop cleanup fixpoints
@@ -614,10 +617,6 @@ fn run_optimization_passes(
     // an interprocedural pass scans all functions but reports exactly the ones
     // it touched. Both go through `&mut gate`.
     let mut gate = gate::FunctionGate::new(project);
-    // Cross-iteration cache for `const_fold`'s whole-program maps (CalleeMap /
-    // GlobalEnv / GlobalFieldEnv). Rebuilt only when the function or global count
-    // changes; see `ConstFoldCache`.
-    let mut const_fold_cache: Option<ConstFoldCache> = None;
     let mut param_spec_state = param_spec::ParamSpecState::default();
     // Held across the loop: the budget anchors on the unit as the loop found it,
     // so what the rounds add together stays bounded. See `InlineBudget`.
@@ -775,9 +774,7 @@ fn run_optimization_passes(
         // collapse — where the env-free half runs in `nir/peephole`. It absorbs
         // `field_forward`, which used to alternate one statement per round and
         // left `-O3` non-convergent. No `cse` pass: hash-consing already shares.
-        gated!("nir/const_fold", GatedPass::ConstFold, |p, g| {
-            fold_constants(p, g, &mut const_fold_cache)
-        });
+        gated!("nir/const_fold", GatedPass::ConstFold, fold_constants);
         // Trivial-block / dead-statement pruning moved into the pre-inline
         // `nir/peephole` run above; the post-loop `branch_prune_final` and the
         // post-globalization `const_fold_post_global` keep their own engine
@@ -866,9 +863,7 @@ fn run_optimization_passes(
         project,
         profiler,
         |p, g| {
-            forward_stores_to_loads(p, g)
-                | fold_constants_uncached(p, g)
-                | prune_constant_branches(p, g)
+            forward_stores_to_loads(p, g) | fold_constants_all(p, g) | prune_constant_branches(p, g)
         },
     );
     // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
@@ -900,7 +895,7 @@ fn run_optimization_passes(
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
     run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
-        fold_constants_uncached(p, g) | prune_constant_branches(p, g)
+        fold_constants_all(p, g) | prune_constant_branches(p, g)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
