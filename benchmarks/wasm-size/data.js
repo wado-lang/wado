@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790053059885,
+  "lastUpdate": 1790059825399,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58269,6 +58269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c1edabb9d2e20aec3296667f5eacbdb064025290"
         },
         "date": 1790053059337,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "08fc67ccd8a52b1644a4f81e92416477bc19b6f8",
+          "message": "Merge pull request #2121 from wado-lang/claude/package-gaes-cold-start-kv1y7p\n\nperf(optimize): keep the post-loop const fold whole-module",
+          "timestamp": "2026-09-22T15:32:38+09:00",
+          "tree_id": "791442aaed00da1d4d870ab8b6f0f681ed98e24e",
+          "url": "https://github.com/wado-lang/wado/commit/08fc67ccd8a52b1644a4f81e92416477bc19b6f8"
+        },
+        "date": 1790059824653,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
