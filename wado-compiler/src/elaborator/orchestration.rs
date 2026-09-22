@@ -1104,12 +1104,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
             }
+            // A supertrait's associated type is not this impl's to bind: the
+            // obligation `impl Sub for T` owes is `T: Super`, and the impl
+            // answering that is where `Super`'s members live (WEP 2026-07-27).
+            // Accepting the name here would record the binding under `Sub`,
+            // leaving the projection through `Super` unresolved.
             for binding in &header.associated_types {
-                if !trait_env.declares_assoc_type(decl_key, &binding.name)
-                    && trait_env
-                        .supertrait_declaring_assoc_type(decl_key, &binding.name)
-                        .is_none()
-                {
+                if !trait_env.declares_assoc_type(decl_key, &binding.name) {
                     let _ = logger.error_in(
                         &header.module,
                         TypeError::ImplAssocTypeNotInTrait {

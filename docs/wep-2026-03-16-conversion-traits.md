@@ -107,7 +107,7 @@ impl TryFrom<i64> for u8 {
 }
 
 let n = u8::try_from(42 as i64)?;  // Ok(42)
-let n = u8::try_from(999 as i64)?; // Err("999 out of range for u8")
+let n = u8::try_from(999 as i64)?; // Err(ConvertError), reading "999 out of range for u8"
 ```
 
 `ConvertError` is what every stdlib impl uses. An impl may define its own error

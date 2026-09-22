@@ -43,8 +43,9 @@ unsubstituted. A name the trait never declared is a typo for one it did, which
 is how the real type came to be unbound.
 
 A derivation request (`impl Trait for Type;`) writes no members at all, so it
-owes none. A supertrait's associated type counts as the subtrait's, so
-`impl Ord for T` may bind one `Eq` declares.
+owes none. A supertrait's associated type belongs to the impl answering
+`T: Super`, not to the subtrait's: `impl Ord for T` neither owes nor may bind
+one `Eq` declares ([Super Traits](./wep-2026-07-27-super-traits.md)).
 
 ### Resolution
 
