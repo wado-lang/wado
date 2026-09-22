@@ -317,6 +317,23 @@ fn run_program_args() {
     assert_eq!(opts.program_args, vec!["arg1", "arg2"]);
 }
 
+/// `--` ends `wado run`'s own options, so the guest never sees it. A guest
+/// reading its first positional as a subcommand would read `--` as the name.
+#[test]
+fn run_program_args_after_separator() {
+    let parser = Parser::from_args(&["input.wado", "--", "gen", "--output", "out.wado"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.program_args, vec!["gen", "--output", "out.wado"]);
+}
+
+/// Only the first is the separator; a second belongs to the guest.
+#[test]
+fn run_program_args_keep_second_separator() {
+    let parser = Parser::from_args(&["input.wado", "--", "--", "arg"]);
+    let opts = wado_cli::run::parse_args(parser).unwrap();
+    assert_eq!(opts.program_args, vec!["--", "arg"]);
+}
+
 #[test]
 fn run_help() {
     let parser = Parser::from_args(&["--help"]);

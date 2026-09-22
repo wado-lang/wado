@@ -154,8 +154,14 @@ pub fn parse_args(mut parser: lexopt::Parser) -> Result<RunOptions, CliExit> {
             }
         } else if let Value(val) = arg {
             input = Some(val.to_string_lossy().into_owned());
-            // Everything after the input file (flags included) is forwarded to the guest.
+            // Everything after the input file (flags included) is forwarded to the
+            // guest, less one leading `--`: that ends `wado run`'s own options, so
+            // a guest reading its first positional as a subcommand reads its own.
             if let Some(raw) = parser.try_raw_args() {
+                let mut raw = raw.peekable();
+                if raw.peek().is_some_and(|first| first == "--") {
+                    raw.next();
+                }
                 for raw_arg in raw {
                     program_args.push(raw_arg.to_string_lossy().into_owned());
                 }
