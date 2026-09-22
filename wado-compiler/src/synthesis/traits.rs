@@ -4449,7 +4449,8 @@ fn resolve_impl_module_via_env(
         | ResolvedType::Flags { .. }
         | ResolvedType::GenericInstance { .. }
         | ResolvedType::GenericResource { .. } => tt.nominal_head(type_id).map(|(_, m)| m),
-        ResolvedType::Primitive(_) | ResolvedType::Unit => Some(ModuleSource::primitive()),
+        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+        ResolvedType::Unit => Some(ModuleSource::primitive()),
         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
         _ => None,
     };

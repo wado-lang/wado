@@ -14,7 +14,8 @@ use crate::nir_arena::{
     ArmData, BlockId, Body, ExprId, ExprKind, Operand, PatId, PatKind, StmtKind,
 };
 use crate::nir_value_graph::{OpaqueSource, ValueId, ValueKind, value_kind_to_const};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId};
 
 use super::CtfeBuiltin;
 use super::pattern::PatternMatch;

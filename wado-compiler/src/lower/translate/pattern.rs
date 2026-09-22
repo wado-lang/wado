@@ -6,10 +6,11 @@ use crate::lower::plan::value_copy::funcset::FuncKeySet;
 use crate::lower::plan::value_copy::place;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName, LocalMethodName};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr,
-    TirExprKind, TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern,
-    TirStmt, TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, StructDef, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
+    TirField, TirFunction, TirLiteralPattern, TirLocal, TirMatchArm, TirPattern, TirStmt,
+    TirStmtKind, TirStructField, TirStructPatternField, TirUnaryOp, TypeId, TypeTable,
 };
 use crate::token::Span;
 

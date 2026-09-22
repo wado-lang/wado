@@ -636,6 +636,7 @@ fn synthesize_export_adapters(project: &mut Package) -> Result<(), String> {
         .world_registry
         .is_generator_world(&project.target_world);
     let entry_type_table = entry_type_table(project);
+    validate_exports_representable(project, &entry_type_table)?;
 
     // Collect adapters in a read-only pass (synthesize_export_binding needs &tir_modules)
     let mut export_adapters: Vec<(String, String, Rc<RefCell<TirFunction>>)> = Vec::new();
@@ -995,11 +996,30 @@ fn find_export_user_func(
     }
 }
 
-/// Reject any param/return type with no Component Model value representation
-/// in any world (empty records, 128-bit/v128 scalars) with a proper compile
-/// error rather than emitting an invalid component or panicking in codegen.
-/// Handle/async types pass — they lower to i32 handles in every world — so
-/// this needs no `--lib`-vs-WASI branch.
+/// Every `export fn` lands on the component's surface, not just the ones the
+/// world names, so each signature has to be representable there. Without this
+/// an extra export reaches WIT emit, which only warns and drops the section.
+fn validate_exports_representable(
+    project: &Package,
+    entry_type_table: &RefCell<TypeTable>,
+) -> Result<(), String> {
+    let tt = entry_type_table.borrow();
+    for (source, module) in &project.tir_modules {
+        if source.is_core() || source.is_binding() {
+            continue;
+        }
+        for func in &module.functions {
+            let func = func.borrow();
+            if func.is_export {
+                validate_boundary_representable(&func, &func.name, &tt, &project.tir_modules)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Reject a param or return type with no Component Model value representation
+/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
 fn validate_boundary_representable(
     user_func: &TirFunction,
     export_name: &str,

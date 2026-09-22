@@ -13,7 +13,8 @@ use crate::nir_arena::{
 };
 use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use super::lattice::is_provably_exhaustive;
 use super::pattern::PatternMatch;
@@ -1462,7 +1463,7 @@ mod tests {
     use super::*;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
     use crate::niri::BodySink;
-    use crate::tir::PrimitiveType;
+    use crate::primitive::PrimitiveType;
     use crate::token::Span;
 
     /// `20 + 22`, as the two pooled operands the skeleton carries.

@@ -1,0 +1,9 @@
+// A `String` implements no `Neg`, so `-s` names an operator the type does not
+// carry. Nothing reaches codegen to fail there instead.
+
+export fn run() {
+    let _neg = -"hello";
+}
+
+__DATA__
+{"compile_error": "operator `-` cannot be applied to type `String`"}

@@ -197,6 +197,10 @@ bool
 // wide integers (GC types, work like primitives)
 i128, u128
 
+// half precision: storage only, no arithmetic and no `as` cast.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+f16, bf16
+
 // Composites
 String                  // UTF-8 string
 List<T>                 // dynamic array

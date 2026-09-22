@@ -12,7 +12,8 @@ use crate::nir_arena::{
 };
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeTable};
 use crate::token::Span;
 
 /// Minimum values a `br_table` must cover to be worth it — one range arm can

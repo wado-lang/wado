@@ -28,7 +28,8 @@ use crate::nir_arena::{
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 use cranelift_entity::EntityRef;
 
@@ -78,6 +79,8 @@ fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
         | PrimitiveType::U16
         | PrimitiveType::I32
         | PrimitiveType::U32
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
         | PrimitiveType::Bool
         | PrimitiveType::Char => Some(PrimitiveType::I32),
         PrimitiveType::I64 | PrimitiveType::U64 => Some(PrimitiveType::I64),

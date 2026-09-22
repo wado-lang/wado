@@ -1,0 +1,9 @@
+// Narrowing loses precision, so it is never silent: the checked `try_from`
+// or the rounding `from_f32` says which of the two the caller meant.
+
+export fn run() {
+    let _half = 1.5 as f32 as f16;
+}
+
+__DATA__
+{"compile_error": "`as` does not convert to `f16`; use `f16::from_f32(x)` to round or `f16::try_from(x)` to require an exact value"}

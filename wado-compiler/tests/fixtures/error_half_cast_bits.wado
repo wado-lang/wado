@@ -1,0 +1,11 @@
+// `f32 as u32` converts a value and `f16 as u16` would reinterpret bits, so
+// `as` does not take part for the half types at all. The error names the
+// bit accessor to write instead.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let _bits = a as u16;
+}
+
+__DATA__
+{"compile_error": "`as` converts a value; use `to_bits()` to read the bits of `f16`"}

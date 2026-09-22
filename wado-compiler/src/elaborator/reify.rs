@@ -53,7 +53,8 @@ use crate::elaborator::sem::types::{
     SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
+    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
+    remap_pattern_local,
 };
 use crate::elaborator::trait_query::{
     assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
@@ -9644,7 +9645,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         use crate::compiler_item::CompilerItem;
-        use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::{ResolvedType, TypeTable};
 
         let source_type = self.ann_expression_types(cast.expr.id())?;
         // Newtypes share their base's representation, so dispatch on the
@@ -10771,41 +10773,13 @@ fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
 /// `reify_ident` to resolve such constants when they are not present in
 /// `associated_constants` — e.g. a default-argument expression reified
 /// under a stdlib-snapshot callee module whose `associated_constants` map
-/// was not rehydrated. The value table mirrors
-/// [`super::stmt::primitive_assoc_const_to_i128`].
+/// was not rehydrated.
 fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
     use crate::tir::TypeTable;
-    let ty = match prefix {
-        "i8" => TypeTable::I8,
-        "i16" => TypeTable::I16,
-        "i32" => TypeTable::I32,
-        "i64" => TypeTable::I64,
-        "u8" => TypeTable::U8,
-        "u16" => TypeTable::U16,
-        "u32" => TypeTable::U32,
-        "u64" => TypeTable::U64,
-        _ => return None,
-    };
-    let value = match (prefix, suffix) {
-        ("i8", "MAX") => i128::from(i8::MAX),
-        ("i8", "MIN") => i128::from(i8::MIN),
-        ("i16", "MAX") => i128::from(i16::MAX),
-        ("i16", "MIN") => i128::from(i16::MIN),
-        ("i32", "MAX") => i128::from(i32::MAX),
-        ("i32", "MIN") => i128::from(i32::MIN),
-        ("i64", "MAX") => i128::from(i64::MAX),
-        ("i64", "MIN") => i128::from(i64::MIN),
-        ("u8", "MAX") => i128::from(u8::MAX),
-        ("u8", "MIN") => i128::from(u8::MIN),
-        ("u16", "MAX") => i128::from(u16::MAX),
-        ("u16", "MIN") => i128::from(u16::MIN),
-        ("u32", "MAX") => i128::from(u32::MAX),
-        ("u32", "MIN") => i128::from(u32::MIN),
-        ("u64", "MAX") => i128::from(u64::MAX),
-        ("u64", "MIN") => i128::from(u64::MIN),
-        _ => return None,
-    };
-    Some((value, ty))
+    Some((
+        primitive_int_bound(prefix, suffix)?,
+        TypeTable::primitive_by_name(prefix)?,
+    ))
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks

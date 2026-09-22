@@ -16,7 +16,7 @@ use super::{HeapVersion, OpaqueSource, ValueId, ValueKind, ValuePool};
 use crate::const_eval::{MAX_SEQ_ELEMENTS, Value};
 use crate::nir_value_graph::value_kind_to_const;
 use crate::niri::{CtfeBuiltin, CtfeBuiltinMap};
-use crate::tir::PrimitiveType;
+use crate::primitive::PrimitiveType;
 use crate::{compiler_trace, tir};
 
 /// Per-function heap-version tracker: every node that may write the heap bumps

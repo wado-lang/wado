@@ -132,6 +132,7 @@ stdlib_table! {
     "core:prelude/fpfmt.wado" => "core/prelude/fpfmt.wado",
     "core:prelude/int128.wado" => "core/prelude/int128.wado",
     "core:prelude/intparse.wado" => "core/prelude/intparse.wado",
+    "core:prelude/half.wado" => "core/prelude/half.wado",
     "core:prelude/primitive.wado" => "core/prelude/primitive.wado",
     "core:prelude/range.wado" => "core/prelude/range.wado",
     "core:prelude/bytes.wado" => "core/prelude/bytes.wado",
@@ -319,6 +320,19 @@ mod tests {
             "https://example.com/lib.wado",
         ] {
             assert!(get_stdlib_module(import).is_none(), "{import}");
+        }
+    }
+
+    /// A module that declares no identity is loaded twice when it is also the
+    /// entry point, and the second one makes its types foreign to its impls.
+    #[test]
+    fn every_module_declares_the_identity_its_import_path_names() {
+        for (import, source) in all_core_modules().iter().chain(all_binding_modules()) {
+            let declaration = format!("#![stdlib(\"{import}\")]");
+            assert!(
+                source.contains(&declaration),
+                "{import} lacks {declaration}"
+            );
         }
     }
 

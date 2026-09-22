@@ -42,7 +42,8 @@ use crate::elaborator::types::{
 };
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
-use crate::tir::{AnonStructId, PrimitiveType, StructDef};
+use crate::primitive::PrimitiveType;
+use crate::tir::{AnonStructId, StructDef};
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -219,6 +220,43 @@ struct NumericLiteralTails<'a> {
 /// Whether a branch already produces `target`; `never` fits any of them.
 fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
+}
+
+/// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
+/// names neither or is the newtype step every type admits (WEP 2026-09-22).
+fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let from_half = tt.primitive_head(source).filter(|p| p.is_half());
+    let to_half = tt.primitive_head(target).filter(|p| p.is_half());
+    let half = from_half.or(to_half)?.as_str();
+    if tt.representation_head(source) == tt.representation_head(target) {
+        return None;
+    }
+    let source_half = from_half.is_some();
+    Some(if source_half && to_half.is_some() {
+        "neither direction is exact: `f16` has the shorter exponent range and \
+         `bf16` the shorter mantissa"
+            .to_string()
+    } else if source_half {
+        if tt.is_float(target) {
+            format!(
+                "`as` does not convert `{half}`; use `{}::from(x)`",
+                tt.type_name(target)
+            )
+        } else if tt.is_integer(target) {
+            format!("`as` converts a value; use `to_bits()` to read the bits of `{half}`")
+        } else {
+            format!("`{half}` converts only through `to_bits()` and `From`")
+        }
+    } else if tt.is_float(source) {
+        format!(
+            "`as` does not convert to `{half}`; use `{half}::from_f32(x)` to round or \
+             `{half}::try_from(x)` to require an exact value"
+        )
+    } else if tt.is_integer(source) {
+        format!("`as` converts a value; use `{half}::from_bits(x)` to reinterpret the bits")
+    } else {
+        format!("`{half}` is built only by `from_bits`, `from_f32` and `try_from`")
+    })
 }
 
 /// A struct-literal field as the body walk knows it: the name it was written
@@ -3164,19 +3202,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The values an integer literal may take at `prim`. `char` is included:
+    /// a `\u{…}` escape is checked against the scalar range the same way.
     fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
-        use crate::tir::PrimitiveType;
         match prim {
-            PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
-            PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
-            PrimitiveType::I32 => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
-            PrimitiveType::I64 => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
-            PrimitiveType::U8 => Some((0, i128::from(u8::MAX))),
-            PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
-            PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
-            PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
             PrimitiveType::Char => Some((0, 0x0010_FFFF)),
-            _ => None,
+            other => other.int_range(),
         }
     }
 
@@ -3494,6 +3525,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return TypeTable::ERROR;
         }
 
+        let half_cast = {
+            let tt = self.tysys.type_table.borrow();
+            half_cast_hint(&tt, source_type, target_type)
+                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
+        };
+        if let Some((from, to, hint)) = half_cast {
+            let _ = self.emit(TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span: cast.span,
+            });
+            return target_type;
+        }
+
         // Every coercion above declined, so nothing relates these two: `as`
         // between aggregates is only ever a newtype step, which shares a base.
         let unrelated_aggregate = {
@@ -3549,7 +3595,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
         {
-            use crate::tir::PrimitiveType;
+            use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
                 tt.get(tt.representation_head(source_type)),
