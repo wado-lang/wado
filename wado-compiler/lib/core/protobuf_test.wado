@@ -1,0 +1,110 @@
+use {
+    WireType,
+    read_fixed32,
+    read_fixed64,
+    read_varint,
+    tag_len,
+    unzigzag_64,
+    varint_len,
+    write_fixed32,
+    write_fixed64,
+    write_tag,
+    write_varint,
+    zigzag_64,
+} from "core:protobuf";
+
+fn hex(bytes: &ByteList) -> String {
+    let mut out = "";
+    for let b of *bytes {
+        out.push_str(`${b:02x}`);
+    }
+    return out;
+}
+
+fn varint(value: u64) -> String {
+    let mut buf = ByteList::with_capacity(10);
+    write_varint(&mut buf, value);
+    assert buf.len() == varint_len(value);
+    return hex(&buf);
+}
+
+test "a varint is seven bits a byte, low group first" {
+    // The specification's own worked example: 150 is `9601`.
+    assert varint(150) == "9601";
+    assert varint(1) == "01";
+    assert varint(0) == "00";
+    assert varint(127) == "7f";
+    assert varint(128) == "8001";
+}
+
+test "a varint of the largest 64-bit value takes ten bytes" {
+    assert varint_len(18446744073709551615) == 10;
+}
+
+test "a tag carries the field number and what follows it" {
+    let mut buf = ByteList::with_capacity(4);
+    write_tag(&mut buf, 1, WireType::Varint);
+    // `08` is `00001 000`: field 1, wire type 0.
+    assert hex(&buf) == "08";
+
+    let mut len_tag = ByteList::with_capacity(4);
+    write_tag(&mut len_tag, 2, WireType::Len);
+    // `12` is `00010 010`: field 2, wire type 2.
+    assert hex(&len_tag) == "12";
+
+    assert tag_len(1) == 1;
+    assert tag_len(15) == 1;
+    assert tag_len(16) == 2;
+}
+
+test "zigzag moves the sign into the low bit" {
+    assert zigzag_64(0) == 0;
+    assert zigzag_64(-1) == 1;
+    assert zigzag_64(1) == 2;
+    assert zigzag_64(-2) == 3;
+    assert unzigzag_64(zigzag_64(-4000000000)) == -4000000000;
+}
+
+test "a fixed field is little-endian" {
+    let mut buf = ByteList::with_capacity(8);
+    write_fixed32(&mut buf, 1);
+    assert hex(&buf) == "01000000";
+
+    let mut wide = ByteList::with_capacity(8);
+    write_fixed64(&mut wide, 1);
+    assert hex(&wide) == "0100000000000000";
+}
+
+test "a varint reads back to what was written" {
+    let mut buf = ByteList::with_capacity(16);
+    write_varint(&mut buf, 150);
+    write_varint(&mut buf, 1);
+    let slice = buf.as_byte_slice();
+
+    let Some([first, after_first]) = read_varint(&slice, 0) else {
+        panic("the first varint did not read");
+    };
+    assert first == 150;
+    let Some([second, after_second]) = read_varint(&slice, after_first) else {
+        panic("the second varint did not read");
+    };
+    assert second == 1;
+    assert after_second == buf.len();
+}
+
+test "a varint that runs off the end reads nothing" {
+    let mut buf = ByteList::with_capacity(4);
+    buf.push(0x80);
+    assert read_varint(&buf.as_byte_slice(), 0) matches { None };
+}
+
+test "a fixed field reads back to what was written" {
+    let mut buf = ByteList::with_capacity(16);
+    write_fixed32(&mut buf, 305419896);
+    write_fixed64(&mut buf, 81985529216486895);
+    let slice = buf.as_byte_slice();
+
+    assert read_fixed32(&slice, 0) matches { Some([305419896, 4]) };
+    assert read_fixed64(&slice, 4) matches { Some([81985529216486895, 12]) };
+    assert read_fixed32(&slice, 10) matches { None };
+}

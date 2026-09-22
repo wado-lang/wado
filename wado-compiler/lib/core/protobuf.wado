@@ -1,0 +1,136 @@
+//! Protocol Buffers over `core:serde`: the wire format, and nothing of
+//! `.proto`. See [WEP: Grog](../../../docs/wep-2026-09-22-grog.md).
+
+/// What follows a tag, as the wire format numbers them.
+pub enum WireType {
+    Varint,
+    Fixed64,
+    Len,
+    Fixed32,
+}
+
+impl WireType {
+    /// The three bits a tag carries, or `None` for a number no wire type
+    /// uses. `3` and `4` are the deprecated group markers.
+    pub fn from_bits(bits: i32) -> Option<WireType> {
+        if bits == 0 {
+            return Option::Some(WireType::Varint);
+        }
+        if bits == 1 {
+            return Option::Some(WireType::Fixed64);
+        }
+        if bits == 2 {
+            return Option::Some(WireType::Len);
+        }
+        if bits == 5 {
+            return Option::Some(WireType::Fixed32);
+        }
+        return null;
+    }
+
+    pub fn bits(&self) -> i32 {
+        return match self {
+            Varint => 0,
+            Fixed64 => 1,
+            Len => 2,
+            Fixed32 => 5,
+        };
+    }
+}
+
+/// A base-128 varint: seven payload bits per byte, low group first, the top
+/// bit set on every byte but the last.
+pub fn write_varint(buf: &mut ByteList, value: u64) {
+    let mut rest = value;
+    while rest >= 128 {
+        buf.push((rest & 0x7f | 0x80) as u8);
+        rest = rest >> 7;
+    }
+    buf.push(rest as u8);
+}
+
+/// How many bytes `write_varint` would write.
+pub fn varint_len(value: u64) -> i32 {
+    let mut rest = value;
+    let mut len = 1;
+    while rest >= 128 {
+        rest = rest >> 7;
+        len += 1;
+    }
+    return len;
+}
+
+/// A field's tag: its number and what follows it, in one varint.
+pub fn write_tag(buf: &mut ByteList, number: i32, wire_type: WireType) {
+    write_varint(buf, number as u64 << 3 | wire_type.bits() as u64);
+}
+
+pub fn tag_len(number: i32) -> i32 {
+    return varint_len(number as u64 << 3);
+}
+
+/// Zigzag: the encoding `sint32` and `sint64` use, which keeps a small
+/// negative number small by moving the sign to the low bit.
+pub fn zigzag_64(value: i64) -> u64 {
+    return (value << 1 ^ value >> 63) as u64;
+}
+
+pub fn unzigzag_64(value: u64) -> i64 {
+    return (value >> 1) as i64 ^ -((value & 1) as i64);
+}
+
+pub fn write_fixed32(buf: &mut ByteList, value: u32) {
+    buf.push(value as u8);
+    buf.push((value >> 8) as u8);
+    buf.push((value >> 16) as u8);
+    buf.push((value >> 24) as u8);
+}
+
+pub fn write_fixed64(buf: &mut ByteList, value: u64) {
+    write_fixed32(buf, value as u32);
+    write_fixed32(buf, (value >> 32) as u32);
+}
+
+/// A varint read at `pos`, with the position after it. `None` where the bytes
+/// run out or the varint runs past the ten bytes a 64-bit value can take.
+pub fn read_varint(input: &ByteSlice, pos: i32) -> Option<[u64, i32]> {
+    let mut value: u64 = 0;
+    let mut shift = 0;
+    let mut at = pos;
+    while at < input.len() {
+        let byte = input[at];
+        at += 1;
+        if shift < 64 {
+            value = value | (byte & 0x7f) as u64 << shift as u64;
+        }
+        if byte < 128 {
+            return Option::Some([value, at]);
+        }
+        shift += 7;
+        if shift >= 70 {
+            builtin::cold_path();
+            return null;
+        }
+    }
+    builtin::cold_path();
+    return null;
+}
+
+pub fn read_fixed32(input: &ByteSlice, pos: i32) -> Option<[u32, i32]> {
+    if pos + 4 > input.len() {
+        builtin::cold_path();
+        return null;
+    }
+    let value = input[pos] as u32 | input[pos + 1] as u32 << 8 | input[pos + 2] as u32 << 16 | input[pos + 3] as u32 << 24;
+    return Option::Some([value, pos + 4]);
+}
+
+pub fn read_fixed64(input: &ByteSlice, pos: i32) -> Option<[u64, i32]> {
+    let Some([low, after_low]) = read_fixed32(input, pos) else {
+        return null;
+    };
+    let Some([high, after_high]) = read_fixed32(input, after_low) else {
+        return null;
+    };
+    return Option::Some([low as u64 | high as u64 << 32, after_high]);
+}
