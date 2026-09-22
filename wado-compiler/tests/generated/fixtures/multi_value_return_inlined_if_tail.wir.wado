@@ -239,7 +239,7 @@ type "functype//core:serde/core:prelude/types.wado/Option<core:uuid/Uuid>^core:s
 
 type "functype//core:uuid/core:uuid/UuidVisitor^core:serde/Visitor::visit_string<core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "core:uuid//Uuid", ref null "core:serde//DeserializeError"];  // TypeId(79)
 
-type "functype//core:uuid/core:uuid/Uuid::parse<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "core:uuid//Uuid", ref null "core:uuid//ParseError"];  // TypeId(80)
+type "functype//core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:prelude/string.wado/String>" = fn(ref "core:prelude/string.wado//String") -> [i32, ref null "core:uuid//Uuid", ref null "core:uuid//ParseError"];  // TypeId(80)
 
 type "functype//core:prelude/string.wado/core:prelude/string.wado/StrSlice::substr_bytes$spec0" = fn(ref "core:prelude/string.wado//StrSlice", i32) -> ref "core:prelude/string.wado//String";  // TypeId(81)
 
@@ -1309,7 +1309,7 @@ fn "core:uuid/core/uuid/has_urn_prefix<&core:prelude/string.wado/String>$cold0"(
     offset_35 = 0 + 47;
     builtin::array_copy<u8>(self_34, offset_35, global:core:prelude/string.wado::$const_obj_35, 0, 1);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(330, $local_7.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(333, $local_7.buf);
     new_used_45 = $local_6.used + 28;
     if @unlikely(new_used_45 > builtin::array_len($local_6.repr)) {
         cold_path;
@@ -3905,7 +3905,7 @@ fn "core:uuid/core:uuid/UuidVisitor^core:serde/Visitor::visit_string<core:prelud
     let $mv$$vr_6$0: i32;
     let $mv$$vr_6$1: ref null "core:uuid//Uuid";
     let $mv$$vr_6$2: ref null "core:uuid//ParseError";
-    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:uuid/core:uuid/Uuid::parse<&core:prelude/string.wado/String>"(v);
+    multivalue_bind [$mv$$vr_6$0, $mv$$vr_6$1, $mv$$vr_6$2] = "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:prelude/string.wado/String>"(v);
     if $mv$$vr_6$0 == 0 {
         id = ref.as_non_null($mv$$vr_6$1);
         return 0, id, ref.null none;
@@ -3937,7 +3937,7 @@ fn "core:uuid/core:uuid/UuidVisitor^core:serde/Visitor::visit_string<core:prelud
     }
 }
 
-fn "core:uuid/core:uuid/Uuid::parse<&core:prelude/string.wado/String>"(s) {
+fn "core:uuid/core:uuid/Uuid^core:prelude/traits.wado/FromStr::from_str<&core:prelude/string.wado/String>"(s) {
     let len: i32;
     let start: i32;
     let hyphenated: bool;

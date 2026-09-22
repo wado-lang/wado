@@ -137,7 +137,7 @@ test "v7 values sort by timestamp" {
 
 test "parse round-trips canonical form" {
     let s: String = "00010203-0405-4607-8809-0a0b0c0d0e0f";
-    let parsed = Uuid::parse(&s);
+    let parsed = Uuid::from_str(&s);
     assert parsed matches { Ok(_) };
     if let Ok(id) = parsed {
         assert id.to_string() == s;
@@ -146,8 +146,8 @@ test "parse round-trips canonical form" {
 }
 
 test "parse accepts uppercase hex" {
-    let lower = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
-    let upper = Uuid::parse("00010203-0405-4607-8809-0A0B0C0D0E0F");
+    let lower = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let upper = Uuid::from_str("00010203-0405-4607-8809-0A0B0C0D0E0F");
     assert lower matches { Ok(_) };
     assert upper matches { Ok(_) };
     if let Ok(l) = lower {
@@ -158,31 +158,31 @@ test "parse accepts uppercase hex" {
 }
 
 test "parse accepts every form Go's uuid does" {
-    let canonical = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let canonical = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
     assert canonical matches { Ok(_) };
     if let Ok(want) = canonical {
-        assert Uuid::parse("000102030405460788090a0b0c0d0e0f") matches { Ok(id) && id == want };
-        assert Uuid::parse("{00010203-0405-4607-8809-0a0b0c0d0e0f}") matches { Ok(id) && id == want };
-        assert Uuid::parse("urn:uuid:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
-        assert Uuid::parse("URN:UUID:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
+        assert Uuid::from_str("000102030405460788090a0b0c0d0e0f") matches { Ok(id) && id == want };
+        assert Uuid::from_str("{00010203-0405-4607-8809-0a0b0c0d0e0f}") matches { Ok(id) && id == want };
+        assert Uuid::from_str("urn:uuid:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
+        assert Uuid::from_str("URN:UUID:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Ok(id) && id == want };
     }
 }
 
 test "parse reports why the input was rejected" {
-    assert Uuid::parse("") matches { Err(ParseError::InvalidLength) };
-    assert Uuid::parse("not-a-uuid") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::from_str("") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::from_str("not-a-uuid") matches { Err(ParseError::InvalidLength) };
     // 35 chars, 33 hex digits: neither length is a UUID.
-    assert Uuid::parse("0001020-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidLength) };
-    assert Uuid::parse("000102030405460788090a0b0c0d0e0ff") matches { Err(ParseError::InvalidLength) };
-    assert Uuid::parse("000102030-405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
-    assert Uuid::parse("00010203f0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
-    assert Uuid::parse("{00010203-0405-4607-8809-0a0b0c0d0e0f]") matches { Err(ParseError::InvalidGroups) };
-    assert Uuid::parse("urn:uuiX:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
-    assert Uuid::parse("0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidCharacter) };
+    assert Uuid::from_str("0001020-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::from_str("000102030405460788090a0b0c0d0e0ff") matches { Err(ParseError::InvalidLength) };
+    assert Uuid::from_str("000102030-405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::from_str("00010203f0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::from_str("{00010203-0405-4607-8809-0a0b0c0d0e0f]") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::from_str("urn:uuiX:00010203-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidGroups) };
+    assert Uuid::from_str("0001020g-0405-4607-8809-0a0b0c0d0e0f") matches { Err(ParseError::InvalidCharacter) };
 }
 
 test "bytes round-trip" {
-    let id = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let id = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
     assert id matches { Ok(_) };
     if let Ok(id) = id {
         let bytes = id.as_bytes();
@@ -212,7 +212,7 @@ test "Inspect shows the canonical form" {
 }
 
 test "serializes as a CBOR binary UUID" {
-    let id = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let id = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
     assert id matches { Ok(_) };
     if let Ok(id) = id {
         let encoded = to_bytes(&id);
@@ -229,7 +229,7 @@ test "serializes as a CBOR binary UUID" {
 }
 
 test "serializes as a JSON string" {
-    let id = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let id = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
     assert id matches { Ok(_) };
     if let Ok(id) = id {
         assert to_string(&id) matches { Ok(json) && json == "\"00010203-0405-4607-8809-0a0b0c0d0e0f\"" };
@@ -255,9 +255,9 @@ test "nil is all zero" {
 }
 
 test "equality compares all 128 bits" {
-    let a = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
-    let b = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e0f");
-    let c = Uuid::parse("00010203-0405-4607-8809-0a0b0c0d0e10");
+    let a = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let b = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e0f");
+    let c = Uuid::from_str("00010203-0405-4607-8809-0a0b0c0d0e10");
     assert a matches { Ok(_) };
     assert b matches { Ok(_) };
     assert c matches { Ok(_) };
@@ -273,7 +273,7 @@ test "equality compares all 128 bits" {
 }
 
 test "ParseError renders its reason" {
-    assert `${Uuid::parse("nope").unwrap_err()}` == "not a UUID-shaped length";
-    assert `${Uuid::parse("550e8400+e29b+41d4+a716+446655440000").unwrap_err()}` == "hyphens, braces or the `urn:uuid:` prefix are misplaced";
-    assert `${Uuid::parse("550e8400-e29b-41d4-a716-44665544000z").unwrap_err()}` == "not a hex digit";
+    assert `${Uuid::from_str("nope").unwrap_err()}` == "not a UUID-shaped length";
+    assert `${Uuid::from_str("550e8400+e29b+41d4+a716+446655440000").unwrap_err()}` == "hyphens, braces or the `urn:uuid:` prefix are misplaced";
+    assert `${Uuid::from_str("550e8400-e29b-41d4-a716-44665544000z").unwrap_err()}` == "not a hex digit";
 }

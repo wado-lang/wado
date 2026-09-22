@@ -558,10 +558,11 @@ does for the struct-field pre-pass.
 
 ### Known gap: a `Stream` or `Future` handle nothing drops
 
-Cleanup excludes `GenericResource`, meaning `Stream<T>` and `Future<T>`. Those
-handles carry their own drop discipline, so every path out of a function holding
-one has to call `drop` itself. Nothing diagnoses a path that does not, and the
-handle leaks with no trace.
+"Deterministic drop" says an owned, un-moved resource is dropped at scope exit
+on every path. Cleanup does not do that for `GenericResource`, meaning
+`Stream<T>` and `Future<T>`: it excludes them, so every path out of a function
+holding one has to call `drop` itself, and nothing diagnoses a path that does
+not. The handle leaks with no trace.
 
 A `?` or an early `return` inside the region holding the handle is the shape
 that admits it. `core:fs` drains the stream and drops before it decides what to
