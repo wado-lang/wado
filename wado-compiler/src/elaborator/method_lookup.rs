@@ -152,21 +152,53 @@ pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
     }
 }
 
-/// Where the target names `param`, as a position in its argument list.
-/// A parameter is substituted against the instance's type arguments, so that
-/// position is its index: `impl<T> Tr for Holder<i32, T>` puts `T` at 1, and
-/// declaration order would read the instance's `i32` for it.
-pub(super) fn target_arg_slot(impl_ty: &Type, param: &str) -> Option<u32> {
-    let at = impl_target_head_args(impl_ty)?
-        .iter()
-        .position(|arg| matches!(arg, Type::Named(n) if n.name == param))?;
-    Some(at as u32)
+/// Where an `impl` block's parameters sit, as positions in the instance's type
+/// arguments. One answer for every frame the block reaches, so no two of them
+/// can number one parameter differently (WEP 2026-08-12).
+pub(super) struct ImplParamSlots {
+    slots: IndexMap<String, u32>,
 }
 
-/// How many arguments the target writes, so a parameter it does not name takes
-/// a slot no instantiation reaches.
-pub(super) fn target_arity(impl_ty: &Type) -> u32 {
-    impl_target_head_args(impl_ty).map_or(0, |args| args.len() as u32)
+impl ImplParamSlots {
+    /// The target says where it writes a name. A parameter it does not write —
+    /// a blanket's projection, a trait argument's own — takes a slot past the
+    /// ones it assigned, which no instantiation reaches.
+    pub(super) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
+        let args = impl_target_args(target).unwrap_or_default();
+        let written = |param: &ast::GenericParam| {
+            args.iter()
+                .position(|arg| target_arg_names(arg, &param.name))
+                .map(|at| at as u32)
+        };
+        let mut slots: IndexMap<String, u32> = params
+            .iter()
+            .filter(|param| param.fills_impl_slot())
+            .filter_map(|param| Some((param.name.clone(), written(param)?)))
+            .collect();
+        let mut next = slots.values().map(|slot| slot + 1).max().unwrap_or(0);
+        for param in params.iter().filter(|param| param.fills_impl_slot()) {
+            if slots.contains_key(&param.name) {
+                continue;
+            }
+            slots.insert(param.name.clone(), next);
+            next += 1;
+        }
+        Self { slots }
+    }
+
+    pub(super) fn of_name(&self, param: &str) -> Option<u32> {
+        self.slots.get(param).copied()
+    }
+}
+
+/// Whether a target argument is the parameter `name` — written plainly, or
+/// spread as a pack in a tuple target.
+fn target_arg_names(arg: &Type, name: &str) -> bool {
+    match arg {
+        Type::Named(n) => n.name == name,
+        Type::TypePackSpread(spread, _) => spread == name,
+        _ => false,
+    }
 }
 
 impl TypeSystem {
@@ -195,6 +227,19 @@ impl TypeSystem {
         impl_ty: &Type,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
+        // A reference receiver supplies its pointee as the one argument, so
+        // that is what the written target names: `&Wrap<i32>` writes
+        // `Wrap<i32>`. Reading the pointee's own arguments compares one nesting
+        // level too deep, and the solver, which keeps the reference, then
+        // disagrees with the answer here.
+        if let Type::Reference(inner) | Type::MutReference(inner) = impl_ty {
+            let Some(args) = receiver_type_args else {
+                return true;
+            };
+            return args
+                .first()
+                .is_some_and(|&recv| self.arg_matches(inner, recv));
+        }
         let Some(written) = impl_target_args(impl_ty) else {
             return true;
         };
@@ -556,10 +601,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         trait_params_from_impl(&header.type_params, trait_args, implementing)
             .into_iter()
             .filter(|supplied| !have.iter().any(|b| b.name == supplied.param.name))
-            .map(|supplied| DefaultTypeBinding {
-                name: supplied.param.name.clone(),
-                bounds: supplied.bounds,
-                settled: SettledAs::Type(supplied.arg),
+            .filter_map(|supplied| {
+                Some(DefaultTypeBinding {
+                    name: supplied.param.name.clone(),
+                    settled: SettledAs::Type(supplied.arg?),
+                    bounds: supplied.bounds,
+                })
             })
             .collect()
     }
@@ -1775,6 +1822,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Bind `name` in the current type-param scope as the binder `decl`
     /// declares. The node is the caller's to state, never this helper's to
     /// find — see [`super::scope::param_decl`].
+    /// Point a name already in scope at another type, keeping what it is
+    /// bounded by: the declaration's `T: Ord` still holds of the receiver
+    /// argument standing in for it. A name taking a new meaning is bound
+    /// through [`Scope::bind_param`] instead, which drops the old one's bounds.
     fn bind_type_param(
         scope: &mut scope::TypeParamScope<'_, '_, H>,
         decl: Option<ast::AstId>,
@@ -2280,21 +2331,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | ResolvedType::TypePack { index, .. } => *index,
                     other => panic!("method slot is not a type parameter: {other:?}"),
                 };
-                Self::bind_type_param(
-                    &mut scope,
-                    Some(type_param.id),
+                scope.bind_param(
                     &type_param.name,
-                    index,
-                    type_param_id,
+                    BinderInScope::declared(index, type_param_id, type_param.id),
+                    ScopedBound::pin_declared(type_param, self_binding),
                 );
-                let bounds = ScopedBound::pin_declared(type_param, self_binding);
-                if !bounds.is_empty() {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .insert(type_param.name.clone(), bounds);
-                }
             }
 
             // `Self` needs no special handling: the canonical frame bound it

@@ -25,8 +25,7 @@ use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
 use crate::defs::{DefId, DefKind};
-use crate::elaborator::method_lookup::{impl_target_args, impl_target_head_args};
-use crate::elaborator::scope::TraitContext;
+use crate::elaborator::method_lookup::{ImplParamSlots, impl_target_args, impl_target_head_args};
 use crate::elaborator::sem::decls::FunctionSig;
 use crate::elaborator::sem::types::MethodNames;
 use crate::elaborator::sig;
@@ -629,9 +628,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         &mut self,
         target_args: &[Type],
         impl_declared_params: &[ast::GenericParam],
+        slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
-        for (index, arg) in target_args.iter().enumerate() {
+        for arg in target_args {
             let ast::Type::Named(named) = arg else {
                 continue;
             };
@@ -653,9 +653,12 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                 }
                 continue;
             }
+            let Some(slot) = slots.of_name(name) else {
+                continue;
+            };
             params.push(self.bind_target_param(
                 name,
-                index as u32,
+                slot,
                 false,
                 vec![],
                 None,
@@ -670,14 +673,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_blanket_target_param(
         &mut self,
         named: &ast::NamedType,
-        saved: &TraitContext,
         impl_declared_params: &[ast::GenericParam],
+        slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
-        let Some(&BinderInScope {
-            index: target_index,
-            ..
-        }) = saved.type_params.get(&named.name)
-        else {
+        let Some(target_index) = slots.of_name(&named.name) else {
             return Vec::new();
         };
         // Declaration order, not "receiver then projections": the impl's type
@@ -689,7 +688,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             if !declared.is_real_type_param() {
                 continue;
             }
-            let Some(&BinderInScope { index, .. }) = saved.type_params.get(&declared.name) else {
+            let Some(index) = slots.of_name(&declared.name) else {
                 continue;
             };
             let bounds = self.saved_param_bounds(&declared.name);
@@ -750,15 +749,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_ref_target_param(
         &mut self,
         inner: &ast::Type,
-        saved: &TraitContext,
+        impl_declared_params: &[ast::GenericParam],
+        slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
         let ast::Type::Named(named) = inner else {
             return Vec::new();
         };
-        let Some(&BinderInScope { index, decl, .. }) = saved.type_params.get(&named.name) else {
+        let Some(index) = slots.of_name(&named.name) else {
             return Vec::new();
         };
         let bounds = self.saved_param_bounds(&named.name);
+        let decl = param_decl(impl_declared_params, &named.name);
         vec![self.bind_target_param(&named.name, index, false, bounds, None, decl)]
     }
 
@@ -767,17 +768,19 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
     fn bind_tuple_pack_params(
         &mut self,
         elements: &[ast::Type],
-        saved: &TraitContext,
+        impl_declared_params: &[ast::GenericParam],
+        slots: &ImplParamSlots,
     ) -> Vec<TirTypeParam> {
         let mut params = Vec::new();
         for element in elements {
             let ast::Type::TypePackSpread(name, _) = element else {
                 continue;
             };
-            let Some(&BinderInScope { index, decl, .. }) = saved.type_params.get(name) else {
+            let Some(index) = slots.of_name(name) else {
                 continue;
             };
             let bounds = self.saved_param_bounds(name);
+            let decl = param_decl(impl_declared_params, name);
             params.push(self.bind_target_param(name, index, true, bounds, None, decl));
         }
         params
@@ -798,6 +801,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<TirTypeParam> {
         let saved = &self.saved().clone();
+        let slots = ImplParamSlots::of(impl_type, impl_declared_params);
         let impl_type_inner = match impl_type {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
             other => other,
@@ -808,16 +812,18 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let impl_type_params = if let Some(args) = head_args
             && !impl_is_concrete
         {
-            self.bind_declared_target_params(args, impl_declared_params)
+            self.bind_declared_target_params(args, impl_declared_params, &slots)
         } else {
             match impl_type {
                 ast::Type::Named(named) => {
-                    self.bind_blanket_target_param(named, saved, impl_declared_params)
+                    self.bind_blanket_target_param(named, impl_declared_params, &slots)
                 }
                 ast::Type::Reference(boxed) | ast::Type::MutReference(boxed) => {
-                    self.bind_ref_target_param(boxed.as_ref(), saved)
+                    self.bind_ref_target_param(boxed.as_ref(), impl_declared_params, &slots)
                 }
-                ast::Type::Tuple(elements) => self.bind_tuple_pack_params(elements, saved),
+                ast::Type::Tuple(elements) => {
+                    self.bind_tuple_pack_params(elements, impl_declared_params, &slots)
+                }
                 _ => Vec::new(),
             }
         };
@@ -835,7 +841,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // binding the trait's first claims the name for an argument that does
         // not resolve yet, and the block's own slot never gets made.
         let mut impl_type_params = impl_type_params;
-        let mut next_slot = method_param_offset(&impl_type_params);
         for param in impl_declared_params
             .iter()
             .filter(|p| p.is_real_type_param())
@@ -848,16 +853,18 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             {
                 continue;
             }
+            let slot = slots
+                .of_name(&param.name)
+                .expect("a real type parameter fills an impl slot");
             let bounds = self.saved_param_bounds(&param.name);
             impl_type_params.push(self.bind_target_param(
                 &param.name,
-                next_slot,
+                slot,
                 param.is_pack,
                 bounds,
                 None,
                 Some(param.id),
             ));
-            next_slot += 1;
         }
 
         // `Self` is established before the trait's parameters, whose bounds pin

@@ -3770,9 +3770,14 @@ impl TraitBound {
     }
 
     /// Whether any type the bound writes is rooted at `Self`, so reading it
-    /// needs the frame that wrote it.
+    /// needs the frame that wrote it. Every position a bound writes a type in,
+    /// an `fn` bound's own signature included.
     pub fn writes_self(&self) -> bool {
-        self.type_args.iter().any(|ty| ty.mentions("Self"))
+        let in_signature = self.fn_signature.as_ref().is_some_and(|sig| {
+            sig.return_type.mentions("Self") || sig.params.iter().any(|ty| ty.mentions("Self"))
+        });
+        in_signature
+            || self.type_args.iter().any(|ty| ty.mentions("Self"))
             || self.assoc_types.iter().any(|c| c.ty.mentions("Self"))
     }
 }

@@ -51,7 +51,7 @@ use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, V
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
-use crate::elaborator::method_lookup::{target_arg_slot, target_arity};
+use crate::elaborator::method_lookup::ImplParamSlots;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
@@ -198,16 +198,11 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        // A parameter is substituted against the instance's type arguments, so
-        // where the target names it is its number — the same answer
-        // `bind_generic_target_params` gives the methods. A parameter the
-        // target does not name takes a slot past the written ones, which no
-        // argument can reach.
-        let mut spare = target_arity(&impl_block.ty);
+        let slots = ImplParamSlots::of(&impl_block.ty, &impl_block.type_params);
         for param in &impl_block.type_params {
-            if !param.fills_impl_slot() {
+            let Some(slot) = slots.of_name(&param.name) else {
                 continue;
-            }
+            };
             // A name the enclosing frame already numbered keeps that number;
             // renumbering it here would give one parameter two indices.
             if self
@@ -218,10 +213,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             {
                 continue;
             }
-            let slot = target_arg_slot(&impl_block.ty, &param.name).unwrap_or_else(|| {
-                spare += 1;
-                spare - 1
-            });
             let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
                 param.name.clone(),
                 slot,

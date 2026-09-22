@@ -1,0 +1,43 @@
+// An impl whose target is a reference to a generic head. Every such impl is
+// filed under one receiver key, and the pointee is the single argument that
+// chooses between them, so `&Wrap<i32>` and `&Wrap<bool>` reach their own.
+//
+// The written target names that pointee whole: reading its arguments instead
+// compares a nesting level too deep, and the trait solver, which keeps the
+// reference, then contradicts the answer.
+
+trait Show with () {
+    fn show(&self) -> i32;
+}
+
+struct Wrap<A> {
+    a: A,
+}
+
+impl Show for &Wrap<i32> {
+    fn show(&self) -> i32 {
+        return 1;
+    }
+}
+
+impl Show for &Wrap<bool> {
+    fn show(&self) -> i32 {
+        return 2;
+    }
+}
+
+fn show_it<T: Show>(t: &T) -> i32 {
+    return t.show();
+}
+
+test "an impl on a reference to a generic head" {
+    let wi = Wrap { a: 7 };
+    let wb = Wrap { a: true };
+    let ri = &wi;
+    let rb = &wb;
+    assert show_it(&ri) == 1;
+    assert show_it(&rb) == 2;
+}
+
+__DATA__
+{"test": {}}

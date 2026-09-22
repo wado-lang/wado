@@ -165,34 +165,52 @@ impl Deref for ScopedBound {
     }
 }
 
-/// A trait declaration's own parameter, as the `impl` supplying its argument
+/// A trait declaration's own parameter, as the site supplying its argument
 /// sees it.
 pub(super) struct TraitParamFromImpl<'p, A> {
     pub(super) param: &'p ast::GenericParam,
-    pub(super) arg: A,
+    /// What the site wrote at this parameter's argument position, `None` where
+    /// it wrote none. What a missing argument means is the caller's: a default
+    /// to expand, or a parameter to leave alone.
+    pub(super) arg: Option<A>,
+    /// The slot the parameter occupies in the trait's own numbering, `None` for
+    /// an `fn`-bound one, which is realised in its own type and takes none.
+    pub(super) slot: u32,
+    pub(super) takes_a_slot: bool,
     pub(super) bounds: Vec<ScopedBound>,
 }
 
-/// Each parameter of a trait declaration paired with the argument an `impl`
-/// wrote for it, and the bounds it declares pinned to `implementing`.
+/// Each parameter of a trait declaration paired with the argument a site wrote
+/// for it, the slot it occupies, and the bounds it declares pinned to
+/// `implementing`.
 ///
-/// [`ast::GenericParam::fills_impl_slot`] is the alignment written arguments
-/// have: a denser filter slides every parameter after an `fn`-bound one onto
-/// the wrong argument. The trait wrote the bounds in its own space, so their
-/// `Self` is the type standing under it.
+/// The two numberings differ and both are here, since reading one for the other
+/// slides every parameter after an `fn`-bound one. An argument position counts
+/// every parameter a site may write ([`ast::GenericParam::fills_impl_slot`]); a
+/// slot counts only those a substitution fills
+/// ([`ast::GenericParam::is_real_type_param`]). The trait wrote the bounds in
+/// its own space, so their `Self` is the type standing under it.
 pub(super) fn trait_params_from_impl<'p, A: Copy>(
     params: &'p [ast::GenericParam],
     args: &[A],
     implementing: Option<SelfBinding>,
 ) -> Vec<TraitParamFromImpl<'p, A>> {
+    let mut slot = 1;
     params
         .iter()
         .filter(|param| param.fills_impl_slot())
-        .zip(args)
-        .map(|(param, &arg)| TraitParamFromImpl {
-            param,
-            arg,
-            bounds: ScopedBound::pin_declared(param, implementing),
+        .enumerate()
+        .map(|(at, param)| {
+            let takes_a_slot = param.is_real_type_param();
+            let this = TraitParamFromImpl {
+                param,
+                arg: args.get(at).copied(),
+                slot,
+                takes_a_slot,
+                bounds: ScopedBound::pin_declared(param, implementing),
+            };
+            slot += u32::from(takes_a_slot);
+            this
         })
         .collect()
 }
@@ -781,8 +799,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ///
     /// The two are one fact. A binder without its bounds is a name that
     /// resolves and dispatches on nothing; bounds without a binder are a
-    /// constraint no name reaches. Bounds already filed under `name` are kept,
-    /// since a bound that was declared still holds.
+    /// constraint no name reaches. A new binder is a new meaning for the name,
+    /// so what the old one was bounded by goes with it: a method parameter
+    /// shadowing an impl's would otherwise dispatch on the impl parameter's
+    /// traits as well as its own.
     pub(super) fn bind_param(
         &mut self,
         name: &str,
@@ -793,12 +813,16 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .trait_ctx
             .type_params
             .insert(name.to_string(), binder);
+        self.annotate_ctx
+            .trait_ctx
+            .type_param_bounds
+            .shift_remove(name);
         self.add_param_bounds(name, bounds);
     }
 
-    /// File `bounds` under `name`, keeping what is already there. Only for a
-    /// name with no binder to pair them with; everything else goes through
-    /// [`Self::bind_param`].
+    /// File `bounds` under `name`, keeping what is already there. For a name
+    /// with no binder to pair them with, and for the second half of a binding
+    /// whose bounds are read after the name is bound.
     pub(super) fn add_param_bounds(&mut self, name: &str, bounds: Vec<ScopedBound>) {
         if bounds.is_empty() {
             return;
@@ -815,17 +839,19 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// bounds' written types mean, whatever frame later reads them.
     pub(super) fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
         let self_binding = self.self_binding();
-        let bounds = ScopedBound::pin_declared(param, self_binding);
         if self_binding.is_none() {
-            self.reject_self_in_bounds(&param.name, &bounds);
+            // Every bound the parameter declares, not the trait-named ones kept
+            // below: an `fn` bound writes types too, and one rooted at `Self`
+            // goes as unchecked there as anywhere else.
+            self.reject_self_in_bounds(&param.name, &param.bounds);
         }
-        bounds
+        ScopedBound::pin_declared(param, self_binding)
     }
 
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.
-    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ScopedBound]) {
+    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ast::TraitBound]) {
         let written: Vec<Span> = bounds
             .iter()
             .filter(|bound| bound.writes_self())
@@ -863,7 +889,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         };
         let supplied =
             trait_params_from_impl(&trait_decl_type_params, &trait_args, Some(implementing));
-        for TraitParamFromImpl { param, arg, bounds } in supplied {
+        for TraitParamFromImpl {
+            param, arg, bounds, ..
+        } in supplied
+        {
+            let Some(arg) = arg else {
+                continue;
+            };
             if self
                 .annotate_ctx
                 .trait_ctx

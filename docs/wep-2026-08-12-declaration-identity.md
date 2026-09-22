@@ -748,10 +748,22 @@ Nothing is spelled, so nothing can be spelled two ways.
 A parameter of an `impl` block is substituted against the instance's type
 arguments, so its number is the position the target writes it at.
 `impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1, and declaration order
-reads the instance's `Option<i32>` for it. One answer, `target_arg_slot`, serves
-the block's own frame, its methods, and the associated types it registers. A
-parameter the target does not name takes a slot past the written ones, which no
-instantiation reaches.
+reads the instance's `Option<i32>` for it. A parameter the target does not name
+takes a slot past the ones it assigned, which no instantiation reaches.
+
+One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the
+associated types it registers. Each site computing its own is the shape this
+defect takes: they read the target differently — one unwrapping a reference,
+another not; one counting the written arguments, another the parameters it
+bound — and a block whose target both reach numbers one parameter twice. The
+cross-check against the trait solver is where that surfaces, as a disagreement
+about whether an impl applies at all.
+
+A trait declaration carries two numberings, and they are not the same count. An
+argument position counts every parameter a site may write; a slot counts only
+those a substitution fills, and an `fn`-bound parameter takes the first and not
+the second. `trait_params_from_impl` reports both, so a reader asking for one
+cannot land on the other.
 
 ### The head finds the candidates, the arguments choose
 
@@ -762,8 +774,15 @@ Registering a block's associated types without it files
 `impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
 build order then decides both, which is the pick this WEP forbids.
 
+A reference target is the case where the two readings differ most. Every impl on
+one is filed under a single receiver key, and the pointee is the one argument
+that chooses between them, so the written target names that pointee whole.
+Reading the pointee's own arguments there compares a nesting level too deep.
+
 Fixtures: `assoc_type_per_receiver_args.wado`,
-`assoc_type_binder_at_target_position.wado`.
+`assoc_type_binder_at_target_position.wado`,
+`impl_on_reference_to_generic_head.wado`,
+`bound_arg_behind_fn_bound_param.wado`.
 
 ## Keys past the Component Model boundary
 
@@ -859,6 +878,15 @@ names no instantiation, so the scrutinee's argument has nothing to disagree with
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
+
+## Known gap: a reference impl's associated type is not projected
+
+An impl on a reference target (`impl Kind for &Wrap<i32>`) answers a trait
+bound, and its methods dispatch. Its associated types do not project: `T::Out`
+where `T` is that reference stays unresolved, so the binding the impl wrote is
+out of reach. What it admits is a reference impl that can carry methods but not
+an associated type, so a trait declaring one cannot be implemented on a
+reference to a generic head.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 

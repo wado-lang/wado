@@ -14,9 +14,10 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
-use super::method_lookup::target_arg_slot;
+use super::method_lookup::ImplParamSlots;
 use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
+    trait_params_from_impl,
 };
 use super::sig::Param;
 use super::trait_env::{InheritedBound, ViaClause};
@@ -2976,18 +2977,20 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the bound wrote means whatever wrote it; one the declaration defaulted
         // (`Eq<Rhs = Self>`) is written in the trait's space and means the
         // bounded type.
-        let written: Vec<(u32, ast::Type, BoundSelf)> = trait_params
-            .iter()
-            .filter(|p| p.is_real_type_param())
-            .enumerate()
-            .filter_map(|(i, p)| match bound.type_args.get(i) {
-                Some(ty) => Some((1 + i as u32, ty.clone(), written_self)),
-                None => p
-                    .default
-                    .as_ref()
-                    .map(|ty| (1 + i as u32, ty.clone(), BoundSelf::Bounded)),
-            })
-            .collect();
+        let args: Vec<&ast::Type> = bound.type_args.iter().collect();
+        let written: Vec<(u32, ast::Type, BoundSelf)> =
+            trait_params_from_impl(&trait_params, &args, None)
+                .into_iter()
+                .filter(|supplied| supplied.takes_a_slot)
+                .filter_map(|supplied| match supplied.arg {
+                    Some(ty) => Some((supplied.slot, ty.clone(), written_self)),
+                    None => supplied
+                        .param
+                        .default
+                        .as_ref()
+                        .map(|ty| (supplied.slot, ty.clone(), BoundSelf::Bounded)),
+                })
+                .collect();
         for (slot, ty, scope) in written {
             let resolved =
                 self.under_self_binding(scope.at(self_type_id, decl), |s| s.resolve_type(&ty));
@@ -3193,10 +3196,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         {
                             continue;
                         }
+                        let slots = ImplParamSlots::of(&header.ty, &header.type_params);
                         let type_params: Vec<(ast::GenericParam, Option<u32>)> = header
                             .type_params
                             .iter()
-                            .map(|param| (param.clone(), target_arg_slot(&header.ty, &param.name)))
+                            .map(|param| (param.clone(), slots.of_name(&param.name)))
                             .collect();
                         let Some(trait_key) = header
                             .fq_trait(&self.tysys.resolutions)
