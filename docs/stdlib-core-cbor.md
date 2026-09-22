@@ -54,10 +54,8 @@ containers, and map keys sorted by the bytewise order of their encoded form.
 Equal values produce byte-identical output regardless of map insertion order
 — use this for COSE/CWT signing or content addressing.
 
-Float caveat: nothing here emits a binary16, so the canonical float ladder
-stops at binary32. Output is byte-identical to a reference deterministic
-encoder for
-integers, lengths, and map order, but may differ on float-bearing values.
+Float caveat: the ladder stops at binary32, so output may differ from a
+reference deterministic encoder on float-bearing values.
 
 ### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 
