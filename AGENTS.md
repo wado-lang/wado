@@ -29,6 +29,17 @@ mise trust                 # trust the mise.toml config (first time only)
 mise run on-task-started   # install project tools
 ```
 
+### The Cycle
+
+Write the change, commit it, distill, then test. The distill is the last of the
+editing rather than a phase after it, so one full test run at the end answers
+for the change and the distill together. A run on either side of the distill is
+the same hour spent twice.
+
+Having distilled this branch an hour ago is not a reason to skip the next one.
+The scope is the whole branch every time, and what the commits since then made
+stale is spread across everything the branch touched.
+
 ### Common Development Tasks
 
 ```sh
@@ -66,7 +77,7 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - Test the language from an e2e fixture: a `.wado` file in `wado-compiler/tests/fixtures/`, expectations in its `__DATA__` section. Nearly everything the language does is stated there, diagnostics included. A fixture states a rejection two ways. `{"compile_error": "…"}` matches the whole report, so writing `":4:13: parse error: …"` pins the position as well as the message. `{"compile_error_codes": ["INVALID_SYNTAX"]}` names the `Code` it was raised under. Kiln is the exception: a generator runs against the filesystem, which a fixture cannot set up.
 - Write an integration test only for what no fixture can state — the CLI, the loader, `dump` output, a host API. Put it in `tests/integration/` and declare it in that directory's `main.rs`. A file dropped directly in `tests/` becomes its own target, and each one statically links the compiler and wasmtime for another ~150 MB.
 - Run `/code-review-response` to answer any review finding, whoever the reviewer is and however it reaches you. A finding arriving as a pull request event is one, and handling it straight from the event skips every step the skill ends with.
-- Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should.
+- Run `/distill` once a piece of work is done, and again after answering review findings. An extra run costs nothing, so run it the moment you wonder whether you should. §"The Cycle" says where it sits.
 
 ## The Wado Language
 
