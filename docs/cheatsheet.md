@@ -1189,6 +1189,15 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
+`From` takes the same marker, but no use derives it, so the marker is what asks
+for one. On a variant, `impl From<T> for V;` wraps the value into the single
+case whose payload is `T`.
+
+```wado
+variant ServiceError { Network(NetworkError), Timeout(TimeoutError) }
+impl From<NetworkError> for ServiceError;   // -> ServiceError::Network(e)
+```
+
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` runs the same `Display` with `Formatter.alternate` set.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
@@ -1199,8 +1208,7 @@ instead of wording the failure again, and declares `impl From<Narrower> for Wide
 so `?` converts at the call site:
 
 ```wado
-variant ParseError { InvalidPercentEncoding, InvalidUtf8(Utf8Error) }
-impl From<Utf8Error> for ParseError;      // derived: wraps into the matching case
+impl From<Utf8Error> for ParseError;
 
 fn percent_decode(input: String) -> Result<String, ParseError> {
     let bytes = decode_octets(input)?;
