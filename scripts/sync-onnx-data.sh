@@ -31,6 +31,14 @@ fi
 
 changed=0
 while IFS= read -r rel; do
+    # A test names a file under `tests/onnx`, so a path climbing out of it would
+    # have this script read and write somewhere neither directory covers.
+    case "/${rel}/" in
+    */../* | //*)
+        echo "ERROR: ${rel} leaves ${DEST}" >&2
+        exit 1
+        ;;
+    esac
     if [ ! -f "${SRC}/${rel}" ]; then
         echo "ERROR: ${SRC}/${rel} is missing; the submodule may be at another commit" >&2
         exit 1
