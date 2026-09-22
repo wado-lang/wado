@@ -54,6 +54,11 @@ assert `${end_of_january.add(&month)}` == "2023-02-28T00:00:00Z";
 // The zoneless types are the shapes a date or a clock reading really has.
 assert PlainDate::new(2024, 2, 29).in_leap_year();
 assert `${PlainTime { hour: 9, minute: 30 }}` == "09:30:00";
+
+// Every type reads its own spelling back through `FromStr`.
+assert PlainDate::from_str("2024-02-29") matches { Ok(d) && d.in_leap_year() };
+assert PlainYearMonth::from_str("2024-13") matches { Err(_) };
+
 assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
 ```
 
@@ -580,10 +585,6 @@ length — Temporal's `constrain` overflow.
 
 The date `days` after the Unix epoch.
 
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDate, DeserializeError>`
-
-Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
-
 #### `pub fn epoch_days(&self) -> i64`
 
 Days since 1970-01-01, negative before it.
@@ -706,10 +707,6 @@ descending significance and so orders chronologically within a day.
 A wall-clock time, asserted to be in range. Every component defaults to
 zero, so `PlainTime { hour: 9 }` is 09:00:00.
 
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainTime, DeserializeError>`
-
-Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
-
 #### `pub fn is_valid(&self) -> bool`
 
 Whether every component is in the range the ISO 8601 clock allows.
@@ -782,11 +779,6 @@ still names a different moment in every zone. Corresponds to
 
 A date and time, asserted to be in range.
 
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDateTime, DeserializeError>`
-
-Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
-the separator and no offset.
-
 #### `pub fn add(&self, duration: &Duration) -> PlainDateTime`
 
 Move forward by `duration`: the date components first, constraining a
@@ -842,10 +834,6 @@ period. Corresponds to `Temporal.PlainYearMonth`.
 #### `pub fn new(year: i32, month: i32) -> PlainYearMonth`
 
 A year and month, asserted to be in range.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainYearMonth, DeserializeError>`
-
-Parse `YYYY-MM`.
 
 #### `pub fn days_in_month(&self) -> i32`
 
@@ -922,10 +910,6 @@ is `to_plain_date`'s problem.
 
 A month and day, asserted to exist in some year — February 29 does, so
 it is accepted here and resolved by `to_plain_date`.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainMonthDay, DeserializeError>`
-
-Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
 
 #### `pub fn to_plain_date(&self, year: i32) -> PlainDate`
 

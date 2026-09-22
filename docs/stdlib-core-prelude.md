@@ -687,10 +687,9 @@ wins. A target without this impl rejects `..base` where it is written.
 
 ### `pub trait FromStr with ()`
 
-Parse a value from a string.
-
-The parameter takes a `StrSlice` among the rest, so a field is parsed out
-of a larger buffer with no substring allocation.
+Parse a value from text that may not denote one, where `From<String>` is
+for text that always does. The parameter takes a `StrSlice` among the rest,
+so a field is parsed out of a larger buffer with no substring allocation.
 
 #### `fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>`
 

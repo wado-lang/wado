@@ -1589,10 +1589,9 @@ pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 
-/// Parse a value from a string.
-///
-/// The parameter takes a `StrSlice` among the rest, so a field is parsed out
-/// of a larger buffer with no substring allocation.
+/// Parse a value from text that may not denote one, where `From<String>` is
+/// for text that always does. The parameter takes a `StrSlice` among the rest,
+/// so a field is parsed out of a larger buffer with no substring allocation.
 pub trait FromStr with () {
     type Err: Error;
 
