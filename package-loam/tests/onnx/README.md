@@ -15,6 +15,7 @@ These are committed rather than read out of the `vendor/onnx` submodule, which
 is absent wherever it is not initialized. The Loam WEP says why under the
 conformance suite.
 
-To take a new model, copy it and its `test_data_set_0/` under the same upstream
-path and update this file's commit if it moved. `scripts/sync-vendor.sh` updates
-the submodule; it does not touch what is copied here.
+`mise run sync-onnx-data` fetches them. It reads the tests for which files to
+take, so naming a new model in a test and running it is the whole step. It also
+reports a file here that no test names any more, and says when the submodule has
+moved off the commit above.
