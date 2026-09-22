@@ -64,19 +64,17 @@ a reviewer asked is how a design drifts without anyone deciding.
 
 ## Then invoke `/distill`
 
-Commit the fixes, then invoke the `/distill` skill. This is not a decision. Do not ask
-whether to run it, do not offer it as a next step, and do not stop before it:
-there is no case where the answer is no, and the moment you wonder is the
-moment to run it. A response that ends without it is unfinished.
+Commit the fixes, then invoke the `/distill` skill. This is not a decision. Do
+not ask whether to run it, do not offer it as a next step, and do not stop
+before it: there is no case where the answer is no, and the moment you wonder is
+the moment to run it. A response that ends without it is unfinished.
 
-`/distill` is the last of the editing, not a phase that follows it. The order is
-commit, `/distill`, test. One test run covers the fixes and what `/distill`
-edited, which is what the skill ends with. A run before it and another after it
-is the same hour spent twice.
+Where it sits is §"The Cycle" in `AGENTS.md`: commit, `/distill`, test.
 
 Run it even when the fixes were small, even when you invoked `/distill` on this
-branch an hour ago, and even when you are confident there is nothing to cut. Finding
-nothing is the outcome that ends the cycle, and you only know it by running.
+branch an hour ago, and even when you are confident there is nothing to cut.
+Finding nothing is the outcome that ends the cycle, and you only know it by
+running.
 
 A fix written to satisfy a reviewer arrives in the reviewer's framing: their
 wording in its comments, an explanation of the bug beside the code, a helper the

@@ -193,7 +193,7 @@ pub fn float_tensor(t: &TensorProto) -> Option<[List<f32>, List<i32>]> {
     }
     let mut extents: List<i32> = [];
     for let d of t.dims {
-        extents.push(d as i32);
+        extents.push(extent(d, &t.name).unwrap());
     }
     if t.raw_data.is_empty() {
         return Option::Some([t.float_data, extents]);
@@ -233,17 +233,27 @@ fn dtype_name(elem_type: i32) -> Option<String> {
     };
 }
 
-fn read_dim(d: &TensorShapeProtoDimension) -> Dim {
+/// An extent as the shape algebra holds it. ONNX states a dimension as an
+/// `int64` and no tensor that fits in memory needs one, so narrowing it is
+/// where a file says something no graph can mean.
+fn extent(dim: i64, tensor: &String) -> Result<i32, String> {
+    if dim < 0 || dim > i32::MAX as i64 {
+        return Result::Err(`${tensor}: dimension ${dim}`);
+    }
+    return Result::Ok(dim as i32);
+}
+
+fn read_dim(d: &TensorShapeProtoDimension, tensor: &String) -> Result<Dim, String> {
     if d.dim_param != "" {
-        return Dim::Symbol(d.dim_param);
+        return Result::Ok(Dim::Symbol(d.dim_param));
     }
     if d.dim_value != 0 {
-        return Dim::Static(d.dim_value as i32);
+        return Result::Ok(Dim::Static(extent(d.dim_value, tensor)?));
     }
     // A zero `dim_value` and an empty `dim_param` are both the absent field,
     // which is ONNX's `?`. A genuine extent of zero is indistinguishable, and
     // an exporter does not write one.
-    return Dim::Unknown;
+    return Result::Ok(Dim::Unknown);
 }
 
 fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
@@ -260,7 +270,7 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
         Some(shape) => {
             let mut dims: List<Dim> = [];
             for let d of shape.dim {
-                dims.push(read_dim(&d));
+                dims.push(read_dim(&d, &vi.name)?);
             }
             Rank::Dims(dims);
         },
@@ -283,7 +293,7 @@ fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
     };
     let mut dims: List<Dim> = [];
     for let d of t.dims {
-        dims.push(Dim::Static(d as i32));
+        dims.push(Dim::Static(extent(d, &t.name)?));
     }
     return Result::Ok(ValueInfo { name: t.name, dtype, rank: Rank::Dims(dims) });
 }
@@ -326,12 +336,12 @@ fn read_attr(a: &AttributeProto) -> Attr {
         ATTRIBUTE_TENSOR => {
             is_list = false;
             if let Some(t) = &a.t {
-                if let Some([data, extents]) = float_tensor(t) {
+                if let Some([data, _]) = float_tensor(t) {
                     return Attr {
                         name: a.name,
                         values: [],
                         is_list: false,
-                        tensor: Option::Some(ConstTensor { dtype: "float", extents, data }),
+                        tensor: Option::Some(ConstTensor { data }),
                     };
                 }
             }
