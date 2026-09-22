@@ -1394,7 +1394,7 @@ impl From<i64> for i128 {
 }
 
 impl TryFrom<u128> for u64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<u64, ConvertError> {
         if value.high() != 0 {
@@ -1405,7 +1405,7 @@ impl TryFrom<u128> for u64 {
 }
 
 impl TryFrom<u128> for i64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<i64, ConvertError> {
         if value.high() != 0 || value.low() > i64::MAX as u64 {
@@ -1416,7 +1416,7 @@ impl TryFrom<u128> for i64 {
 }
 
 impl TryFrom<u128> for i128 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<i128, ConvertError> {
         if value.high() > i64::MAX as u64 {
@@ -1427,7 +1427,7 @@ impl TryFrom<u128> for i128 {
 }
 
 impl TryFrom<i128> for i64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<i64, ConvertError> {
         let min: i128 = i64::MIN as i128;
@@ -1440,7 +1440,7 @@ impl TryFrom<i128> for i64 {
 }
 
 impl TryFrom<i128> for u64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<u64, ConvertError> {
         // In range exactly when the value is in [0, 2^64): the high half
@@ -1453,7 +1453,7 @@ impl TryFrom<i128> for u64 {
 }
 
 impl TryFrom<i128> for u128 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<u128, ConvertError> {
         if value.is_negative() {
@@ -1464,7 +1464,7 @@ impl TryFrom<i128> for u128 {
 }
 
 impl TryFrom<i128> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<f64, ConvertError> {
         let max: i128 = 9007199254740992;
@@ -1477,7 +1477,7 @@ impl TryFrom<i128> for f64 {
 }
 
 impl TryFrom<i128> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: i128) -> Result<f32, ConvertError> {
         let max: i128 = 16777216;
@@ -1490,7 +1490,7 @@ impl TryFrom<i128> for f32 {
 }
 
 impl TryFrom<u128> for f64 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<f64, ConvertError> {
         let max: u128 = 9007199254740992;
@@ -1502,7 +1502,7 @@ impl TryFrom<u128> for f64 {
 }
 
 impl TryFrom<u128> for f32 {
-    type Error = ConvertError;
+    type Err = ConvertError;
 
     pub fn try_from(value: u128) -> Result<f32, ConvertError> {
         let max: u128 = 16777216;

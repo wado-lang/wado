@@ -145,6 +145,16 @@ impl Serializer for MockSerializer {
         return Result::Ok(());
     }
 
+    fn serialize_i128(&mut self, v: i128) -> Result<(), SerializeError> {
+        self.w.buf.push_str(`${v}`);
+        return Result::Ok(());
+    }
+
+    fn serialize_u128(&mut self, v: u128) -> Result<(), SerializeError> {
+        self.w.buf.push_str(`${v}`);
+        return Result::Ok(());
+    }
+
     fn serialize_f32(&mut self, v: f32) -> Result<(), SerializeError> {
         self.w.buf.push_str(`${v as f64}`);
         return Result::Ok(());

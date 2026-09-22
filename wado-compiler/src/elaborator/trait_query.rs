@@ -2226,9 +2226,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         Some((sig, assoc_types))
     }
 
-    /// The recorded declaration facts of an identified trait — the digest
-    /// counterpart of [`Self::trait_decl_header_of`], answerable only once the
-    /// decl pass has run.
     /// The recorded signature of an already-identified trait.
     ///
     /// Every by-name form funnels through this one. Flattening a key back to

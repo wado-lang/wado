@@ -52,6 +52,11 @@ its own to carry the rest of the chain. Reported at the impl block with a reason
 chain. Structural on-demand derivation satisfies the obligation, so a plain
 struct gets `Ord: Eq` without an `impl Eq` being written.
 
+The impl answering that obligation is where the supertrait's members live, so
+`impl Sub for T` neither owes nor may bind an associated type `Super` declares
+([Associated Types](./wep-2026-01-20-associated-types.md)). A binding written in
+the subtrait lands where no projection through `Super` reads it.
+
 ### Elaboration
 
 A declared bound `T: Sub` expands to the transitive closure of `Sub` and its

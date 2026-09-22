@@ -905,6 +905,30 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` leaves one of its trait's associated types unbound. None
+    /// declares a default, so the projection reaches codegen unsubstituted.
+    ImplMissingAssocType {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a name its trait does not declare — a typo for one it
+    /// does, which leaves the real associated type unbound.
+    ImplAssocTypeNotInTrait {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` leaves a method its trait requires undefined. A trait method
+    /// written with a body is a default and is not required.
+    ImplMissingMethod {
+        trait_name: String,
+        method_name: String,
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -1986,6 +2010,33 @@ impl TypeError {
                         receiver(*expected)
                     )
                 },
+                *span,
+            ),
+            TypeError::ImplMissingAssocType {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeNotInTrait {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplMissingMethod {
+                trait_name,
+                method_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not define method '{method_name}'"),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (
