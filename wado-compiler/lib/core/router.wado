@@ -992,6 +992,8 @@ impl PathParamsDeserializer {
         let [s, e] = self.current_range();
         return match T::from_str_slice(&self.src.path.as_str_slice().sub(s, e)) {
             Ok(v) => Result::Ok(v),
+            // `FromStr::Err` carries no `Display` bound, so only the expected
+            // type is reportable here.
             Err(_) => Result::Err(DeserializeError::invalid_value(self.format_error(type_name), s as i64)),
         };
     }

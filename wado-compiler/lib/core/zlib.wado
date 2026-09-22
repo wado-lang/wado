@@ -71,6 +71,27 @@ pub enum ZlibError {
     InvalidDeflateData,
 }
 
+impl Display for ZlibError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            DataTooShort => "input is shorter than the smallest valid stream",
+            InvalidHeader => "invalid header",
+            InvalidMagicNumber => "invalid magic number",
+            UnsupportedCompressionMethod => "unsupported compression method",
+            PresetDictionaryNotSupported => "preset dictionary is not supported",
+            Adler32Mismatch => "Adler-32 checksum mismatch",
+            Crc32Mismatch => "CRC-32 checksum mismatch",
+            TruncatedExtraField => "truncated extra field",
+            HeaderExtendsPastEnd => "header extends past the end of the input",
+            TruncatedTrailer => "truncated trailer",
+            IsizeMismatch => "uncompressed size does not match the trailer",
+            OutputExceedsMax => "output exceeds the maximum size",
+            InvalidDeflateData => "malformed DEFLATE stream",
+        };
+        f.write_str(&message);
+    }
+}
+
 /// Returns the zlib version string.
 pub fn zlib_version() -> String {
     return "1.3.1.wado";

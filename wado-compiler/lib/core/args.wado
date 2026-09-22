@@ -99,6 +99,12 @@ impl Eq for ArgsErrorKind;
 
 impl Eq for ArgsError;
 
+impl Display for ArgsError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
 /// The argv `Deserializer`. Holds the token stream and the plumbing that serves
 /// the current field's value to the `deserialize_*` methods.
 pub struct ArgvDeserializer {

@@ -126,3 +126,8 @@ test "LenientParseError reason" {
 
 __DATA__
 {"test": {}}
+
+test "LenientParseError renders its reason" {
+    let e = bool::from_str_lenient("maybe").unwrap_err();
+    assert `${e}` == e.reason();
+}

@@ -1512,6 +1512,12 @@ impl ConvertError {
     }
 }
 
+impl Display for ConvertError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 /// bound. Implemented for every `Add<Output = Self>`.
 pub trait Sum with () {
@@ -1607,6 +1613,12 @@ impl LenientParseError {
     /// A short description of why parsing failed.
     pub fn reason(&self) -> String {
         return self.reason;
+    }
+}
+
+impl Display for LenientParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
     }
 }
 

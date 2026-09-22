@@ -271,3 +271,9 @@ test "equality compares all 128 bits" {
         }
     }
 }
+
+test "ParseError renders its reason" {
+    assert `${Uuid::parse("nope").unwrap_err()}` == "not a UUID-shaped length";
+    assert `${Uuid::parse("550e8400+e29b+41d4+a716+446655440000").unwrap_err()}` == "hyphens, braces or the `urn:uuid:` prefix are misplaced";
+    assert `${Uuid::parse("550e8400-e29b-41d4-a716-44665544000z").unwrap_err()}` == "not a hex digit";
+}

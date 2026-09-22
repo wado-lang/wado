@@ -1189,6 +1189,10 @@ impl Default for Broken;   // ERROR: `name` has no default expression
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
+Every standard library error type has a hand-written `Display`, so `` `${e}` ``
+renders the reason and an error being carried into a wider one needs no
+per-site wording.
+
 ## Associated Constants
 
 ```wado

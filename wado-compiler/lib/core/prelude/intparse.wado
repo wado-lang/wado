@@ -8,6 +8,8 @@
 // and `int128.wado`).
 
 use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
+use { Display } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { u128 } from "core:prelude/int128.wado";
 use { LenientParseError } from "core:prelude/traits.wado";
@@ -149,6 +151,18 @@ impl ParseIntError {
     }
 }
 
+impl Display for ParseIntError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse integer from empty string",
+            InvalidDigit => "invalid digit found in string",
+            PosOverflow => "number too large to fit in target type",
+            NegOverflow => "number too small to fit in target type",
+        };
+        f.write_str(&message);
+    }
+}
+
 /// Kind of failure returned by float parsing.
 pub enum FloatErrorKind {
     /// The input string was empty.
@@ -170,6 +184,16 @@ impl ParseFloatError {
     /// Returns the kind of this error.
     pub fn kind(&self) -> FloatErrorKind {
         return self.kind;
+    }
+}
+
+impl Display for ParseFloatError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse float from empty string",
+            Invalid => "invalid float literal",
+        };
+        f.write_str(&message);
     }
 }
 

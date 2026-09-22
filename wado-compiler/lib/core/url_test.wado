@@ -981,3 +981,14 @@ test "deserialize Url invalid string" {
     let r = from_string::<Url>(`"not-a-url"`);
     assert r matches { Err(_) };
 }
+
+test "ParseError renders its reason" {
+    assert `${Url::parse("").unwrap_err()}` == "empty input";
+    assert `${Url::parse("http://").unwrap_err()}` == "missing host";
+}
+
+test "percent_decode reports the UTF-8 failure it found" {
+    let e = percent_decode("%FF").unwrap_err();
+    assert e == ParseError::InvalidUtf8(Utf8Error::invalid(0, 1));
+    assert `${e}` == "invalid UTF-8: invalid utf-8 sequence of 1 bytes from index 0";
+}

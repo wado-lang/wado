@@ -3,7 +3,7 @@
 // Split from the prelude so other stdlib modules can depend on String without a cycle.
 
 
-use { Eq, Ord, Iterator, IntoIterator, Add, Default, From, Ordering } from "core:prelude/traits.wado";
+use { Eq, Ord, Iterator, IntoIterator, Add, Default, Display, From, Ordering } from "core:prelude/traits.wado";
 use { LenientFromStr, LenientParseError } from "core:prelude/traits.wado";
 use { IterMap, IterFilter, IterEnumerate, IterTake, IterSkip, IterChain, IterZip } from "core:prelude/traits.wado";
 use { ReflectTemplate } from "core:prelude/traits.wado";
@@ -13,6 +13,46 @@ use { Slice } from "core:prelude/slice.wado";
 use { Array, seq_eq, seq_cmp } from "core:prelude/array.wado";
 use { List } from "core:prelude/list.wado";
 use { ByteSlice, ByteList, ByteArray, AsByteSlice } from "core:prelude/bytes.wado";
+
+/// Why a byte sequence is not valid UTF-8: where the valid part ends, and
+/// whether what follows is malformed or merely cut short.
+pub struct Utf8Error {
+    valid_up_to: i32,
+    error_len: Option<i32>,
+}
+
+impl Utf8Error {
+    /// A sequence no further byte could complete, `len` bytes long.
+    pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error {
+        assert len >= 1 && len <= 3;
+        return Utf8Error { valid_up_to, error_len: Option::Some(len) };
+    }
+
+    /// A sequence the input ends in the middle of.
+    pub fn incomplete(valid_up_to: i32) -> Utf8Error {
+        return Utf8Error { valid_up_to, error_len: Option::None };
+    }
+
+    /// Byte offset at which the first invalid sequence begins.
+    pub fn valid_up_to(&self) -> i32 {
+        return self.valid_up_to;
+    }
+
+    /// Length of the invalid sequence, or `None` when the input just ends short
+    /// and more bytes could still complete it.
+    pub fn error_len(&self) -> Option<i32> {
+        return self.error_len;
+    }
+}
+
+impl Display for Utf8Error {
+    fn fmt(&self, f: &mut Formatter) {
+        match self.error_len {
+            Some(n) => f.write_str(`invalid utf-8 sequence of ${n} bytes from index ${self.valid_up_to}`),
+            None => f.write_str(`incomplete utf-8 byte sequence from index ${self.valid_up_to}`),
+        }
+    }
+}
 
 /// Byte length (1–4) of the UTF-8 sequence led by `b0`, assuming valid UTF-8.
 #[inline]
@@ -952,18 +992,20 @@ impl String {
     }
 
     /// Build a `String` from an iterable of bytes, validating UTF-8.
-    /// `Ok(String)` on success, `Err(message)` on invalid UTF-8.
-    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String> {
+    pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error> {
         let collected: List<u8> = bytes.into_iter().collect();
         return String::from_utf8_slice(collected.as_slice() as ByteSlice);
     }
 
     /// Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
-    pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String> {
-        let bad = String::utf8_error_offset(&bytes);
-        if bad >= 0 {
+    ///
+    /// `bytes` is the whole input, so a sequence merely cut short at its end
+    /// still fails — with `error_len() == None`, which says so.
+    pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error> {
+        let prefix = String::utf8_valid_prefix(&bytes);
+        if prefix != bytes.len() {
             builtin::cold_path();
-            return Result::Err(`invalid UTF-8 at byte ${bad}`);
+            return Result::Err(String::utf8_error_at(&bytes, prefix));
         }
         return Result::Ok(String {
             repr: bytes.to_array() as ByteArray,
@@ -978,12 +1020,12 @@ impl String {
     ///
     /// `Err` names a sequence no further byte could complete, and leaves this
     /// string untouched: the prefix is validated before any of it is appended.
-    pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String> {
+    pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error> {
         let slice = bytes.as_byte_slice();
         let taken = String::utf8_valid_prefix(&slice);
         if taken < 0 {
             builtin::cold_path();
-            return Result::Err(`invalid UTF-8 at byte ${-1 - taken}`);
+            return Result::Err(String::utf8_error_at(&slice, taken));
         }
         self.push_bytes_unchecked(&slice.slice(0, taken));
         return Result::Ok(taken);
@@ -1011,16 +1053,40 @@ impl String {
         return len;
     }
 
-    /// Offset of the first malformed UTF-8 sequence in `bytes`, or `-1` when it
-    /// is well-formed. `bytes` is the whole input, so a sequence merely cut
-    /// short at its end is malformed too.
-    internal fn utf8_error_offset(bytes: &ByteSlice) -> i32 {
-        let prefix = String::utf8_valid_prefix(bytes);
-        if prefix == bytes.len() {
-            return -1;
+    /// Describe the failure a `utf8_valid_prefix` answer other than `len`
+    /// stands for. Off the hot path, so the invalid sequence is measured here
+    /// rather than carried out of the scan.
+    internal fn utf8_error_at(bytes: &ByteSlice, prefix: i32) -> Utf8Error {
+        assert prefix != bytes.len();
+        if prefix >= 0 {
+            return Utf8Error::incomplete(prefix);
         }
-        builtin::cold_path();
-        return if prefix < 0 { -1 - prefix } else { prefix };
+        let start = -1 - prefix;
+        return Utf8Error::invalid(start, String::utf8_invalid_len(bytes, start));
+    }
+
+    /// Length (1–3) of the valid prefix of the malformed sequence at `start`:
+    /// how many of its bytes `utf8_sequence_len` accepted before the one that
+    /// no continuation could rescue.
+    internal fn utf8_invalid_len(bytes: &ByteSlice, start: i32) -> i32 {
+        let b0 = bytes.get_unchecked(start);
+        if b0 < 0xC2 || b0 >= 0xF5 {
+            return 1;
+        }
+        let b1 = bytes.get_unchecked(start + 1);
+        if b1 < 0x80
+            || b1 > 0xBF
+            || b0 == 0xE0 && b1 < 0xA0
+            || b0 == 0xED && b1 >= 0xA0
+            || b0 == 0xF0 && b1 < 0x90
+            || b0 == 0xF4 && b1 > 0x8F {
+            return 1;
+        }
+        let b2 = bytes.get_unchecked(start + 2);
+        if b2 < 0x80 || b2 > 0xBF {
+            return 2;
+        }
+        return 3;
     }
 
     /// Length (1–4) of the valid UTF-8 sequence at `bytes[start..len)`, `0` when
@@ -1106,7 +1172,7 @@ impl String {
 
     /// Whether `bytes` is well-formed UTF-8.
     pub fn is_valid_utf8(bytes: ByteSlice) -> bool {
-        return String::utf8_error_offset(&bytes) < 0;
+        return String::utf8_valid_prefix(&bytes) == bytes.len();
     }
 
     /// Build a `String` from an iterable of bytes, replacing invalid UTF-8 with U+FFFD.

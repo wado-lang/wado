@@ -677,3 +677,12 @@ test "an empty float clamp range is refused" {
 test "a NaN clamp bound is refused" {
     let _ = f64::clamp(0.0, f64::NAN, 1.0);
 }
+
+test "ParseIntError and ParseFloatError render their reason" {
+    assert `${i32::from_str("").unwrap_err()}` == "cannot parse integer from empty string";
+    assert `${i32::from_str("x").unwrap_err()}` == "invalid digit found in string";
+    assert `${i8::from_str("999").unwrap_err()}` == "number too large to fit in target type";
+    assert `${i8::from_str("-999").unwrap_err()}` == "number too small to fit in target type";
+    assert `${f64::from_str("").unwrap_err()}` == "cannot parse float from empty string";
+    assert `${f64::from_str("x").unwrap_err()}` == "invalid float literal";
+}

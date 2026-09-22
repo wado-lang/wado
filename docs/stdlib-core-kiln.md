@@ -21,7 +21,7 @@ Read an input file's content to the end. A generator that needs the whole
 file calls this; one that needs a prefix reads `content` itself and drops
 it early.
 
-### `pub fn read_text(content: Stream<u8>) -> Result<String, String>`
+### `pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error>`
 
 Read an input file's content to the end as text, decoding as it goes so no
 second copy of the file exists. `Err` carries the decode failure, which is a

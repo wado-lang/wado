@@ -2773,6 +2773,10 @@ Error type returned by fallible conversions.
 
 #### `pub fn new(message: String) -> ConvertError`
 
+#### `impl Display for ConvertError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct LenientParseError`
 
 Error returned by the lenient string parsers (`LenientFromStr`). All
@@ -2786,6 +2790,10 @@ _Fields are private._
 #### `pub fn reason(&self) -> String`
 
 A short description of why parsing failed.
+
+#### `impl Display for LenientParseError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct Formatter`
 
@@ -3486,6 +3494,10 @@ Error returned by integer parsing.
 
 Returns the kind of this error.
 
+#### `impl Display for ParseIntError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct ParseFloatError`
 
 Error returned by float parsing.
@@ -3497,6 +3509,10 @@ Error returned by float parsing.
 #### `pub fn kind(&self) -> FloatErrorKind`
 
 Returns the kind of this error.
+
+#### `impl Display for ParseFloatError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct Slice<T>`
 
@@ -3663,6 +3679,34 @@ _Fields are private._
 #### `impl IntoIterator for SliceChunks<T>`
 
 ##### `fn into_iter(&self) -> SliceChunks<T>`
+
+### `pub struct Utf8Error`
+
+Why a byte sequence is not valid UTF-8: where the valid part ends, and
+whether what follows is malformed or merely cut short.
+
+_Fields are private._
+
+#### `pub fn invalid(valid_up_to: i32, len: i32) -> Utf8Error`
+
+A sequence no further byte could complete, `len` bytes long.
+
+#### `pub fn incomplete(valid_up_to: i32) -> Utf8Error`
+
+A sequence the input ends in the middle of.
+
+#### `pub fn valid_up_to(&self) -> i32`
+
+Byte offset at which the first invalid sequence begins.
+
+#### `pub fn error_len(&self) -> Option<i32>`
+
+Length of the invalid sequence, or `None` when the input just ends short
+and more bytes could still complete it.
+
+#### `impl Display for Utf8Error`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct String`
 
@@ -3967,16 +4011,18 @@ If `count` is negative, replaces all occurrences.
 
 Build a `String` from an iterable of chars.
 
-#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, String>`
+#### `pub fn from_utf8<I: IntoIterator<Item = u8>>(bytes: I) -> Result<String, Utf8Error>`
 
 Build a `String` from an iterable of bytes, validating UTF-8.
-`Ok(String)` on success, `Err(message)` on invalid UTF-8.
 
-#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, String>`
+#### `pub fn from_utf8_slice(bytes: ByteSlice) -> Result<String, Utf8Error>`
 
 Validate a contiguous byte slice as UTF-8 and wrap it as a `String`.
 
-#### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, String>`
+`bytes` is the whole input, so a sequence merely cut short at its end
+still fails — with `error_len() == None`, which says so.
+
+#### `pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error>`
 
 Append the longest prefix of `bytes` that is complete, valid UTF-8, and
 answer how many bytes that was. A trailing sequence cut short is left

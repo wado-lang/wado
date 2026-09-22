@@ -933,9 +933,9 @@ fn parse_i64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<i64, DeserializeE
                 let checked = checked_int_f64(v, -TWO_POW_63, TWO_POW_63, "value out of range for i64", start)?;
                 Result::Ok(checked as i64);
             },
-            Err(_) => {
+            Err(e) => {
                 builtin::cold_path();
-                Result::Err(DeserializeError::invalid_value("invalid number", start));
+                Result::Err(DeserializeError::invalid_value(`invalid number: ${e}`, start));
             },
         };
     }
@@ -963,9 +963,9 @@ fn parse_u64_from<S: AsStrSlice>(raw: S, start: i64) -> Result<u64, DeserializeE
                 let checked = checked_int_f64(v, 0.0, TWO_POW_64, "value out of range for u64", start)?;
                 Result::Ok(checked as u64);
             },
-            Err(_) => {
+            Err(e) => {
                 builtin::cold_path();
-                Result::Err(DeserializeError::invalid_value("invalid number", start));
+                Result::Err(DeserializeError::invalid_value(`invalid number: ${e}`, start));
             },
         };
     }

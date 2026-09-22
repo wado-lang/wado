@@ -35,6 +35,24 @@ pub variant ParseError {
     InvalidPort,
     InvalidPath,
     InvalidPercentEncoding,
+    /// The percent-decoded bytes are not UTF-8.
+    InvalidUtf8(Utf8Error),
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            EmptyInput => "empty input",
+            InvalidScheme => "invalid scheme",
+            MissingHost => "missing host",
+            InvalidHost => "invalid host",
+            InvalidPort => "invalid port",
+            InvalidPath => "invalid path",
+            InvalidPercentEncoding => "invalid percent-encoding",
+            InvalidUtf8(e) => `invalid UTF-8: ${e}`,
+        };
+        f.write_str(&message);
+    }
 }
 
 impl Eq for ParseError {
@@ -47,6 +65,7 @@ impl Eq for ParseError {
             [InvalidPort, InvalidPort] => true,
             [InvalidPath, InvalidPath] => true,
             [InvalidPercentEncoding, InvalidPercentEncoding] => true,
+            [InvalidUtf8(a), InvalidUtf8(b)] => a.valid_up_to() == b.valid_up_to() && a.error_len() == b.error_len(),
             _ => false,
         };
     }
@@ -198,7 +217,7 @@ pub fn percent_decode<S: AsStrSlice>(input: S) -> Result<String, ParseError> {
     }
     return match String::from_utf8(bytes) {
         Ok(s) => Result::Ok(s),
-        Err(_) => Result::Err(ParseError::InvalidPercentEncoding),
+        Err(e) => Result::Err(ParseError::InvalidUtf8(e)),
     };
 }
 
@@ -805,9 +824,9 @@ impl Deserialize for Url {
         };
         return match Url::parse(str) {
             Ok(url) => Result::Ok(url),
-            Err(_) => Result::Err(DeserializeError {
+            Err(e) => Result::Err(DeserializeError {
                 kind: DeserializeErrorKind::InvalidValue,
-                message: "invalid URL",
+                message: `invalid URL: ${e}`,
                 offset: 0,
             }),
         };

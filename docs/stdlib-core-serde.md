@@ -428,6 +428,10 @@ Used by variadic tuple deserialization via type pack expansion.
 
 #### `message: String`
 
+#### `impl Display for SerializeError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
+
 ### `pub struct DeserializeError`
 
 #### `kind: DeserializeErrorKind`
@@ -453,6 +457,10 @@ Used by variadic tuple deserialization via type pack expansion.
 #### `pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError`
 
 #### `pub fn duplicate_field<S: AsStrSlice>(name: S) -> DeserializeError`
+
+#### `impl Display for DeserializeError`
+
+##### `fn fmt(&self, f: &mut Formatter)`
 
 ### `pub struct IgnoredAny`
 

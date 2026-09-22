@@ -176,3 +176,7 @@ Error type for URL parsing failures.
 #### `InvalidPath`
 
 #### `InvalidPercentEncoding`
+
+#### `InvalidUtf8(Utf8Error)`
+
+The percent-decoded bytes are not UTF-8.

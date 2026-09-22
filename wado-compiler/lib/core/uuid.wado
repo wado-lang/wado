@@ -55,6 +55,17 @@ pub variant ParseError {
     InvalidCharacter,
 }
 
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            InvalidLength => "not a UUID-shaped length",
+            InvalidGroups => "hyphens, braces or the `urn:uuid:` prefix are misplaced",
+            InvalidCharacter => "not a hex digit",
+        };
+        f.write_str(&message);
+    }
+}
+
 /// A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
 /// the fields out.
 pub struct Uuid {
@@ -226,7 +237,7 @@ impl Visitor for UuidVisitor {
     fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Uuid, DeserializeError> {
         return match Uuid::parse(&v) {
             Ok(id) => Result::Ok(id),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid UUID", -1)),
+            Err(e) => Result::Err(DeserializeError::invalid_value(`invalid UUID: ${e}`, -1)),
         };
     }
 
