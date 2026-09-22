@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790075742119,
+  "lastUpdate": 1790080164120,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58367,6 +58367,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "pi_approx",
             "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0bdcf6850267caff3c8c3ba65230c66b1478b8ca",
+          "message": "Merge pull request #2123 from wado-lang/claude/f16-bf16-compiler-design-c1vc74\n\nfeat(compiler): f16 and bf16 as storage-only primitives",
+          "timestamp": "2026-09-22T21:11:03+09:00",
+          "tree_id": "6095e6a0b1c477d2058b4754935577aa6a8b3f86",
+          "url": "https://github.com/wado-lang/wado/commit/0bdcf6850267caff3c8c3ba65230c66b1478b8ca"
+        },
+        "date": 1790080163470,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
             "unit": "bytes"
           },
           {
