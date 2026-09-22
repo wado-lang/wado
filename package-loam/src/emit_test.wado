@@ -140,6 +140,48 @@ g (float[N, 1] X, float[N, 4] Z) => (float[N, 4] Y)
     assert `${e}` == "Y = Add: no kernel broadcasts [Batch, One] against [Batch, Wide]";
 }
 
+test "Gemm lowers to a matmul under its transpose flags" {
+    let source = `
+g (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y)
+<>
+{
+    Y = Gemm <transB = 1, alpha = 0.5, beta = 2.0> (A, B, C)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("A", ["Batch", "In"]),
+        rule("B", ["Out", "In"]),
+        rule("C", ["Out"]),
+        rule("Y", ["Batch", "Out"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("transpose2(");
+    assert out.contains("(0.5 as f32)");
+    assert out.contains("(2 as f32)");
+    assert out.contains("zip_suffix::<[Batch], [Out]>");
+}
+
+test "Gemm whose scalars are both one writes no map" {
+    let source = `
+g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
+<>
+{
+    Y = Gemm(A, B)
+}
+`;
+    let layout: List<LayoutRule> = [
+        rule("A", ["Batch", "In"]),
+        rule("B", ["In", "Out"]),
+        rule("Y", ["Batch", "Out"]),
+    ];
+    let out = generate(source, layout).unwrap();
+
+    assert out.contains("matmul(");
+    assert !out.contains("map(");
+    assert !out.contains("transpose2(");
+}
+
 test "a rank-2 Transpose lowers to the kernel" {
     let source = `
 g (float[2, 3] X) => (float[3, 2] Y)

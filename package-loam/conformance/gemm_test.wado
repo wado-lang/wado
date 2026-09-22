@@ -1,0 +1,58 @@
+//! `pytorch-operator/test_operator_addmm`: two `Gemm` nodes whose bias
+//! broadcasts across the batch axis, checked against the output ONNX ships.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use {
+    Batch,
+    In,
+    Out,
+    Tensor,
+    Weights,
+    forward,
+} from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "1",
+                        axes: ["In", "Out"],
+                    },
+                    {
+                        pattern: "2",
+                        axes: ["Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "Gemm reproduces the output ONNX ships" {
+    let [a, a_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/test_data_set_0/input_0.pb"),
+    );
+    let [b, b_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/test_data_set_0/input_1.pb"),
+    );
+    let [c, c_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/test_data_set_0/input_2.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_addmm/test_data_set_0/output_0.pb"),
+    );
+
+    let got = forward(
+        &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
+        &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
+        &Tensor::<f32, [Out]> { data: c, extents: c_extents },
+        &Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

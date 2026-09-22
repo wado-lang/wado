@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, ValueInfo } from "./graph.wado";
-use { transpose_perm } from "./infer.wado";
+use { gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -292,19 +292,14 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     }
     if let Some(body) = binary_body(&op) {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
-        if axis_list(&left) == axis_list(&right) {
-            return Result::Ok(`zip(${a}, ${b}, |x, y| ${body})`);
-        }
-        if let Some(pre) = suffix_of(&right, &left) {
-            let turbofish = `::<[${pre}], [${axis_list(&right)}]>`;
-            return Result::Ok(`zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`);
-        }
-        if let Some(pre) = suffix_of(&left, &right) {
-            let turbofish = `::<[${pre}], [${axis_list(&left)}]>`;
-            return Result::Ok(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
-        }
-        builtin::cold_path();
-        return Result::Err(broadcast_error(node, &left, &right));
+        let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
+            builtin::cold_path();
+            return Result::Err(broadcast_error(node, &left, &right));
+        };
+        return Result::Ok(call);
+    }
+    if op == "Gemm" {
+        return gemm_call(node, shapes, exprs);
     }
     if op == "Transpose" {
         let a = exprs.reference(&node.inputs[0]);
@@ -344,6 +339,60 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
         shapes.get(node.inputs[0]).unwrap(),
         shapes.get(node.inputs[1]).unwrap(),
     ];
+}
+
+/// The kernel that combines two operands elementwise, or `None` where no
+/// kernel broadcasts one against the other.
+fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
+    if axis_list(left) == axis_list(right) {
+        return Option::Some(`zip(${a}, ${b}, |x, y| ${body})`);
+    }
+    if let Some(pre) = suffix_of(right, left) {
+        let turbofish = `::<[${pre}], [${axis_list(right)}]>`;
+        return Option::Some(`zip_suffix${turbofish}(${a}, ${b}, |x, y| ${body})`);
+    }
+    if let Some(pre) = suffix_of(left, right) {
+        let turbofish = `::<[${pre}], [${axis_list(left)}]>`;
+        return Option::Some(`zip_suffix_lhs${turbofish}(${a}, ${b}, |x, y| ${body})`);
+    }
+    return null;
+}
+
+/// `Gemm` is `alpha * A' * B' + beta * C`, which the kernels spell as a
+/// `matmul` under two optional `transpose2`s, a `map` for each scalar that is
+/// not one, and an elementwise add for the bias.
+fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
+    let Ok([alpha, beta, trans_a, trans_b]) = gemm_options(node) else {
+        // Stage 0 read the same attributes and stopped the build there.
+        unreachable();
+    };
+    let a = transposed(&exprs.reference(&node.inputs[0]), trans_a);
+    let b = transposed(&exprs.reference(&node.inputs[1]), trans_b);
+    let mut product = `matmul(${a}, ${b})`;
+    if alpha != 1.0 {
+        product = `map(&${product}, |v| v * (${alpha} as f32))`;
+    }
+    if !has_bias(node) {
+        return Result::Ok(product);
+    }
+    let mut bias = exprs.reference(&node.inputs[2]);
+    if beta != 1.0 {
+        bias = `&map(${bias}, |v| v * (${beta} as f32))`;
+    }
+    let produced = shapes.get(node.outputs[0]).unwrap();
+    let c = shapes.get(node.inputs[2]).unwrap();
+    let Some(call) = elementwise_call(&`&${product}`, &bias, &produced, &c, &"x + y") else {
+        builtin::cold_path();
+        return Result::Err(broadcast_error(node, &produced, &c));
+    };
+    return Result::Ok(call);
+}
+
+fn transposed(operand: &String, flag: bool) -> String {
+    if flag {
+        return `&transpose2(${operand})`;
+    }
+    return *operand;
 }
 
 fn is_identity(perm: &List<i32>) -> bool {
