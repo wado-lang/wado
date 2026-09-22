@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790088445908,
+  "lastUpdate": 1790102963245,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58445,6 +58445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/51329236232652e17ccc2a79b0bcd9242c75b152"
         },
         "date": 1790088445335,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1d7e33b2cfa3bbc84ffd2c2adf488a4049366e6a",
+          "message": "Merge pull request #2126 from wado-lang/claude/fromstr-tryrom-consolidation-sxz77k\n\nfix(compiler)!: reject an impl that does not match its trait",
+          "timestamp": "2026-09-23T03:32:11+09:00",
+          "tree_id": "a9c08914122de2b34bae9443d87e1f1ed5795566",
+          "url": "https://github.com/wado-lang/wado/commit/1d7e33b2cfa3bbc84ffd2c2adf488a4049366e6a"
+        },
+        "date": 1790102962573,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
