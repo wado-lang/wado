@@ -1,6 +1,6 @@
 //! Single module type/signature collection and name resolution helpers.
 
-use crate::ast::{self, Item, Module, Type};
+use crate::ast::{self, Item, Module, Type, wire_number_of};
 use crate::compiler_host::CompilerHost;
 use crate::tir::TypeTable;
 
@@ -58,6 +58,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             fields,
                             field_ast_ids,
                             field_defaults,
+                            field_wire_numbers: struct_decl
+                                .fields
+                                .iter()
+                                .map(|f| wire_number_of(&f.attrs))
+                                .collect(),
                             type_params: RealTypeParams::of(&struct_decl.type_params),
                             type_param_type_ids,
                         },

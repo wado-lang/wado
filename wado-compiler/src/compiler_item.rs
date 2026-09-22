@@ -275,6 +275,9 @@ pub enum CompilerItem {
     /// `core:serde::Deserialize` — anchor for `Deserialize` impl
     /// synthesis and for the Kiln CM adapter's options decoding.
     Deserialize,
+    /// `core:serde::WireNumbered` — the bound a format keyed by field numbers
+    /// requires, which holds for a struct whose every field carries one.
+    WireNumbered,
     /// `core:serde::Serializer` — supertrait bound on synthesised
     /// `serialize<S: Serializer>` methods.
     Serializer,
@@ -693,6 +696,7 @@ impl CompilerItem {
         Self::From,
         Self::Serialize,
         Self::Deserialize,
+        Self::WireNumbered,
         Self::Serializer,
         Self::Deserializer,
         Self::SerializeStruct,
@@ -892,6 +896,7 @@ impl CompilerItem {
             Self::From => "from",
             Self::Serialize => "serialize",
             Self::Deserialize => "deserialize",
+            Self::WireNumbered => "wire_numbered",
             Self::Serializer => "serializer",
             Self::Deserializer => "deserializer",
             Self::SerializeStruct => "serialize_struct",
@@ -1195,6 +1200,7 @@ impl CompilerItem {
             // without being registered.
             Self::Serialize
             | Self::Deserialize
+            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct
@@ -1336,6 +1342,7 @@ impl CompilerItem {
             | Self::From
             | Self::Serialize
             | Self::Deserialize
+            | Self::WireNumbered
             | Self::Serializer
             | Self::Deserializer
             | Self::SerializeStruct

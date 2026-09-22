@@ -2,7 +2,7 @@
 
 use crate::attribute::{
     ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
-    WASM_MODULE,
+    WASM_MODULE, WIRE,
 };
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1502,6 +1502,26 @@ impl AttrArg {
             | Self::KeyNumber(k, _) => k,
         }
     }
+}
+
+/// The field numbers the wire format admits, from the protobuf specification's
+/// "Assigning Field Numbers".
+pub const WIRE_NUMBER_MIN: u32 = 1;
+pub const WIRE_NUMBER_MAX: u32 = 536_870_911;
+pub const WIRE_NUMBER_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+
+/// The `#[wire(number = N)]` these attributes carry, where it is a number the
+/// wire format admits. The diagnostics for one it does not are the
+/// elaborator's, which is where a declaration is checked.
+#[must_use]
+pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
+    attrs
+        .iter()
+        .find(|a| a.name == WIRE)
+        .and_then(|a| a.kv_number("number"))
+        .and_then(|written| written.parse::<u32>().ok())
+        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
+        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
 /// Attribute like #[cm("...")]

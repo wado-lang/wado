@@ -12,7 +12,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::types::{FunctionContext, TypeError};
 use super::util;
-use crate::ast::{RangeKind, StructPatternField};
+use crate::ast::{RangeKind, StructPatternField, wire_number_of};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::expr::MemberOwner;
@@ -287,6 +287,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 fields: Vec::new(),
                 field_ast_ids: Vec::new(),
                 field_defaults: Vec::new(),
+                field_wire_numbers: Vec::new(),
                 type_params: RealTypeParams::of(&struct_decl.type_params),
                 type_param_type_ids,
             },
@@ -351,6 +352,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         info.fields = fields;
         info.field_ast_ids = field_ast_ids;
         info.field_defaults = field_defaults;
+        info.field_wire_numbers = struct_decl
+            .fields
+            .iter()
+            .map(|f| wire_number_of(&f.attrs))
+            .collect();
         // Local structs have no `Item::Struct` entry in `module.items` for
         // reify's per-item dispatch loop to walk — reify's own `Stmt::Item`
         // statement handling (`reify_local_struct`) is what discovers and

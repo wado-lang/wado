@@ -55,6 +55,7 @@ pub(super) enum OnBoundTrait {
     Ord,
     Serialize,
     Deserialize,
+    WireNumbered,
     Default,
     Reflect,
     ReflectStruct,
@@ -78,6 +79,7 @@ impl OnBoundTrait {
             Self::Ord => CompilerItem::Ord,
             Self::Serialize => CompilerItem::Serialize,
             Self::Deserialize => CompilerItem::Deserialize,
+            Self::WireNumbered => CompilerItem::WireNumbered,
             Self::Default => CompilerItem::Default,
             Self::Reflect => CompilerItem::Reflect,
             Self::ReflectStruct => CompilerItem::ReflectStruct,
@@ -100,6 +102,7 @@ impl OnBoundTrait {
             CompilerItem::Ord => Self::Ord,
             CompilerItem::Serialize => Self::Serialize,
             CompilerItem::Deserialize => Self::Deserialize,
+            CompilerItem::WireNumbered => Self::WireNumbered,
             CompilerItem::Default => Self::Default,
             CompilerItem::Reflect => Self::Reflect,
             CompilerItem::ReflectStruct => Self::ReflectStruct,
@@ -1107,6 +1110,8 @@ impl TypeSystem {
                 of(CompilerItem::Serialize, OnBoundTrait::Serialize)
             } else if items.trait_name_opt(CompilerItem::Deserialize) == Some(trait_name) {
                 of(CompilerItem::Deserialize, OnBoundTrait::Deserialize)
+            } else if items.trait_name_opt(CompilerItem::WireNumbered) == Some(trait_name) {
+                of(CompilerItem::WireNumbered, OnBoundTrait::WireNumbered)
             } else if trait_name == items.trait_name(CompilerItem::Default) {
                 of(CompilerItem::Default, OnBoundTrait::Default)
             } else if trait_name == items.trait_name(CompilerItem::Reflect) {
@@ -1327,6 +1332,9 @@ impl TypeSystem {
         if tr == OnBoundTrait::Default {
             return self.is_defaultable_struct(scope, type_id);
         }
+        if tr == OnBoundTrait::WireNumbered {
+            return self.is_numbered_struct(scope, type_id);
+        }
         let resolved = self.type_table.borrow().get(type_id).clone();
         match &resolved {
             ResolvedType::Newtype { base_type, .. } => {
@@ -1362,6 +1370,25 @@ impl TypeSystem {
             tt.type_name(type_id)
         };
         self.auto_derive_default_struct_type(scope, &name).is_some()
+    }
+
+    /// The `WireNumbered` bound's eligibility: a struct whose every field
+    /// carries `#[wire(number = N)]`. A struct numbers all of its fields or
+    /// none, so one number is what the whole declaration turns on.
+    fn is_numbered_struct(&self, scope: &TypeLookup, type_id: TypeId) -> bool {
+        let Some(def) = ({
+            let tt = self.type_table.borrow();
+            match tt.get(type_id) {
+                ResolvedType::Struct { def, .. } => def.decl(),
+                _ => None,
+            }
+        }) else {
+            return false;
+        };
+        scope.struct_fields_of(def).is_some_and(|info| {
+            !info.field_wire_numbers.is_empty()
+                && info.field_wire_numbers.iter().all(Option::is_some)
+        })
     }
 
     /// The `Ref` marker's eligibility: whether a value of this type is a Wasm GC
@@ -1560,6 +1587,10 @@ impl TypeSystem {
                 }
                 return true;
             }
+        }
+
+        if on_bound == Some(OnBoundTrait::WireNumbered) {
+            return self.is_numbered_struct(scope, type_id);
         }
 
         if let ResolvedType::Struct { def, .. } = &resolved
@@ -2065,6 +2096,7 @@ impl TypeSystem {
             | OnBoundTrait::Ord
             | OnBoundTrait::Serialize
             | OnBoundTrait::Deserialize
+            | OnBoundTrait::WireNumbered
             | OnBoundTrait::Default
             | OnBoundTrait::Ref
             | OnBoundTrait::RefMut
@@ -2108,6 +2140,7 @@ fn declaring_module_of_kind(
         | OnBoundTrait::Ord
         | OnBoundTrait::Serialize
         | OnBoundTrait::Deserialize
+        | OnBoundTrait::WireNumbered
         | OnBoundTrait::Default
         | OnBoundTrait::Ref
         | OnBoundTrait::RefMut

@@ -6,7 +6,6 @@
 
 use super::sig::AssocConstSig;
 use std::cell::RefCell;
-use std::ops::RangeInclusive;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
@@ -35,7 +34,10 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
+use crate::ast::{
+    AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
+    WIRE_NUMBER_RESERVED, wire_number_of,
+};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -2059,7 +2061,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 numbers.push(None);
                 continue;
             };
-            let Some(number) = accepted_wire_number(written) else {
+            let Some(number) = wire_number_of(&field.attrs) else {
                 self.wire_number_error(&field.span, wire_number_fault(written));
                 numbers.push(None);
                 continue;
@@ -11361,21 +11363,6 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
             None
         }
     })
-}
-
-/// The field numbers the wire format admits, from the protobuf specification's
-/// "Assigning Field Numbers".
-const WIRE_NUMBER_MIN: u32 = 1;
-const WIRE_NUMBER_MAX: u32 = 536_870_911;
-const WIRE_NUMBER_RESERVED: RangeInclusive<u32> = 19_000..=19_999;
-
-/// A written field number, where it is one the wire format admits.
-fn accepted_wire_number(written: &str) -> Option<u32> {
-    written
-        .parse::<u32>()
-        .ok()
-        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
-        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
 /// Why a written field number is not one, said to whoever wrote it.

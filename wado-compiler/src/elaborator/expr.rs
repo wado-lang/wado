@@ -4461,6 +4461,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .collect(),
             field_ast_ids: Vec::new(),
             field_defaults: vec![None; fields.len()],
+            field_wire_numbers: vec![None; fields.len()],
             type_params: RealTypeParams::default(),
             type_param_type_ids: Vec::new(),
         };
