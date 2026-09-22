@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790117690120,
+  "lastUpdate": 1790121022433,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58533,6 +58533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c1fd8d2b06f37cf365c5ed7a4499c14907be1d67"
         },
         "date": 1790117689473,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0080d5ee3ba4721e6317fe1e9828f8760b675d2e",
+          "message": "Merge pull request #2125 from wado-lang/claude/declaration-identity-wep-gap-k1lplu\n\nfeat(traits): a bound may write `Self::Assoc`, and an impl's parameter has one number everywhere",
+          "timestamp": "2026-09-23T08:33:58+09:00",
+          "tree_id": "fb067744371c02b09b9ae7e54e9ca5211082c478",
+          "url": "https://github.com/wado-lang/wado/commit/0080d5ee3ba4721e6317fe1e9828f8760b675d2e"
+        },
+        "date": 1790121021682,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
