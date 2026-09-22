@@ -184,6 +184,30 @@ pub struct ModelProto {
     pub opset_import: List<OperatorSetIdProto> = [],
 }
 
+/// A `FLOAT` tensor's elements and extents. ONNX writes the elements either
+/// in the typed `float_data` or, as every exporter does, as little-endian
+/// bytes in `raw_data`. `None` where the tensor is some other element type.
+pub fn float_tensor(t: &TensorProto) -> Option<[List<f32>, List<i32>]> {
+    if t.data_type != 1 {
+        return null;
+    }
+    let mut extents: List<i32> = [];
+    for let d of t.dims {
+        extents.push(d as i32);
+    }
+    if t.raw_data.is_empty() {
+        return Option::Some([t.float_data, extents]);
+    }
+    let mut data: List<f32> = List::with_capacity(t.raw_data.len() / 4);
+    let mut at = 0;
+    while at + 4 <= t.raw_data.len() {
+        let bits = t.raw_data[at] as i32 | t.raw_data[at + 1] as i32 << 8 | t.raw_data[at + 2] as i32 << 16 | t.raw_data[at + 3] as i32 << 24;
+        data.push(f32::from_bits(bits));
+        at += 4;
+    }
+    return Option::Some([data, extents]);
+}
+
 /// The element type names the textual format spells, indexed by
 /// `TensorProto.DataType`. The two formats must agree, since one `Graph`
 /// serves both readers.
@@ -340,9 +364,18 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
         return Result::Err("a model without a graph");
     };
 
+    // An initializer's name may also appear in `input`, where it supplies that
+    // input's default rather than a second value. Loam's weights are the
+    // caller's either way, so such a name is a weight and not a parameter.
+    let mut weight_names: List<String> = [];
+    for let t of graph.initializer {
+        weight_names.push(t.name);
+    }
     let mut inputs: List<ValueInfo> = [];
     for let vi of graph.input {
-        inputs.push(read_value_info(&vi)?);
+        if !weight_names.contains_str(vi.name.as_str_slice()) {
+            inputs.push(read_value_info(&vi)?);
+        }
     }
     let mut outputs: List<ValueInfo> = [];
     for let vi of graph.output {

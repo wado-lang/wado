@@ -1,0 +1,49 @@
+//! `pytorch-operator/test_operator_basic` from the ONNX backend test data,
+//! compiled through Loam and checked against the output ONNX ships beside it.
+//! The graph is `Add`, `Mul`, `Tanh`, `Sigmoid` and `Neg` over `float[1]`.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use {
+    N,
+    Tensor,
+    Weights,
+    forward,
+} from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["N"],
+                    },
+                    {
+                        pattern: "1",
+                        axes: ["N"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "the generated graph reproduces the output ONNX ships" {
+    let [a, a_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/input_0.pb"),
+    );
+    let [b, b_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/input_1.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_basic/test_data_set_0/output_0.pb"),
+    );
+
+    let got = forward(
+        &Tensor::<f32, [N]> { data: a, extents: a_extents },
+        &Tensor::<f32, [N]> { data: b, extents: b_extents },
+        &Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

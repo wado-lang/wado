@@ -1,0 +1,51 @@
+//! `pytorch-operator/test_operator_pow`: one binary operator over
+//! `float[1, 2, 3, 4]`, checked against the output ONNX ships.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use {
+    A,
+    B,
+    C,
+    D,
+    Tensor,
+    Weights,
+    forward,
+} from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_pow/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["A", "B", "C", "D"],
+                    },
+                    {
+                        pattern: "1",
+                        axes: ["A", "B", "C", "D"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "Pow reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_pow/test_data_set_0/input_0.pb"),
+    );
+    let [y, y_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_pow/test_data_set_0/input_1.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_pow/test_data_set_0/output_0.pb"),
+    );
+
+    let got = forward(
+        &Tensor::<f32, [A, B, C, D]> { data: x, extents: x_extents },
+        &Tensor::<f32, [A, B, C, D]> { data: y, extents: y_extents },
+        &Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

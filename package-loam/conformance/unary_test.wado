@@ -1,0 +1,63 @@
+//! `pytorch-operator/test_operator_exp` and `test_operator_sqrt`: one unary
+//! operator each over `float[3, 4]`, checked against the outputs ONNX ships.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use exp from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["Row", "Col"],
+                    },
+                ],
+            },
+        },
+    };
+use sqrt from "../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["Row", "Col"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "Exp reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_exp/test_data_set_0/output_0.pb"),
+    );
+
+    let got = exp::forward(&exp::Tensor::<f32, [exp::Row, exp::Col]> { data: x, extents: x_extents }, &exp::Weights {});
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
+
+test "Sqrt reproduces the output ONNX ships" {
+    let [x, x_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/test_data_set_0/input_0.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../../vendor/onnx/onnx/backend/test/data/pytorch-operator/test_operator_sqrt/test_data_set_0/output_0.pb"),
+    );
+
+    let got = sqrt::forward(
+        &sqrt::Tensor::<f32, [sqrt::Row, sqrt::Col]> { data: x, extents: x_extents },
+        &sqrt::Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}
