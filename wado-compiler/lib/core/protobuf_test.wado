@@ -393,3 +393,36 @@ test "an element of a repeated run is bounded by the run" {
     };
     assert e.offset == 3;
 }
+
+test "a varint whose tenth byte overflows u64 is malformed" {
+    // Nine continuation bytes and a tenth of `0x02`. Only bit 0 of the tenth
+    // byte fits, so the rest is a number the encoding cannot mean.
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02")
+        matches { Err(_) };
+    // `0x01` is the largest tenth byte, and `u64::MAX` is what it spells.
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01")
+        matches { Ok(_) };
+}
+
+test "a tag whose wire type is not the field's is refused" {
+    struct Ints {
+        #[wire(number = 1)]
+        a: i32 = 0,
+        #[wire(number = 2)]
+        b: i32 = 0,
+    }
+
+    // Field 1 tagged `Fixed32` (`0x0d`) over bytes that read as a varint and
+    // leave a whole field behind them: taking the tag at its word gives
+    // `{a: 1, b: 7}` from bytes that say no such thing.
+    assert from_bytes::<Ints, ByteList>(b"\x0d\x01\x10\x07") matches { Err(_) };
+
+    struct Float {
+        #[wire(number = 1)]
+        f: f32 = 0.0,
+    }
+
+    // The other direction: a `Fixed32` field tagged `Varint` (`0x08`), over
+    // four bytes that are exactly one `f32`.
+    assert from_bytes::<Float, ByteList>(b"\x08\x00\x00\x80\x3f") matches { Err(_) };
+}

@@ -53,6 +53,16 @@ pub enum WireType {
     Fixed32,
 }
 
+/// A scalar element's width in bytes, `0` where it is a varint and has none.
+fn element_width(scalar: WireType) -> i32 {
+    return match scalar {
+        Varint => 0,
+        Fixed32 => 4,
+        Fixed64 => 8,
+        Len => unreachable(),
+    };
+}
+
 impl WireType {
     /// The three bits a tag carries, or `None` for a number no wire type
     /// uses. `3` and `4` are the deprecated group markers.
@@ -144,9 +154,13 @@ pub fn read_varint(input: &ByteSlice, pos: i32) -> Option<[u64, i32]> {
     while at < input.len() {
         let byte = input[at];
         at += 1;
-        if shift < 64 {
-            value = value | (byte & 0x7f) as u64 << shift as u64;
+        // The tenth byte carries one bit, since 64 is not a multiple of 7. A
+        // payload above it is a number no `u64` holds.
+        if shift == 63 && byte > 1 {
+            builtin::cold_path();
+            return null;
         }
+        value = value | (byte & 0x7f) as u64 << shift as u64;
         if byte < 128 {
             return Option::Some([value, at]);
         }
@@ -711,13 +725,25 @@ impl ProtobufReader {
         return Result::Ok([start, stop]);
     }
 
-    /// A scalar under a `LEN` tag is a packed repeated run, and this is where
-    /// that run is entered. `false` where the run holds no element and the
-    /// field keeps its default. `width` is a fixed element's, `0` for a varint.
-    fn enter_packed(&mut self, width: i32) -> Result<bool, DeserializeError> {
-        if self.packed_end >= 0 || !self.pending matches { Some(Len) } {
+    /// What a scalar of `scalar` is read from: its own tag, or a packed `LEN`
+    /// run this enters. `false` where the run holds no element and the field
+    /// keeps its default.
+    fn enter_packed(&mut self, scalar: WireType) -> Result<bool, DeserializeError> {
+        if self.packed_end >= 0 {
             return Result::Ok(true);
         }
+        // A tag naming neither the scalar's own wire type nor a packed run
+        // says the bytes are not what this read would make of them.
+        if self.pending matches { Some(t) && t == scalar } {
+            return Result::Ok(true);
+        }
+        if !self.pending matches { Some(Len) } {
+            return Result::Err(DeserializeError::unexpected_type(
+                `a ${scalar} field`,
+                self.pos as i64,
+            ));
+        }
+        let width = element_width(scalar);
         self.packed_end = self.read_len()?;
         if self.in_seq {
             if self.packed_end == self.pos {
@@ -770,14 +796,14 @@ impl ProtobufReader {
     }
 
     fn scalar_varint(&mut self) -> Result<u64, DeserializeError> {
-        if !self.enter_packed(0)? {
+        if !self.enter_packed(WireType::Varint)? {
             return Result::Ok(0);
         }
         return self.varint();
     }
 
     fn scalar_fixed32(&mut self) -> Result<u32, DeserializeError> {
-        if !self.enter_packed(4)? {
+        if !self.enter_packed(WireType::Fixed32)? {
             return Result::Ok(0);
         }
         let Some([value, next]) = read_fixed32(&self.input, self.pos) else {
@@ -791,7 +817,7 @@ impl ProtobufReader {
     }
 
     fn scalar_fixed64(&mut self) -> Result<u64, DeserializeError> {
-        if !self.enter_packed(8)? {
+        if !self.enter_packed(WireType::Fixed64)? {
             return Result::Ok(0);
         }
         let Some([value, next]) = read_fixed64(&self.input, self.pos) else {
