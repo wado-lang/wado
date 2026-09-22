@@ -1,6 +1,11 @@
 // `==` on a `v128` is all 128 bits equal. There is no lane type to defer to —
 // every lane-typed alias is the same `v128` — so a float lane's NaN is a bit
 // pattern here and equals itself, which no IEEE comparison would say.
+//
+// It dispatches to the `Eq` impl in `core:prelude`. Wasm has no v128-to-bool
+// equality, so a fall-through to `i32.eq` would emit a module that fails
+// validation ("type mismatch: expected i32, found v128"); running this is what
+// proves it does not.
 
 use { f32x4, i32x4 } from "core:simd";
 

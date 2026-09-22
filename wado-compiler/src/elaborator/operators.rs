@@ -271,16 +271,11 @@ impl TypeSystem {
             // lowering for BuiltinArray"). Its comparison dispatches through the
             // element-wise `Eq` / `Ord` impls in `core:prelude/array.wado`.
             ResolvedType::BuiltinArray(_) => true,
-            // `v128` (and its SIMD type aliases) is a 128-bit vector with no
-            // scalar binary-op semantics: Wasm has no `v128`-to-bool `==`, and
-            // a fall-through to `i32.eq` produces invalid core Wasm
-            // ("type mismatch: expected i32, found v128"). SIMD comparison is
-            // lane-wise via the `core:simd` builtins / methods, so reject the
-            // scalar operator and route to the requires-trait diagnostic
-            // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
-            // `f16` / `bf16` carry bits and no arithmetic: Wasm has no half
-            // precision instruction, and the `u16` they lower to would add two
-            // bit patterns. Widen to `f32` to compute.
+            // Wasm has no instruction for either. `i32.eq` against a `v128` is
+            // invalid core Wasm ("type mismatch: expected i32, found v128"),
+            // and the `u16` a half lowers to would add two bit patterns. Both
+            // dispatch to their `core:prelude` impls, which `Eq` has and the
+            // arithmetic operators deliberately do not.
             ResolvedType::Primitive(
                 PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
             ) => true,
