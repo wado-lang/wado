@@ -29,8 +29,9 @@ use crate::optimize::alias::{
     CallImmutability, builder_alias_sets, call_verdicts, first_param_types,
 };
 use crate::optimize::arena_query::storage_root;
+use crate::primitive::PrimitiveType;
 use crate::tir;
-use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+use crate::tir::{ResolvedType, TypeTable};
 use crate::token::Span;
 
 /// Rewrite a pure expression whose `ValueGraph` representative is a literal into

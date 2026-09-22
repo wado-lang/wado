@@ -50,12 +50,13 @@ use crate::elaborator::{build_func_index, collect_unavailable, liveness, scope, 
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
 use crate::name::{namespace_member_alias, resolve_import_with_invocations};
+use crate::primitive::PrimitiveType;
 use crate::resolve::{Resolution, Resolutions, head_site};
 use crate::semantics::Semantics;
 use crate::signature_reach;
 use crate::stdlib_snapshot::{is_building, rehydrate_tir_module, stdlib_sources};
 use crate::symbol::SymbolKind;
-use crate::tir::{AnonStructId, PrimitiveType, StructDef, TirFunction, TraitRef};
+use crate::tir::{AnonStructId, StructDef, TirFunction, TraitRef};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::wit_consume::module_host_leaf_imports;

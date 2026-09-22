@@ -14,10 +14,11 @@ use crate::component_model::{CmInterfaceRegistry, EMPTY_TUPLE_AT_BOUNDARY};
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, ModuleSourceInterner};
 use crate::name::LocalMethodName;
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    CallArg, FunctionRef, PrimitiveType, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind,
-    TirFunction, TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind,
-    TirStructField, TirVariantCase, TirVariantDecl, TypeId, TypeTable,
+    CallArg, FunctionRef, ResolvedType, TirBinaryOp, TirBlock, TirExpr, TirExprKind, TirFunction,
+    TirLocal, TirMatchArm, TirModule, TirParam, TirPattern, TirStmt, TirStmtKind, TirStructField,
+    TirVariantCase, TirVariantDecl, TypeId, TypeTable,
 };
 
 use crate::synthesis::common::{

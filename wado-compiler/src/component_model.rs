@@ -25,8 +25,9 @@ use crate::cm_abi::{
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, to_kebab};
+use crate::primitive::PrimitiveType;
 use crate::synthesis::cm_binding::types::cm_interface_module;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};

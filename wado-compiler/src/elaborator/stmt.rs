@@ -6,7 +6,8 @@ use crate::ast::{
     TaskReturnStmt, Type, WhileStmt,
 };
 use crate::compiler_host::CompilerHost;
-use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;

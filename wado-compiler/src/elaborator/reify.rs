@@ -9644,7 +9644,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         use crate::compiler_item::CompilerItem;
-        use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::{ResolvedType, TypeTable};
 
         let source_type = self.ann_expression_types(cast.expr.id())?;
         // Newtypes share their base's representation, so dispatch on the

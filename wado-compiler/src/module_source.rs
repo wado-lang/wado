@@ -7,8 +7,8 @@
 use crate::compiler_host::DependencyIndex;
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
+use crate::primitive::PrimitiveType;
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
-use crate::tir::PrimitiveType;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 

@@ -12,8 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
 };
 
@@ -574,7 +575,8 @@ fn check_cm_boundary_representable_inner(
     names: &CmStdlibNames,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    use crate::tir::{PrimitiveType, ResolvedType as R};
+    use crate::primitive::PrimitiveType;
+    use crate::tir::ResolvedType as R;
 
     if visited.contains(&type_id) {
         // `visited` is the recursion path (pushed on entry, popped on exit),

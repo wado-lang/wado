@@ -42,7 +42,8 @@ use crate::elaborator::types::{
 };
 use crate::escape::{self, unescape_byte, unescape_char};
 use crate::hashmap;
-use crate::tir::{AnonStructId, PrimitiveType, StructDef};
+use crate::primitive::PrimitiveType;
+use crate::tir::{AnonStructId, StructDef};
 
 /// Outcome of trying to derive type arguments for a generic function
 /// reference from an expected `fn(...)` (or `&fn(...)`) type. Distinguishes
@@ -3212,7 +3213,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
-        use crate::tir::PrimitiveType;
+        use crate::primitive::PrimitiveType;
         match prim {
             PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
             PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
@@ -3611,7 +3612,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // the wide-int struct ref into codegen. `char` targets are
         // excluded: the char-cast diagnostic below already covers them.
         {
-            use crate::tir::PrimitiveType;
+            use crate::primitive::PrimitiveType;
             let tt = self.tysys.type_table.borrow();
             let source_is_wide_int = matches!(
                 tt.get(tt.representation_head(source_type)),

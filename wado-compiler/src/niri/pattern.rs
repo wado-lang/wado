@@ -7,7 +7,7 @@
 use crate::const_eval::{Value, is_int_prim, is_signed_int};
 use crate::nir::NirLiteralPattern;
 use crate::nir_arena::{Body, PatId, PatKind};
-use crate::tir::PrimitiveType;
+use crate::primitive::PrimitiveType;
 
 use super::{Interpreter, PatBindings};
 

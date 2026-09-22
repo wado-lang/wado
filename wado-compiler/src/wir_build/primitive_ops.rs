@@ -6,7 +6,8 @@
 
 use crate::compiler_item::SeqField;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;

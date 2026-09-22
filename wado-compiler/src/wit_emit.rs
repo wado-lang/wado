@@ -21,10 +21,11 @@ use crate::component_model::{
 use crate::hashmap::IndexMap;
 use crate::module_source::{ModuleSource, is_bundled_specifier};
 use crate::name::to_kebab;
+use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct,
-    TirVariantDecl, TypeId, TypeTable,
+    ResolvedType, TirEnum, TirFlags, TirModule, TirNewtype, TirStruct, TirVariantDecl, TypeId,
+    TypeTable,
 };
 use crate::world_registry::WorldRegistry;
 

@@ -736,7 +736,8 @@ impl<'a> WirContext<'a> {
         type_table: &TypeTable,
         type_id: TypeId,
     ) -> Result<WirType, UnregisteredType> {
-        use crate::tir::{PrimitiveType, ResolvedType};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::ResolvedType;
         Ok(match type_table.get(type_id) {
             ResolvedType::Primitive(prim) => match prim {
                 PrimitiveType::I8 => WirType::I8,

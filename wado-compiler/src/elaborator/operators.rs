@@ -5,7 +5,8 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
