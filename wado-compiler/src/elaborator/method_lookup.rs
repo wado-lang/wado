@@ -1303,9 +1303,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             sig.declaring_impl
                 .map(|impl_def| self.tysys.resolutions.defs().module(impl_def).clone())
         });
-        let trait_decl = sig
-            .declaring_impl
-            .and_then(|impl_def| self.tysys.signatures.impl_sig(impl_def)?.trait_decl);
+        let trait_decl = self.tysys.signatures.declaring_trait(sig);
         self.fill_defaulted_method_type_args(
             &sig.own_params,
             receiver_type,
@@ -1349,8 +1347,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let defaults = self.resolve_method_type_param_defaults(
             method_type_params,
-            receiver_type,
-            trait_decl,
+            SelfBinding {
+                type_id: receiver_type,
+                declaring_trait: trait_decl,
+            },
             slots,
             declaring_module,
         );
@@ -1384,8 +1384,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn resolve_method_type_param_defaults(
         &mut self,
         method_type_params: &[ast::GenericParam],
-        receiver_type: TypeId,
-        declaring_trait: Option<DefId>,
+        declaring: SelfBinding,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
     ) -> Vec<Option<TypeId>> {
@@ -1394,10 +1393,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
-        let declaring = SelfBinding {
-            type_id: receiver_type,
-            declaring_trait,
-        };
         self.with_self_binding(declaring, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
@@ -1433,10 +1428,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if known.len() != own_ids.len() {
             known = own_ids.to_vec();
         }
+        let declaring = SelfBinding {
+            type_id: receiver,
+            declaring_trait,
+        };
         self.method_type_args_for_value_defaults(
             own_params,
-            receiver,
-            declaring_trait,
+            declaring,
             own_ids,
             declaring_module,
             &mut known,
@@ -1446,10 +1444,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // holds, never what it is — so `U::default()` dispatches on its bound
         // rather than on a receiver. The declaration wrote that bound, and
         // nothing at the call site carries it.
-        let receiver_self = Some(SelfBinding {
-            type_id: receiver,
-            declaring_trait,
-        });
+        let receiver_self = Some(declaring);
         for binding in &mut bindings {
             if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
@@ -1471,13 +1466,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn method_type_args_for_value_defaults(
         &mut self,
         method_type_params: &[ast::GenericParam],
-        receiver_type: TypeId,
-        declaring_trait: Option<DefId>,
+        mut declaring: SelfBinding,
         slots: &[TypeId],
         declaring_module: Option<ModuleSource>,
         known: &mut [TypeId],
     ) {
-        let receiver_type = self.tysys.get_base_type(receiver_type);
+        declaring.type_id = self.tysys.get_base_type(declaring.type_id);
         let fillable: Vec<bool> = method_type_params
             .iter()
             .zip(known.iter())
@@ -1488,8 +1482,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
         let defaults = self.resolve_method_type_param_defaults(
             method_type_params,
-            receiver_type,
-            declaring_trait,
+            declaring,
             slots,
             declaring_module,
         );
