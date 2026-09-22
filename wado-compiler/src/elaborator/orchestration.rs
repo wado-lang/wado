@@ -1063,15 +1063,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // Compare each impl against the trait it implements, where every
-        // declaration and impl is in hand. Nothing downstream rejects a
-        // disagreement: an unbound associated type reaches code generation
-        // unsubstituted, and a method built to the trait's shape over a body of
-        // another arity only fails Wasm validation.
+        // Nothing downstream rejects an impl that disagrees with its trait: an
+        // unbound associated type reaches codegen unsubstituted, a wrong arity
+        // only fails Wasm validation.
         //
-        // The impl's trait is the one its header resolved to, so a module
-        // implementing its own `Encode` is never checked against another
-        // module's declaration of that name.
+        // The trait is the one the impl's header resolved to, so a module
+        // implementing its own `Encode` is never checked against another's.
         for header in trait_env.impl_headers.values() {
             if !is_user_local(&header.module) {
                 continue;
@@ -1104,11 +1101,9 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     );
                 }
             }
-            // A supertrait's associated type is not this impl's to bind: the
-            // obligation `impl Sub for T` owes is `T: Super`, and the impl
-            // answering that is where `Super`'s members live (WEP 2026-07-27).
-            // Accepting the name here would record the binding under `Sub`,
-            // leaving the projection through `Super` unresolved.
+            // A supertrait's associated type belongs to the impl answering
+            // `T: Super`, so binding it here would record it where no
+            // projection reads it (WEP 2026-07-27).
             for binding in &header.associated_types {
                 if !trait_env.declares_assoc_type(decl_key, &binding.name) {
                     let _ = logger.error_in(

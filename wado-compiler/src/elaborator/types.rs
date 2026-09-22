@@ -905,9 +905,8 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// An `impl` leaves one of its trait's associated types unbound. An
-    /// associated type declares no default, so the projection stays
-    /// unsubstituted and reaches codegen as a panic.
+    /// An `impl` leaves one of its trait's associated types unbound. None
+    /// declares a default, so the projection reaches codegen unsubstituted.
     ImplMissingAssocType {
         trait_name: String,
         assoc_name: String,

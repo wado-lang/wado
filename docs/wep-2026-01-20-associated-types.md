@@ -117,7 +117,7 @@ the bound is all it may rely on. `FromStr::Err` and `TryFrom::Err` are both
 ### Trade-offs
 
 1. **Single binding**: Each impl can only bind one type per associated type name
-2. **No defaults**: A trait cannot supply a fallback, so every impl binds all of them
+2. **No defaults**: A trait supplies no fallback, so every impl binds every one
 
 ### Implementation Status
 
