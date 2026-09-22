@@ -1,0 +1,8 @@
+# One layer whose boundary is float16, the element type roadmap step 2 adds.
+<ir_version: 7, opset_import: [ "" : 14 ]>
+half (float16[N, 4] X) => (float16[N, 2] Y)
+<float16[4, 2] W, float16[2] B>
+{
+    H = MatMul(X, W)
+    Y = Add(H, B)
+}

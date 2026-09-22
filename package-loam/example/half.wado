@@ -1,0 +1,70 @@
+//! A graph whose boundary is `float16`, run through the generated kernels.
+//!
+//! Wado's `f16` is storage only, so the weights and the boundary tensors are
+//! held in it and the generated `forward` widens each one into the f32 the
+//! kernels compute in.
+//!
+//!     wado run package-loam/example/half.wado
+
+use { println, Stdout } from "core:cli";
+use { Batch, In, Out, Tensor, Weights, forward } from "./half.onnxtext"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "X",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "W",
+                        axes: ["In", "Out"],
+                    },
+                    {
+                        pattern: "B",
+                        axes: ["Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+fn half_tensor_2d(rows: i32, cols: i32, value: f32) -> List<f16> {
+    return List::<f16>::filled(rows * cols, f16::from_f32(value));
+}
+
+/// Stand-ins for a checkpoint, which roadmap step 3 reads.
+fn weights() -> Weights {
+    return Weights {
+        W: Tensor::<f16, [In, Out]> {
+            data: half_tensor_2d(4, 2, 0.5),
+            extents: [4, 2],
+        },
+        B: Tensor::<f16, [Out]> {
+            data: half_tensor_2d(2, 1, 1.0),
+            extents: [2],
+        },
+    };
+}
+
+fn ones_input() -> Tensor<f16, [Batch, In]> {
+    return Tensor {
+        data: half_tensor_2d(1, 4, 1.0),
+        extents: [1, 4],
+    };
+}
+
+export fn run() with Stdout {
+    let y = forward(&ones_input(), &weights());
+    println(`logits ${y.extents[1]}, first ${y.data[0]}`);
+}
+
+test "a float16 boundary runs through the f32 kernels and comes back half" {
+    let y = forward(&ones_input(), &weights());
+
+    assert y.extents == [1, 2] as List<i32>;
+    // Four ones at 0.5 each, plus the bias. Every value here is exact in f16.
+    let expected: f32 = 4.0 * 0.5 + 1.0;
+    assert f32::from(y.data[0]) == expected;
+}

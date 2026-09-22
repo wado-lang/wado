@@ -124,3 +124,37 @@ pub fn sigmoid_f32(v: f32) -> f32 {
     let e = f32::exp(v);
     return e / (1.0 + e);
 }
+
+/// A half-precision tensor as the f32 one the kernels compute in. Wado's `f16`
+/// and `bf16` are storage only, so every half operand arrives through one.
+pub fn widen_f16<Axes>(t: &Tensor<f16, Axes>) -> Tensor<f32, Axes> {
+    let mut out = List::<f32>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(f32::from(v));
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+pub fn narrow_f16<Axes>(t: &Tensor<f32, Axes>) -> Tensor<f16, Axes> {
+    let mut out = List::<f16>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(f16::from_f32(v));
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+pub fn widen_bf16<Axes>(t: &Tensor<bf16, Axes>) -> Tensor<f32, Axes> {
+    let mut out = List::<f32>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(f32::from(v));
+    }
+    return Tensor { data: out, extents: t.extents };
+}
+
+pub fn narrow_bf16<Axes>(t: &Tensor<f32, Axes>) -> Tensor<bf16, Axes> {
+    let mut out = List::<bf16>::with_capacity(t.data.len());
+    for let v of t.data {
+        out.push(bf16::from_f32(v));
+    }
+    return Tensor { data: out, extents: t.extents };
+}

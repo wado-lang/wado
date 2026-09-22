@@ -294,6 +294,20 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
 }
 
+fn half_mlp(dtype: String) -> String {
+    return `
+mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
+<${dtype}[4, 3] W1, ${dtype}[3] B1, ${dtype}[3, 2] W2, ${dtype}[2] B2>
+{
+    H = MatMul(X, W1)
+    HB = Add(H, B1)
+    A = Relu(HB)
+    T = MatMul(A, W2)
+    Y = Add(T, B2)
+}
+`;
+}
+
 fn refused_dtype(dtype: String) -> String {
     let source = `
 g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
@@ -310,10 +324,32 @@ test "an element type the kernels cannot compute in names itself" {
     assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
 }
 
-// Half precision has Wado primitives and no kernel, which roadmap step 2 closes.
-test "a half precision boundary tensor is refused" {
-    assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16";
-    assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16";
+test "a half precision boundary states its own element type" {
+    let out = generate(half_mlp("float16"), mlp_layout()).unwrap();
+
+    assert out.contains(
+        "pub fn forward(X: &Tensor<f16, [Batch, In]>, weights: &Weights) -> Tensor<f16, [Batch, Out]> {",
+    );
+    assert out.contains("pub W1: Tensor<f16, [In, Hidden]>,");
+}
+
+// The kernels compute in f32 and half precision has no arithmetic, so every
+// half operand is widened on the way in and the result narrowed on the way out.
+test "a half precision boundary is widened into the f32 the kernels compute in" {
+    let out = generate(half_mlp("float16"), mlp_layout()).unwrap();
+
+    assert out.contains("let X = widen_f16(X);");
+    assert out.contains("let W1 = widen_f16(&weights.W1);");
+    assert out.contains("let H = matmul(&X, &W1);");
+    assert out.contains("return narrow_f16(&Y);");
+}
+
+test "bfloat16 is the same boundary with the other primitive" {
+    let out = generate(half_mlp("bfloat16"), mlp_layout()).unwrap();
+
+    assert out.contains("pub fn forward(X: &Tensor<bf16, [Batch, In]>");
+    assert out.contains("let X = widen_bf16(X);");
+    assert out.contains("return narrow_bf16(&Y);");
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is
