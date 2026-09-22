@@ -82,9 +82,9 @@ The associated type is `Err`, as `FromStr`'s is: it names the `Result`'s `Err`
 side, and `type Error` would give the name two meanings inside an impl that
 also has the `Error` trait in scope.
 
-`Err: Error` makes every conversion failure reportable. Through the bound there
-is no impl to read, so without it a generic caller holds a value it cannot
-word:
+`Err: Error` makes every conversion failure reportable. A caller reaching the
+failure through the bound has no impl to read, so without it the value it holds
+says nothing:
 
 ```wado
 fn reason<T: TryFrom<i32>>(value: i32) -> String {
@@ -110,8 +110,8 @@ let n = u8::try_from(42 as i64)?;  // Ok(42)
 let n = u8::try_from(999 as i64)?; // Err("999 out of range for u8")
 ```
 
-`ConvertError` is what every stdlib impl uses. A type of one's own is fine, and
-owes `impl Display` plus the empty `impl Error for T;`.
+`ConvertError` is what every stdlib impl uses. An impl may define its own error
+type instead, which needs an `impl Display` and the empty `impl Error for T;`.
 
 ### 3. `?` Operator
 

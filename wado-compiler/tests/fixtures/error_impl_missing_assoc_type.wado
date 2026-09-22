@@ -1,6 +1,7 @@
-// An impl that leaves one of its trait's associated types unbound was accepted:
-// the projection stayed unsubstituted and reached codegen as an ICE. An
-// associated type declares no default, so every one of them is required.
+// An impl that leaves one of its trait's associated types unbound was accepted.
+// The projection stayed unsubstituted, and reaching WIR through a bound it
+// named `Result<i32, Crate::Load#Carry>`, an instance registered as neither a
+// struct nor a variant, which panicked the build.
 
 trait Carry with () {
     type Load;

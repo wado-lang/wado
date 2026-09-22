@@ -1060,11 +1060,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             }
         }
 
-        // An `impl` method whose parameter list differs from the trait's is
-        // never rejected downstream: the call is built to the trait's shape and
-        // only fails Wasm validation. Compare the two here, where every
-        // declaration and impl is in hand. The receiver counts as much as the
-        // rest, since no call site writes one the trait did not declare.
+        // Compare each impl against the trait it implements, where every
+        // declaration and impl is in hand. Nothing downstream rejects a
+        // disagreement: an unbound associated type reaches code generation
+        // unsubstituted, and a method built to the trait's shape over a body of
+        // another arity only fails Wasm validation.
         //
         // The impl's trait is the one its header resolved to, so a module
         // implementing its own `Encode` is never checked against another
@@ -1079,31 +1079,28 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             let Some(decl) = trait_env.decl_header_of(decl_key) else {
                 continue;
             };
-            // An associated type declares no default, so one the impl leaves
-            // unbound has nothing to resolve to: the projection survives into
-            // WIR, where it names an instance registered as neither struct nor
-            // variant. A derivation request writes no members at all.
-            if !header.is_synthesize_request {
-                for declared in &decl.assoc_types {
-                    if header
-                        .associated_types
-                        .iter()
-                        .all(|bound| bound.name != declared.name)
-                    {
-                        let _ = logger.error_in(
-                            &header.module,
-                            TypeError::ImplMissingAssocType {
-                                trait_name: decl.name.clone(),
-                                assoc_name: declared.name.clone(),
-                                span: header.span,
-                            },
-                        );
-                    }
+            // A derivation request asks for an impl rather than writing one, so
+            // it has no members to compare.
+            if header.is_synthesize_request {
+                debug_assert!(header.associated_types.is_empty() && header.methods.is_empty());
+                continue;
+            }
+            for declared in &decl.assoc_types {
+                if header
+                    .associated_types
+                    .iter()
+                    .all(|bound| bound.name != declared.name)
+                {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplMissingAssocType {
+                            trait_name: decl.name.clone(),
+                            assoc_name: declared.name.clone(),
+                            span: header.span,
+                        },
+                    );
                 }
             }
-            // The other half: a name the trait never declared is a typo for one
-            // it did, and binding it silently is what left the real one unbound.
-            // A supertrait's associated type is the subtrait's too.
             for binding in &header.associated_types {
                 if !trait_env.declares_assoc_type(decl_key, &binding.name)
                     && trait_env
@@ -1148,6 +1145,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         );
                     }
                 }
+                // The receiver counts as much as the parameters, since no call
+                // site writes one the trait did not declare.
                 if declared.has_receiver != method.has_receiver {
                     let _ = logger.error_in(
                         &header.module,

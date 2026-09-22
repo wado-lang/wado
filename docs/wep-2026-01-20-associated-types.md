@@ -37,14 +37,13 @@ impl Container for IntArray {
 ### Conformance
 
 An associated type declares no default, so an impl binds every one its trait
-declares, and binds no name the trait does not. Unbound, the projection has
-nothing to resolve to and survives into WIR as an instance registered as
-neither a struct nor a variant; a name the trait never declared is a typo for
-one it did, which is how the real type came to be unbound.
+declares, and binds no name the trait does not. An unbound type leaves the
+projection with nothing to resolve to, so it reaches code generation
+unsubstituted. A name the trait never declared is a typo for one it did, which
+is how the real type came to be unbound.
 
-The two are checked together, where every declaration and impl is in hand. A
-derivation request (`impl Trait for Type;`) writes no members at all and is
-exempt. A supertrait's associated type counts as the subtrait's, so
+A derivation request (`impl Trait for Type;`) writes no members at all, so it
+owes none. A supertrait's associated type counts as the subtrait's, so
 `impl Ord for T` may bind one `Eq` declares.
 
 ### Resolution
@@ -99,13 +98,12 @@ trait Container {
 }
 ```
 
-A binding that does not satisfy them is reported as
-`type 'X' does not implement trait 'Display' required by bound on 'Item'`. A
-still-parametric binding is left to the instantiation that settles it.
+A binding that does not satisfy them is rejected. A still-parametric binding is
+left to the instantiation that settles it.
 
-The bound is what a caller through `T: Container` may rely on: there is no impl
-to read, so `Self::Item` answers only what the bound promises. `FromStr::Err`
-and `TryFrom::Err` are both `: Error` for that reason.
+A caller reaching `Self::Item` through `T: Container` has no impl to read, so
+the bound is all it may rely on. `FromStr::Err` and `TryFrom::Err` are both
+`: Error` for that reason.
 
 ## Consequences
 
@@ -118,7 +116,7 @@ and `TryFrom::Err` are both `: Error` for that reason.
 ### Trade-offs
 
 1. **Single binding**: Each impl can only bind one type per associated type name
-2. **No defaults**: A trait cannot supply a fallback, so every impl binds every one
+2. **No defaults**: A trait cannot supply a fallback, so every impl binds all of them
 
 ### Implementation Status
 

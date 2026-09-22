@@ -1143,8 +1143,8 @@ pub trait LenientFromStr {
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
-// Value-to-value conversion. `Err: Error` for the same reason FromStr's is;
-// the stdlib impls all use `ConvertError`.
+// Value-to-value conversion. `Err: Error` for the same reason FromStr's is.
+// The stdlib impls all use `ConvertError`.
 pub trait From<T> { fn from(value: T) -> Self; }
 pub trait TryFrom<T> {
     type Err: Error;
