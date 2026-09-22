@@ -12,7 +12,7 @@ use crate::tir::{
 use crate::token::Span;
 
 use super::Elaborator;
-use super::call::{SigChoice, merge_turbofish_type_args, turbofish_leaves_slot};
+use super::call::{SigChoice, bind_nearer, merge_turbofish_type_args, turbofish_leaves_slot};
 use super::callee::StaticMethodRef;
 use super::coercion::is_numeric_literal_arg;
 use super::expr::IndexAccess;
@@ -785,13 +785,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // argument reached it, which makes it the solve's failure.
             let reached = self.packs_args_reach(&expected_param_types, args.len());
             self.settle_unreached_packs(&method_own_params, &mut known, &reached);
-            default_type_bindings.extend(self.value_default_slot_bindings(
+            let own = self.value_default_slot_bindings(
                 &method_own_params,
                 &method_type_param_ids,
                 base_type_id,
                 known,
                 defaults_module.clone(),
-            ));
+            );
+            bind_nearer(&mut default_type_bindings, own);
         }
         self.fill_trailing_defaults(
             &mut args,

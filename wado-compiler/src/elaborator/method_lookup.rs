@@ -19,7 +19,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::call::{
-    DefaultTypeBinding, SettledAs, merge_turbofish_type_args, slot_type_bindings,
+    DefaultTypeBinding, SettledAs, bind_nearer, merge_turbofish_type_args, slot_type_bindings,
     turbofish_leaves_slot,
 };
 use super::coercion::is_numeric_literal_arg;
@@ -585,14 +585,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// The trait declaration's own type parameters, under the names it wrote
-    /// them, standing at the arguments this impl supplied. `have` is what the
-    /// impl header already named, which keeps its own spelling.
+    /// them, standing at the arguments this impl supplied.
     fn trait_declared_bindings(
         &self,
         trait_decl: DefId,
         trait_args: &[TypeId],
         receiver: Option<TypeId>,
-        have: &[DefaultTypeBinding],
     ) -> Vec<DefaultTypeBinding> {
         let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
             return Vec::new();
@@ -605,7 +603,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         });
         trait_params_from_impl(&header.type_params, trait_args, implementing)
             .into_iter()
-            .filter(|supplied| !have.iter().any(|b| b.name == supplied.param.name))
             .filter_map(|supplied| {
                 Some(DefaultTypeBinding {
                     name: supplied.param.name.clone(),
@@ -2275,13 +2272,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         };
         let trait_args = impl_sig.trait_type_args;
         // A trait-declared default spells the trait's own parameters: under
-        // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`.
-        impl_type_bindings.extend(scope.trait_declared_bindings(
-            trait_decl,
-            &trait_args,
-            receiver_type_id,
-            &impl_type_bindings,
-        ));
+        // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`. The
+        // trait declared it, so its names outrank the impl's same-named ones.
+        let declared = scope.trait_declared_bindings(trait_decl, &trait_args, receiver_type_id);
+        bind_nearer(&mut impl_type_bindings, declared);
         let trait_name_of_impl = scope
             .tysys
             .trait_env

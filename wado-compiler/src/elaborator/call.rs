@@ -108,6 +108,19 @@ pub(super) struct DefaultTypeBinding {
     pub(super) settled: SettledAs,
 }
 
+/// Add each of `nearer` to `bindings`, replacing a same-named entry.
+///
+/// Two declarations reach one default's scope and may share a spelling, so what
+/// the name means is the nearer declaration's, never whichever was added first.
+pub(super) fn bind_nearer(bindings: &mut Vec<DefaultTypeBinding>, nearer: Vec<DefaultTypeBinding>) {
+    for binding in nearer {
+        match bindings.iter_mut().find(|held| held.name == binding.name) {
+            Some(held) => *held = binding,
+            None => bindings.push(binding),
+        }
+    }
+}
+
 /// What a site settled one type parameter to. A pack carries no type here:
 /// `[..T::default()]` means the elements, and no callee spells `[i32]::default`.
 #[derive(Debug, Clone)]

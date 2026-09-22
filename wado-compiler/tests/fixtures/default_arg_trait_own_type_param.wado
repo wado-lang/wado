@@ -73,6 +73,18 @@ impl FnFirst<fn(i32) -> i32, i32> for Runner {
     }
 }
 
+// The impl's own parameter takes the trait's spelling and stands at a different
+// type. The trait declared the default, so `A` in it is the trait's.
+struct Boxed<T> {
+    v: T,
+}
+
+impl<A: Default> One<String> for Boxed<A> {
+    fn one(&self, a: String) -> String {
+        return `${a:?}`;
+    }
+}
+
 test "a trait's own type parameter in a default arg" {
     let bi: Box1<i32> = Box1 { v: 1 };
     let bs: Box1<String> = Box1 { v: "x" };
@@ -97,6 +109,11 @@ test "two trait parameters at one concrete type" {
 
 test "a real trait parameter behind an fn-bound one" {
     assert Runner {}.apply(|x| x + 5) == 5;
+}
+
+test "an impl parameter spelled as the trait's" {
+    let b: Boxed<i32> = Boxed { v: 1 };
+    assert b.one() == "\"\"";
 }
 
 __DATA__
