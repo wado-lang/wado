@@ -123,8 +123,6 @@ use {
     parse_f64_from_str,
     lenient_int_preprocess,
     lenient_float_preprocess,
-    lenient_int_error,
-    lenient_float_error,
 } from "core:prelude/intparse.wado";
 
 /// Copy bytes from linear memory to a new GC array (internal helper)
@@ -366,6 +364,34 @@ impl bool {
     }
 }
 
+/// Error returned by `bool::from_str`, which takes `true` and `false` alone.
+pub struct ParseBoolError {
+}
+
+impl Display for ParseBoolError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str("provided string was not `true` or `false`");
+    }
+}
+
+impl Error for ParseBoolError {
+}
+
+impl FromStr for bool {
+    type Err = ParseBoolError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<bool, ParseBoolError> {
+        return match s.as_str_slice() {
+            "true" => Result::Ok(true),
+            "false" => Result::Ok(false),
+            _ => {
+                builtin::cold_path();
+                Result::Err(ParseBoolError {});
+            },
+        };
+    }
+}
+
 impl LenientFromStr for bool {
     type Err = LenientParseError;
 
@@ -572,20 +598,75 @@ impl char {
     }
 }
 
+/// Kind of failure returned by char parsing.
+pub enum CharErrorKind {
+    /// The input string was empty.
+    Empty,
+    /// The input held more than one Unicode scalar.
+    TooManyChars,
+}
+
+/// Error returned by char parsing.
+pub struct ParseCharError {
+    pub kind: CharErrorKind,
+}
+
+impl ParseCharError {
+    pub fn new(kind: CharErrorKind) -> ParseCharError {
+        return ParseCharError { kind };
+    }
+
+    pub fn kind(&self) -> CharErrorKind {
+        return self.kind;
+    }
+}
+
+impl Display for ParseCharError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match self.kind {
+            Empty => "cannot parse char from empty string",
+            TooManyChars => "too many characters in string",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseCharError {
+}
+
+impl From<ParseCharError> for LenientParseError {
+    fn from(e: ParseCharError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty char string",
+            TooManyChars => "char string holds more than one character",
+        };
+        return LenientParseError::new(reason);
+    }
+}
+
+impl FromStr for char {
+    type Err = ParseCharError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<char, ParseCharError> {
+        let mut iter = s.as_str_slice().chars();
+        let Some(first) = iter.next() else {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::Empty));
+        };
+        if iter.next() matches { Some(_) } {
+            builtin::cold_path();
+            return Result::Err(ParseCharError::new(CharErrorKind::TooManyChars));
+        }
+        return Result::Ok(first);
+    }
+}
+
+/// Leniency adds nothing here: one Unicode scalar has one spelling.
 impl LenientFromStr for char {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<char, LenientParseError> {
-        let mut iter = s.as_str_slice().chars();
-        let Some(first) = iter.next() else {
-            builtin::cold_path();
-            return Result::Err(LenientParseError::new("expected exactly one character, got none"));
-        };
-        if iter.next() matches { Some(_) } {
-            builtin::cold_path();
-            return Result::Err(LenientParseError::new("expected exactly one character, got more"));
-        }
-        return Result::Ok(first);
+        return Result::Ok(char::from_str(s)?);
     }
 }
 
@@ -623,21 +704,15 @@ impl i8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i8),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i8::MAX as i64, i8::MAX as u64 + 1)? as i8);
     }
 }
 
 impl FromStr for i8 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i8, ParseIntError> {
-        return match parse_i64_radix(s, 10, i8::MAX as i64, i8::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i8),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i8, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i8::MAX as i64, i8::MAX as u64 + 1)? as i8);
     }
 }
 
@@ -645,16 +720,8 @@ impl LenientFromStr for i8 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i8, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i8::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i8::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -744,21 +811,15 @@ impl u8 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64) {
-            Ok(v) => Result::Ok(v as u8),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u8::MAX as u64)? as u8);
     }
 }
 
 impl FromStr for u8 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u8, ParseIntError> {
-        return match parse_u64_radix(s, 10, u8::MAX as u64) {
-            Ok(v) => Result::Ok(v as u8),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u8, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u8::MAX as u64)? as u8);
     }
 }
 
@@ -766,16 +827,8 @@ impl LenientFromStr for u8 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u8, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u8::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u8::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -813,21 +866,15 @@ impl i16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i16),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i16::MAX as i64, i16::MAX as u64 + 1)? as i16);
     }
 }
 
 impl FromStr for i16 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i16, ParseIntError> {
-        return match parse_i64_radix(s, 10, i16::MAX as i64, i16::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i16),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i16, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i16::MAX as i64, i16::MAX as u64 + 1)? as i16);
     }
 }
 
@@ -835,16 +882,8 @@ impl LenientFromStr for i16 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i16, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i16::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i16::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -882,21 +921,15 @@ impl u16 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64) {
-            Ok(v) => Result::Ok(v as u16),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u16::MAX as u64)? as u16);
     }
 }
 
 impl FromStr for u16 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u16, ParseIntError> {
-        return match parse_u64_radix(s, 10, u16::MAX as u64) {
-            Ok(v) => Result::Ok(v as u16),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u16, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u16::MAX as u64)? as u16);
     }
 }
 
@@ -904,16 +937,8 @@ impl LenientFromStr for u16 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u16, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u16::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u16::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -974,21 +999,15 @@ impl i32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i32),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), radix, i32::MAX as i64, i32::MAX as u64 + 1)? as i32);
     }
 }
 
 impl FromStr for i32 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i32, ParseIntError> {
-        return match parse_i64_radix(s, 10, i32::MAX as i64, i32::MAX as u64 + 1) {
-            Ok(v) => Result::Ok(v as i32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i32, ParseIntError> {
+        return Result::Ok(parse_i64_radix(&s.as_str_slice(), 10, i32::MAX as i64, i32::MAX as u64 + 1)? as i32);
     }
 }
 
@@ -996,16 +1015,8 @@ impl LenientFromStr for i32 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i32, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i32::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i32::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1050,21 +1061,15 @@ impl u32 {
     }
 
     pub fn from_str_radix<S: AsStrSlice>(s: S, radix: u32) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64) {
-            Ok(v) => Result::Ok(v as u32),
-            Err(e) => Result::Err(e),
-        };
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), radix, u32::MAX as u64)? as u32);
     }
 }
 
 impl FromStr for u32 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u32, ParseIntError> {
-        return match parse_u64_radix(s, 10, u32::MAX as u64) {
-            Ok(v) => Result::Ok(v as u32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u32, ParseIntError> {
+        return Result::Ok(parse_u64_radix(&s.as_str_slice(), 10, u32::MAX as u64)? as u32);
     }
 }
 
@@ -1072,16 +1077,8 @@ impl LenientFromStr for u32 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u32, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u32::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u32::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1150,8 +1147,8 @@ impl i64 {
 impl FromStr for i64 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<i64, ParseIntError> {
-        return parse_i64_radix(s, 10, i64::MAX, i64::MAX as u64 + 1);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<i64, ParseIntError> {
+        return parse_i64_radix(&s.as_str_slice(), 10, i64::MAX, i64::MAX as u64 + 1);
     }
 }
 
@@ -1159,16 +1156,8 @@ impl LenientFromStr for i64 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i64, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i64::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i64::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1244,8 +1233,8 @@ impl u64 {
 impl FromStr for u64 {
     type Err = ParseIntError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<u64, ParseIntError> {
-        return parse_u64_radix(s, 10, u64::MAX);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<u64, ParseIntError> {
+        return parse_u64_radix(&s.as_str_slice(), 10, u64::MAX);
     }
 }
 
@@ -1253,16 +1242,8 @@ impl LenientFromStr for u64 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u64, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u64::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u64::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1587,11 +1568,8 @@ impl f32 {
 impl FromStr for f32 {
     type Err = ParseFloatError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<f32, ParseFloatError> {
-        return match parse_f64_from_str(s) {
-            Ok(v) => Result::Ok(v as f32),
-            Err(e) => Result::Err(e),
-        };
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f32, ParseFloatError> {
+        return Result::Ok(parse_f64_from_str(&s.as_str_slice())? as f32);
     }
 }
 
@@ -1600,10 +1578,7 @@ impl LenientFromStr for f32 {
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f32, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f32::from_str(cleaned) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_float_error(e)),
-        };
+        return Result::Ok(f32::from_str(cleaned)?);
     }
 }
 
@@ -1980,8 +1955,8 @@ impl f64 {
 impl FromStr for f64 {
     type Err = ParseFloatError;
 
-    fn from_str_slice(s: &StrSlice) -> Result<f64, ParseFloatError> {
-        return parse_f64_from_str(s);
+    fn from_str<S: AsStrSlice>(s: S) -> Result<f64, ParseFloatError> {
+        return parse_f64_from_str(&s.as_str_slice());
     }
 }
 
@@ -1990,10 +1965,7 @@ impl LenientFromStr for f64 {
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<f64, LenientParseError> {
         let cleaned = lenient_float_preprocess(s);
-        return match f64::from_str(cleaned) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_float_error(e)),
-        };
+        return Result::Ok(f64::from_str(cleaned)?);
     }
 }
 

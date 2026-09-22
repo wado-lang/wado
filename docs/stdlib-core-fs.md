@@ -259,7 +259,7 @@ The host granted no directory, so no path can be resolved.
 
 The path names nothing.
 
-#### `NotUtf8`
+#### `NotUtf8(Utf8Error)`
 
 The bytes read are not UTF-8 (`read_to_string` only).
 

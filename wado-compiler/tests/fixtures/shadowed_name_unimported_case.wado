@@ -1,0 +1,29 @@
+// A bare case pattern reads against the scrutinee's type, which the pattern's
+// module need not import. `Error` here is `Slot::Error`, not a binder, so the
+// lint must stay quiet even though the prelude trait of that name is in scope.
+
+use { println, Stdout } from "core:cli";
+use { slots } from "./sub/shadowed_name_unimported_case_dep.wado";
+
+fn label() -> String {
+    let mut out = "";
+    for let slot of slots() {
+        let piece: String = match slot {
+            Rule(n) => `r${n}`,
+            Error => "e",
+        };
+        out.push_str(&piece);
+    }
+    return out;
+}
+
+export fn run() with Stdout {
+    assert label() == "r1e";
+    println("ok");
+}
+
+__DATA__
+{
+    "stdout": "ok\n",
+    "warnings_not_contains": ["`Error` shadows"]
+}

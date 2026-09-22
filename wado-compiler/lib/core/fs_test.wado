@@ -32,7 +32,8 @@ test "bytes that are not UTF-8 do not read as text" {
     let path = `${dir}/raw.bin`;
     fs::write(&path, &([0xff as u8] as ByteList)).unwrap();
     let e = fs::read_to_string(&path).unwrap_err();
-    assert e.kind matches { NotUtf8 };
+    assert e.kind matches { NotUtf8(u) && u == Utf8Error::invalid(0, 1) };
+    assert `${e}`.ends_with("not valid UTF-8: invalid utf-8 sequence of 1 bytes from index 0");
 }
 
 test "a path that names nothing is NotFound" {

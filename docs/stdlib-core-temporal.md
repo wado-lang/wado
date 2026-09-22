@@ -54,6 +54,11 @@ assert `${end_of_january.add(&month)}` == "2023-02-28T00:00:00Z";
 // The zoneless types are the shapes a date or a clock reading really has.
 assert PlainDate::new(2024, 2, 29).in_leap_year();
 assert `${PlainTime { hour: 9, minute: 30 }}` == "09:30:00";
+
+// Every type reads its own spelling back through `FromStr`.
+assert PlainDate::from_str("2024-02-29") matches { Ok(d) && d.in_leap_year() };
+assert PlainYearMonth::from_str("2024-13") matches { Err(_) };
+
 assert Instant::EPOCH.to_http_date() == "Thu, 01 Jan 1970 00:00:00 GMT";
 ```
 
@@ -206,7 +211,7 @@ Interpret this instant in `time_zone`, the zoned view of the same moment
 
 #### `impl FromStr for Instant`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<Instant, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<Instant, DeserializeError>`
 
 #### `impl Serialize for Instant`
 
@@ -444,7 +449,7 @@ zone name.
 
 #### `impl FromStr for ZonedDateTime`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<ZonedDateTime, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<ZonedDateTime, DeserializeError>`
 
 #### `impl Serialize for ZonedDateTime`
 
@@ -547,7 +552,7 @@ The ISO 8601 form, e.g. `"P1Y2M3W4DT5H6M7.5S"`. A zero duration is
 
 #### `impl FromStr for Duration`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<Duration, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<Duration, DeserializeError>`
 
 #### `impl Deserialize for Duration`
 
@@ -568,8 +573,8 @@ orders chronologically.
 #### `pub fn new(year: i32, month: i32, day: i32) -> PlainDate`
 
 A date, asserted to exist in the ISO 8601 calendar. Use `constrain` to
-clamp a day past the month's end instead, or `parse` for input that may
-be malformed.
+clamp a day past the month's end instead, or `from_str` for input that
+may be malformed.
 
 #### `pub fn constrain(year: i32, month: i32, day: i32) -> PlainDate`
 
@@ -579,10 +584,6 @@ length — Temporal's `constrain` overflow.
 #### `pub fn from_epoch_days(days: i64) -> PlainDate`
 
 The date `days` after the Unix epoch.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDate, DeserializeError>`
-
-Parse `YYYY-MM-DD`, or a sign and six year digits for an expanded year.
 
 #### `pub fn epoch_days(&self) -> i64`
 
@@ -681,7 +682,7 @@ instant. Traps on an IANA zone name.
 
 #### `impl FromStr for PlainDate`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<PlainDate, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<PlainDate, DeserializeError>`
 
 ### `pub struct PlainTime`
 
@@ -705,10 +706,6 @@ descending significance and so orders chronologically within a day.
 
 A wall-clock time, asserted to be in range. Every component defaults to
 zero, so `PlainTime { hour: 9 }` is 09:00:00.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainTime, DeserializeError>`
-
-Parse `hh:mm[:ss[.fraction]]`, the ISO 8601 extended time form.
 
 #### `pub fn is_valid(&self) -> bool`
 
@@ -766,7 +763,7 @@ exact.
 
 #### `impl FromStr for PlainTime`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<PlainTime, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<PlainTime, DeserializeError>`
 
 ### `pub struct PlainDateTime`
 
@@ -781,11 +778,6 @@ still names a different moment in every zone. Corresponds to
 #### `pub fn new(date: PlainDate, time: PlainTime = PlainTime {}) -> PlainDateTime`
 
 A date and time, asserted to be in range.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainDateTime, DeserializeError>`
-
-Parse `YYYY-MM-DDThh:mm[:ss[.fraction]]`, with `T`, `t`, or a space as
-the separator and no offset.
 
 #### `pub fn add(&self, duration: &Duration) -> PlainDateTime`
 
@@ -828,7 +820,7 @@ Traps on an IANA zone name.
 
 #### `impl FromStr for PlainDateTime`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<PlainDateTime, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<PlainDateTime, DeserializeError>`
 
 ### `pub struct PlainYearMonth`
 
@@ -842,10 +834,6 @@ period. Corresponds to `Temporal.PlainYearMonth`.
 #### `pub fn new(year: i32, month: i32) -> PlainYearMonth`
 
 A year and month, asserted to be in range.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainYearMonth, DeserializeError>`
-
-Parse `YYYY-MM`.
 
 #### `pub fn days_in_month(&self) -> i32`
 
@@ -906,7 +894,7 @@ Land this month on a day, clamped to the month's length.
 
 #### `impl FromStr for PlainYearMonth`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<PlainYearMonth, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<PlainYearMonth, DeserializeError>`
 
 ### `pub struct PlainMonthDay`
 
@@ -922,10 +910,6 @@ is `to_plain_date`'s problem.
 
 A month and day, asserted to exist in some year — February 29 does, so
 it is accepted here and resolved by `to_plain_date`.
-
-#### `pub fn parse<S: AsStrSlice>(text: S) -> Result<PlainMonthDay, DeserializeError>`
-
-Parse `--MM-DD`, the ISO 8601 spelling, or the bare `MM-DD`.
 
 #### `pub fn to_plain_date(&self, year: i32) -> PlainDate`
 
@@ -954,7 +938,7 @@ Temporal month code, `"M01"` … `"M12"`.
 
 #### `impl FromStr for PlainMonthDay`
 
-##### `fn from_str_slice(s: &StrSlice) -> Result<PlainMonthDay, DeserializeError>`
+##### `fn from_str<S: AsStrSlice>(s: S) -> Result<PlainMonthDay, DeserializeError>`
 
 ## Enums
 

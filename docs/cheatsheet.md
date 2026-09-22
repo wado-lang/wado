@@ -1126,21 +1126,25 @@ trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
 
-// For parsing a value from a string. `from_str_slice` is the required
-// fundamental operation, so parsing a field out of a larger buffer allocates
-// no substring; `from_str` is defaulted to view the whole string.
+// What every error type is. It adds nothing to Display, so `E: Error` says
+// only that the failure has a readable reason.
+pub trait Error: Display { }
+
+// For parsing a value from a string. The parameter takes a `StrSlice` among
+// the rest, so parsing a field out of a larger buffer allocates no substring.
+// `Err: Error`, so a caller reaching it through the bound can always report
+// the reason.
 pub trait FromStr {
-    type Err;
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
-    fn from_str(s: &String) -> Result<Self, Self::Err> { /* default */ }
+    type Err: Error;
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 // Forgiving sibling of FromStr for human-supplied strings: accepts casing,
 // radix prefixes (0x/0o/0b), `_` digit separators, and alternate bool words
 // (1/0). Never trims whitespace. See WEP: Lenient String Parsing.
 pub trait LenientFromStr {
-    type Err;  // built-in impls all use LenientParseError
-    fn from_str_lenient(s: &String) -> Result<Self, Self::Err>;
+    type Err: Error;  // built-in impls all use LenientParseError
+    fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 ```
 
@@ -1193,9 +1197,32 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
+`From` takes the same marker. Nothing derives it from a use, so the marker is
+what asks for one. On a variant, `impl From<T> for V;` wraps the value into the
+single case whose payload is `T`.
+
+```wado
+variant ServiceError { Network(NetworkError), Timeout(TimeoutError) }
+impl From<NetworkError> for ServiceError;   // -> ServiceError::Network(e)
+```
+
 `${x:?}` / `${x:#?}` (`Inspect`, plainly or indented) work for every type. `${x}` (`Display`) uses the type's `impl Display`: primitives, `String`, plain enums (bare case name, e.g. `Red`), and newtypes (inherited from the base) have one; other types need a hand-written impl, else `${x}` is a compile error and `${x:?}` gives the debug form. `${x:#}` runs the same `Display` with `Formatter.alternate` set.
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
+
+Every standard library error type implements `Display` and `Error`, so
+`` `${e}` `` renders the reason. A wider error that carries a narrower one
+interpolates it rather than wording the failure again. It declares
+`impl From<Narrower> for Wider`, so `?` converts at the call site:
+
+```wado
+impl From<Utf8Error> for ParseError;
+
+fn percent_decode(input: String) -> Result<String, ParseError> {
+    let bytes = decode_octets(input)?;
+    return Result::Ok(String::from_utf8(bytes)?);   // Utf8Error -> ParseError
+}
+```
 
 ## Associated Constants
 
@@ -1226,7 +1253,7 @@ f64::from_str("3.14")                 // Result<f64, ParseFloatError>
 i32::from_str("42")                   // Result<i32, ParseIntError>
 i32::from_str_hex("ff")               // Result<i32, ParseIntError> (radix 16)
 i32::from_str_radix("1010", 2)        // Result<i32, ParseIntError> (radix 2..=36)
-i32::from_str_slice(&"xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
+i32::from_str("xyz42abc".as_str_slice().sub(3, 5))  // no substring alloc
 
 i32::min(a, b)  i32::max(a, b)
 i32::clamp(v, lo, hi)                 // traps when lo > hi

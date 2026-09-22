@@ -200,9 +200,9 @@ type "functype//opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::d
 
 type "functype//opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$scalar" = fn(i32) -> i32;  // TypeId(81)
 
-type "functype//opt_sroa_single_field.wado/opt_sroa_single_field.wado/Amount::as_cents$scalar" = fn(f64) -> i32;  // TypeId(82)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar" = fn(ref "core:prelude/string.wado//String", i32, i32, char);  // TypeId(82)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar" = fn(ref "core:prelude/string.wado//String", i32, i32, char);  // TypeId(83)
+type "functype//opt_sroa_single_field.wado/opt_sroa_single_field.wado/Amount::as_cents$scalar" = fn(f64) -> i32;  // TypeId(83)
 
 type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar" = fn(i32, ref "core:prelude/format.wado//Formatter");  // TypeId(84)
 
@@ -4218,10 +4218,6 @@ fn "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Wrapper::get$scalar"(s
     return self;
 }
 
-fn "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Amount::as_cents$scalar"(self) {
-    return builtin::i32_trunc_f64_s(self * 100);
-}
-
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$scalar"(self, at, n, c) {
     let fill_len: i32;
     let fill_byte: u8;
@@ -4285,6 +4281,10 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::write_fill_at$s
             continue l430;
         };
     };
+}
+
+fn "opt_sroa_single_field.wado/opt_sroa_single_field.wado/Amount::as_cents$scalar"(self) {
+    return builtin::i32_trunc_f64_s(self * 100);
 }
 
 fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {

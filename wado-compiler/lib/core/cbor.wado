@@ -945,7 +945,7 @@ impl CborDeserializer {
             Err(e) => {
                 builtin::cold_path();
                 return Result::Err(DeserializeError::malformed(
-                    `text string contains ${e}`,
+                    `text string contains ${e.rebased(self.pos)}`,
                     self.pos as i64,
                 ));
             },
