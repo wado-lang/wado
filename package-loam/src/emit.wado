@@ -4,7 +4,7 @@
 use { TreeMap, TreeSet } from "core:collections";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, ValueInfo } from "./graph.wado";
-use { gemm_options, has_bias, transpose_perm } from "./infer.wado";
+use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
 
 /// A boundary tensor whose element type the kernels have no arithmetic for.
 pub struct UnmappedDtype {
@@ -202,6 +202,9 @@ fn emit_weights(out: &mut String, graph: &Graph, shapes: &TreeMap<String, Shape>
 struct Operands {
     values: TreeMap<String, String>,
     already_reference: TreeSet<String>,
+    /// A one-element `Constant`, as the literal that replaces it. It allocates
+    /// no tensor: every operator reading one folds it into a closure.
+    scalars: TreeMap<String, String>,
 }
 
 impl Operands {
@@ -232,6 +235,7 @@ fn emit_forward(
     let mut exprs = Operands {
         values: TreeMap::<String, String>::new(),
         already_reference: TreeSet::<String>::new(),
+        scalars: TreeMap::<String, String>::new(),
     };
     let mut params: List<String> = [];
     for let vi of &graph.inputs {
@@ -250,6 +254,14 @@ fn emit_forward(
     out.push_str(`pub fn forward(${params.join(", ")}) -> ${tensor_type(shapes, &result)} {\n`);
     for let node of &graph.nodes {
         let produced = node.outputs[0];
+        if node.op == "Constant" {
+            let Ok(value) = constant_value(node) else {
+                // Stage 0 read the same attribute and stopped the build there.
+                unreachable();
+            };
+            exprs.scalars[produced] = float_literal(value);
+            continue;
+        }
         let ident = names.get(&produced);
         out.push_str(`    let ${ident} = ${node_call(node, shapes, &exprs)?};\n`);
         exprs.values[produced] = ident;
@@ -290,13 +302,8 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         }
         return Result::Ok(`matmul(${a}, ${b})`);
     }
-    if let Some(body) = binary_body(&op) {
-        let [a, b, left, right] = binary_call(node, shapes, exprs);
-        let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
-            builtin::cold_path();
-            return Result::Err(broadcast_error(node, &left, &right));
-        };
-        return Result::Ok(call);
+    if binary_body(&op, &"x", &"y") matches { Some(_) } {
+        return binary_node_call(node, shapes, exprs);
     }
     if op == "Gemm" {
         return gemm_call(node, shapes, exprs);
@@ -341,6 +348,35 @@ fn binary_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -
     ];
 }
 
+/// One binary elementwise node. A one-element `Constant` operand folds into
+/// the closure, so the pass allocates no tensor for it and walks the other
+/// operand once.
+fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
+    let op = node.op;
+    if let Some(literal) = exprs.scalars.get(node.inputs[1]) {
+        let body = binary_body(&op, &"v", &literal).unwrap();
+        return Result::Ok(`map(${exprs.reference(&node.inputs[0])}, |v| ${body})`);
+    }
+    if let Some(literal) = exprs.scalars.get(node.inputs[0]) {
+        let body = binary_body(&op, &literal, &"v").unwrap();
+        return Result::Ok(`map(${exprs.reference(&node.inputs[1])}, |v| ${body})`);
+    }
+    let [a, b, left, right] = binary_call(node, shapes, exprs);
+    let body = binary_body(&op, &"x", &"y").unwrap();
+    let Some(call) = elementwise_call(&a, &b, &left, &right, &body) else {
+        builtin::cold_path();
+        return Result::Err(broadcast_error(node, &left, &right));
+    };
+    return Result::Ok(call);
+}
+
+/// A constant as a literal the generated source spells. The shortest
+/// round-tripping form of a float can be an integer, so the cast is what makes
+/// it a float literal.
+fn float_literal(value: f32) -> String {
+    return `(${value} as f32)`;
+}
+
 /// The kernel that combines two operands elementwise, or `None` where no
 /// kernel broadcasts one against the other.
 fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
@@ -374,6 +410,10 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     }
     if !has_bias(node) {
         return Result::Ok(product);
+    }
+    if let Some(literal) = exprs.scalars.get(node.inputs[2]) {
+        let scaled = if beta == 1.0 { literal } else { `${literal} * ${float_literal(beta)}` };
+        return Result::Ok(`map(&${product}, |v| v + ${scaled})`);
     }
     let mut bias = exprs.reference(&node.inputs[2]);
     if beta != 1.0 {
@@ -445,21 +485,21 @@ fn suffix_of(part: &Shape, whole: &Shape) -> Option<String> {
 
 /// The expression a binary operator's elements combine through, over the
 /// kernel's `x` and `y`.
-fn binary_body(op: &String) -> Option<String> {
+fn binary_body(op: &String, lhs: &String, rhs: &String) -> Option<String> {
     if *op == "Add" {
-        return Option::Some("x + y");
+        return Option::Some(`${lhs} + ${rhs}`);
     }
     if *op == "Sub" {
-        return Option::Some("x - y");
+        return Option::Some(`${lhs} - ${rhs}`);
     }
     if *op == "Mul" {
-        return Option::Some("x * y");
+        return Option::Some(`${lhs} * ${rhs}`);
     }
     if *op == "Div" {
-        return Option::Some("x / y");
+        return Option::Some(`${lhs} / ${rhs}`);
     }
     if *op == "Pow" {
-        return Option::Some("f32::pow(x, y)");
+        return Option::Some(`f32::pow(${lhs}, ${rhs})`);
     }
     return null;
 }

@@ -7,7 +7,7 @@
 //! whatever else it carries.
 
 use { from_bytes } from "core:protobuf";
-use { Attr, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 
 /// Nesting flattens: `.proto` nests a message inside a message and Wado has
 /// no nested declaration, so the path is joined into the name. This is the
@@ -321,10 +321,24 @@ fn read_attr(a: &AttributeProto) -> Attr {
                 values.push(utf8(&v));
             }
         },
-        // A tensor, a graph or a type has no text form, and nothing reads an
-        // attribute: an operator Loam cannot run is refused by the operator
-        // check, which names the operator rather than one of its attributes.
-        // So the attribute is present and its value is not there.
+        ATTRIBUTE_TENSOR => {
+            let Some(t) = &a.t else {
+                return Attr { name: a.name, values: [], is_list: false };
+            };
+            let Some([data, extents]) = float_tensor(t) else {
+                return Attr { name: a.name, values: [], is_list: false };
+            };
+            return Attr {
+                name: a.name,
+                values: [],
+                is_list: false,
+                tensor: Option::Some(ConstTensor { dtype: "float", extents, data }),
+            };
+        },
+        // A graph or a type has no text form, and only `Constant` reads a
+        // payload this shape: an operator Loam cannot run is refused by the
+        // operator check, which names the operator rather than one of its
+        // attributes. So the attribute is present and its value is not there.
         _ => {
             is_list = false;
         },

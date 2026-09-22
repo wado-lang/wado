@@ -322,6 +322,12 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         let [a, b] = binary_operands(node, shapes)?;
         return at_node(node, a.elementwise(&b, op));
     }
+    if op == "Constant" {
+        constant_value(node)?;
+        // A one-element constant has no axis to name, so it broadcasts into
+        // whatever reads it and needs no layout rule of its own.
+        return Result::Ok(Shape { axes: [] });
+    }
     if op == "Gemm" {
         arity(node, 2)?;
         let [_, _, trans_a, trans_b] = gemm_options(node)?;
@@ -345,6 +351,29 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
     }
     builtin::cold_path();
     return Result::Err(InferError::UnknownOperator(op));
+}
+
+/// A `Constant`'s single element. Loam reads the one-element case, which is
+/// how an exporter writes a scalar an operator combines with a whole tensor;
+/// a constant with more elements has axes nothing names, and stops the build.
+pub fn constant_value(node: &Node) -> Result<f32, InferError> {
+    let Some(attr) = node.attr("value") else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, "value", "is absent and the operator reads it"));
+    };
+    let Some(tensor) = &attr.tensor else {
+        builtin::cold_path();
+        return Result::Err(attribute_error(node, "value", "is not a tensor this reader carries"));
+    };
+    if tensor.data.len() != 1 {
+        builtin::cold_path();
+        return Result::Err(attribute_error(
+            node,
+            "value",
+            `holds ${tensor.data.len()} elements and only a single one broadcasts`,
+        ));
+    }
+    return Result::Ok(tensor.data[0]);
 }
 
 /// Whether a `Gemm` was given its `C` operand. ONNX writes an absent optional

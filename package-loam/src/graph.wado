@@ -23,13 +23,21 @@ pub struct ValueInfo {
     pub rank: Rank,
 }
 
+/// A tensor an attribute carries, which `Constant` is the operator of.
+pub struct ConstTensor {
+    pub dtype: String,
+    pub extents: List<i32>,
+    pub data: List<f32>,
+}
+
 /// An attribute's values as written. ONNX types an attribute by the operator's
 /// schema rather than by the syntax, so the text is kept and the operator
-/// reads it.
+/// reads it. A tensor payload has no text form and travels in `tensor`.
 pub struct Attr {
     pub name: String,
     pub values: List<String>,
     pub is_list: bool,
+    pub tensor: Option<ConstTensor> = null,
 }
 
 pub struct Node {
