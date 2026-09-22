@@ -273,9 +273,8 @@ fn read_dim(d: &TensorShapeProtoDimension, tensor: &String) -> Result<Dim, Strin
     if d.dim_value != 0 {
         return Result::Ok(Dim::Static(extent(d.dim_value, tensor)?));
     }
-    // A zero `dim_value` and an empty `dim_param` are both the absent field,
-    // which is ONNX's `?`. A genuine extent of zero is indistinguishable, and
-    // an exporter does not write one.
+    // A `oneof`'s presence is on the wire, and `core:protobuf` has none, so an
+    // extent of zero is the absent field. See the Loam WEP's known gaps.
     return Result::Ok(Dim::Unknown);
 }
 

@@ -397,11 +397,9 @@ test "an element of a repeated run is bounded by the run" {
 test "a varint whose tenth byte overflows u64 is malformed" {
     // Nine continuation bytes and a tenth of `0x02`. Only bit 0 of the tenth
     // byte fits, so the rest is a number the encoding cannot mean.
-    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02")
-        matches { Err(_) };
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x02") matches { Err(_) };
     // `0x01` is the largest tenth byte, and `u64::MAX` is what it spells.
-    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01")
-        matches { Ok(_) };
+    assert from_bytes::<Test1, ByteList>(b"\x08\xff\xff\xff\xff\xff\xff\xff\xff\xff\x01") matches { Ok(_) };
 }
 
 test "a tag whose wire type is not the field's is refused" {
