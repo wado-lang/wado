@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790059825399,
+  "lastUpdate": 1790075742119,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58328,6 +58328,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "zlib",
             "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c0bf19e143da6f03b38a8daab41c72feaf987c41",
+          "message": "Merge pull request #2122 from wado-lang/claude/stdlib-result-err-type-n9qovk\n\nrefactor(stdlib)!: one parser per type, and a readable reason on every error",
+          "timestamp": "2026-09-22T20:02:20+09:00",
+          "tree_id": "ea5fca0ad15516b2b2de502113a2b80c370d8f11",
+          "url": "https://github.com/wado-lang/wado/commit/c0bf19e143da6f03b38a8daab41c72feaf987c41"
+        },
+        "date": 1790075741552,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
             "unit": "bytes"
           },
           {
