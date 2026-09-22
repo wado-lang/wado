@@ -3202,25 +3202,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The values an integer literal may take at `prim`. `char` is included:
+    /// a `\u{…}` escape is checked against the scalar range the same way.
     fn primitive_range(prim: PrimitiveType) -> Option<(i128, i128)> {
-        use crate::primitive::PrimitiveType;
         match prim {
-            PrimitiveType::I8 => Some((i128::from(i8::MIN), i128::from(i8::MAX))),
-            PrimitiveType::I16 => Some((i128::from(i16::MIN), i128::from(i16::MAX))),
-            PrimitiveType::I32 => Some((i128::from(i32::MIN), i128::from(i32::MAX))),
-            PrimitiveType::I64 => Some((i128::from(i64::MIN), i128::from(i64::MAX))),
-            PrimitiveType::U8 => Some((0, i128::from(u8::MAX))),
-            PrimitiveType::U16 => Some((0, i128::from(u16::MAX))),
-            PrimitiveType::U32 => Some((0, i128::from(u32::MAX))),
-            PrimitiveType::U64 => Some((0, i128::from(u64::MAX))),
             PrimitiveType::Char => Some((0, 0x0010_FFFF)),
-            // No integer literal lands on these, so none has a range to check.
-            PrimitiveType::F32
-            | PrimitiveType::F64
-            | PrimitiveType::F16
-            | PrimitiveType::Bf16
-            | PrimitiveType::Bool
-            | PrimitiveType::V128 => None,
+            other => other.int_range(),
         }
     }
 

@@ -1,5 +1,11 @@
+#![no_prelude]
+#![stdlib("core:prelude/half.wado")]
 //! `f16` and `bf16`: half precision as an interchange format, bits and no
 //! arithmetic. See [WEP: Half-Precision Primitives](../../../../docs/wep-2026-09-22-half-precision-primitives.md).
+
+use { ConvertError, Display, From, Inspect, TryFrom } from "core:prelude/traits.wado";
+use { Formatter } from "core:prelude/format.wado";
+use { Result } from "core:prelude/types.wado";
 
 global F16_SIGN: u16 = 0x8000;
 global F16_EXP: u16 = 0x7C00;

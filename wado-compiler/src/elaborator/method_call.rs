@@ -1131,9 +1131,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .nominal_head(base_id)
                             .map(|(_, m)| m),
-                        ResolvedType::Primitive(_) | ResolvedType::Unit => {
-                            Some(ModuleSource::primitive())
-                        }
+                        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+                        ResolvedType::Unit => Some(ModuleSource::primitive()),
                         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
@@ -2164,7 +2163,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 ResolvedType::Primitive(prim) => (
                     prim.as_str().to_string(),
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(*prim),
                     FqTypeName::builtin(prim.as_str()),
                     vec![],
                 ),
@@ -2298,7 +2297,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             ResolvedType::Primitive(prim) => (
                                 prim.as_str().to_string(),
-                                ModuleSource::primitive(),
+                                ModuleSource::of_primitive(prim),
                                 FqTypeName::builtin(prim.as_str()),
                                 vec![],
                             ),

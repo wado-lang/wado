@@ -621,10 +621,8 @@ fn check_cm_boundary_representable_inner(
         // exactly the bug this check exists to prevent. New variants must be
         // classified explicitly.
         match type_table.get(type_id) {
-            // No CM value representation in any world. The half types are
-            // here for the same reason as `v128`: the Component Model's
-            // `defvaltype` stops at `f32`, and lowering a half as the `u16`
-            // it is represented by would name a bit pattern an integer.
+            // No CM value representation in any world: `defvaltype` stops at
+            // `f32`, and a half lowered as its `u16` would read as an integer.
             R::Primitive(PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16) => {
                 Err(format!(
                     "`{}` has no Component Model value representation",

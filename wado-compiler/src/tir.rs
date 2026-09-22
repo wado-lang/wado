@@ -880,35 +880,39 @@ impl TypeTable {
     pub const V128: TypeId = TypeId(14);
     pub const UNIT: TypeId = TypeId(15);
     pub const NEVER: TypeId = TypeId(16);
-    // STRING removed - String is now a user-defined struct in core:prelude/string.wado
     pub const UNKNOWN: TypeId = TypeId(17);
     pub const ERROR: TypeId = TypeId(18);
 
-    /// The primitive spelling → well-known `TypeId` mapping, the single
-    /// source for every by-name primitive resolution. `i128` / `u128` are
-    /// deliberately absent: they are struct-backed in the prelude, so their
-    /// names resolve through the declaration path, not to the raw
-    /// `PrimitiveType` ids.
+    /// The well-known id `prim` interns to. [`Self::new`] asserts each one
+    /// against what it actually interns, so neither can drift.
+    #[must_use]
+    pub fn primitive_type_id(prim: PrimitiveType) -> TypeId {
+        match prim {
+            PrimitiveType::I8 => Self::I8,
+            PrimitiveType::I16 => Self::I16,
+            PrimitiveType::I32 => Self::I32,
+            PrimitiveType::I64 => Self::I64,
+            PrimitiveType::U8 => Self::U8,
+            PrimitiveType::U16 => Self::U16,
+            PrimitiveType::U32 => Self::U32,
+            PrimitiveType::U64 => Self::U64,
+            PrimitiveType::F32 => Self::F32,
+            PrimitiveType::F64 => Self::F64,
+            PrimitiveType::F16 => Self::F16,
+            PrimitiveType::Bf16 => Self::BF16,
+            PrimitiveType::Bool => Self::BOOL,
+            PrimitiveType::Char => Self::CHAR,
+            PrimitiveType::V128 => Self::V128,
+        }
+    }
+
+    /// The type spelling → well-known `TypeId` mapping, the single source for
+    /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
     pub fn primitive_by_name(name: &str) -> Option<TypeId> {
         match name {
-            "i8" => Some(Self::I8),
-            "i16" => Some(Self::I16),
-            "i32" => Some(Self::I32),
-            "i64" => Some(Self::I64),
-            "u8" => Some(Self::U8),
-            "u16" => Some(Self::U16),
-            "u32" => Some(Self::U32),
-            "u64" => Some(Self::U64),
-            "f32" => Some(Self::F32),
-            "f64" => Some(Self::F64),
-            "f16" => Some(Self::F16),
-            "bf16" => Some(Self::BF16),
-            "bool" => Some(Self::BOOL),
-            "char" => Some(Self::CHAR),
-            "v128" => Some(Self::V128),
             "()" => Some(Self::UNIT),
             "!" => Some(Self::NEVER),
-            _ => None,
+            _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
     }
 
@@ -981,25 +985,14 @@ impl TypeTable {
             defs: std::sync::Arc::default(),
         };
 
-        // Pre-populate primitive types matching the constants above
-        table.intern(ResolvedType::Primitive(PrimitiveType::I8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Bf16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Char));
-        table.intern(ResolvedType::Primitive(PrimitiveType::V128));
-        table.intern(ResolvedType::Unit);
+        for &prim in PrimitiveType::ALL {
+            let id = table.intern(ResolvedType::Primitive(prim));
+            assert_eq!(id, Self::primitive_type_id(prim));
+        }
+        // Landing here says `ALL` holds every variant once: a missing or
+        // repeated entry shifts everything after the primitives.
+        assert_eq!(table.intern(ResolvedType::Unit), Self::UNIT);
         table.intern(ResolvedType::Never);
-        // ResolvedType::String removed - String is now a user-defined struct
         table.intern(ResolvedType::Unknown);
         table.intern(ResolvedType::Error);
 

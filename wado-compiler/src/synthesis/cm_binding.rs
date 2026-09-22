@@ -1018,11 +1018,8 @@ fn validate_exports_representable(
     Ok(())
 }
 
-/// Reject any param/return type with no Component Model value representation
-/// in any world (empty records, 128-bit/v128/half scalars) with a proper
-/// compile error rather than emitting an invalid component or panicking in
-/// codegen. Handle/async types pass — they lower to i32 handles in every world
-/// — so this needs no `--lib`-vs-WASI branch.
+/// Reject a param or return type with no Component Model value representation
+/// in any world: an empty record, or a 128-bit, `v128` or half scalar.
 fn validate_boundary_representable(
     user_func: &TirFunction,
     export_name: &str,
