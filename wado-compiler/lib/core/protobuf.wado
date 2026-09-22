@@ -668,11 +668,19 @@ struct ProtobufReader {
 }
 
 impl ProtobufReader {
+    /// Where a read must stop: the packed run being read, or the message.
+    fn limit(&self) -> i32 {
+        if self.packed_end >= 0 {
+            return self.packed_end;
+        }
+        return self.end;
+    }
+
     fn varint(&mut self) -> Result<u64, DeserializeError> {
         let Some([value, next]) = read_varint(&self.input, self.pos) else {
             return Result::Err(DeserializeError::malformed("truncated varint", self.pos as i64));
         };
-        if next > self.end {
+        if next > self.limit() {
             return Result::Err(DeserializeError::malformed("varint runs past the message", self.pos as i64));
         }
         self.pos = next;
@@ -778,7 +786,7 @@ impl ProtobufReader {
         let Some([value, next]) = read_fixed32(&self.input, self.pos) else {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         };
-        if next > self.end {
+        if next > self.limit() {
             return Result::Err(DeserializeError::malformed("fixed32 runs past the message", self.pos as i64));
         }
         self.pos = next;
@@ -792,7 +800,7 @@ impl ProtobufReader {
         let Some([value, next]) = read_fixed64(&self.input, self.pos) else {
             return Result::Err(DeserializeError::eof(self.pos as i64));
         };
-        if next > self.end {
+        if next > self.limit() {
             return Result::Err(DeserializeError::malformed("fixed64 runs past the message", self.pos as i64));
         }
         self.pos = next;

@@ -375,3 +375,21 @@ test "a packed run whose last varint runs past it is malformed" {
     // would read past the run's end into whatever follows.
     assert from_bytes::<Singular, ByteList>(b"\x0a\x02\x01\x80\x01") matches { Err(_) };
 }
+
+test "an element of a repeated run is bounded by the run" {
+    struct Repeated {
+        #[wire(number = 1)]
+        items: List<i32> = [],
+        #[wire(number = 2)]
+        tail: i32 = 0,
+    }
+
+    // The run says two bytes and its second element is a varint continuation,
+    // so reading it would take the next field's tag as part of the value. The
+    // offset is what the run's bound buys: the straddling element, rather than
+    // whatever the tag that element ate turns out to mean.
+    let Err(e) = from_bytes::<Repeated, ByteList>(b"\x0a\x02\x01\x80\x10\x09") else {
+        panic("the run decoded");
+    };
+    assert e.offset == 3;
+}
