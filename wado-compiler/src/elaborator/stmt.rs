@@ -1,9 +1,9 @@
 //! Statement resolution (let, return, if, loop, break, continue, etc.).
 
 use crate::ast::{
-    self, AstId, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr, ExprStmt,
-    ForOfStmt, ForStmt, IfStmt, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt, Stmt,
-    TaskReturnStmt, Type, WhileStmt,
+    self, AstId, AstVisitor, Block, BreakStmt, Condition, ConditionElement, ContinueStmt, Expr,
+    ExprStmt, ForOfStmt, ForStmt, IfStmt, Item, LetStmt, Literal, LoopStmt, Pattern, ReturnStmt,
+    Stmt, TaskReturnStmt, Type, WhileStmt, walk_expr, walk_stmt,
 };
 use crate::compiler_host::CompilerHost;
 use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
@@ -2887,43 +2887,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     fn find_control_flow_in_stmt(stmt: &Stmt) -> Option<(&'static str, Span)> {
-        match stmt {
-            Stmt::Break(b) => Some(("break", b.span)),
-            Stmt::Continue(c) => Some(("continue", c.span)),
-            // return and task return are allowed — they exit the enclosing function,
-            // which is well-defined even in compile-time-expanded blocks.
-            Stmt::Return(_) | Stmt::TaskReturn(_) => None,
-            // Recurse into blocks that don't introduce a new loop/function scope
-            Stmt::If(if_stmt) => Self::find_control_flow_in_block(&if_stmt.then_block)
-                .or_else(|| Self::find_control_flow_in_block(if_stmt.else_block.as_ref()?)),
-            Stmt::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
-            Stmt::Let(let_stmt) => Self::find_control_flow_in_block(let_stmt.else_block.as_ref()?),
-            Stmt::Match(m) => m
-                .arms
-                .iter()
-                .find_map(|arm| Self::find_control_flow_in_expr(&arm.body)),
-            Stmt::Expr(e) => Self::find_control_flow_in_expr(&e.expr),
-            Stmt::Assert(_) | Stmt::Item(_) | Stmt::Error(_) => None,
-            // A loop owns the `break` and `continue` written in it, and a
-            // closure owns its own `return`.
-            Stmt::While(_) | Stmt::For(_) | Stmt::ForOf(_) | Stmt::Loop(_) => None,
-        }
-    }
-
-    /// The same search through an expression that carries a block: a match arm
-    /// and a statement-position expression both reach one.
-    fn find_control_flow_in_expr(expr: &Expr) -> Option<(&'static str, Span)> {
-        match expr {
-            Expr::Block(block) => Self::find_control_flow_in_block(block),
-            Expr::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
-            Expr::If(if_expr) => Self::find_control_flow_in_block(&if_expr.then_block)
-                .or_else(|| Self::find_control_flow_in_block(if_expr.else_block.as_ref()?)),
-            Expr::Match(m) => m
-                .arms
-                .iter()
-                .find_map(|arm| Self::find_control_flow_in_expr(&arm.body)),
-            _ => None,
-        }
+        let mut finder = LoopControlFlowFinder { found: None };
+        finder.visit_stmt(stmt);
+        finder.found
     }
 
     pub(super) fn resolve_break(&mut self, break_stmt: &BreakStmt, ctx: &mut FunctionContext) {
@@ -3393,4 +3359,65 @@ pub(super) fn primitive_assoc_const_to_i128(
         ("u64", "MIN") => Some(i128::from(u64::MIN)),
         _ => None,
     }
+}
+
+/// The first `break` or `continue` a tuple for-of's body writes. The loop is
+/// expanded at compile time, so neither has a loop of its own to name.
+struct LoopControlFlowFinder {
+    found: Option<(&'static str, Span)>,
+}
+
+impl AstVisitor for LoopControlFlowFinder {
+    fn visit_stmt(&mut self, stmt: &Stmt) {
+        if self.found.is_some() {
+            return;
+        }
+        match stmt {
+            Stmt::Break(b) => self.found = Some(("break", b.span)),
+            Stmt::Continue(c) => self.found = Some(("continue", c.span)),
+            // A loop owns the `break` and `continue` its body writes. What
+            // drives the loop is still the enclosing block's, so the header is
+            // walked and the body is not.
+            Stmt::While(w) => self.visit_condition(&w.condition),
+            Stmt::For(f) => {
+                if let Some(init) = &f.init {
+                    self.visit_stmt(init);
+                }
+                if let Some(condition) = &f.condition {
+                    self.visit_condition(condition);
+                }
+                if let Some(update) = &f.update {
+                    self.visit_expr(update);
+                }
+            }
+            Stmt::ForOf(f) => self.visit_expr(&f.iterable),
+            Stmt::Loop(_) => {}
+            // `return` and `task return` leave the enclosing function, which is
+            // well defined in an expanded block; what they deliver is walked.
+            Stmt::Let(_)
+            | Stmt::Expr(_)
+            | Stmt::Return(_)
+            | Stmt::TaskReturn(_)
+            | Stmt::If(_)
+            | Stmt::Match(_)
+            | Stmt::Assert(_)
+            | Stmt::LabeledBlock(_)
+            | Stmt::Item(_)
+            | Stmt::Error(_) => walk_stmt(self, stmt),
+        }
+    }
+
+    fn visit_expr(&mut self, expr: &Expr) {
+        if self.found.is_some() {
+            return;
+        }
+        // A closure is a function boundary, so what it writes is its own.
+        if matches!(expr, Expr::Closure(_)) {
+            return;
+        }
+        walk_expr(self, expr);
+    }
+
+    /// A declaration written in the body carries its own bodies.
+    fn visit_item(&mut self, _item: &Item) {}
 }

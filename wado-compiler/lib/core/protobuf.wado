@@ -190,6 +190,26 @@ fn unsupported<S: AsStrSlice>(what: S) -> SerializeError {
 /// written. A real field number starts at 1, so it can never collide.
 global NO_FIELD: i32 = 0;
 
+/// The field numbers the wire format admits, from the specification's
+/// "Assigning Field Numbers". `wado-compiler/src/ast.rs` holds the same two.
+global FIELD_NUMBER_MIN: i32 = 1;
+global FIELD_NUMBER_MAX: i32 = 536870911;
+
+/// Whether a number can key a field on the wire. `WireNumbered` answers for the
+/// type a call names, and a field holding another message is bound by nothing,
+/// so this is what stands between an unnumbered submessage and bytes that
+/// decode as something else.
+fn is_field_number(number: i64) -> bool {
+    return FIELD_NUMBER_MIN as i64 <= number <= FIELD_NUMBER_MAX as i64;
+}
+
+fn unnumbered<S: AsStrSlice>(name: S) -> SerializeError {
+    return SerializeError {
+        kind: SerializeErrorKind::UnsupportedValue,
+        message: `protobuf cannot encode the unnumbered field ${name}`,
+    };
+}
+
 /// Each submessage's payload length, in the order the traversal opens them.
 /// Slot 0 is the whole message.
 struct SizeState {
@@ -296,7 +316,7 @@ impl SerializeSeq for SizeSeqSerializer {
 
 impl SerializeStruct for SizeStructSerializer {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported(`the unnumbered field ${name}`));
+        return Result::Err(unnumbered(name));
     }
 
     fn field_numbered<T: Serialize, S: AsStrSlice>(
@@ -305,6 +325,10 @@ impl SerializeStruct for SizeStructSerializer {
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
+        if !is_field_number(number as i64) {
+            builtin::cold_path();
+            return Result::Err(unnumbered(name));
+        }
         let mut ser = SizeSerializer { state: self.state, number };
         return value.serialize::<SizeSerializer>(&mut ser);
     }
@@ -467,7 +491,7 @@ impl SerializeSeq for WriteSeqSerializer {
 
 impl SerializeStruct for WriteStructSerializer {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported(`the unnumbered field ${name}`));
+        return Result::Err(unnumbered(name));
     }
 
     fn field_numbered<T: Serialize, S: AsStrSlice>(
@@ -476,6 +500,9 @@ impl SerializeStruct for WriteStructSerializer {
         name: S,
         value: &T,
     ) -> Result<(), SerializeError> {
+        // The size pass refused this already, so reaching it here is the two
+        // passes disagreeing about the same declaration.
+        assert is_field_number(number as i64);
         let mut ser = WriteSerializer { state: self.state, number };
         return value.serialize::<WriteSerializer>(&mut ser);
     }
@@ -730,7 +757,11 @@ impl ProtobufReader {
         let Some(wire_type) = WireType::from_bits((tag & 7) as i32) else {
             return Result::Err(DeserializeError::malformed("unknown wire type", at as i64));
         };
-        return Result::Ok(Option::Some([(tag >> 3) as i32, wire_type, after]));
+        let number = (tag >> 3) as i64;
+        if !is_field_number(number) {
+            return Result::Err(DeserializeError::malformed("field number out of range", at as i64));
+        }
+        return Result::Ok(Option::Some([number as i32, wire_type, after]));
     }
 }
 

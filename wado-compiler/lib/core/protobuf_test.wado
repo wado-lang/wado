@@ -301,3 +301,27 @@ test "a packed run holding nothing is an empty list" {
     assert m.items.is_empty();
     assert m.after == 150;
 }
+
+test "a submessage carrying no field numbers is refused, not written as zero" {
+    struct Unnumbered {
+        a: i32 = 0,
+    }
+
+    struct Holder {
+        #[wire(number = 1)]
+        inner: Unnumbered = Unnumbered {},
+    }
+
+    assert to_bytes(&Holder {
+        inner: Unnumbered { a: 7 },
+    }) matches { Err(_) };
+}
+
+test "a tag whose field number the wire cannot carry is malformed" {
+    // Field number 0 under wire type 0, which no encoder writes.
+    assert from_bytes::<Test1, ByteList>(b"\x00\x2a") matches { Err(_) };
+    // A number past 536870911, reached by a tag of ten varint bytes.
+    assert from_bytes::<Test1, ByteList>(
+        b"\xf8\xff\xff\xff\xff\xff\xff\xff\xff\x01\x2a",
+    ) matches { Err(_) };
+}

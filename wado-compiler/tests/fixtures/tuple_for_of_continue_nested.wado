@@ -1,9 +1,8 @@
 // A tuple for-of is expanded at compile time, so `break` and `continue` have
-// no loop to name and are refused. The refusal has to reach every block the
-// body can write one in, not just an `if`: inside a real loop such a
-// `continue` silently bound to that loop, and outside one it reached WIR and
-// panicked.
-fn matched(v: Option<i32>) -> i32 {
+// no loop to name and are refused. The refusal has to reach every expression
+// the body holds, not just an `if`: inside a real loop such a `continue`
+// silently bound to that loop, and outside one it reached WIR and panicked.
+fn from_let_else(v: Option<i32>) -> i32 {
     let mut seen = 0;
     for let line of ["a"] as List<String> {
         for let w of [v] {
@@ -16,11 +15,24 @@ fn matched(v: Option<i32>) -> i32 {
     return seen;
 }
 
-test "a let-else body is reached" {
-    assert matched(Option::Some(1)) == 1;
+fn from_let_initializer(v: i32) -> i32 {
+    let mut seen = 0;
+    for let mut i = 0; i < 2; i += 1 {
+        for let w of [v] {
+            let n = match w { 0 => { continue; }, _ => w };
+            seen += n;
+        }
+    }
+    return seen;
+}
+
+test "each spelling is reached" {
+    assert from_let_else(Option::Some(1)) == 1;
+    assert from_let_initializer(0) == 0;
 }
 
 __DATA__
 {
-  "compile_error": ":11:17: analysis error: invalid pattern: `continue` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
+  "compile_error": ":10:17: analysis error: invalid pattern: `continue` is not allowed inside a tuple for-of loop (the loop is expanded at compile time); 22:38: invalid pattern: `continue` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)",
+  "compile_error_codes": ["INVALID_SYNTAX"]
 }
