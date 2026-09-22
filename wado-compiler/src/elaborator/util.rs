@@ -3,7 +3,8 @@
 use crate::ast::Pattern;
 use crate::elaborator::stmt::primitive_assoc_const_to_i128;
 use crate::escape::{unescape_byte, unescape_char};
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 
 /// Check if a positive integer literal value fits in the target integer type.
 /// Returns `Some(error_message)` if out of range, `None` if OK.

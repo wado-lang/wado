@@ -55,6 +55,7 @@ struct core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueI
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut has_default: bool,
     mut is_secret: bool,
+    mut wire_number: i32,
 }
 
 struct core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,&Array<i32>> {  // TypeId(11)
@@ -63,6 +64,7 @@ struct core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueI
     mut wire_override: ref null "core:prelude/string.wado//String",
     mut has_default: bool,
     mut is_secret: bool,
+    mut wire_number: i32,
 }
 
 struct core:prelude//List<i32> {  // TypeId(12)
@@ -152,7 +154,7 @@ import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
 global global:trait_projection_receiver_blanket.wado::$const_obj_3: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:trait_projection_receiver_blanket.wado::$const_obj_4: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 16 };
+global global:trait_projection_receiver_blanket.wado::$const_obj_4: ref null "core:prelude//List<i32>" = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 };
 global global:core:prelude/array.wado::$const_obj_16: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_17: ref null Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_18: ref null Array<u8> = array.new_fixed<u8>(44, 32);
@@ -237,14 +239,14 @@ fn "trait_projection_receiver_blanket.wado/$test_0_a_projection_inside_a_receive
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_6 + 89, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("trait_projection_receiver_blanket.wado"), used: 38 }, 38);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_6 + 127, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_5_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:trait_projection_receiver_blanket.wado::$const_obj_4, $local_5_5);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 16 }, $local_5_5);
         $fuse_at_7 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 43);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: count(xs.into_iter()) == 3
 "), used: 39 }, 39);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_7 + 39, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(120, 115, 58, 32), used: 4 }, 4);
         $local_5_5 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_4);
-        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2, 3), used: 3 }, $local_5_5);
+        "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/Inspect::inspect"(global:trait_projection_receiver_blanket.wado::$const_obj_4, $local_5_5);
         $fuse_at_8 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_4, 17);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 }, 1);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_4.repr, $fuse_at_8 + 1, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("xs.into_iter(): "), used: 16 }, 16);
@@ -1552,7 +1554,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 }
 
 fn "core:prelude/slice.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/ReflectStruct::members"() {
-    return struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,&Array<i32>>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 112, 114), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0 }, struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 110, 100), used: 3 }, wire_override: ref.null none, has_default: 0, is_secret: 0 };
+    return struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,&Array<i32>>" { index: 0, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(114, 101, 112, 114), used: 4 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 }, struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { index: 1, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("index"), used: 5 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 }, struct.new "core:prelude/traits.wado//StructField<core:prelude/slice.wado/SliceValueIter<i32>,i32>" { index: 2, field_name: struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(101, 110, 100), used: 3 }, wire_override: ref.null none, has_default: 0, is_secret: 0, wire_number: 0 };
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {

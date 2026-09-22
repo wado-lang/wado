@@ -99,6 +99,15 @@ pub struct SerializeError {
     pub message: String,
 }
 
+impl Display for SerializeError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for SerializeError {
+}
+
 #[compiler_item("deserialize_error_kind")]
 pub enum DeserializeErrorKind {
     UnexpectedType,
@@ -123,23 +132,43 @@ pub enum DeserializeErrorKind {
 pub struct DeserializeError {
     pub kind: DeserializeErrorKind,
     pub message: String,
+    /// Byte offset into the input, or `-1` where the failure has no position —
+    /// a whole-value rejection, or a format that counts nothing.
     pub offset: i64,
 }
 
+impl Display for DeserializeError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+        if self.offset >= 0 {
+            f.write_str(` at offset ${self.offset}`);
+        }
+    }
+}
+
+impl Error for DeserializeError {
+}
+
+/// A constructor a caller with no position can reach defaults `offset` to `-1`,
+/// so that caller omits it rather than inventing a byte the reader would trust.
 impl DeserializeError {
-    pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::UnexpectedType, message: msg.to_string(), offset };
     }
 
     pub fn missing_field<S: AsStrSlice>(name: S) -> DeserializeError {
-        return DeserializeError { kind: DeserializeErrorKind::MissingField, message: name.to_string(), offset: -1 };
+        return DeserializeError {
+            kind: DeserializeErrorKind::MissingField,
+            message: `missing field: ${name}`,
+            offset: -1,
+        };
     }
 
-    pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::InvalidValue, message: msg.to_string(), offset };
     }
 
-    pub fn malformed<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn malformed<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::MalformedInput, message: msg.to_string(), offset };
     }
 
@@ -155,11 +184,11 @@ impl DeserializeError {
         };
     }
 
-    pub fn overflow<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn overflow<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::Overflow, message: msg.to_string(), offset };
     }
 
-    pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 
@@ -236,6 +265,14 @@ pub trait SerializeMap with () {
     fn end(&mut self) -> Result<(), SerializeError>;
 }
 
+/// A struct whose every field carries `#[wire(number = N)]`. A format keyed by
+/// numbers requires it, so a type without them is refused where the call is
+/// written rather than where the bytes are produced. See
+/// `docs/wep-2026-09-22-grog.md`.
+#[compiler_item("wire_numbered")]
+pub trait WireNumbered with () {
+}
+
 #[compiler_item("serialize_struct")]
 pub trait SerializeStruct with () {
 
@@ -243,6 +280,17 @@ pub trait SerializeStruct with () {
     #[compiler_item("serialize_struct_field")]
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>;
 
+    /// The same field, with the numeric wire key `#[wire(number = N)]` gave
+    /// it, or `0` where it has none. A format keyed by name drops the number,
+    /// which is what this default does.
+    fn field_numbered<T: Serialize, S: AsStrSlice>(
+        &mut self,
+        number: i32,
+        name: S,
+        value: &T,
+    ) -> Result<(), SerializeError> {
+        return self.field(name, value);
+    }
 
     #[compiler_item("serialize_struct_end")]
     fn end(&mut self) -> Result<(), SerializeError>;
@@ -390,6 +438,11 @@ pub trait FieldSchema with () {
     /// declaration order), or `null` when `rank` is out of range. Returns
     /// `null` for every `rank` when the type has no positional fields.
     fn positional_at(rank: i32) -> Option<i32>;
+
+    /// Field index of the field `#[wire(number = N)]` gave `number` to.
+    /// Returns `null` for every number when the type carries none, which a
+    /// format keyed by numbers rules out through `WireNumbered`.
+    fn by_number(number: i32) -> Option<i32>;
 }
 
 #[compiler_item("deserialize_struct")]
@@ -626,6 +679,20 @@ impl Serialize for f64 {
     }
 }
 
+// A half goes on the wire as the `f32` it widens to: no format here spells
+// binary16, and every half is exact in `f32`.
+impl Serialize for f16 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f32(f32::from(*self));
+    }
+}
+
+impl Serialize for bf16 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f32(f32::from(*self));
+    }
+}
+
 impl Serialize for bool {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_bool(*self);
@@ -804,6 +871,20 @@ impl Deserialize for f64 {
     }
 }
 
+// The wire carries an `f32`, so reading one back rounds. `from_f32` rounds to
+// nearest rather than refusing, which is what an interchange format asks for.
+impl Deserialize for f16 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_f32(d.deserialize_f32()?));
+    }
+}
+
+impl Deserialize for bf16 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_f32(d.deserialize_f32()?));
+    }
+}
+
 impl Deserialize for bool {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<bool, DeserializeError> {
         return d.deserialize_bool();
@@ -969,7 +1050,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]>, ..F: Serialize> Serialize for T {
         for let f of members {
             let name = wire_name(&f, policy);
             let value = f.get(self);
-            st.field(&name, &value)?;
+            st.field_numbered(f.wire_number(), &name, &value)?;
         }
         return st.end();
     }
@@ -1083,14 +1164,6 @@ fn unknown_case_error(key: &CaseKey) -> DeserializeError {
     };
 }
 
-fn missing_field_error<S: AsStrSlice>(name: S) -> DeserializeError {
-    return DeserializeError {
-        kind: DeserializeErrorKind::MissingField,
-        message: `missing field: ${name}`,
-        offset: -1,
-    };
-}
-
 /// Struct deserialization derived over `ReflectStruct`. Slots start empty and
 /// are written at the index the format reports; an empty one takes the field's
 /// declared default, or names the field as missing.
@@ -1131,7 +1204,7 @@ impl<T: ReflectStruct<FieldTypes = [..F]> + FieldSchema, ..F: Deserialize> Deser
                 None => match ReflectStruct::<T>::defaults()[i] {
                     Some(fallback) => fallback,
                     None => {
-                        return Result::Err(missing_field_error(
+                        return Result::Err(DeserializeError::missing_field(
                             wire_name(&ReflectStruct::<T>::members()[i], policy),
                         ));
                     },

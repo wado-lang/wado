@@ -5,8 +5,10 @@ use crate::compiler_host::CompilerHost;
 use crate::compiler_item::CompilerItem;
 use crate::elaborator::synth::ArgSource;
 use crate::name::{FqTypeName, LocalMethodName, MethodName};
-use crate::tir::{FunctionRef, PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{FunctionRef, ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
+use crate::unparse::binary_op_str;
 
 use super::Elaborator;
 use super::coercion::{is_numeric_literal_expr, numeric_literal_pair_order};
@@ -211,25 +213,36 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 }
 
 impl TypeSystem {
-    /// True when an operand type has no native Wasm binary-op instruction
-    /// and must therefore dispatch through a trait implementation. Used to
-    /// detect operator misuse symmetrically: either operand being such a
-    /// type means the operator cannot fall through to a primitive
-    /// instruction.
+    /// Whether `-x` / `~x` on `type_id` needs a trait impl, because the WIR
+    /// unary lowering has no opcode for it (`primitive_ops::scalar_kind`).
+    fn unary_operand_requires_trait(&self, op: UnaryOp, type_id: TypeId) -> bool {
+        let tt = self.type_table.borrow();
+        match op {
+            UnaryOp::Neg => !tt.is_scalar_primitive_like(type_id),
+            // `bool` complements through `i32.eqz`; a float has no complement.
+            UnaryOp::BitNot => {
+                tt.representation_head(type_id) != TypeTable::BOOL
+                    && (tt.is_float(type_id) || !tt.is_scalar_primitive_like(type_id))
+            }
+            UnaryOp::Not | UnaryOp::Ref | UnaryOp::MutRef | UnaryOp::Deref => false,
+        }
+    }
+
+    /// Whether a binary operator on `type_id` needs a trait impl. Either
+    /// operand answering true means no primitive instruction can carry it.
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
         let tt = self.type_table.borrow();
         match tt.get(type_id) {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
-                matches!(
-                    tt.get(ultimate),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        // SIMD aliases (`type f32x4 = v128`) — see the
-                        // `Primitive(V128)` arm below.
-                        | ResolvedType::Primitive(PrimitiveType::V128)
-                )
+                match tt.get(ultimate) {
+                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                    // SIMD aliases (`type f32x4 = v128`) and half aliases —
+                    // see the `Primitive` arm below.
+                    ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
+                    _ => false,
+                }
             }
             // Types with no native Wasm binary-op support and no prelude
             // trait impl. Without rejection, codegen emits `ref.eq` /
@@ -251,7 +264,12 @@ impl TypeSystem {
             // lane-wise via the `core:simd` builtins / methods, so reject the
             // scalar operator and route to the requires-trait diagnostic
             // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
-            ResolvedType::Primitive(PrimitiveType::V128) => true,
+            // `f16` / `bf16` carry bits and no arithmetic: Wasm has no half
+            // precision instruction, and the `u16` they lower to would add two
+            // bit patterns. Widen to `f32` to compute.
+            ResolvedType::Primitive(
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
+            ) => true,
             // `()` pushes nothing, so the `i32.eq` below it underflows the
             // stack; its `Eq` / `Ord` are the prelude's impls for `()`, and
             // the other operators have none. `Never` is deliberately absent:
@@ -313,7 +331,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else if both_refs {
                 // All operators other than == and != are invalid on reference types
                 let type_name = self.tysys.type_table.borrow().type_name(left);
-                let op_str = binary_op_symbol(op);
+                let op_str = binary_op_str(op);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_str.to_string(),
                     operands: vec![type_name],
@@ -889,7 +907,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod
             ) && matches!(left_resolved, ResolvedType::Flags { .. });
             if is_flags_arith {
-                let op_char = binary_op_symbol(op);
+                let op_char = binary_op_str(op);
                 let type_name = self.tysys.type_table.borrow().type_name(left);
                 let _ = self.emit(TypeError::OperatorNotApplicable {
                     op: op_char.to_string(),
@@ -925,7 +943,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     | BinaryOp::BitAnd
                     | BinaryOp::BitOr
                     | BinaryOp::BitXor => Some((
-                        binary_op_symbol(op),
+                        binary_op_str(op),
                         "bitwise and shift operators are integer-only".to_string(),
                     )),
                     _ => None,
@@ -962,7 +980,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let type_table = self.tysys.type_table.borrow();
                 let left_name = type_table.type_name(left);
                 let right_name = type_table.type_name(right);
-                let op_char = binary_op_symbol(op);
+                let op_char = binary_op_str(op);
                 drop(type_table);
                 if left_name == right_name {
                     // Both operands share a type that lacks the operator's
@@ -1124,9 +1142,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // `resolve_trait_method_for_op` + `dispatch_trait_op_method`
         // pipeline as binary operators.  The builder handles the zero-arg
         // case via `resolved.param_types.is_empty()`.
-        if let Some((method_name, item)) = match unary.op {
-            UnaryOp::Neg => Some(("neg", CompilerItem::Neg)),
-            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot)),
+        if let Some((method_name, item, op_symbol)) = match unary.op {
+            UnaryOp::Neg => Some(("neg", CompilerItem::Neg, "-")),
+            UnaryOp::BitNot => Some(("bitnot", CompilerItem::BitNot, "~")),
             _ => None,
         } {
             let trait_name = self
@@ -1230,6 +1248,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         Some(unary.id),
                     );
                 }
+            }
+
+            // No impl answered, and the WIR lowering has no opcode for this
+            // operand, so reject here: `scalar_kind` would panic instead.
+            if expr_type != TypeTable::ERROR
+                && self.tysys.unary_operand_requires_trait(unary.op, expr_type)
+            {
+                let operand = self.tysys.type_table.borrow().type_name(expr_type);
+                let _ = self.emit(TypeError::OperatorNotApplicable {
+                    op: op_symbol.to_string(),
+                    operands: vec![operand],
+                    note: Some(format!("type does not implement `{trait_name}`")),
+                    span: unary.span,
+                });
+                return TypeTable::ERROR;
             }
         }
 
@@ -2088,29 +2121,5 @@ fn projected_subscripts_of_place(target: &ast::Expr) -> Vec<AstId> {
             ast::Expr::FieldAccess(field) => at = &field.expr,
             _ => return subscripts,
         }
-    }
-}
-
-/// The source spelling of a binary operator, for diagnostics.
-pub(super) fn binary_op_symbol(op: BinaryOp) -> &'static str {
-    match op {
-        BinaryOp::Add => "+",
-        BinaryOp::Sub => "-",
-        BinaryOp::Mul => "*",
-        BinaryOp::Div => "/",
-        BinaryOp::Mod => "%",
-        BinaryOp::BitAnd => "&",
-        BinaryOp::BitOr => "|",
-        BinaryOp::BitXor => "^",
-        BinaryOp::Shl => "<<",
-        BinaryOp::Shr => ">>",
-        BinaryOp::And => "&&",
-        BinaryOp::Or => "||",
-        BinaryOp::Eq => "==",
-        BinaryOp::NotEq => "!=",
-        BinaryOp::Lt => "<",
-        BinaryOp::LtEq => "<=",
-        BinaryOp::Gt => ">",
-        BinaryOp::GtEq => ">=",
     }
 }

@@ -1,0 +1,26 @@
+// A closure's by-reference capture publishes the captured local's `Box` cell
+// into the env struct. `bump()` writes `step.value` through that cell, naming
+// no `&mut` for the call scan to see, so hot-field scalarization must not hold
+// the field in a scalar across the call.
+
+use { println, Stdout } from "core:cli";
+
+export fn run() with Stdout {
+    let mut step = builtin::black_box(1);
+    let mut bump = || {
+        step = 100;
+    };
+    let mut sum = 0;
+    for let mut i = 0; i < 3; i += 1 {
+        step = step + 1;
+        sum += step;
+        sum += step;
+        bump();
+    }
+    println(`${sum}`);
+}
+
+__DATA__
+{
+    "stdout": "408\n"
+}

@@ -8,6 +8,7 @@
 pub mod analyze;
 pub mod ast;
 pub mod ast_index;
+pub mod attribute;
 pub mod bind;
 pub mod builtin_registry;
 pub mod canonical;
@@ -50,6 +51,7 @@ pub mod param_resolution;
 pub mod parser;
 pub mod path;
 mod prelower_reach;
+pub mod primitive;
 pub mod remarks;
 pub mod resolve;
 pub mod resource_move_check;

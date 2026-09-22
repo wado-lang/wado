@@ -1,0 +1,12 @@
+// `v128` has no scalar negate: `core:simd` writes a `Neg` impl per lane type,
+// and the bare vector reaches none of them.
+
+use { i32x4 } from "core:simd";
+
+export fn run() {
+    let a = i32x4::splat(1) as v128;
+    let _neg = -a;
+}
+
+__DATA__
+{"compile_error": "operator `-` cannot be applied to type `v128`"}

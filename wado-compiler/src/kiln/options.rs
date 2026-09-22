@@ -9,10 +9,9 @@ use serde::{Deserialize, Serialize};
 use crate::compiler_host::{Code, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
+use crate::primitive::PrimitiveType;
 use crate::semantics::Semantics;
-use crate::tir::{
-    PrimitiveType, ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable,
-};
+use crate::tir::{ResolvedType, TirExpr, TirExprKind, TirField, TirModule, TypeId, TypeTable};
 use crate::token::Span;
 
 /// Structural description of a generator's `pub struct Options`.

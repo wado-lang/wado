@@ -1,0 +1,53 @@
+// The attributes the schema admits, in the places and spellings it admits
+// them: the check that rejects the rest must let these through.
+
+#[allow(dead_code)]
+use { println, Stdout } from "core:cli";
+
+#[allow(dead_code)]
+fn unused() -> i32 {
+    return 1;
+}
+
+trait Named {
+    type Id;
+    fn name(&self) -> String;
+}
+
+#[allow(dead_code)]
+impl Named for Login {
+    #[allow(dead_code)]
+    type Id = i32;
+
+    #[allow(dead_code)]
+    const MAX: i32 = 1;
+
+    fn name(&self) -> String {
+        return self.user;
+    }
+}
+
+#[inline("never")]
+fn slow_add(a: i32, b: i32) -> i32 {
+    return a + b;
+}
+
+struct Login {
+    user: String,
+    #[secret]
+    token: String,
+}
+
+#[timeout_ms(30000)]
+test "attributes the schema admits" {
+    let login = Login { user: "alice", token: "t0ken" };
+    assert `${login:?}`.len() > 0;
+    assert slow_add(1, 2) == 3;
+}
+
+export fn run() with Stdout {
+    println(`${slow_add(20, 22)}`);
+}
+
+__DATA__
+{"expected_stdout": "42\n"}

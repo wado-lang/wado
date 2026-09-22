@@ -1,0 +1,16 @@
+//! A field holding two packs with nothing to settle them. The literal gives
+//! the field one value, which every split satisfies, so the literal must say
+//! which parameters it could not infer rather than reach codegen with none.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+
+struct Joined<..A, ..B> {
+    both: [..A, ..B],
+}
+
+test "a field's two packs with no annotation" {
+    let j = Joined { both: [1, true] };
+    assert j.both.len() == 2;
+}
+
+__DATA__
+{"compile_error": "cannot infer type parameter `A`, `B` of struct `Joined`"}

@@ -1,14 +1,15 @@
-//! A parameter holding two type packs in one tuple. Every split of the
-//! argument satisfies it, so neither pack is settled and the declaration is
-//! rejected. See docs/wep-2026-03-14-variadic-type-parameters.md §6.
+//! A parameter holding two type packs in one tuple, with nothing else to
+//! settle them. Every split of the argument satisfies it, so the call must say
+//! which parameters it could not infer and ask for a turbofish.
+//! See docs/wep-2026-03-14-variadic-type-parameters.md §6.
 
 fn split<..A, ..B>(t: [..A, ..B]) -> i32 {
     return t.len();
 }
 
-test "two packs in one parameter tuple" {
+test "two packs in one parameter tuple settle neither" {
     assert split([1, true]) == 2;
 }
 
 __DATA__
-{"compile_error": "a parameter cannot hold two type packs in one tuple"}
+{"compile_error": "cannot infer type parameter `A`, `B` of function `split`"}

@@ -98,6 +98,8 @@ pub struct Url {
 
 When parsing, if the port matches the default for the scheme, `port` is set to `None`. This follows WHATWG behavior: `http://example.com:80/` and `http://example.com/` produce the same `Url`.
 
+An empty port is `None` too. WHATWG's port state reads the buffer only when it is not empty, so `http://example.com:/` and `http://[::1]:/` name no port rather than failing.
+
 ### `ParseError` Variant
 
 ```wado
@@ -115,10 +117,14 @@ pub variant ParseError {
 ### `Url` Methods
 
 ```wado
+/// Reads an absolute URL. Only special schemes (http, https, ws, wss) are
+/// accepted; a relative reference goes through `Url::resolve`.
+impl FromStr for Url {
+    type Err = ParseError;
+    fn from_str<S: AsStrSlice>(input: S) -> Result<Url, ParseError>
+}
+
 impl Url {
-    /// Parses a URL string. Only special schemes (http, https, ws, wss)
-    /// are accepted.
-    pub fn parse(input: String) -> Result<Url, ParseError>
 
     /// Serializes the URL back to a string.
     pub fn to_string(&self) -> String
@@ -188,7 +194,7 @@ use { Url } from "core:url";
 use { Request, Scheme } from "wasi:http";
 
 // Construct URL for outgoing request
-if let Ok(url) = Url::parse("https://api.example.com/v1/users?page=2") {
+if let Ok(url) = Url::from_str("https://api.example.com/v1/users?page=2") {
     let req = Request::new();
     let scheme = if url.scheme == "https" { Scheme::Https } else { Scheme::Http };
     req.set_scheme(Option::Some(scheme));
@@ -238,7 +244,7 @@ impl Display for Url {
 /// Serializes as a JSON string.
 impl Serialize for Url { ... }
 
-/// Deserializes from a JSON string via Url::parse.
+/// Deserializes from a JSON string via Url::from_str.
 impl Deserialize for Url { ... }
 ```
 
@@ -272,7 +278,7 @@ pub fn format_query(params: TreeMap<String, String>) -> String
 
 | Function / Method           | Signature                                               | Description               |
 | --------------------------- | ------------------------------------------------------- | ------------------------- |
-| `Url::parse`                | `String -> Result<Url, ParseError>`                     | Parse URL string          |
+| `Url::from_str`             | `AsStrSlice -> Result<Url, ParseError>`                 | Parse URL string          |
 | `Url::from_parts`           | `String, String, Option<String>, Option<String> -> Url` | Infallible parts ctor     |
 | `.query_params()`           | `&self -> TreeMap<String, String>`                      | Parse `query` field       |
 | `.to_string()`              | `&self -> String`                                       | Serialize to string       |
@@ -299,7 +305,7 @@ use { Url, ParseError, percent_encode, parse_query, format_query } from "core:ur
 
 export fn run() with Stdout {
     // Parse a full URL
-    if let Ok(url) = Url::parse("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
+    if let Ok(url) = Url::from_str("https://user:pass@example.com:8443/api/v1?key=val&lang=ja#sec1") {
         assert url.scheme == "https";
         assert url.username == "user";
         assert url.password == "pass";
@@ -329,7 +335,7 @@ export fn run() with Stdout {
     }
 
     // Default port normalization
-    if let Ok(url) = Url::parse("http://example.com:80/path") {
+    if let Ok(url) = Url::from_str("http://example.com:80/path") {
         assert url.port matches { None };  // 80 is default for http
         assert url.effective_port() == 80;
         assert url.to_string() == "http://example.com/path";
@@ -360,9 +366,9 @@ export fn run() with Stdout {
     // "key=hello+world&lang=%E6%97%A5%E6%9C%AC%E8%AA%9E"
 
     // Error handling
-    assert Url::parse("") matches { Err(EmptyInput) };
-    assert Url::parse("mailto:user@host") matches { Err(InvalidScheme) };
-    assert Url::parse("http://") matches { Err(MissingHost) };
+    assert Url::from_str("") matches { Err(EmptyInput) };
+    assert Url::from_str("mailto:user@host") matches { Err(InvalidScheme) };
+    assert Url::from_str("http://") matches { Err(MissingHost) };
 }
 ```
 

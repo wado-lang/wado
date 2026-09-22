@@ -1820,7 +1820,8 @@ mod tests {
     use crate::const_eval::Value;
     use crate::nir::NirBinaryOp;
     use crate::nir_arena::{BlockNode, ExprNode, StmtNode};
-    use crate::tir::{PrimitiveType, TypeTable};
+    use crate::primitive::PrimitiveType;
+    use crate::tir::TypeTable;
     use Span;
     use std::assert_matches;
 

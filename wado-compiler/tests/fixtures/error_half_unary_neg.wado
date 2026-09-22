@@ -1,0 +1,10 @@
+// A half carries bits, so `-x` has nothing to lower to, as `+` has nothing.
+// The unary path rejects it where the binary path rejects `a + a`.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let _neg = -a;
+}
+
+__DATA__
+{"compile_error": "operator `-` cannot be applied to type `f16`"}

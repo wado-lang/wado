@@ -100,8 +100,7 @@ import fn wasi/stream-new from "wasi/stream-new";
 import fn wasi/stream-drop-writable from "wasi/stream-drop-writable";
 import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code from "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code";
 
-global global:core:prelude/types.wado::$const_obj_1: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 7 };
-global global:core:prelude/primitive.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/primitive.wado::$const_obj_1: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "result_expect_err_on_ok_message.wado/$cm_export__run"() {
     "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<i32>"(struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("wanted an error"), used: 15 });
@@ -203,7 +202,7 @@ fn "core:prelude/types.wado/core/prelude/types.wado/unwrap_failed<i32>"(msg) {
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_2.repr, $fuse_at_5, msg, $fuse_len_4);
     "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_2.repr, $fuse_at_5 + $fuse_len_4, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58, 32), used: 2 }, 2);
     $local_3 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_2);
-    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(global:core:prelude/types.wado::$const_obj_1, $local_3);
+    "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Inspect::inspect"(struct.new "core:prelude/types.wado//Box<i32>" { value: 7 }, $local_3);
     "core:rt/panic"($local_2.repr, $local_2.used);
     unreachable;
 }
@@ -766,7 +765,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_2;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_1;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;

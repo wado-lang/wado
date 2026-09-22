@@ -1,0 +1,9 @@
+// Any file can write `#![stdlib]`, so a name no bundled module answers to is a
+// diagnostic on the attribute's own line, never a panic.
+
+#![stdlib("core:bogus.wado")]
+
+export fn run() {}
+
+__DATA__
+{"compile_error": ":4:1: analysis error: #![stdlib(\"core:bogus.wado\")] does not name a bundled stdlib module", "compile_error_codes": ["STDLIB_ATTR"]}

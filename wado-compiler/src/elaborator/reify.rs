@@ -9,6 +9,9 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use crate::ast::{self, AstId, CompoundAssignOp, Expr, Item, Module, UnaryOp};
+use crate::attribute::{
+    ALLOC, AMBIENT, BENIGN, EXPORT_NAME, IMMEDIATE, INLINE, PARAM, RESULT, RETAIN, SECRET, WIRE,
+};
 use crate::compiler_host::{Code, CompilerHost, Diagnostic, DiagnosticSpan, Severity};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::logger::{Bail, Logger};
@@ -20,7 +23,7 @@ use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
     TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable,
+    TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -31,7 +34,10 @@ use super::sem::ModuleSemantics;
 use super::types::{FunctionContext, TypeLookup};
 use super::tysys::TypeSystem;
 use super::util;
-use crate::ast::{AttrArg, Attribute, InterfaceDecl, Visibility};
+use crate::ast::{
+    AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
+    WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
+};
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
@@ -50,7 +56,8 @@ use crate::elaborator::sem::types::{
     SequenceCoercionFacts, StaticMethodDispatch, with_body_facts,
 };
 use crate::elaborator::stmt::{
-    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, remap_pattern_local,
+    collect_pattern_bindings_with_index, primitive_assoc_const_to_i128, primitive_int_bound,
+    remap_pattern_local,
 };
 use crate::elaborator::trait_query::{
     assoc_const_owner, assoc_const_owner_of_path, trait_sig_of_with,
@@ -1022,6 +1029,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
 
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_types[index];
@@ -1039,7 +1047,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             let serde_positional = field
                 .attrs
                 .iter()
-                .any(|a| a.name == "wire" && a.has_arg("positional"));
+                .any(|a| a.name == WIRE && a.has_arg("positional"));
 
             fields.push(TirField {
                 name: field.name.clone(),
@@ -1047,10 +1055,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 type_id,
                 index: index as u32,
                 span: field.span,
-                is_secret: field.attrs.iter().any(|a| a.name == "secret"),
+                is_secret: field.attrs.iter().any(|a| a.name == SECRET),
                 wire_name_override,
                 serde_default,
                 serde_positional,
+                serde_number: wire_numbers[index],
                 default_expr,
             });
         }
@@ -1124,6 +1133,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (no self, no other fields in scope), matching `reify_struct`.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let fields: Vec<TirField> = info
             .fields
             .iter()
@@ -1141,12 +1151,13 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     type_id: *type_id,
                     index: index as u32,
                     span: field.map_or(struct_decl.span, |f| f.span),
-                    is_secret: attrs.iter().any(|a| a.name == "secret"),
+                    is_secret: attrs.iter().any(|a| a.name == SECRET),
                     wire_name_override: wire_name_override_of(attrs),
                     serde_default: field.is_some_and(|f| f.default.is_some()),
                     serde_positional: attrs
                         .iter()
-                        .any(|a| a.name == "wire" && a.has_arg("positional")),
+                        .any(|a| a.name == WIRE && a.has_arg("positional")),
+                    serde_number: wire_numbers.get(index).copied().flatten(),
                     default_expr,
                 }
             })
@@ -2014,6 +2025,80 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         );
     }
 
+    /// Report a malformed `#[wire(number = …)]` at the field it was written on.
+    fn wire_number_error(&self, span: &Span, message: String) {
+        let _ = self.logger.error_in(
+            &self.current_module_source,
+            Diagnostic {
+                severity: Severity::Error,
+                code: Code::WireNumber,
+                message,
+                span: Some(DiagnosticSpan::from_span(span, None)),
+            },
+        );
+    }
+
+    /// Each field's `#[wire(number = N)]`, by field position. A struct numbers
+    /// every field or none, so the result is all `Some` or all `None`, and
+    /// anything else is reported here. See
+    /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
+    fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
+        let written: Vec<Option<&str>> = fields
+            .iter()
+            .map(|field| wire_number_written(&field.attrs))
+            .collect();
+        self.check_numbers_are_all_or_none(fields, &written);
+
+        let mut numbers: Vec<Option<u32>> = Vec::with_capacity(fields.len());
+        let mut taken: Vec<(u32, &str)> = Vec::new();
+        for (field, written) in fields.iter().zip(&written) {
+            let Some(written) = *written else {
+                numbers.push(None);
+                continue;
+            };
+            let Some(number) = wire_number_of(&field.attrs) else {
+                self.wire_number_error(&field.span, wire_number_fault(written));
+                numbers.push(None);
+                continue;
+            };
+            if let Some((_, owner)) = taken.iter().find(|(taken, _)| *taken == number) {
+                self.wire_number_error(
+                    &field.span,
+                    format!("`#[wire(number = {number})]` is already `{owner}`'s number"),
+                );
+                numbers.push(None);
+                continue;
+            }
+            taken.push((number, &field.name));
+            numbers.push(Some(number));
+        }
+        numbers
+    }
+
+    /// One numbered field makes the rest owe a number, since a format that
+    /// reads numbers has nothing to put on the wire for a field without one.
+    fn check_numbers_are_all_or_none(&self, fields: &[ast::StructField], written: &[Option<&str>]) {
+        let Some(numbered) = written
+            .iter()
+            .position(Option::is_some)
+            .map(|index| &fields[index].name)
+        else {
+            return;
+        };
+        for (field, written) in fields.iter().zip(written) {
+            if written.is_none() {
+                self.wire_number_error(
+                    &field.span,
+                    format!(
+                        "`{}` carries no `#[wire(number = …)]` and `{numbered}` does: \
+                         a struct numbers every field or none",
+                        field.name
+                    ),
+                );
+            }
+        }
+    }
+
     /// Extract and structurally validate a `#[param]` attribute on a global.
     ///
     /// Returns `Some(ParamSpec)` for a well-formed `#[param]`, `None` when the
@@ -2022,7 +2107,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// resolution itself (overrides, env, conversion) happens later in the
     /// param-resolution pass — see `wep-2026-04-26-compile-time-params.md`.
     fn reify_param_attr(&self, global_decl: &ast::GlobalDecl) -> Option<tir::ParamSpec> {
-        let attr = global_decl.attributes.iter().find(|a| a.name == "param")?;
+        let attr = global_decl.attributes.iter().find(|a| a.name == PARAM)?;
         let emit = |message: String| self.attr_error(Code::ParamAttr, attr, message);
 
         let mut ok = true;
@@ -2036,7 +2121,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 ast::AttrArg::KeyValue(k, _) if k == "name" || k == "from_env" => {}
                 ast::AttrArg::KeyValue(k, _)
                 | ast::AttrArg::KeyArray(k, _)
-                | ast::AttrArg::KeyIdent(k, _) => {
+                | ast::AttrArg::KeyIdent(k, _)
+                | ast::AttrArg::KeyNumber(k, _) => {
                     emit(format!("unknown #[param] argument: {k}"));
                     ok = false;
                 }
@@ -2092,7 +2178,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Option<tir::ReturnConvention> {
         // The attribute, not what it resolved to: one that failed to resolve was
         // reported already, and asking for it again says nothing new.
-        let states_one = func.attrs.iter().any(|attr| attr.name == "result");
+        let states_one = func.attrs.iter().any(|attr| attr.name == RESULT);
         if has_body || states_one || reserves_a_name_only(func) {
             return declared;
         }
@@ -2127,7 +2213,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         params: &[tir::TirParam],
         has_body: bool,
     ) -> Option<tir::ReturnConvention> {
-        let attr = attrs.iter().find(|a| a.name == "result")?;
+        let attr = attrs.iter().find(|a| a.name == RESULT)?;
         let emit = |message: String| {
             self.attr_error(Code::ResultAttr, attr, message);
             None
@@ -2177,7 +2263,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<tir::RetainSpec<String>> {
         attrs
             .iter()
-            .filter(|a| a.name == "retain")
+            .filter(|a| a.name == RETAIN)
             .filter_map(|attr| self.reify_retain_attr(attr, params, has_body))
             .collect()
     }
@@ -2260,7 +2346,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     ) -> Vec<String> {
         attrs
             .iter()
-            .filter(|a| a.name == "immediate")
+            .filter(|a| a.name == IMMEDIATE)
             .filter_map(|attr| self.reify_immediate_attr(attr, params, has_body))
             .collect()
     }
@@ -7642,7 +7728,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use super::expr::UnionSource;
-        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
+        use crate::tir::TirStructField;
 
         // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
@@ -7747,15 +7833,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.span,
         );
 
-        if stmts.is_empty() {
-            return literal;
-        }
-        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
-            struct_type,
-            struct_lit.span,
-        )
+        Self::hoist_block(literal, stmts)
     }
 
     /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
@@ -7767,7 +7845,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prefix: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmt, TirStmtKind};
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
@@ -7788,6 +7865,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
         TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+    }
+
+    /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
+    /// reads, or `value` alone when nothing was hoisted.
+    fn hoist_block(value: TirExpr, mut stmts: Vec<TirStmt>) -> TirExpr {
+        if stmts.is_empty() {
+            return value;
+        }
+        let (span, type_id) = (value.span, value.type_id);
+        stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            type_id,
+            span,
+        )
     }
 
     /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters
@@ -8814,82 +8906,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
+                        let span = method_call.span;
+                        // Bound ahead of the branch so the deferred expansion
+                        // inherits it: the monomorphizer allocates no locals.
+                        let mut stmts = Vec::new();
+                        let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        if self.type_contains_pack(base_type_id) {
+                        let transposed = if self.type_contains_pack(base_type_id) {
                             TirExpr::new(
                                 TirExprKind::TupleZip {
                                     expr: Box::new(receiver),
                                 },
                                 recorded_type,
-                                method_call.span,
+                                span,
                             )
                         } else {
-                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
-                            let outer_elems = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .as_tuple(base_type_id)
-                                .unwrap();
-                            let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                                .iter()
-                                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
-                                .collect();
-                            let arity = inner_arities[0].len();
-                            assert!(
-                                inner_arities.iter().all(|row| row.len() == arity),
-                                "method lookup gives `zip` no return type unless its rows agree"
-                            );
-                            let num_rows = outer_elems.len();
-                            let mut col_exprs = Vec::with_capacity(arity);
-                            for col in 0..arity {
-                                let mut row_exprs = Vec::with_capacity(num_rows);
-                                for (row, row_types) in inner_arities.iter().enumerate() {
-                                    let row_access = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(receiver.clone()),
-                                            field_index: row as u32,
-                                            field_name: row.to_string(),
-                                        },
-                                        outer_elems[row],
-                                        method_call.span,
-                                    );
-                                    let cell = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(row_access),
-                                            field_index: col as u32,
-                                            field_name: col.to_string(),
-                                        },
-                                        row_types[col],
-                                        method_call.span,
-                                    );
-                                    row_exprs.push(cell);
-                                }
-                                let col_types: Vec<TypeId> =
-                                    inner_arities.iter().map(|row| row[col]).collect();
-                                let col_tuple_type =
-                                    self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                                col_exprs.push(TirExpr::new(
-                                    TirExprKind::TupleLiteral {
-                                        elements: row_exprs,
-                                    },
-                                    col_tuple_type,
-                                    method_call.span,
-                                ));
-                            }
-                            TirExpr::new(
-                                TirExprKind::TupleLiteral {
-                                    elements: col_exprs,
-                                },
-                                recorded_type,
-                                method_call.span,
+                            transpose_tuple_expr(
+                                &receiver,
+                                span,
+                                &mut self.tysys.type_table.borrow_mut(),
                             )
-                        }
+                        };
+                        Self::hoist_block(transposed, stmts)
                     }
                     _ => unreachable!(),
                 };
@@ -9684,7 +9727,8 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
         use crate::compiler_item::CompilerItem;
-        use crate::tir::{PrimitiveType, ResolvedType, TypeTable};
+        use crate::primitive::PrimitiveType;
+        use crate::tir::{ResolvedType, TypeTable};
 
         let source_type = self.ann_expression_types(cast.expr.id())?;
         // Newtypes share their base's representation, so dispatch on the
@@ -10750,7 +10794,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 /// the AST alone, which is what the completeness rule lets reify re-derive, so
 /// these need no recorded fact and no elaborator to run.
 fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
-    attrs.iter().any(|a| a.name == "ambient")
+    attrs.iter().any(|a| a.name == AMBIENT)
 }
 
 /// Collect the effect names from every `#[benign(E, ...)]` attribute; multiple
@@ -10759,14 +10803,14 @@ fn extract_is_ambient_attr(attrs: &[Attribute]) -> bool {
 fn extract_benign_effect_names(attrs: &[Attribute]) -> Vec<String> {
     attrs
         .iter()
-        .filter(|a| a.name == "benign")
+        .filter(|a| a.name == BENIGN)
         .flat_map(|a| a.args.iter().map(AttrArg::as_str))
         .map(str::to_string)
         .collect()
 }
 
 fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
-    let Some(attr) = attrs.iter().find(|a| a.name == "inline") else {
+    let Some(attr) = attrs.iter().find(|a| a.name == INLINE) else {
         return tir::InlineHint::Auto;
     };
     match attr.args.first().map(AttrArg::as_str) {
@@ -10780,7 +10824,7 @@ fn extract_inline_hint_attr(attrs: &[Attribute]) -> tir::InlineHint {
 fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "export_name")
+        .find(|a| a.name == EXPORT_NAME)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -10788,7 +10832,7 @@ fn extract_export_name_attr(attrs: &[Attribute]) -> Option<String> {
 fn extract_allocator_tag_attr(attrs: &[Attribute]) -> Option<String> {
     attrs
         .iter()
-        .find(|a| a.name == "allocator")
+        .find(|a| a.name == ALLOC)
         .and_then(|a| a.args.first())
         .map(|a| a.as_str().to_string())
 }
@@ -10811,41 +10855,13 @@ fn arg_is_unannotated_closure(arg: &ast::Expr) -> bool {
 /// `reify_ident` to resolve such constants when they are not present in
 /// `associated_constants` — e.g. a default-argument expression reified
 /// under a stdlib-snapshot callee module whose `associated_constants` map
-/// was not rehydrated. The value table mirrors
-/// [`super::stmt::primitive_assoc_const_to_i128`].
+/// was not rehydrated.
 fn primitive_int_assoc_const(prefix: &str, suffix: &str) -> Option<(i128, tir::TypeId)> {
     use crate::tir::TypeTable;
-    let ty = match prefix {
-        "i8" => TypeTable::I8,
-        "i16" => TypeTable::I16,
-        "i32" => TypeTable::I32,
-        "i64" => TypeTable::I64,
-        "u8" => TypeTable::U8,
-        "u16" => TypeTable::U16,
-        "u32" => TypeTable::U32,
-        "u64" => TypeTable::U64,
-        _ => return None,
-    };
-    let value = match (prefix, suffix) {
-        ("i8", "MAX") => i128::from(i8::MAX),
-        ("i8", "MIN") => i128::from(i8::MIN),
-        ("i16", "MAX") => i128::from(i16::MAX),
-        ("i16", "MIN") => i128::from(i16::MIN),
-        ("i32", "MAX") => i128::from(i32::MAX),
-        ("i32", "MIN") => i128::from(i32::MIN),
-        ("i64", "MAX") => i128::from(i64::MAX),
-        ("i64", "MIN") => i128::from(i64::MIN),
-        ("u8", "MAX") => i128::from(u8::MAX),
-        ("u8", "MIN") => i128::from(u8::MIN),
-        ("u16", "MAX") => i128::from(u16::MAX),
-        ("u16", "MIN") => i128::from(u16::MIN),
-        ("u32", "MAX") => i128::from(u32::MAX),
-        ("u32", "MIN") => i128::from(u32::MIN),
-        ("u64", "MAX") => i128::from(u64::MAX),
-        ("u64", "MIN") => i128::from(u64::MIN),
-        _ => return None,
-    };
-    Some((value, ty))
+    Some((
+        primitive_int_bound(prefix, suffix)?,
+        TypeTable::primitive_by_name(prefix)?,
+    ))
 }
 
 /// Build the receiver node the recorded `(self_kind, is_ref_impl)` pair asks
@@ -11309,7 +11325,7 @@ fn ast_binary_op_to_tir(op: ast::BinaryOp) -> TirBinaryOp {
 /// `#[wire(name = "...")]` on a struct field, enum case, or variant case.
 fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name").map(str::to_string)
         } else {
             None
@@ -11317,10 +11333,27 @@ fn wire_name_override_of(attrs: &[ast::Attribute]) -> Option<String> {
     })
 }
 
+/// Why a written field number is not one, said to whoever wrote it.
+fn wire_number_fault(written: &str) -> String {
+    if written
+        .parse::<u32>()
+        .is_ok_and(|n| WIRE_NUMBER_RESERVED.contains(&n))
+    {
+        return format!(
+            "`#[wire(number = {written})]`: {} to {} are reserved by the wire format",
+            WIRE_NUMBER_RESERVED.start(),
+            WIRE_NUMBER_RESERVED.end()
+        );
+    }
+    format!(
+        "`#[wire(number = {written})]`: a field number runs from {WIRE_NUMBER_MIN} to {WIRE_NUMBER_MAX}"
+    )
+}
+
 /// `#[wire(name_policy = "...")]` on a struct, enum, or variant declaration.
 fn wire_name_policy_of(attrs: &[ast::Attribute]) -> Option<String> {
     attrs.iter().find_map(|a| {
-        if a.name == "wire" {
+        if a.name == WIRE {
             a.kv_value("name_policy").map(str::to_string)
         } else {
             None

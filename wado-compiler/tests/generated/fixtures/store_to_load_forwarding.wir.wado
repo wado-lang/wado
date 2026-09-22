@@ -91,12 +91,6 @@ fn "store_to_load_forwarding.wado/run"() with Stdout {
     let packed: i64;
     let rx_77: i32;
     let tx_78: i32;
-    let $sroa_p2_a: i32;
-    let $sroa_p3_a: i32;
-    $sroa_p2_a = 0;
-    $sroa_p2_a = 42;
-    $sroa_p3_a = 0;
-    $sroa_p3_a = 100;
     $local_27 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(52), used: 0 };
     $local_28 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_27 };
     "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(10, $local_28.buf);
@@ -109,7 +103,7 @@ fn "store_to_load_forwarding.wado/run"() with Stdout {
     $local_27.used = new_used_50;
     builtin::array_copy<u8>($local_27.repr, start_51, global:store_to_load_forwarding.wado::$const_obj_1, 0, 2);
     $local_28 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_27 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_p2_a, $local_28.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(42, $local_28.buf);
     new_used_68 = $local_27.used + 2;
     if @unlikely(new_used_68 > builtin::array_len($local_27.repr)) {
         cold_path;
@@ -119,7 +113,7 @@ fn "store_to_load_forwarding.wado/run"() with Stdout {
     $local_27.used = new_used_68;
     builtin::array_copy<u8>($local_27.repr, start_69, global:store_to_load_forwarding.wado::$const_obj_1, 0, 2);
     $local_28 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_27 };
-    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"($sroa_p3_a, $local_28.buf);
+    "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(100, $local_28.buf);
     rx_77 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_78 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "store_to_load_forwarding.wado/$cm_binding__Stdout_write_via_stream"(rx_77);

@@ -247,8 +247,8 @@ fn load_and_merge(paths: &List<String>) -> Grammar with (Stdout, Stderr, Preopen
         };
         let content = match String::from_utf8(bytes) {
             Ok(s) => s,
-            Err(_) => {
-                eprintln(`gale: ${*path}: not valid UTF-8`);
+            Err(e) => {
+                eprintln(`gale: ${*path}: not valid UTF-8: ${e}`);
                 exit(1);
             },
         };
@@ -281,8 +281,8 @@ fn read_source_file<S: AsStrSlice>(path: S) -> String with (Stderr, Preopens, Ex
     };
     return match String::from_utf8(bytes) {
         Ok(s) => s,
-        Err(_) => {
-            eprintln(`gale: ${path}: not valid UTF-8`);
+        Err(e) => {
+            eprintln(`gale: ${path}: not valid UTF-8: ${e}`);
             exit(1);
         },
     };

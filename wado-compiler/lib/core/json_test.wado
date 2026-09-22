@@ -914,3 +914,8 @@ test "a StrSlice parses without copying out" {
     let r: Result<TreeMap<String, i32>, DeserializeError> = from_string(view);
     assert r matches { Ok(m) && m.len() == 2 };
 }
+
+test "DeserializeError renders its message and offset" {
+    assert `${from_string::<Utf8Rec>("{}").unwrap_err()}` == "missing field: a";
+    assert `${from_string::<Utf8Rec>("nope").unwrap_err()}`.contains(" at offset ");
+}

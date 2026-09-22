@@ -277,13 +277,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .nominal_head(base_type_id)
                 .expect("a nominal type names a declaration"),
-            // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (
+            // `v128` has no prelude impl block of its own, and lookup finds its
+            // `core:simd` methods by name from this key anyway.
+            ResolvedType::Primitive(prim) => (
                 self.tysys
                     .type_table
                     .borrow()
                     .mangle_type_name(base_type_id),
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (
@@ -1140,9 +1141,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .borrow()
                             .nominal_head(base_id)
                             .map(|(_, m)| m),
-                        ResolvedType::Primitive(_) | ResolvedType::Unit => {
-                            Some(ModuleSource::primitive())
-                        }
+                        ResolvedType::Primitive(prim) => Some(ModuleSource::of_primitive(*prim)),
+                        ResolvedType::Unit => Some(ModuleSource::primitive()),
                         ResolvedType::BuiltinArray(_) => Some(ModuleSource::array()),
                         _ => None,
                     }
@@ -2173,7 +2173,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 }
                 ResolvedType::Primitive(prim) => (
                     prim.as_str().to_string(),
-                    ModuleSource::primitive(),
+                    ModuleSource::of_primitive(*prim),
                     FqTypeName::builtin(prim.as_str()),
                     vec![],
                 ),
@@ -2307,7 +2307,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             }
                             ResolvedType::Primitive(prim) => (
                                 prim.as_str().to_string(),
-                                ModuleSource::primitive(),
+                                ModuleSource::of_primitive(prim),
                                 FqTypeName::builtin(prim.as_str()),
                                 vec![],
                             ),
@@ -2711,14 +2711,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn zip_row_of_unprovable_arity(&self, tuple: TypeId) -> Option<String> {
         let table = self.tysys.type_table.borrow();
         let rows = table.as_tuple(tuple)?;
-        // A row that is no tuple makes this no transpose at all, which method
-        // lookup reports; saying anything here would stack a packs diagnostic
-        // on a value that has none.
+        // A row that is no tuple has no layout, and is no transpose either.
         let layouts: Vec<Vec<TupleSlot>> = rows
             .iter()
             .map(|&row| table.tuple_layout(row))
             .collect::<Option<_>>()?;
-        let first = layouts.first()?;
+        // Only a pack leaves two rows' lengths unprovable. Without one, the
+        // "no method" message already said everything.
+        if !layouts
+            .iter()
+            .flatten()
+            .any(|slot| matches!(slot, TupleSlot::Pack(_)))
+        {
+            return None;
+        }
+        let first = &layouts[0];
         let odd = layouts.iter().position(|l| l != first)?;
         Some(table.type_name(rows[odd]))
     }

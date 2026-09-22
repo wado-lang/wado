@@ -7,9 +7,11 @@ use crate::ast::{
     StructField, TraitBound, TraitDecl, Type, UseItem, VariantDecl, Visibility, type_head_name,
     written_params,
 };
+use crate::attribute::SYNOPSIS;
 use crate::comment::{Comment, CommentKind, TriviaMap};
 use crate::loader::resolve_wasm_asset_path;
 use crate::module_source::ModuleSourceInterner;
+use crate::primitive::PrimitiveType;
 use crate::token::Span;
 use crate::unparse::{
     get_item_id, unparse_attributes, unparse_bound_arguments_into, unparse_enum_signature,
@@ -306,7 +308,7 @@ fn collect_synopsis(module: &Module, source: &str) -> Vec<String> {
         .items
         .iter()
         .filter_map(|item| match item {
-            Item::Test(t) if t.attributes.iter().any(|a| a.name == "synopsis") => {
+            Item::Test(t) if t.attributes.iter().any(|a| a.name == SYNOPSIS) => {
                 let span = t.body.span;
                 let inner = source.get(span.start + 1..span.end.saturating_sub(1))?;
                 Some(dedent_synopsis(inner))
@@ -1055,10 +1057,6 @@ fn collect_impl_constants_for_type(
     constants
 }
 
-const PRIMITIVE_TYPE_NAMES: &[&str] = &[
-    "bool", "char", "i8", "u8", "i16", "u16", "i32", "u32", "i64", "u64", "f32", "f64",
-];
-
 fn build_doc_const(c: &AssociatedConst, trivia: &TriviaMap) -> DocFunction {
     let mut sig = String::new();
     if c.visibility.is_public() {
@@ -1105,7 +1103,7 @@ fn collect_primitive_types_from_module(
 
     let mut by_name: IndexMap<&str, DocPrimitiveType> = IndexMap::default();
 
-    for &prim_name in PRIMITIVE_TYPE_NAMES {
+    for prim_name in PrimitiveType::all_primitive_names() {
         let (methods, trait_impls) =
             collect_impl_methods_for_type(prim_name, &impls, trivia, include_private);
 

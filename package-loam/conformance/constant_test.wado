@@ -1,0 +1,44 @@
+//! `pytorch-operator/test_operator_mm`: a `Constant` feeding a `Gemm` bias.
+//! The constant holds one element, so it folds into the closure and no tensor
+//! is allocated for it.
+
+use { assert_close, tensor_of } from "./oracle.wado";
+use { Batch, In, Out, Tensor, Weights, forward } from "../tests/onnx/pytorch-operator/test_operator_mm/model.onnx"
+    with {
+        generator: {
+            module: "../src/generator.wado",
+            options: {
+                layout: [
+                    {
+                        pattern: "0",
+                        axes: ["Batch", "In"],
+                    },
+                    {
+                        pattern: "1",
+                        axes: ["In", "Out"],
+                    },
+                ],
+            },
+        },
+    };
+
+test "a scalar Constant folds into the Gemm bias" {
+    let [a, a_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_0.pb"),
+    );
+    let [b, b_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/input_1.pb"),
+    );
+    let [want, want_extents] = tensor_of(
+        #include_bytes("../tests/onnx/pytorch-operator/test_operator_mm/test_data_set_0/output_0.pb"),
+    );
+
+    let got = forward(
+        &Tensor::<f32, [Batch, In]> { data: a, extents: a_extents },
+        &Tensor::<f32, [In, Out]> { data: b, extents: b_extents },
+        &Weights {},
+    );
+
+    assert got.extents == want_extents;
+    assert_close(&got.data, &want);
+}

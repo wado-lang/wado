@@ -3672,7 +3672,7 @@ impl Default for Point {
 
 ### String Parsing Traits
 
-Two prelude traits parse a value from a `String`, both returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`String`, `char`, the integer types, `f32`/`f64`, `bool`) implement both.
+Two prelude traits parse a value from text, both taking any `AsStrSlice` and returning `Result`. `FromStr` is strict; `LenientFromStr` is forgiving of human input. The built-in scalars (`char`, `bool`, the integer types, `f32`/`f64`) implement both; `String` implements only the lenient one, since taking a string as itself cannot fail.
 
 ```wado
 i32::from_str("42")              // Ok(42)
@@ -3685,7 +3685,7 @@ f64::from_str_lenient("inf")     // Ok(f64::INFINITY)
 i32::from_str_lenient(" 1 ")     // Err — never trims whitespace
 ```
 
-`FromStr`'s fundamental operation is `from_str_slice(&StrSlice)` (parse a view of a string with no substring allocation); `from_str` defaults to calling it over the whole string. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
+`FromStr::from_str` takes any `AsStrSlice` — a `StrSlice` among them, so a field is parsed out of a larger buffer with no substring allocation. See [WEP: String Views](./wep-2026-09-13-string-slice.md) and [WEP: Lenient String Parsing](./wep-2026-06-22-lenient-from-str.md).
 
 ### Arithmetic Operator Traits
 
@@ -3957,7 +3957,7 @@ match s {
 - Tuple payload pattern destructuring (`if let Foo([a, b]) = x`): implemented
 - `match` expression/statement: implemented
 - `matches` operator: implemented
-- Match ergonomics (`&T` scrutinees in `if let`/`match`/`matches`; payload bindings become refs): implemented
+- Match ergonomics (`&T` scrutinees in `let`/`if let`/`match`/`matches`; payload bindings become refs onto the scrutinee's own storage, never a copy): implemented
 - Nested sub-patterns in tuple/struct destructuring (literal, variant, enum): implemented
 - Generic custom variant pattern matching (e.g., `Maybe<T>`): not yet implemented
 - `Result<T, E>` pattern matching: not yet implemented
@@ -5379,29 +5379,34 @@ fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
 concat([1, "x"], [true]);   // A = [i32, String], B = [bool]
 ```
 
-A tuple holding two packs (`[..A, ..B]`) determines neither pack, because
-matching it against a concrete tuple admits every split. It is legal only where a
-value is produced, such as a return type or a local annotation. A position that
-receives a value rejects it:
+A tuple holding two packs (`[..A, ..B]`) settles neither pack, because matching
+it against a concrete tuple admits every split. Such a tuple is legal anywhere.
+It just cannot be the only thing naming a pack: something else must settle each
+one — another parameter, a turbofish, or an annotation — and then the tuple is
+checked against the arity they fix.
 
 ```wado
 fn wrap<X, ..A, ..B, Y>(x: X, a: [..A], b: [..B], y: Y) -> [X, ..A, ..B, Y] {
-    return [x, ..a, ..b, y];   // OK: the parameters settle both packs
+    return [x, ..a, ..b, y];   // the parameters settle both packs
 }
 
-// fn split<..A, ..B>(t: [..A, ..B]) { }       // ERROR: a parameter
-// struct Joined<..A, ..B> { both: [..A, ..B] }  // ERROR: a field
+fn joined<..A, ..B>(split: [[..A], [..B]], both: [..A, ..B]) -> i32 { … }
+joined([[1], [true]], [1, true]);         // `split` settles both
+joined([[1], [true]], [1, true, "x"]);    // ERROR: expected `[i32, bool]`
+
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { … }
+middle::<[i32], String, [bool]>([1, "mid", true]);   // the turbofish settles them
+middle([1, "mid", true]);                 // ERROR: cannot infer `Pre`, `Post`
 ```
 
-The rule covers a parameter, a struct field and a variant payload, at any depth
-of the written type. A `fn` type written inside one ends the walk, because its
-parameters and return belong to that function. To receive both packs, give each
-a tuple of its own (`[[..A], [..B]]`).
+A pack nothing settles is reported at the use site as an uninferred type
+parameter, as a scalar parameter no argument reaches is. To settle both packs
+from one value, give each a tuple of its own (`[[..A], [..B]]`).
 
-Where the tuple is produced, its ends still place elements. The elements ahead of
-the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
-settles `X` and `Y` and nothing else. An element between two packs is inferred
-from no argument, so name it in a turbofish.
+Where such a tuple is produced, its ends still place elements. The elements ahead
+of the first pack and behind the last keep their positions, so `[X, ..A, ..B, Y]`
+settles `X` and `Y` and nothing else. An element between two packs is settled by
+no argument, so name it in a turbofish.
 
 Inside the body that declares them, packs are rigid, as a scalar parameter is. A
 value matches such a tuple by layout: the same fixed positions and the same packs

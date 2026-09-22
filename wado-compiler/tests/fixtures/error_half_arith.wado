@@ -1,0 +1,12 @@
+// `f16` carries bits and no arithmetic, so `+` has nothing to lower to:
+// Wasm has no half precision instruction, and a fall-through to `i32.add`
+// would add two bit patterns. The elaborator rejects it the way it rejects
+// the same operator on `v128`.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let _sum = a + a;
+}
+
+__DATA__
+{"compile_error": "operator `+` cannot be applied to type `f16`"}

@@ -42,6 +42,9 @@ pub(crate) struct StructFieldInfo {
     /// `Some(expr)` means the field declared `= expr` and may be omitted at
     /// construction; `None` means the field is required.
     pub(super) field_defaults: Vec<Option<ast::Expr>>,
+    /// `#[wire(number = N)]` per field, parallel to `fields`. A struct numbers
+    /// every field or none, which `WireNumbered` is the bound for.
+    pub(super) field_wire_numbers: Vec<Option<u32>>,
     /// The declaration's real type parameters. Bounds, defaults and arity are
     /// all read from here, never from a projection of it.
     pub(super) type_params: RealTypeParams,
@@ -839,14 +842,6 @@ pub enum TypeError {
         span: Span,
     },
 
-    /// A position that receives a value holding two packs in one tuple
-    /// (`[..A, ..B]`). Every split of the value satisfies it, so nothing
-    /// reaching it settles either pack.
-    TwoPacksInReceivedType {
-        position: String,
-        span: Span,
-    },
-
     /// A `..X` whose `X` is not a declared type pack. A scalar parameter stands
     /// for one position, so spreading it says nothing a bare `X` does not.
     SpreadOfNonPack {
@@ -1220,6 +1215,29 @@ pub(super) fn format_operator_not_applicable(
 }
 
 impl TypeError {
+    /// The one sentence every use site says when a type parameter goes
+    /// unanswered. `owner` names the declaration and `turbofish` shows the
+    /// spelling that would answer it, both already backticked.
+    pub(super) fn cannot_infer(
+        names: &[String],
+        owner: &str,
+        turbofish: &str,
+        span: Span,
+    ) -> TypeError {
+        let named = names
+            .iter()
+            .map(|n| format!("`{n}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        TypeError::CannotInferType {
+            message: format!(
+                "cannot infer type parameter {named} of {owner}; \
+                 add a turbofish ({turbofish}) or a type annotation"
+            ),
+            span,
+        }
+    }
+
     /// This error as its `(code, message, span)` triple, which is what
     /// `From<TypeError> for Diagnostic` fills a `Diagnostic` from.
     pub(super) fn render(&self) -> (Code, String, Span) {
@@ -1289,7 +1307,7 @@ impl TypeError {
                 *span,
             ),
             TypeError::SelfByValueOnNonResource { type_name, span } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "`self` by value is only allowed on a resource; `{type_name}` is a value type — use `&self`"
                 ),
@@ -1312,7 +1330,7 @@ impl TypeError {
                 expected,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 {
                     let name = unalias_namespace_member(name);
                     format!(
@@ -1329,7 +1347,7 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 {
                     // Surplus, so a declared parameter puts `found` at two or
                     // more and only the `expected == 0` wording needs "was".
@@ -1384,12 +1402,12 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 format!("expected {expected} arguments, found {found}"),
                 *span,
             ),
             TypeError::CalleeNotCallable { type_name, span } => (
-                Code::TypeMismatch,
+                Code::NotCallable,
                 format!("expression is not callable: type '{type_name}' is not a function"),
                 *span,
             ),
@@ -1407,7 +1425,7 @@ impl TypeError {
                 (Code::InvalidSyntax, message.clone(), *span)
             }
             TypeError::CannotInferType { message, span } => {
-                (Code::TypeMismatch, message.clone(), *span)
+                (Code::NeedsTypeAnnotation, message.clone(), *span)
             }
             TypeError::BareCaseNeedsContext {
                 case,
@@ -1415,7 +1433,7 @@ impl TypeError {
                 expected,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::NeedsTypeAnnotation,
                 {
                     let context = match expected {
                         Some(expected) => {
@@ -1444,7 +1462,7 @@ impl TypeError {
                 span,
                 unmet: _,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 append_reason_chain(
                     format!(
                         "type '{type_name}' does not implement trait '{trait_name}' required by bound on '{param_name}'"
@@ -1460,7 +1478,7 @@ impl TypeError {
                 reason,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 append_reason_chain(
                     format!(
                         "type '{type_name}' implements trait '{trait_name}' but not its supertrait '{supertrait}'"
@@ -1475,7 +1493,7 @@ impl TypeError {
                 arguments,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 append_reason_chain(
                     format!(
                         "ambiguous call to '{method}': the arguments do not select between {}; annotate an argument (e.g. '42 as i64') or pin the trait, e.g. '{}::{method}(&value, …)'",
@@ -1519,7 +1537,7 @@ impl TypeError {
                 candidates,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous operator `{op}` on '{type_name}': the right operand does not select between {}; annotate it (e.g. '42 as i64') to pin one",
                     candidates
@@ -1536,7 +1554,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous associated type '{param}::{assoc}': declared by {}; name the trait's own binding, e.g. '{param}: {}<{assoc} = ...>'",
                     traits
@@ -1554,7 +1572,7 @@ impl TypeError {
                 bounds,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous blanket impls of '{trait_name}' for '{receiver}': {} apply, and nothing ranks them; write 'impl {trait_name} for {receiver}'",
                     bounds
@@ -1571,7 +1589,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitNotImported,
                 format!(
                     "{} is not imported here: '{receiver}' has '{method}' through it; import the trait to call it",
                     traits
@@ -1587,7 +1605,7 @@ impl TypeError {
                 traits,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous method '{method}': declared by {}; name the trait, e.g. '{}::{method}(&value)'",
                     traits
@@ -1608,7 +1626,7 @@ impl TypeError {
                 method,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "'{trait_name}::{method}' takes the receiver as its first argument, e.g. '{trait_name}::{method}(&value)'"
                 ),
@@ -1621,7 +1639,7 @@ impl TypeError {
                 spelled,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 format!(
                     "'{trait_name}::{method}' takes '{expected}'; the receiver spells its own mode: '{trait_name}::{method}({spelled}, …)'"
                 ),
@@ -1633,7 +1651,7 @@ impl TypeError {
                 params,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::NeedsTypeAnnotation,
                 {
                     assert!(!params.is_empty(), "the emitter found an unspelled slot");
                     let named = params
@@ -1659,7 +1677,7 @@ impl TypeError {
                 candidates,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous call to '{receiver}::{method}': a literal argument admits {}; annotate the argument (e.g. '42 as i64')",
                     candidates
@@ -1677,7 +1695,7 @@ impl TypeError {
                 arg_type,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "'{receiver}::{method}' resolves to a blanket '{trait_name}' impl, and selecting its instantiation from the argument is not supported yet; write a concrete 'impl {trait_name}<{arg_type}> for {receiver}'"
                 ),
@@ -1688,7 +1706,7 @@ impl TypeError {
                 method,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::NeedsTypeAnnotation,
                 format!(
                     "'{trait_name}' declares type parameters of its own, so the turbofish of '{trait_name}::<…>::{method}' is its argument list and names no receiver; write the receiver out ('Receiver::{method}(…)'), where the arguments select the impl"
                 ),
@@ -1733,7 +1751,7 @@ impl TypeError {
                 actual,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 format!(
                     "type '{type_name}' does not satisfy the associated type '{trait_name}::{assoc_name} = {expected}': it is '{actual}'"
                 ),
@@ -1744,7 +1762,7 @@ impl TypeError {
                 supertrait,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "supertrait '{supertrait}' of trait '{trait_name}' is not a declared trait"
                 ),
@@ -1755,7 +1773,7 @@ impl TypeError {
                 chain,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "circular supertrait: trait '{trait_name}' is its own supertrait via {}",
                     chain.join(" -> ")
@@ -1768,7 +1786,7 @@ impl TypeError {
                 reason,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 append_reason_chain(
                     format!(
                         "cannot derive `{trait_name}` for `{type_name}`: not every field/case implements `{trait_name}`"
@@ -1807,7 +1825,7 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::StructFieldMismatch,
                 format!("missing field '{field_name}' in struct literal '{struct_name}'"),
                 *span,
             ),
@@ -1816,22 +1834,22 @@ impl TypeError {
                 field_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::StructFieldMismatch,
                 format!("struct '{struct_name}' has no field '{field_name}'"),
                 *span,
             ),
             TypeError::DuplicateField { name, span } => (
-                Code::DuplicateDefinition,
+                Code::StructFieldMismatch,
                 format!("duplicate field '{name}' in struct literal"),
                 *span,
             ),
             TypeError::MissingReturn { return_type, span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 format!("function with return type '{return_type}' must use explicit `return`"),
                 *span,
             ),
             TypeError::MissingTaskReturn { function, span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 format!(
                     "`export async fn {function}` never delivers its result; \
                      add a `task return` where the result is ready"
@@ -1839,7 +1857,7 @@ impl TypeError {
                 *span,
             ),
             TypeError::LetElseMustDiverge { span } => (
-                Code::TypeMismatch,
+                Code::MissingReturn,
                 "the `else` block of a `let ... else` must diverge (`return`, `break`, \
                  `continue`, `panic`, …)"
                     .to_string(),
@@ -1907,13 +1925,6 @@ impl TypeError {
                 "a variadic impl target must be the bare `[..T]`: a pack alongside other elements (`[i32, ..T]`) or under a reference (`&[..T]`) is not supported yet".to_string(),
                 *span,
             ),
-            TypeError::TwoPacksInReceivedType { position, span } => (
-                Code::TypeMismatch,
-                format!(
-                    "a {position} cannot hold two type packs in one tuple: every split of the value satisfies it, so neither pack is settled; give each pack a tuple of its own, as in `[[..A], [..B]]`"
-                ),
-                *span,
-            ),
             TypeError::SpreadOfNonPack { name, span } => (
                 Code::TypeMismatch,
                 format!(
@@ -1934,7 +1945,7 @@ impl TypeError {
                 *span,
             ),
             TypeError::UnconstrainedImplTypeParam { param_name, span } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "the type parameter `{param_name}` is not constrained by the impl target or the trait reference"
                 ),
@@ -1965,7 +1976,7 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ArityMismatch,
                 format!(
                     "method `{method_name}` takes {found} {}parameter(s) but `{trait_name}` declares {expected}",
                     list.prefix()
@@ -1979,7 +1990,7 @@ impl TypeError {
                 found,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::ReceiverMismatch,
                 {
                     let receiver = |has: bool| if has { "a receiver" } else { "no receiver" };
                     format!(
@@ -2065,7 +2076,7 @@ impl TypeError {
                 hint,
                 span,
             } => (
-                Code::UndefinedVariable,
+                Code::MethodNotFound,
                 if hint.is_empty() {
                     format!("no method '{method_name}' found on type '{type_name}'")
                 } else {
@@ -2081,7 +2092,7 @@ impl TypeError {
                 trait_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitBoundNotSatisfied,
                 format!("type '{type_name}' does not implement {trait_name}"),
                 *span,
             ),
@@ -2090,7 +2101,7 @@ impl TypeError {
                 count,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "literal is ambiguous: '{type_name}' has {count} `From<Array<…>>` impls that \
                      could build it — write `{type_name}::from(…)` to choose one"
@@ -2118,7 +2129,7 @@ impl TypeError {
                     ""
                 };
                 (
-                    Code::TypeMismatch,
+                    Code::TraitDeclInvalid,
                     format!(
                         "cannot synthesize trait `{trait_name}` for `{type_name}`: `impl Trait for Type;` is supported for `From`, `Serialize`, `Deserialize`, `Eq`, `Ord`, `Default`, and `Inspect`.{hint}"
                     ),
@@ -2130,7 +2141,7 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "default value for parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
@@ -2141,21 +2152,21 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::TraitDeclInvalid,
                 format!(
                     "default for type parameter '{param}' in method '{method}' is not allowed; defaults belong to the trait declaration"
                 ),
                 *span,
             ),
             TypeError::DefaultInClosure { param, span } => (
-                Code::TypeMismatch,
+                Code::ClosureInvalid,
                 format!(
                     "default value for parameter '{param}' is not allowed in closure; closures erase defaults when assigned to a function type"
                 ),
                 *span,
             ),
             TypeError::ClosureMutBindingRequired { name, span } => (
-                Code::TypeMismatch,
+                Code::ClosureInvalid,
                 format!(
                     "cannot call `fn mut` closure '{name}' through a non-`mut` binding; use `let mut {name}`"
                 ),
@@ -2166,7 +2177,7 @@ impl TypeError {
                 position,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "closure type in {position} of `{function}` is not allowed: closures cannot cross the Component Model boundary"
                 ),
@@ -2177,7 +2188,7 @@ impl TypeError {
                 position,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "slice type in {position} of `{function}` is not allowed: a slice is a reference view with no Component Model representation; use `List<T>` or `Array<T>`"
                 ),
@@ -2188,7 +2199,7 @@ impl TypeError {
                 param,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::CmBoundaryType,
                 format!(
                     "default value for parameter '{param}' in export fn '{function}' is not allowed; the Component Model ABI requires every parameter at the boundary"
                 ),
@@ -2227,14 +2238,14 @@ impl TypeError {
                 interface_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::EffectHandlerInvalid,
                 format!(
                     "handler value of type '{type_name}' does not implement interface '{interface_name}'"
                 ),
                 *span,
             ),
             TypeError::BundledHandlerImplementsNoEffect { type_name, span } => (
-                Code::TypeMismatch,
+                Code::EffectHandlerInvalid,
                 format!(
                     "handler value of type '{type_name}' does not implement any effect; use `with E => h do` instead"
                 ),
@@ -2277,7 +2288,7 @@ impl TypeError {
                 trait_name,
                 span,
             } => (
-                Code::TypeMismatch,
+                Code::AmbiguousCandidate,
                 format!(
                     "ambiguous method '{method}': declared by resource '{resource}' and by trait '{trait_name}'; name one, e.g. '{resource}::{method}(&value)' or '{trait_name}::{method}(&value)'"
                 ),
@@ -3087,25 +3098,6 @@ impl TraitMethodMatch {
                 MethodOwner::InheritedFrom(link)
             }
             _ => self.method_info.owner,
-        }
-    }
-}
-
-/// A written type position a value arrives at, which is what settles the type
-/// parameters it names.
-#[derive(Clone, Copy)]
-pub(super) enum ReceivedPosition {
-    Parameter,
-    Field,
-    VariantPayload,
-}
-
-impl ReceivedPosition {
-    pub(super) fn name(self) -> &'static str {
-        match self {
-            ReceivedPosition::Parameter => "parameter",
-            ReceivedPosition::Field => "field",
-            ReceivedPosition::VariantPayload => "variant payload",
         }
     }
 }

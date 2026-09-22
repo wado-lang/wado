@@ -1,5 +1,9 @@
 // AST definitions for Wado
 
+use crate::attribute::{
+    ALLOW, CM, EXPECT_TRAP, GENERATED, NO_PRELUDE, STDLIB, SYNOPSIS, TIMEOUT_MS, TODO, UNAVAILABLE,
+    WASM_MODULE, WIRE,
+};
 use crate::defs::DefId;
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::token::Span;
@@ -1152,19 +1156,19 @@ impl Module {
 
     /// Returns true if the module has the `#![no_prelude]` attribute.
     pub fn has_no_prelude(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "no_prelude")
+        self.inner_attributes.iter().any(|a| a.name == NO_PRELUDE)
     }
 
     /// Returns true if the module has the `#![TODO]` attribute.
     /// All tests in a TODO module must fail; passing tests become failures.
     pub fn has_todo(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "TODO")
+        self.inner_attributes.iter().any(|a| a.name == TODO)
     }
 
     /// Returns true if the module has the `#![generated]` attribute.
     /// Indicates machine-generated code (e.g. wado-from-idl, gale).
     pub fn has_generated(&self) -> bool {
-        self.inner_attributes.iter().any(|a| a.name == "generated")
+        self.inner_attributes.iter().any(|a| a.name == GENERATED)
     }
 
     /// Returns the `wasm_module` name if `#![wasm_module("name")]` is present.
@@ -1177,9 +1181,7 @@ impl Module {
     /// The attribute itself, for a diagnostic's span.
     #[must_use]
     pub fn wasm_module_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes
-            .iter()
-            .find(|a| a.name == "wasm_module")
+        self.inner_attributes.iter().find(|a| a.name == WASM_MODULE)
     }
 
     /// Returns the canonical bundled-stdlib import path declared by
@@ -1200,7 +1202,7 @@ impl Module {
     /// The attribute itself: a malformed one has no identity, but has a span.
     #[must_use]
     pub fn stdlib_identity_attribute(&self) -> Option<&InnerAttribute> {
-        self.inner_attributes.iter().find(|a| a.name == "stdlib")
+        self.inner_attributes.iter().find(|a| a.name == STDLIB)
     }
 
     /// Returns the value of a scalar `key = "value"` argument on any
@@ -1213,7 +1215,7 @@ impl Module {
     pub fn generated_meta(&self, key: &str) -> Option<&str> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_value(key))
     }
 
@@ -1225,7 +1227,7 @@ impl Module {
     pub fn generated_meta_array(&self, key: &str) -> Option<&[String]> {
         self.inner_attributes
             .iter()
-            .filter(|a| a.name == "generated")
+            .filter(|a| a.name == GENERATED)
             .find_map(|a| a.kv_array(key))
     }
 
@@ -1360,7 +1362,8 @@ impl Item {
         }
     }
 
-    /// The attributes written before the item.
+    /// The attributes written before the item. Exhaustive on purpose: a new
+    /// item kind that carries attributes must name them here to be read at all.
     pub fn attrs(&self) -> &[Attribute] {
         match self {
             Item::Function(d) => &d.attrs,
@@ -1372,14 +1375,14 @@ impl Item {
             Item::Interface(d) => &d.attrs,
             Item::Resource(d) => &d.attrs,
             Item::TupleTypeDecl(d) => &d.attrs,
+            Item::BuiltinTypeDecl(d) => &d.attrs,
+            Item::Use(d) => &d.attrs,
+            Item::Impl(d) => &d.attrs,
+            Item::World(d) => &d.attrs,
+            Item::Test(d) => &d.attributes,
             Item::Global(d) => &d.attributes,
             Item::Flags(d) => d.attributes.as_deref().unwrap_or_default(),
-            Item::BuiltinTypeDecl(_)
-            | Item::Use(_)
-            | Item::Impl(_)
-            | Item::World(_)
-            | Item::Test(_)
-            | Item::Error(_) => &[],
+            Item::Error(_) => &[],
         }
     }
 }
@@ -1419,11 +1422,11 @@ impl TestDecl {
     /// `#[synopsis]` attributes. `module_is_todo` folds in a module-level `#[TODO]`.
     pub fn metadata(&self, module_is_todo: bool) -> TestMetadata {
         TestMetadata {
-            expect_trap: self.attributes.iter().any(|a| a.name == "expect_trap"),
-            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == "TODO"),
-            is_synopsis: self.attributes.iter().any(|a| a.name == "synopsis"),
+            expect_trap: self.attributes.iter().any(|a| a.name == EXPECT_TRAP),
+            is_todo: module_is_todo || self.attributes.iter().any(|a| a.name == TODO),
+            is_synopsis: self.attributes.iter().any(|a| a.name == SYNOPSIS),
             timeout_ms: self.attributes.iter().find_map(|a| {
-                if a.name == "timeout_ms" {
+                if a.name == TIMEOUT_MS {
                     a.args
                         .first()
                         .and_then(|arg| arg.as_str().parse::<u64>().ok())
@@ -1471,6 +1474,9 @@ pub enum AttrArg {
     /// A `key = ident` pair, whose value names something in the source rather
     /// than carrying text, e.g. `part_of = arr`.
     KeyIdent(String, String),
+    /// A `key = 3` pair, whose value is a number rather than text, e.g.
+    /// `#[wire(number = 3)]`.
+    KeyNumber(String, String),
 }
 
 impl AttrArg {
@@ -1479,7 +1485,7 @@ impl AttrArg {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(_, v) | Self::KeyIdent(_, v) => v,
+            Self::KeyValue(_, v) | Self::KeyIdent(_, v) | Self::KeyNumber(_, v) => v,
             Self::KeyArray(_, vs) => vs.first().map(String::as_str).unwrap_or(""),
         }
     }
@@ -1490,14 +1496,49 @@ impl AttrArg {
     pub fn name(&self) -> &str {
         match self {
             Self::Str(s) | Self::Ident(s) | Self::Number(s) => s,
-            Self::KeyValue(k, _) | Self::KeyArray(k, _) | Self::KeyIdent(k, _) => k,
+            Self::KeyValue(k, _)
+            | Self::KeyArray(k, _)
+            | Self::KeyIdent(k, _)
+            | Self::KeyNumber(k, _) => k,
         }
     }
 }
 
-/// The attribute a declaration carries in place of a body.
-/// See [WEP: Declared Absence](../../docs/wep-2026-09-13-declared-absence.md).
-pub const UNAVAILABLE: &str = "unavailable";
+/// The field numbers the wire format admits, from the protobuf specification's
+/// "Assigning Field Numbers".
+pub const WIRE_NUMBER_MIN: u32 = 1;
+pub const WIRE_NUMBER_MAX: u32 = 536_870_911;
+pub const WIRE_NUMBER_RESERVED: std::ops::RangeInclusive<u32> = 19_000..=19_999;
+
+/// The `#[wire(number = …)]` text these attributes carry, as written. Every
+/// `#[wire]` is read, since a field may spell one adjustment per attribute.
+#[must_use]
+pub fn wire_number_written(attrs: &[Attribute]) -> Option<&str> {
+    attrs.iter().find_map(|a| {
+        if a.name == WIRE {
+            a.kv_number("number")
+        } else {
+            None
+        }
+    })
+}
+
+/// The `#[wire(number = N)]` these attributes carry, where it is a number the
+/// wire format admits. The diagnostics for one it does not are the
+/// elaborator's, which is where a declaration is checked.
+#[must_use]
+pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
+    wire_number_written(attrs)
+        .and_then(|written| written.parse::<u32>().ok())
+        .filter(|n| (WIRE_NUMBER_MIN..=WIRE_NUMBER_MAX).contains(n))
+        .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
+}
+
+/// One entry per field, in declaration order, as `StructInfo` holds them.
+#[must_use]
+pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
+    fields.iter().map(|f| wire_number_of(&f.attrs)).collect()
+}
 
 /// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
@@ -1533,7 +1574,7 @@ pub mod lint {
 pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 /// [`attrs_allow`] for a module's `#![allow(...)]`, which waives the lint for
@@ -1542,7 +1583,7 @@ pub fn attrs_allow(attrs: &[Attribute], lint: &str) -> bool {
 pub fn inner_attrs_allow(attrs: &[InnerAttribute], lint: &str) -> bool {
     attrs
         .iter()
-        .any(|attr| attr.name == "allow" && args_name(&attr.args, lint))
+        .any(|attr| attr.name == ALLOW && args_name(&attr.args, lint))
 }
 
 fn args_name(args: &[AttrArg], lint: &str) -> bool {
@@ -1557,6 +1598,19 @@ impl Attribute {
     pub fn kv_value(&self, key: &str) -> Option<&str> {
         self.args.iter().find_map(|arg| {
             if let AttrArg::KeyValue(k, v) = arg {
+                if k == key { Some(v.as_str()) } else { None }
+            } else {
+                None
+            }
+        })
+    }
+
+    /// The literal text of a `key = <number>` argument, as written.
+    ///
+    /// For `#[wire(number = 3)]`, `attr.kv_number("number")` returns `Some("3")`.
+    pub fn kv_number(&self, key: &str) -> Option<&str> {
+        self.args.iter().find_map(|arg| {
+            if let AttrArg::KeyNumber(k, v) = arg {
                 if k == key { Some(v.as_str()) } else { None }
             } else {
                 None
@@ -1581,7 +1635,7 @@ impl Attribute {
 
     /// The linearity `#[cm(..., linearity=...)]` declares, if any.
     pub fn cm_resource_linearity(&self) -> Option<CmResourceLinearity> {
-        if self.name != "cm" {
+        if self.name != CM {
             return None;
         }
         self.kv_value("linearity")
@@ -2130,6 +2184,9 @@ impl Visibility {
 #[derive(Debug, Clone)]
 pub struct UseDecl {
     pub id: AstId,
+    /// Leading `#[…]` attributes, distinct from the `with { … }` clause the
+    /// `attributes` field carries.
+    pub attrs: Vec<Attribute>,
     /// Re-export visibility; `Private` is a local import, not re-exported.
     pub visibility: Visibility,
     /// Import source (e.g., "core:cli", "wasi:filesystem", "./utils.wado")
@@ -3561,31 +3618,6 @@ impl Type {
         }
     }
 
-    /// Where a tuple receiving a value spreads a second type pack, leaving the
-    /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
-    #[must_use]
-    pub fn second_pack_spread(&self, is_pack: &dyn Fn(&str) -> bool) -> Option<Span> {
-        let recurse = |t: &Type| t.second_pack_spread(is_pack);
-        match self {
-            Type::Tuple(elems) => elems
-                .iter()
-                .filter_map(|e| match e {
-                    Type::TypePackSpread(name, span) => is_pack(name).then_some(*span),
-                    _ => None,
-                })
-                .nth(1)
-                .or_else(|| elems.iter().find_map(recurse)),
-            Type::Generic(g) => g.args.iter().find_map(recurse),
-            Type::NamespacedGeneric(g) => g.args.iter().find_map(recurse),
-            Type::Reference(inner) | Type::MutReference(inner) => recurse(inner),
-            Type::Function(_)
-            | Type::Named(_)
-            | Type::TypePackSpread(..)
-            | Type::Infer(_)
-            | Type::Error(_) => None,
-        }
-    }
-
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {
@@ -4042,6 +4074,7 @@ pub struct AssociatedTypeDecl {
 #[derive(Debug, Clone)]
 pub struct AssociatedTypeBinding {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub ty: Type,
     pub span: Span,
@@ -4052,6 +4085,7 @@ pub struct AssociatedTypeBinding {
 #[derive(Debug, Clone)]
 pub struct AssociatedConst {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     pub name: String,
     pub visibility: Visibility,
     pub ty: Type,
@@ -4155,6 +4189,7 @@ pub struct RestClauseDecl {
 #[derive(Debug, Clone)]
 pub struct ImplBlock {
     pub id: AstId,
+    pub attrs: Vec<Attribute>,
     /// Generic type parameters: `impl<T> Box<T> { ... }`
     pub type_params: Vec<GenericParam>,
     /// The trait being implemented, if any: `impl Trait for Type`

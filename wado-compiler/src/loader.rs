@@ -200,12 +200,12 @@ impl LoadError {
             LoadError::BindError { .. } => Code::DuplicateDefinition,
             LoadError::WasmImport { .. } => Code::InvalidSyntax,
             LoadError::LexError { .. } | LoadError::ParseError { .. } => Code::InvalidSyntax,
+            LoadError::IoError { .. } => Code::FileReadError,
+            LoadError::StdlibIdentity { .. } => Code::StdlibAttr,
             LoadError::ModuleNotFound { .. }
-            | LoadError::IoError { .. }
             | LoadError::UnknownNamespace { .. }
             | LoadError::InvalidModulePath { .. }
-            | LoadError::DependencyUnresolved { .. }
-            | LoadError::StdlibIdentity { .. } => Code::ModuleNotFound,
+            | LoadError::DependencyUnresolved { .. } => Code::ModuleNotFound,
         }
     }
 }
@@ -257,7 +257,7 @@ impl From<LoadError> for Diagnostic {
                 column,
             } => Self {
                 severity: Severity::Error,
-                code: Code::ModuleNotFound,
+                code: Code::StdlibAttr,
                 message: stdlib_identity_message(path.as_deref()),
                 span: Some(DiagnosticSpan {
                     file: file.clone(),

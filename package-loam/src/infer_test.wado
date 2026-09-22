@@ -1,0 +1,390 @@
+//! Stage 0 over a two-layer MLP: what it proves, and what it stops the build
+//! for.
+
+use { Extent } from "./extent.wado";
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+
+fn rule(pattern: String, axes: List<String>) -> LayoutRule {
+    return LayoutRule { pattern, axes };
+}
+
+/// The MLP's schema. `Hidden` names an output axis on the first layer and an
+/// input axis on the second, which is what makes the two layers check.
+fn mlp_schema() -> Schema {
+    return Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("W1", ["In", "Hidden"]),
+            rule("B1", ["Hidden"]),
+            rule("W2", ["Hidden", "Out"]),
+            rule("B2", ["Out"]),
+        ],
+    };
+}
+
+fn mlp(hidden_in_w2: i32) -> String {
+    return `mlp (float[N, 128] X) => (float[N, 10] Y)
+    <float[128, 64] W1, float[64] B1, float[${hidden_in_w2}, 10] W2, float[10] B2>
+    {
+        H = MatMul(X, W1)
+        HB = Add(H, B1)
+        A = Relu(HB)
+        T = MatMul(A, W2)
+        Y = Add(T, B2)
+    }`;
+}
+
+fn infer_mlp(hidden_in_w2: i32) -> Result<String, String> {
+    let graph = read(&mlp(hidden_in_w2)).unwrap();
+    return match infer(&graph, &mlp_schema()) {
+        Ok(shapes) => {
+            let y = shapes["Y"];
+            Result::Ok(`${y.axes[0].name}=${y.axes[0].extent},${y.axes[1].name}=${y.axes[1].extent}`);
+        },
+        Err(e) => Result::Err(`${e}`),
+    };
+}
+
+test "a consistent MLP infers its output shape" {
+    assert infer_mlp(64).unwrap() == "Batch=N,Out=10";
+}
+
+test "an extent mismatch between the layers names both extents" {
+    assert infer_mlp(32).unwrap_err() == "T = MatMul: axis Hidden is 64 on the left and 32 on the right";
+}
+
+test "a symbolic batch axis flows through both layers" {
+    let graph = read(&mlp(64)).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    assert shapes["H"].axes[0].extent.agrees(&Extent::Symbol("N"));
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+}
+
+test "a bias broadcasts against the batch axis ahead of it" {
+    let graph = read(&mlp(64)).unwrap();
+    let shapes = infer(&graph, &mlp_schema()).unwrap();
+    assert shapes["HB"].rank() == 2;
+    assert shapes["HB"].axes[1].name == "Hidden";
+}
+
+test "a tensor no pattern reaches stops the build naming it" {
+    let graph = read(&mlp(64)).unwrap();
+    let partial = Schema {
+        layout: [rule("X", ["Batch", "In"])],
+    };
+    let e = infer(&graph, &partial).unwrap_err();
+    assert `${e}` == "W1: no layout pattern names this tensor's axes";
+}
+
+test "a pattern naming the wrong number of axes stops the build" {
+    let graph = read(&mlp(64)).unwrap();
+    let mut schema = mlp_schema();
+    schema.layout[1] = rule("W1", ["In"]);
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "W1: the schema names 1 axes and the graph gives 2 dimensions";
+}
+
+test "an operator with no shape rule stops the build naming it" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Conv(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Conv: no shape rule for this operator";
+}
+
+test "a wildcard pattern reaches every tensor" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["X"].axes[0].name == "A";
+}
+
+test "an earlier pattern overrides a later one" {
+    let graph = read(
+        `agraph (float[2, 3] "layers.0.weight") => (float[2, 3] Y) {
+            Y = Relu("layers.0.weight")
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("*.0.weight", ["First", "Second"]),
+            rule("*", ["A", "B"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["layers.0.weight"].axes[0].name == "First";
+}
+
+test "an unknown dimension takes its axis's name as its symbol" {
+    let graph = read(
+        `agraph (float[?, 4] X, float[4, 4] W) => (float[?, 4] Y) {
+            Y = MatMul(X, W)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("X", ["Batch", "In"]),
+            rule("W", ["In", "Out"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+}
+
+test "an operator given too few operands stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Add(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Add: reads 2 operands and was given 1";
+}
+
+test "a node naming several outputs stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y, Z = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Relu: produces one output and names 2";
+}
+
+test "a scalar operand to MatMul stops the build rather than trapping" {
+    let graph = read(
+        `agraph (float S, float[2, 3] W) => (float[2, 3] Y) {
+            Y = MatMul(S, W)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("S", []),
+            rule("*", ["A", "B"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = MatMul: a scalar operand has no axis to contract";
+}
+
+test "a declared output extent disagreeing with the produced one stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X, float[3, 10] W) => (float[2, 7] Y) {
+            Y = MatMul(X, W)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("X", ["A", "K"]),
+            rule("W", ["K", "B"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y: axis B is declared 7 and produced 10";
+}
+
+test "a declared output rank disagreeing with the produced one stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y: the graph declares rank 1 and the nodes produce rank 2";
+}
+
+test "a declared symbolic name need not be the one the schema gave the axis" {
+    let graph = read(
+        `agraph (float[?, 3] X) => (float[N, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("Batch"));
+}
+
+test "a declared static extent settles an axis the nodes left symbolic" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[8, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(8));
+    // Only the declared output is settled; the input keeps what it stated.
+    assert shapes["X"].axes[0].extent.agrees(&Extent::Symbol("N"));
+}
+
+test "a declared `?` claims nothing about the produced extent" {
+    let graph = read(
+        `agraph (float[N, 3] X) => (float[?, 3] Y) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["Batch", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Symbol("N"));
+}
+
+test "a graph output no node produces stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y, float[2, 3] Z) {
+            Y = Relu(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Z: no graph input, initializer or node defines this";
+}
+
+test "Gemm contracts the axis its transpose flags leave facing" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[4, 3] B, float[4] C) => (float[2, 4] Y) {
+            Y = Gemm <transB = 1> (A, B, C)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["Batch", "In"]),
+            rule("B", ["Out", "In"]),
+            rule("C", ["Out"]),
+            rule("Y", ["Batch", "Out"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "Batch";
+    assert shapes["Y"].axes[1].name == "Out";
+}
+
+test "Gemm without its C operand is the product alone" {
+    let graph = read(
+        `agraph (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y) {
+            Y = Gemm(A, B)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["Batch", "In"]),
+            rule("B", ["In", "Out"]),
+            rule("Y", ["Batch", "Out"]),
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[1].extent.agrees(&Extent::Static(4));
+}
+
+test "a Gemm operand that is not a matrix stops the build" {
+    let graph = read(
+        `agraph (float[3] A, float[3, 4] B) => (float[4] Y) {
+            Y = Gemm(A, B)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [
+            rule("A", ["In"]),
+            rule("B", ["In", "Out"]),
+            rule("Y", ["Out"]),
+        ],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Gemm: operand 0 has rank 1 and the operator reads rank 2";
+}
+
+test "Transpose reorders the axes its perm names" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+    assert shapes["Y"].axes[1].name == "A";
+    assert shapes["Y"].axes[0].extent.agrees(&Extent::Static(3));
+}
+
+test "Transpose with no perm reverses the axes, as ONNX defaults it" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose(X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert shapes["Y"].axes[0].name == "B";
+}
+
+test "a perm that is not a permutation stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [1, 1]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm is not a permutation of 2 axes";
+}
+
+test "a perm naming the wrong number of axes stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[3, 2] Y) {
+            Y = Transpose <perm = [0]> (X)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Y = Transpose: attribute perm names 1 axes and the operand has 2";
+}
+
+test "a node reading an undefined tensor stops the build" {
+    let graph = read(
+        `agraph (float[2, 3] X) => (float[2, 3] Y) {
+            Y = Add(X, Missing)
+        }`,
+    ).unwrap();
+    let schema = Schema {
+        layout: [rule("*", ["A", "B"])],
+    };
+    let e = infer(&graph, &schema).unwrap_err();
+    assert `${e}` == "Missing: no graph input, initializer or node defines this";
+}

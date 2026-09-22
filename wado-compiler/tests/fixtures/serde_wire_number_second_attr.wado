@@ -1,0 +1,28 @@
+// A field spells one wire adjustment per attribute if it likes, so a number
+// is read from whichever `#[wire]` carries it rather than from the first one.
+use { WireNumbered } from "core:serde";
+use { to_string } from "core:json";
+
+struct Split {
+    #[wire(name = "ex")]
+    #[wire(number = 1)]
+    x: i32,
+    #[wire(number = 2)]
+    #[wire(name = "why")]
+    y: i32,
+}
+
+fn numbered_only<T: WireNumbered>(_value: &T) -> i32 {
+    return 1;
+}
+
+test "a number in a second wire attribute still numbers the field" {
+    assert numbered_only(&Split { x: 1, y: 2 }) == 1;
+}
+
+test "the name override in the other attribute still applies" {
+    assert to_string(&Split { x: 1, y: 2 }).unwrap() == "{\"ex\":1,\"why\":2}";
+}
+
+__DATA__
+{"test": {}}

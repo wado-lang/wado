@@ -1,0 +1,11 @@
+// A number identifies a field, so two fields cannot share one.
+
+struct Point {
+    #[wire(number = 1)] x: i32,
+    #[wire(number = 1)] y: i32,
+}
+
+export fn run() {}
+
+__DATA__
+{"compile_error": "`#[wire(number = 1)]` is already `x`'s number", "compile_error_codes": ["WIRE_NUMBER"]}

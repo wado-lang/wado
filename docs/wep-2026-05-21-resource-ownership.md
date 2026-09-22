@@ -556,6 +556,19 @@ it means resolving `Name<args>` against the resource declarations in the
 elaborator's main type resolution, as `resolve_type_static_with_params` already
 does for the struct-field pre-pass.
 
+### Known gap: a `Stream` or `Future` handle nothing drops
+
+"Deterministic drop" says an owned, un-moved resource is dropped at scope exit
+on every path. Cleanup does not do that for `GenericResource`, meaning
+`Stream<T>` and `Future<T>`: it excludes them, so every path out of a function
+holding one has to call `drop` itself, and nothing diagnoses a path that does
+not. The handle leaks with no trace.
+
+A `?` or an early `return` inside the region holding the handle is the shape
+that admits it. `core:fs` drains the stream and drops before it decides what to
+return. `core:kiln` lends the handle to a helper, so the body that owns it
+cannot return early at all.
+
 ## Amendments to earlier WEPs
 
 - WEP 2026-04-28 (Resource Inheritance): its "value semantics, no borrow

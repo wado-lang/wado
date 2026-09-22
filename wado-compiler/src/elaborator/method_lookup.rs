@@ -755,23 +755,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Option<AstId>,
         struct_name: &str,
     ) -> ModuleSource {
-        // Primitive impl blocks live in `core:prelude/primitive.wado`. i128 /
-        // u128 are structs in `prelude/int128.wado`, not primitives.
-        if matches!(
-            struct_name,
-            "i8" | "i16"
-                | "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-        ) {
-            return ModuleSource::primitive();
+        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, so
+        // this answers `None` for them and they take the walk below.
+        if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
+            return module;
         }
         if let Some(def) = site.map_or_else(
             || self.decl_key_or_local(struct_name),
@@ -856,29 +843,28 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                     }
                     if method_name == "zip" {
-                        if elems.is_empty() {
-                            return None;
-                        }
-                        let inner_arities: Vec<Vec<TypeId>> = elems
+                        let rows: Vec<Vec<TypeId>> = elems
                             .iter()
                             .filter_map(|e| self.tysys.type_table.borrow().as_tuple(*e))
                             .collect();
-                        if inner_arities.len() != elems.len() {
+                        // `zip` transposes rows of equal length; nothing else has
+                        // the method. A pack fills one position here, so equal
+                        // length still leaves the layouts free to differ.
+                        if rows.is_empty()
+                            || rows.len() != elems.len()
+                            || rows.iter().any(|row| row.len() != rows[0].len())
+                        {
                             return None;
                         }
-                        let arity = inner_arities[0].len();
-                        if !inner_arities.iter().all(|a| a.len() == arity) {
-                            return None;
-                        }
-                        let mut transposed = Vec::with_capacity(arity);
-                        for col in 0..arity {
-                            let col_types: Vec<TypeId> =
-                                inner_arities.iter().map(|row| row[col]).collect();
-                            let col_tuple =
-                                self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                            transposed.push(col_tuple);
-                        }
-                        let return_type = self.tysys.type_table.borrow_mut().make_tuple(transposed);
+                        // Rows sharing no layout have no transposed shape. The
+                        // method exists, so the caller reaches the diagnostic
+                        // naming the offending row.
+                        let return_type = self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .transposed_tuple(base_type_id)
+                            .unwrap_or(TypeTable::ERROR);
                         return Some(MethodInfo {
                             impl_type_bindings: Vec::new(),
                             method_def: None,

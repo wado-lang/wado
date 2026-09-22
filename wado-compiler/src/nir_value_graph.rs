@@ -12,7 +12,8 @@ use crate::const_eval::{Value, eval_binary, eval_cast, eval_unary, is_int_prim, 
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::ExprId;
-use crate::tir::{PrimitiveType, TypeId, TypeTable};
+use crate::primitive::PrimitiveType;
+use crate::tir::{TypeId, TypeTable};
 
 /// The constant a [`ValueKind`] denotes, as niri's
 /// [`crate::const_eval::Value`] — the one projection between the two, which

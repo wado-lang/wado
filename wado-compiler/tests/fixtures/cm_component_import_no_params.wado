@@ -1,0 +1,11 @@
+// A component export with no parameters: the synthesized `#[cm_params()]`
+// names none, which the attribute schema must admit.
+
+use { Oracle } from "./sub/wasm_import_cm_no_params.wat" with { type: "wat" };
+
+test "a zero-parameter component export is callable" {
+    assert Oracle::answer() == 42;
+}
+
+__DATA__
+{"test": {}}

@@ -75,6 +75,8 @@ struct WirEmitter<'a> {
     func_index_map: IndexMap<u32, u32>,
     /// Map from global fq name to Wasm global index.
     global_name_map: IndexMap<String, u32>,
+    /// The function being emitted, so an ICE names where the bad node stands.
+    current_function: String,
     /// Local name map for current function.
     current_locals: IndexMap<String, u32>,
     /// Locals declared with ref types (need `ref.as_non_null` on `local.get`).
@@ -112,6 +114,7 @@ impl<'a> WirEmitter<'a> {
             func_index_offset: 0,
             func_index_map: IndexMap::default(),
             global_name_map: IndexMap::default(),
+            current_function: String::new(),
             current_locals: IndexMap::default(),
             ref_locals: IndexSet::default(),
             scratch_local_names: IndexSet::default(),
@@ -774,6 +777,7 @@ impl<'a> WirEmitter<'a> {
 
     fn emit_function(&mut self, func: &WirFunction) -> Function {
         // Reset local tracking
+        self.current_function.clone_from(&func.name.fq);
         self.current_locals.clear();
         self.ref_locals.clear();
         self.scratch_local_names.clear();
@@ -2563,9 +2567,10 @@ impl<'a> WirEmitter<'a> {
             .copied()
             .unwrap_or_else(|| {
                 panic!(
-                    "[WIR emit] WIR type {wir_idx} ({}) has no Wasm type index — either a pass \
-                     dropped the type while leaving a use behind, or the use names a type kind \
-                     that emits none (enum / flags)",
+                    "[WIR emit] in `{}`: WIR type {wir_idx} ({}) has no Wasm type index — either \
+                     a pass dropped the type while leaving a use behind, or the use names a type \
+                     kind that emits none (enum / flags)",
+                    self.current_function,
                     self.describe_wir_type(wir_idx)
                 )
             })
@@ -2578,7 +2583,8 @@ impl<'a> WirEmitter<'a> {
             .copied()
             .unwrap_or_else(|| {
                 panic!(
-                    "[WIR emit] WIR type {wir_type_idx} ({}) has no field '{field_name}'",
+                    "[WIR emit] in `{}`: WIR type {wir_type_idx} ({}) has no field '{field_name}'",
+                    self.current_function,
                     self.describe_wir_type(wir_type_idx)
                 )
             })

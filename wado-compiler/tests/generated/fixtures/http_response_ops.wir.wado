@@ -371,11 +371,9 @@ import fn wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code 
 
 global global:http_response_ops.wado::$const_obj_1: ref null "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>" = struct.new "core:prelude/types.wado//Result<core:prelude/types.wado/Option<wasi:http/types.wado/Fields>,wasi:http/types.wado/ErrorCode>::Ok" { discriminant: 0, payload_0: struct.new "core:prelude/types.wado//Option<wasi:http/types.wado/Fields>" { 1 } };
 global global:http_response_ops.wado::$const_obj_2: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 };
-global global:http_response_ops.wado::$const_obj_3: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 33 };
-global global:http_response_ops.wado::$const_obj_5: ref null "core:prelude/types.wado//Box<i32>" = struct.new "core:prelude/types.wado//Box<i32>" { value: 26 };
-global global:core:prelude/traits.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 116, 97, 116, 117, 115, 67, 111, 100, 101), used: 10 };
-global global:core:prelude/traits.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
-global global:core:prelude/primitive.wado::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
+global global:core:prelude/traits.wado::$const_obj_4: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(83, 116, 97, 116, 117, 115, 67, 111, 100, 101), used: 10 };
+global global:core:prelude/traits.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(32, 97, 115, 32);
+global global:core:prelude/primitive.wado::$const_obj_6: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(0), used: 0 };
 
 fn "http_response_ops.wado/$cm_binding__Fields_new"() with Fields {
     return "wasi/wasi:http/Fields::new"();
@@ -457,7 +455,7 @@ fn "http_response_ops.wado/$cm_task_entry__handle"(request) {
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_11.repr, $fuse_at_186 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_response_ops.wado"), used: 22 }, 22);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_11.repr, $fuse_at_186 + 52, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_12 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_11);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:http_response_ops.wado::$const_obj_5, $local_12);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 26 }, $local_12);
         $fuse_at_187 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_11, 50);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_11.repr, $fuse_at_187, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: default_status == 200
@@ -483,7 +481,7 @@ condition: default_status == 200
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $fuse_at_188 + 30, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("http_response_ops.wado"), used: 22 }, 22);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $fuse_at_188 + 52, struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(58), used: 1 }, 1);
         $local_14 = "core:prelude/format.wado/core:prelude/format.wado/Formatter::new"($local_13);
-        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(global:http_response_ops.wado::$const_obj_3, $local_14);
+        "core:prelude/primitive.wado/i32^core:prelude/traits.wado/Display::fmt"(struct.new "core:prelude/types.wado//Box<i32>" { value: 33 }, $local_14);
         $fuse_at_189 = "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_uninit"($local_13, 42);
         "core:prelude/string.wado/core:prelude/string.wado/String::internal_write_str_at$scalar"($local_13.repr, $fuse_at_189, struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("
 condition: new_status == 404
@@ -1151,8 +1149,8 @@ fn "core:prelude/traits.wado/wasi:http/types.wado/StatusCode^core:prelude/traits
     }
     start_20 = self_7.used;
     self_7.used = new_used_19;
-    builtin::array_copy<u8>(self_7.repr, start_20, global:core:prelude/traits.wado::$const_obj_7, 0, 4);
-    s_23 = global:core:prelude/traits.wado::$const_obj_6;
+    builtin::array_copy<u8>(self_7.repr, start_20, global:core:prelude/traits.wado::$const_obj_5, 0, 4);
+    s_23 = global:core:prelude/traits.wado::$const_obj_4;
     self_24 = f.buf;
     new_used_36 = self_24.used + 10;
     if @unlikely(new_used_36 > builtin::array_len(self_24.repr)) {
@@ -1646,7 +1644,7 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar"(self, f) {
     digit_count_4 = "core:prelude/primitive.wado/count_digits_u64"(local.tee abs_val(select i64(val_6 < 0_i64, 0_i64 - val_6, val_6)));
     offset_5 = block -> i32 {
         let $mv_arg_3: ref "core:prelude/string.wado//String";
-        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_8;
+        $mv_arg_3 = global:core:prelude/primitive.wado::$const_obj_6;
         "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(f, is_negative, $mv_arg_3.repr, $mv_arg_3.used, digit_count_4);
     };
     self_14 = f.buf;
