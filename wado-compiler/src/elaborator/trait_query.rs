@@ -1682,17 +1682,13 @@ impl TypeSystem {
             // The raw GC array `Array<T>` carries its element as a single type
             // arg, so trait impls (`impl IntoIterator for Array<T>`) resolve
             // under the canonical name "Array".
-            ResolvedType::BuiltinArray(elem) => (
+            ResolvedType::BuiltinArray(_) => (
                 FqTypeName::builtin(TypeTable::ARRAY_TYPE_NAME),
-                Some(vec![*elem]),
+                self.impl_position_args(type_id),
             ),
-            ResolvedType::GenericInstance { type_args, .. } => (
+            ResolvedType::GenericInstance { .. } => (
                 self.type_table.borrow().fq_base_type_name(type_id),
-                if type_args.is_empty() {
-                    None
-                } else {
-                    Some(type_args.clone())
-                },
+                self.impl_position_args(type_id),
             ),
             ResolvedType::Ref(inner) => {
                 // References always implement Eq via ref.eq (identity
@@ -1709,7 +1705,7 @@ impl TypeSystem {
                     Some(type_id),
                     &Receiver::Ref(RefKind::Shared),
                     decl,
-                    Some(&[inner_id]),
+                    self.impl_position_args(type_id).as_deref(),
                     NewtypePeel::Follow,
                     wanted,
                 ) {
@@ -1731,7 +1727,7 @@ impl TypeSystem {
                     Some(type_id),
                     &Receiver::Ref(RefKind::Mut),
                     decl,
-                    Some(&[inner_id]),
+                    self.impl_position_args(type_id).as_deref(),
                     NewtypePeel::Follow,
                     wanted,
                 ) {
@@ -1890,6 +1886,7 @@ impl TypeSystem {
                         scope,
                         &header.type_params,
                         &header.ty,
+                        subject,
                         type_args,
                     )
                 {
@@ -2663,6 +2660,7 @@ impl TypeSystem {
         scope: &TypeLookup,
         type_params: &[ast::GenericParam],
         impl_ty: &ast::Type,
+        receiver: Option<TypeId>,
         type_args: Option<&[TypeId]>,
     ) -> bool {
         // No type params with bounds → always OK
@@ -2715,11 +2713,11 @@ impl TypeSystem {
                 }
             }
         } else if let Some(inner_name) = inner_type_name {
-            // Handle `impl<T: Bound> Trait for &T` / `impl<T: Bound> Trait for &mut T`:
-            // type_args[0] is the inner type T.
+            // `impl<T: Bound> Trait for &T` writes no position, so `T` stands
+            // for the receiver's pointee rather than for an argument of it.
             if let Some(bounds) = bounds_map.get(inner_name)
-                && let Some(&type_arg) = type_args.first()
-                && !self.bounds_hold(ctx, scope, type_arg, bounds)
+                && let Some(pointee) = receiver.and_then(|id| self.pointee_of(id))
+                && !self.bounds_hold(ctx, scope, pointee, bounds)
             {
                 return false;
             }

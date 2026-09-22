@@ -774,10 +774,17 @@ Registering a block's associated types without it files
 `impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
 build order then decides both, which is the pick this WEP forbids.
 
-A reference target is where the two readings come apart. Every impl on one is
-filed under a single receiver key, and the pointee is the one argument that
-chooses between them, so the written target names that pointee whole. Reading
-the pointee's own arguments there compares a nesting level too deep.
+A reference target is where a reading comes apart most easily. Every impl on one
+is filed under a single receiver key, so the arguments are what choose between
+them, and `impl_target_args` reads through the reference to the pointee's. Those
+are the positions `ImplParamSlots` numbers, so they are what a receiver supplies:
+`TypeSystem::impl_position_args` is the one answer, and a caller handing the
+pointee whole instead makes the match disagree with the binding.
+
+A blanket `impl<T: Bound> Trait for &T` writes no position at all, so its `T`
+stands for the receiver's pointee rather than for an argument of it. The bound is
+checked against that pointee, read off the receiver rather than off a position a
+caller filled.
 
 Fixtures: `assoc_type_per_receiver_args.wado`,
 `assoc_type_binder_at_target_position.wado`,
@@ -887,6 +894,22 @@ where `T` is that reference stays unresolved, so the binding the impl wrote is
 out of reach. What it admits is a reference impl that can carry methods but not
 an associated type, so a trait declaring one cannot be implemented on a
 reference to a generic head.
+
+## Known gap: a reference impl target has no name of its own
+
+`name::Receiver::Ref` spells the reference kind and nothing else, with the
+pointee riding in the type-argument list. That is the blanket
+`impl<T> Trait for &T` written out, and it is the only reference target the
+naming layer can say. A target that is a reference to a named head has no
+spelling of its own, so its definition and its call sites mint two different
+names for one method.
+
+What it admits is a reference impl on a named head that is unreachable wherever
+the two names differ. `impl Show for &Wrap<i32>` called directly on a
+`&Wrap<i32>` reports that `&i32` does not implement `Show`;
+`impl<T> Show for &Wrap<T>` reached inside a frame monomorphized for
+`&Wrap<i32>` reports that `Wrap<i32>` does not. The same generic impl called
+directly works, because both sides mint the same name.
 
 ## Known gap: a data declaration binds no `Self` for its own bounds
 

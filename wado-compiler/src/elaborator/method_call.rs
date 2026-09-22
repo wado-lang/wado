@@ -318,36 +318,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             ),
         };
 
-        // Extract receiver type args for generic types (used for resolving associated types)
-        let type_args_source_id = {
-            let tt = self.tysys.type_table.borrow();
-            if matches!(tt.get(base_type_id), ResolvedType::Newtype { .. }) {
-                tt.representation_head(base_type_id)
-            } else {
-                base_type_id
-            }
-        };
-        let receiver_type_args_for_trait: Option<Vec<TypeId>> = match self
-            .tysys
-            .type_table
-            .borrow()
-            .get(type_args_source_id)
-            .clone()
-        {
-            ResolvedType::GenericInstance { type_args, .. }
-            | ResolvedType::GenericResource { type_args, .. }
-                if !type_args.is_empty() =>
-            {
-                Some(type_args)
-            }
-            // The raw GC array `Array<T>` carries its element as a single
-            // type arg, so a trait method's associated types (e.g.
-            // `IntoIterator::Iter` / `Item` for `impl IntoIterator for
-            // Array<T>`) resolve against `[elem]` just like a generic
-            // container's.
-            ResolvedType::BuiltinArray(elem) => Some(vec![elem]),
-            _ => None,
-        };
+        let receiver_type_args_for_trait = self.tysys.impl_position_args(base_type_id);
 
         let mut method_info: Option<MethodInfo> = None;
         let mut trait_name: Option<FqTraitName> = None;

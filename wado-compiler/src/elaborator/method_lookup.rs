@@ -210,6 +210,23 @@ fn target_arg_names(arg: &Type, name: &str) -> bool {
 }
 
 impl TypeSystem {
+    /// What a reference type refers to, `None` for anything else.
+    pub(crate) fn pointee_of(&self, id: TypeId) -> Option<TypeId> {
+        match self.type_table.borrow().get(id) {
+            ResolvedType::Ref(inner) | ResolvedType::MutRef(inner) => Some(*inner),
+            _ => None,
+        }
+    }
+
+    /// What a receiver fills the positions [`impl_target_args`] reads, a
+    /// reference read through to its pointee's (WEP 2026-08-12).
+    pub(crate) fn impl_position_args(&self, receiver: TypeId) -> Option<Vec<TypeId>> {
+        let pointee = self.pointee_of(receiver).unwrap_or(receiver);
+        let tt = self.type_table.borrow();
+        tt.nominal_type_args(tt.representation_head(pointee))
+            .filter(|args| !args.is_empty())
+    }
+
     /// Whether an implicit `&mut self` borrow of a local receiver has to box
     /// it: a receiver whose reference is a box cell is handed a copy, and the
     /// callee's write reaches the local only through the box the address-taken
@@ -235,16 +252,6 @@ impl TypeSystem {
         impl_ty: &Type,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        // A reference receiver supplies its pointee as its one argument, so the
-        // written target names that pointee whole, not the pointee's arguments.
-        if let Type::Reference(inner) | Type::MutReference(inner) = impl_ty {
-            let Some(args) = receiver_type_args else {
-                return true;
-            };
-            return args
-                .first()
-                .is_some_and(|&recv| self.arg_matches(inner, recv));
-        }
         let Some(written) = impl_target_args(impl_ty) else {
             return true;
         };
@@ -1017,7 +1024,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !targets_receiver {
                     continue;
                 }
-                if !self.inherent_impl_applies(header, receiver_type_args.as_deref()) {
+                if !self.inherent_impl_applies(header, base_type_id, receiver_type_args.as_deref())
+                {
                     continue;
                 }
                 if let Some(info) =
@@ -1037,7 +1045,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 let trait_env = Arc::clone(&self.tysys.trait_env);
                 let header = impl_header(&trait_env, &impl_ref);
                 if self.get_type_name(&header.ty) != struct_name
-                    || !self.inherent_impl_applies(header, receiver_type_args.as_deref())
+                    || !self.inherent_impl_applies(
+                        header,
+                        base_type_id,
+                        receiver_type_args.as_deref(),
+                    )
                 {
                     continue;
                 }
@@ -1090,6 +1102,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     fn inherent_impl_applies(
         &mut self,
         header: &ImplHeader,
+        receiver: TypeId,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
         self.tysys
@@ -1099,6 +1112,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 &self.type_lookup(),
                 &header.type_params,
                 &header.ty,
+                Some(receiver),
                 receiver_type_args,
             )
     }
@@ -2990,6 +3004,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     &s.type_lookup(),
                     &header.type_params,
                     &header.ty,
+                    Some(base_type_id),
                     Some(&concrete_type_args),
                 ) {
                     return None;
@@ -3134,6 +3149,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         &s.type_lookup(),
                         &impl_type_params,
                         &impl_ty,
+                        Some(base_type_id),
                         Some(&concrete_type_args),
                     )
                 {
