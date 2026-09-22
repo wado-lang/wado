@@ -9,12 +9,15 @@ use {
     KilnHost,
     Diagnostic as KilnDiagnostic,
     DiagnosticLevel,
+    read_all,
     read_text,
 } from "core:kiln";
 use { Deserialize } from "core:serde";
 use { emit } from "./emit.wado";
+use { Graph } from "./graph.wado";
 use { infer } from "./infer.wado";
-use { read } from "./onnx_text.wado";
+use onnx_proto from "./onnx_proto.wado";
+use onnx_text from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
 
 /// Generator-side options, written at the `use ... with { generator: { options:
@@ -32,15 +35,25 @@ fn at<E: Display>(path: &String, e: &E) -> Error {
     return Error::InvalidSchema(`loam: '${path}': ${e}`);
 }
 
-export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
-    let path = req.primary.path;
-    let source = match read_text(req.primary.content) {
+/// The two spellings of one graph. `.onnx` is ONNX's own form and what an
+/// exporter writes; `.onnxtext` is the form a hand-written fixture is written
+/// as, and what a repository can show a diff of.
+fn read_graph(path: &String, content: Stream<u8>) -> Result<Graph, Error> {
+    if path.ends_with(".onnx") {
+        return onnx_proto::read(read_all(content)).map_err(|e| at(path, &e));
+    }
+    let source = match read_text(content) {
         Ok(text) => text,
         Err(e) => {
             return Result::Err(Error::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
         },
     };
-    let graph = read(&source).map_err(|e| at(&path, &e))?;
+    return onnx_text::read(&source).map_err(|e| at(path, &e));
+}
+
+export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
+    let path = req.primary.path;
+    let graph = read_graph(&path, req.primary.content)?;
     // An extent the algebra cannot discharge stops the build here, since there
     // is no tier below this one to re-check at.
     let shapes = infer(&graph, &Schema { layout: req.options.layout }).map_err(|e| at(&path, &e))?;

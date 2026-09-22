@@ -16,8 +16,8 @@ Encoding uses preferred (shortest) serialization (RFC 8949 §4.1). Decoding is
 variation-tolerant (§4.1): it accepts any well-formed encoding, preferred or
 not, definite or indefinite length. `to_bytes_canonical` emits the Core
 Deterministic Encoding profile (§4.2.1) for COSE-style signing, with the
-documented float caveat (Wado has no `f16`, so the canonical float ladder
-stops at binary32).
+documented float caveat (this encoder never emits binary16, so the canonical
+float ladder stops at binary32).
 
 The spec is vendored verbatim at `wado-compiler/ref/rfc8949.txt`; comments
 cite section numbers from it.
@@ -54,9 +54,8 @@ containers, and map keys sorted by the bytewise order of their encoded form.
 Equal values produce byte-identical output regardless of map insertion order
 — use this for COSE/CWT signing or content addressing.
 
-Float caveat: Wado has no `f16`, so the canonical float ladder stops at
-binary32. Output is byte-identical to a reference deterministic encoder for
-integers, lengths, and map order, but may differ on float-bearing values.
+Float caveat: the ladder stops at binary32, so output may differ from a
+reference deterministic encoder on float-bearing values.
 
 ### `pub fn from_bytes<T: Deserialize, B: AsByteSlice>(input: B, strict: bool = true, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 

@@ -23,6 +23,7 @@ use crate::name::{
     TypeHead, TypeNameInfo, format_type_name, mangle_builtin_array_type, mangle_generic_name,
     mangle_local_item_name, mangle_tuple_type,
 };
+use crate::primitive::PrimitiveType;
 use crate::symbol_notation::render;
 use crate::token::Span;
 use crate::{hashmap, name};
@@ -295,77 +296,6 @@ pub struct InferVarId(pub u32);
 impl std::fmt::Display for InferVarId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "?{}", self.0)
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum PrimitiveType {
-    I8,
-    I16,
-    I32,
-    I64,
-    U8,
-    U16,
-    U32,
-    U64,
-    F32,
-    F64,
-    Bool,
-    Char,
-    V128,
-}
-
-impl PrimitiveType {
-    /// Returns the string representation of the primitive type (e.g., "i32", "f64")
-    #[must_use]
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::I8 => "i8",
-            Self::I16 => "i16",
-            Self::I32 => "i32",
-            Self::I64 => "i64",
-            Self::U8 => "u8",
-            Self::U16 => "u16",
-            Self::U32 => "u32",
-            Self::U64 => "u64",
-            Self::F32 => "f32",
-            Self::F64 => "f64",
-            Self::Bool => "bool",
-            Self::Char => "char",
-            Self::V128 => "v128",
-        }
-    }
-
-    /// The largest value a scalar integer holds; `None` for every other
-    /// primitive.
-    #[must_use]
-    pub fn int_max(self) -> Option<u128> {
-        Some(match self {
-            Self::I8 => i8::MAX as u128,
-            Self::I16 => i16::MAX as u128,
-            Self::I32 => i32::MAX as u128,
-            Self::I64 => i64::MAX as u128,
-            Self::U8 => u128::from(u8::MAX),
-            Self::U16 => u128::from(u16::MAX),
-            Self::U32 => u128::from(u32::MAX),
-            Self::U64 => u128::from(u64::MAX),
-            Self::F32 | Self::F64 | Self::Bool | Self::Char | Self::V128 => return None,
-        })
-    }
-
-    /// Check if a name is a primitive type name.
-    #[must_use]
-    pub fn is_primitive_name(name: &str) -> bool {
-        Self::all_primitive_names().contains(&name)
-    }
-
-    /// Every name this enum spells. `i128` and `u128` are absent: they are
-    /// prelude struct declarations, which write their own operator impls.
-    pub fn all_primitive_names() -> &'static [&'static str] {
-        &[
-            "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
-            "v128",
-        ]
     }
 }
 
@@ -943,38 +873,46 @@ impl TypeTable {
     pub const U64: TypeId = TypeId(7);
     pub const F32: TypeId = TypeId(8);
     pub const F64: TypeId = TypeId(9);
-    pub const BOOL: TypeId = TypeId(10);
-    pub const CHAR: TypeId = TypeId(11);
-    pub const V128: TypeId = TypeId(12);
-    pub const UNIT: TypeId = TypeId(13);
-    pub const NEVER: TypeId = TypeId(14);
-    // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(15);
-    pub const ERROR: TypeId = TypeId(16);
+    pub const F16: TypeId = TypeId(10);
+    pub const BF16: TypeId = TypeId(11);
+    pub const BOOL: TypeId = TypeId(12);
+    pub const CHAR: TypeId = TypeId(13);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
 
-    /// The primitive spelling → well-known `TypeId` mapping, the single
-    /// source for every by-name primitive resolution. `i128` / `u128` are
-    /// deliberately absent: they are struct-backed in the prelude, so their
-    /// names resolve through the declaration path, not to the raw
-    /// `PrimitiveType` ids.
+    /// The well-known id `prim` interns to. [`Self::new`] asserts each one
+    /// against what it actually interns, so neither can drift.
+    #[must_use]
+    pub fn primitive_type_id(prim: PrimitiveType) -> TypeId {
+        match prim {
+            PrimitiveType::I8 => Self::I8,
+            PrimitiveType::I16 => Self::I16,
+            PrimitiveType::I32 => Self::I32,
+            PrimitiveType::I64 => Self::I64,
+            PrimitiveType::U8 => Self::U8,
+            PrimitiveType::U16 => Self::U16,
+            PrimitiveType::U32 => Self::U32,
+            PrimitiveType::U64 => Self::U64,
+            PrimitiveType::F32 => Self::F32,
+            PrimitiveType::F64 => Self::F64,
+            PrimitiveType::F16 => Self::F16,
+            PrimitiveType::Bf16 => Self::BF16,
+            PrimitiveType::Bool => Self::BOOL,
+            PrimitiveType::Char => Self::CHAR,
+            PrimitiveType::V128 => Self::V128,
+        }
+    }
+
+    /// The type spelling → well-known `TypeId` mapping, the single source for
+    /// every by-name primitive resolution. `i128` / `u128` are struct-backed.
     pub fn primitive_by_name(name: &str) -> Option<TypeId> {
         match name {
-            "i8" => Some(Self::I8),
-            "i16" => Some(Self::I16),
-            "i32" => Some(Self::I32),
-            "i64" => Some(Self::I64),
-            "u8" => Some(Self::U8),
-            "u16" => Some(Self::U16),
-            "u32" => Some(Self::U32),
-            "u64" => Some(Self::U64),
-            "f32" => Some(Self::F32),
-            "f64" => Some(Self::F64),
-            "bool" => Some(Self::BOOL),
-            "char" => Some(Self::CHAR),
-            "v128" => Some(Self::V128),
             "()" => Some(Self::UNIT),
             "!" => Some(Self::NEVER),
-            _ => None,
+            _ => PrimitiveType::from_name(name).map(Self::primitive_type_id),
         }
     }
 
@@ -1047,23 +985,14 @@ impl TypeTable {
             defs: std::sync::Arc::default(),
         };
 
-        // Pre-populate primitive types matching the constants above
-        table.intern(ResolvedType::Primitive(PrimitiveType::I8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::I64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U8));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U16));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::U64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F32));
-        table.intern(ResolvedType::Primitive(PrimitiveType::F64));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
-        table.intern(ResolvedType::Primitive(PrimitiveType::Char));
-        table.intern(ResolvedType::Primitive(PrimitiveType::V128));
-        table.intern(ResolvedType::Unit);
+        for &prim in PrimitiveType::ALL {
+            let id = table.intern(ResolvedType::Primitive(prim));
+            assert_eq!(id, Self::primitive_type_id(prim));
+        }
+        // Landing here says `ALL` holds every variant once: a missing or
+        // repeated entry shifts everything after the primitives.
+        assert_eq!(table.intern(ResolvedType::Unit), Self::UNIT);
         table.intern(ResolvedType::Never);
-        // ResolvedType::String removed - String is now a user-defined struct
         table.intern(ResolvedType::Unknown);
         table.intern(ResolvedType::Error);
 
@@ -2787,10 +2716,11 @@ impl TypeTable {
         self.primitive_head(id).is_some()
     }
 
-    /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
-    /// but `v128`, whose arithmetic is known only to the lane type's own impl.
+    /// Whether `id` bottoms out in a primitive that carries Wasm arithmetic.
+    /// `v128`'s belongs to the lane type's own impl, and the half types carry
+    /// none at all.
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
-        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128)
+        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128 && !p.is_half())
     }
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit or
@@ -6824,6 +6754,10 @@ pub struct TirField {
     /// (never matched by name) and `positional_at` enumerates it. Name-only and
     /// sequence-only formats ignore it; `core:args` binds it to a bare token.
     pub serde_positional: bool,
+    /// `#[wire(number = N)]` — the numeric wire key, which a format reads
+    /// instead of the name. A struct numbers every field or none, so this is
+    /// `Some` for all of a struct's fields or for none of them.
+    pub serde_number: Option<u32>,
     /// Resolved default expression for `struct S { x: T = expr }`.
     /// Inserted by the elaborator when the field is omitted in a struct literal.
     pub default_expr: Option<Box<TirExpr>>,

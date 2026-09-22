@@ -550,6 +550,7 @@ fn build_list_wrapper_copy(
         wire_name_override: None,
         serde_default: false,
         serde_positional: false,
+        serde_number: None,
         default_expr: None,
     };
     let used_field = TirField {
@@ -562,6 +563,7 @@ fn build_list_wrapper_copy(
         wire_name_override: None,
         serde_default: false,
         serde_positional: false,
+        serde_number: None,
         default_expr: None,
     };
     let fields = vec![
@@ -616,6 +618,7 @@ fn build_tuple_copy(
                 wire_name_override: None,
                 serde_default: false,
                 serde_positional: false,
+                serde_number: None,
                 default_expr: None,
             };
             TirStructField {

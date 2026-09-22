@@ -7,7 +7,8 @@
 
 use crate::module_source::ModuleSource;
 use crate::nir::NirLiteralPattern;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId};
+use crate::primitive::PrimitiveType;
+use crate::tir::{ResolvedType, TypeId};
 use crate::wir::{WirInstr, WirType, WirTypeId};
 
 use super::calls::{MULTIVALUE_I64_BUILTINS, MULTIVALUE_I64_RESULTS};

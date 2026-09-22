@@ -1,0 +1,21 @@
+# ONNX backend test data
+
+Models and tensors from [onnx/onnx](https://github.com/onnx/onnx), licensed
+under the Apache License 2.0. Copied from
+`onnx/backend/test/data/` at commit `718bf2eaa65ad7df49f1fb2dfc91e15f51a1ef92`,
+keeping the upstream directory layout, so a path here names the path there.
+
+Each `model.onnx` is a graph Loam compiles, and the `test_data_set_0/` beside it
+holds the inputs and the output ONNX's own runtime produces. That output is the
+oracle: `package-loam/conformance/` runs the generated kernels against the same
+inputs and compares. `light/` holds one larger model, read by the protobuf
+reader's own tests rather than compiled.
+
+These are committed rather than read out of the `vendor/onnx` submodule, which
+is absent wherever it is not initialized. The Loam WEP says why under the
+conformance suite.
+
+`mise run sync-onnx-data` fetches them. It reads the tests for which files to
+take, so naming a new model in a test and running it is the whole step. It also
+reports a file here that no test names any more, and says when the submodule has
+moved off the commit above.

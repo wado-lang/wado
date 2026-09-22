@@ -25,8 +25,9 @@ use crate::cm_abi::{
 use crate::defs::DefId;
 use crate::module_source::{CmNamespace, ModuleSource};
 use crate::name::{DeclName, DeclPath, to_kebab};
+use crate::primitive::PrimitiveType;
 use crate::synthesis::cm_binding::types::cm_interface_module;
-use crate::tir::{PrimitiveType, ResolvedType, TypeId, TypeTable};
+use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::token::Span;
 use crate::unparse::unparse_type_into;
 use crate::world_registry::{InterfaceExportLookup, InterfaceExportMethod, WorldRegistry};
@@ -500,7 +501,9 @@ pub fn primitive_to_cm_scalar(prim: &PrimitiveType) -> Option<CmScalarType> {
         PrimitiveType::F64 => CmScalarType::F64,
         PrimitiveType::Bool => CmScalarType::Bool,
         PrimitiveType::Char => CmScalarType::Char,
-        _ => return None,
+        // The Component Model's `defvaltype` stops at `f32` / `f64` and has
+        // nothing 128 bits wide, so these cross no boundary.
+        PrimitiveType::F16 | PrimitiveType::Bf16 | PrimitiveType::V128 => return None,
     })
 }
 

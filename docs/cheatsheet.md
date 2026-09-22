@@ -197,6 +197,10 @@ bool
 // wide integers (GC types, work like primitives)
 i128, u128
 
+// half precision: storage only, no arithmetic and no `as` cast.
+// Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+f16, bf16
+
 // Composites
 String                  // UTF-8 string
 List<T>                 // dynamic array
@@ -1709,8 +1713,12 @@ Format-agnostic `Serialize` / `Deserialize` framework.
 A plain struct derives with no marker; `impl Serialize for T;` attaches
 `#[wire(...)]` customization. Wire keys default to the field name; override
 with `#[wire(name_policy = "...")]` (per type) or `#[wire(name = "...")]`
-(per field). See [`core:serde`](./stdlib-core-serde.md) and
-[WEP: Serde](./wep-2026-02-28-serde.md).
+(per field). A format keyed by numbers rather than names reads
+`#[wire(number = N)]`, which a struct carries on every field or on none; such a
+type satisfies `WireNumbered`, the bound those formats require. See
+[`core:serde`](./stdlib-core-serde.md),
+[WEP: Serde](./wep-2026-02-28-serde.md) and
+[WEP: Grog](./wep-2026-09-22-grog.md).
 
 ```wado
 struct Point { x: i32, y: i32 }         // serializable, no marker needed
@@ -1761,6 +1769,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 
 ### Other core modules
 
+- [`core:protobuf`](./stdlib-core-protobuf.md) — the Protocol Buffers wire
+  format, keyed by `#[wire(number = N)]`
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value

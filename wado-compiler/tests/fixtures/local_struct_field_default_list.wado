@@ -1,0 +1,18 @@
+use { from_string } from "core:json";
+
+// A local struct's field default resolves the way a top-level struct's does,
+// so a list literal reaches `ReflectStruct::defaults` through its
+// `From<Array<T>>` coercion rather than as a bare array.
+test "a local struct's list default fills a missing field" {
+    struct Packed {
+        items: List<i32> = [],
+        labels: List<String> = ["one"],
+    }
+
+    let Ok(p) = from_string::<Packed>("{}") else {
+        panic("the object did not decode");
+    };
+    assert p.items.is_empty();
+    assert p.labels.len() == 1;
+    assert p.labels[0] == "one";
+}

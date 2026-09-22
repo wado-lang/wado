@@ -1,0 +1,39 @@
+// A half goes on the wire as the `f32` it widens to, in JSON and in CBOR
+// alike: no format here spells binary16, and the value round trips whenever
+// the wire number is one a half already holds.
+
+use { println, Stdout } from "core:cli";
+use json from "core:json";
+use cbor from "core:cbor";
+
+struct Weights {
+    scale: f16,
+    bias: bf16,
+    name: String,
+}
+
+export fn run() with Stdout {
+    let w = Weights {
+        scale: f16::from_bits(0x3C00),
+        bias: bf16::from_bits(0x4049),
+        name: "layer0",
+    };
+
+    let text = json::to_string(&w).unwrap();
+    println(text);
+
+    let back = json::from_string::<Weights>(&text).unwrap();
+    assert back.scale.to_bits() == 0x3C00;
+    assert back.bias.to_bits() == 0x4049;
+    assert back.name == "layer0";
+
+    let bytes = cbor::to_bytes(&w).unwrap();
+    let decoded = cbor::from_bytes::<Weights>(bytes).unwrap();
+    assert decoded.scale.to_bits() == 0x3C00;
+    assert decoded.bias.to_bits() == 0x4049;
+}
+
+__DATA__
+{
+    "stdout": "{\"scale\":1,\"bias\":3.140625,\"name\":\"layer0\"}\n"
+}

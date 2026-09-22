@@ -2,7 +2,7 @@ global mut heap_offset: i32 = 8;
 
 global PAGE_SIZE: i32 = 65536;
 
-global NEG_ZERO_BITS: i64 = -9223372036854775808;
+global NEG_ZERO_BITS: u64 = 9223372036854775808;
 
 global POW10: List<u64> = deferred null;
 
@@ -15,6 +15,14 @@ pub global PARSE_DIGITS_MAX: i32 = 19;
 pub global PARSE_EXP_MAX: i32 = 350;
 
 pub global PARSE_EXP_MIN: i32 = -351;
+
+global F16_SIGN: u16 = 32768;
+
+global F16_EXP: u16 = 31744;
+
+global F16_MANTISSA: u16 = 1023;
+
+global F16_SUBNORMAL_MAGIC: u32 = 947912704;
 
 global LOW32: u64 = 4294967295;
 
@@ -242,6 +250,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,u32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wado/Waitable>" {
@@ -250,6 +259,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wad
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
@@ -258,6 +268,7 @@ pub struct "StructField<core:prelude/types.wado/WaitEvent,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>" {
@@ -266,6 +277,7 @@ pub struct "StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.w
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamWrite,i32>" {
@@ -274,6 +286,7 @@ pub struct "StructField<core:prelude/types.wado/StreamWrite,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>" {
@@ -282,6 +295,7 @@ pub struct "StructField<core:prelude/traits.wado/LenientParseError,core:prelude/
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>" {
@@ -290,6 +304,7 @@ pub struct "StructField<core:prelude/traits.wado/ConvertError,core:prelude/strin
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSlice,i32>" {
@@ -298,6 +313,7 @@ pub struct "StructField<core:prelude/string.wado/StrSlice,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSlice,&Array<u8>>" {
@@ -306,6 +322,7 @@ pub struct "StructField<core:prelude/string.wado/StrSlice,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,bool>" {
@@ -314,6 +331,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,i32>" {
@@ -322,6 +340,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>" {
@@ -330,6 +349,7 @@ pub struct "StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>" {
@@ -338,6 +358,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>" {
@@ -346,6 +367,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,bool>" {
@@ -354,6 +376,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,i32>" {
@@ -362,6 +385,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>" {
@@ -370,6 +394,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,bool>" {
@@ -378,6 +403,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,i32>" {
@@ -386,6 +412,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>" {
@@ -394,6 +421,7 @@ pub struct "StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,i32>" {
@@ -402,6 +430,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>" {
@@ -410,6 +439,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>"
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIter,i32>" {
@@ -418,6 +448,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>" {
@@ -426,6 +457,7 @@ pub struct "StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>" {
@@ -434,6 +466,7 @@ pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>" {
@@ -442,6 +475,7 @@ pub struct "StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/String,i32>" {
@@ -450,6 +484,7 @@ pub struct "StructField<core:prelude/string.wado/String,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/ByteArray>" {
@@ -458,6 +493,7 @@ pub struct "StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,bool>" {
@@ -466,6 +502,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,i32>" {
@@ -474,6 +511,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Scalar,u32>" {
@@ -482,6 +520,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Scalar,u32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>" {
@@ -490,6 +529,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/string.wado/Utf8Error,i32>" {
@@ -498,6 +538,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>" {
@@ -506,6 +547,7 @@ pub struct "StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>" {
@@ -514,6 +556,7 @@ pub struct "StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>" {
@@ -522,6 +565,7 @@ pub struct "StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/in
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/int128.wado/i128,i64>" {
@@ -530,6 +574,7 @@ pub struct "StructField<core:prelude/int128.wado/i128,i64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/int128.wado/i128,u64>" {
@@ -538,6 +583,7 @@ pub struct "StructField<core:prelude/int128.wado/i128,u64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/int128.wado/u128,u64>" {
@@ -546,6 +592,7 @@ pub struct "StructField<core:prelude/int128.wado/u128,u64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,i32>" {
@@ -554,6 +601,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,u64>" {
@@ -562,6 +610,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/FormatResult,u64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/PmHiLo,u64>" {
@@ -570,6 +619,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/PmHiLo,u64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,i32>" {
@@ -578,6 +628,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,u64>" {
@@ -586,6 +637,7 @@ pub struct "StructField<core:prelude/fpfmt.wado/UnpackResult,u64>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>" {
@@ -594,6 +646,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,&mut core:prelude/str
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,i32>" {
@@ -602,6 +655,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,bool>" {
@@ -610,6 +664,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>" {
@@ -618,6 +673,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,core:prelude/format.w
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/format.wado/Formatter,char>" {
@@ -626,6 +682,7 @@ pub struct "StructField<core:prelude/format.wado/Formatter,char>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "IterMap<core:prelude/string.wado/StrCharIter,char>" {
@@ -819,6 +876,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<u8>,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>" {
@@ -827,6 +885,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<u8>,&Array<u8>>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeExclusive<i32>,i32>" {
@@ -835,6 +894,7 @@ pub struct "StructField<core:prelude/range.wado/RangeExclusive<i32>,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
@@ -843,6 +903,7 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,bool>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
@@ -851,6 +912,7 @@ pub struct "StructField<core:prelude/range.wado/RangeInclusive<i32>,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/types.wado/CopyResult>" {
@@ -859,6 +921,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/typ
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/list.wado/List<u8>>" {
@@ -867,6 +930,7 @@ pub struct "StructField<core:prelude/types.wado/StreamChunk<u8>,core:prelude/lis
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
@@ -875,6 +939,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,i32>" {
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" {
@@ -883,6 +948,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<u8>,&Array<u8>>" 
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,i32>" {
@@ -891,6 +957,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/S
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -899,6 +966,7 @@ pub struct "StructField<core:prelude/slice.wado/Slice<core:prelude/string.wado/S
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "SliceValueIter<core:prelude/string.wado/String>" {
@@ -913,6 +981,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -921,6 +990,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceRefIter<core:prelude/string
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,fn mut(u8)->bool>" {
@@ -929,6 +999,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -937,6 +1008,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -945,6 +1017,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -953,6 +1026,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -961,6 +1035,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -969,6 +1044,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>,i32>" {
@@ -977,6 +1053,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrUtf8ByteIter>,core:prelude/string.wado/StrUtf8ByteIter>" {
@@ -985,6 +1062,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,fn mut(char)->bool>" {
@@ -993,6 +1071,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1001,6 +1080,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1009,6 +1089,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1017,6 +1098,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1025,6 +1107,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1033,6 +1116,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>,i32>" {
@@ -1041,6 +1125,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIter>,core:prelude/string.wado/StrCharIter>" {
@@ -1049,6 +1134,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,fn mut([i32,char])->bool>" {
@@ -1057,6 +1143,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1065,6 +1152,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1073,6 +1161,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1081,6 +1170,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1089,6 +1179,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1097,6 +1188,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>,i32>" {
@@ -1105,6 +1197,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrCharIndicesIter>,core:prelude/string.wado/StrCharIndicesIter>" {
@@ -1113,6 +1206,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1121,6 +1215,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1129,6 +1224,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1137,6 +1233,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1145,6 +1242,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1153,6 +1251,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1161,6 +1260,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>,i32>" {
@@ -1169,6 +1269,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitIter>,core:prelude/string.wado/StrSplitIter>" {
@@ -1177,6 +1278,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1185,6 +1287,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1193,6 +1296,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1201,6 +1305,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1209,6 +1314,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1217,6 +1323,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1225,6 +1332,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>,i32>" {
@@ -1233,6 +1341,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitNIter>,core:prelude/string.wado/StrSplitNIter>" {
@@ -1241,6 +1350,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1249,6 +1359,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1257,6 +1368,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1265,6 +1377,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1273,6 +1386,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1281,6 +1395,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1289,6 +1404,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>,i32>" {
@@ -1297,6 +1413,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrSplitWhitespaceIter>,core:prelude/string.wado/StrSplitWhitespaceIter>" {
@@ -1305,6 +1422,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,fn mut(core:prelude/string.wado/String)->bool>" {
@@ -1313,6 +1431,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1321,6 +1440,7 @@ pub struct "StructField<core:prelude/traits.wado/IterFilter<core:prelude/string.
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1329,6 +1449,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1337,6 +1458,7 @@ pub struct "StructField<core:prelude/traits.wado/IterEnumerate<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1345,6 +1467,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1353,6 +1476,7 @@ pub struct "StructField<core:prelude/traits.wado/IterTake<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>,i32>" {
@@ -1361,6 +1485,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wado/StrLinesIter>,core:prelude/string.wado/StrLinesIter>" {
@@ -1369,6 +1494,7 @@ pub struct "StructField<core:prelude/traits.wado/IterSkip<core:prelude/string.wa
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,fn mut(char)->char>" {
@@ -1377,6 +1503,7 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wado/StrCharIter,char>,core:prelude/string.wado/StrCharIter>" {
@@ -1385,6 +1512,7 @@ pub struct "StructField<core:prelude/traits.wado/IterMap<core:prelude/string.wad
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,i32>" {
@@ -1393,6 +1521,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>,&Array<core:prelude/string.wado/String>>" {
@@ -1401,6 +1530,7 @@ pub struct "StructField<core:prelude/slice.wado/SliceValueIter<core:prelude/stri
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "VariantCase<core:prelude/types.wado/Result<core:prelude/string.wado/String,core:prelude/string.wado/Utf8Error>,core:prelude/string.wado/Utf8Error>" {
@@ -1430,6 +1560,7 @@ pub struct "StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/typ
     wire_override: Option<String>,
     has_default: bool,
     is_secret: bool,
+    wire_number: i32,
 }
 
 pub struct "VariantCase<core:prelude/types.wado/Option<i32>,()>" {
@@ -1451,6 +1582,14 @@ pub struct "VariantCase<core:prelude/types.wado/Option<i32>,[i32,()]>" {
     case_name: String,
     wire_override: Option<String>,
     is_unit: bool,
+}
+
+pub struct "Box<f16>" {
+    value: f16,
+}
+
+pub struct "Box<bf16>" {
+    value: bf16,
 }
 
 pub struct "Box<bool>" {
@@ -1623,6 +1762,14 @@ pub struct "Box<core:prelude/types.wado/Option<i32>>" {
 
 pub struct "Box<core:prelude/types.wado/Option<f64>>" {
     value: Option<f64>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>" {
+    value: Result<f16, ConvertError>,
+}
+
+pub struct "Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>" {
+    value: Result<bf16, ConvertError>,
 }
 
 pub struct "Box<core:prelude/types.wado/Result<core:prelude/int128.wado/u128,core:prelude/intparse.wado/ParseIntError>>" {
@@ -2369,6 +2516,14 @@ pub fn f64_reinterpret_i64(i: i64) -> f64;
 pub fn i32_reinterpret_f32(f: f32) -> i32;
 
 pub fn f32_reinterpret_i32(i: i32) -> f32;
+
+pub fn u16_reinterpret_f16(f: f16) -> u16;
+
+pub fn f16_reinterpret_u16(i: u16) -> f16;
+
+pub fn u16_reinterpret_bf16(f: bf16) -> u16;
+
+pub fn bf16_reinterpret_u16(i: u16) -> bf16;
 
 pub fn unreachable() -> !;
 
@@ -3172,7 +3327,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 125 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 126 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: greeting == \"Hello, Wado!\"\n", used: 39 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"greeting: ", used: 10 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3196,7 +3351,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 128 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 129 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.len() == 4\n", used: 30 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"primes: ", used: 8 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3225,7 +3380,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 129 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 130 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.get(1) matches { Some(v) && v == 3 }\n", used: 56 });
                 break $tmpl: $r;
             });
@@ -3246,7 +3401,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 130 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 131 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: primes.get(9) matches { None }\n", used: 43 });
                 break $tmpl: $r;
             });
@@ -3268,7 +3423,7 @@ fn "$test_0"() {
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"core:prelude", used: 12 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed":", used: 1 });
                 let mut $f: Formatter = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
-                Box<i32> { value: 133 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
+                Box<i32> { value: 134 }."i32^core:prelude/traits.wado/Display::fmt"(&mut $f);
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"\ncondition: decoded matches { Ok(s) && s == \"Wado\" }\n", used: 53 });
                 $r."core:prelude/string.wado/String::push_str<core:prelude/string.wado/String>"(String { repr: packed"decoded: ", used: 9 });
                 $f = "core::prelude/format.wado::core:prelude/format.wado/Formatter::new"(&mut $r);
@@ -3685,7 +3840,7 @@ pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/Reflect::typ
 }
 
 pub fn "core:prelude/format.wado/Formatter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/format.wado/Formatter,char>, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>] {
-    return [StructField<core:prelude/format.wado/Formatter,char> { index: 0, field_name: String { repr: packed"fill", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: 1, field_name: String { repr: packed"align", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 2, field_name: String { repr: packed"sign_plus", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 3, field_name: String { repr: packed"alternate", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,bool> { index: 4, field_name: String { repr: packed"zero_pad", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 5, field_name: String { repr: packed"width", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 6, field_name: String { repr: packed"precision", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,i32> { index: 7, field_name: String { repr: packed"indent", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: 8, field_name: String { repr: packed"buf", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/format.wado/Formatter,char> { index: 0, field_name: String { repr: packed"fill", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: 1, field_name: String { repr: packed"align", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,bool> { index: 2, field_name: String { repr: packed"sign_plus", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,bool> { index: 3, field_name: String { repr: packed"alternate", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,bool> { index: 4, field_name: String { repr: packed"zero_pad", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,i32> { index: 5, field_name: String { repr: packed"width", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,i32> { index: 6, field_name: String { repr: packed"precision", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,i32> { index: 7, field_name: String { repr: packed"indent", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: 8, field_name: String { repr: packed"buf", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -3858,7 +4013,7 @@ pub fn log2_pow10(x: i32) -> i32 {
 }
 
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits: u64 = Box<f64> { value: f }.f64::to_bits() as u64;
+    let bits: u64 = Box<f64> { value: f }.f64::to_bits();
     let mantissa_mask: u64 = 4503599627370495;
     let exp_mask: u64 = 2047;
     let shift: i32 = 11;
@@ -3881,7 +4036,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 }
 
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits: u32 = Box<f32> { value: f }.f32::to_bits() as u32;
+    let bits: u32 = Box<f32> { value: f }.f32::to_bits();
     let mantissa_mask: u32 = 8388607;
     let exp_mask: u32 = 255;
     let shift: i32 = 40;
@@ -4550,18 +4705,18 @@ pub fn format_exp_prec(d: u64, p: i32, nd: i32, precision: i32, upper: bool) -> 
 }
 
 pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
-    let bits: i64 = Box<f64> { value: f }.f64::to_bits();
+    let bits: u64 = Box<f64> { value: f }.f64::to_bits();
     if (bits == 0) {
         return [true, false, SpecialKind::Zero];
     }
     if (bits == core::prelude/fpfmt.wado::NEG_ZERO_BITS) {
         return [true, true, SpecialKind::Zero];
     }
-    let is_neg: bool = (bits < 0);
-    let exp_mask: i64 = 9218868437227405312;
+    let is_neg: bool = ((bits & core::prelude/fpfmt.wado::NEG_ZERO_BITS) != 0);
+    let exp_mask: u64 = 9218868437227405312;
     if ((bits & exp_mask) == exp_mask) {
         core::builtin::cold_path();
-        let mantissa_mask: i64 = 4503599627370495;
+        let mantissa_mask: u64 = 4503599627370495;
         if ((bits & mantissa_mask) != 0) {
             return [true, false, SpecialKind::NaN];
         }
@@ -4573,11 +4728,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52: u64 = 4503599627370496;
     if ((m & bit52) == 0) {
-        return "core::prelude/primitive.wado::f64::from_bits"(m as i64);
+        return "core::prelude/primitive.wado::f64::from_bits"(m);
     }
     let mantissa_bits: u64 = (m & ~bit52);
     let exp_bits: u64 = ((1075 + e) as u64 << 52);
-    return "core::prelude/primitive.wado::f64::from_bits"((mantissa_bits | exp_bits) as i64);
+    return "core::prelude/primitive.wado::f64::from_bits"((mantissa_bits | exp_bits));
 }
 
 pub fn parse(d: u64, p: i32) -> f64 {
@@ -4738,7 +4893,7 @@ pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/Reflect::t
 }
 
 pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/fpfmt.wado/UnpackResult,u64>, StructField<core:prelude/fpfmt.wado/UnpackResult,i32>] {
-    return [StructField<core:prelude/fpfmt.wado/UnpackResult,u64> { index: 0, field_name: String { repr: packed"mantissa", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/fpfmt.wado/UnpackResult,i32> { index: 1, field_name: String { repr: packed"exponent", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/fpfmt.wado/UnpackResult,u64> { index: 0, field_name: String { repr: packed"mantissa", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/fpfmt.wado/UnpackResult,i32> { index: 1, field_name: String { repr: packed"exponent", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/fpfmt.wado/UnpackResult^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u64, i32]) -> UnpackResult {
@@ -4777,7 +4932,7 @@ pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/Reflect::type_na
 }
 
 pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/fpfmt.wado/PmHiLo,u64>, StructField<core:prelude/fpfmt.wado/PmHiLo,u64>] {
-    return [StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: 0, field_name: String { repr: packed"hi", used: 2 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: 1, field_name: String { repr: packed"lo", used: 2 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: 0, field_name: String { repr: packed"hi", used: 2 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: 1, field_name: String { repr: packed"lo", used: 2 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/fpfmt.wado/PmHiLo^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u64, u64]) -> PmHiLo {
@@ -4810,7 +4965,7 @@ pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/Reflect::t
 }
 
 pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/fpfmt.wado/FormatResult,u64>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>] {
-    return [StructField<core:prelude/fpfmt.wado/FormatResult,u64> { index: 0, field_name: String { repr: packed"digits", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: 1, field_name: String { repr: packed"exponent", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: 2, field_name: String { repr: packed"n_digits", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/fpfmt.wado/FormatResult,u64> { index: 0, field_name: String { repr: packed"digits", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: 1, field_name: String { repr: packed"exponent", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: 2, field_name: String { repr: packed"n_digits", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/fpfmt.wado/FormatResult^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u64, i32, i32]) -> FormatResult {
@@ -4946,6 +5101,105 @@ pub fn "core:prelude/fpfmt.wado/SpecialKind^core:prelude/traits.wado/Display::fm
         };
     };
 }
+
+pub fn f16::to_bits(self: Box<f16>) -> u16 {
+    return core::builtin::u16_reinterpret_f16(self.value);
+}
+
+pub fn bf16::to_bits(self: Box<bf16>) -> u16 {
+    return core::builtin::u16_reinterpret_bf16(self.value);
+}
+
+fn "f32^core:prelude/traits.wado/From<f16>::from"(value: f16) -> f32 {
+    let bits: u16 = Box<f16> { value: value }.f16::to_bits();
+    let sign: u32 = ((bits & core::prelude/half.wado::F16_SIGN) as u32 << 16);
+    let exp: u32 = ((bits & core::prelude/half.wado::F16_EXP) as u32 >> 10);
+    let mantissa: u32 = (bits & core::prelude/half.wado::F16_MANTISSA) as u32;
+    if (exp == 0) {
+        if (mantissa == 0) {
+            return "core::prelude/primitive.wado::f32::from_bits"(sign);
+        }
+        let magic: f32 = "core::prelude/primitive.wado::f32::from_bits"(core::prelude/half.wado::F16_SUBNORMAL_MAGIC);
+        let shifted: f32 = "core::prelude/primitive.wado::f32::from_bits"((core::prelude/half.wado::F16_SUBNORMAL_MAGIC | (mantissa << 13)));
+        return "core::prelude/primitive.wado::f32::from_bits"((sign | Box<f32> { value: (shifted - magic) }.f32::to_bits()));
+    }
+    if (exp == 31) {
+        return "core::prelude/primitive.wado::f32::from_bits"(((sign | 2139095040) | (mantissa << 13)));
+    }
+    return "core::prelude/primitive.wado::f32::from_bits"(((sign | ((exp + 112) << 23)) | (mantissa << 13)));
+}
+
+fn "f32^core:prelude/traits.wado/From<bf16>::from"(value: bf16) -> f32 {
+    return "core::prelude/primitive.wado::f32::from_bits"((Box<bf16> { value: value }.bf16::to_bits() as u32 << 16));
+}
+
+pub fn "f16^core:prelude/traits.wado/Display::fmt"(self: Box<f16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "bf16^core:prelude/traits.wado/Display::fmt"(self: Box<bf16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/Display::fmt"(f);
+}
+
+pub fn "f16^core:prelude/traits.wado/Inspect::inspect"(self: Box<f16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<f16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
+}
+
+pub fn "bf16^core:prelude/traits.wado/Inspect::inspect"(self: Box<bf16>, f: &mut Formatter) {
+    Box<f32> { value: "core::prelude/half.wado::f32^core:prelude/traits.wado/From<bf16>::from"(self.value) }."f32^core:prelude/traits.wado/LowerExp::fmt_lower_exp"(f);
+}
+
+pub fn "fn mut(char)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn(core:prelude/string.wado/String)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->core:prelude/string.wado/StrUtf8ByteIter>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(u8)->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut(u8,u8)->u8^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8,u8)->u8>, f: &mut Formatter);
+
+pub fn "fn mut(u8,u8)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(char)->core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->core:prelude/string.wado/StrCharIter>, f: &mut Formatter);
+
+pub fn "fn mut(char)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(char,char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char,char)->char>, f: &mut Formatter);
+
+pub fn "fn mut(char,char)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char])->core:prelude/string.wado/StrCharIndicesIter>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char])->bool^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(char)->bool>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char],[i32,char])->[i32,char]^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut([i32,char],[i32,char])->[i32,char]>, f: &mut Formatter);
+
+pub fn "fn mut([i32,char],[i32,char])->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->()^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(u8)->()>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/string.wado/String>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String,core:prelude/string.wado/String)->core:prelude/traits.wado/Ordering^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/types.wado/Box<u8>,core:prelude/types.wado/Box<u8>)->core:prelude/traits.wado/Ordering>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitNIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrSplitWhitespaceIter>, f: &mut Formatter);
+
+pub fn "fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn mut(core:prelude/string.wado/String)->core:prelude/string.wado/StrLinesIter>, f: &mut Formatter);
+
+pub fn "fn(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
+
+pub fn "fn mut(char)->char^core:prelude/traits.wado/Inspect::inspect"(self: Box<fn(char)->char>, f: &mut Formatter);
 
 pub fn "core:prelude/int128.wado/u128::from_u64"(value: u64) -> u128 {
     return u128 { low: value, high: 0 };
@@ -5697,7 +5951,7 @@ pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/Reflect::type_nam
 }
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/int128.wado/u128,u64>, StructField<core:prelude/int128.wado/u128,u64>] {
-    return [StructField<core:prelude/int128.wado/u128,u64> { index: 0, field_name: String { repr: packed"low", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/int128.wado/u128,u64> { index: 1, field_name: String { repr: packed"high", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/int128.wado/u128,u64> { index: 0, field_name: String { repr: packed"low", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/int128.wado/u128,u64> { index: 1, field_name: String { repr: packed"high", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/int128.wado/u128^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u64, u64]) -> u128 {
@@ -5730,7 +5984,7 @@ pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/Reflect::type_nam
 }
 
 pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/int128.wado/i128,u64>, StructField<core:prelude/int128.wado/i128,i64>] {
-    return [StructField<core:prelude/int128.wado/i128,u64> { index: 0, field_name: String { repr: packed"low", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/int128.wado/i128,i64> { index: 1, field_name: String { repr: packed"high", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/int128.wado/i128,u64> { index: 0, field_name: String { repr: packed"low", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/int128.wado/i128,i64> { index: 1, field_name: String { repr: packed"high", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/int128.wado/i128^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u64, i64]) -> i128 {
@@ -5839,7 +6093,7 @@ pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/Reflec
 }
 
 pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>] {
-    return [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/intparse.wado/ParseIntError^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [IntErrorKind]) -> ParseIntError {
@@ -5871,7 +6125,7 @@ pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/Refl
 }
 
 pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>] {
-    return [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/intparse.wado/ParseFloatError^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [FloatErrorKind]) -> ParseFloatError {
@@ -6586,8 +6840,12 @@ fn f32::fmt_exp(self: Box<f32>, precision: i32, upper: i32, f: &mut Formatter) {
     Box<f64> { value: v64 }.f64::fmt_exp(precision, upper, f);
 }
 
-pub fn f32::to_bits(self: Box<f32>) -> i32 {
-    return core::builtin::i32_reinterpret_f32(self.value);
+pub fn f32::to_bits(self: Box<f32>) -> u32 {
+    return core::builtin::i32_reinterpret_f32(self.value) as u32;
+}
+
+pub fn f32::from_bits(bits: u32) -> f32 {
+    return core::builtin::f32_reinterpret_i32(bits as i32);
 }
 
 fn f64::fmt_into(self: Box<f64>, f: &mut Formatter) {
@@ -6767,12 +7025,12 @@ fn f64::fmt_exp(self: Box<f64>, precision: i32, upper: i32, f: &mut Formatter) {
     f."core:prelude/format.wado/Formatter::apply_padding"(mark);
 }
 
-pub fn f64::to_bits(self: Box<f64>) -> i64 {
-    return core::builtin::i64_reinterpret_f64(self.value);
+pub fn f64::to_bits(self: Box<f64>) -> u64 {
+    return core::builtin::i64_reinterpret_f64(self.value) as u64;
 }
 
-pub fn f64::from_bits(bits: i64) -> f64 {
-    return core::builtin::f64_reinterpret_i64(bits);
+pub fn f64::from_bits(bits: u64) -> f64 {
+    return core::builtin::f64_reinterpret_i64(bits as i64);
 }
 
 pub fn "()^core:prelude/traits.wado/Display::fmt"(self: &(), f: &mut Formatter) {
@@ -7367,7 +7625,7 @@ pub fn "core:prelude/primitive.wado/ParseCharError^core:prelude/traits.wado/Refl
 }
 
 pub fn "core:prelude/primitive.wado/ParseCharError^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>] {
-    return [StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind> { index: 0, field_name: String { repr: packed"kind", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/primitive.wado/ParseCharError^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [CharErrorKind]) -> ParseCharError {
@@ -8474,7 +8732,7 @@ pub fn "core:prelude/string.wado/Utf8Error^core:prelude/traits.wado/Reflect::typ
 }
 
 pub fn "core:prelude/string.wado/Utf8Error^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/Utf8Error,i32>, StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>] {
-    return [StructField<core:prelude/string.wado/Utf8Error,i32> { index: 0, field_name: String { repr: packed"valid_up_to", used: 11 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>> { index: 1, field_name: String { repr: packed"error_len", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/Utf8Error,i32> { index: 0, field_name: String { repr: packed"valid_up_to", used: 11 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>> { index: 1, field_name: String { repr: packed"error_len", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8515,7 +8773,7 @@ pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/Reflect::ty
 }
 
 pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/Utf8Scalar,u32>, StructField<core:prelude/string.wado/Utf8Scalar,i32>, StructField<core:prelude/string.wado/Utf8Scalar,bool>] {
-    return [StructField<core:prelude/string.wado/Utf8Scalar,u32> { index: 0, field_name: String { repr: packed"code", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/Utf8Scalar,i32> { index: 1, field_name: String { repr: packed"advance", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/Utf8Scalar,bool> { index: 2, field_name: String { repr: packed"valid", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/Utf8Scalar,u32> { index: 0, field_name: String { repr: packed"code", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/Utf8Scalar,i32> { index: 1, field_name: String { repr: packed"advance", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/Utf8Scalar,bool> { index: 2, field_name: String { repr: packed"valid", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/string.wado/Utf8Scalar^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [u32, i32, bool]) -> Utf8Scalar {
@@ -8561,7 +8819,7 @@ pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/Reflect::type_n
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/String,Array<u8>>, StructField<core:prelude/string.wado/String,i32>] {
-    return [StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/ByteArray> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/String,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/String,core:prelude/bytes.wado/ByteArray> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/String,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/string.wado/String^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [Array<u8>, i32]) -> String {
@@ -8600,7 +8858,7 @@ pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/Reflec
 }
 
 pub fn "core:prelude/string.wado/StrUtf8ByteIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>] {
-    return [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 2, field_name: String { repr: packed"index", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: 2, field_name: String { repr: packed"index", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8642,7 +8900,7 @@ pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/Reflect::t
 }
 
 pub fn "core:prelude/string.wado/StrCharIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIter,i32>, StructField<core:prelude/string.wado/StrCharIter,i32>] {
-    return [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrCharIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8684,7 +8942,7 @@ pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/Ref
 }
 
 pub fn "core:prelude/string.wado/StrCharIndicesIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>] {
-    return [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 3, field_name: String { repr: packed"base", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 2, field_name: String { repr: packed"byte_index", used: 10 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: 3, field_name: String { repr: packed"base", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8727,7 +8985,7 @@ pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/Reflect::
 }
 
 pub fn "core:prelude/string.wado/StrSplitIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,bool>] {
-    return [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitIter,bool> { index: 6, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitIter,bool> { index: 6, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8779,7 +9037,7 @@ pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/Reflect:
 }
 
 pub fn "core:prelude/string.wado/StrSplitNIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,bool>] {
-    return [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 6, field_name: String { repr: packed"remaining", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: 7, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: 3, field_name: String { repr: packed"sep_repr", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 4, field_name: String { repr: packed"sep_at", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 5, field_name: String { repr: packed"sep_len", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: 6, field_name: String { repr: packed"remaining", used: 9 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: 7, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8832,7 +9090,7 @@ pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado
 }
 
 pub fn "core:prelude/string.wado/StrSplitWhitespaceIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>] {
-    return [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8874,7 +9132,7 @@ pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/Reflect::
 }
 
 pub fn "core:prelude/string.wado/StrLinesIter^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,bool>] {
-    return [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrLinesIter,bool> { index: 3, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 1, field_name: String { repr: packed"used", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrLinesIter,i32> { index: 2, field_name: String { repr: packed"pos", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrLinesIter,bool> { index: 3, field_name: String { repr: packed"finished", used: 8 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -8923,7 +9181,7 @@ pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/Reflect::type
 }
 
 pub fn "core:prelude/string.wado/StrSlice^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>] {
-    return [StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 1, field_name: String { repr: packed"start", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 2, field_name: String { repr: packed"end", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: 0, field_name: String { repr: packed"repr", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 1, field_name: String { repr: packed"start", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/string.wado/StrSlice,i32> { index: 2, field_name: String { repr: packed"end", used: 3 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 #[retain(fields)]
@@ -9073,7 +9331,7 @@ pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/Reflect::
 }
 
 pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>] {
-    return [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> { index: 0, field_name: String { repr: packed"message", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> { index: 0, field_name: String { repr: packed"message", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/traits.wado/ConvertError^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [String]) -> ConvertError {
@@ -9105,7 +9363,7 @@ pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/Refl
 }
 
 pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>] {
-    return [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> { index: 0, field_name: String { repr: packed"reason", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> { index: 0, field_name: String { repr: packed"reason", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/traits.wado/LenientParseError^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [String]) -> LenientParseError {
@@ -9359,7 +9617,7 @@ pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/Reflect::ty
 }
 
 pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>] {
-    return [StructField<core:prelude/types.wado/StreamWrite,i32> { index: 0, field_name: String { repr: packed"count", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: 1, field_name: String { repr: packed"result", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/types.wado/StreamWrite,i32> { index: 0, field_name: String { repr: packed"count", used: 5 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: 1, field_name: String { repr: packed"result", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/types.wado/StreamWrite^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [i32, CopyResult]) -> StreamWrite {
@@ -9398,7 +9656,7 @@ pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/Reflect::type
 }
 
 pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct::members"() -> [StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,u32>] {
-    return [StructField<core:prelude/types.wado/WaitEvent,i32> { index: 0, field_name: String { repr: packed"code", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wado/Waitable> { index: 1, field_name: String { repr: packed"handle", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false }, StructField<core:prelude/types.wado/WaitEvent,u32> { index: 2, field_name: String { repr: packed"payload", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false }];
+    return [StructField<core:prelude/types.wado/WaitEvent,i32> { index: 0, field_name: String { repr: packed"code", used: 4 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/types.wado/WaitEvent,core:prelude/types.wado/Waitable> { index: 1, field_name: String { repr: packed"handle", used: 6 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }, StructField<core:prelude/types.wado/WaitEvent,u32> { index: 2, field_name: String { repr: packed"payload", used: 7 }, wire_override: Option<String>::None, has_default: false, is_secret: false, wire_number: 0 }];
 }
 
 pub fn "core:prelude/types.wado/WaitEvent^core:prelude/traits.wado/ReflectStruct::from_fields"(fields: [i32, i32, u32]) -> WaitEvent {
@@ -12613,6 +12871,94 @@ pub fn "$case_construct$core:prelude/types.wado/Option<f64>$()"(payload: (), ind
 }
 
 pub fn "$variant_tag$core:prelude/types.wado/Option<f64>"(self: Box<core:prelude/types.wado/Option<f64>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$f16"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>, index: i32) -> f16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$f16"(payload: f16, index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        0 => Result<f16, ConvertError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(v: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>, index: i32) -> ConvertError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        1 => Result<f16, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<f16, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>>) -> i32 {
+    return $variant_tag(self.value);
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$bf16"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>, index: i32) -> bf16 {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        0 => $variant_payload(v.value, case=0),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$bf16"(payload: bf16, index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        0 => Result<bf16, ConvertError>::Ok(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_extract$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(v: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>, index: i32) -> ConvertError {
+    if ($variant_tag(v.value) != index) {
+        core::builtin::unreachable();
+    };
+    return match index {
+        1 => $variant_payload(v.value, case=1),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$core:prelude/traits.wado/ConvertError"(payload: ConvertError, index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        1 => Result<bf16, ConvertError>::Err(payload),
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$case_construct$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>$()"(payload: (), index: i32) -> Result<bf16, ConvertError> {
+    return match index {
+        _ => core::builtin::unreachable(),
+    };
+}
+
+pub fn "$variant_tag$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>"(self: Box<core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>>) -> i32 {
     return $variant_tag(self.value);
 }
 
@@ -16863,6 +17209,22 @@ fn "$value_copy$core:prelude/types.wado/Result<core:prelude/int128.wado/u128,cor
 }
 
 #[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<bf16,core:prelude/traits.wado/ConvertError>"(v: Result<bf16, ConvertError>) -> Result<bf16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<bf16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<bf16, ConvertError>::Err("ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
+fn "$value_copy$core:prelude/types.wado/Result<f16,core:prelude/traits.wado/ConvertError>"(v: Result<f16, ConvertError>) -> Result<f16, ConvertError> {
+    return match v {
+        Ok($vc_payload_0) => Result<f16, ConvertError>::Ok($vc_payload_0),
+        Err($vc_payload_1) => Result<f16, ConvertError>::Err("ops.mess_dirty.wado::$value_copy$core:prelude/traits.wado/ConvertError"($vc_payload_1)),
+    };
+}
+
+#[retain(v)]
 fn "$value_copy$core:prelude/slice.wado/SliceValueIter<core:prelude/string.wado/String>"(v: SliceValueIter<core:prelude/string.wado/String>) -> SliceValueIter<core:prelude/string.wado/String> {
     return SliceValueIter<core:prelude/string.wado/String> { repr: v.repr, index: v.index, end: v.end };
 }
@@ -17022,7 +17384,7 @@ fn "$value_copy$core:prelude/traits.wado/VariantCase<core:prelude/types.wado/Opt
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]>"(v: StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]>) -> StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]> {
-    return StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Error,[i32,core:prelude/types.wado/Option<i32>]> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 #[retain(v)]
@@ -17096,11 +17458,11 @@ fn "$value_copy$[i32,i32,u32]"(v: [i32, i32, u32]) -> [i32, i32, u32] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>"(v: StructField<core:prelude/types.wado/WaitEvent,u32>) -> StructField<core:prelude/types.wado/WaitEvent,u32> {
-    return StructField<core:prelude/types.wado/WaitEvent,u32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/types.wado/WaitEvent,u32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>"(v: StructField<core:prelude/types.wado/WaitEvent,i32>) -> StructField<core:prelude/types.wado/WaitEvent,i32> {
-    return StructField<core:prelude/types.wado/WaitEvent,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/types.wado/WaitEvent,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/WaitEvent,u32>]"(v: [StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,u32>]) -> [StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,i32>, StructField<core:prelude/types.wado/WaitEvent,u32>] {
@@ -17117,11 +17479,11 @@ fn "$value_copy$[i32,core:prelude/types.wado/CopyResult]"(v: [i32, CopyResult]) 
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>"(v: StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>) -> StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> {
-    return StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>"(v: StructField<core:prelude/types.wado/StreamWrite,i32>) -> StructField<core:prelude/types.wado/StreamWrite,i32> {
-    return StructField<core:prelude/types.wado/StreamWrite,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/types.wado/StreamWrite,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,i32>,core:prelude/traits.wado/StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>]"(v: [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>]) -> [StructField<core:prelude/types.wado/StreamWrite,i32>, StructField<core:prelude/types.wado/StreamWrite,core:prelude/types.wado/CopyResult>] {
@@ -17149,7 +17511,7 @@ fn "$value_copy$[core:prelude/traits.wado/EnumCase<core:prelude/traits.wado/Orde
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>"(v: StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>) -> StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> {
-    return StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]"(v: [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>]) -> [StructField<core:prelude/traits.wado/LenientParseError,core:prelude/string.wado/String>] {
@@ -17165,7 +17527,7 @@ fn "$value_copy$[core:prelude/string.wado/String]"(v: [String]) -> [String] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>"(v: StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>) -> StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> {
-    return StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>]"(v: [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>]) -> [StructField<core:prelude/traits.wado/ConvertError,core:prelude/string.wado/String>] {
@@ -17181,11 +17543,11 @@ fn "$value_copy$core:prelude/traits.wado/ConvertError"(v: ConvertError) -> Conve
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>"(v: StructField<core:prelude/string.wado/StrSlice,i32>) -> StructField<core:prelude/string.wado/StrSlice,i32> {
-    return StructField<core:prelude/string.wado/StrSlice,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSlice,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSlice,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSlice,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSlice,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSlice,i32>]"(v: [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>]) -> [StructField<core:prelude/string.wado/StrSlice,&Array<u8>>, StructField<core:prelude/string.wado/StrSlice,i32>, StructField<core:prelude/string.wado/StrSlice,i32>] {
@@ -17203,15 +17565,15 @@ fn "$value_copy$[&Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i32, i32, bool]) -> [
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>"(v: StructField<core:prelude/string.wado/StrLinesIter,bool>) -> StructField<core:prelude/string.wado/StrLinesIter,bool> {
-    return StructField<core:prelude/string.wado/StrLinesIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrLinesIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>"(v: StructField<core:prelude/string.wado/StrLinesIter,i32>) -> StructField<core:prelude/string.wado/StrLinesIter,i32> {
-    return StructField<core:prelude/string.wado/StrLinesIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrLinesIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrLinesIter,bool>]"(v: [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,bool>]) -> [StructField<core:prelude/string.wado/StrLinesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,i32>, StructField<core:prelude/string.wado/StrLinesIter,bool>] {
@@ -17219,11 +17581,11 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>) -> StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> {
-    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>]"(v: [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>]) -> [StructField<core:prelude/string.wado/StrSplitWhitespaceIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>, StructField<core:prelude/string.wado/StrSplitWhitespaceIter,i32>] {
@@ -17241,15 +17603,15 @@ fn "$value_copy$[&Array<u8>,i32,i32,&Array<u8>,i32,i32,i32,bool]"(v: [&Array<u8>
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>"(v: StructField<core:prelude/string.wado/StrSplitNIter,bool>) -> StructField<core:prelude/string.wado/StrSplitNIter,bool> {
-    return StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitNIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitNIter,i32>) -> StructField<core:prelude/string.wado/StrSplitNIter,i32> {
-    return StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitNIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitNIter,bool>]"(v: [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,bool>]) -> [StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,i32>, StructField<core:prelude/string.wado/StrSplitNIter,bool>] {
@@ -17267,15 +17629,15 @@ fn "$value_copy$[&Array<u8>,i32,i32,&Array<u8>,i32,i32,bool]"(v: [&Array<u8>, i3
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>"(v: StructField<core:prelude/string.wado/StrSplitIter,bool>) -> StructField<core:prelude/string.wado/StrSplitIter,bool> {
-    return StructField<core:prelude/string.wado/StrSplitIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitIter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>"(v: StructField<core:prelude/string.wado/StrSplitIter,i32>) -> StructField<core:prelude/string.wado/StrSplitIter,i32> {
-    return StructField<core:prelude/string.wado/StrSplitIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrSplitIter,bool>]"(v: [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,bool>]) -> [StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,&Array<u8>>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,i32>, StructField<core:prelude/string.wado/StrSplitIter,bool>] {
@@ -17293,11 +17655,11 @@ fn "$value_copy$[&Array<u8>,i32,i32,i32]"(v: [&Array<u8>, i32, i32, i32]) -> [&A
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>"(v: StructField<core:prelude/string.wado/StrCharIndicesIter,i32>) -> StructField<core:prelude/string.wado/StrCharIndicesIter,i32> {
-    return StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrCharIndicesIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIndicesIter,i32>]"(v: [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>]) -> [StructField<core:prelude/string.wado/StrCharIndicesIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>, StructField<core:prelude/string.wado/StrCharIndicesIter,i32>] {
@@ -17305,11 +17667,11 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/S
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>"(v: StructField<core:prelude/string.wado/StrCharIter,i32>) -> StructField<core:prelude/string.wado/StrCharIter,i32> {
-    return StructField<core:prelude/string.wado/StrCharIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrCharIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrCharIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrCharIter,i32>]"(v: [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIter,i32>, StructField<core:prelude/string.wado/StrCharIter,i32>]) -> [StructField<core:prelude/string.wado/StrCharIter,&Array<u8>>, StructField<core:prelude/string.wado/StrCharIter,i32>, StructField<core:prelude/string.wado/StrCharIter,i32>] {
@@ -17327,11 +17689,11 @@ fn "$value_copy$[&Array<u8>,i32,i32]"(v: [&Array<u8>, i32, i32]) -> [&Array<u8>,
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>"(v: StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>) -> StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> {
-    return StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrUtf8ByteIter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>"(v: StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>) -> StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> {
-    return StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>]"(v: [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>]) -> [StructField<core:prelude/string.wado/StrUtf8ByteIter,&Array<u8>>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>, StructField<core:prelude/string.wado/StrUtf8ByteIter,i32>] {
@@ -17356,7 +17718,7 @@ fn "$value_copy$[Array<u8>,i32]"(v: [Array<u8>, i32]) -> [Array<u8>, i32] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/String,i32>"(v: StructField<core:prelude/string.wado/String,i32>) -> StructField<core:prelude/string.wado/String,i32> {
-    return StructField<core:prelude/string.wado/String,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/String,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 #[retain(v)]
@@ -17382,15 +17744,15 @@ fn "$value_copy$[u32,i32,bool]"(v: [u32, i32, bool]) -> [u32, i32, bool] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>"(v: StructField<core:prelude/string.wado/Utf8Scalar,bool>) -> StructField<core:prelude/string.wado/Utf8Scalar,bool> {
-    return StructField<core:prelude/string.wado/Utf8Scalar,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Scalar,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>"(v: StructField<core:prelude/string.wado/Utf8Scalar,i32>) -> StructField<core:prelude/string.wado/Utf8Scalar,i32> {
-    return StructField<core:prelude/string.wado/Utf8Scalar,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Scalar,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>"(v: StructField<core:prelude/string.wado/Utf8Scalar,u32>) -> StructField<core:prelude/string.wado/Utf8Scalar,u32> {
-    return StructField<core:prelude/string.wado/Utf8Scalar,u32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Scalar,u32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,u32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Scalar,bool>]"(v: [StructField<core:prelude/string.wado/Utf8Scalar,u32>, StructField<core:prelude/string.wado/Utf8Scalar,i32>, StructField<core:prelude/string.wado/Utf8Scalar,bool>]) -> [StructField<core:prelude/string.wado/Utf8Scalar,u32>, StructField<core:prelude/string.wado/Utf8Scalar,i32>, StructField<core:prelude/string.wado/Utf8Scalar,bool>] {
@@ -17408,11 +17770,11 @@ fn "$value_copy$[i32,core:prelude/types.wado/Option<i32>]"(v: [i32, Option<i32>]
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>"(v: StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>) -> StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>> {
-    return StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Error,i32>"(v: StructField<core:prelude/string.wado/Utf8Error,i32>) -> StructField<core:prelude/string.wado/Utf8Error,i32> {
-    return StructField<core:prelude/string.wado/Utf8Error,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/string.wado/Utf8Error,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Error,i32>,core:prelude/traits.wado/StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>]"(v: [StructField<core:prelude/string.wado/Utf8Error,i32>, StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>]) -> [StructField<core:prelude/string.wado/Utf8Error,i32>, StructField<core:prelude/string.wado/Utf8Error,core:prelude/types.wado/Option<i32>>] {
@@ -17493,7 +17855,7 @@ fn "$value_copy$[core:prelude/primitive.wado/CharErrorKind]"(v: [CharErrorKind])
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>"(v: StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>) -> StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind> {
-    return StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>]"(v: [StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>]) -> [StructField<core:prelude/primitive.wado/ParseCharError,core:prelude/primitive.wado/CharErrorKind>] {
@@ -17534,7 +17896,7 @@ fn "$value_copy$[core:prelude/intparse.wado/FloatErrorKind]"(v: [FloatErrorKind]
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>"(v: StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>) -> StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> {
-    return StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>]"(v: [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>]) -> [StructField<core:prelude/intparse.wado/ParseFloatError,core:prelude/intparse.wado/FloatErrorKind>] {
@@ -17551,7 +17913,7 @@ fn "$value_copy$[core:prelude/intparse.wado/IntErrorKind]"(v: [IntErrorKind]) ->
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>"(v: StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>) -> StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> {
-    return StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]"(v: [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>]) -> [StructField<core:prelude/intparse.wado/ParseIntError,core:prelude/intparse.wado/IntErrorKind>] {
@@ -17572,11 +17934,11 @@ fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Opt
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>"(v: StructField<core:prelude/int128.wado/i128,i64>) -> StructField<core:prelude/int128.wado/i128,i64> {
-    return StructField<core:prelude/int128.wado/i128,i64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/int128.wado/i128,i64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>"(v: StructField<core:prelude/int128.wado/i128,u64>) -> StructField<core:prelude/int128.wado/i128,u64> {
-    return StructField<core:prelude/int128.wado/i128,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/int128.wado/i128,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/i128,i64>]"(v: [StructField<core:prelude/int128.wado/i128,u64>, StructField<core:prelude/int128.wado/i128,i64>]) -> [StructField<core:prelude/int128.wado/i128,u64>, StructField<core:prelude/int128.wado/i128,i64>] {
@@ -17584,7 +17946,7 @@ fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/i
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>"(v: StructField<core:prelude/int128.wado/u128,u64>) -> StructField<core:prelude/int128.wado/u128,u64> {
-    return StructField<core:prelude/int128.wado/u128,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/int128.wado/u128,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>,core:prelude/traits.wado/StructField<core:prelude/int128.wado/u128,u64>]"(v: [StructField<core:prelude/int128.wado/u128,u64>, StructField<core:prelude/int128.wado/u128,u64>]) -> [StructField<core:prelude/int128.wado/u128,u64>, StructField<core:prelude/int128.wado/u128,u64>] {
@@ -17637,11 +17999,11 @@ fn "$value_copy$[u64,i32,i32]"(v: [u64, i32, i32]) -> [u64, i32, i32] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>"(v: StructField<core:prelude/fpfmt.wado/FormatResult,i32>) -> StructField<core:prelude/fpfmt.wado/FormatResult,i32> {
-    return StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/fpfmt.wado/FormatResult,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>"(v: StructField<core:prelude/fpfmt.wado/FormatResult,u64>) -> StructField<core:prelude/fpfmt.wado/FormatResult,u64> {
-    return StructField<core:prelude/fpfmt.wado/FormatResult,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/fpfmt.wado/FormatResult,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/FormatResult,i32>]"(v: [StructField<core:prelude/fpfmt.wado/FormatResult,u64>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>]) -> [StructField<core:prelude/fpfmt.wado/FormatResult,u64>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>, StructField<core:prelude/fpfmt.wado/FormatResult,i32>] {
@@ -17658,7 +18020,7 @@ fn "$value_copy$[u64,u64]"(v: [u64, u64]) -> [u64, u64] {
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>"(v: StructField<core:prelude/fpfmt.wado/PmHiLo,u64>) -> StructField<core:prelude/fpfmt.wado/PmHiLo,u64> {
-    return StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/fpfmt.wado/PmHiLo,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/PmHiLo,u64>]"(v: [StructField<core:prelude/fpfmt.wado/PmHiLo,u64>, StructField<core:prelude/fpfmt.wado/PmHiLo,u64>]) -> [StructField<core:prelude/fpfmt.wado/PmHiLo,u64>, StructField<core:prelude/fpfmt.wado/PmHiLo,u64>] {
@@ -17671,11 +18033,11 @@ fn "$value_copy$[core:prelude/types.wado/Option<u64>,core:prelude/types.wado/Opt
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>"(v: StructField<core:prelude/fpfmt.wado/UnpackResult,i32>) -> StructField<core:prelude/fpfmt.wado/UnpackResult,i32> {
-    return StructField<core:prelude/fpfmt.wado/UnpackResult,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/fpfmt.wado/UnpackResult,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>"(v: StructField<core:prelude/fpfmt.wado/UnpackResult,u64>) -> StructField<core:prelude/fpfmt.wado/UnpackResult,u64> {
-    return StructField<core:prelude/fpfmt.wado/UnpackResult,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/fpfmt.wado/UnpackResult,u64> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,u64>,core:prelude/traits.wado/StructField<core:prelude/fpfmt.wado/UnpackResult,i32>]"(v: [StructField<core:prelude/fpfmt.wado/UnpackResult,u64>, StructField<core:prelude/fpfmt.wado/UnpackResult,i32>]) -> [StructField<core:prelude/fpfmt.wado/UnpackResult,u64>, StructField<core:prelude/fpfmt.wado/UnpackResult,i32>] {
@@ -17721,19 +18083,19 @@ fn "$value_copy$[char,core:prelude/format.wado/Alignment,bool,bool,bool,i32,i32,
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>"(v: StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>) -> StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> {
-    return StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>"(v: StructField<core:prelude/format.wado/Formatter,i32>) -> StructField<core:prelude/format.wado/Formatter,i32> {
-    return StructField<core:prelude/format.wado/Formatter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/format.wado/Formatter,i32> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>"(v: StructField<core:prelude/format.wado/Formatter,bool>) -> StructField<core:prelude/format.wado/Formatter,bool> {
-    return StructField<core:prelude/format.wado/Formatter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/format.wado/Formatter,bool> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>"(v: StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>) -> StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> {
-    return StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 #[retain(v)]
@@ -17745,7 +18107,7 @@ fn "$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"
 }
 
 fn "$value_copy$core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>"(v: StructField<core:prelude/format.wado/Formatter,char>) -> StructField<core:prelude/format.wado/Formatter,char> {
-    return StructField<core:prelude/format.wado/Formatter,char> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret };
+    return StructField<core:prelude/format.wado/Formatter,char> { index: v.index, field_name: "ops.mess_dirty.wado::$value_copy$core:prelude/string.wado/String"(v.field_name), wire_override: "ops.mess_dirty.wado::$value_copy$core:prelude/types.wado/Option<core:prelude/string.wado/String>"(v.wire_override), has_default: v.has_default, is_secret: v.is_secret, wire_number: v.wire_number };
 }
 
 fn "$value_copy$[core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,char>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,bool>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,i32>,core:prelude/traits.wado/StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>]"(v: [StructField<core:prelude/format.wado/Formatter,char>, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>]) -> [StructField<core:prelude/format.wado/Formatter,char>, StructField<core:prelude/format.wado/Formatter,core:prelude/format.wado/Alignment>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,bool>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,i32>, StructField<core:prelude/format.wado/Formatter,&mut core:prelude/string.wado/String>] {

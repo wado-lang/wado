@@ -12,8 +12,9 @@ use crate::compiler_item::CompilerItem;
 use crate::component_model::{CmInterfaceRegistry, CmTypeKind, cm_layout_with_registry};
 use crate::hashmap::IndexMap;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
-    PrimitiveType, ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
+    ResolvedType, TirBinaryOp, TirExpr, TirExprKind, TirModule, TirParam, TirStruct,
     TirVariantDecl, TypeId, TypeTable,
 };
 
@@ -574,7 +575,8 @@ fn check_cm_boundary_representable_inner(
     names: &CmStdlibNames,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), String> {
-    use crate::tir::{PrimitiveType, ResolvedType as R};
+    use crate::primitive::PrimitiveType;
+    use crate::tir::ResolvedType as R;
 
     if visited.contains(&type_id) {
         // `visited` is the recursion path (pushed on entry, popped on exit),
@@ -619,11 +621,14 @@ fn check_cm_boundary_representable_inner(
         // exactly the bug this check exists to prevent. New variants must be
         // classified explicitly.
         match type_table.get(type_id) {
-            // No CM value representation in any world.
-            R::Primitive(PrimitiveType::V128) => Err(format!(
-                "`{}` has no Component Model value representation",
-                type_table.type_name(type_id)
-            )),
+            // No CM value representation in any world: `defvaltype` stops at
+            // `f32`, and a half lowered as its `u16` would read as an integer.
+            R::Primitive(PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16) => {
+                Err(format!(
+                    "`{}` has no Component Model value representation",
+                    type_table.type_name(type_id)
+                ))
+            }
             // Scalars, plain discriminants, bitflags, and plain resource
             // handles lower to an i32 handle identically in every world.
             R::Primitive(_) | R::Unit | R::Enum { .. } | R::Flags { .. } | R::Resource { .. } => {
@@ -1127,8 +1132,8 @@ fn flat_types_from_type_id_inner(
             PrimitiveType::I64 | PrimitiveType::U64 => out.push(cm_abi::CmValType::I64),
             PrimitiveType::F32 => out.push(cm_abi::CmValType::F32),
             PrimitiveType::F64 => out.push(cm_abi::CmValType::F64),
-            PrimitiveType::V128 => {
-                panic!("v128 cannot appear at CM boundary")
+            PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
+                panic!("{} cannot appear at CM boundary", p.as_str())
             }
         },
         ResolvedType::Unit => {} // no flat values

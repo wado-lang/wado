@@ -18,7 +18,7 @@ use { Option } from "core:prelude/types.wado";
 
 
 // The f64 bit pattern of -0.0: the sign bit alone.
-global NEG_ZERO_BITS: i64 = 0x8000000000000000 as i64;
+global NEG_ZERO_BITS: u64 = 0x8000000000000000;
 
 // Powers of 10 from 10^0 to 10^19
 global POW10: List<u64> = [
@@ -54,7 +54,7 @@ pub struct UnpackResult {
 
 // unpack64 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 pub fn unpack64(f: f64) -> UnpackResult {
-    let bits = f.to_bits() as u64;
+    let bits = f.to_bits();
 
     let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
     let exp_mask: u64 = 0x7FF;
@@ -83,7 +83,7 @@ pub fn unpack64(f: f64) -> UnpackResult {
 // unpack32 returns (mantissa, exponent) such that f = mantissa * 2^exponent
 // The mantissa is left-aligned in 64 bits (top 24 bits significant).
 pub fn unpack32(f: f32) -> UnpackResult {
-    let bits = f.to_bits() as u32;
+    let bits = f.to_bits();
 
     let mantissa_mask: u32 = 0x007FFFFF;
     let exp_mask: u32 = 0xFF;
@@ -863,13 +863,13 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
         return [true, true, SpecialKind::Zero];
     }
 
-    let is_neg = bits < 0;
+    let is_neg = bits & NEG_ZERO_BITS != 0;
 
     // Check for infinity/NaN
-    let exp_mask: i64 = 0x7FF0000000000000;
+    let exp_mask: u64 = 0x7FF0000000000000;
     if bits & exp_mask == exp_mask {
         builtin::cold_path();
-        let mantissa_mask: i64 = 0x000FFFFFFFFFFFFF;
+        let mantissa_mask: u64 = 0x000FFFFFFFFFFFFF;
         if bits & mantissa_mask != 0 {
             return [true, false, SpecialKind::NaN];
         }
@@ -889,11 +889,11 @@ pub fn check_special(f: f64) -> [bool, bool, SpecialKind] {
 fn pack64(m: u64, e: i32) -> f64 {
     let bit52 = 1 as u64 << 52;
     if m & bit52 == 0 {
-        return f64::from_bits(m as i64);
+        return f64::from_bits(m);
     }
     let mantissa_bits = m & ~bit52;
     let exp_bits = (1075 + e) as u64 << 52;
-    return f64::from_bits((mantissa_bits | exp_bits) as i64);
+    return f64::from_bits(mantissa_bits | exp_bits);
 }
 
 /// `parse` accepts at most this many decimal digits in `d` — the most that
