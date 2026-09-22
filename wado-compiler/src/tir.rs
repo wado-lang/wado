@@ -2391,6 +2391,61 @@ impl TypeTable {
         )
     }
 
+    /// The type of `t.zip()`: the tuple-of-tuples `t` transposed column by
+    /// column, or `None` where its rows share no layout to transpose.
+    pub fn transposed_tuple(&mut self, id: TypeId) -> Option<TypeId> {
+        let row_ids = self.as_tuple(id)?;
+        let layout = self.tuple_layout(*row_ids.first()?)?;
+        let mut rows = Vec::with_capacity(row_ids.len());
+        for &row in &row_ids {
+            if self.tuple_layout(row).as_ref() != Some(&layout) {
+                return None;
+            }
+            rows.push(self.as_tuple(row).expect("a row with a layout is a tuple"));
+        }
+        let columns: Vec<TypeId> = layout
+            .iter()
+            .enumerate()
+            .map(|(col, slot)| {
+                let cells: Vec<TypeId> = rows.iter().map(|row| row[col]).collect();
+                match slot {
+                    TupleSlot::Fixed => self.make_tuple(cells),
+                    // A pack slot stands for a run, so its column is a pack too:
+                    // element `k` is the cells with the pack bound to its `k`-th.
+                    TupleSlot::Pack(name) => {
+                        let parts: Vec<(u32, TypeId)> =
+                            cells.iter().map(|&c| self.pack_element(c)).collect();
+                        let (index, _) = parts[0];
+                        assert!(
+                            parts.iter().all(|&(i, _)| i == index),
+                            "one scope gives a pack name one index"
+                        );
+                        let elem = self.make_tuple(parts.iter().map(|&(_, e)| e).collect());
+                        self.make_mapped_type_pack(name.clone(), index, elem)
+                    }
+                }
+            })
+            .collect();
+        Some(self.make_tuple(columns))
+    }
+
+    /// What one row contributes at a pack slot: the pack's index, and its
+    /// mapped element or the scalar placeholder an identity pack stands for.
+    fn pack_element(&mut self, cell: TypeId) -> (u32, TypeId) {
+        let ResolvedType::TypePack {
+            name,
+            index,
+            mapped_elem,
+        } = self.get(cell).clone()
+        else {
+            unreachable!("`tuple_layout` marks a slot a pack only for a `TypePack`")
+        };
+        (
+            index,
+            mapped_elem.unwrap_or_else(|| self.make_type_param(name, index)),
+        )
+    }
+
     /// Like [`Self::as_tuple`], but also looks through `&`/`&mut` wrappers
     /// (any nesting depth, via [`Self::peel_refs`]). Returns the element types
     /// together with a `by_ref` flag that is `true` when the tuple was reached
@@ -5710,6 +5765,69 @@ impl TirBlock {
             span,
         }
     }
+}
+
+/// `receiver.zip()` as a tuple literal: one column per position, each reading
+/// its cell out of every row. A `&`/`&mut` receiver transposes what it refers to.
+pub fn transpose_tuple_expr(receiver: &TirExpr, span: Span, type_table: &mut TypeTable) -> TirExpr {
+    assert!(
+        matches!(receiver.kind, TirExprKind::Local { .. }),
+        "every cell reads the receiver, so reify binds it before either expansion"
+    );
+    let tuple = type_table.peel_refs(receiver.type_id);
+    let transposed = type_table
+        .transposed_tuple(tuple)
+        .expect("method lookup admits `zip` only over rows that transpose");
+    let rows: Vec<(TypeId, Vec<TypeId>)> = type_table
+        .as_tuple(tuple)
+        .expect("a transpose has rows")
+        .into_iter()
+        .map(|row| {
+            let cells = type_table
+                .as_tuple(row)
+                .expect("a transposed row is a tuple");
+            (row, cells)
+        })
+        .collect();
+    let column_types = type_table
+        .as_tuple(transposed)
+        .expect("a transpose is a tuple");
+    let columns: Vec<TirExpr> = column_types
+        .into_iter()
+        .enumerate()
+        .map(|(col, column_type)| {
+            let elements: Vec<TirExpr> = rows
+                .iter()
+                .enumerate()
+                .map(|(row, (row_type, cells))| {
+                    let row_access = TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(receiver.clone()),
+                            field_index: row as u32,
+                            field_name: row.to_string(),
+                        },
+                        *row_type,
+                        span,
+                    );
+                    TirExpr::new(
+                        TirExprKind::FieldAccess {
+                            expr: Box::new(row_access),
+                            field_index: col as u32,
+                            field_name: col.to_string(),
+                        },
+                        cells[col],
+                        span,
+                    )
+                })
+                .collect();
+            TirExpr::new(TirExprKind::TupleLiteral { elements }, column_type, span)
+        })
+        .collect();
+    TirExpr::new(
+        TirExprKind::TupleLiteral { elements: columns },
+        transposed,
+        span,
+    )
 }
 
 /// Value-yielding type of a block: the last statement decides, except that a

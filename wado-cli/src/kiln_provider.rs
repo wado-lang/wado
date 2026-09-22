@@ -446,11 +446,11 @@ impl CliGeneratorProvider {
                     loaded: loaded_for_task,
                 };
                 let options = CompilerOptions {
-                    // Optimize the generator: its runtime dominates for heavy
-                    // grammars (minutes of generation), and CI runs it cold on
-                    // every build since build/kiln is gitignored, so the O2
-                    // compile cost is repaid many times over by faster generation.
-                    opt_level: wado_compiler::OptLevel::O2,
+                    // A generator's opt level never reaches the artifact, so all
+                    // it buys is generation speed: on `Wado.g4`, 0.19s at O1
+                    // against 0.16s at O2, for a 57s compile against 93s. The
+                    // `kiln/generate` and `kiln/aot` spans re-measure this.
+                    opt_level: wado_compiler::OptLevel::O1,
                     target_world: Some(GENERATOR_WORLD_FQ.to_string()),
                     skip_validation: false,
                     log_level: Some(log_level),

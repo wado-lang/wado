@@ -29,6 +29,16 @@ pub(super) fn unify(
     let actual_type = type_table.borrow().get(actual).clone();
 
     match (&expected_type, &actual_type) {
+        // A pack stands for a list of types, so it binds to a tuple and nothing
+        // else. Without this arm a turbofish or annotation could settle no pack.
+        (
+            ResolvedType::TypePack {
+                mapped_elem: None, ..
+            },
+            ResolvedType::GenericInstance { def, .. },
+        ) if TypeTable::is_tuple_type(type_table.borrow().def_name(*def)) => {
+            bindings.entry(expected).or_insert(actual);
+        }
         // Direct type parameter mapping.
         //
         // `or_insert` prevents later fields with self-referential types

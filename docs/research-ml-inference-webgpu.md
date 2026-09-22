@@ -4,7 +4,7 @@ Date: 2026-09-20
 
 A survey of how ML inference frameworks are built, and of what the 2026 literature
 says about running inference on WebGPU. This document records findings only and
-draws no conclusions about Wado. [WEP: Geas](./wep-2026-09-20-geas.md) draws
+draws no conclusions about Wado. [WEP: Loam](./wep-2026-09-20-loam.md) draws
 them.
 
 > **Source**: the papers and specifications linked inline. Searched 2026-09-20.

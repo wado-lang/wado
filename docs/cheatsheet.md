@@ -968,14 +968,18 @@ fn prepend<A, ..T>(a: A, rest: [..T]) -> [A, ..T] {
 }
 
 // More than one pack: each is settled by the argument carrying it alone, so a
-// turbofish spells each as its own tuple. `[..A, ..B]` determines neither, so it
-// is legal where a value is produced and rejected where one is received.
+// turbofish spells each as its own tuple. `[..A, ..B]` settles neither, so
+// something else must — a sibling parameter, a turbofish, or an annotation.
 fn concat<..A, ..B>(a: [..A], b: [..B]) -> [..A, ..B] {
     return [..a, ..b];
 }
 concat([1, "x"], [true]);                 // A = [i32, String], B = [bool]
 concat::<[i32], [bool, String]>([1], [true, "x"]);
-// fn split<..A, ..B>(t: [..A, ..B]) { }  // ERROR: write `[[..A], [..B]]`
+
+// A pack on either side of a scalar: nothing settles the ends, so spell them.
+fn middle<..Pre, K, ..Post>(t: [..Pre, K, ..Post]) -> i32 { ... }
+middle::<[i32], String, [bool]>([1, "mid", true]);   // 3
+// middle([1, "mid", true]);              // ERROR: cannot infer `Pre`, `Post`
 
 // Value spread (works with any tuple, not just packs)
 let a = [1, "hello"];

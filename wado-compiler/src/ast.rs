@@ -3563,31 +3563,6 @@ impl Type {
         }
     }
 
-    /// Where a tuple receiving a value spreads a second type pack, leaving the
-    /// boundary unwritten. A `fn` type ends the walk: its positions are its own.
-    #[must_use]
-    pub fn second_pack_spread(&self, is_pack: &dyn Fn(&str) -> bool) -> Option<Span> {
-        let recurse = |t: &Type| t.second_pack_spread(is_pack);
-        match self {
-            Type::Tuple(elems) => elems
-                .iter()
-                .filter_map(|e| match e {
-                    Type::TypePackSpread(name, span) => is_pack(name).then_some(*span),
-                    _ => None,
-                })
-                .nth(1)
-                .or_else(|| elems.iter().find_map(recurse)),
-            Type::Generic(g) => g.args.iter().find_map(recurse),
-            Type::NamespacedGeneric(g) => g.args.iter().find_map(recurse),
-            Type::Reference(inner) | Type::MutReference(inner) => recurse(inner),
-            Type::Function(_)
-            | Type::Named(_)
-            | Type::TypePackSpread(..)
-            | Type::Infer(_)
-            | Type::Error(_) => None,
-        }
-    }
-
     /// Whether this is the unit type, spelled `()`.
     #[must_use]
     pub fn is_unit(&self) -> bool {

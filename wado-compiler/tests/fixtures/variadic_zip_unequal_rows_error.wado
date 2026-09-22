@@ -1,0 +1,12 @@
+test "zip over rows of unequal length has no method" {
+    let a = [1, 2];
+    let b = [3];
+    let t = [a, b].zip();
+    assert t.0.0 == 1;
+}
+
+__DATA__
+{
+  "compile_error": "no method 'zip' found on type '[[i32, i32], [i32]]'",
+  "compile_errors_not_contains": ["type packs are never known to be equally long"]
+}

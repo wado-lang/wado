@@ -23,7 +23,7 @@ use crate::tir::{
     self as tir, CallArg, GlobalInit, LocalFrame, ResolvedType, TirBinaryOp, TirBlock, TirEnum,
     TirEnumCase, TirExpr, TirExprKind, TirFlags, TirFlagsMember, TirFunction, TirGlobal, TirModule,
     TirNewtype, TirPattern, TirStmt, TirStmtKind, TirStruct, TirTest, TirUnaryOp, TirVariantDecl,
-    TypeId, TypeTable,
+    TypeId, TypeTable, transpose_tuple_expr,
 };
 
 use super::coercion::{
@@ -7645,7 +7645,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         recorded_type: TypeId,
     ) -> TirExpr {
         use super::expr::UnionSource;
-        use crate::tir::{TirBlock, TirExprKind, TirStmt, TirStmtKind, TirStructField};
+        use crate::tir::TirStructField;
 
         // `resolve_anonymous_struct_literal` records the synthesised `$anon_{…}`
         // name (and the union flag) on the `GenericInstantiation` slot.
@@ -7750,15 +7750,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             struct_lit.span,
         );
 
-        if stmts.is_empty() {
-            return literal;
-        }
-        stmts.push(TirStmt::new(TirStmtKind::Expr(literal), struct_lit.span));
-        TirExpr::new(
-            TirExprKind::Block(TirBlock::new(stmts, struct_lit.span)),
-            struct_type,
-            struct_lit.span,
-        )
+        Self::hoist_block(literal, stmts)
     }
 
     /// Bind `expr` to a fresh `{prefix}_N` temporary (pushed onto `stmts`) so it
@@ -7770,7 +7762,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         prefix: &str,
         stmts: &mut Vec<TirStmt>,
     ) -> TirExpr {
-        use crate::tir::{TirExprKind, TirStmt, TirStmtKind};
         if matches!(expr.kind, TirExprKind::Local { .. }) {
             return expr;
         }
@@ -7791,6 +7782,21 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             span,
         ));
         TirExpr::new(TirExprKind::Local { index, name }, type_id, span)
+    }
+
+    /// `value` inside the block holding the [`Self::hoist_once`] temporaries it
+    /// reads, or `value` alone when nothing was hoisted.
+    fn hoist_block(value: TirExpr, mut stmts: Vec<TirStmt>) -> TirExpr {
+        if stmts.is_empty() {
+            return value;
+        }
+        let (span, type_id) = (value.span, value.type_id);
+        stmts.push(TirStmt::new(TirStmtKind::Expr(value), span));
+        TirExpr::new(
+            TirExprKind::Block(TirBlock::new(stmts, span)),
+            type_id,
+            span,
+        )
     }
 
     /// Reify a `MatchExpr`. The scrutinee is walked; each arm enters
@@ -8817,82 +8823,33 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                         )
                     }
                     "zip" => {
+                        let span = method_call.span;
+                        // Bound ahead of the branch so the deferred expansion
+                        // inherits it: the monomorphizer allocates no locals.
+                        let mut stmts = Vec::new();
+                        let receiver = self.hoist_once(ctx, receiver, "$zip", &mut stmts);
                         // A concrete tuple-of-tuples transposes inline here;
                         // only a type-pack receiver defers expansion to the
                         // monomorphiser via `TupleZip`. Non-generic bodies
                         // never reach the monomorphiser, so emitting
                         // `TupleZip` here would hit `lower::translate`'s
                         // `unreachable!`.
-                        if self.type_contains_pack(base_type_id) {
+                        let transposed = if self.type_contains_pack(base_type_id) {
                             TirExpr::new(
                                 TirExprKind::TupleZip {
                                     expr: Box::new(receiver),
                                 },
                                 recorded_type,
-                                method_call.span,
+                                span,
                             )
                         } else {
-                            // [[A0, A1], [B0, B1]].zip() → [[A0, B0], [A1, B1]]
-                            let outer_elems = self
-                                .tysys
-                                .type_table
-                                .borrow()
-                                .as_tuple(base_type_id)
-                                .unwrap();
-                            let inner_arities: Vec<Vec<TypeId>> = outer_elems
-                                .iter()
-                                .map(|e| self.tysys.type_table.borrow().as_tuple(*e).unwrap())
-                                .collect();
-                            let arity = inner_arities[0].len();
-                            assert!(
-                                inner_arities.iter().all(|row| row.len() == arity),
-                                "method lookup gives `zip` no return type unless its rows agree"
-                            );
-                            let num_rows = outer_elems.len();
-                            let mut col_exprs = Vec::with_capacity(arity);
-                            for col in 0..arity {
-                                let mut row_exprs = Vec::with_capacity(num_rows);
-                                for (row, row_types) in inner_arities.iter().enumerate() {
-                                    let row_access = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(receiver.clone()),
-                                            field_index: row as u32,
-                                            field_name: row.to_string(),
-                                        },
-                                        outer_elems[row],
-                                        method_call.span,
-                                    );
-                                    let cell = TirExpr::new(
-                                        TirExprKind::FieldAccess {
-                                            expr: Box::new(row_access),
-                                            field_index: col as u32,
-                                            field_name: col.to_string(),
-                                        },
-                                        row_types[col],
-                                        method_call.span,
-                                    );
-                                    row_exprs.push(cell);
-                                }
-                                let col_types: Vec<TypeId> =
-                                    inner_arities.iter().map(|row| row[col]).collect();
-                                let col_tuple_type =
-                                    self.tysys.type_table.borrow_mut().make_tuple(col_types);
-                                col_exprs.push(TirExpr::new(
-                                    TirExprKind::TupleLiteral {
-                                        elements: row_exprs,
-                                    },
-                                    col_tuple_type,
-                                    method_call.span,
-                                ));
-                            }
-                            TirExpr::new(
-                                TirExprKind::TupleLiteral {
-                                    elements: col_exprs,
-                                },
-                                recorded_type,
-                                method_call.span,
+                            transpose_tuple_expr(
+                                &receiver,
+                                span,
+                                &mut self.tysys.type_table.borrow_mut(),
                             )
-                        }
+                        };
+                        Self::hoist_block(transposed, stmts)
                     }
                     _ => unreachable!(),
                 };

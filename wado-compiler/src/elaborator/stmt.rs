@@ -10,7 +10,7 @@ use crate::tir::{PrimitiveType, ResolvedType, TirPattern, TypeId, TypeTable};
 use crate::token::Span;
 
 use super::Elaborator;
-use super::types::{FunctionContext, ReceivedPosition, TypeError};
+use super::types::{FunctionContext, TypeError};
 use super::util;
 use crate::ast::{RangeKind, StructPatternField};
 use crate::compiler_item::CompilerItem;
@@ -312,7 +312,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut field_defaults = Vec::new();
         for field in &struct_decl.fields {
             let type_id = scope.resolve_type(&field.ty);
-            scope.reject_received_annotation(&field.ty, ReceivedPosition::Field);
+            scope.reject_written_annotation(&field.ty);
             fields.push((field.name.clone(), type_id, field.visibility));
             field_ast_ids.push(field.id);
             field_defaults.push(field.default.clone());
@@ -359,38 +359,25 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // sole TIR producer, matching every other declaration kind).
     }
 
-    /// Report what a signature's written types cannot mean. A parameter also
-    /// receives a value, which is the stricter position.
+    /// Report what a signature's written types cannot mean.
     pub(super) fn reject_signature_annotations(
         &mut self,
         params: &[ast::Param],
         return_type: Option<&ast::Type>,
     ) {
         for param in params {
-            self.reject_received_annotation(&param.ty, ReceivedPosition::Parameter);
+            self.reject_written_annotation(&param.ty);
         }
         if let Some(ty) = return_type {
-            self.reject_unresolved_annotation(ty);
-            self.reject_non_pack_spreads(ty);
+            self.reject_written_annotation(ty);
         }
     }
 
-    /// Report what a written type that receives a value cannot mean: a name no
-    /// declaration answers, then a tuple no value can settle.
-    pub(super) fn reject_received_annotation(
-        &mut self,
-        ty: &ast::Type,
-        position: ReceivedPosition,
-    ) {
+    /// Report what a written type cannot mean: a name no declaration answers,
+    /// then a `..X` naming something that is not a pack.
+    pub(super) fn reject_written_annotation(&mut self, ty: &ast::Type) {
         self.reject_unresolved_annotation(ty);
         self.reject_non_pack_spreads(ty);
-        let second = ty.second_pack_spread(&|name| self.binds_type_pack(name));
-        if let Some(span) = second {
-            let _ = self.emit(TypeError::TwoPacksInReceivedType {
-                position: position.name().to_string(),
-                span,
-            });
-        }
     }
 
     /// Report every `..X` in a written type whose `X` no type parameter list

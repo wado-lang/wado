@@ -7,6 +7,8 @@
 
 use std::cell::Cell;
 
+use cranelift_entity::EntityRef;
+
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::nir::{FuncId, NirFunction};
 use crate::nir_arena::{BlockId, Body, ExprId, ExprKind, NodeRef};
@@ -18,23 +20,25 @@ use crate::optimize::alias::{
     CallImmutability, FirstParamTypes, builder_alias_sets, first_param_types,
 };
 use crate::optimize::extract::{extract_const, is_place_read};
+use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::tir::TypeTable;
 
-/// Forwards stores to loads in every function. Used by the post-`field_scalarize`
-/// cleanup so the scalarization shadow inits (`$hfs_x = obj.f`) get their fields
-/// forwarded to constants — the load→literal fold `field_scalarize` leaves to
-/// a later pass, and the only one that runs after it.
-pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
+/// Forwards stores to loads in the functions `gate` still holds. The only pass
+/// after `field_scalarize`, so its shadow inits (`$hfs_x = obj.f`) fold here.
+pub fn forward_stores_to_loads(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::StoreLoadForward, len) {
+        return false;
+    }
     let type_table = project.type_table.borrow();
     let first_param_types = first_param_types(project);
     let call_immutability = CallImmutability::new(project, &type_table);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let ctfe_builtins = build_ctfe_builtin_map(project);
     let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
-        changed |= forward_one(
+    gate.run_gated(GatedPass::StoreLoadForward, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
+        forward_one(
             &mut func,
             &type_table,
             &first_param_types,
@@ -42,9 +46,8 @@ pub fn forward_stores_to_loads_all(project: &mut NirPackage) -> bool {
             &pure_builtin_callees,
             &ctfe_builtins,
             &mut buffers,
-        );
-    }
-    changed
+        )
+    })
 }
 
 /// Run store→load forwarding over one function body. Returns whether anything

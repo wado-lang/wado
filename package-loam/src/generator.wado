@@ -1,4 +1,4 @@
-//! Kiln generator entry for Geas. Reads an ONNX graph, discharges its extent
+//! Kiln generator entry for Loam. Reads an ONNX graph, discharges its extent
 //! conditions, and emits the axis types a checked graph earns.
 
 use {
@@ -29,7 +29,7 @@ impl Deserialize for Options;
 
 /// Whatever the graph is wrong about, said against the file it was read from.
 fn at<E: Display>(path: &String, e: &E) -> Error {
-    return Error::InvalidSchema(`geas: '${path}': ${e}`);
+    return Error::InvalidSchema(`loam: '${path}': ${e}`);
 }
 
 export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHost {
@@ -37,7 +37,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     let source = match read_text(req.primary.content) {
         Ok(text) => text,
         Err(e) => {
-            return Result::Err(Error::InvalidSchema(`geas: '${path}' is not UTF-8: ${e}`));
+            return Result::Err(Error::InvalidSchema(`loam: '${path}' is not UTF-8: ${e}`));
         },
     };
     let graph = read(&source).map_err(|e| at(&path, &e))?;
@@ -48,7 +48,7 @@ export fn generate(req: Request<Options>) -> Result<Response, Error> with KilnHo
     KilnHost::emit_diagnostic(KilnDiagnostic {
         level: DiagnosticLevel::Hint,
         span: null,
-        message: `geas: ${graph.name}: ${graph.nodes.len()} operators checked`,
+        message: `loam: ${graph.name}: ${graph.nodes.len()} operators checked`,
     });
     let files: List<OutputFile> = [
         OutputFile {
