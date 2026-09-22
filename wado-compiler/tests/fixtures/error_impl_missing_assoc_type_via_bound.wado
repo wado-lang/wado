@@ -1,0 +1,35 @@
+// The unbound associated type reached WIR through a bound, where the
+// projection is what names the instance: `Result<i32, Crate::Load#Carry>` is
+// registered as neither a struct nor a variant, and the build panicked.
+
+trait Carry with () {
+    type Load;
+
+    fn make() -> Result<i32, Self::Load>;
+}
+
+struct Wrong {
+}
+
+struct Crate {
+}
+
+impl Carry for Crate {
+    fn make() -> Result<i32, Wrong> {
+        return Result::Err(Wrong {});
+    }
+}
+
+fn attempt<T: Carry>() -> bool {
+    return T::make() matches { Ok(_) };
+}
+
+export fn run() {
+    let _ = attempt::<Crate>();
+}
+
+__DATA__
+{
+    "compile_error": "impl of trait 'Carry' does not bind associated type 'Load'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

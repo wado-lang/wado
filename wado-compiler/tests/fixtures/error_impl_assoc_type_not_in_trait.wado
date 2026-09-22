@@ -1,0 +1,33 @@
+// A bound the trait never declared is a typo for one it did, so accepting it
+// silently left the real associated type unbound. The impl's own name is
+// reported, not the one it was meant to be.
+
+trait Carry with () {
+    type Load;
+
+    fn make() -> Result<i32, Self::Load>;
+}
+
+struct Wrong {
+}
+
+struct Crate {
+}
+
+impl Carry for Crate {
+    type Cargo = Wrong;
+
+    fn make() -> Result<i32, Wrong> {
+        return Result::Err(Wrong {});
+    }
+}
+
+export fn run() {
+    let _ = Crate::make();
+}
+
+__DATA__
+{
+    "compile_error": "trait 'Carry' declares no associated type 'Cargo'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

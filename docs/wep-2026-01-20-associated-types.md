@@ -34,6 +34,19 @@ impl Container for IntArray {
 }
 ```
 
+### Conformance
+
+An associated type declares no default, so an impl binds every one its trait
+declares, and binds no name the trait does not. Unbound, the projection has
+nothing to resolve to and survives into WIR as an instance registered as
+neither a struct nor a variant; a name the trait never declared is a typo for
+one it did, which is how the real type came to be unbound.
+
+The two are checked together, where every declaration and impl is in hand. A
+derivation request (`impl Trait for Type;`) writes no members at all and is
+exempt. A supertrait's associated type counts as the subtrait's, so
+`impl Ord for T` may bind one `Eq` declares.
+
 ### Resolution
 
 Associated types are resolved via `Self::TypeName` syntax:
@@ -76,15 +89,23 @@ When resolving `Self::TypeName`:
 2. If found, return the bound type
 3. If not found, report an error
 
-### Constraints (Not Yet Implemented)
+### Bounds
 
-Future work may add trait bounds on associated types:
+An associated type carries trait bounds, enforced against each impl's binding:
 
 ```wado
 trait Container {
-    type Item: Display;  // Item must implement Display
+    type Item: Display;
 }
 ```
+
+A binding that does not satisfy them is reported as
+`type 'X' does not implement trait 'Display' required by bound on 'Item'`. A
+still-parametric binding is left to the instantiation that settles it.
+
+The bound is what a caller through `T: Container` may rely on: there is no impl
+to read, so `Self::Item` answers only what the bound promises. `FromStr::Err`
+and `TryFrom::Err` are both `: Error` for that reason.
 
 ## Consequences
 
@@ -96,8 +117,8 @@ trait Container {
 
 ### Trade-offs
 
-1. **No bounds yet**: Cannot constrain associated types with trait bounds
-2. **Single binding**: Each impl can only bind one type per associated type name
+1. **Single binding**: Each impl can only bind one type per associated type name
+2. **No defaults**: A trait cannot supply a fallback, so every impl binds every one
 
 ### Implementation Status
 
@@ -106,7 +127,8 @@ trait Container {
 - [x] Elaborator: `Self::TypeName` resolution
 - [x] Desugar: Pass-through of associated types
 - [x] Unparse: Output associated types
-- [ ] Trait bounds on associated types
+- [x] Trait bounds on associated types
+- [x] Impl conformance: every declared type bound, and no other
 - [ ] Default associated types
 
 ## Related

@@ -1,0 +1,31 @@
+// An impl that leaves one of its trait's associated types unbound was accepted:
+// the projection stayed unsubstituted and reached codegen as an ICE. An
+// associated type declares no default, so every one of them is required.
+
+trait Carry with () {
+    type Load;
+
+    fn make() -> Result<i32, Self::Load>;
+}
+
+struct Wrong {
+}
+
+struct Crate {
+}
+
+impl Carry for Crate {
+    fn make() -> Result<i32, Wrong> {
+        return Result::Err(Wrong {});
+    }
+}
+
+export fn run() {
+    let _ = Crate::make();
+}
+
+__DATA__
+{
+    "compile_error": "impl of trait 'Carry' does not bind associated type 'Load'",
+    "compile_error_codes": ["TRAIT_DECL_INVALID"]
+}

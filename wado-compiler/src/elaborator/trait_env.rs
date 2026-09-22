@@ -1816,15 +1816,6 @@ impl TraitEnv {
             .map(|def| ImplTargetKey::Decl(*def))
     }
 
-    /// The digested declaration an `impl` header's [`ImplHeader::trait_key`]
-    /// names, or `None` when the key names no trait declaration.
-    pub(super) fn trait_decl_header(&self, key: &ImplTargetKey) -> Option<&TraitDeclHeader> {
-        let ImplTargetKey::Decl(decl_key) = key else {
-            return None;
-        };
-        self.decl_header_of(decl_key)
-    }
-
     /// The digested declaration `key` identifies, or `None` when it names no
     /// trait.
     pub(super) fn decl_header_of(&self, key: &DefId) -> Option<&TraitDeclHeader> {

@@ -902,6 +902,23 @@ pub enum TypeError {
         span: Span,
     },
 
+    /// An `impl` leaves one of its trait's associated types unbound. An
+    /// associated type declares no default, so the projection stays
+    /// unsubstituted and reaches codegen as a panic.
+    ImplMissingAssocType {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
+    /// An `impl` binds a name its trait does not declare — a typo for one it
+    /// does, which leaves the real associated type unbound.
+    ImplAssocTypeNotInTrait {
+        trait_name: String,
+        assoc_name: String,
+        span: Span,
+    },
+
     /// `impl X for T` where `X` resolves to no trait, effect or resource in
     /// the impl's frame.
     UnknownTraitImpl {
@@ -1983,6 +2000,24 @@ impl TypeError {
                         receiver(*expected)
                     )
                 },
+                *span,
+            ),
+            TypeError::ImplMissingAssocType {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("impl of trait '{trait_name}' does not bind associated type '{assoc_name}'"),
+                *span,
+            ),
+            TypeError::ImplAssocTypeNotInTrait {
+                trait_name,
+                assoc_name,
+                span,
+            } => (
+                Code::TraitDeclInvalid,
+                format!("trait '{trait_name}' declares no associated type '{assoc_name}'"),
                 *span,
             ),
             TypeError::UnknownTraitImpl { name, span } => (

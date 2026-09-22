@@ -1073,12 +1073,53 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             if !is_user_local(&header.module) {
                 continue;
             }
-            let Some(decl) = header
-                .trait_key()
-                .and_then(|key| trait_env.trait_decl_header(key))
-            else {
+            let Some(ImplTargetKey::Decl(decl_key)) = header.trait_key() else {
                 continue;
             };
+            let Some(decl) = trait_env.decl_header_of(decl_key) else {
+                continue;
+            };
+            // An associated type declares no default, so one the impl leaves
+            // unbound has nothing to resolve to: the projection survives into
+            // WIR, where it names an instance registered as neither struct nor
+            // variant. A derivation request writes no members at all.
+            if !header.is_synthesize_request {
+                for declared in &decl.assoc_types {
+                    if header
+                        .associated_types
+                        .iter()
+                        .all(|bound| bound.name != declared.name)
+                    {
+                        let _ = logger.error_in(
+                            &header.module,
+                            TypeError::ImplMissingAssocType {
+                                trait_name: decl.name.clone(),
+                                assoc_name: declared.name.clone(),
+                                span: header.span,
+                            },
+                        );
+                    }
+                }
+            }
+            // The other half: a name the trait never declared is a typo for one
+            // it did, and binding it silently is what left the real one unbound.
+            // A supertrait's associated type is the subtrait's too.
+            for binding in &header.associated_types {
+                if !trait_env.declares_assoc_type(decl_key, &binding.name)
+                    && trait_env
+                        .supertrait_declaring_assoc_type(decl_key, &binding.name)
+                        .is_none()
+                {
+                    let _ = logger.error_in(
+                        &header.module,
+                        TypeError::ImplAssocTypeNotInTrait {
+                            trait_name: decl.name.clone(),
+                            assoc_name: binding.name.clone(),
+                            span: binding.span,
+                        },
+                    );
+                }
+            }
             for method in &header.methods {
                 let Some(declared) = decl.methods.iter().find(|m| m.name == method.name) else {
                     continue;
