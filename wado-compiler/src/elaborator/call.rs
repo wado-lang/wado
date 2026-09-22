@@ -3891,7 +3891,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .type_param_bounds
             .get(type_param_name)
             .cloned();
-
         if let Some(bounds) = bounds
             && let Some((found_trait, method_info_result)) = {
                 self.find_method_in_trait_bounds(

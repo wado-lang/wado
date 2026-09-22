@@ -1,0 +1,63 @@
+// A value default may name the trait's own type parameter, as it may name the
+// method's own. The trait declares the bound, so `A::default()` dispatches on
+// whatever the impl bound `A` to.
+
+struct NoFields {}
+
+impl Default for NoFields;
+
+trait One<A: Default> with () {
+    fn one(&self, a: A = A::default()) -> String;
+}
+
+// Two parameters the impl binds to one type, so the frame resolving the
+// defaults holds two names at one binder.
+trait Two<A: Default, B: Default> with () {
+    fn both(&self, a: A = A::default(), b: B = B::default()) -> String;
+}
+
+struct Box1<T> {
+    v: T,
+}
+
+impl<T: Default> One<T> for Box1<T> {
+    fn one(&self, a: T) -> String {
+        return `${a:?}`;
+    }
+}
+
+impl<T: Default> Two<T, T> for Box1<T> {
+    fn both(&self, a: T, b: T) -> String {
+        return `${a:?}/${b:?}`;
+    }
+}
+
+// A concrete instantiation, where the two parameters differ.
+struct Plain {}
+
+impl Two<i32, String> for Plain {
+    fn both(&self, a: i32, b: String) -> String {
+        return `${a:?}/${b:?}`;
+    }
+}
+
+test "a trait's own type parameter in a default arg" {
+    let bi: Box1<i32> = Box1 { v: 1 };
+    let bs: Box1<String> = Box1 { v: "x" };
+    assert bi.one() == "0";
+    assert bs.one() == "\"\"";
+}
+
+test "two trait parameters the impl binds to one type" {
+    let bi: Box1<i32> = Box1 { v: 1 };
+    let bs: Box1<String> = Box1 { v: "x" };
+    assert bi.both() == "0/0";
+    assert bs.both() == "\"\"/\"\"";
+}
+
+test "two trait parameters at distinct concrete types" {
+    assert Plain {}.both() == "0/\"\"";
+}
+
+__DATA__
+{"test": {}}

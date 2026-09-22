@@ -517,6 +517,35 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         self.tysys.compiler_trait_def(operator_compiler_item(op)?)
     }
 
+    /// The trait declaration's own type parameters, under the names it wrote
+    /// them, standing at the arguments this impl supplied. `have` is what the
+    /// impl header already named, which keeps its own spelling.
+    fn trait_declared_bindings(
+        &self,
+        trait_decl: DefId,
+        trait_args: &[TypeId],
+        receiver: Option<TypeId>,
+        have: &[DefaultTypeBinding],
+    ) -> Vec<DefaultTypeBinding> {
+        let Some(header) = self.tysys.trait_env.decl_header_of(&trait_decl) else {
+            return Vec::new();
+        };
+        header
+            .type_params
+            .iter()
+            .filter(|p| p.is_real_type_param())
+            .zip(trait_args)
+            .filter(|(p, _)| !have.iter().any(|b| b.name == p.name))
+            .map(|(p, &arg)| DefaultTypeBinding {
+                name: p.name.clone(),
+                // The trait declared the bound, so its `Self` is the trait's —
+                // which at this impl is the receiver.
+                bounds: ScopedBound::pin_all(&p.bounds, receiver),
+                settled: SettledAs::Type(arg),
+            })
+            .collect()
+    }
+
     /// The right-hand type `trait_`'s declaration gives `method_name`, read off
     /// whichever bound names that trait — a hint for typing a literal, so it
     /// reports no ambiguity of its own; the dispatch already does.
@@ -2088,7 +2117,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // parameter default naming one (`v: T = T::default()`) spells. Taken
         // before the method's own parameters join the frame: those are still
         // abstract here, and the call site binds them.
-        let impl_type_bindings: Vec<DefaultTypeBinding> = scope
+        let mut impl_type_bindings: Vec<DefaultTypeBinding> = scope
             .annotate_ctx
             .trait_ctx
             .type_params
@@ -2190,6 +2219,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
+        // A default the trait declaration wrote spells the trait's own
+        // parameters, which the impl header never names: `fn m(a: A = A::f())`
+        // under `impl One<T> for X` reaches this frame as `A`, not `T`.
+        impl_type_bindings.extend(scope.trait_declared_bindings(
+            trait_decl,
+            &trait_args,
+            receiver_type_id,
+            &impl_type_bindings,
+        ));
         let trait_name_of_impl = scope
             .tysys
             .trait_env
