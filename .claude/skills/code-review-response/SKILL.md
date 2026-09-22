@@ -64,11 +64,15 @@ a reviewer asked is how a design drifts without anyone deciding.
 
 ## Then distill
 
-Once the fixes land, invoke `/distill`. This is not a decision. Do not ask
+Commit the fixes, then invoke `/distill`. This is not a decision. Do not ask
 whether to run it, do not offer it as a next step, and do not stop before it:
 there is no case where the answer is no, and the moment you wonder is the
-moment to run it. A response that ends without it is unfinished, however green
-the tests are.
+moment to run it. A response that ends without it is unfinished.
+
+The distill is the last of the editing, not a phase that follows it. The order
+is commit, distill, test. One test run covers the fixes and the distill
+together, which is what `/distill` ends with. A run before the distill and
+another after it is the same hour spent twice.
 
 Run it even when the fixes were small, even when you distilled this branch an
 hour ago, and even when you are confident there is nothing to cut. Finding
