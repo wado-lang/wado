@@ -2894,17 +2894,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // which is well-defined even in compile-time-expanded blocks.
             Stmt::Return(_) | Stmt::TaskReturn(_) => None,
             // Recurse into blocks that don't introduce a new loop/function scope
-            Stmt::If(if_stmt) => {
-                if let Some(found) = Self::find_control_flow_in_block(&if_stmt.then_block) {
-                    return Some(found);
-                }
-                if let Some(else_block) = &if_stmt.else_block {
-                    return Self::find_control_flow_in_block(else_block);
-                }
-                None
-            }
+            Stmt::If(if_stmt) => Self::find_control_flow_in_block(&if_stmt.then_block)
+                .or_else(|| Self::find_control_flow_in_block(if_stmt.else_block.as_ref()?)),
             Stmt::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
-            // Don't recurse into loops/closures — break/continue/return there are valid
+            Stmt::Let(let_stmt) => Self::find_control_flow_in_block(let_stmt.else_block.as_ref()?),
+            Stmt::Match(m) => m
+                .arms
+                .iter()
+                .find_map(|arm| Self::find_control_flow_in_expr(&arm.body)),
+            Stmt::Expr(e) => Self::find_control_flow_in_expr(&e.expr),
+            Stmt::Assert(_) | Stmt::Item(_) | Stmt::Error(_) => None,
+            // A loop owns the `break` and `continue` written in it, and a
+            // closure owns its own `return`.
+            Stmt::While(_) | Stmt::For(_) | Stmt::ForOf(_) | Stmt::Loop(_) => None,
+        }
+    }
+
+    /// The same search through an expression that carries a block: a match arm
+    /// and a statement-position expression both reach one.
+    fn find_control_flow_in_expr(expr: &Expr) -> Option<(&'static str, Span)> {
+        match expr {
+            Expr::Block(block) => Self::find_control_flow_in_block(block),
+            Expr::LabeledBlock(lb) => Self::find_control_flow_in_block(&lb.block),
+            Expr::If(if_expr) => Self::find_control_flow_in_block(&if_expr.then_block)
+                .or_else(|| Self::find_control_flow_in_block(if_expr.else_block.as_ref()?)),
+            Expr::Match(m) => m
+                .arms
+                .iter()
+                .find_map(|arm| Self::find_control_flow_in_expr(&arm.body)),
             _ => None,
         }
     }

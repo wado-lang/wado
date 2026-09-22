@@ -1,0 +1,26 @@
+// A tuple for-of is expanded at compile time, so `break` and `continue` have
+// no loop to name and are refused. The refusal has to reach every block the
+// body can write one in, not just an `if`: inside a real loop such a
+// `continue` silently bound to that loop, and outside one it reached WIR and
+// panicked.
+fn matched(v: Option<i32>) -> i32 {
+    let mut seen = 0;
+    for let line of ["a"] as List<String> {
+        for let w of [v] {
+            let Some(n) = w else {
+                continue;
+            };
+            seen += n;
+        }
+    }
+    return seen;
+}
+
+test "a let-else body is reached" {
+    assert matched(Option::Some(1)) == 1;
+}
+
+__DATA__
+{
+  "compile_error": ":11:17: analysis error: invalid pattern: `continue` is not allowed inside a tuple for-of loop (the loop is expanded at compile time)"
+}

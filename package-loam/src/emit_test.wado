@@ -268,6 +268,19 @@ g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
     assert `${e}` == "Y = Add: no kernel broadcasts [Batch, Unit] against [Batch, Unit]";
 }
 
+test "a MatMul batch axis that stretches names both operands" {
+    let source = `
+g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
+<>
+{
+    Y = MatMul(X, Z)
+}
+`;
+    let e = generate(source, [rule("*", ["Batch", "M", "K"])]).unwrap_err();
+
+    assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
+}
+
 test "an element type the kernels cannot compute in names itself" {
     let source = `
 g (int32[N, 2] X) => (int32[N, 2] Y)

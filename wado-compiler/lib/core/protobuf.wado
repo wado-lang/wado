@@ -680,9 +680,8 @@ impl ProtobufReader {
         if self.packed_end < 0 && self.pending matches { Some(Len) } {
             self.packed_end = self.read_len()?;
             if self.packed_end == self.pos {
-                // A run with no bytes in it has no element to read, and only
-                // this scalar read knew the tag was a run at all. `PbSeqAccess`
-                // turns the flag back into the end of the sequence.
+                // Only this read knew the tag was a run at all, so the flag is
+                // how `PbSeqAccess` learns there is nothing in it.
                 self.packed_empty = true;
                 return Result::Err(DeserializeError::eof(self.pos as i64));
             }
