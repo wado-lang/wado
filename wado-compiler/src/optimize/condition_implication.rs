@@ -6,6 +6,8 @@
 
 use std::ops::ControlFlow;
 
+use cranelift_entity::EntityRef;
+
 use super::arena_query::local_written_by;
 use crate::const_eval::Value;
 use crate::nir::{FuncId, NirBinaryOp, NirUnaryOp};
@@ -18,6 +20,7 @@ use crate::optimize::arena_query::{
     binary_parts, is_pure_nontrapping_expr_typed, is_pure_operand, operand_local,
     operand_mentions_local, storage_root,
 };
+use crate::optimize::gate::{FunctionGate, GatedPass};
 use crate::tir::TypeTable;
 use crate::{hashmap, nir_arena};
 
@@ -81,7 +84,7 @@ pub(super) fn resolve_panic_ids(project: &NirPackage) -> hashmap::IndexSet<FuncI
 /// `Operand::Value`, but runs *after* the optimization loop, so the in-loop pass
 /// never sees the promoted bound. The caller pairs this with `const_branch_prune`
 /// to fixpoint so the newly-`false` checks' panic blocks go too.
-pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
+pub(super) fn eliminate_post_promote(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
     use crate::nir::NirFunction;
     use crate::nir_engine::EngineBuffers;
     let type_table = project.type_table.borrow();
@@ -90,11 +93,11 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        let mut func = func_rc.borrow_mut();
+    let len = project.functions.len();
+    gate.run_gated(GatedPass::CondImplPostPromote, len, |fid| {
+        let mut func = project.functions[fid.index()].borrow_mut();
         if func.body.is_none() {
-            continue;
+            return false;
         }
         let NirFunction {
             body,
@@ -121,9 +124,8 @@ pub(super) fn eliminate_post_promote(project: &mut NirPackage) -> bool {
         engine.set_param_locals(param_locals);
         engine.set_panic_callee_ids(&panic_ids);
         engine.set_pure_builtin_callees(&pure_builtin_callees);
-        changed |= eliminate_at_root(&mut engine);
-    }
-    changed
+        eliminate_at_root(&mut engine)
+    })
 }
 
 /// A structural bound: the right-hand side of a guard / check comparison,

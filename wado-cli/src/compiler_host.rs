@@ -14,6 +14,7 @@ use wado_compiler::{
 };
 
 use crate::args::DEFAULT_LOG_LEVEL;
+use crate::kiln_driver::KilnSpan;
 use crate::kiln_runtime::{self, KilnRunPolicy};
 use crate::run_cache::RunCache;
 use crate::runtime::create_kiln_engine;
@@ -314,7 +315,11 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: GeneratorRequest,
     ) -> Result<GeneratorResponse, GeneratorRunnerError> {
-        let (engine, component) = self.run.components().get_or_compile(component_wasm)?;
+        let (engine, component) = {
+            let _aot = KilnSpan::new(self, "kiln/aot");
+            self.run.components().get_or_compile(component_wasm)?
+        };
+        let _generate = KilnSpan::new(self, "kiln/generate");
         let (outcome, diagnostics) =
             kiln_runtime::run_generator(&engine, &component, request, KilnRunPolicy::default())
                 .await;
@@ -332,7 +337,11 @@ impl CompilerHost for FilesystemCompilerHost {
         component_wasm: &[u8],
         request: &GeneratorRequest,
     ) -> Result<Vec<Option<u64>>, GeneratorRunnerError> {
-        let (engine, component) = self.run.components().get_or_compile(component_wasm)?;
+        let (engine, component) = {
+            let _aot = KilnSpan::new(self, "kiln/aot");
+            self.run.components().get_or_compile(component_wasm)?
+        };
+        let _probe = KilnSpan::new(self, "kiln/probe");
         let (outcome, diagnostics) =
             kiln_runtime::run_probe(&engine, &component, request, KilnRunPolicy::default()).await;
         for diag in diagnostics {

@@ -89,7 +89,7 @@ use tmpl_hoist::hoist_template_buffers;
 use value_copy_demote::demote_value_copies;
 
 use extract::FreezePhase;
-use gate::GatedPass;
+use gate::{FunctionGate, GatedPass};
 
 use crate::compiler_host::SpanEmitter;
 use crate::nir_package::NirPackage;
@@ -262,9 +262,14 @@ pub fn optimize(
         // cond-impl could not see; pair with `const_branch_prune` so the
         // now-`false` checks' panic blocks are removed. Must precede
         // `select_lowering`, which reshapes conditions out of matcher form.
-        run_bounded_fixpoint("nir/cond_impl_post_promote", &mut project, profiler, |p| {
-            condition_implication::eliminate_post_promote(p) | prune_constant_branches(p)
-        });
+        run_bounded_fixpoint(
+            "nir/cond_impl_post_promote",
+            &mut project,
+            profiler,
+            |p, g| {
+                condition_implication::eliminate_post_promote(p, g) | prune_constant_branches(p, g)
+            },
+        );
         // Loop-versioned BCE: a check whose bound is loop-invariant but not
         // statically related to the loop guard (the relation lives at the
         // call site) is deleted in a fast clone guarded by the runtime
@@ -360,16 +365,26 @@ const POST_LOOP_FIXPOINT_CAP: u32 = 100;
 /// Run `step` to a fixed point under [`run_pass`] instrumentation, bounded by
 /// [`POST_LOOP_FIXPOINT_CAP`]. Returns whether any round changed the IR; emits a
 /// debug diagnostic if the cap is reached (a sign of an oscillating rewrite).
+///
+/// `step` receives a gate of the fixpoint's own, so the first round processes
+/// every function and each later one only what the round before rewrote (and
+/// its 1-hop neighbours). Without it every round re-scans the whole module to
+/// find the handful of functions still moving.
 fn run_bounded_fixpoint(
     name: &'static str,
     project: &mut NirPackage,
     profiler: &dyn SpanEmitter,
-    mut step: impl FnMut(&mut NirPackage) -> bool,
+    mut step: impl FnMut(&mut NirPackage, &mut FunctionGate) -> bool,
 ) -> bool {
+    let mut gate = FunctionGate::new(project);
     run_pass(name, project, profiler, |p| {
         let mut changed = false;
         for i in 0..POST_LOOP_FIXPOINT_CAP {
-            if !step(p) {
+            let round = format!("{name}/round {i}");
+            profiler.span_start(&round);
+            let stepped = step(p, &mut gate);
+            profiler.span_end(&round);
+            if !stepped {
                 break;
             }
             changed = true;
@@ -834,7 +849,11 @@ fn run_optimization_passes(
         "nir/store_load_forward_post_scalarize",
         project,
         profiler,
-        |p| forward_stores_to_loads_all(p) | fold_constants_all(p) | prune_constant_branches(p),
+        |p, g| {
+            forward_stores_to_loads_all(p, g)
+                | fold_constants_all(p, g)
+                | prune_constant_branches(p, g)
+        },
     );
     // Final cleanup: flatten any `$tmpl:` labeled blocks the fixpoint
     // preserved as anchors for `tmpl_hoist`. `tmpl_hoist` has finished
@@ -843,8 +862,8 @@ fn run_optimization_passes(
     // body directly. Iterate until convergence because one flatten can
     // expose another (e.g. single-stmt Block collapse on a freshly
     // produced `Block { Expr(tail) }`).
-    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p| {
-        prune_template_block_wrappers(p)
+    run_bounded_fixpoint("nir/branch_prune_final", project, profiler, |p, g| {
+        prune_template_block_wrappers(p, g)
     });
     // Body globalization: hoist constant, read-only aggregate `let` bindings
     // into shared immutable module globals so they build once at instantiation
@@ -864,8 +883,8 @@ fn run_optimization_passes(
     // `branch_prune` run here — re-entering the full loop is unsafe, since the
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
-    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p| {
-        fold_constants_all(p) | prune_constant_branches(p)
+    run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
+        fold_constants_all(p, g) | prune_constant_branches(p, g)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
