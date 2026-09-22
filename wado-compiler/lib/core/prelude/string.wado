@@ -43,6 +43,13 @@ impl Utf8Error {
     pub fn error_len(&self) -> Option<i32> {
         return self.error_len;
     }
+
+    /// The same failure, with its offset read from `base` instead of from the
+    /// start of the decoded buffer. A caller decoding a stream in pieces owes
+    /// this, or it reports a position into a buffer its own caller never saw.
+    pub fn rebased(&self, base: i32) -> Utf8Error {
+        return Utf8Error { ..*self, valid_up_to: base + self.valid_up_to };
+    }
 }
 
 impl Display for Utf8Error {
@@ -980,8 +987,9 @@ impl String {
     /// behind rather than rejected, so a caller decoding a stream carries those
     /// bytes into its next chunk.
     ///
-    /// `Err` names a sequence no further byte could complete, and leaves this
-    /// string untouched: the prefix is validated before any of it is appended.
+    /// `Err` names a sequence no further byte could complete, offset from the
+    /// start of `bytes` — a stream decoder owes it `Utf8Error::rebased`. This
+    /// string is untouched: the prefix is validated before any of it is appended.
     pub fn push_utf8<S: AsByteSlice>(&mut self, bytes: &S) -> Result<i32, Utf8Error> {
         let slice = bytes.as_byte_slice();
         let taken = String::utf8_valid_prefix(&slice);

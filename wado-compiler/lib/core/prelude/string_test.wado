@@ -726,6 +726,13 @@ test "Utf8Error points past the valid prefix" {
     assert e.error_len() == Option::Some(1);
 }
 
+test "Utf8Error::rebased shifts the offset and keeps the rest" {
+    let e = utf8_err([0x41, 0xC3, 0xB1, 0xFF] as List<u8>);
+    assert e.rebased(100) == Utf8Error::invalid(103, 1);
+    assert utf8_err([0x41, 0xC3] as List<u8>).rebased(100) == Utf8Error::incomplete(101);
+    assert e.rebased(0) == e;
+}
+
 test "Utf8Error Display names the offset and what it found" {
     assert `${utf8_err([0x41, 0xFF] as List<u8>)}` == "invalid utf-8 sequence of 1 bytes from index 1";
     assert `${utf8_err([0x41, 0xC3] as List<u8>)}` == "incomplete utf-8 byte sequence from index 1";

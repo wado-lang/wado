@@ -132,6 +132,8 @@ pub enum DeserializeErrorKind {
 pub struct DeserializeError {
     pub kind: DeserializeErrorKind,
     pub message: String,
+    /// Byte offset into the input, or `-1` where the failure has no position —
+    /// a whole-value rejection, or a format that counts nothing.
     pub offset: i64,
 }
 
@@ -147,8 +149,10 @@ impl Display for DeserializeError {
 impl Error for DeserializeError {
 }
 
+/// A constructor a caller with no position can reach defaults `offset` to `-1`,
+/// so that caller omits it rather than inventing a byte the reader would trust.
 impl DeserializeError {
-    pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn unexpected_type<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::UnexpectedType, message: msg.to_string(), offset };
     }
 
@@ -160,11 +164,11 @@ impl DeserializeError {
         };
     }
 
-    pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn invalid_value<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::InvalidValue, message: msg.to_string(), offset };
     }
 
-    pub fn malformed<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn malformed<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::MalformedInput, message: msg.to_string(), offset };
     }
 
@@ -180,11 +184,11 @@ impl DeserializeError {
         };
     }
 
-    pub fn overflow<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn overflow<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::Overflow, message: msg.to_string(), offset };
     }
 
-    pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64) -> DeserializeError {
+    pub fn depth_limit<S: AsStrSlice>(msg: S, offset: i64 = -1) -> DeserializeError {
         return DeserializeError { kind: DeserializeErrorKind::DepthLimitExceeded, message: msg.to_string(), offset };
     }
 

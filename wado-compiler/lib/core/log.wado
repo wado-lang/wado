@@ -177,14 +177,17 @@ pub fn log_level() -> Level {
     return RUNTIME_LEVEL;
 }
 
-/// The fields as a `Value`, or `Null` when they will not serialize: degrading
-/// to fieldless beats inventing content that was never there.
+/// The fields as a `Value`. Fields that will not serialize are replaced by the
+/// reason, under a key of this module's own: the failure reaches whoever is
+/// listening through the sink they installed, rather than around it.
 fn box_fields<T: Serialize>(fields: T) -> Value {
     return match to_value(&fields) {
         Ok(v) => v,
         Err(e) => {
-            log_stderr(`log: fields failed to serialize: ${e}`);
-            Value::Null;
+            builtin::cold_path();
+            let mut reported = TreeMap::<String, Value>::new();
+            reported["log.fields_error"] = Value::String(`${e}`);
+            Value::Object(reported);
         },
     };
 }

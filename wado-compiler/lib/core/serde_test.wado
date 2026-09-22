@@ -237,6 +237,13 @@ test "error type construction" {
     assert de2.offset == 10;
 }
 
+test "a positionless DeserializeError omits the offset rather than saying 0" {
+    assert DeserializeError::malformed("bad json").offset == -1;
+    assert DeserializeError::invalid_value("bad value").offset == -1;
+    assert `${DeserializeError::malformed("bad json")}` == "bad json";
+    assert `${DeserializeError::malformed("bad json", 0)}` == "bad json at offset 0";
+}
+
 test "serialize i32" {
     let n = 42;
     assert mock_serialize(&n) == "42";

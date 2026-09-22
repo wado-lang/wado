@@ -64,6 +64,19 @@ test "captures message, level, and caller location" {
     };
 }
 
+test "fields that will not serialize reach the sink as the reason" {
+    let mut sink = CaptureSink {};
+    with Log => &mut sink do {
+        error(`boom`, Value::Undefined);
+    };
+    assert sink.events.len() == 1;
+    let Object(fields) = sink.events[0].fields else {
+        unreachable();
+    };
+    assert fields.len() == 1;
+    assert fields["log.fields_error"] matches { String(_) };
+}
+
 test "the raw event emitter takes a run-time level" {
     let mut sink = CaptureSink {};
     let mut level = Level::Error;

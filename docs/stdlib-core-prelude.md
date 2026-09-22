@@ -3709,6 +3709,12 @@ Byte offset at which the first invalid sequence begins.
 Length of the invalid sequence, or `None` when the input just ends short
 and more bytes could still complete it.
 
+#### `pub fn rebased(&self, base: i32) -> Utf8Error`
+
+The same failure, with its offset read from `base` instead of from the
+start of the decoded buffer. A caller decoding a stream in pieces owes
+this, or it reports a position into a buffer its own caller never saw.
+
 #### `impl Display for Utf8Error`
 
 ##### `fn fmt(&self, f: &mut Formatter)`
@@ -4032,8 +4038,9 @@ answer how many bytes that was. A trailing sequence cut short is left
 behind rather than rejected, so a caller decoding a stream carries those
 bytes into its next chunk.
 
-`Err` names a sequence no further byte could complete, and leaves this
-string untouched: the prefix is validated before any of it is appended.
+`Err` names a sequence no further byte could complete, offset from the
+start of `bytes` — a stream decoder owes it `Utf8Error::rebased`. This
+string is untouched: the prefix is validated before any of it is appended.
 
 #### `pub fn is_valid_utf8(bytes: ByteSlice) -> bool`
 

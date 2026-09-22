@@ -64,7 +64,9 @@ pub fn read_text(content: Stream<u8>) -> Result<String, Utf8Error> {
     loop {
         let chunk = content.read(READ_CHUNK);
         pending.extend(&chunk.items);
-        let taken = out.push_utf8(&(pending as ByteList))?;
+        // Every byte read is either decoded into `out` or still in `pending`.
+        let pending_at = out.len();
+        let taken = out.push_utf8(&(pending as ByteList)).map_err(|e| e.rebased(pending_at))?;
         pending = pending.as_slice().slice(taken, pending.len()).to_list();
         if chunk.result != CopyResult::Completed {
             break;

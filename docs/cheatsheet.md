@@ -1189,9 +1189,9 @@ struct Broken { retries: i32 = 3, name: String }
 impl Default for Broken;   // ERROR: `name` has no default expression
 ```
 
-`From` takes the same marker, but no use derives it, so the marker is what asks
-for one. On a variant, `impl From<T> for V;` wraps the value into the single
-case whose payload is `T`.
+`From` takes the same marker. Nothing derives it from a use, so the marker is
+what asks for one. On a variant, `impl From<T> for V;` wraps the value into the
+single case whose payload is `T`.
 
 ```wado
 variant ServiceError { Network(NetworkError), Timeout(TimeoutError) }
@@ -1203,9 +1203,9 @@ impl From<NetworkError> for ServiceError;   // -> ServiceError::Network(e)
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
 Every standard library error type implements `Display` and `Error`, so
-`` `${e}` `` renders the reason. A wider error that carries one interpolates it
-instead of wording the failure again, and declares `impl From<Narrower> for Wider`
-so `?` converts at the call site:
+`` `${e}` `` renders the reason. A wider error that carries a narrower one
+interpolates it rather than wording the failure again. It declares
+`impl From<Narrower> for Wider`, so `?` converts at the call site:
 
 ```wado
 impl From<Utf8Error> for ParseError;

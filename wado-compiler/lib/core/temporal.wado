@@ -2028,7 +2028,7 @@ fn parse_rfc850_date(text: &StrSlice, comma: i32) -> Result<Instant, Deserialize
 fn parse_asctime(text: &StrSlice) -> Result<Instant, DeserializeError> {
     let end = text.len();
     if end != 24 {
-        return Result::Err(DeserializeError::malformed("expected an HTTP-date", 0));
+        return Result::Err(DeserializeError::malformed("expected an HTTP-date"));
     }
     expect_byte(text, 3, b' ')?;
     let month = read_month_name(text, 4)?;
