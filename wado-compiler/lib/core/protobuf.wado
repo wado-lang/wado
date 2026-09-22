@@ -638,8 +638,6 @@ pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, Seri
     return Result::Ok(out.buf);
 }
 
-// ── Decoding ──
-
 fn undecodable<S: AsStrSlice>(what: S, offset: i32) -> DeserializeError {
     return DeserializeError::unexpected_type(`protobuf cannot decode ${what}`, offset as i64);
 }
@@ -731,8 +729,7 @@ impl ProtobufReader {
             return Result::Ok(true);
         }
         // The field is not repeated, so the run is one value: its last element.
-        // That is the `repeated` to singular path the wire format allows, and
-        // whoever entered the run is who leaves it.
+        // That is the `repeated` to singular path the wire format allows.
         if self.packed_end == self.pos {
             self.leave_packed();
             return Result::Ok(false);

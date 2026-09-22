@@ -310,8 +310,7 @@ test "an element type the kernels cannot compute in names itself" {
     assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
 }
 
-// Half precision has Wado primitives and no kernel, which is what roadmap
-// step 2 closes. Until it does, such a graph stops the build like any other.
+// Half precision has Wado primitives and no kernel, which roadmap step 2 closes.
 test "a half precision boundary tensor is refused" {
     assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16";
     assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16";
