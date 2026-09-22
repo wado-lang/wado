@@ -42,6 +42,9 @@ pub(super) struct SharedEscape<'a> {
     in_flight: RefCell<IndexSet<Slot>>,
     /// Whether the query in progress leaned on such an assumption.
     assumed: Cell<bool>,
+    /// Per-body seed census, built on first ask. Every slot is asked of every
+    /// body, so rediscovering one body's reads per slot is quadratic.
+    census: RefCell<IndexMap<usize, BodyCensus>>,
 }
 
 impl<'a> SharedEscape<'a> {
@@ -51,7 +54,24 @@ impl<'a> SharedEscape<'a> {
             verdicts: RefCell::new(IndexMap::default()),
             in_flight: RefCell::new(IndexSet::default()),
             assumed: Cell::new(false),
+            census: RefCell::new(IndexMap::default()),
         }
+    }
+
+    /// Whether `body` can read the slot at all. A function that cannot is left
+    /// alone, so an unrelated one never refuses the query.
+    fn can_read(
+        &self,
+        func_idx: usize,
+        body: &Body,
+        seed_field: Option<&str>,
+        seed_call: Option<FuncId>,
+    ) -> bool {
+        let mut census = self.census.borrow_mut();
+        census
+            .entry(func_idx)
+            .or_insert_with(|| BodyCensus::of(body, &self.project.type_table.borrow()))
+            .can_read(seed_field, seed_call)
     }
 
     /// Whether a constant handed to `func_id`'s parameter at `pos` may be
@@ -161,12 +181,7 @@ impl<'a> SharedEscape<'a> {
             if seed_field.is_none() && seed_call.is_none() {
                 return true;
             }
-            if !has_seed(
-                body,
-                &self.project.type_table.borrow(),
-                seed_field,
-                seed_call,
-            ) {
+            if !self.can_read(func_idx, body, seed_field, seed_call) {
                 return true;
             }
         }
@@ -574,45 +589,54 @@ fn pattern_field_reads<'a>(
         .map(|f| f.pattern)
 }
 
-/// Whether `body` can read the slot at all. A function that cannot is left
-/// alone, so an unrelated one never refuses the query.
-fn has_seed(
-    body: &Body,
-    type_table: &TypeTable,
-    seed_field: Option<&str>,
-    seed_call: Option<FuncId>,
-) -> bool {
-    let mut found = false;
-    body.for_each_reachable_node(|node| {
-        if found {
-            return;
-        }
-        match node {
-            NodeRef::Expr(e) => {
-                found = match &body.exprs[e].kind {
+/// What one body can read, as the sets every seed question is asked against.
+#[derive(Default)]
+struct BodyCensus {
+    fields_read: IndexSet<String>,
+    /// A field read promoted to a value carries no name to match, so it counts
+    /// as a read of any field.
+    reads_unnamed_field: bool,
+    callees: IndexSet<FuncId>,
+}
+
+impl BodyCensus {
+    /// One walk answering every seed question this body will be asked.
+    fn of(body: &Body, type_table: &TypeTable) -> Self {
+        let mut census = Self::default();
+        body.for_each_reachable_node(|node| {
+            match node {
+                NodeRef::Expr(e) => match &body.exprs[e].kind {
                     ExprKind::FieldAccess { field_name, .. } => {
-                        seed_field == Some(field_name.as_str())
+                        census.fields_read.insert(field_name.clone());
                     }
-                    ExprKind::Call { func_id, .. } => seed_call == Some(*func_id),
-                    _ => false,
-                };
+                    ExprKind::Call { func_id, .. } => {
+                        census.callees.insert(*func_id);
+                    }
+                    _ => {}
+                },
+                NodeRef::Pat(p) => {
+                    if let PatKind::Struct { fields, .. } = &body.pats[p].kind {
+                        for f in fields {
+                            census.fields_read.insert(f.field_name.clone());
+                        }
+                    }
+                }
+                NodeRef::Stmt(_) | NodeRef::Block(_) => {}
             }
-            NodeRef::Pat(p) => {
-                found = pattern_field_reads(body, p, seed_field).next().is_some();
-            }
-            NodeRef::Stmt(_) | NodeRef::Block(_) => {}
-        }
-        if !found {
-            body.for_each_operand(node, |op| {
-                // A field read promoted to a value carries no name to match, so
-                // it counts as a possible read of any field.
-                found |= seed_field.is_some()
-                    && matches!(
+            if !census.reads_unnamed_field {
+                body.for_each_operand(node, |op| {
+                    census.reads_unnamed_field |= matches!(
                         promoted_reference(body, type_table, op),
                         PromotedRef::Unknown
                     );
-            });
-        }
-    });
-    found
+                });
+            }
+        });
+        census
+    }
+
+    fn can_read(&self, seed_field: Option<&str>, seed_call: Option<FuncId>) -> bool {
+        seed_field.is_some_and(|f| self.reads_unnamed_field || self.fields_read.contains(f))
+            || seed_call.is_some_and(|id| self.callees.contains(&id))
+    }
 }

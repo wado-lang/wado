@@ -80,6 +80,29 @@ pub(super) struct ConstFoldCache {
     maps: FoldMaps,
 }
 
+impl ConstFoldCache {
+    /// `project`'s maps, rebuilt only where the function or global set moved.
+    fn maps<'c>(
+        cache: &'c mut Option<Self>,
+        project: &NirPackage,
+        type_table: &TypeTable,
+    ) -> &'c FoldMaps {
+        let funcs_len = project.functions.len();
+        let globals_len = project.globals.len();
+        let stale = cache
+            .as_ref()
+            .is_none_or(|c| c.funcs_len != funcs_len || c.globals_len != globals_len);
+        if stale {
+            *cache = Some(Self {
+                funcs_len,
+                globals_len,
+                maps: build_fold_maps(project, type_table),
+            });
+        }
+        &cache.as_ref().expect("just populated").maps
+    }
+}
+
 /// Apply constant folding to all functions in the project.
 /// Flow-sensitive constant folding, gated: skips functions unchanged since this
 /// pass last ran. Used in the fixed-point loop, reusing `cache`'s [`FoldMaps`]
@@ -90,19 +113,7 @@ pub fn fold_constants(
     cache: &mut Option<ConstFoldCache>,
 ) -> bool {
     let type_table = project.type_table.borrow();
-    let funcs_len = project.functions.len();
-    let globals_len = project.globals.len();
-    let stale = cache
-        .as_ref()
-        .is_none_or(|c| c.funcs_len != funcs_len || c.globals_len != globals_len);
-    if stale {
-        *cache = Some(ConstFoldCache {
-            funcs_len,
-            globals_len,
-            maps: build_fold_maps(project, &type_table),
-        });
-    }
-    let maps = &cache.as_ref().expect("just populated").maps;
+    let maps = ConstFoldCache::maps(cache, project, &type_table);
     let globals = build_global_view(project, &type_table, maps);
     let mut visitor = new_visitor(&type_table, maps, &globals);
     let mut buffers = EngineBuffers::default();
@@ -117,13 +128,17 @@ pub fn fold_constants(
     })
 }
 
-/// Post-loop variant: rebuilds the maps each call rather than reading the loop's
-/// cache. Ungated — its global facts reach readers the call graph never links.
-pub fn fold_constants_uncached(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+/// Post-loop variant, ungated: its global facts reach readers the call graph
+/// never links, so every function is folded. Shares the loop's [`FoldMaps`].
+pub fn fold_constants_ungated(
+    project: &mut NirPackage,
+    gate: &mut FunctionGate,
+    cache: &mut Option<ConstFoldCache>,
+) -> bool {
     let type_table = project.type_table.borrow();
-    let maps = build_fold_maps(project, &type_table);
-    let globals = build_global_view(project, &type_table, &maps);
-    let mut visitor = new_visitor(&type_table, &maps, &globals);
+    let maps = ConstFoldCache::maps(cache, project, &type_table);
+    let globals = build_global_view(project, &type_table, maps);
+    let mut visitor = new_visitor(&type_table, maps, &globals);
     let mut buffers = EngineBuffers::default();
     let mut changed = false;
     for (i, func) in project.functions.iter().enumerate() {

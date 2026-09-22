@@ -166,11 +166,11 @@ pub(super) fn reachable_function_positions(
     let descriptors = build_callee_descriptors(project);
     let mut graph = build_analysis_graph(project, &descriptors);
     let mut reachable = compute_function_reachability(project, &descriptors, &mut graph);
-    for id in cached {
-        let function = function_id_for(&project.functions[id.index()].borrow());
-        let callees = compute_reachable(&graph.call_graph, &function);
-        reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
-    }
+    let roots = cached
+        .into_iter()
+        .map(|id| function_id_for(&project.functions[id.index()].borrow()));
+    let callees = compute_reachable(&graph.call_graph, roots);
+    reachable.extend(compute_reachable_positions(&callees, &graph.func_positions));
     reachable
 }
 
@@ -349,9 +349,7 @@ fn extend_reachable_for_optimizer_passes(
     // `Ctx::resolve` reads the compiler item off an entry this pass leaves in
     // place.
     if append_ids.iter().any(|id| reachable.contains(id)) {
-        for id in fused {
-            reachable.extend(compute_reachable(call_graph, &id));
-        }
+        reachable.extend(compute_reachable(call_graph, fused));
     }
 
     // An `array_clone::<T>` site reaches its helper through the element type
@@ -402,7 +400,7 @@ fn extend_reachable_for_optimizer_passes(
             }
             for helper_id in helpers {
                 if !reachable.contains(helper_id) {
-                    reachable.extend(compute_reachable(call_graph, helper_id));
+                    reachable.extend(compute_reachable(call_graph, [helper_id.clone()]));
                     added_this_round = true;
                 }
             }
@@ -457,24 +455,16 @@ fn compute_reachable_from_entries(
     project: &NirPackage,
     call_graph: &CallGraph,
 ) -> IndexSet<FunctionId> {
-    let mut reachable = IndexSet::default();
-
-    for func_rc in &project.functions {
+    let roots = project.functions.iter().filter_map(|func_rc| {
         let func = func_rc.borrow();
-
         let is_root = func.is_cm_export
             || (func.is_export
                 && project
                     .wasm_module_sources
                     .contains_key(&func.module_source));
-
-        if is_root {
-            let func_id = FunctionId::free(&func.module_source, &func.name);
-            reachable.extend(compute_reachable(call_graph, &func_id));
-        }
-    }
-
-    reachable
+        is_root.then(|| FunctionId::free(&func.module_source, &func.name))
+    });
+    compute_reachable(call_graph, roots)
 }
 
 /// Resolve WASI imports and populate `project.imports` and `project.used_wasi_functions`
@@ -1424,13 +1414,14 @@ fn add_to_string_callee(type_id: TypeId, type_table: &TypeTable, analysis: &mut 
     }
 }
 
-/// Worklist BFS over `call_graph` starting at `entry`.
+/// Worklist BFS over `call_graph` from every root in `entries` at once. One
+/// traversal per root instead re-walks whatever the roots share.
 fn compute_reachable(
     call_graph: &IndexMap<FunctionId, IndexSet<FunctionId>>,
-    entry: &FunctionId,
+    entries: impl IntoIterator<Item = FunctionId>,
 ) -> IndexSet<FunctionId> {
     let mut reachable = IndexSet::default();
-    let mut worklist = vec![entry.clone()];
+    let mut worklist: Vec<FunctionId> = entries.into_iter().collect();
 
     while let Some(func) = worklist.pop() {
         if reachable.contains(&func) {
@@ -2507,7 +2498,7 @@ mod tests {
         let mut interner = ModuleSourceInterner::new();
         let call_graph = IndexMap::default();
         let entry = free_fn(&mut interner, "run");
-        let reachable = compute_reachable(&call_graph, &entry);
+        let reachable = compute_reachable(&call_graph, [entry]);
         assert!(reachable.contains(&free_fn(&mut interner, "run")));
         assert_eq!(reachable.len(), 1);
     }
@@ -2530,7 +2521,7 @@ mod tests {
             IndexSet::from_iter([free_fn(&mut interner, "bar")]),
         );
 
-        let reachable = compute_reachable(&call_graph, &free_fn(&mut interner, "run"));
+        let reachable = compute_reachable(&call_graph, [free_fn(&mut interner, "run")]);
         assert!(reachable.contains(&free_fn(&mut interner, "run")));
         assert!(reachable.contains(&free_fn(&mut interner, "foo")));
         assert!(reachable.contains(&free_fn(&mut interner, "bar")));

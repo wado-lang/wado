@@ -64,7 +64,7 @@ use crate::nir_arena::{NodeRef, PatKind, StmtKind};
 use crate::trace::filter;
 
 use const_branch_prune::{prune_constant_branches, prune_template_block_wrappers};
-use const_folding::{ConstFoldCache, fold_constants, fold_constants_uncached};
+use const_folding::{ConstFoldCache, fold_constants, fold_constants_ungated};
 use const_object_globalization::globalize_const_objects;
 use container_sroa::scalarize_containers;
 use copy_prop::propagate_copies;
@@ -849,7 +849,7 @@ fn run_optimization_passes(
         profiler,
         |p, g| {
             forward_stores_to_loads(p, g)
-                | fold_constants_uncached(p, g)
+                | fold_constants_ungated(p, g, &mut const_fold_cache)
                 | prune_constant_branches(p, g)
         },
     );
@@ -882,7 +882,7 @@ fn run_optimization_passes(
     // nullable `GlobalVarGet`s globalization emits are not meant to flow back
     // through `value_copy` / `sroa` (which is why globalization runs last).
     run_bounded_fixpoint("nir/const_fold_post_global", project, profiler, |p, g| {
-        fold_constants_uncached(p, g) | prune_constant_branches(p, g)
+        fold_constants_ungated(p, g, &mut const_fold_cache) | prune_constant_branches(p, g)
     });
     // Forward the inliner's leftover single-use pure-scalar value-parameter
     // temps into their uses. Runs last, after every scalarization / globalization
