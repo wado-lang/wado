@@ -800,7 +800,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         impl_is_concrete: bool,
         impl_declared_params: &[ast::GenericParam],
     ) -> Vec<TirTypeParam> {
-        let saved = &self.saved().clone();
         let slots = ImplParamSlots::of(impl_type, impl_declared_params);
         let impl_type_inner = match impl_type {
             ast::Type::Reference(inner) | ast::Type::MutReference(inner) => inner.as_ref(),
@@ -828,7 +827,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             }
         };
 
-        let saved_bounds = saved.type_param_bounds.clone();
+        let saved_bounds = self.saved().type_param_bounds.clone();
         self.annotate_ctx.trait_ctx.type_param_bounds = saved_bounds;
 
         // A slot the target never mentions is the block's too, numbered after
@@ -867,10 +866,8 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             ));
         }
 
-        // `Self` is established before the trait's parameters, whose bounds pin
-        // it, and after the impl's own, which `Maker<Container<U>>` names. Its
-        // trait comes off the header: a concrete `Self` carries no bound to read
-        // one from, and the defaults it inherits qualify `Self::Assoc` by it.
+        // After the impl's own parameters, which `Maker<Container<U>>` names,
+        // and before the trait's, whose bounds pin the `Self` they mean.
         let implementing = SelfBinding {
             type_id: self.resolve_type(impl_type),
             declaring_trait: trait_type.and_then(|t| {
@@ -1032,10 +1029,7 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         let Some(args) = impl_target_head_args(inner) else {
             return Vec::new();
         };
-        args.to_vec()
-            .iter()
-            .map(|arg| self.resolve_type(arg))
-            .collect()
+        args.iter().map(|arg| self.resolve_type(arg)).collect()
     }
 
     pub(super) fn enter_impl_method_frame(
@@ -1584,8 +1578,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .borrow_mut()
             .make_type_param("Self".to_string(), 0);
         // Before the parameters, since each one's bounds pin the `Self` they
-        // mean, and `Self::Assoc` inside the declaration means this trait's
-        // name rather than whatever the enclosing walk was implementing.
+        // mean, and inside the declaration that is this trait.
         let declaring = SelfBinding {
             type_id: self_slot,
             declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
@@ -1596,9 +1589,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             BinderInScope::undeclared(0, self_slot),
             vec![ScopedBound::new(
                 ast::TraitBound {
-                    // The trait's own declaration node, which the resolution walk
-                    // answers for: `Self` here is bounded by this trait, and a
-                    // fresh id would be a reference site nothing resolved.
+                    // The trait's own declaration node, which the resolution
+                    // walk answers for; a fresh id nothing resolved would not.
                     id: trait_decl.id,
                     name: trait_decl.name.clone(),
                     type_args: Vec::new(),

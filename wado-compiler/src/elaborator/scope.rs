@@ -173,9 +173,11 @@ pub(super) struct TraitParamFromImpl<'p, A> {
     /// it wrote none. What a missing argument means is the caller's: a default
     /// to expand, or a parameter to leave alone.
     pub(super) arg: Option<A>,
-    /// The slot the parameter occupies in the trait's own numbering, `None` for
-    /// an `fn`-bound one, which is realised in its own type and takes none.
+    /// The slot the parameter occupies in the trait's own numbering, counted
+    /// from 1 since slot 0 is the trait's `Self`.
     pub(super) slot: u32,
+    /// Whether the parameter occupies `slot` at all. An `fn`-bound one is
+    /// realised in its own type, so it takes an argument position and no slot.
     pub(super) takes_a_slot: bool,
     pub(super) bounds: Vec<ScopedBound>,
 }
@@ -184,12 +186,9 @@ pub(super) struct TraitParamFromImpl<'p, A> {
 /// for it, the slot it occupies, and the bounds it declares pinned to
 /// `implementing`.
 ///
-/// The two numberings differ and both are here, since reading one for the other
-/// slides every parameter after an `fn`-bound one. An argument position counts
-/// every parameter a site may write ([`ast::GenericParam::fills_impl_slot`]); a
-/// slot counts only those a substitution fills
-/// ([`ast::GenericParam::is_real_type_param`]). The trait wrote the bounds in
-/// its own space, so their `Self` is the type standing under it.
+/// Both numberings are here, since reading one for the other slides every
+/// parameter after an `fn`-bound one. The trait wrote the bounds in its own
+/// space, so their `Self` is the type standing under it.
 pub(super) fn trait_params_from_impl<'p, A: Copy>(
     params: &'p [ast::GenericParam],
     args: &[A],
@@ -797,12 +796,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
 
     /// Bind `name` to `binder` and to what it is bounded by, in one step.
     ///
-    /// The two are one fact. A binder without its bounds is a name that
-    /// resolves and dispatches on nothing; bounds without a binder are a
-    /// constraint no name reaches. A new binder is a new meaning for the name,
-    /// so what the old one was bounded by goes with it: a method parameter
-    /// shadowing an impl's would otherwise dispatch on the impl parameter's
-    /// traits as well as its own.
+    /// The two are one fact: a binder without its bounds dispatches on nothing,
+    /// and bounds without a binder are a constraint no name reaches. A new
+    /// binder is a new meaning, so the old one's bounds go with it, and a
+    /// method parameter shadowing an impl's dispatches on its own traits alone.
     pub(super) fn bind_param(
         &mut self,
         name: &str,
@@ -840,9 +837,8 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     pub(super) fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
         let self_binding = self.self_binding();
         if self_binding.is_none() {
-            // Every bound the parameter declares, not the trait-named ones kept
-            // below: an `fn` bound writes types too, and one rooted at `Self`
-            // goes as unchecked there as anywhere else.
+            // Every bound the parameter declares, not the trait-named ones
+            // below: an `fn` bound writes types rooted at `Self` too.
             self.reject_self_in_bounds(&param.name, &param.bounds);
         }
         ScopedBound::pin_declared(param, self_binding)

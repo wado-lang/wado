@@ -548,7 +548,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                                     assoc_types: Vec::new(),
                                     span,
                                     fn_signature: None,
-                                    // The referent this bound was rebuilt from.
                                     // Recorded on the bound, so nothing has to
                                     // resolve `name` at an id the walk never saw.
                                     resolved: b.canonical(),

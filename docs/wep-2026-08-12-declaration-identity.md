@@ -752,18 +752,18 @@ reads the instance's `Option<i32>` for it. A parameter the target does not name
 takes a slot past the ones it assigned, which no instantiation reaches.
 
 One answer, `ImplParamSlots`, serves the block's own frame, its methods, and the
-associated types it registers. Each site computing its own is the shape this
-defect takes: they read the target differently — one unwrapping a reference,
-another not; one counting the written arguments, another the parameters it
-bound — and a block whose target both reach numbers one parameter twice. The
-cross-check against the trait solver is where that surfaces, as a disagreement
-about whether an impl applies at all.
+associated types it registers. Where each site computes its own, they read the
+target differently. One unwraps a reference and another does not; one counts the
+arguments the target writes and another the parameters it bound. A block both
+sites reach then carries two numbers for one parameter, and the cross-check
+against the trait solver reports it as a disagreement about whether the impl
+applies at all.
 
-A trait declaration carries two numberings, and they are not the same count. An
-argument position counts every parameter a site may write; a slot counts only
-those a substitution fills, and an `fn`-bound parameter takes the first and not
-the second. `trait_params_from_impl` reports both, so a reader asking for one
-cannot land on the other.
+A trait declaration carries two numberings, and they do not count the same
+parameters. An argument position counts every parameter a site may write; a slot
+counts only those a substitution fills, and an `fn`-bound parameter takes the
+first and not the second. `trait_params_from_impl` reports both, so a reader
+asking for one cannot land on the other.
 
 ### The head finds the candidates, the arguments choose
 
@@ -774,10 +774,10 @@ Registering a block's associated types without it files
 `impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
 build order then decides both, which is the pick this WEP forbids.
 
-A reference target is the case where the two readings differ most. Every impl on
-one is filed under a single receiver key, and the pointee is the one argument
-that chooses between them, so the written target names that pointee whole.
-Reading the pointee's own arguments there compares a nesting level too deep.
+A reference target is where the two readings come apart. Every impl on one is
+filed under a single receiver key, and the pointee is the one argument that
+chooses between them, so the written target names that pointee whole. Reading
+the pointee's own arguments there compares a nesting level too deep.
 
 Fixtures: `assoc_type_per_receiver_args.wado`,
 `assoc_type_binder_at_target_position.wado`,

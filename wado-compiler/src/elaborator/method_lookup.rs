@@ -160,22 +160,30 @@ pub(super) struct ImplParamSlots {
 }
 
 impl ImplParamSlots {
-    /// The target says where it writes a name. A parameter it does not write —
-    /// a blanket's projection, a trait argument's own — takes a slot past the
-    /// ones it assigned, which no instantiation reaches.
+    /// The target says where it writes a name. A parameter it does not write,
+    /// such as a blanket's projection, takes a slot past every position the
+    /// target has, which no instantiation reaches.
     pub(super) fn of(target: &Type, params: &[ast::GenericParam]) -> Self {
         let args = impl_target_args(target).unwrap_or_default();
+        // An argument spelling the name outright claims it over one merely
+        // mentioning it, so `Holder<Wrap<T>, T>` puts `T` at 1 and not 0.
         let written = |param: &ast::GenericParam| {
-            args.iter()
-                .position(|arg| target_arg_names(arg, &param.name))
-                .map(|at| at as u32)
+            let name = &param.name;
+            let at = args
+                .iter()
+                .position(|arg| target_arg_names(arg, name))
+                .or_else(|| args.iter().position(|arg| arg.mentions(name)))?;
+            Some(at as u32)
         };
         let mut slots: IndexMap<String, u32> = params
             .iter()
             .filter(|param| param.fills_impl_slot())
             .filter_map(|param| Some((param.name.clone(), written(param)?)))
             .collect();
-        let mut next = slots.values().map(|slot| slot + 1).max().unwrap_or(0);
+        // Every written slot is a position in `args`, so its length is past
+        // them all, concrete arguments the target wrote included.
+        let mut next = args.len() as u32;
+        assert!(slots.values().all(|&slot| slot < next));
         for param in params.iter().filter(|param| param.fills_impl_slot()) {
             if slots.contains_key(&param.name) {
                 continue;
@@ -191,7 +199,7 @@ impl ImplParamSlots {
     }
 }
 
-/// Whether a target argument is the parameter `name` — written plainly, or
+/// Whether a target argument is the parameter `name`: written plainly, or
 /// spread as a pack in a tuple target.
 fn target_arg_names(arg: &Type, name: &str) -> bool {
     match arg {
@@ -227,11 +235,8 @@ impl TypeSystem {
         impl_ty: &Type,
         receiver_type_args: Option<&[TypeId]>,
     ) -> bool {
-        // A reference receiver supplies its pointee as the one argument, so
-        // that is what the written target names: `&Wrap<i32>` writes
-        // `Wrap<i32>`. Reading the pointee's own arguments compares one nesting
-        // level too deep, and the solver, which keeps the reference, then
-        // disagrees with the answer here.
+        // A reference receiver supplies its pointee as its one argument, so the
+        // written target names that pointee whole, not the pointee's arguments.
         if let Type::Reference(inner) | Type::MutReference(inner) = impl_ty {
             let Some(args) = receiver_type_args else {
                 return true;
@@ -1819,13 +1824,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Bind `name` in the current type-param scope as the binder `decl`
-    /// declares. The node is the caller's to state, never this helper's to
-    /// find — see [`super::scope::param_decl`].
-    /// Point a name already in scope at another type, keeping what it is
-    /// bounded by: the declaration's `T: Ord` still holds of the receiver
-    /// argument standing in for it. A name taking a new meaning is bound
-    /// through [`Scope::bind_param`] instead, which drops the old one's bounds.
+    /// Point `name` at another type, keeping the bounds it carries. A name
+    /// taking a new meaning goes through `Scope::bind_param`, which drops them.
     fn bind_type_param(
         scope: &mut scope::TypeParamScope<'_, '_, H>,
         decl: Option<ast::AstId>,
@@ -2288,9 +2288,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return found_traits;
         };
         let trait_args = impl_sig.trait_type_args;
-        // A default the trait declaration wrote spells the trait's own
-        // parameters, which the impl header never names: `fn m(a: A = A::f())`
-        // under `impl One<T> for X` reaches this frame as `A`, not `T`.
+        // A trait-declared default spells the trait's own parameters: under
+        // `impl One<T> for X`, `fn m(a: A = A::f())` reaches here as `A`.
         impl_type_bindings.extend(scope.trait_declared_bindings(
             trait_decl,
             &trait_args,

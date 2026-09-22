@@ -2973,10 +2973,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let Some(trait_params) = self.trait_decl_type_params_of(&decl) else {
             return slots;
         };
-        // Slot 0 is the trait's own `Self`, which is `self_type_id`. An argument
-        // the bound wrote means whatever wrote it; one the declaration defaulted
-        // (`Eq<Rhs = Self>`) is written in the trait's space and means the
-        // bounded type.
+        // Slot 0 is the trait's `Self`. An argument the bound wrote means
+        // whatever wrote it; a defaulted one (`Eq<Rhs = Self>`) is written in
+        // the trait's space and means the bounded type.
         let args: Vec<&ast::Type> = bound.type_args.iter().collect();
         let written: Vec<(u32, ast::Type, BoundSelf)> =
             trait_params_from_impl(&trait_params, &args, None)
@@ -3186,10 +3185,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     };
                     if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
                         // The receiver is keyed by head, so every impl on
-                        // `List<_>` answers here. An impl whose target writes
-                        // arguments this instantiation contradicts implements
-                        // a different type, and its bindings would be filed
-                        // under this one.
+                        // `List<_>` answers here, including ones implementing
+                        // an instantiation this one contradicts.
                         if !self
                             .tysys
                             .inherent_impl_type_args_match(&header.ty, Some(&concrete_type_args))
