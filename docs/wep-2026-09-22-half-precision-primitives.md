@@ -46,13 +46,14 @@ precision, and Wasm has no instruction to lower an operator to. Whether Wado
 grows half precision arithmetic later is open; nothing decided here forecloses
 it.
 
-The comparisons are the exception, and they are not arithmetic. `Eq`, `Ord` and
-`Default` are written in `core:prelude/half.wado`, and each answers what `f32`
-answers for the widened value. Widening is exact, so that is a complete rule
-rather than a convention to remember: a NaN equals nothing, the two zeroes are
-one value, and both readings differ from what comparing the bits would give.
-Since Wasm has no half comparison either, the operator dispatches to the impl
-the way a struct's does, which is the one place a primitive does so.
+The comparisons are the exception, and they are not arithmetic. `Eq` and `Ord`
+are written in `core:prelude/half.wado`, and each answers what `f32` answers for
+the widened value. Widening is exact, so that is a rule rather than a convention
+to remember: a NaN equals nothing and the two zeroes are one value. Comparing
+the bits would say the opposite of both. `Default` is there too, and is the zero.
+
+Wasm has no half comparison either, so the operator dispatches to the impl the
+way a struct's does. These are the only primitives whose operator does.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -196,9 +197,9 @@ No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
-The bits decide every case on their own — equal bits are equal values unless
-both are NaN, and different bits are different values unless both are zero — so
-an implementation that never widens exists. Nothing measured has asked for it.
+An implementation that never widens exists: equal bits are equal values unless
+both are NaN, and different bits are different values unless both are zero.
+Nothing measured has asked for it.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.

@@ -202,9 +202,8 @@ impl TryFrom<f64> for bf16 {
     }
 }
 
-// Every comparison is f32's on the widened value. Widening is exact, so this
-// is the only reading that agrees with what `Display` prints: a NaN equals
-// nothing and the two zeroes are one value, neither of which the bits give.
+// Both comparisons are f32's on the widened value, which is exact: a NaN
+// equals nothing and the two zeroes are one value, neither of which bits give.
 impl Eq for f16 {
     pub fn eq(&self, other: &Self) -> bool {
         return f32::from(*self) == f32::from(*other);

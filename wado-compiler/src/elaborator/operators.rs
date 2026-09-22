@@ -413,22 +413,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // carries does — named by that head, not by one peel, which on a
                 // chain (`type B = A; type A = Point`) lands on another newtype.
                 ResolvedType::Newtype { base_type, .. } => {
-                    let ultimate = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .representation_head(*base_type);
                     let tt = self.tysys.type_table.borrow();
+                    let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
-                        _ => {
-                            drop(tt);
-                            self.tysys.primitive_op_receiver(left, ultimate)
-                        }
+                        _ => self.tysys.primitive_op_receiver(left, ultimate),
                     }
                 }
                 _ => None,
