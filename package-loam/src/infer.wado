@@ -337,7 +337,20 @@ fn infer_node(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<Shape, Inf
         if !has_bias(node) {
             return Result::Ok(product);
         }
-        return at_node(node, product.elementwise(&operand(node, shapes, 2)?, op));
+        // ONNX broadcasts `C` into the product, so a bias of higher rank is
+        // refused rather than widening a `Gemm` past the two axes it has.
+        let c = operand(node, shapes, 2)?;
+        if c.rank() > product.rank() {
+            builtin::cold_path();
+            return Result::Err(InferError::OperandRank(OperandRankConflict {
+                node: node_name(node),
+                op: node.op,
+                operand: 2,
+                rank: c.rank(),
+                needed: product.rank(),
+            }));
+        }
+        return at_node(node, product.elementwise(&c, op));
     }
     if op == "Transpose" {
         arity(node, 1)?;

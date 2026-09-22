@@ -5,7 +5,7 @@ use onnx from "../grammar/Onnx.g4"
         generator: { module: "../../package-gale/src/generator.wado" },
     };
 
-use { Attr, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
 
 /// Read a graph out of the ONNX textual format. A syntax error comes back as
 /// the first diagnostic; anything the reader does not cover names itself.
@@ -48,7 +48,7 @@ fn read_graph(s: &onnx::CstStore, toks: &onnx::TokenStream, graph: i32) -> Resul
     }
     return Result::Ok(Graph {
         name: quotable_text(s, toks, name_node),
-        inputs,
+        inputs: parameters(inputs, &initializers),
         outputs,
         initializers,
         nodes,

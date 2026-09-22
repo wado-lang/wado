@@ -7,7 +7,7 @@
 //! whatever else it carries.
 
 use { from_bytes } from "core:protobuf";
-use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
+use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo, parameters } from "./graph.wado";
 
 /// Nesting flattens: `.proto` nests a message inside a message and Wado has
 /// no nested declaration, so the path is joined into the name. This is the
@@ -196,16 +196,39 @@ pub fn float_tensor(t: &TensorProto) -> Result<Option<[List<f32>, List<i32>]>, S
         extents.push(extent(d, &t.name)?);
     }
     if t.raw_data.is_empty() {
+        check_element_count(&t.name, t.float_data.len(), &extents)?;
         return Result::Ok(Option::Some([t.float_data, extents]));
+    }
+    if t.raw_data.len() % 4 != 0 {
+        return Result::Err(`${t.name}: ${t.raw_data.len()} raw bytes is not whole f32 elements`);
     }
     let mut data: List<f32> = List::with_capacity(t.raw_data.len() / 4);
     let mut at = 0;
-    while at + 4 <= t.raw_data.len() {
+    while at < t.raw_data.len() {
         let bits = t.raw_data[at] as u32 | t.raw_data[at + 1] as u32 << 8 | t.raw_data[at + 2] as u32 << 16 | t.raw_data[at + 3] as u32 << 24;
         data.push(f32::from_bits(bits));
         at += 4;
     }
+    check_element_count(&t.name, data.len(), &extents)?;
     return Result::Ok(Option::Some([data, extents]));
+}
+
+/// The extents' product is how many elements the tensor says it has, and a
+/// payload of any other length is a file disagreeing with itself.
+fn check_element_count(tensor: &String, elements: i32, extents: &List<i32>) -> Result<(), String> {
+    let mut declared: i64 = 1;
+    for let e of *extents {
+        declared = declared * e as i64;
+        // No payload is longer than what was read, so a product past it is
+        // already wrong and cannot overflow on the way.
+        if declared > elements as i64 {
+            return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared} or more`);
+        }
+    }
+    if declared != elements as i64 {
+        return Result::Err(`${tensor}: ${elements} elements for a shape of ${declared}`);
+    }
+    return Result::Ok(());
 }
 
 /// The element type names the textual format spells, indexed by
@@ -387,21 +410,15 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
         return Result::Err("a model without a graph");
     };
 
-    // An initializer's name may also appear in `input`, where it supplies that
-    // input's default rather than a second value. Loam's weights are the
-    // caller's either way, so such a name is a weight and not a parameter.
-    let mut weight_names: List<String> = [];
     let mut initializers: List<ValueInfo> = [];
     for let t of graph.initializer {
-        weight_names.push(t.name);
         initializers.push(read_initializer(&t)?);
     }
-    let mut inputs: List<ValueInfo> = [];
+    let mut declared: List<ValueInfo> = [];
     for let vi of graph.input {
-        if !weight_names.contains_str(vi.name.as_str_slice()) {
-            inputs.push(read_value_info(&vi)?);
-        }
+        declared.push(read_value_info(&vi)?);
     }
+    let inputs = parameters(declared, &initializers);
     let mut outputs: List<ValueInfo> = [];
     for let vi of graph.output {
         outputs.push(read_value_info(&vi)?);

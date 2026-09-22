@@ -57,12 +57,31 @@ impl Node {
     }
 }
 
+/// `inputs` holds the parameters `forward` takes, so it never names an
+/// initializer: both readers pass theirs through `parameters` first.
 pub struct Graph {
     pub name: String,
     pub inputs: List<ValueInfo>,
     pub outputs: List<ValueInfo>,
     pub initializers: List<ValueInfo>,
     pub nodes: List<Node>,
+}
+
+/// The declared inputs that are parameters. An initializer's name may also
+/// appear among them, where it supplies that input's default rather than a
+/// second value, and Loam's weights are the caller's either way.
+pub fn parameters(inputs: List<ValueInfo>, initializers: &List<ValueInfo>) -> List<ValueInfo> {
+    let mut weights: List<String> = [];
+    for let vi of *initializers {
+        weights.push(vi.name);
+    }
+    let mut kept: List<ValueInfo> = [];
+    for let vi of inputs {
+        if !weights.contains_str(vi.name.as_str_slice()) {
+            kept.push(vi);
+        }
+    }
+    return kept;
 }
 
 impl Display for Dim {
