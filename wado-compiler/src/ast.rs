@@ -3762,6 +3762,15 @@ pub struct TraitBound {
     pub resolved: Option<DefId>,
 }
 
+impl TraitBound {
+    /// Whether any type the bound writes is rooted at `Self`, so reading it
+    /// needs the frame that wrote it.
+    pub fn writes_self(&self) -> bool {
+        self.type_args.iter().any(|ty| ty.mentions("Self"))
+            || self.assoc_types.iter().any(|c| c.ty.mentions("Self"))
+    }
+}
+
 /// Generic type parameter declaration: `<T>`, `<T, U>`, `<T: Ord>`, `<T: Builder<Output = T>>`
 /// Effect parameter declaration: `<effect E>` — represents a set of effects
 #[derive(Debug, Clone)]

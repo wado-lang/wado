@@ -1,6 +1,6 @@
 //! Method lookup, operator resolution, and indexing trait dispatch.
 
-use super::scope::{BinderInScope, BoundSelf, ScopedBound};
+use super::scope::{BinderInScope, ScopedBound};
 use super::trait_env::ImplTargetKey;
 use super::trait_query::SelfBinding;
 use std::rc::Rc;
@@ -544,7 +544,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         })?;
         // The same slots the dispatch binds, so the hint and the call agree on
         // what the bound means.
-        let written_self = BoundSelf::Frame(bound.self_type);
+        let written_self = bound.scope();
         let slots = self.bound_slots(bound, trait_, self_type_id, written_self);
         let substituted = self
             .tysys

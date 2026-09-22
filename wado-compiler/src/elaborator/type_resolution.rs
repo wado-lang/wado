@@ -111,11 +111,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // Each bound is resolved through its own reference site. Asking by the
         // written name first would answer from this frame, which a default body
         // materialized for an impl in another module does not share.
-        self.tysys.trait_env.bound_declaring_assoc_type(
-            &ScopedBound::bares(bounds),
-            assoc_name,
-            |bound| self.trait_decl_at(bound.id, &bound.name),
-        )
+        self.tysys
+            .trait_env
+            .bound_declaring_assoc_type(bounds, assoc_name, |bound| {
+                self.trait_decl_at(bound.id, &bound.name)
+            })
     }
 
     /// The identity an impl header names: the trait, plus the arguments it

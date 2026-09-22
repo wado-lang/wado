@@ -1463,12 +1463,10 @@ impl TypeSystem {
             .chain(sig.decl.return_type.iter())
             .any(|t| table.contains_type_param_index(*t, 0));
         in_types
-            || sig.own_params.iter().any(|p| {
-                p.bounds
-                    .iter()
-                    .flat_map(|b| &b.assoc_types)
-                    .any(|c| c.ty.mentions("Self"))
-            })
+            || sig
+                .own_params
+                .iter()
+                .any(|p| p.bounds.iter().any(ast::TraitBound::writes_self))
     }
 
     fn type_implements_trait_inner(
@@ -2883,8 +2881,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     /// Whether one concrete type argument meets one trait bound — the primitive
     /// every enforcement path funnels through. Registers the associated types on
     /// success, raises `TraitBoundNotSatisfied` on failure.
-    /// [`Self::enforce_single_bound`] for a bound writing arguments for the
-    /// trait's own parameters.
     pub(super) fn enforce_single_bound_args(
         &mut self,
         type_arg: TypeId,
@@ -2999,7 +2995,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
     }
 
     /// Check a bound's associated-type constraints (`T: Collect<Item = i32>`)
-    /// against the type argument. Runs after [`Self::enforce_single_bound`],
+    /// against the type argument. Runs after [`Self::enforce_single_bound_args`],
     /// which is what registers the argument's bindings.
     fn enforce_assoc_type_bounds(
         &mut self,

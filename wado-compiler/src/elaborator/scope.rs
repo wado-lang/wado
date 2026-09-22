@@ -4,6 +4,7 @@
 //! helpers in this file — every entry has exactly one panic-safe restore
 //! path (WEP 2026-05-26).
 
+use std::borrow::Borrow;
 use std::cell::{Cell, RefCell};
 use std::ops::{Deref, DerefMut};
 
@@ -121,9 +122,16 @@ impl ScopedBound {
             .collect()
     }
 
-    /// The bounds alone, for a caller that only reads their spellings.
-    pub(super) fn bares(bounds: &[Self]) -> Vec<ast::TraitBound> {
-        bounds.iter().map(|b| b.bound.clone()).collect()
+    /// Whose `Self` this bound's written types mean. A bound written at a frame
+    /// means that frame, never the type it is standing on.
+    pub(super) fn scope(&self) -> BoundSelf {
+        BoundSelf::Frame(self.self_type)
+    }
+}
+
+impl Borrow<ast::TraitBound> for ScopedBound {
+    fn borrow(&self) -> &ast::TraitBound {
+        &self.bound
     }
 }
 
@@ -471,13 +479,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         let mut out: Vec<(ElaboratedBound, Option<DefId>)> = Vec::with_capacity(bounds.len());
         for scoped in bounds {
             let bound = &scoped.bound;
-            self.merge_bound(
-                &mut out,
-                bound,
-                None,
-                BoundSelf::Frame(scoped.self_type),
-                known,
-            );
+            self.merge_bound(&mut out, bound, None, scoped.scope(), known);
             if bound.fn_signature.is_some() {
                 continue;
             }
@@ -676,33 +678,25 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     /// their written types mean, whatever frame later reads them.
     fn scoped_bounds(&mut self, param: &ast::GenericParam) -> Vec<ScopedBound> {
         let self_type = self.annotate_ctx.trait_ctx.self_type;
-        self.reject_self_in_bounds(param, self_type);
-        param
-            .real_bounds()
-            .into_iter()
-            .map(|bound| ScopedBound::new(bound, self_type))
-            .collect()
+        let bounds = param.real_bounds();
+        if self_type.is_none() {
+            self.reject_self_in_bounds(&param.name, &bounds);
+        }
+        ScopedBound::pin_all(&bounds, self_type)
     }
 
     /// Reject a bound writing `Self` where the frame binds none. `Self::Assoc`
     /// on a free function's parameter would go unchecked rather than mean what
     /// the parameter's own name already says.
-    fn reject_self_in_bounds(&mut self, param: &ast::GenericParam, self_type: Option<TypeId>) {
-        if self_type.is_some() {
-            return;
-        }
-        let written: Vec<Span> = param
-            .real_bounds()
+    fn reject_self_in_bounds(&mut self, param: &str, bounds: &[ast::TraitBound]) {
+        let written: Vec<Span> = bounds
             .iter()
-            .filter(|bound| {
-                bound.type_args.iter().any(|ty| ty.mentions("Self"))
-                    || bound.assoc_types.iter().any(|c| c.ty.mentions("Self"))
-            })
+            .filter(|bound| bound.writes_self())
             .map(|bound| bound.span)
             .collect();
         for span in written {
             let _ = self.emit(TypeError::SelfInUnboundedBound {
-                param: param.name.clone(),
+                param: param.to_string(),
                 span,
             });
         }

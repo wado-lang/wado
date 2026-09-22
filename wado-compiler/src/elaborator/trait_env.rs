@@ -4,6 +4,7 @@
 //! It provides O(1) lookup of trait implementations by type name and trait name,
 //! replacing linear scans across all modules.
 
+use std::borrow::Borrow;
 use std::sync::Arc;
 
 use crate::ast::{self, Item, Module, Type};
@@ -1910,21 +1911,21 @@ impl TraitEnv {
     /// `<T as ThatTrait>::assoc_name`.
     // `resolve` says which declaration each bound names: only its reader knows
     // the scope it was written in.
-    pub(super) fn bound_declaring_assoc_type(
+    pub(super) fn bound_declaring_assoc_type<B: Borrow<ast::TraitBound>>(
         &self,
-        bounds: &[ast::TraitBound],
+        bounds: &[B],
         assoc_name: &str,
         resolve: impl Fn(&ast::TraitBound) -> Option<DefId>,
     ) -> Option<DefId> {
         bounds
             .iter()
-            .filter_map(&resolve)
+            .filter_map(|bound| resolve(bound.borrow()))
             .find(|decl| self.declares_assoc_type(decl, assoc_name))
             // Searched after every direct bound, so a trait redeclaring the
             // name still wins for itself.
             .or_else(|| {
                 bounds.iter().find_map(|bound| {
-                    self.supertrait_declaring_assoc_type(&resolve(bound)?, assoc_name)
+                    self.supertrait_declaring_assoc_type(&resolve(bound.borrow())?, assoc_name)
                 })
             })
     }
