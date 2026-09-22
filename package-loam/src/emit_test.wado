@@ -294,17 +294,30 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
 }
 
-test "an element type the kernels cannot compute in names itself" {
+fn refused_dtype(dtype: String) -> String {
     let source = `
-g (int32[N, 2] X) => (int32[N, 2] Y)
+g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
 <>
 {
     Y = Relu(X)
 }
 `;
-    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+    return `${generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err()}`;
+}
 
-    assert `${e}` == "X: the kernels compute in f32 and this tensor is int32";
+test "an element type the kernels cannot compute in names itself" {
+    assert refused_dtype("int32") == "X: the kernels compute in f32 and this tensor is int32 (`i32`)";
+}
+
+// Half precision is the one roadmap step 2 is about, so the refusal names the
+// primitive a kernel will hold rather than treating it as an unknown type.
+test "a half precision tensor is refused naming the Wado primitive" {
+    assert refused_dtype("float16") == "X: the kernels compute in f32 and this tensor is float16 (`f16`)";
+    assert refused_dtype("bfloat16") == "X: the kernels compute in f32 and this tensor is bfloat16 (`bf16`)";
+}
+
+test "an element type Wado has no name for names only itself" {
+    assert refused_dtype("uint8") == "X: the kernels compute in f32 and this tensor is uint8";
 }
 
 // The textual format carries no tensor attribute, so a `Constant` graph is
