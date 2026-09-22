@@ -59,8 +59,8 @@ mise run report-wasm-size  # measures the size of the generated Wasm files and r
 - `test`, `test-wado`, `test-stdlib` and `test-gale-o2` refuse to start while another of the same is running, naming the holder's pid — where `flock` exists; `scripts/exclusive.sh` says so on stderr and runs unlocked where it does not. Abandoning a job does not stop it, so restarting after an edit means killing that pid first.
 - Redirect a job's output to a file and read the file, so what you did not anticipate is still there.
 - Have the job record its own completion — `cmd > run.log 2>&1 && s=0 || s=$?; echo "exit=$s" >> run.log` — and wait for it with `until grep -q "^exit=" run.log; do sleep 30; done`. The `&&`/`||` is what writes the marker on a failure too, which `set -e` would otherwise exit before.
-- A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
-- `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated file is gone too.
+- A generated file carries `-diff` in `.gitattributes`, so `git diff`, `git show` and `git log -p` report it as changed without printing it, and the sources stay readable. Regenerate and commit those; do not read them. A vendored corpus carries the same `-diff`, and is fetched rather than regenerated. `--text` prints one where you do want it. `rg` reads them like any other file; `git grep` calls them binary.
+- `git diff <base> -- $(scripts/changed-sources.sh)` narrows further, to the changed paths themselves: a stat line or a rename for a generated or vendored file is gone too.
 
 ## General Rules
 
