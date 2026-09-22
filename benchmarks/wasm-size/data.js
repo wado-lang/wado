@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790039813975,
+  "lastUpdate": 1790046046192,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58181,6 +58181,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/7fd5c619b3d71431a1583f0c8d1bfb57b02fa69a"
         },
         "date": 1790039813437,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6437,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19638,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ed4d10a1b35bb824e0cae9f61d961b76722146b6",
+          "message": "Merge pull request #2119 from wado-lang/claude/rename-geas-to-loam\n\nchore(loam): rename the tensor package Geas to Loam, the mould Kiln fires",
+          "timestamp": "2026-09-22T11:41:35+09:00",
+          "tree_id": "578932a939d95ff5d0643ae71502f9434672a321",
+          "url": "https://github.com/wado-lang/wado/commit/ed4d10a1b35bb824e0cae9f61d961b76722146b6"
+        },
+        "date": 1790046045522,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
