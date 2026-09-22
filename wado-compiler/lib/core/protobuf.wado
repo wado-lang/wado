@@ -53,33 +53,17 @@ pub enum WireType {
     Fixed32,
 }
 
-/// A scalar element's width in bytes, `0` where it is a varint and has none.
-fn element_width(scalar: WireType) -> i32 {
-    return match scalar {
-        Varint => 0,
-        Fixed32 => 4,
-        Fixed64 => 8,
-        Len => unreachable(),
-    };
-}
-
 impl WireType {
     /// The three bits a tag carries, or `None` for a number no wire type
     /// uses. `3` and `4` are the deprecated group markers.
     pub fn from_bits(bits: i32) -> Option<WireType> {
-        if bits == 0 {
-            return Option::Some(WireType::Varint);
-        }
-        if bits == 1 {
-            return Option::Some(WireType::Fixed64);
-        }
-        if bits == 2 {
-            return Option::Some(WireType::Len);
-        }
-        if bits == 5 {
-            return Option::Some(WireType::Fixed32);
-        }
-        return null;
+        return match bits {
+            0 => Option::Some(WireType::Varint),
+            1 => Option::Some(WireType::Fixed64),
+            2 => Option::Some(WireType::Len),
+            5 => Option::Some(WireType::Fixed32),
+            _ => null,
+        };
     }
 
     pub fn bits(&self) -> i32 {
@@ -88,6 +72,17 @@ impl WireType {
             Fixed64 => 1,
             Len => 2,
             Fixed32 => 5,
+        };
+    }
+
+    /// A fixed-width element's width in bytes. The other two wire types are
+    /// not fixed-width, and the only caller has already excluded them.
+    fn element_width(&self) -> i32 {
+        return match self {
+            Fixed32 => 4,
+            Fixed64 => 8,
+            Varint => unreachable(),
+            Len => unreachable(),
         };
     }
 }
@@ -743,7 +738,6 @@ impl ProtobufReader {
                 self.pos as i64,
             ));
         }
-        let width = element_width(scalar);
         self.packed_end = self.read_len()?;
         if self.in_seq {
             if self.packed_end == self.pos {
@@ -760,7 +754,7 @@ impl ProtobufReader {
             self.leave_packed();
             return Result::Ok(false);
         }
-        self.pos = self.last_packed(width)?;
+        self.pos = self.last_packed(scalar)?;
         self.leave_packed();
         return Result::Ok(true);
     }
@@ -768,26 +762,27 @@ impl ProtobufReader {
     /// Where the last element of the run being read starts. A run holds whole
     /// elements, and one that does not is malformed rather than a last element
     /// read from before the run or past it.
-    fn last_packed(&self, width: i32) -> Result<i32, DeserializeError> {
-        if width > 0 {
-            if (self.packed_end - self.pos) % width != 0 {
-                return Result::Err(partial_element(self.pos));
+    fn last_packed(&self, scalar: WireType) -> Result<i32, DeserializeError> {
+        if scalar matches { Varint } {
+            let mut at = self.pos;
+            let mut last = at;
+            while at < self.packed_end {
+                let Some([_, next]) = read_varint(&self.input, at) else {
+                    return Result::Err(DeserializeError::eof(at as i64));
+                };
+                if next > self.packed_end {
+                    return Result::Err(partial_element(at));
+                }
+                last = at;
+                at = next;
             }
-            return Result::Ok(self.packed_end - width);
+            return Result::Ok(last);
         }
-        let mut at = self.pos;
-        let mut last = at;
-        while at < self.packed_end {
-            let Some([_, next]) = read_varint(&self.input, at) else {
-                return Result::Err(DeserializeError::eof(at as i64));
-            };
-            if next > self.packed_end {
-                return Result::Err(partial_element(at));
-            }
-            last = at;
-            at = next;
+        let width = scalar.element_width();
+        if (self.packed_end - self.pos) % width != 0 {
+            return Result::Err(partial_element(self.pos));
         }
-        return Result::Ok(last);
+        return Result::Ok(self.packed_end - width);
     }
 
     fn leave_packed(&mut self) {

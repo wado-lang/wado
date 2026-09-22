@@ -2860,8 +2860,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
-    /// Report a `break` or `continue` written in a for-of the compiler expands,
-    /// which leaves neither a loop to name. `kind` names the for-of.
+    /// Report a `break` or `continue` written in a for-of the compiler expands:
+    /// the expansion leaves neither a loop to name. `kind` names the for-of.
     fn reject_expanded_control_flow(&mut self, body: &Block, kind: &str) -> bool {
         let mut finder = LoopControlFlowFinder { found: None };
         finder.visit_block(body);
@@ -3339,8 +3339,8 @@ pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i12
     }
 }
 
-/// The first statement in a tuple for-of's body that names the loop itself.
-/// The loop is expanded at compile time, so no such name survives.
+/// The first statement in a for-of's body that names the loop itself. The
+/// compiler expands such a loop, so no such name survives.
 struct LoopControlFlowFinder {
     found: Option<(&'static str, Span)>,
 }
