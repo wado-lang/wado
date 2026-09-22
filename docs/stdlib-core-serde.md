@@ -140,11 +140,24 @@ else the type's `name_policy` applies, else identity.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
+### `pub trait WireNumbered with ()`
+
+A struct whose every field carries `#[wire(number = N)]`. A format keyed by
+numbers requires it, so a type without them is refused where the call is
+written rather than where the bytes are produced. See
+[WEP: Grog](../../../docs/wep-2026-09-22-grog.md).
+
 ### `pub trait SerializeStruct with ()`
 
 #### `fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError>`
 
 `#[compiler_item("serialize_struct_field")]`
+
+#### `fn field_numbered<T: Serialize, S: AsStrSlice>(&mut self, number: i32, name: S, value: &T) -> Result<(), SerializeError>`
+
+The same field, with the numeric wire key `#[wire(number = N)]` gave
+it, or `0` where it has none. A format keyed by name drops the number,
+which is what this default does.
 
 #### `fn end(&mut self) -> Result<(), SerializeError>`
 
@@ -277,6 +290,12 @@ to bind bare tokens to positional fields.
 Field index of the `rank`-th `#[wire(positional)]` field (in
 declaration order), or `null` when `rank` is out of range. Returns
 `null` for every `rank` when the type has no positional fields.
+
+#### `fn by_number(number: i32) -> Option<i32>`
+
+Field index of the field `#[wire(number = N)]` gave `number` to.
+Returns `null` for every number when the type carries none, which a
+format keyed by numbers rules out through `WireNumbered`.
 
 ### `pub trait DeserializeStruct with ()`
 
