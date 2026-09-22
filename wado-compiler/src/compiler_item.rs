@@ -8,6 +8,7 @@ use std::fmt;
 
 use crate::ast::{AstId, Attribute};
 use crate::attribute::COMPILER_ITEM;
+use crate::defs::DefId;
 use crate::hashmap;
 use crate::module_source::ModuleSource;
 use crate::name::{FqTraitName, FqTypeName};
@@ -581,6 +582,9 @@ pub enum CompilerItem {
     // analysis can see, so each is a root of the liveness graph.
     /// `Formatter::new` — template expansion builds the formatter through it.
     FormatterNew,
+    /// `Formatter::internal_write_literal` — the only call a synthesized
+    /// closure-functor `Display` / `Inspect` body makes.
+    FormatterWriteLiteral,
     /// `core:rt::assert_failed`.
     AssertFailed,
     /// `core:rt::cm_future_pair`.
@@ -805,6 +809,7 @@ impl CompilerItem {
         Self::DeserializeVariantPayload,
         Self::DeserializeVariantEnd,
         Self::FormatterNew,
+        Self::FormatterWriteLiteral,
         Self::AssertFailed,
         Self::CmFuturePair,
         Self::CmStreamPair,
@@ -951,6 +956,7 @@ impl CompilerItem {
             Self::MemberName => "member_name",
             Self::MemberWireNameOverride => "member_wire_name_override",
             Self::FormatterNew => "formatter_new",
+            Self::FormatterWriteLiteral => "formatter_write_literal",
             Self::AssertFailed => "assert_failed",
             Self::CmFuturePair => "cm_future_pair",
             Self::CmStreamPair => "cm_stream_pair",
@@ -1130,6 +1136,7 @@ impl CompilerItem {
             | Self::MemberName
             | Self::MemberWireNameOverride
             | Self::FormatterNew
+            | Self::FormatterWriteLiteral
             | Self::ReflectVariantDiscriminant
             | Self::ReflectVariantMembers
             | Self::ReflectEnumDiscriminant
@@ -1277,7 +1284,7 @@ impl CompilerItem {
     /// `#[compiler_item("option")]` on a trait.
     pub fn expected_kind(self) -> CompilerItemKind {
         match self {
-            Self::FormatterNew => CompilerItemKind::Method,
+            Self::FormatterNew | Self::FormatterWriteLiteral => CompilerItemKind::Method,
             Self::AssertFailed
             | Self::CmFuturePair
             | Self::CmStreamPair
@@ -1956,10 +1963,18 @@ impl CompilerItems {
             .unwrap_or_else(|| panic!("compiler item `{item}` is not a registered trait"))
     }
 
-    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
-    /// registered.
+    /// The trait's declaration identity, which is what an impl of it is matched
+    /// by: an impl writes the trait with its own type arguments (`Eq<String>`),
+    /// so the spelling does not settle which trait it is.
     #[must_use]
-    pub fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
+    pub fn trait_def(&self, item: CompilerItem) -> Option<DefId> {
+        self.trait_fq_opt(item)?.canonical()
+    }
+
+    /// Non-panicking [`Self::trait_fq`]: `None` when the item is not
+    /// registered. Private, so matching an impl goes through [`Self::trait_def`]
+    /// rather than through a spelling.
+    fn trait_fq_opt(&self, item: CompilerItem) -> Option<FqTraitName> {
         match self.get(item)? {
             Resolved::Trait { fq, .. } => fq.clone(),
             _ => None,

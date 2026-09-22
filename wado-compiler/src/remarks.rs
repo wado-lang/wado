@@ -38,15 +38,7 @@ pub struct Remark {
 /// restricted to functions the entry package defines.
 pub fn collect_value_copy_remarks(package: &NirPackage) -> Vec<Remark> {
     let value_copy_set = package.value_copy_helper_types();
-    // Callee descriptor by `func_id` (the call node carries no `FunctionRef`).
-    let callees: Vec<FunctionRef> = package
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            FunctionRef::from_resolved(&f, f.module_source.clone())
-        })
-        .collect();
+    let callees: Vec<FunctionRef> = package.callee_descriptors_from(0).collect();
 
     let type_table_ref = package.type_table.borrow();
     let type_table: &TypeTable = &type_table_ref;

@@ -1075,8 +1075,7 @@ impl TypeSystem {
         self.type_table
             .borrow()
             .compiler_items()
-            .trait_fq_opt(on_bound.compiler_item())
-            .and_then(|t| t.canonical())
+            .trait_def(on_bound.compiler_item())
     }
 
     /// Which [`OnBoundTrait`] `trait_` is, by identity.

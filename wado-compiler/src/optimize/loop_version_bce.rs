@@ -26,7 +26,7 @@ use super::condition_implication::{
     peel_capture_block, resolve_panic_ids, stmt_modifies,
 };
 use super::const_branch_prune::{BranchPruneRule, PruneMode};
-use super::dce::{build_callee_descriptors, callee_descriptor};
+use super::dce::{DescriptorCache, callee_descriptor};
 use super::elide_local::ElideRule;
 use crate::module_source::ModuleSource;
 use crate::nir::FuncId;
@@ -80,14 +80,14 @@ struct FastArm {
 }
 
 /// Version eligible loops in every function. Returns whether anything changed.
-pub(super) fn version_loops(project: &mut NirPackage) -> bool {
+pub(super) fn version_loops(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
     let fill_id = project.intern_extern(&FunctionRef {
         module_source: ModuleSource::builtin(),
         name: "array_fill".to_string(),
         monomorph_info: None,
         method_info: None,
     });
-    let descriptors = build_callee_descriptors(project);
+    let descriptors = cache.descriptors(project);
     let panic_ids = resolve_panic_ids(project);
     let pure_builtin_callees = project.pure_builtin_callee_ids();
     // Only a body with a loop is versioned, so a program with none pays nothing.
@@ -154,7 +154,7 @@ pub(super) fn version_loops(project: &mut NirPackage) -> bool {
         // Fill idiom over the cleaned fast arms; sweep again if it fired.
         let mut filled = false;
         for (plan, arm) in plans.iter().zip(&fast_arms) {
-            filled |= try_fill_idiom(&mut engine, &binds, &descriptors, fill_id, plan, arm);
+            filled |= try_fill_idiom(&mut engine, &binds, descriptors, fill_id, plan, arm);
         }
         if filled {
             engine.run(&rules);

@@ -10,7 +10,7 @@ use crate::nir::{FuncId, FunctionRef, NirFunction, NirUnaryOp};
 use crate::nir_arena::{ArenaCallArg, BlockId, Body, ExprId, ExprKind, NodeRef, StmtId, StmtKind};
 use crate::nir_engine::{Engine, EngineBuffers, Rule};
 use crate::nir_package::NirPackage;
-use crate::optimize::dce::{build_callee_descriptors, callee_descriptor};
+use crate::optimize::dce::{DescriptorCache, callee_descriptor};
 use crate::tir::TypeTable;
 
 /// The builtin general-name of a call's callee descriptor, resolving a
@@ -486,8 +486,8 @@ fn remove_dead_bindings(engine: &mut Engine, block: BlockId, dead: &IndexSet<Stm
 /// Runs once after the fixed-point loop (a whole-package sweep, no gate): the
 /// residual clones it targets only take their flat shape after the post-loop
 /// `const_object_globalization`, so there is no earlier iteration to be dirty in.
-pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
-    let descriptors = build_callee_descriptors(project);
+pub fn forward_redundant_clones(project: &mut NirPackage, cache: &mut DescriptorCache) -> bool {
+    let descriptors = cache.descriptors(project);
     let fpt = first_param_types(project);
     let type_table = project.type_table.clone();
     let type_table = type_table.borrow();
@@ -500,7 +500,7 @@ pub fn forward_redundant_clones(project: &mut NirPackage) -> bool {
             continue;
         }
         let rule = CloneForwardRule {
-            descriptors: &descriptors,
+            descriptors,
             fpt: &fpt,
             type_table: &type_table,
         };
