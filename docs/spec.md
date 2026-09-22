@@ -3580,19 +3580,31 @@ pub enum Ordering {
 #### Ord - Ordering
 
 ```wado
-/// Types that can be ordered
+/// A total order over the type
 pub trait Ord: Eq {
     /// Compares self with other and returns an Ordering
     fn cmp(&self, other: &Self) -> Ordering;
 }
 ```
 
-Comparison operators use `Ord::cmp`:
+`Ord` is a total order, and `sort`, `TreeMap` and every `T: Ord` bound read it.
+On a float it is IEEE 754-2019 `totalOrder`, so it separates `-0.0` from `0.0`
+and places each NaN at one end rather than calling it equal to what it met.
+
+A comparison operator lowers to an instruction where the type has one. Where it
+does not, it uses `Ord::cmp`:
 
 - `a < b` desugars to `Ord::cmp(&a, &b) == Ordering::Less`
 - `a > b` desugars to `Ord::cmp(&a, &b) == Ordering::Greater`
 - `a <= b` desugars to `Ord::cmp(&a, &b) != Ordering::Greater`
 - `a >= b` desugars to `Ord::cmp(&a, &b) != Ordering::Less`
+
+A float is the one type whose operators are not its `Ord`: all four are IEEE,
+so a NaN answers false and the two zeroes are one value. `f32` and `f64` get
+that from their instructions and `f16` / `bf16` from an impl, so the four agree.
+`Ordering` has three cases and an IEEE comparison has four answers, which is why
+one trait cannot carry both orders. See
+[WEP: Comparison Traits](./wep-2026-09-23-comparison-traits.md).
 
 #### Default Implementations
 

@@ -2710,8 +2710,7 @@ fn total_order_key_64(bits: u64) -> u64 {
 
 // `Ord` is a total order, so it separates the two zeroes and puts every NaN at
 // one end rather than calling it equal to whatever it met. `==` and `<` keep
-// IEEE's answers; C++20 splits them the same way, `partial_ordering` from
-// `operator<=>` against `strong_order`.
+// IEEE's answers, as C++20 splits `operator<=>` from `strong_order`.
 impl Ord for f32 {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return total_order_key_32(self.to_bits()).cmp(&total_order_key_32(other.to_bits()));

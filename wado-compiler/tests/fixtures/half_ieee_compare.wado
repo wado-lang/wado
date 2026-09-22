@@ -1,0 +1,82 @@
+// A half's `<`, `<=`, `>` and `>=` are IEEE, as f32's are: a NaN answers
+// false four times and the two zeroes are one value. `Ord::cmp` stays the
+// total order, so `sort()` still has one answer. The two differ only where
+// IEEE has no answer to give.
+
+global F16_POS_NAN: u16 = 0x7E00;
+global F16_NEG_NAN: u16 = 0xFE00;
+global F16_POS_INF: u16 = 0x7C00;
+global F16_NEG_ZERO: u16 = 0x8000;
+global F16_ONE: u16 = 0x3C00;
+
+export fn run() {
+    let pos_nan = f16::from_bits(F16_POS_NAN);
+    let neg_nan = f16::from_bits(F16_NEG_NAN);
+    let pos_inf = f16::from_bits(F16_POS_INF);
+    let neg_zero = f16::from_bits(F16_NEG_ZERO);
+    let pos_zero = f16::from_bits(0);
+    let one = f16::from_bits(F16_ONE);
+
+    // Every comparison against a NaN is false, whichever NaN and whichever
+    // side it is on. The total order would answer true for four of these.
+    assert !(neg_nan < pos_inf);
+    assert !(neg_nan <= pos_inf);
+    assert !(pos_inf < pos_nan);
+    assert !(pos_inf <= pos_nan);
+    assert !(pos_nan > neg_nan);
+    assert !(pos_nan >= neg_nan);
+    assert !(pos_nan < pos_nan);
+    assert !(pos_nan <= pos_nan);
+
+    // The two zeroes are one value, so neither is below the other. The total
+    // order puts -0 first.
+    assert !(neg_zero < pos_zero);
+    assert !(pos_zero < neg_zero);
+    assert neg_zero <= pos_zero;
+    assert pos_zero >= neg_zero;
+
+    // Ordinary values order as they do in f32.
+    assert neg_zero < one;
+    assert one < pos_inf;
+    assert pos_inf > one;
+    assert one >= one;
+
+    // bf16 answers the same way.
+    let b_nan = bf16::from_bits(0x7FC0);
+    let b_inf = bf16::from_bits(0x7F80);
+    assert !(b_nan < b_inf);
+    assert !(b_nan >= b_inf);
+    assert bf16::from_bits(0x8000) <= bf16::from_bits(0x0000);
+    assert !(bf16::from_bits(0x8000) < bf16::from_bits(0x0000));
+
+    // `cmp` is untouched: still the total order, so a sort has one answer
+    // and separates the zeroes it just called equal.
+    assert neg_nan.cmp(&pos_inf) matches { Less };
+    assert pos_nan.cmp(&pos_nan) matches { Equal };
+    assert neg_zero.cmp(&pos_zero) matches { Less };
+
+    let mut xs: List<f16> = [pos_inf, neg_zero, pos_nan, one, neg_nan, pos_zero];
+    xs.sort();
+    assert xs[0].to_bits() == F16_NEG_NAN;
+    assert xs[1].to_bits() == F16_NEG_ZERO;
+    assert xs[2].to_bits() == 0x0000;
+    assert xs[3].to_bits() == F16_ONE;
+    assert xs[4].to_bits() == F16_POS_INF;
+    assert xs[5].to_bits() == F16_POS_NAN;
+
+    // `==` was already IEEE and still is.
+    assert !(pos_nan == pos_nan);
+    assert neg_zero == pos_zero;
+
+    // Reached through a `T: Ord` bound there is no operator, so the total
+    // order is what answers — as it does for f32.
+    assert total_less(&neg_nan, &pos_inf);
+    assert total_less(&neg_zero, &pos_zero);
+}
+
+fn total_less<T: Ord>(a: &T, b: &T) -> bool {
+    return a.cmp(b) matches { Less };
+}
+
+__DATA__
+{}

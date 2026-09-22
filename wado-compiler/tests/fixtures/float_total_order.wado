@@ -57,11 +57,11 @@ export fn run() {
     assert f64::from_bits(0x8000_0000_0000_0000).cmp(&(0.0 as f64)) matches { Less };
     assert d_pos_nan.cmp(&d_pos_nan) matches { Equal };
 
-    // The half types order by the same rule. Their `<` reaches this `cmp`,
-    // having no instruction of its own, so it is total where f32's is IEEE.
+    // The half types order by the same rule, and their operators are IEEE as
+    // f32's are — see `half_ieee_compare.wado`.
     assert f16::from_bits(0xFE00).cmp(&f16::from_bits(0xFC00)) matches { Less };
     assert f16::from_bits(0x8000).cmp(&f16::from_bits(0x0000)) matches { Less };
-    assert f16::from_bits(0x7C00) < f16::from_bits(0x7E00);
+    assert !(f16::from_bits(0x7C00) < f16::from_bits(0x7E00));
     assert bf16::from_bits(0xFFC0).cmp(&bf16::from_bits(0xFF80)) matches { Less };
     assert bf16::from_bits(0x8000).cmp(&bf16::from_bits(0x0000)) matches { Less };
 }

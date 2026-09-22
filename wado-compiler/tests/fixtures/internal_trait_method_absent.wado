@@ -1,0 +1,14 @@
+// A trait the call site cannot name offers no method. `OperatorOrd` is
+// `internal` to `core:prelude` and carries `f16`'s ordering operators, so
+// without this the call would ask for an import no user file can write.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let b = f16::from_bits(0x4000);
+    // The operator reaches the same impl, and is the supported spelling.
+    assert a < b;
+    assert a.lt(&b);
+}
+
+__DATA__
+{"compile_error": ":10:12: error: no method 'lt' found on type 'f16'"}

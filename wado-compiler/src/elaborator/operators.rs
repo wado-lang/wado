@@ -228,7 +228,7 @@ impl TypeSystem {
         }
     }
 
-    /// The receiver a primitive's own `Eq` / `Ord` impl attaches to, where the
+    /// The receiver a primitive's own comparison impl attaches to, where the
     /// operator has no Wasm instruction to lower to: the half types and
     /// `v128`. `head` is `operand`'s representation head, so an alias
     /// (`type f32x4 = v128`) reaches the impl its base writes. Every other
@@ -431,23 +431,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
                 // Handle Eq trait (== and !=)
                 if matches!(op, BinaryOp::Eq | BinaryOp::NotEq) {
-                    let eq_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::Eq)
-                        .to_string();
                     let eq_method = self.operator_method_name(CompilerItem::Eq);
-                    let Some(eq_trait) = self.tysys.compiler_trait_def(CompilerItem::Eq) else {
-                        return TypeTable::ERROR;
-                    };
-                    let Some(resolved) = self.resolve_trait_method_for_op(
+                    let Some(resolved) = self.resolve_comparison_method(
+                        CompilerItem::Eq,
+                        &eq_method,
                         &struct_name,
                         lookup_type_id,
-                        eq_trait,
-                        &eq_trait_name,
-                        &eq_method,
-                        false,
                         Some(&ArgClass::Exact(right)),
                     ) else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
@@ -479,25 +468,23 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     op,
                     BinaryOp::Lt | BinaryOp::Gt | BinaryOp::LtEq | BinaryOp::GtEq
                 ) {
-                    let ord_trait_name = self
-                        .tysys
-                        .type_table
-                        .borrow()
-                        .compiler_trait_name(CompilerItem::Ord)
-                        .to_string();
-                    let ord_method = self.operator_method_name(CompilerItem::Ord);
-                    let Some(ord_trait) = self.tysys.compiler_trait_def(CompilerItem::Ord) else {
-                        return TypeTable::ERROR;
-                    };
-                    let Some(resolved) = self.resolve_trait_method_for_op(
-                        &struct_name,
-                        lookup_type_id,
-                        ord_trait,
-                        &ord_trait_name,
-                        &ord_method,
-                        false,
-                        None,
-                    ) else {
+                    // `Ord` is the total order, which is not what a float's
+                    // operators mean: a half's `cmp` sorts a NaN at an end
+                    // where its `<` is IEEE. A type whose two orders differ
+                    // writes `OperatorOrd`, and the operators read that.
+                    let resolved = self
+                        .resolve_operator_ord_method(&struct_name, lookup_type_id, op)
+                        .or_else(|| {
+                            let cmp = self.operator_method_name(CompilerItem::Ord);
+                            self.resolve_comparison_method(
+                                CompilerItem::Ord,
+                                &cmp,
+                                &struct_name,
+                                lookup_type_id,
+                                None,
+                            )
+                        });
+                    let Some(resolved) = resolved else {
                         let type_name = self.tysys.type_table.borrow().type_name(left);
                         let op_str = match op {
                             BinaryOp::Lt => "<",
@@ -514,14 +501,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         });
                         return TypeTable::ERROR;
                     };
-                    let cmp_call = self.dispatch_trait_op_method(
+                    let call = self.dispatch_trait_op_method(
                         left,
                         vec![(right, right_span)],
                         &resolved,
                         span,
                         origin,
                     );
-                    if cmp_call == TypeTable::ERROR {
+                    if call == TypeTable::ERROR {
                         return TypeTable::ERROR;
                     }
                     return TypeTable::BOOL;
@@ -1967,6 +1954,63 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .unwrap_or_else(|| {
                 self.make_frame_projection_of_trait(operand_type_id, &name, trait_, "Output")
             })
+    }
+
+    /// A comparison operator's trait method on `struct_name`, named through
+    /// the compiler item that anchors the trait.
+    fn resolve_comparison_method(
+        &mut self,
+        item: CompilerItem,
+        method: &str,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        rhs: Option<&ArgClass>,
+    ) -> Option<ResolvedTraitMethod> {
+        let trait_ = self.tysys.compiler_trait_def(item)?;
+        let trait_name = self
+            .tysys
+            .type_table
+            .borrow()
+            .compiler_trait_name(item)
+            .to_string();
+        self.resolve_trait_method_for_op(
+            struct_name,
+            lookup_type_id,
+            trait_,
+            &trait_name,
+            method,
+            false,
+            rhs,
+        )
+    }
+
+    /// The `OperatorOrd` method an ordering operator reads, for a type that
+    /// writes one. `None` leaves the operator on `Ord::cmp`, which is every
+    /// type but the halves.
+    fn resolve_operator_ord_method(
+        &mut self,
+        struct_name: &str,
+        lookup_type_id: TypeId,
+        op: BinaryOp,
+    ) -> Option<ResolvedTraitMethod> {
+        let method = match op {
+            BinaryOp::Lt => "lt",
+            BinaryOp::LtEq => "le",
+            BinaryOp::Gt => "gt",
+            BinaryOp::GtEq => "ge",
+            _ => unreachable!("resolve_operator_ord_method takes an ordering operator"),
+        };
+        let mut resolved = self.resolve_comparison_method(
+            CompilerItem::OperatorOrd,
+            method,
+            struct_name,
+            lookup_type_id,
+            None,
+        )?;
+        // The impl lookup defaults a trait with no `type Output` to the
+        // receiver's type; every `OperatorOrd` method answers `bool`.
+        resolved.return_type = TypeTable::BOOL;
+        Some(resolved)
     }
 
     /// Dispatch an operator to a trait method, unary and binary alike, over

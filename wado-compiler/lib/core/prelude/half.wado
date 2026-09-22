@@ -3,7 +3,18 @@
 //! `f16` and `bf16`: half precision as an interchange format, bits and no
 //! arithmetic. See [WEP: Half-Precision Primitives](../../../../docs/wep-2026-09-22-half-precision-primitives.md).
 
-use { ConvertError, Default, Display, Eq, From, Inspect, Ord, Ordering, TryFrom } from "core:prelude/traits.wado";
+use {
+    ConvertError,
+    Default,
+    Display,
+    Eq,
+    From,
+    Inspect,
+    OperatorOrd,
+    Ord,
+    Ordering,
+    TryFrom,
+} from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Result } from "core:prelude/types.wado";
 
@@ -202,7 +213,7 @@ impl TryFrom<f64> for bf16 {
     }
 }
 
-// Both comparisons are f32's on the widened value, which is exact: a NaN
+// Every comparison is f32's on the widened value, which is exact: a NaN
 // equals nothing and the two zeroes are one value, neither of which bits give.
 impl Eq for f16 {
     pub fn eq(&self, other: &Self) -> bool {
@@ -225,6 +236,44 @@ impl Ord for f16 {
 impl Ord for bf16 {
     pub fn cmp(&self, other: &Self) -> Ordering {
         return f32::from(*self).cmp(&f32::from(*other));
+    }
+}
+
+// `Ord` above is the total order, which `sort` wants and `<` does not. These
+// are the widened f32's own operators, so `<` means one thing on every float.
+impl OperatorOrd for f16 {
+    pub fn lt(&self, other: &Self) -> bool {
+        return f32::from(*self) < f32::from(*other);
+    }
+
+    pub fn le(&self, other: &Self) -> bool {
+        return f32::from(*self) <= f32::from(*other);
+    }
+
+    pub fn gt(&self, other: &Self) -> bool {
+        return f32::from(*self) > f32::from(*other);
+    }
+
+    pub fn ge(&self, other: &Self) -> bool {
+        return f32::from(*self) >= f32::from(*other);
+    }
+}
+
+impl OperatorOrd for bf16 {
+    pub fn lt(&self, other: &Self) -> bool {
+        return f32::from(*self) < f32::from(*other);
+    }
+
+    pub fn le(&self, other: &Self) -> bool {
+        return f32::from(*self) <= f32::from(*other);
+    }
+
+    pub fn gt(&self, other: &Self) -> bool {
+        return f32::from(*self) > f32::from(*other);
+    }
+
+    pub fn ge(&self, other: &Self) -> bool {
+        return f32::from(*self) >= f32::from(*other);
     }
 }
 

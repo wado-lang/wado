@@ -46,20 +46,28 @@ precision, and Wasm has no instruction to lower an operator to. Whether Wado
 grows half precision arithmetic later is open; nothing decided here forecloses
 it.
 
-The comparisons are the exception, and they are not arithmetic. `Eq` and `Ord`
-are written in `core:prelude/half.wado`, and each hands the widened value to
-`f32`'s. Widening is exact and order-preserving, so a half never has an answer
-of its own to get wrong: `Eq` is IEEE, where a NaN equals nothing and the two
-zeroes are one value, and `Ord` is the total order `f32`'s is. `Default` is
-there too, and is the zero.
+The comparisons are the exception, and they are not arithmetic. `Eq`, `Ord` and
+`OperatorOrd` are written in `core:prelude/half.wado`, and each hands the
+widened value to `f32`'s. Widening is exact and order-preserving, so a half
+never has an answer of its own to get wrong. `Default` is there too, and is the
+zero.
 
-Where a half differs from `f32` is which of those an operator reaches. `f32`
-lowers `<` to a Wasm instruction and never consults `cmp`; a half has no such
-instruction, so its `<` is the total order and sorts a NaN at an end rather than
-answering `false`. `f32` answers as a half does as soon as it is reached through
-a `T: Ord` bound. These are the only primitives whose comparison operator
-dispatches to an impl, which is why they are the only ones where both orders are
-visible at once.
+Which of them a comparison reaches is the same for a half as for `f32`. `==`
+and the four ordering operators are IEEE, so a NaN answers false and the two
+zeroes are one value. `Ord::cmp` is the total order, which `sort` and a `T: Ord`
+bound read.
+
+`f32` gets that split from its instructions: `<` lowers to `f32.lt` and never
+consults `cmp`. A half has no instruction, so the split is written down instead.
+`Ord` cannot carry both, because `Ordering` has three cases and an IEEE
+comparison has four answers — the fourth being that there is none. So the
+ordering operators dispatch to `OperatorOrd`, whose four methods return `bool`,
+and `Ord` is left to mean the total order alone. C++20 splits them the same way,
+`operator<=>` yielding `partial_ordering` against `strong_order`.
+
+`OperatorOrd` is `internal` to `core:prelude`: the half types are the only ones
+that need it, and naming the split in the public API is
+[a separate decision](./wep-2026-09-23-comparison-traits.md).
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -201,12 +209,6 @@ of it is committed work.
 
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
-
-A half's `<` is its total order and `f32`'s is IEEE, so the same comparison
-written over the two types can differ on a NaN. `Ord` answers the same for both;
-only the operator diverges, because one of them has an instruction and the other
-does not. Closing it means lowering a half's ordering operators to the widened
-`f32` comparison, so that `<` means one thing across the four float types.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
 Both have an implementation that never widens: `Eq` reads the bits, since equal

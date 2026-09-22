@@ -5390,11 +5390,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 dispatch.return_type,
                 binary.span,
             );
-            // Comparison operators dispatch to `Eq::eq` / `Ord::cmp` but
-            // the source operator decides the wrapping the elaborator
-            // applies after the call: `!=` negates the `eq` result, and
-            // `<` / `>` / `<=` / `>=` compare the `cmp` `Ordering` against
-            // the variant that makes the operator true.
+            // The source operator decides the wrapping the elaborator applies
+            // after the call: `!=` negates the `eq` result, and an ordering
+            // operator reads the `Ordering` an `Ord::cmp` answers. An
+            // `OperatorOrd` method already answers the operator itself.
             return match binary.op {
                 ast::BinaryOp::NotEq if call.type_id == TypeTable::BOOL => TirExpr::new(
                     TirExprKind::Unary {
@@ -5408,7 +5407,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | ast::BinaryOp::Gt
                 | ast::BinaryOp::LtEq
                 | ast::BinaryOp::GtEq
-                    if call.type_id != TypeTable::ERROR =>
+                    if call.type_id
+                        == self
+                            .tysys
+                            .type_table
+                            .borrow_mut()
+                            .make_compiler_enum(CompilerItem::Ordering) =>
                 {
                     ord_bool_from_cmp(call, binary.op, binary.span, &self.tysys.type_table)
                 }
