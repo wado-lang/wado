@@ -71,10 +71,9 @@ the moment to run it. A response that ends without it is unfinished.
 
 Where it sits is §"The Cycle" in `AGENTS.md`: commit, `/distill`, test.
 
-Run it even when the fixes were small, even when you invoked `/distill` on this
-branch an hour ago, and even when you are confident there is nothing to cut.
-Finding nothing is the outcome that ends the cycle, and you only know it by
-running.
+Run it even when the fixes were small and even when you are confident there is
+nothing to cut. Finding nothing is the outcome that ends the cycle, and you only
+know it by running.
 
 A fix written to satisfy a reviewer arrives in the reviewer's framing: their
 wording in its comments, an explanation of the bug beside the code, a helper the

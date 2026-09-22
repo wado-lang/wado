@@ -19,8 +19,10 @@ if [ ! -d "$SRC" ]; then
     exit 1
 fi
 
-wanted=$(grep -rhoE '\.\./tests/onnx/[^"]+' --include='*.wado' --exclude-dir=build package-loam |
-    cut -c15- | sort -u)
+wanted=$(
+    grep -rhoE '\.\./tests/onnx/[^"]+' --include='*.wado' --exclude-dir=build package-loam |
+        while IFS= read -r named; do echo "${named#../tests/onnx/}"; done | sort -u
+)
 
 if [ -z "$wanted" ]; then
     echo "ERROR: no test under package-loam names a file in ${DEST}" >&2
