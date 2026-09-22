@@ -1,0 +1,7 @@
+use { Error } from "core:kiln";
+
+test "Error renders its reason" {
+    assert `${Error::InvalidSchema("bad token")}` == "invalid schema: bad token";
+    assert `${Error::Unsupported("streaming input")}` == "unsupported: streaming input";
+    assert `${Error::Other("boom")}` == "boom";
+}

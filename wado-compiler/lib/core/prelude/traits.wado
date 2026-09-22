@@ -793,6 +793,11 @@ pub trait Display with () {
     fn fmt(&self, f: &mut Formatter);
 }
 
+/// What every standard library error type is: a failure carrying a reason a
+/// person can read. It adds nothing to `Display`, so a bound on it says only that.
+pub trait Error: Display with () {
+}
+
 /// Trait for debug/inspect formatting.
 /// Types implementing this trait can be formatted with `${x:?}` in template strings.
 /// Unlike Display, Inspect always shows the "raw" debug representation:
@@ -1512,6 +1517,15 @@ impl ConvertError {
     }
 }
 
+impl Display for ConvertError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.message);
+    }
+}
+
+impl Error for ConvertError {
+}
+
 /// Addition over an iterator of `Elem`, carrying `Iterator::sum`'s element
 /// bound. Implemented for every `Add<Output = Self>`.
 pub trait Sum with () {
@@ -1575,21 +1589,14 @@ pub trait LiteralSpread with () {
     fn spread_literal(&mut self, base: Self);
 }
 
-/// Parse a value from a string.
-///
-/// `from_str_slice` is the fundamental operation: a `StrSlice` names part of a
-/// string without allocating a substring, so parsing a field out of a larger
-/// buffer copies nothing. `from_str` is a default that views the whole string.
+/// Parse a value from text that may not denote one, where `From<String>` is
+/// for text that always does. The parameter takes a `StrSlice` among the rest,
+/// so a field is parsed out of a larger buffer with no substring allocation.
 pub trait FromStr with () {
-    type Err;
-
-    /// Parse the view as `Self`.
-    fn from_str_slice(s: &StrSlice) -> Result<Self, Self::Err>;
+    type Err: Error;
 
     /// Parse the whole of any `AsStrSlice` text as `Self`.
-    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err> {
-        return Self::from_str_slice(&s.as_str_slice());
-    }
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;
 }
 
 /// Error returned by the lenient string parsers (`LenientFromStr`). All
@@ -1610,6 +1617,15 @@ impl LenientParseError {
     }
 }
 
+impl Display for LenientParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(&self.reason);
+    }
+}
+
+impl Error for LenientParseError {
+}
+
 /// Forgiving sibling of `FromStr`: parse a human-supplied string, accepting
 /// the common spelling variations for the type (casing, radix prefixes,
 /// digit separators, alternate boolean words). Leniency widens accepted
@@ -1617,7 +1633,7 @@ impl LenientParseError {
 /// is never trimmed (that is the caller's concern). See
 /// `docs/wep-2026-06-22-lenient-from-str.md`.
 pub trait LenientFromStr with () {
-    type Err;
+    type Err: Error;
 
     /// Parse the entire string as `Self`, accepting forgiving spellings.
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<Self, Self::Err>;

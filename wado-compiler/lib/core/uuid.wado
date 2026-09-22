@@ -11,7 +11,7 @@
 //! Generating in bulk, run it under `core:secure_random`'s `with_buffered` so
 //! the host call is drawn once per block rather than once per UUID.
 //!
-//! `parse` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
+//! `FromStr` accepts the four forms Rust's `uuid` and Go's `uuid` do. `Display`
 //! and `Inspect` render the canonical hyphenated form, as does `Serialize` for
 //! text formats; binary ones get CBOR tag 37 and the 16 bytes.
 //!
@@ -42,7 +42,7 @@ global CBOR_TAG_UUID: u64 = 37;
 
 #[synopsis]
 test {
-    assert Uuid::parse("550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
+    assert Uuid::from_str("550e8400-e29b-41d4-a716-446655440000") matches { Ok(id) && id.version() == 4
         && id.to_string() == "550e8400-e29b-41d4-a716-446655440000" };
 }
 
@@ -53,6 +53,20 @@ pub variant ParseError {
     /// Hyphens, braces or the `urn:uuid:` prefix are not where they belong.
     InvalidGroups,
     InvalidCharacter,
+}
+
+impl Display for ParseError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            InvalidLength => "not a UUID-shaped length",
+            InvalidGroups => "hyphens, braces or the `urn:uuid:` prefix are misplaced",
+            InvalidCharacter => "not a hex digit",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for ParseError {
 }
 
 /// A 128-bit universally unique identifier, held big-endian as RFC 9562 lays
@@ -106,51 +120,6 @@ impl Uuid {
         return from_byte_list(&b);
     }
 
-    /// Parse a UUID string (case-insensitive), accepting every form Go's
-    /// `uuid` and Rust's `uuid` do: `8-4-4-4-12`, 32 bare hex digits,
-    /// `{8-4-4-4-12}`, and `urn:uuid:8-4-4-4-12`.
-    pub fn parse<S: AsStrSlice>(s: S) -> Result<Uuid, ParseError> {
-        let len = s.len();
-        let mut start = 0;
-        let mut hyphenated = true;
-        if len == 32 {
-            hyphenated = false;
-        } else if len == 38 {
-            if s.get_byte_unchecked(0) != b'{' || s.get_byte_unchecked(37) != b'}' {
-                return Result::Err(ParseError::InvalidGroups);
-            }
-            start = 1;
-        } else if len == 45 {
-            if !has_urn_prefix(s) {
-                return Result::Err(ParseError::InvalidGroups);
-            }
-            start = 9;
-        } else if len != 36 {
-            return Result::Err(ParseError::InvalidLength);
-        }
-        let groups: List<i32> = if hyphenated { [8, 4, 4, 4, 12] } else { [32] };
-        let mut out = ByteList::with_capacity(16);
-        let mut pos = start;
-        for let mut g = 0; g < groups.len(); g += 1 {
-            if g > 0 {
-                if s.get_byte_unchecked(pos) != b'-' {
-                    return Result::Err(ParseError::InvalidGroups);
-                }
-                pos += 1;
-            }
-            for let mut k = 0; k < groups[g]; k += 2 {
-                let hi = s.get_byte_unchecked(pos) as char;
-                let lo = s.get_byte_unchecked(pos + 1) as char;
-                if !hi.is_hexdigit() || !lo.is_hexdigit() {
-                    return Result::Err(ParseError::InvalidCharacter);
-                }
-                out.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
-                pos += 2;
-            }
-        }
-        return Result::Ok(from_byte_list(&out));
-    }
-
     /// Build a UUID from its 16 big-endian bytes. `null` for any other length.
     pub fn from_bytes(bytes: &ByteList) -> Option<Uuid> {
         if bytes.len() != 16 {
@@ -193,6 +162,54 @@ impl Uuid {
     }
 }
 
+/// Reads every form Go's `uuid` and Rust's `uuid` do, case-insensitively:
+/// `8-4-4-4-12`, 32 bare hex digits, `{8-4-4-4-12}`, and `urn:uuid:8-4-4-4-12`.
+impl FromStr for Uuid {
+    type Err = ParseError;
+
+    fn from_str<S: AsStrSlice>(s: S) -> Result<Uuid, ParseError> {
+        let len = s.len();
+        let mut start = 0;
+        let mut hyphenated = true;
+        if len == 32 {
+            hyphenated = false;
+        } else if len == 38 {
+            if s.get_byte_unchecked(0) != b'{' || s.get_byte_unchecked(37) != b'}' {
+                return Result::Err(ParseError::InvalidGroups);
+            }
+            start = 1;
+        } else if len == 45 {
+            if !has_urn_prefix(s) {
+                return Result::Err(ParseError::InvalidGroups);
+            }
+            start = 9;
+        } else if len != 36 {
+            return Result::Err(ParseError::InvalidLength);
+        }
+        let groups: List<i32> = if hyphenated { [8, 4, 4, 4, 12] } else { [32] };
+        let mut out = ByteList::with_capacity(16);
+        let mut pos = start;
+        for let mut g = 0; g < groups.len(); g += 1 {
+            if g > 0 {
+                if s.get_byte_unchecked(pos) != b'-' {
+                    return Result::Err(ParseError::InvalidGroups);
+                }
+                pos += 1;
+            }
+            for let mut k = 0; k < groups[g]; k += 2 {
+                let hi = s.get_byte_unchecked(pos) as char;
+                let lo = s.get_byte_unchecked(pos + 1) as char;
+                if !hi.is_hexdigit() || !lo.is_hexdigit() {
+                    return Result::Err(ParseError::InvalidCharacter);
+                }
+                out.push((hi.hex_digit_value() << 4 | lo.hex_digit_value()) as u8);
+                pos += 2;
+            }
+        }
+        return Result::Ok(from_byte_list(&out));
+    }
+}
+
 impl Display for Uuid {
     fn fmt(&self, f: &mut Formatter) {
         self.write_to(f.buf);
@@ -224,9 +241,9 @@ impl Visitor for UuidVisitor {
     type Value = Uuid;
 
     fn visit_string<S: AsStrSlice>(&mut self, v: S) -> Result<Uuid, DeserializeError> {
-        return match Uuid::parse(&v) {
+        return match Uuid::from_str(&v) {
             Ok(id) => Result::Ok(id),
-            Err(_) => Result::Err(DeserializeError::invalid_value("invalid UUID", -1)),
+            Err(e) => Result::Err(DeserializeError::invalid_value(`invalid UUID: ${e}`, -1)),
         };
     }
 

@@ -109,7 +109,7 @@ pub struct FsError { pub path: String, pub kind: FsErrorKind }
 pub variant FsErrorKind {
     NoPreopen,
     NotFound,
-    NotUtf8,
+    NotUtf8(Utf8Error),
     Io(ErrorCode),
 }
 ```
