@@ -23,11 +23,6 @@ use crate::token::Span;
 use crate::unparse::unparse_tir_closure_source;
 use crate::{hashmap, tir};
 
-/// The non-generic `Formatter` entry point a lowered body writes through, since
-/// lowering runs past monomorphization and a generic call minted here is never
-/// instantiated.
-const FORMATTER_WRITE_LITERAL: &str = "internal_write_literal";
-
 /// Body a per-functor format impl gets.
 enum FunctorFmtBody {
     /// The signature `|i32| -> i32`, or the source `|x: i32| (x + 1)` under
@@ -853,6 +848,12 @@ impl ClosureLowerer {
         };
         let formatter_mut_ref = type_table.make_mut_ref(formatter_type);
         let string_type = type_table.make_compiler_struct(CompilerItem::String);
+        // Non-generic, because lowering runs past monomorphization and a generic
+        // call minted here is never instantiated.
+        let write_literal = type_table
+            .compiler_items()
+            .method_name(CompilerItem::FormatterWriteLiteral)
+            .to_string();
 
         for (item, body) in &CLOSURE_FORMAT_TRAITS {
             let name = |it| type_table.compiler_items().trait_fq(it);
@@ -874,6 +875,7 @@ impl ClosureLowerer {
                     formatter_mut_ref,
                     string_type,
                     &formatter_fq,
+                    &write_literal,
                     span,
                 ),
                 FunctorFmtBody::Delegate(target) => self.build_functor_delegate_method(
@@ -905,6 +907,7 @@ impl ClosureLowerer {
         formatter_mut_ref: TypeId,
         string_type: TypeId,
         formatter_fq: &FqTypeName,
+        write_literal: &str,
         span: Span,
     ) -> TirFunction {
         let fmt_local = TirExpr::new(
@@ -922,12 +925,12 @@ impl ClosureLowerer {
                         Box::new(fmt_local.clone()),
                         FunctionRef {
                             module_source: ModuleSource::format(),
-                            name: format!("{formatter_fq}::{FORMATTER_WRITE_LITERAL}"),
+                            name: format!("{formatter_fq}::{write_literal}"),
                             monomorph_info: None,
                             method_info: Some(LocalMethodName::new(
                                 formatter_fq.clone(),
                                 None,
-                                FORMATTER_WRITE_LITERAL.to_string(),
+                                write_literal.to_string(),
                             )),
                         },
                         vec![],

@@ -110,6 +110,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
         wasm_assets,
         trait_env,
         moved_local_spans,
+        #[cfg(debug_assertions)]
+        pruned,
     } = flat;
 
     // For `try_expand_deref_aggregate_assign`.
@@ -145,6 +147,8 @@ pub fn translate(flat: FlatPackage, plan: LowerPlan) -> NirPackage {
             base_len,
             #[cfg(debug_assertions)]
             shadowed: Vec::new(),
+            #[cfg(debug_assertions)]
+            pruned,
         }),
         moved_local_spans,
     };
@@ -268,6 +272,9 @@ struct Interner {
     /// Stubs minted for a name the package defines — see `resolve`.
     #[cfg(debug_assertions)]
     shadowed: Vec<String>,
+    /// What `prelower_reach` dropped before this phase — see `resolve`.
+    #[cfg(debug_assertions)]
+    pruned: IndexSet<FunctionId>,
 }
 
 impl Interner {
@@ -278,6 +285,13 @@ impl Interner {
         if let Some(&id) = self.ids.get(&key) {
             return id;
         }
+        #[cfg(debug_assertions)]
+        assert!(
+            !self.pruned.contains(&key),
+            "[lower] `{key:?}` was pruned before `lower` and then minted here: \
+             this phase spelled a callee that no TIR body names, so \
+             `prelower_reach::is_root` owes it a root (WEP 2026-05-26)"
+        );
         // A stub is for a callee outside the package. Minting one for a name the
         // package *does* define means the call and the definition disagree on
         // some other part of the identity — the call then binds to a body-less

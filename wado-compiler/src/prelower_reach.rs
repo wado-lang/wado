@@ -1,16 +1,17 @@
-//! What a program reaches over the monomorphized TIR, and what only `lower`
-//! and `optimize` name.
+//! What a program reaches over the monomorphized TIR, and the prune that drops
+//! the rest before `lower` translates it.
 //!
-//! `WADO_TRACE=prelower_reach` prints the difference. See WEP 2026-05-26,
-//! "A prune before `lower` is guessing".
+//! `WADO_TRACE=prelower_reach` prints what it found. See WEP 2026-05-26.
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::compiler_item::CompilerItem;
 use crate::compiler_trace;
+use crate::defs::DefId;
 use crate::flat_package::FlatPackage;
 use crate::hashmap::{IndexMap, IndexSet};
-use crate::name::{FunctionId, global_init_target, is_type_bridge};
+use crate::name::{FqTraitName, FunctionId, global_init_target, is_type_bridge};
 use crate::nir_package::NirPackage;
 use crate::tir::{TirBlock, TirExpr, TirExprKind, TirFunction};
 use crate::tir_visitor::TirRefVisitor;
@@ -28,16 +29,45 @@ fn function_key(func: &TirFunction) -> FunctionId {
     FunctionId::free(&func.module_source, &func.name)
 }
 
+/// The traits `lower` dispatches to from a node that names no callee — a match
+/// pattern, a wide-int literal comparison, a `builtin::variant_tag` marker — so
+/// an impl of one is reachable however unreachable the call graph says it is.
+const MINTABLE: [CompilerItem; 3] = [
+    CompilerItem::Eq,
+    CompilerItem::Ord,
+    CompilerItem::ReflectVariant,
+];
+
+/// [`MINTABLE`] as declaration identities. An impl names the trait with this
+/// impl's type arguments (`Eq<String>` for `StrSlice`), so the spelling is not
+/// what settles which trait it is.
+fn mintable_traits(flat: &FlatPackage) -> IndexSet<DefId> {
+    let type_table = flat.type_table.borrow();
+    let items = type_table.compiler_items();
+    MINTABLE
+        .iter()
+        .filter_map(|item| items.trait_fq_opt(*item)?.canonical())
+        .collect()
+}
+
 /// The exports the emitted component keeps, matching `optimize::dce`'s entries,
 /// plus what a later phase may call without any TIR body naming it: a compiler
-/// item the compiler resolves itself, a per-type synthesized bridge, and a
-/// global initializer, which `lower` splices into `$initialize_module`.
-fn is_root(func: &TirFunction, flat: &FlatPackage) -> bool {
+/// item the compiler resolves itself, a per-type synthesized bridge, a global
+/// initializer, which `lower` splices into `$initialize_module`, and an impl of
+/// a trait `lower` can spell (see [`MINTABLE`]).
+fn is_root(func: &TirFunction, flat: &FlatPackage, mintable: &IndexSet<DefId>) -> bool {
     func.is_cm_export
         || (func.is_export && flat.wasm_module_sources.contains_key(&func.module_source))
         || func.compiler_item.is_some()
         || is_type_bridge(&func.name)
         || global_init_target(&func.name).is_some()
+        || func.method_info.as_ref().is_some_and(|method| {
+            method
+                .trait_name
+                .as_ref()
+                .and_then(FqTraitName::canonical)
+                .is_some_and(|def| mintable.contains(&def))
+        })
 }
 
 /// What [`reachable`] found, against the population it walked.
@@ -53,12 +83,13 @@ pub(crate) struct Reached {
 /// Every function the program reaches from its roots. Walks only the bodies it
 /// reaches, which is the work [`prune`] saves.
 fn reach(flat: &FlatPackage) -> IndexSet<FunctionId> {
+    let mintable = mintable_traits(flat);
     let mut bodies: IndexMap<FunctionId, &Rc<RefCell<TirFunction>>> = IndexMap::default();
     let mut work: Vec<FunctionId> = Vec::new();
     for func_rc in &flat.functions {
         let func = func_rc.borrow();
         let key = function_key(&func);
-        if is_root(&func, flat) {
+        if is_root(&func, flat, &mintable) {
             work.push(key.clone());
         }
         bodies.insert(key, func_rc);
@@ -144,19 +175,34 @@ pub(crate) fn audit(found: Option<&Reached>, package: &NirPackage) {
 
 /// What every pipeline does with `flat` on its way into `lower`. One entry
 /// point, because `compile` and `dump` lower separately.
+///
+/// `WADO_NO_PRELOWER_PRUNE` holds the prune back, so a missing root is a flag
+/// to flip rather than a compiler to rebuild.
 pub(crate) fn before_lower(flat: &mut FlatPackage) -> Option<Reached> {
     let found = enabled().then(|| reachable(flat));
-    if std::env::var_os("WADO_PRELOWER_PRUNE").is_some() {
+    if std::env::var_os("WADO_NO_PRELOWER_PRUNE").is_none() {
         prune(flat);
     }
     found
 }
 
-/// Drop what no root reaches, so `lower` never translates it. Unsound, and so
-/// off by default: see WEP 2026-05-26, "A prune before `lower` is guessing".
+/// Drop what no root reaches, so `lower` never translates it, and record the
+/// drop for the assert in `lower`'s `Interner::resolve`.
 fn prune(flat: &mut FlatPackage) {
     let reached = reach(flat);
     let before = flat.functions.len();
+    #[cfg(debug_assertions)]
+    {
+        let dropped: Vec<FunctionId> = flat
+            .functions
+            .iter()
+            .filter_map(|func_rc| {
+                let key = function_key(&func_rc.borrow());
+                (!reached.contains(&key)).then_some(key)
+            })
+            .collect();
+        flat.pruned.extend(dropped);
+    }
     flat.functions
         .retain(|func_rc| reached.contains(&function_key(&func_rc.borrow())));
     compiler_trace!(
