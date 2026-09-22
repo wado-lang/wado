@@ -2843,19 +2843,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if unresolved.is_empty() {
             return;
         }
-        let names = unresolved
-            .iter()
-            .map(|n| format!("`{n}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let names: Vec<String> = unresolved.iter().copied().map(str::to_string).collect();
         let func_name = callee.name();
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {names} of function `{func_name}`; \
-                 add a turbofish (`{func_name}::<...>()`) or a type annotation"
-            ),
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("function `{func_name}`"),
+            &format!("`{func_name}::<...>()`"),
             span,
-        });
+        ));
     }
 
     fn report_uninferred_static_method_type_args(
@@ -2905,23 +2900,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return;
         }
 
-        let joined = names
-            .iter()
-            .map(|n| format!("`{n}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
         let turbofish = if type_level_unresolved {
             format!("`{prefix}::<...>::{suffix}()`")
         } else {
             format!("`{prefix}::{suffix}::<...>()`")
         };
-        let _ = self.emit(TypeError::CannotInferType {
-            message: format!(
-                "cannot infer type parameter {joined} of `{prefix}::{suffix}`; \
-                 add a turbofish ({turbofish}) or a type annotation"
-            ),
+        let _ = self.emit(TypeError::cannot_infer(
+            &names,
+            &format!("`{prefix}::{suffix}`"),
+            &turbofish,
             span,
-        });
+        ));
     }
 
     /// Substitute a declared default (`fn f<T = Fallback>`) into any dense

@@ -1,7 +1,6 @@
 //! A function type written inside a signature carries its own positions. Its
-//! parameters and return belong to that function, and neither settles the
-//! packs of the signature that names it, so the received-position rule on
-//! `[..A, ..B]` stops at the boundary.
+//! parameters and return belong to that function and settle no pack of the
+//! signature naming it, so `a` and `b` are what settle `A` and `B` here.
 
 fn apply<..A, ..B>(f: fn([..A], [..B]) -> [..A, ..B], a: [..A], b: [..B]) -> [..A, ..B] {
     return f(a, b);
