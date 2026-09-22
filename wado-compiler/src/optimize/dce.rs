@@ -134,38 +134,38 @@ impl DceAnalysis {
 /// pure mutator over the matching field. The split also puts type reachability
 /// before `remove_unreachable_globals` mutates function bodies — those mutations
 /// expose no new types, but the ordering makes that invariant observable.
-pub fn analyze_dce(project: &mut NirPackage) -> DceAnalysis {
-    // The callee descriptor for every `FuncId`, materialized once from the
-    // function records (borrow-safe: a plain pass, no body walk). A call's
-    // callee is identified by its stamped `func_id` (born resolved, authoritative
-    // — `wir_build` never falls back to name resolution for a NIR call), and the
-    // record at that id carries the identical identity (name / module /
-    // method_info / monomorph_info) the call node's `FunctionRef` used to. Indexed
-    // by `func_id.index()` (== store position, Phase 4a), so the reachability
-    // walk reads identity by id without a self-borrowing `store[id]` deref.
-    let descriptors = build_callee_descriptors(project);
+pub(super) fn analyze_dce(project: &mut NirPackage, cache: &mut DescriptorCache) -> DceAnalysis {
+    // The callee descriptor for every `FuncId`. A call's callee is identified by
+    // its stamped `func_id` (born resolved, authoritative — `wir_build` never
+    // falls back to name resolution for a NIR call), and the record at that id
+    // carries the identical identity (name / module / method_info /
+    // monomorph_info) the call node's `FunctionRef` used to. Indexed by
+    // `func_id.index()` (== store position, Phase 4a), so the reachability walk
+    // reads identity by id without a self-borrowing `store[id]` deref.
+    let descriptors = cache.descriptors(project);
 
     // Single AST walk per function body: build the call graph and
     // collect per-function used-globals / used-types in one go.
-    let mut graph = build_analysis_graph(project, &descriptors);
+    let mut graph = build_analysis_graph(project, descriptors);
 
     let mut analysis = DceAnalysis::empty();
-    analysis.functions = compute_function_reachability(project, &descriptors, &mut graph);
+    analysis.functions = compute_function_reachability(project, descriptors, &mut graph);
     analysis.globals = compute_global_reachability(&graph, &analysis.functions);
-    populate_type_reachability(project, &descriptors, &graph, &mut analysis);
+    populate_type_reachability(project, descriptors, &graph, &mut analysis);
     analysis
 }
 
 /// Callers relevant to interprocedural facts, including cached rewrite targets.
 pub(super) fn reachable_function_positions(
     project: &mut NirPackage,
+    cache: &mut DescriptorCache,
     cached: impl IntoIterator<Item = FuncId>,
 ) -> IndexSet<usize> {
     use cranelift_entity::EntityRef;
 
-    let descriptors = build_callee_descriptors(project);
-    let mut graph = build_analysis_graph(project, &descriptors);
-    let mut reachable = compute_function_reachability(project, &descriptors, &mut graph);
+    let descriptors = cache.descriptors(project);
+    let mut graph = build_analysis_graph(project, descriptors);
+    let mut reachable = compute_function_reachability(project, descriptors, &mut graph);
     let roots = cached
         .into_iter()
         .map(|id| function_id_for(&project.functions[id.index()].borrow()));
@@ -174,8 +174,8 @@ pub(super) fn reachable_function_positions(
     reachable
 }
 
-/// The table of [`build_callee_descriptors`], appended to across the fixed-point
-/// loop's rounds rather than rebuilt.
+/// One [`FunctionRef`] per function, appended to as functions are minted
+/// rather than rebuilt. The only way to a descriptor table.
 #[derive(Default)]
 pub(super) struct DescriptorCache {
     refs: Vec<FunctionRef>,
@@ -224,17 +224,6 @@ impl DescriptorCache {
 /// The callee [`FunctionRef`] descriptor for every function, indexed by
 /// `func_id.index()` (== store position). Used so a call site's identity is read
 /// by its stamped `func_id` rather than the call node's own `FunctionRef`.
-pub(super) fn build_callee_descriptors(project: &NirPackage) -> Vec<FunctionRef> {
-    project
-        .functions
-        .iter()
-        .map(|f| {
-            let f = f.borrow();
-            FunctionRef::from_resolved(&f, f.module_source.clone())
-        })
-        .collect()
-}
-
 /// Resolve a call node's stamped `func_id` to its callee descriptor. `func_id`
 /// is total for every NIR call (born resolved): the field is a non-optional
 /// [`FuncId`].
@@ -2180,8 +2169,12 @@ fn dead_pure_binding(
 ///
 /// Answers whether any body changed, so a caller holding `effects` knows
 /// whether they still describe the IR.
-pub(super) fn unhoist_unobserved_globals(project: &mut NirPackage, effects: &[FnEffect]) -> bool {
-    let descriptors = build_callee_descriptors(project);
+pub(super) fn unhoist_unobserved_globals(
+    project: &mut NirPackage,
+    cache: &mut DescriptorCache,
+    effects: &[FnEffect],
+) -> bool {
+    let descriptors = cache.descriptors(project);
     let type_table = project.type_table.clone();
     let types = type_table.borrow();
     let mut guards = GlobalGuards {
