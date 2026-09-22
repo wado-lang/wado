@@ -36,7 +36,7 @@ use super::tysys::TypeSystem;
 use super::util;
 use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
-    WIRE_NUMBER_RESERVED, wire_number_of,
+    WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
 use crate::compiler_item::CompilerItem;
 use crate::defs::DefId;
@@ -2044,13 +2044,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
         let written: Vec<Option<&str>> = fields
             .iter()
-            .map(|field| {
-                field
-                    .attrs
-                    .iter()
-                    .find(|a| a.name == WIRE)
-                    .and_then(|a| a.kv_number("number"))
-            })
+            .map(|field| wire_number_written(&field.attrs))
             .collect();
         self.check_numbers_are_all_or_none(fields, &written);
 

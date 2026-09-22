@@ -1,4 +1,5 @@
 use { EmitError, emit } from "./emit.wado";
+use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
 use { LayoutRule, Schema } from "./schema.wado";
@@ -206,6 +207,8 @@ g (float[2, 3] X) => (float[2, 3] Y)
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
     assert !out.contains("transpose2(");
+    // Every node result is bound as a value, so the operand is read as one.
+    assert out.contains("let Y = *X;");
 }
 
 test "a Transpose no kernel covers names itself" {
@@ -221,6 +224,50 @@ g (float[2, 3, 4] X) => (float[4, 3, 2] Y)
     assert `${e}` == "Y = Transpose: no kernel for this operator";
 }
 
+test "a tensor named as the generated module names something is renamed" {
+    let source = `
+g (float[N, 2] weights, float[N, 2] map) => (float[N, 2] Tensor)
+<>
+{
+    Tensor = Add(weights, map)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("pub fn forward(weights_: &Tensor<f32, [Batch, Unit]>, map_: ");
+    assert out.contains("let Tensor_ = zip(weights_, map_,");
+    assert out.contains("return Tensor_;");
+}
+
+test "a tensor named as an axis is renamed too" {
+    let source = `
+g (float[N, 2] Batch) => (float[N, 2] Y)
+<>
+{
+    Y = Relu(Batch)
+}
+`;
+    let out = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap();
+
+    assert out.contains("pub struct Batch {}");
+    assert out.contains("let Y = map(Batch_,");
+}
+
+test "a broadcast that stretches an extent of one names both operands" {
+    let source = `
+g (float[2, 1] X, float[2, 4] Z) => (float[2, 4] Y)
+<>
+{
+    Y = Add(X, Z)
+}
+`;
+    // One layout rule names both operands' axes, so stage 0 discharges the
+    // stretch and only the extents differ.
+    let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
+
+    assert `${e}` == "Y = Add: no kernel broadcasts [Batch, Unit] against [Batch, Unit]";
+}
+
 test "an element type the kernels cannot compute in names itself" {
     let source = `
 g (int32[N, 2] X) => (int32[N, 2] Y)
@@ -232,4 +279,100 @@ g (int32[N, 2] X) => (int32[N, 2] Y)
     let e = generate(source, [rule("*", ["Batch", "Unit"])]).unwrap_err();
 
     assert `${e}` == "X: the kernels compute in f32 and this tensor is int32";
+}
+
+// The textual format carries no tensor attribute, so a `Constant` graph is
+// built here rather than read.
+fn constant_graph(consumer: Node, produced: Rank, value: f32) -> Graph {
+    let float2 = ValueInfo {
+        name: "X",
+        dtype: "float",
+        rank: Rank::Dims([
+            Dim::Symbol("N"),
+            Dim::Static(2),
+        ]),
+    };
+    return Graph {
+        name: "g",
+        inputs: [float2],
+        outputs: [
+            ValueInfo { name: consumer.outputs[0], dtype: "float", rank: produced },
+        ],
+        initializers: [],
+        nodes: [
+            Node {
+                op: "Constant",
+                outputs: ["C"],
+                inputs: [],
+                attrs: [
+                    Attr {
+                        name: "value",
+                        values: [],
+                        is_list: false,
+                        tensor: Option::Some(ConstTensor {
+                            dtype: "float",
+                            extents: [1],
+                            data: [value],
+                        }),
+                    },
+                ],
+            },
+            consumer,
+        ],
+    };
+}
+
+fn node(op: String, output: String, inputs: List<String>) -> Node {
+    return Node {
+        op,
+        outputs: [output],
+        inputs,
+        attrs: [],
+    };
+}
+
+fn emit_graph(graph: &Graph) -> Result<String, EmitError> {
+    let shapes = infer(graph, &Schema {
+        layout: [rule("*", ["Batch", "Unit"])],
+    }).unwrap();
+    return emit(graph, &shapes);
+}
+
+fn matrix_rank() -> Rank {
+    return Rank::Dims([
+        Dim::Symbol("N"),
+        Dim::Static(2),
+    ]);
+}
+
+fn folded_add(value: f32) -> Result<String, EmitError> {
+    return emit_graph(&constant_graph(node("Add", "Y", ["X", "C"]), matrix_rank(), value));
+}
+
+test "a constant folds into the operator that reads it" {
+    assert folded_add(0.5).unwrap().contains("let Y = map(X, |v| v + (0.5 as f32));");
+}
+
+test "a constant no Wado literal spells is written as the prelude's constant" {
+    assert folded_add(-f32::INFINITY).unwrap().contains("let Y = map(X, |v| v + -f32::INFINITY);");
+    assert folded_add(f32::NAN).unwrap().contains("v + f32::NAN");
+}
+
+test "a constant no operator can fold names the operator that reads it" {
+    let graph = constant_graph(node("Relu", "Y", ["C"]), Rank::Scalar, 0.5);
+    let e = emit_graph(&graph).unwrap_err();
+
+    assert `${e}` == "Y = Relu: no kernel folds the constant C";
+}
+
+test "a constant is not a value a graph can return" {
+    let graph = constant_graph(node("Relu", "Y", ["X"]), matrix_rank(), 0.5);
+    let e = emit_graph(&Graph {
+        ..graph,
+        outputs: [
+            ValueInfo { name: "C", dtype: "float", rank: Rank::Scalar },
+        ],
+    }).unwrap_err();
+
+    assert `${e}` == "C: a graph cannot return a constant";
 }

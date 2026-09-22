@@ -282,3 +282,22 @@ test "a truncated message is an error, not a trap" {
     assert from_bytes::<Test1, ByteList>(b"\x08\x96") matches { Err(_) };
     assert from_bytes::<Test3, ByteList>(b"\x1a\x08\x08\x96\x01") matches { Err(_) };
 }
+
+test "a length no message could hold is an error, not a trap" {
+    // 0x7fffffff, which added to a position overflows what an offset holds.
+    assert from_bytes::<Test2, ByteList>(b"\x12\xff\xff\xff\xff\x07") matches { Err(_) };
+    assert from_bytes::<Test3, ByteList>(b"\x1a\xff\xff\xff\xff\x07") matches { Err(_) };
+}
+
+test "a packed run holding nothing is an empty list" {
+    struct Packed {
+        #[wire(number = 4)]
+        items: List<i32> = [],
+        #[wire(number = 1)]
+        after: i32 = 0,
+    }
+
+    let m = decode::<Packed>(b"\x22\x00\x08\x96\x01");
+    assert m.items.is_empty();
+    assert m.after == 150;
+}

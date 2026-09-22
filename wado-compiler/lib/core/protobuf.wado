@@ -628,6 +628,8 @@ struct ProtobufReader {
     pending: Option<WireType>,
     /// End of the packed-repeated run being read, or `-1` outside one.
     packed_end: i32,
+    /// Whether the run just entered holds no elements.
+    packed_empty: bool,
     number: i32,
     depth: i32,
     max_depth: i32,
@@ -653,12 +655,15 @@ impl ProtobufReader {
                 self.pos as i64,
             ));
         }
-        let len = self.varint()? as i32;
-        let stop = self.pos + len;
-        if len < 0 || stop > self.end {
-            return Result::Err(DeserializeError::malformed("length runs past the message", self.pos as i64));
+        let at = self.pos;
+        // The length is checked against what is left before it is narrowed: a
+        // length near `u64::MAX` added to a position is not a position.
+        let len = self.varint()?;
+        assert self.pos <= self.end;
+        if len > (self.end - self.pos) as u64 {
+            return Result::Err(DeserializeError::malformed("length runs past the message", at as i64));
         }
-        return Result::Ok(stop);
+        return Result::Ok(self.pos + len as i32);
     }
 
     fn read_region(&mut self) -> Result<[i32, i32], DeserializeError> {
@@ -674,6 +679,13 @@ impl ProtobufReader {
     fn enter_packed(&mut self) -> Result<(), DeserializeError> {
         if self.packed_end < 0 && self.pending matches { Some(Len) } {
             self.packed_end = self.read_len()?;
+            if self.packed_end == self.pos {
+                // A run with no bytes in it has no element to read, and only
+                // this scalar read knew the tag was a run at all. `PbSeqAccess`
+                // turns the flag back into the end of the sequence.
+                self.packed_empty = true;
+                return Result::Err(DeserializeError::eof(self.pos as i64));
+            }
         }
         return Result::Ok(());
     }
@@ -769,7 +781,18 @@ impl DeserializeSeq for PbSeqAccess {
         }
         self.first = false;
         let mut de = ProtobufDeserializer { de: self.de };
-        let value = T::deserialize(&mut de)?;
+        let value = match T::deserialize(&mut de) {
+            Ok(value) => value,
+            Err(e) => {
+                if !self.de.packed_empty {
+                    return Result::Err(e);
+                }
+                self.de.packed_empty = false;
+                self.de.packed_end = -1;
+                self.de.pending = null;
+                return Result::Ok(null);
+            },
+        };
         return Result::Ok(Option::Some(value));
     }
 
@@ -1003,6 +1026,7 @@ pub fn from_bytes<T: Deserialize + WireNumbered, S: AsByteSlice>(
         end: bytes.len(),
         pending: null,
         packed_end: -1,
+        packed_empty: false,
         number: 0,
         depth: 0,
         max_depth,

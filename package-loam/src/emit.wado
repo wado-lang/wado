@@ -34,11 +34,22 @@ pub struct NameCollision {
     pub ident: String,
 }
 
+/// A `Constant` reaching an operator that has nowhere to put it. Only a
+/// closure an operator already writes folds one, since it allocates no tensor.
+pub struct UnfoldedConstant {
+    pub node: String,
+    pub op: String,
+    pub tensor: String,
+}
+
 pub variant EmitError {
     Dtype(UnmappedDtype),
     Operator(UnimplementedOperator),
     Broadcast(UnimplementedBroadcast),
     Collision(NameCollision),
+    Constant(UnfoldedConstant),
+    /// A graph output a `Constant` produces, which `forward` has no tensor for.
+    ReturnedConstant(String),
     /// A graph whose outputs `forward` cannot return: it delivers one value.
     OutputCount(i32),
 }
@@ -69,6 +80,12 @@ impl Display for NameCollision {
     }
 }
 
+impl Display for UnfoldedConstant {
+    fn fmt(&self, f: &mut Formatter) {
+        f.write_str(`${self.node} = ${self.op}: no kernel folds the constant ${self.tensor}`);
+    }
+}
+
 impl Display for EmitError {
     fn fmt(&self, f: &mut Formatter) {
         match self {
@@ -76,6 +93,8 @@ impl Display for EmitError {
             Operator(e) => e.fmt(f),
             Broadcast(e) => e.fmt(f),
             Collision(e) => e.fmt(f),
+            Constant(e) => e.fmt(f),
+            ReturnedConstant(name) => f.write_str(`${name}: a graph cannot return a constant`),
             OutputCount(n) => f.write_str(`the graph has ${n} outputs and \`forward\` returns one`),
         }
     }
@@ -103,13 +122,14 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     out.push_str("//! Each axis is a marker type, so two tensors that share an axis\n");
     out.push_str("//! share the type that names it.\n\n");
 
-    for let axis of axis_names(graph, shapes) {
+    let axes = axis_names(graph, shapes);
+    for let axis of axes {
         out.push_str(`pub struct ${axis} {}\n`);
     }
     out.push('\n');
-    out.push_str(#include_str("./runtime/tensor.wado"));
+    out.push_str(&RUNTIME);
 
-    let names = Names::of(graph)?;
+    let names = Names::of(graph, &axes)?;
     emit_weights(&mut out, graph, shapes, &names);
     emit_forward(&mut out, graph, shapes, &names)?;
     return Result::Ok(out);
@@ -128,11 +148,15 @@ fn check_dtype(vi: &ValueInfo) -> Result<(), EmitError> {
 /// any string, so it is sanitized, and two that collide stop the build.
 struct Names {
     idents: TreeMap<String, String>,
+    reserved: TreeSet<String>,
 }
 
 impl Names {
-    fn of(graph: &Graph) -> Result<Names, EmitError> {
-        let mut names = Names { idents: TreeMap::<String, String>::new() };
+    fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
+        let mut names = Names {
+            idents: TreeMap::<String, String>::new(),
+            reserved: reserved_idents(axes),
+        };
         let mut taken = TreeMap::<String, String>::new();
         for let vi of &graph.inputs {
             names.take(&mut taken, &vi.name)?;
@@ -147,7 +171,12 @@ impl Names {
     }
 
     fn take(&mut self, taken: &mut TreeMap<String, String>, tensor: &String) -> Result<(), EmitError> {
-        let ident = sanitize(tensor);
+        let mut ident = sanitize(tensor);
+        // A name the generated module already binds is not this tensor's to
+        // take, and a trailing `_` is a name no other rule here produces.
+        while self.reserved.contains(ident) {
+            ident = `${ident}_`;
+        }
         if let Some(other) = taken.get(ident) {
             builtin::cold_path();
             return Result::Err(EmitError::Collision(NameCollision {
@@ -164,6 +193,61 @@ impl Names {
     fn get(&self, tensor: &String) -> String {
         return self.idents.get(*tensor).unwrap();
     }
+}
+
+/// The kernels every generated module carries, inlined rather than imported so
+/// the module stands on its own.
+global RUNTIME: String = #include_str("./runtime/tensor.wado");
+
+/// The words Wado reserves, which an ONNX tensor may well be named after
+/// (`in`, `of`, `type`). From `wado-compiler/src/syntax.rs`.
+global KEYWORDS: List<String> = [
+    "if", "else", "while", "for", "loop", "break", "continue", "return", "match", "fn", "let", "global", "const",
+    "struct", "enum", "variant", "flags", "impl", "trait", "type", "resource", "extends", "world", "effect", "interface",
+    "pub", "internal", "export", "mut", "async", "unique", "reactive", "use", "from", "import", "as", "with", "in", "of",
+    "assert", "true", "false", "null", "matches", "self", "Self",
+];
+
+/// The names the generated module already binds. The runtime's are read out of
+/// the runtime itself, so adding a kernel there cannot leave this behind.
+fn reserved_idents(axes: &List<String>) -> TreeSet<String> {
+    let mut reserved = TreeSet::<String>::new();
+    for let word of KEYWORDS {
+        reserved.insert(word);
+    }
+    for let name of declared_in(&RUNTIME) {
+        reserved.insert(name);
+    }
+    for let axis of *axes {
+        reserved.insert(axis);
+    }
+    reserved.insert("forward");
+    reserved.insert("weights");
+    reserved.insert("Weights");
+    return reserved;
+}
+
+/// Every module-level name a Wado source declares, by the one shape the
+/// runtime is written in: a `fn` or a `struct` at column zero.
+fn declared_in(source: &String) -> List<String> {
+    let mut names: List<String> = [];
+    for let line of source.lines() {
+        let declaration = line.strip_prefix("pub ").unwrap_or(line.as_str_slice());
+        for let keyword of ["fn ", "struct "] as List<String> {
+            let Some(rest) = declaration.strip_prefix(keyword) else {
+                continue;
+            };
+            let mut name = String::with_capacity(rest.len());
+            for let c of rest.chars() {
+                if !c.is_ascii_alphanumeric() && c != '_' {
+                    break;
+                }
+                name.push(c);
+            }
+            names.push(name);
+        }
+    }
+    return names;
 }
 
 /// An ONNX tensor name as a Wado identifier: exporters write `/` and `.` into
@@ -266,6 +350,10 @@ fn emit_forward(
         out.push_str(`    let ${ident} = ${node_call(node, shapes, &exprs)?};\n`);
         exprs.values[produced] = ident;
     }
+    if exprs.scalars.contains_key(result) {
+        builtin::cold_path();
+        return Result::Err(EmitError::ReturnedConstant(result));
+    }
     out.push_str(`    return ${exprs.value(&result)};\n}\n`);
     return Result::Ok(());
 }
@@ -292,6 +380,7 @@ fn axis_names_of(axes: &List<Axis>) -> List<String> {
 /// already in scope, since a graph's nodes are in topological order.
 fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> Result<String, EmitError> {
     let op = node.op;
+    check_constants_fold(node, exprs)?;
     if op == "MatMul" {
         let [a, b, left, right] = binary_call(node, shapes, exprs);
         // The kernel's signature is `[..Bs, M, K]` against `[..Bs, K, N]`, so
@@ -319,8 +408,9 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
             return Result::Ok(`transpose2(${a})`);
         }
         // A permutation that leaves every axis alone computes the operand.
+        // Every node result is bound as a value, so it is read as one.
         if is_identity(&perm) {
-            return Result::Ok(a);
+            return Result::Ok(exprs.value(&node.inputs[0]));
         }
         builtin::cold_path();
         return Result::Err(EmitError::Operator(UnimplementedOperator {
@@ -336,6 +426,40 @@ fn node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
         node: node.outputs[0],
         op,
     }));
+}
+
+/// A `Constant` is a literal rather than a tensor, so only an operator that
+/// already writes a closure over its other operand has anywhere to put one.
+/// Every other operand position stops the build here rather than at the
+/// lookup that would find no tensor.
+fn check_constants_fold(node: &Node, exprs: &Operands) -> Result<(), EmitError> {
+    for let [index, input] of node.inputs.into_iter().enumerate() {
+        if !exprs.scalars.contains_key(input) {
+            continue;
+        }
+        if folds_constant(node, index, exprs) {
+            continue;
+        }
+        builtin::cold_path();
+        return Result::Err(EmitError::Constant(UnfoldedConstant {
+            node: node.outputs[0],
+            op: node.op,
+            tensor: input,
+        }));
+    }
+    return Result::Ok(());
+}
+
+/// Whether the operand at `index` is one this operator folds: a binary
+/// elementwise operand whose partner is a tensor, or a `Gemm` bias.
+fn folds_constant(node: &Node, index: i32, exprs: &Operands) -> bool {
+    if node.op == "Gemm" {
+        return index == 2;
+    }
+    if binary_body(&node.op, &"x", &"y") matches { None } {
+        return false;
+    }
+    return !exprs.scalars.contains_key(node.inputs[1 - index]);
 }
 
 /// A two-operand node's operand expressions and the shapes stage 0 gave them.
@@ -370,16 +494,32 @@ fn binary_node_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operan
     return Result::Ok(call);
 }
 
-/// A constant as a literal the generated source spells. The shortest
-/// round-tripping form of a float can be an integer, so the cast is what makes
-/// it a float literal.
+/// A constant as an expression the generated source spells. Wado has no
+/// literal for a non-finite float, and `-inf` is how a graph writes a mask, so
+/// those three are the prelude's constants.
 fn float_literal(value: f32) -> String {
+    if value.is_nan() {
+        return "f32::NAN";
+    }
+    if value == f32::INFINITY {
+        return "f32::INFINITY";
+    }
+    if value == f32::NEG_INFINITY {
+        return "-f32::INFINITY";
+    }
+    // The shortest round-tripping form of a float can be an integer, so the
+    // cast is what makes it a float.
     return `(${value} as f32)`;
 }
 
 /// The kernel that combines two operands elementwise, or `None` where no
 /// kernel broadcasts one against the other.
 fn elementwise_call(a: &String, b: &String, left: &Shape, right: &Shape, body: &String) -> Option<String> {
+    // Stage 0 lets an extent of 1 stretch to meet the other operand, and no
+    // kernel does, so two axis lists that read alike can still be two lengths.
+    if !extents_agree(left, right) {
+        return null;
+    }
     if axis_list(left) == axis_list(right) {
         return Option::Some(`zip(${a}, ${b}, |x, y| ${body})`);
     }
@@ -451,6 +591,19 @@ fn broadcast_error(node: &Node, left: &Shape, right: &Shape) -> EmitError {
         left: axis_list(left),
         right: axis_list(right),
     });
+}
+
+/// Whether the axes the two operands share, aligned from the end, are the same
+/// length. A kernel walks both operands with one index, so a stretch is not a
+/// call it can write.
+fn extents_agree(left: &Shape, right: &Shape) -> bool {
+    let common = i32::min(left.rank(), right.rank());
+    for let mut back = 0; back < common; back += 1 {
+        if !left.from_end(back).extent.agrees(&right.from_end(back).extent) {
+            return false;
+        }
+    }
+    return true;
 }
 
 /// Whether two `MatMul` operands' batch axes are one list, which is what the
