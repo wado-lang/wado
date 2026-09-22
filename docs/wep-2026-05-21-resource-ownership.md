@@ -558,13 +558,15 @@ does for the struct-field pre-pass.
 
 ### Known gap: a `Stream` or `Future` handle nothing drops
 
-Cleanup excludes `GenericResource` — `Stream<T>` and `Future<T>` — because those
+Cleanup excludes `GenericResource`, meaning `Stream<T>` and `Future<T>`. Those
 handles carry their own drop discipline, so every path out of a function holding
 one has to call `drop` itself. Nothing diagnoses a path that does not, and the
-handle leaks with no trace. The shape that admits it is a `?` or an early
-`return` inside the region holding the handle; the readers in `core:fs` and
-`core:kiln` avoid it by draining the stream, dropping the handle, and only then
-deciding what to return.
+handle leaks with no trace.
+
+A `?` or an early `return` inside the region holding the handle is the shape
+that admits it. `core:fs` drains the stream and drops before it decides what to
+return. `core:kiln` lends the handle to a helper, so the body that owns it
+cannot return early at all.
 
 ## Amendments to earlier WEPs
 

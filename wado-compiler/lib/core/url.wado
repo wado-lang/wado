@@ -337,9 +337,7 @@ fn remove_dot_segments<S: AsStrSlice>(path: S) -> String {
 }
 
 fn parse_port_str<S: AsStrSlice>(s: S) -> Result<u16, ParseError> {
-    if s.is_empty() {
-        return Result::Err(ParseError::InvalidPort);
-    }
+    assert !s.is_empty();
     let mut val: i32 = 0;
     for let c of s.chars() {
         if !('0' <= c <= '9') {
