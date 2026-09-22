@@ -152,6 +152,23 @@ pub(super) fn impl_target_head_args(impl_ty: &Type) -> Option<&[Type]> {
     }
 }
 
+/// Where the target names `param`, as a position in its argument list.
+/// A parameter is substituted against the instance's type arguments, so that
+/// position is its index: `impl<T> Tr for Holder<i32, T>` puts `T` at 1, and
+/// declaration order would read the instance's `i32` for it.
+pub(super) fn target_arg_slot(impl_ty: &Type, param: &str) -> Option<u32> {
+    let at = impl_target_head_args(impl_ty)?
+        .iter()
+        .position(|arg| matches!(arg, Type::Named(n) if n.name == param))?;
+    Some(at as u32)
+}
+
+/// How many arguments the target writes, so a parameter it does not name takes
+/// a slot no instantiation reaches.
+pub(super) fn target_arity(impl_ty: &Type) -> u32 {
+    impl_target_head_args(impl_ty).map_or(0, |args| args.len() as u32)
+}
+
 impl TypeSystem {
     /// Whether an implicit `&mut self` borrow of a local receiver has to box
     /// it: a receiver whose reference is a box cell is handed a copy, and the

@@ -3168,9 +3168,8 @@ impl ParamSlot {
             .collect()
     }
 
-    /// An `impl` head's parameters as slots, which
-    /// [`ast::GenericParam::fills_impl_slot`] numbers by argument position
-    /// rather than by the dense space a data declaration uses.
+    /// An `impl` head's parameters as slots, [`Self::list`] minus the effect
+    /// parameters, which are no type. The target says where each one sits.
     pub(super) fn impl_list(params: &[ast::GenericParam]) -> Vec<Self> {
         params
             .iter()

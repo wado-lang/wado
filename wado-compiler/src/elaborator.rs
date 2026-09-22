@@ -51,6 +51,7 @@ use crate::ast::{self, AstId, Block, Expr, IdentExpr, ImplBlock, Item, Module, V
 use crate::compiler_host::{CompilerHost, Diagnostic};
 use crate::defs::{DefId, DefKind, DefTable};
 use crate::elaborator::item::OperationOwner;
+use crate::elaborator::method_lookup::{target_arg_slot, target_arity};
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
@@ -197,10 +198,12 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
     /// against. The decl pass and the body walk share it, so both see one
     /// numbering.
     pub(super) fn register_impl_block_params(&mut self, impl_block: &ast::ImplBlock) {
-        // `fills_impl_slot` is the numbering the associated-type registration
-        // reads back (`ParamSlot::impl_list`); the two drifting apart gives one
-        // parameter two indices.
-        let mut slot = 0;
+        // A parameter is substituted against the instance's type arguments, so
+        // where the target names it is its number — the same answer
+        // `bind_generic_target_params` gives the methods. A parameter the
+        // target does not name takes a slot past the written ones, which no
+        // argument can reach.
+        let mut spare = target_arity(&impl_block.ty);
         for param in &impl_block.type_params {
             let bounds = self.scoped_bounds(param);
             if !param.fills_impl_slot() {
@@ -215,6 +218,10 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
             let binder = if let Some(&existing) = already {
                 existing
             } else {
+                let slot = target_arg_slot(&impl_block.ty, &param.name).unwrap_or_else(|| {
+                    spare += 1;
+                    spare - 1
+                });
                 let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
                     param.name.clone(),
                     slot,
@@ -223,7 +230,6 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
                 scope::BinderInScope::declared(slot, type_id, param.id)
             };
             self.bind_param(&param.name, binder, bounds);
-            slot += 1;
         }
     }
 }

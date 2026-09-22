@@ -22,6 +22,7 @@ use crate::tir::{ResolvedType, TirModule, TypeId, TypeTable, positional_substitu
 use crate::world_registry::WorldRegistry;
 
 use super::Elaborator;
+use super::method_lookup::target_arg_slot;
 use super::types::{
     EnumCaseData, EnumInfo, FlagsInfo, FlagsMemberData, GenericNewtypeInfo, ParamList, ParamSlot,
     RealTypeParams, ResourceInfo, StructFieldInfo, TypeError, TypeLookup, VariantCaseData,
@@ -3621,8 +3622,12 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 if param_slots.is_empty() {
                     continue;
                 }
-                let param_at =
-                    |name: &str| param_slots.iter().enumerate().find(|(_, p)| p.name == name);
+                // The index is substituted against the instance's type
+                // arguments, so it is where the target names the parameter.
+                let param_at = |name: &str| {
+                    let param = param_slots.iter().find(|p| p.name == name)?;
+                    Some((target_arg_slot(&impl_block.ty, name)? as usize, param))
+                };
 
                 for binding in &impl_block.associated_types {
                     let type_param_id = match &binding.ty {

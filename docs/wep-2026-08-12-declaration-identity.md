@@ -736,6 +736,28 @@ compare without being nominal types); every other shape compares as itself, a
 reference by kind, a tuple by arity, a function type by parameters and return.
 Nothing is spelled, so nothing can be spelled two ways.
 
+### A parameter's number is where the target names it
+
+A parameter of an `impl` block is substituted against the instance's type
+arguments, so its number is the position the target writes it at.
+`impl<T> Kind for Holder<Option<i32>, T>` puts `T` at 1, and declaration order
+reads the instance's `Option<i32>` for it. One answer, `target_arg_slot`, serves
+the block's own frame, its methods, and the associated types it registers. A
+parameter the target does not name takes a slot past the written ones, which no
+instantiation reaches.
+
+### The head finds the candidates, the arguments choose
+
+An impl is filed under its target's head, so every impl on `List<_>` answers a
+lookup for `List<String>`. The written arguments decide which of them applies.
+That decision is `inherent_impl_type_args_match`, wherever the answer is used.
+Registering a block's associated types without it files
+`impl Kind for List<u8>`'s `Out` under `List<String>` too. The last impl in
+build order then decides both, which is the pick this WEP forbids.
+
+Fixtures: `assoc_type_per_receiver_args.wado`,
+`assoc_type_binder_at_target_position.wado`.
+
 ## Keys past the Component Model boundary
 
 A component's outer scope holds two kinds of type. One stands for a shape, and is

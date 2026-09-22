@@ -14,6 +14,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::callee::CalleeRef;
+use super::method_lookup::target_arg_slot;
 use super::scope::{
     BinderInScope, BoundSelf, ElaboratedBound, Scope, ScopedBound, TraitCheckFrame,
 };
@@ -3161,8 +3162,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         // Collect matching impl block info (avoids borrow conflicts during resolution)
         struct ImplInfo {
-            type_params: Vec<ast::GenericParam>,
-            impl_ty_param_names: Vec<String>,
+            /// Each declared parameter and where the target names it, so the
+            /// instantiation binds it by position. `None` where the target
+            /// does not name it, leaving bounds with no binder to pair with.
+            type_params: Vec<(ast::GenericParam, Option<u32>)>,
             assoc_types: Vec<ast::AssociatedTypeBinding>,
             /// The trait this block implements, as its own header names it —
             /// the key the registration must use.
@@ -3182,20 +3185,22 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         continue;
                     };
                     if header.trait_def() == Some(trait_) && !header.associated_types.is_empty() {
-                        let impl_ty_param_names: Vec<String> = match &header.ty {
-                            ast::Type::Generic(g) => g
-                                .args
-                                .iter()
-                                .filter_map(|arg| {
-                                    if let ast::Type::Named(named) = arg {
-                                        Some(named.name.clone())
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect(),
-                            _ => vec![],
-                        };
+                        // The receiver is keyed by head, so every impl on
+                        // `List<_>` answers here. An impl whose target writes
+                        // arguments this instantiation contradicts implements
+                        // a different type, and its bindings would be filed
+                        // under this one.
+                        if !self
+                            .tysys
+                            .inherent_impl_type_args_match(&header.ty, Some(&concrete_type_args))
+                        {
+                            continue;
+                        }
+                        let type_params: Vec<(ast::GenericParam, Option<u32>)> = header
+                            .type_params
+                            .iter()
+                            .map(|param| (param.clone(), target_arg_slot(&header.ty, &param.name)))
+                            .collect();
                         let Some(trait_key) = header
                             .fq_trait(&self.tysys.resolutions)
                             .and_then(|t| t.canonical())
@@ -3206,8 +3211,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             continue;
                         };
                         result.push(ImplInfo {
-                            type_params: header.type_params.clone(),
-                            impl_ty_param_names,
+                            type_params,
                             assoc_types: header.associated_types.clone(),
                             trait_key,
                             trait_type,
@@ -3231,28 +3235,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             };
             scope.set_self_binding(implementing);
 
-            // Bind impl type params to concrete type args.
-            // For `impl<T> IntoIterator for List<T>` with List<u8>:
-            // impl_ty_param_names = ["T"], concrete_type_args = [u8_typeid]
-            // → set current_type_params["T"] = (0, u8_typeid)
-            for (i, tp_name) in info.impl_ty_param_names.iter().enumerate() {
-                if let Some(&concrete_arg) = concrete_type_args.get(i) {
-                    scope.annotate_ctx.trait_ctx.type_params.insert(
-                        tp_name.clone(),
-                        BinderInScope::undeclared(i as u32, concrete_arg),
-                    );
-                }
-            }
-            // Add bounds from type param declarations
-            for param in &info.type_params {
-                if !param.bounds.is_empty() {
-                    scope
-                        .annotate_ctx
-                        .trait_ctx
-                        .type_param_bounds
-                        .entry(param.name.clone())
-                        .or_default()
-                        .extend(ScopedBound::pin_declared(param, Some(implementing)));
+            // `impl<T> IntoIterator for List<T>` registering for `List<u8>`
+            // binds `T` to `u8`: the slot is where the target names it.
+            for (param, slot) in &info.type_params {
+                let bounds = ScopedBound::pin_declared(param, Some(implementing));
+                let bound_to = slot.and_then(|slot| {
+                    let &arg = concrete_type_args.get(slot as usize)?;
+                    Some(BinderInScope::undeclared(slot, arg))
+                });
+                match bound_to {
+                    Some(binder) => scope.bind_param(&param.name, binder, bounds),
+                    None => scope.add_param_bounds(&param.name, bounds),
                 }
             }
 
