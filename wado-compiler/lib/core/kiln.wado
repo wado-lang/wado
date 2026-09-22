@@ -11,6 +11,7 @@
 
 
 use { Deserialize } from "core:serde";
+use { Error as CoreError } from "core:prelude/traits.wado";
 
 pub use { KilnHost, Diagnostic, DiagnosticLevel, SourceSpan } from "core:kiln/kiln_host.wado";
 
@@ -27,6 +28,9 @@ impl Display for Error {
         };
         f.write_str(&message);
     }
+}
+
+impl CoreError for Error {
 }
 
 /// How many bytes each `read` asks for while draining an input. Large enough

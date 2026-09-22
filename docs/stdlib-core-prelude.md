@@ -425,6 +425,11 @@ All format traits write to a `Formatter` that wraps `&mut String`.
 
 Formats the value and writes to the given formatter.
 
+### `pub trait Error: Display with ()`
+
+What every standard library error type is: a failure carrying a reason a
+person can read. It adds nothing to `Display`, so a bound on it says only that.
+
 ### `pub trait Inspect with ()`
 
 Trait for debug/inspect formatting.

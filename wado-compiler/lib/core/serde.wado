@@ -105,6 +105,9 @@ impl Display for SerializeError {
     }
 }
 
+impl Error for SerializeError {
+}
+
 #[compiler_item("deserialize_error_kind")]
 pub enum DeserializeErrorKind {
     UnexpectedType,
@@ -139,6 +142,9 @@ impl Display for DeserializeError {
             f.write_str(` at offset ${self.offset}`);
         }
     }
+}
+
+impl Error for DeserializeError {
 }
 
 impl DeserializeError {

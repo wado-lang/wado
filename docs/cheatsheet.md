@@ -1118,6 +1118,10 @@ trait IndexAssign<I> { type Output; fn index_assign(&mut self, index: I, value: 
 // For string template interpolation
 pub trait Display { fn fmt(&self, f: &mut Formatter); }         // stringify with specifiers
 
+// What every error type is. It adds nothing to Display, so `E: Error` says
+// only that the failure has a readable reason.
+pub trait Error: Display { }
+
 // For parsing a value from a string. `from_str_slice` is the required
 // fundamental operation, so parsing a field out of a larger buffer allocates
 // no substring; `from_str` is defaulted to view the whole string.
@@ -1189,9 +1193,20 @@ impl Default for Broken;   // ERROR: `name` has no default expression
 
 A hand-written `impl Trait for T { … }` always wins. See [WEP: Trait Derivation Policy](./wep-2026-06-25-trait-derivation.md).
 
-Every standard library error type has a hand-written `Display`, so `` `${e}` ``
-renders the reason. A wider error that carries one interpolates it instead of
-wording the failure again.
+Every standard library error type implements `Display` and `Error`, so
+`` `${e}` `` renders the reason. A wider error that carries one interpolates it
+instead of wording the failure again, and declares `impl From<Narrower> for Wider`
+so `?` converts at the call site:
+
+```wado
+variant ParseError { InvalidPercentEncoding, InvalidUtf8(Utf8Error) }
+impl From<Utf8Error> for ParseError;      // derived: wraps into the matching case
+
+fn percent_decode(input: String) -> Result<String, ParseError> {
+    let bytes = decode_octets(input)?;
+    return Result::Ok(String::from_utf8(bytes)?);   // Utf8Error -> ParseError
+}
+```
 
 ## Associated Constants
 

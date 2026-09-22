@@ -523,3 +523,47 @@ test "u128 accumulation round-trip via From / TryFrom" {
 test "ConvertError renders its message" {
     assert `${EvenNumber::try_from(3).unwrap_err()}` == "3 is not even";
 }
+
+variant PortError {
+    Digits(ParseIntError),
+    OutOfRange,
+}
+
+impl Display for PortError {
+    fn fmt(&self, f: &mut Formatter) {
+        let message: String = match *self {
+            Digits(e) => `bad port: ${e}`,
+            OutOfRange => "port out of range",
+        };
+        f.write_str(&message);
+    }
+}
+
+impl Error for PortError {
+}
+
+impl From<ParseIntError> for PortError;
+
+fn parse_port(s: String) -> Result<i32, PortError> {
+    let n = i32::from_str(&s)?;
+    if n < 0 || n > 65535 {
+        return Result::Err(PortError::OutOfRange);
+    }
+    return Result::Ok(n);
+}
+
+test "`?` widens an error through From" {
+    assert parse_port("8080") matches { Ok(8080) };
+    assert `${parse_port("http").unwrap_err()}` == "bad port: invalid digit found in string";
+    assert `${parse_port("70000").unwrap_err()}` == "port out of range";
+}
+
+fn reason<E: Error>(e: E) -> String {
+    return `${e}`;
+}
+
+test "Error bounds any type that reports a reason" {
+    assert reason(i32::from_str("x").unwrap_err()) == "invalid digit found in string";
+    assert reason(String::from_utf8([0xFF] as List<u8>).unwrap_err()) == "invalid utf-8 sequence of 1 bytes from index 0";
+    assert reason(PortError::OutOfRange) == "port out of range";
+}

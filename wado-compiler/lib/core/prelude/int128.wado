@@ -11,7 +11,6 @@ use {
     split_plus,
     assert_radix,
     lenient_int_preprocess,
-    lenient_int_error,
 } from "core:prelude/intparse.wado";
 use { count_digits_u64, write_decimal_digits } from "core:prelude/primitive.wado";
 use { u64_bit_len } from "core:prelude/fpfmt.wado";
@@ -462,16 +461,8 @@ impl LenientFromStr for u128 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<u128, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match u128::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(u128::from_str_radix(cleaned, radix)?);
     }
 }
 
@@ -1052,16 +1043,8 @@ impl LenientFromStr for i128 {
     type Err = LenientParseError;
 
     fn from_str_lenient<S: AsStrSlice>(s: S) -> Result<i128, LenientParseError> {
-        let [cleaned, radix] = match lenient_int_preprocess(s) {
-            Ok(p) => p,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
-        return match i128::from_str_radix(cleaned, radix) {
-            Ok(v) => Result::Ok(v),
-            Err(e) => Result::Err(lenient_int_error(e)),
-        };
+        let [cleaned, radix] = lenient_int_preprocess(s)?;
+        return Result::Ok(i128::from_str_radix(cleaned, radix)?);
     }
 }
 

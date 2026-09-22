@@ -5,15 +5,7 @@
 
 
 use { TreeMap } from "core:collections";
-use {
-    Serialize,
-    Serializer,
-    SerializeError,
-    Deserialize,
-    Deserializer,
-    DeserializeError,
-    DeserializeErrorKind,
-} from "core:serde";
+use { Serialize, Serializer, SerializeError, Deserialize, Deserializer, DeserializeError } from "core:serde";
 
 // The largest port a URL may name (WHATWG URL Standard, "port state").
 global PORT_MAX: i32 = 65535;
@@ -54,6 +46,11 @@ impl Display for ParseError {
         f.write_str(&message);
     }
 }
+
+impl Error for ParseError {
+}
+
+impl From<Utf8Error> for ParseError;
 
 impl Eq for ParseError {
     fn eq(&self, other: &Self) -> bool {
@@ -215,10 +212,7 @@ pub fn percent_decode<S: AsStrSlice>(input: S) -> Result<String, ParseError> {
             i += 1;
         }
     }
-    return match String::from_utf8(bytes) {
-        Ok(s) => Result::Ok(s),
-        Err(e) => Result::Err(ParseError::InvalidUtf8(e)),
-    };
+    return Result::Ok(String::from_utf8(bytes)?);
 }
 
 fn percent_encode_query_component<S: AsStrSlice>(input: S) -> String {
@@ -394,14 +388,7 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
             if !after.is_empty() {
                 if after.starts_with(":") {
                     let port_str = after.substr_bytes(1, after.len());
-                    match parse_port_str(&port_str) {
-                        Err(e) => {
-                            return Result::Err(e);
-                        },
-                        Ok(port_val) => {
-                            apply_port(url, port_val);
-                        },
-                    }
+                    apply_port(url, parse_port_str(&port_str)?);
                 } else {
                     return Result::Err(ParseError::InvalidHost);
                 }
@@ -423,15 +410,9 @@ fn parse_authority<S: AsStrSlice>(authority: S, url: &mut Url) -> Result<(), Par
         if host_part.is_empty() {
             return Result::Err(ParseError::MissingHost);
         }
-        match parse_port_str(&port_str) {
-            Err(e) => {
-                return Result::Err(e);
-            },
-            Ok(port_val) => {
-                url.host = host_part.to_ascii_lowercase();
-                apply_port(url, port_val);
-            },
-        }
+        let port_val = parse_port_str(&port_str)?;
+        url.host = host_part.to_ascii_lowercase();
+        apply_port(url, port_val);
         return Result::Ok(());
     }
 
@@ -481,9 +462,7 @@ impl Url {
             fragment: fragment,
         };
 
-        if let Err(e) = parse_authority(&authority_str, &mut url) {
-            return Result::Err(e);
-        }
+        parse_authority(&authority_str, &mut url)?;
 
         if url.host.is_empty() {
             return Result::Err(ParseError::MissingHost);
@@ -676,9 +655,7 @@ impl Url {
                 query: r_query,
                 fragment: r_fragment,
             };
-            if let Err(e) = parse_authority(&r_authority, &mut result) {
-                return Result::Err(e);
-            }
+            parse_authority(&r_authority, &mut result)?;
             return Result::Ok(result);
         }
 
@@ -816,19 +793,10 @@ impl Serialize for Url {
 
 impl Deserialize for Url {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<Url, DeserializeError> {
-        let str = match d.deserialize_string() {
-            Ok(s) => s,
-            Err(e) => {
-                return Result::Err(e);
-            },
-        };
+        let str = d.deserialize_string()?;
         return match Url::parse(str) {
             Ok(url) => Result::Ok(url),
-            Err(e) => Result::Err(DeserializeError {
-                kind: DeserializeErrorKind::InvalidValue,
-                message: `invalid URL: ${e}`,
-                offset: 0,
-            }),
+            Err(e) => Result::Err(DeserializeError::invalid_value(`invalid URL: ${e}`, 0)),
         };
     }
 }

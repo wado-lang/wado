@@ -92,6 +92,9 @@ impl Display for ZlibError {
     }
 }
 
+impl Error for ZlibError {
+}
+
 /// Returns the zlib version string.
 pub fn zlib_version() -> String {
     return "1.3.1.wado";
@@ -2989,11 +2992,7 @@ pub fn inflate_gzip(input: &ByteList) -> Result<ByteList, ZlibError> {
             break;
         }
 
-        let header_result = gzip_parse_header(input, member_start);
-        if let Err(e) = header_result {
-            return Result::Err(e);
-        }
-        let data_start = header_result.unwrap();
+        let data_start = gzip_parse_header(input, member_start)?;
 
         // Decompress using inflate_raw_ex to know how many bytes were consumed
         let remaining = input.len() - data_start;
@@ -3724,11 +3723,7 @@ impl InflateStream {
     /// Decompresses the buffered input and clears the buffer. The stream may
     /// be reused for further input.
     pub fn finish(&mut self) -> Result<ByteList, ZlibError> {
-        let decompress_result = self.decompress(&self.buffer);
-        if let Err(e) = decompress_result {
-            return Result::Err(e);
-        }
-        let result = decompress_result.unwrap();
+        let result = self.decompress(&self.buffer)?;
         self.total_in += self.buffer.len();
         self.total_out += result.len();
         self.buffer = [];

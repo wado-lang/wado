@@ -121,8 +121,13 @@ test "bool errors" {
 
 test "LenientParseError reason" {
     let e = i32::from_str_lenient("eighty").unwrap_err();
-    assert e.reason().len() > 0;
+    assert e.reason() == "invalid digit in integer string";
     assert `${e}` == e.reason();
+}
+
+test "a lenient parse converts the strict error it ran into" {
+    assert i8::from_str_lenient("999").unwrap_err().reason() == "integer string overflows the target type";
+    assert f64::from_str_lenient("pi").unwrap_err().reason() == "invalid float string";
 }
 
 __DATA__

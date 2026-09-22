@@ -11,7 +11,7 @@ use { String, StrSlice, AsStrSlice } from "core:prelude/string.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Option, Result } from "core:prelude/types.wado";
 use { u128 } from "core:prelude/int128.wado";
-use { Display, LenientParseError } from "core:prelude/traits.wado";
+use { Display, Error, From, LenientParseError } from "core:prelude/traits.wado";
 
 
 use { parse_text } from "core:prelude/fpfmt.wado";
@@ -70,24 +70,26 @@ internal fn lenient_int_preprocess<T: AsStrSlice>(text: T) -> Result<[String, u3
     return Result::Ok([cleaned, radix]);
 }
 
-/// Render a `ParseIntError` as a `LenientParseError` reason.
-internal fn lenient_int_error(e: ParseIntError) -> LenientParseError {
-    let reason = match e.kind() {
-        Empty => "empty integer string",
-        InvalidDigit => "invalid digit in integer string",
-        PosOverflow => "integer string overflows the target type",
-        NegOverflow => "integer string underflows the target type",
-    };
-    return LenientParseError::new(reason);
+impl From<ParseIntError> for LenientParseError {
+    fn from(e: ParseIntError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty integer string",
+            InvalidDigit => "invalid digit in integer string",
+            PosOverflow => "integer string overflows the target type",
+            NegOverflow => "integer string underflows the target type",
+        };
+        return LenientParseError::new(reason);
+    }
 }
 
-/// Render a `ParseFloatError` as a `LenientParseError` reason.
-internal fn lenient_float_error(e: ParseFloatError) -> LenientParseError {
-    let reason = match e.kind() {
-        Empty => "empty float string",
-        Invalid => "invalid float string",
-    };
-    return LenientParseError::new(reason);
+impl From<ParseFloatError> for LenientParseError {
+    fn from(e: ParseFloatError) -> LenientParseError {
+        let reason: String = match e.kind() {
+            Empty => "empty float string",
+            Invalid => "invalid float string",
+        };
+        return LenientParseError::new(reason);
+    }
 }
 
 /// Strip `_` separators from the digit body of a human-supplied float string
@@ -162,6 +164,9 @@ impl Display for ParseIntError {
     }
 }
 
+impl Error for ParseIntError {
+}
+
 /// Kind of failure returned by float parsing.
 pub enum FloatErrorKind {
     /// The input string was empty.
@@ -194,6 +199,9 @@ impl Display for ParseFloatError {
         };
         f.write_str(&message);
     }
+}
+
+impl Error for ParseFloatError {
 }
 
 /// Translate an ASCII byte into a digit value in the range [0, 36).
