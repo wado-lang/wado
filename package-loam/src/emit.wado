@@ -456,7 +456,7 @@ fn folds_constant(node: &Node, index: i32, exprs: &Operands) -> bool {
     if node.op == "Gemm" {
         return index == 2;
     }
-    if binary_body(&node.op, &"x", &"y") matches { None } {
+    if index > 1 || binary_body(&node.op, &"x", &"y") matches { None } {
         return false;
     }
     return !exprs.scalars.contains_key(node.inputs[1 - index]);
