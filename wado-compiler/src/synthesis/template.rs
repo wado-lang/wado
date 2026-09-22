@@ -1344,6 +1344,7 @@ fn trait_impl_module(
     }
     match resolved {
         ResolvedType::Primitive(prim) => ModuleSource::of_primitive(prim),
+        ResolvedType::Unit => ModuleSource::primitive(),
         ResolvedType::Function { .. } => ctx.module_src.clone(),
         _ => ModuleSource::primitive(),
     }

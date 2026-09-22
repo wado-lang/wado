@@ -655,8 +655,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Option<AstId>,
         struct_name: &str,
     ) -> ModuleSource {
-        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, and
-        // `v128`'s methods are in `core:simd`, which answers `None` here.
+        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, so
+        // this answers `None` for them and they take the walk below.
         if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
             return module;
         }

@@ -1,0 +1,11 @@
+// Each half format keeps what the other drops, so there is no conversion
+// between them to spell: `f16` has the shorter exponent range and `bf16` the
+// shorter mantissa. Widen to `f32` and narrow again to cross.
+
+export fn run() {
+    let a = f16::from_bits(0x3C00);
+    let _other = a as bf16;
+}
+
+__DATA__
+{"compile_error": "neither direction is exact: `f16` has the shorter exponent range and `bf16` the shorter mantissa"}

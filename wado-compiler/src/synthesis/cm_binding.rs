@@ -996,11 +996,6 @@ fn find_export_user_func(
     }
 }
 
-/// Reject any param/return type with no Component Model value representation
-/// in any world (empty records, 128-bit/v128 scalars) with a proper compile
-/// error rather than emitting an invalid component or panicking in codegen.
-/// Handle/async types pass — they lower to i32 handles in every world — so
-/// this needs no `--lib`-vs-WASI branch.
 /// Every `export fn` lands on the component's surface, not just the ones the
 /// world names, so each signature has to be representable there. Without this
 /// an extra export reaches WIT emit, which only warns and drops the section.
@@ -1023,6 +1018,11 @@ fn validate_exports_representable(
     Ok(())
 }
 
+/// Reject any param/return type with no Component Model value representation
+/// in any world (empty records, 128-bit/v128/half scalars) with a proper
+/// compile error rather than emitting an invalid component or panicking in
+/// codegen. Handle/async types pass — they lower to i32 handles in every world
+/// — so this needs no `--lib`-vs-WASI branch.
 fn validate_boundary_representable(
     user_func: &TirFunction,
     export_name: &str,

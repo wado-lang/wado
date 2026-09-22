@@ -23,9 +23,29 @@ pub enum PrimitiveType {
 }
 
 impl PrimitiveType {
-    /// Returns the string representation of the primitive type (e.g., "i32", "f64")
+    /// Every variant. `i128` and `u128` are absent: they are prelude struct
+    /// declarations, which write their own operator impls.
+    pub const ALL: &'static [Self] = &[
+        Self::I8,
+        Self::I16,
+        Self::I32,
+        Self::I64,
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::U64,
+        Self::F32,
+        Self::F64,
+        Self::F16,
+        Self::Bf16,
+        Self::Bool,
+        Self::Char,
+        Self::V128,
+    ];
+
+    /// The name this type is spelled with, such as `i32` or `bf16`.
     #[must_use]
-    pub fn as_str(&self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::I8 => "i8",
             Self::I16 => "i16",
@@ -45,7 +65,7 @@ impl PrimitiveType {
         }
     }
 
-    /// True for a type that carries bits and no arithmetic: `f16` and `bf16`.
+    /// True for the half precision types, `f16` and `bf16`.
     #[must_use]
     pub fn is_half(self) -> bool {
         matches!(self, Self::F16 | Self::Bf16)
@@ -74,40 +94,21 @@ impl PrimitiveType {
         })
     }
 
-    /// Every variant. `i128` and `u128` are absent: they are prelude struct
-    /// declarations, which write their own operator impls.
-    pub const ALL: &'static [Self] = &[
-        Self::I8,
-        Self::I16,
-        Self::I32,
-        Self::I64,
-        Self::U8,
-        Self::U16,
-        Self::U32,
-        Self::U64,
-        Self::F32,
-        Self::F64,
-        Self::F16,
-        Self::Bf16,
-        Self::Bool,
-        Self::Char,
-        Self::V128,
-    ];
-
     /// The primitive `name` spells, `None` for every other name.
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         Self::ALL.iter().copied().find(|p| p.as_str() == name)
     }
 
-    /// Check if a name is a primitive type name.
+    /// True where `name` spells one.
     #[must_use]
     pub fn is_primitive_name(name: &str) -> bool {
         Self::from_name(name).is_some()
     }
 
     /// Every name this enum spells.
+    #[must_use]
     pub fn all_primitive_names() -> Vec<&'static str> {
-        Self::ALL.iter().map(Self::as_str).collect()
+        Self::ALL.iter().copied().map(Self::as_str).collect()
     }
 }

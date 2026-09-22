@@ -619,9 +619,8 @@ impl ModuleSource {
         pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },
     }
 
-    /// The module holding `prim`'s impls — its own methods and the traits
-    /// written for it. `v128`'s are in `core:simd`, which every lookup reaches
-    /// by name from the `core:prelude/primitive.wado` key.
+    /// The module holding `prim`'s impls. `v128`'s are in `core:simd`, which
+    /// every lookup reaches by name from the `primitive.wado` key this answers.
     #[must_use]
     pub fn of_primitive(prim: PrimitiveType) -> Self {
         match prim {

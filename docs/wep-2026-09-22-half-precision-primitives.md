@@ -189,8 +189,7 @@ of it is committed work.
 ## Known gaps
 
 No arithmetic, so every computation widens to `f32` and narrows again to store.
-An operator naming either type is a compile error rather than a slower path, and
-a generic body bounded on `Add` cannot be instantiated at one.
+A generic body bounded on `Add` cannot be instantiated at either type.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.

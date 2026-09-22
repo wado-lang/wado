@@ -54,16 +54,15 @@ impl f16 {
         return f16::from_bits(sign | rounded);
     }
 
-    /// True where the value is a NaN in either encoding.
+    /// True for a NaN, quiet or signaling.
     pub fn is_nan(&self) -> bool {
         let bits = self.to_bits();
         return bits & F16_EXP == F16_EXP && bits & F16_MANTISSA != 0;
     }
 }
 
-/// Add the rounding increment for `dropped`'s low `shift` bits: round to
-/// nearest, ties to even. `kept` carries the exponent, so a mantissa carry
-/// walks into it and an overflow reaches the infinity encoding by itself.
+/// `kept` plus the round-to-nearest-ties-to-even increment for `dropped`'s low
+/// `shift` bits. A mantissa carry walks into the exponent `kept` also holds.
 fn round_to_even(kept: u16, dropped: u32, shift: u32) -> u16 {
     let half = 1 as u32 << shift - 1;
     let remainder = dropped & (1 as u32 << shift) - 1;
@@ -98,7 +97,7 @@ impl bf16 {
         return bf16::from_bits(round_to_even(kept, bits, 16));
     }
 
-    /// True where the value is a NaN in either encoding.
+    /// True for a NaN, quiet or signaling.
     pub fn is_nan(&self) -> bool {
         let bits = self.to_bits();
         return bits & 0x7F80 == 0x7F80 && bits & 0x007F != 0;

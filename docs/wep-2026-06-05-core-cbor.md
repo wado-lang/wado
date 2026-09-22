@@ -226,9 +226,8 @@ Notes:
 - Integers are native. Unlike `core:json` (which stringifies values outside
   ±2^53 for JavaScript safety), CBOR has exact integers up to 64 bits and encodes
   them directly.
-- Floats never use 16-bit form; see canonical caveat. NaN
-  and ±Infinity are permitted (CBOR represents them natively), again unlike JSON
-  which errors.
+- Floats never use 16-bit form; see canonical caveat. NaN and ±Infinity are
+  permitted (CBOR represents them natively), again unlike JSON which errors.
 - Length is always known when serde starts a container (`begin_seq`/`begin_map`
   carry the count), so encoding always uses preferred definite-length form.
 
@@ -285,8 +284,7 @@ encoder for integers, map ordering, and lengths, but **may differ on
 float-bearing values**. For COSE/CWT signing over data containing floats, this is
 a real interoperability hazard and must be documented at the call site. Narrowing
 to a binary16 in canonical mode is a possible future refinement; Wado now has
-`f16`, so [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md)
-supplies the rounding it needs.
+[`f16`](./wep-2026-09-22-half-precision-primitives.md).
 
 ### `core:value`: the unified dynamic value
 

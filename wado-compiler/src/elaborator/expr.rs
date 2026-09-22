@@ -222,27 +222,17 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
 }
 
-/// The reason a cast naming `f16` or `bf16` is refused, or `None` where the
-/// cast is legal or names neither.
-///
-/// `as` converts a value everywhere else, and a half carries bits, so the two
-/// meanings are kept apart: bits go through `to_bits` / `from_bits` and values
-/// through `From` / `TryFrom` (WEP 2026-09-22). The one legal cast is the one
-/// every type has, between a newtype and the type it wraps.
+/// The reason a cast naming `f16` or `bf16` is refused, or `None` where it
+/// names neither or is the newtype step every type admits (WEP 2026-09-22).
 fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
-    let source_prim = tt.primitive_head(source);
-    let target_prim = tt.primitive_head(target);
-    let source_half = source_prim.is_some_and(PrimitiveType::is_half);
-    let target_half = target_prim.is_some_and(PrimitiveType::is_half);
-    let half = match (source_prim, target_prim) {
-        (Some(p), _) if p.is_half() => p.as_str(),
-        (_, Some(p)) if p.is_half() => p.as_str(),
-        _ => return None,
-    };
+    let from_half = tt.primitive_head(source).filter(|p| p.is_half());
+    let to_half = tt.primitive_head(target).filter(|p| p.is_half());
+    let half = from_half.or(to_half)?.as_str();
     if tt.representation_head(source) == tt.representation_head(target) {
         return None;
     }
-    Some(if source_half && target_half {
+    let source_half = from_half.is_some();
+    Some(if source_half && to_half.is_some() {
         "neither direction is exact: `f16` has the shorter exponent range and \
          `bf16` the shorter mantissa"
             .to_string()

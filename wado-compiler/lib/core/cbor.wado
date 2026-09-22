@@ -474,10 +474,10 @@ pub fn to_bytes<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
 //      *encoded* form: entries are encoded into side buffers and sorted before
 //      emission.
 //   2. Floats use the shortest form that preserves the value, but the ladder
-//      stops at binary32: nothing here emits a binary16. `to_bytes_canonical` is thus
-//      byte-identical to a reference deterministic encoder for integers, map
-//      order, and lengths, but may differ on float-bearing values (a documented
-//      COSE/CWT interoperability caveat; see the WEP).
+//      stops at binary32: nothing here emits a binary16. `to_bytes_canonical`
+//      is thus byte-identical to a reference deterministic encoder for
+//      integers, map order, and lengths, but may differ on float-bearing
+//      values (a documented COSE/CWT interoperability caveat; see the WEP).
 
 /// Append a binary32 head + the low 32 bits of `bits`.
 fn push_f32_head(buf: &mut ByteList, bits: u64) {
@@ -745,7 +745,8 @@ impl Serializer for CanonicalCborSerializer {
 /// — use this for COSE/CWT signing or content addressing.
 ///
 /// Float caveat: nothing here emits a binary16, so the canonical float ladder
-/// stops at binary32. Output is byte-identical to a reference encoder for
+/// stops at binary32. Output is byte-identical to a reference deterministic
+/// encoder for
 /// integers, lengths, and map order, but may differ on float-bearing values.
 pub fn to_bytes_canonical<T: Serialize>(value: &T) -> Result<ByteList, SerializeError> {
     let mut buf = ByteList::with_capacity(SERIALIZE_BUFFER_CAPACITY);

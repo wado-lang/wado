@@ -3355,6 +3355,12 @@ pub(super) fn primitive_assoc_const_to_i128(
         | Type::Infer(_)
         | Type::Error(_) => return None,
     };
+    primitive_int_bound(ty_name, const_name)
+}
+
+/// The value of a primitive integer's `MIN` / `MAX`, keyed by the names both
+/// are written with. `None` for every other pair.
+pub(super) fn primitive_int_bound(ty_name: &str, const_name: &str) -> Option<i128> {
     match (ty_name, const_name) {
         ("i8", "MAX") => Some(i128::from(i8::MAX)),
         ("i8", "MIN") => Some(i128::from(i8::MIN)),
