@@ -117,20 +117,22 @@ pub fn fold_constants(
     })
 }
 
-/// Ungated variant: folds every function, rebuilding the maps each call. Used by
-/// the post-globalization cleanup, which runs outside the loop that owns the
-/// cache.
-pub fn fold_constants_all(project: &mut NirPackage) -> bool {
+/// Post-loop variant: rebuilds the maps each call rather than reading the
+/// loop's cache, and gates on the caller's own fixpoint column.
+pub fn fold_constants_uncached(project: &mut NirPackage, gate: &mut FunctionGate) -> bool {
+    let len = project.functions.len();
+    if !gate.any_pending(GatedPass::ConstFoldUncached, len) {
+        return false;
+    }
     let type_table = project.type_table.borrow();
     let maps = build_fold_maps(project, &type_table);
     let globals = build_global_view(project, &type_table, &maps);
     let mut visitor = new_visitor(&type_table, &maps, &globals);
     let mut buffers = EngineBuffers::default();
-    let mut changed = false;
-    for func_rc in &project.functions {
-        changed |= fold_function(func_rc, &mut visitor, &mut buffers, &type_table);
-    }
-    changed
+    gate.run_gated(GatedPass::ConstFoldUncached, len, |fid| {
+        let func = &project.functions[fid.index()];
+        fold_function(func, &mut visitor, &mut buffers, &type_table)
+    })
 }
 
 fn new_visitor<'a>(

@@ -24,6 +24,8 @@ The inline budget counts emitted Wasm instructions on the callee's hot path, not
 
 The fixed-point loop exits early on convergence, so a pass must report a change only when it made one, never when it merely found work to look at. A `gate_only!` pass reports to the dirty-set gate alone and never extends the loop. Both macros name the pass's gate column beside it, and a drained column skips the round before the pass builds any whole-program state.
 
+The post-loop cleanup fixpoints (`run_bounded_fixpoint`) are gated the same way, each on a gate of its own: the first round processes every function, and each later one processes what the round before rewrote, along with those functions' direct callers and callees. Ungated, every round walks the whole module, so the cost is the module's size times however many rounds the slowest function needs.
+
 A run that reaches the cap logs it at debug level, naming the passes still reporting changes. At `-O2`/`-Os` and `-O3` that is also a `debug_assert`: their caps are sized so the loop converges under them. `-O1`'s smaller number of rounds and an explicit `--optimize-iterations` are budgets, and say nothing about convergence.
 
 The backend-required rewrites (`select_lowering`, `multi_value_return`, `multi_value_param`, `freeze_pure_arith`) and `match_to_switch` run at every level, including `-O0`.

@@ -10,6 +10,7 @@
 
 use cranelift_entity::EntityRef;
 
+use crate::hashmap::IndexSet;
 use crate::nir::FuncId;
 use crate::nir_arena::ExprKind;
 use crate::nir_package::NirPackage;
@@ -41,10 +42,16 @@ pub enum GatedPass {
     ValueCopyDemote,
     ScalarForward,
     LetBlockFlatten,
+    /// The post-loop cleanup fixpoints ([`super::run_bounded_fixpoint`]). Each
+    /// owns a fresh gate, so `BranchPrune` serves both of its passes.
+    StoreLoadForward,
+    ConstFoldUncached,
+    BranchPrune,
+    CondImplPostPromote,
 }
 
 impl GatedPass {
-    const COUNT: usize = 16;
+    const COUNT: usize = 20;
 }
 
 /// Static call graph over [`FuncId`]s, built once at loop start from each call
@@ -71,21 +78,18 @@ impl CallGraph {
             let Some(body) = func.body.as_ref() else {
                 continue;
             };
-            let mut seen: Vec<FuncId> = Vec::new();
+            let mut seen: IndexSet<FuncId> = IndexSet::default();
             for node in body.exprs.values() {
                 let func_id = match &node.kind {
                     ExprKind::Call { func_id, .. } => func_id,
                     _ => continue,
                 };
-                let callee = *func_id;
-                if !seen.contains(&callee) {
-                    seen.push(callee);
-                }
+                seen.insert(*func_id);
             }
             for &callee in &seen {
                 callers[callee.index()].push(FuncId::new(i));
             }
-            callees[i] = seen;
+            callees[i] = seen.into_iter().collect();
         }
         Self { callees, callers }
     }
@@ -232,6 +236,10 @@ mod tests {
             GatedPass::ValueCopyDemote,
             GatedPass::ScalarForward,
             GatedPass::LetBlockFlatten,
+            GatedPass::StoreLoadForward,
+            GatedPass::ConstFoldUncached,
+            GatedPass::BranchPrune,
+            GatedPass::CondImplPostPromote,
         ];
         for p in all {
             match p {
@@ -250,7 +258,11 @@ mod tests {
                 | GatedPass::SroaVariantReturn
                 | GatedPass::ValueCopyDemote
                 | GatedPass::ScalarForward
-                | GatedPass::LetBlockFlatten => {}
+                | GatedPass::LetBlockFlatten
+                | GatedPass::StoreLoadForward
+                | GatedPass::ConstFoldUncached
+                | GatedPass::BranchPrune
+                | GatedPass::CondImplPostPromote => {}
             }
         }
         assert_eq!(all.len(), GatedPass::COUNT);
