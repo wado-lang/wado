@@ -11,6 +11,7 @@ use crate::token::Span;
 
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound};
+use super::trait_query::SelfBinding;
 use super::types::TypeError;
 use crate::ast;
 use crate::ast::{NamespacedGenericType, TraitBound};
@@ -969,21 +970,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         resolved.iter().all(|t| *t == first).then_some(first)
     }
 
-    /// A bound's right-hand side, resolved in this frame. `Self` inside one is
-    /// the bounded type, which the frame files under `base_name`.
-    fn resolve_bound_binding(&mut self, base_name: &str, ty: &ast::Type) -> TypeId {
-        match self
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .get(base_name)
-            .map(|b| b.type_id)
-        {
-            Some(id) => self.with_self_type(id, |s| s.resolve_type(ty)),
-            None => self.resolve_type(ty),
-        }
-    }
-
     /// Run `body` unless `key` is already on the walk, which means it is being
     /// asked for what it is computing. Scoped so no exit from `body` can leave
     /// the key behind and answer `None` for the rest of the module.
@@ -1051,7 +1037,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         let space = e.inherited_space(decl, &args, &inherited.via);
                         // An inherited clause is written in `decl`'s own space,
                         // where `Self` is the bounded type — `binder` here.
-                        out.push((ScopedBound::new(inherited.bound, Some(binder)), space));
+                        let self_binding = SelfBinding {
+                            type_id: binder,
+                            declaring_trait: Some(decl),
+                        };
+                        out.push((ScopedBound::new(inherited.bound, Some(self_binding)), space));
                     }
                 }
                 Some(out)
@@ -1123,8 +1113,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         space: &ParamSpace,
         body: impl FnOnce(&mut Self) -> R,
     ) -> R {
-        match scoped.self_type {
-            Some(self_type) => self.in_space(space, |e| e.with_self_type(self_type, body)),
+        match scoped.self_binding {
+            Some(binding) => self.in_space(space, |e| e.with_self_binding(binding, body)),
             None => self.in_space(space, body),
         }
     }
@@ -1146,8 +1136,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         for (bound, space) in self.bound_closure_of(base_name).unwrap_or_default() {
             for binding in bound.assoc_types.iter().filter(|b| b.name == assoc) {
                 let ty = binding.ty.clone();
-                let resolved = self
-                    .in_bound_frame(&bound, &space, |e| e.resolve_bound_binding(base_name, &ty));
+                let resolved = self.in_bound_frame(&bound, &space, |e| e.resolve_type(&ty));
                 if resolved != TypeTable::UNKNOWN {
                     out.push(resolved);
                 }
@@ -1232,9 +1221,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .flatten()
                         .map(|binding| (binding.ty, space, bound))
                 })?;
-        let resolved = self.in_bound_frame(&scoped, &space, |e| {
-            e.resolve_bound_binding(base_name, &written)
-        });
+        let resolved = self.in_bound_frame(&scoped, &space, |e| e.resolve_type(&written));
         (resolved != TypeTable::UNKNOWN).then_some(resolved)
     }
 

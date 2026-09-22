@@ -54,6 +54,7 @@ use crate::elaborator::item::OperationOwner;
 use crate::elaborator::reify::default_impl_methods;
 use crate::elaborator::sem::imports::canonical_ns_ref;
 use crate::elaborator::sem::{ModuleBindings, ModuleSemantics, TypeAnnotations};
+use crate::elaborator::trait_query::SelfBinding;
 use crate::elaborator::types::FunctionContext;
 use crate::hashmap;
 use crate::kiln::InvocationIndex;
@@ -201,34 +202,28 @@ impl<H: CompilerHost> scope::TypeParamScope<'_, '_, H> {
         // parameter two indices.
         let mut slot = 0;
         for param in &impl_block.type_params {
-            if param.fills_impl_slot() {
-                if !self
-                    .annotate_ctx
-                    .trait_ctx
-                    .type_params
-                    .contains_key(&param.name)
-                {
-                    let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
-                        param.name.clone(),
-                        slot,
-                        param.is_pack,
-                    );
-                    self.annotate_ctx.trait_ctx.type_params.insert(
-                        param.name.clone(),
-                        scope::BinderInScope::declared(slot, type_id, param.id),
-                    );
-                }
-                slot += 1;
-            }
             let bounds = self.scoped_bounds(param);
-            if !bounds.is_empty() {
-                self.annotate_ctx
-                    .trait_ctx
-                    .type_param_bounds
-                    .entry(param.name.clone())
-                    .or_default()
-                    .extend(bounds);
+            if !param.fills_impl_slot() {
+                // An effect parameter fills no type slot, so there is no binder
+                // to pair its bounds with.
+                self.add_param_bounds(&param.name, bounds);
+                continue;
             }
+            // A name the enclosing frame already numbered keeps that number;
+            // renumbering it here would give one parameter two indices.
+            let already = self.annotate_ctx.trait_ctx.type_params.get(&param.name);
+            let binder = if let Some(&existing) = already {
+                existing
+            } else {
+                let type_id = self.tysys.type_table.borrow_mut().make_declared_param(
+                    param.name.clone(),
+                    slot,
+                    param.is_pack,
+                );
+                scope::BinderInScope::declared(slot, type_id, param.id)
+            };
+            self.bind_param(&param.name, binder, bounds);
+            slot += 1;
         }
     }
 }
@@ -2262,7 +2257,11 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         trait_name: Option<&FqTraitName>,
     ) {
         let target_type_id = self.resolve_type(&impl_block.ty);
-        self.annotate_ctx.trait_ctx.self_type = Some(target_type_id);
+        let declaring_trait = trait_name.and_then(|fq| self.tysys.trait_env.trait_def_of_fq(fq));
+        self.set_self_binding(SelfBinding {
+            type_id: target_type_id,
+            declaring_trait,
+        });
         let is_concrete = !self
             .tysys
             .type_table

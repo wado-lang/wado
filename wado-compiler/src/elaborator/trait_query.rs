@@ -238,7 +238,7 @@ fn satisfies(tt: &TypeTable, expected: TypeId, actual: TypeId) -> bool {
 
 /// What a bound's `Self::Assoc` projects off at a call: the receiver, and the
 /// trait whose declaration wrote the constraint.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(super) struct SelfBinding {
     pub(super) type_id: TypeId,
     pub(super) declaring_trait: Option<DefId>,
@@ -510,7 +510,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 )
             })
             .collect();
-        let (_, args) = self.trait_params_at_impl(&params, &arg_ids, self_type);
+        let (_, args) = self.trait_params_at_impl(
+            &params,
+            &arg_ids,
+            SelfBinding {
+                type_id: self_type,
+                declaring_trait: Some(trait_decl),
+            },
+        );
         for (decl, bound, via) in clauses {
             let named = self
                 .tysys
@@ -561,7 +568,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         &mut self,
         params: &[ast::GenericParam],
         written: &[TypeId],
-        target: TypeId,
+        target: SelfBinding,
     ) -> (Vec<String>, Vec<TypeId>) {
         let mut names: Vec<String> = Vec::new();
         let mut args: Vec<TypeId> = Vec::new();
@@ -573,7 +580,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     break;
                 };
                 let (settled_names, settled_args) = (names.clone(), args.clone());
-                self.with_self_type(target, |e| {
+                self.with_self_binding(target, |e| {
                     e.with_type_param_args(&settled_names, &settled_args, |e| {
                         e.resolve_type(&default)
                     })
@@ -2820,7 +2827,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // call's own answers in scope — `U: Uses<P::Inner>` asks what
                 // the argument for `P` binds `Inner` to.
                 let site: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                let bounds = ScopedBound::pin_declared(param, self_binding.map(|b| b.type_id));
+                let bounds = ScopedBound::pin_declared(param, self_binding);
                 let root_args = self.with_type_params_bound(&site, type_args, |e| {
                     e.trait_args_of_bound(&bounds, root)
                 });
@@ -2985,8 +2992,8 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             })
             .collect();
         for (slot, ty, scope) in written {
-            let resolved = match scope.at(self_type_id) {
-                Some(self_type) => self.with_self_type(self_type, |s| s.resolve_type(&ty)),
+            let resolved = match scope.at(self_type_id, decl) {
+                Some(binding) => self.with_self_binding(binding, |s| s.resolve_type(&ty)),
                 None => self.resolve_type(&ty),
             };
             slots.insert(slot, resolved);
@@ -3219,8 +3226,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             let mut scope = self.enter_inherited_type_param_scope();
 
             // `Self` in `type Output = Self;` is the type being registered for,
-            // not whatever the enclosing frame was implementing.
-            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
+            // not whatever the enclosing frame was implementing — and the trait
+            // it projects `Self::Assoc` off is the one this block implements.
+            let implementing = SelfBinding {
+                type_id: concrete_type_id,
+                declaring_trait: Some(info.trait_key),
+            };
+            scope.set_self_binding(implementing);
 
             // Bind impl type params to concrete type args.
             // For `impl<T> IntoIterator for List<T>` with List<u8>:
@@ -3243,7 +3255,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .type_param_bounds
                         .entry(param.name.clone())
                         .or_default()
-                        .extend(ScopedBound::pin_declared(param, Some(concrete_type_id)));
+                        .extend(ScopedBound::pin_declared(param, Some(implementing)));
                 }
             }
 
@@ -3334,14 +3346,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // Bind the blanket type param to the concrete type
             // For `impl<I: Iterator> IntoIterator for I` with StrUtf8ByteIter:
             // → set current_type_params["I"] = (0, StrUtf8ByteIter_typeid)
-            scope.annotate_ctx.trait_ctx.self_type = Some(concrete_type_id);
-            scope.annotate_ctx.trait_ctx.type_params.insert(
-                info.blanket_param_name.clone(),
+            let implementing = SelfBinding {
+                type_id: concrete_type_id,
+                declaring_trait: Some(info.trait_key),
+            };
+            scope.set_self_binding(implementing);
+            scope.bind_param(
+                &info.blanket_param_name,
                 BinderInScope::undeclared(0, concrete_type_id),
-            );
-            scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
-                info.blanket_param_name.clone(),
-                ScopedBound::pin_all(&info.blanket_param_bounds, Some(concrete_type_id)),
+                ScopedBound::pin_all(&info.blanket_param_bounds, Some(implementing)),
             );
 
             // Resolve and register each associated type

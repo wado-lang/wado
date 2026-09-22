@@ -20,6 +20,7 @@ use crate::token::Span;
 use super::Elaborator;
 use super::scope::{BinderInScope, ScopedBound, TypeParamScope, param_decl};
 use super::sig::{DeclSig, MethodSig};
+use super::trait_query::SelfBinding;
 use super::types::{FunctionContext, ReceivedPosition, TypeError};
 use crate::ast::{AssociatedTypeDecl, AstId, Attribute, GenericParam, Visibility};
 use crate::compiler_item::TraitAssocType;
@@ -865,18 +866,22 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
         // binds the trait's `T` to `i32`). Impl type params were registered
         // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
         // Foo<U>` resolves correctly.
-        let resolved_self_type = self.resolve_type(impl_type);
-        self.annotate_ctx.trait_ctx.self_type = Some(resolved_self_type);
-        if let Some(trait_t) = trait_type {
-            self.bind_trait_type_params_from_impl(trait_t, resolved_self_type);
-        }
         // The trait this block implements qualifies `Self::Assoc` inside the
         // signatures of the defaults it inherits, where `Self` is concrete and
-        // carries no bound to read the declaring trait off.
-        self.annotate_ctx.trait_ctx.self_trait = trait_type.and_then(|t| {
-            let name = self.get_type_name(t);
-            self.trait_decl_at(t.id()?, &name)
-        });
+        // carries no bound to read the declaring trait off. Established with the
+        // target and before the binding below, since the bounds that binding
+        // pins mean this `Self`, both halves of it.
+        let implementing = SelfBinding {
+            type_id: self.resolve_type(impl_type),
+            declaring_trait: trait_type.and_then(|t| {
+                let name = self.get_type_name(t);
+                self.trait_decl_at(t.id()?, &name)
+            }),
+        };
+        self.set_self_binding(implementing);
+        if let Some(trait_t) = trait_type {
+            self.bind_trait_type_params_from_impl(trait_t, implementing);
+        }
         impl_type_params
     }
 
@@ -896,7 +901,6 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             impl_is_concrete,
             &impl_block.type_params,
         );
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
         let target_type_args = scope.resolve_written_type_args(&impl_block.ty);
         let trait_type_args = impl_block
@@ -1084,25 +1088,17 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
                     true,
                 ),
             };
-            self.annotate_ctx.trait_ctx.type_params.insert(
-                param.name.clone(),
+            let bounds = ScopedBound::pin_declared(param, self.self_binding());
+            self.bind_param(
+                &param.name,
                 BinderInScope::declared(idx, type_id, param.id),
+                bounds,
             );
             // Only push *real* type params (TypeParam-ids) into the
             // inference cache list. Eagerly-resolved fn-bound params have a
             // concrete Function type and aren't generics anymore.
             if fn_bound_sig.is_none() {
                 type_param_list.push((param.name.clone(), type_id));
-            }
-            // Record only "real" trait bounds — `fn`/`fn mut` bounds are
-            // already realised in the parameter's type itself.
-            let real_bounds = param.real_bounds();
-            if !real_bounds.is_empty() {
-                let self_type = self.annotate_ctx.trait_ctx.self_type;
-                self.annotate_ctx.trait_ctx.type_param_bounds.insert(
-                    param.name.clone(),
-                    ScopedBound::pin_all(&real_bounds, self_type),
-                );
             }
             if consumed_index {
                 next_idx += 1;
@@ -1588,6 +1584,14 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             .type_table
             .borrow_mut()
             .make_type_param("Self".to_string(), 0);
+        // With the slot, since `Self::Assoc` inside the declaration means this
+        // trait's name. Left to the enclosing walk it would mean whatever that
+        // was implementing.
+        let declaring = SelfBinding {
+            type_id: self_slot,
+            declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
+        };
+        scope.set_self_binding(declaring);
         scope
             .annotate_ctx
             .trait_ctx
@@ -1608,10 +1612,10 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     fn_signature: None,
                     resolved: None,
                 },
-                Some(self_slot),
+                Some(declaring),
             )],
         );
-        scope.annotate_ctx.trait_ctx.self_type = Some(self_slot);
+        // Before the parameters, so each one's bounds pin the `Self` they mean.
         let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
         (scope, self_slot, next_slot)
     }
@@ -1803,8 +1807,13 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 scope.tysys.type_table.borrow_mut().make_resource(def)
             }
         });
-        if self_type.is_some() {
-            scope.annotate_ctx.trait_ctx.self_type = self_type;
+        if let Some(type_id) = self_type {
+            // A resource declaration, so `Self` is the resource and no trait
+            // declares names off it.
+            scope.set_self_binding(SelfBinding {
+                type_id,
+                declaring_trait: None,
+            });
         }
         (scope, self_type)
     }

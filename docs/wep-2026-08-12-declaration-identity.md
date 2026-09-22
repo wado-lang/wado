@@ -596,6 +596,13 @@ instead, where `Self` is whichever type the bound stands on. The two are carried
 apart because a reader supplying one for the other projects off the wrong
 receiver.
 
+What `Self` means is three facts, not one: the type it stands for, the trait
+whose declaration names what is projected off it, and the bindings that trait's
+`impl` wrote. `Self::Assoc` needs all three, so a frame is installed whole or
+not at all — one that carries a receiver without its trait answers `Self` and
+leaves `Self::Assoc` unresolved, and one that keeps the enclosing walk's
+bindings answers it off the type it was standing on before.
+
 A free function declares no `Self`. A bound there that writes one is rejected at
 the declaration, naming the type parameter to write instead, at every position: a
 trait argument, and an associated-type constraint nested under one.

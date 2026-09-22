@@ -531,8 +531,12 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             return Vec::new();
         };
         // The trait declared the bounds, so their `Self` is the trait's — which
-        // at this impl is the receiver.
-        trait_params_from_impl(&header.type_params, trait_args, receiver)
+        // at this impl is the receiver, under the trait that wrote them.
+        let implementing = receiver.map(|type_id| SelfBinding {
+            type_id,
+            declaring_trait: Some(trait_decl),
+        });
+        trait_params_from_impl(&header.type_params, trait_args, implementing)
             .into_iter()
             .filter(|supplied| !have.iter().any(|b| b.name == supplied.param.name))
             .map(|supplied| DefaultTypeBinding {
@@ -1336,7 +1340,13 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // first slot — read off the slot, not counted from the receiver's type
         // arguments, which overshoots on a concrete or pack-bearing impl.
         let base = self.slot_base(slots);
-        self.with_self_type(receiver_type, |s| {
+        // The declaration is a method's, so a `Self::Assoc` in a default projects
+        // off the receiver, under the trait this frame implements.
+        let receiver_self = SelfBinding {
+            type_id: receiver_type,
+            declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
+        };
+        self.with_self_binding(receiver_self, |s| {
             s.with_resolving_home(declaring_module, |s| {
                 let mut scope = s.enter_inherited_type_param_scope();
                 scope.annotate_ctx.trait_ctx.type_params.clear();
@@ -1382,12 +1392,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         // holds, never what it is — so `U::default()` dispatches on its bound
         // rather than on a receiver. The declaration wrote that bound, and
         // nothing at the call site carries it.
+        // The declaration is a method's, so its `Self` is the receiver, and the
+        // trait it projects `Self::Assoc` off is the one this frame implements.
+        let receiver_self = Some(SelfBinding {
+            type_id: receiver,
+            declaring_trait: self.annotate_ctx.trait_ctx.self_trait,
+        });
         for binding in &mut bindings {
             if binding.settled.is_pack()
                 && let Some(param) = own_params.iter().find(|p| p.name == binding.name)
             {
-                // The declaration is a method's, so its `Self` is the receiver.
-                binding.bounds = ScopedBound::pin_declared(param, Some(receiver));
+                binding.bounds = ScopedBound::pin_declared(param, receiver_self);
             }
         }
         bindings
@@ -2250,7 +2265,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 method_slot_params.len(),
                 method_type_param_ids.len()
             );
-            let self_type = scope.annotate_ctx.trait_ctx.self_type;
+            let self_binding = scope.self_binding();
             for (type_param, &type_param_id) in
                 method_slot_params.iter().zip(method_type_param_ids.iter())
             {
@@ -2269,7 +2284,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 if !type_param.bounds.is_empty() {
                     scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
                         type_param.name.clone(),
-                        ScopedBound::pin_declared(type_param, self_type),
+                        ScopedBound::pin_declared(type_param, self_binding),
                     );
                 }
             }

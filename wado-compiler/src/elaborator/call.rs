@@ -2518,22 +2518,17 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 })
             })
             .collect();
-        let trait_ctx = &mut scope.annotate_ctx.trait_ctx;
-        trait_ctx.type_params.clear();
-        trait_ctx.type_param_bounds.clear();
+        scope.annotate_ctx.trait_ctx.type_params.clear();
+        scope.annotate_ctx.trait_ctx.type_param_bounds.clear();
         for (i, binding) in bindings.iter().enumerate() {
             let Some(bounds) = &installed[i] else {
                 continue;
             };
-            trait_ctx.type_params.insert(
-                binding.name.clone(),
+            scope.bind_param(
+                &binding.name,
                 BinderInScope::undeclared(i as u32, in_scope[i]),
+                bounds.clone(),
             );
-            if !bounds.is_empty() {
-                trait_ctx
-                    .type_param_bounds
-                    .insert(binding.name.clone(), bounds.clone());
-            }
         }
         body(&mut scope)
     }
