@@ -151,8 +151,8 @@ fn check_dtype(vi: &ValueInfo) -> Result<(), EmitError> {
     return Result::Err(EmitError::Dtype(UnmappedDtype { tensor: vi.name, dtype: vi.dtype }));
 }
 
-/// Each tensor name as the Wado identifier that carries it. An ONNX name is
-/// any string, so it is sanitized, and two that collide stop the build.
+/// Every identifier the generated module declares, minted from one set: the
+/// axes, then each tensor name sanitized. Two that collide stop the build.
 struct Names {
     idents: TreeMap<String, String>,
     reserved: TreeSet<String>,
