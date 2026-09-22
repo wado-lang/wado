@@ -69,6 +69,8 @@ pub fn zip_suffix<..Pre, ..Suf>(
     return Tensor { data: out, extents: a.extents };
 }
 
+/// `zip_suffix` with the operands the other way round. It is written out
+/// rather than flipping the closure, since this is an elementwise inner loop.
 pub fn zip_suffix_lhs<..Pre, ..Suf>(
     a: &Tensor<f32, [..Suf]>,
     b: &Tensor<f32, [..Pre, ..Suf]>,

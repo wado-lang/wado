@@ -145,7 +145,7 @@ else the type's `name_policy` applies, else identity.
 A struct whose every field carries `#[wire(number = N)]`. A format keyed by
 numbers requires it, so a type without them is refused where the call is
 written rather than where the bytes are produced. See
-[WEP: Grog](../../../docs/wep-2026-09-22-grog.md).
+`docs/wep-2026-09-22-grog.md`.
 
 ### `pub trait SerializeStruct with ()`
 

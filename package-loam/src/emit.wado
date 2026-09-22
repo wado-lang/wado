@@ -406,7 +406,7 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     let b = transposed(&exprs.reference(&node.inputs[1]), trans_b);
     let mut product = `matmul(${a}, ${b})`;
     if alpha != 1.0 {
-        product = `map(&${product}, |v| v * (${alpha} as f32))`;
+        product = `map(&${product}, |v| v * ${float_literal(alpha)})`;
     }
     if !has_bias(node) {
         return Result::Ok(product);
@@ -417,7 +417,7 @@ fn gemm_call(node: &Node, shapes: &TreeMap<String, Shape>, exprs: &Operands) -> 
     }
     let mut bias = exprs.reference(&node.inputs[2]);
     if beta != 1.0 {
-        bias = `&map(${bias}, |v| v * (${beta} as f32))`;
+        bias = `&map(${bias}, |v| v * ${float_literal(beta)})`;
     }
     let produced = shapes.get(node.outputs[0]).unwrap();
     let c = shapes.get(node.inputs[2]).unwrap();

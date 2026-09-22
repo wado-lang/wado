@@ -2,9 +2,7 @@
 //! only committed graph reaching `MatMul`. Its weight is an initializer, so
 //! ONNX ships one input and the weight travels in the model.
 
-use { from_bytes } from "core:protobuf";
-use { ModelProto, float_tensor } from "../src/onnx_proto.wado";
-use { assert_close, tensor_of } from "./oracle.wado";
+use { assert_close, first_initializer, tensor_of } from "./oracle.wado";
 use {
     Batch,
     In,
@@ -32,15 +30,7 @@ use {
     };
 
 fn weights_of(model_bytes: ByteList) -> Weights {
-    let Ok(model) = from_bytes::<ModelProto, ByteList>(model_bytes) else {
-        panic("the model did not decode");
-    };
-    let Some(graph) = &model.graph else {
-        panic("a model without a graph");
-    };
-    let Some([data, extents]) = float_tensor(&graph.initializer[0]) else {
-        panic("the initializer is not float");
-    };
+    let [data, extents] = first_initializer(model_bytes);
     return Weights {
         t_1: Tensor::<f32, [Out, In]> { data, extents },
     };

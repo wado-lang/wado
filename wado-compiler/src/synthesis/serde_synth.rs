@@ -795,7 +795,7 @@ fn generate_positional_at_function(
 /// Generate `impl FieldSchema for <Type> { fn by_number(number: i32) }` — the
 /// static, per-type numeric-key matcher. Maps a `#[wire(number = N)]` to its
 /// field index, and answers `null` for every number where the type carries
-/// none, which `WireNumbered` is what rules out.
+/// none, which the `WireNumbered` bound rules out.
 fn generate_by_number_function(
     type_name: &FqTypeName,
     field_schema_trait: &FqTraitName,

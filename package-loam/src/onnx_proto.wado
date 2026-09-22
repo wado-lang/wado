@@ -272,7 +272,7 @@ fn read_value_info(vi: &ValueInfoProto) -> Result<ValueInfo, String> {
 /// An initializer as a `ValueInfo`: its name, type and extents. The weights
 /// themselves are the caller's, as `emit` already assumes.
 fn read_initializer(t: &TensorProto) -> Result<ValueInfo, String> {
-    for let entry of t.external_data {
+    if let Some(entry) = t.external_data.first() {
         return Result::Err(`${t.name}: external data (${entry.key})`);
     }
     if t.data_location == DATA_LOCATION_EXTERNAL {
@@ -321,24 +321,23 @@ fn read_attr(a: &AttributeProto) -> Attr {
                 values.push(utf8(&v));
             }
         },
+        // A tensor has no text form, so it travels whole. Only a float one
+        // does, since the kernels compute in f32.
         ATTRIBUTE_TENSOR => {
-            let Some(t) = &a.t else {
-                return Attr { name: a.name, values: [], is_list: false };
-            };
-            let Some([data, extents]) = float_tensor(t) else {
-                return Attr { name: a.name, values: [], is_list: false };
-            };
-            return Attr {
-                name: a.name,
-                values: [],
-                is_list: false,
-                tensor: Option::Some(ConstTensor { dtype: "float", extents, data }),
-            };
+            is_list = false;
+            if let Some(t) = &a.t {
+                if let Some([data, extents]) = float_tensor(t) {
+                    return Attr {
+                        name: a.name,
+                        values: [],
+                        is_list: false,
+                        tensor: Option::Some(ConstTensor { dtype: "float", extents, data }),
+                    };
+                }
+            }
         },
-        // A graph or a type has no text form, and only `Constant` reads a
-        // payload this shape: an operator Loam cannot run is refused by the
-        // operator check, which names the operator rather than one of its
-        // attributes. So the attribute is present and its value is not there.
+        // A graph or a type has no text form, so the attribute is carried with
+        // no value; the operator that reads one is refused by name anyway.
         _ => {
             is_list = false;
         },
@@ -382,8 +381,10 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     // input's default rather than a second value. Loam's weights are the
     // caller's either way, so such a name is a weight and not a parameter.
     let mut weight_names: List<String> = [];
+    let mut initializers: List<ValueInfo> = [];
     for let t of graph.initializer {
         weight_names.push(t.name);
+        initializers.push(read_initializer(&t)?);
     }
     let mut inputs: List<ValueInfo> = [];
     for let vi of graph.input {
@@ -394,10 +395,6 @@ pub fn read<S: AsByteSlice>(bytes: S) -> Result<Graph, String> {
     let mut outputs: List<ValueInfo> = [];
     for let vi of graph.output {
         outputs.push(read_value_info(&vi)?);
-    }
-    let mut initializers: List<ValueInfo> = [];
-    for let t of graph.initializer {
-        initializers.push(read_initializer(&t)?);
     }
     let mut nodes: List<Node> = [];
     for let n of graph.node {

@@ -4,7 +4,7 @@
 # core:protobuf
 
 Protocol Buffers over `core:serde`: the wire format, and nothing of
-`.proto`. See [WEP: Grog](../../../docs/wep-2026-09-22-grog.md).
+`.proto`. See `docs/wep-2026-09-22-grog.md`.
 
 ## Synopsis
 
@@ -65,8 +65,8 @@ run out or the varint runs past the ten bytes a 64-bit value can take.
 
 ### `pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, SerializeError>`
 
-A message as protobuf bytes. Fields ascend by declaration order, which is
-deterministic here and is not a canonical form: protobuf defines none.
+A message as protobuf bytes. Fields are written in declaration order, which
+is deterministic here and is not a canonical form: protobuf defines none.
 
 ### `pub fn from_bytes<T: Deserialize + WireNumbered, S: AsByteSlice>(input: S, max_depth: i32 = DEFAULT_MAX_DEPTH) -> Result<T, DeserializeError>`
 

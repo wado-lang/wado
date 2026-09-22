@@ -2,9 +2,7 @@
 //! `basic_test`, with one operand an initializer. ONNX ships one input for it
 //! and no second, since the weight travels in the model.
 
-use { from_bytes } from "core:protobuf";
-use { ModelProto, float_tensor } from "../src/onnx_proto.wado";
-use { assert_close, tensor_of } from "./oracle.wado";
+use { assert_close, first_initializer, tensor_of } from "./oracle.wado";
 use {
     Col,
     Row,
@@ -30,18 +28,8 @@ use {
         },
     };
 
-/// The initializer, read straight out of the model. This is the seam Loam's
-/// checkpoint reader fills: what a reader produces is the `Weights` struct.
 fn weights_of(model_bytes: ByteList) -> Weights {
-    let Ok(model) = from_bytes::<ModelProto, ByteList>(model_bytes) else {
-        panic("the model did not decode");
-    };
-    let Some(graph) = &model.graph else {
-        panic("a model without a graph");
-    };
-    let Some([data, extents]) = float_tensor(&graph.initializer[0]) else {
-        panic("the initializer is not float");
-    };
+    let [data, extents] = first_initializer(model_bytes);
     return Weights {
         t_1: Tensor::<f32, [Row, Col]> { data, extents },
     };

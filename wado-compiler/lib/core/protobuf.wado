@@ -233,12 +233,37 @@ struct SizeStructSerializer {
     number: i32,
 }
 
-struct SizeMapSerializer {
-    state: &mut SizeState,
+/// The two shapes protobuf has no encoding for. Both passes name these as
+/// their associated types, and neither is ever constructed: what would build
+/// one returns the error instead.
+struct UnsupportedMap {
 }
 
-struct SizeVariantSerializer {
-    state: &mut SizeState,
+struct UnsupportedVariant {
+}
+
+impl SerializeMap for UnsupportedMap {
+    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a map"));
+    }
+
+    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a map"));
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a map"));
+    }
+}
+
+impl SerializeVariant for UnsupportedVariant {
+    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a variant case with a payload"));
+    }
+
+    fn end(&mut self) -> Result<(), SerializeError> {
+        return Result::Err(unsupported("a variant case with a payload"));
+    }
 }
 
 impl SizeSerializer {
@@ -269,30 +294,6 @@ impl SerializeSeq for SizeSeqSerializer {
     }
 }
 
-impl SerializeMap for SizeMapSerializer {
-    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-
-    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-
-    fn end(&mut self) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-}
-
-impl SerializeVariant for SizeVariantSerializer {
-    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a variant case with a payload"));
-    }
-
-    fn end(&mut self) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a variant case with a payload"));
-    }
-}
-
 impl SerializeStruct for SizeStructSerializer {
     fn field<T: Serialize, S: AsStrSlice>(&mut self, name: S, value: &T) -> Result<(), SerializeError> {
         return Result::Err(unsupported(`the unnumbered field ${name}`));
@@ -316,9 +317,9 @@ impl SerializeStruct for SizeStructSerializer {
 
 impl Serializer for SizeSerializer {
     type SeqSerializer = SizeSeqSerializer;
-    type MapSerializer = SizeMapSerializer;
+    type MapSerializer = UnsupportedMap;
     type StructSerializer = SizeStructSerializer;
-    type VariantSerializer = SizeVariantSerializer;
+    type VariantSerializer = UnsupportedVariant;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
         return self.count_varint(v as i64 as u64);
@@ -382,7 +383,7 @@ impl Serializer for SizeSerializer {
         return Result::Ok(SizeSeqSerializer { state: self.state, number: self.number });
     }
 
-    fn begin_map(&mut self, len: i32) -> Result<SizeMapSerializer, SerializeError> {
+    fn begin_map(&mut self, len: i32) -> Result<UnsupportedMap, SerializeError> {
         return Result::Err(unsupported("a map"));
     }
 
@@ -405,7 +406,7 @@ impl Serializer for SizeSerializer {
         type_name: S,
         variant_name: S1,
         disc: i32,
-    ) -> Result<SizeVariantSerializer, SerializeError> {
+    ) -> Result<UnsupportedVariant, SerializeError> {
         return Result::Err(unsupported("a variant case with a payload"));
     }
 }
@@ -440,14 +441,6 @@ struct WriteStructSerializer {
     expected_end: i32,
 }
 
-struct WriteMapSerializer {
-    state: &mut WriteState,
-}
-
-struct WriteVariantSerializer {
-    state: &mut WriteState,
-}
-
 impl WriteSerializer {
     fn write_varint_field(&mut self, payload: u64) -> Result<(), SerializeError> {
         write_tag(&mut self.state.buf, self.number, WireType::Varint);
@@ -469,30 +462,6 @@ impl SerializeSeq for WriteSeqSerializer {
 
     fn end(&mut self) -> Result<(), SerializeError> {
         return Result::Ok(());
-    }
-}
-
-impl SerializeMap for WriteMapSerializer {
-    fn key<T: Serialize>(&mut self, key: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-
-    fn value<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-
-    fn end(&mut self) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a map"));
-    }
-}
-
-impl SerializeVariant for WriteVariantSerializer {
-    fn payload<T: Serialize>(&mut self, value: &T) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a variant case with a payload"));
-    }
-
-    fn end(&mut self) -> Result<(), SerializeError> {
-        return Result::Err(unsupported("a variant case with a payload"));
     }
 }
 
@@ -519,9 +488,9 @@ impl SerializeStruct for WriteStructSerializer {
 
 impl Serializer for WriteSerializer {
     type SeqSerializer = WriteSeqSerializer;
-    type MapSerializer = WriteMapSerializer;
+    type MapSerializer = UnsupportedMap;
     type StructSerializer = WriteStructSerializer;
-    type VariantSerializer = WriteVariantSerializer;
+    type VariantSerializer = UnsupportedVariant;
 
     fn serialize_i32(&mut self, v: i32) -> Result<(), SerializeError> {
         return self.write_varint_field(v as i64 as u64);
@@ -591,7 +560,7 @@ impl Serializer for WriteSerializer {
         return Result::Ok(WriteSeqSerializer { state: self.state, number: self.number });
     }
 
-    fn begin_map(&mut self, len: i32) -> Result<WriteMapSerializer, SerializeError> {
+    fn begin_map(&mut self, len: i32) -> Result<UnsupportedMap, SerializeError> {
         return Result::Err(unsupported("a map"));
     }
 
@@ -620,13 +589,13 @@ impl Serializer for WriteSerializer {
         type_name: S,
         variant_name: S1,
         disc: i32,
-    ) -> Result<WriteVariantSerializer, SerializeError> {
+    ) -> Result<UnsupportedVariant, SerializeError> {
         return Result::Err(unsupported("a variant case with a payload"));
     }
 }
 
-/// A message as protobuf bytes. Fields ascend by declaration order, which is
-/// deterministic here and is not a canonical form: protobuf defines none.
+/// A message as protobuf bytes. Fields are written in declaration order, which
+/// is deterministic here and is not a canonical form: protobuf defines none.
 pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, SerializeError> {
     let mut measured = SizeState { sizes: [], open: [] };
     let mut size_pass = SizeSerializer { state: &mut measured, number: NO_FIELD };

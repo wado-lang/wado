@@ -1524,6 +1524,12 @@ pub fn wire_number_of(attrs: &[Attribute]) -> Option<u32> {
         .filter(|n| !WIRE_NUMBER_RESERVED.contains(n))
 }
 
+/// One entry per field, in declaration order, as `StructInfo` holds them.
+#[must_use]
+pub fn wire_numbers_of(fields: &[StructField]) -> Vec<Option<u32>> {
+    fields.iter().map(|f| wire_number_of(&f.attrs)).collect()
+}
+
 /// Attribute like #[cm("...")]
 #[derive(Debug, Clone)]
 pub struct Attribute {

@@ -1028,7 +1028,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
 
-        let wire_numbers = self.wire_numbers_of(&struct_decl.fields);
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let mut fields = Vec::with_capacity(struct_decl.fields.len());
         for (index, field) in struct_decl.fields.iter().enumerate() {
             let type_id = field_types[index];
@@ -1132,7 +1132,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // (no self, no other fields in scope), matching `reify_struct`.
         let mut field_ctx =
             FunctionContext::new(TypeTable::UNIT, format!("struct:{}", struct_decl.name));
-        let wire_numbers = self.wire_numbers_of(&struct_decl.fields);
+        let wire_numbers = self.checked_wire_numbers(&struct_decl.fields);
         let fields: Vec<TirField> = info
             .fields
             .iter()
@@ -2041,7 +2041,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// every field or none, so the result is all `Some` or all `None`, and
     /// anything else is reported here. See
     /// [WEP: Grog](../../docs/wep-2026-09-22-grog.md).
-    fn wire_numbers_of(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
+    fn checked_wire_numbers(&self, fields: &[ast::StructField]) -> Vec<Option<u32>> {
         let written: Vec<Option<&str>> = fields
             .iter()
             .map(|field| {
