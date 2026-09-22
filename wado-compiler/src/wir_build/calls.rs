@@ -796,6 +796,12 @@ impl FunctionTranslator<'_, '_> {
             "builtin::f64_reinterpret_i64" => unary!(self, args, WirInstr::F64ReinterpretI64),
             "builtin::i32_reinterpret_f32" => unary!(self, args, WirInstr::I32ReinterpretF32),
             "builtin::f32_reinterpret_i32" => unary!(self, args, WirInstr::F32ReinterpretI32),
+            // A half and its `u16` share a representation, so the cast is the
+            // operand. Wasm has no half precision value type to convert to.
+            "builtin::u16_reinterpret_f16"
+            | "builtin::f16_reinterpret_u16"
+            | "builtin::u16_reinterpret_bf16"
+            | "builtin::bf16_reinterpret_u16" => self.translate_operand(args[0].expr),
             "builtin::v128_not" => unary!(self, args, WirInstr::V128Not),
             "builtin::v128_and" => binary!(self, args, WirInstr::V128And),
             "builtin::v128_or" => binary!(self, args, WirInstr::V128Or),

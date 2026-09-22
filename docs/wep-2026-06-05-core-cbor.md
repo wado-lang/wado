@@ -226,7 +226,7 @@ Notes:
 - Integers are native. Unlike `core:json` (which stringifies values outside
   ±2^53 for JavaScript safety), CBOR has exact integers up to 64 bits and encodes
   them directly.
-- Floats never use 16-bit form (Wado has no `f16`); see canonical caveat. NaN
+- Floats never use 16-bit form; see canonical caveat. NaN
   and ±Infinity are permitted (CBOR represents them natively), again unlike JSON
   which errors.
 - Length is always known when serde starts a container (`begin_seq`/`begin_map`
@@ -277,15 +277,16 @@ Implements RFC 8949 §4.2.1 Core Deterministic Encoding:
 #### Float caveat (intentional deviation)
 
 RFC 8949 §4.2.1 requires the shortest float that preserves the value, which can
-be binary16. Wado has no `f16`, so the canonical encoder's float ladder stops at
-binary32: it emits `f32` where a fully-conformant encoder would emit `f16`.
+be binary16. This encoder's float ladder stops at binary32: it emits `f32` where
+a fully-conformant encoder would emit a binary16.
 
 Consequently `to_bytes_canonical` is byte-identical to a reference deterministic
 encoder for integers, map ordering, and lengths, but **may differ on
 float-bearing values**. For COSE/CWT signing over data containing floats, this is
-a real interoperability hazard and must be documented at the call site. Emitting
-`f16` as raw bits (without an `f16` type) in canonical mode only is a possible
-future refinement.
+a real interoperability hazard and must be documented at the call site. Narrowing
+to a binary16 in canonical mode is a possible future refinement; Wado now has
+`f16`, so [WEP: Half-Precision Primitives](./wep-2026-09-22-half-precision-primitives.md)
+supplies the rounding it needs.
 
 ### `core:value`: the unified dynamic value
 
@@ -416,8 +417,8 @@ already share code.
 - The `Visitor` gains lossless integer/bytes entries, removing the prior
   precision loss for large CBOR integers.
 - `to_bytes_canonical` is deterministic for integers, lengths, and map order but
-  not byte-identical to a reference encoder for floats (no `f16`) — a documented
-  COSE caveat.
+  not byte-identical to a reference encoder for floats (no binary16) — a
+  documented COSE caveat.
 - This WEP specifies the design; the format and its typed date/time mapping are
   implemented. Lossy CBOR→JSON via `Value` remains deferred (see TODO).
 
@@ -453,7 +454,7 @@ remaining item is lossy CBOR→JSON conversion.
       recursion, no length-driven preallocation, duplicate/trailing/UTF-8
       checks)
 - [x] `to_bytes_canonical` for CBOR (encoded-key bytewise sort, shortest forms;
-      float ladder stops at binary32 — documented `f16` caveat)
+      float ladder stops at binary32 — documented binary16 caveat)
 - [x] tags: bignum (2/3, encode + decode); self-described (55799) unwrap;
       date/time tag 0 (RFC 3339 text) unwraps on decode so a tag-0-wrapped
       `ZonedDateTime`/`Instant` decodes via its string `Deserialize`. In

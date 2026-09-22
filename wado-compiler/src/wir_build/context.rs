@@ -750,6 +750,9 @@ impl<'a> WirContext<'a> {
                 PrimitiveType::F32 => WirType::F32,
                 PrimitiveType::F64 => WirType::F64,
                 PrimitiveType::V128 => WirType::V128,
+                // A half is a `u16` below here: Wasm has no half precision
+                // value type, and its packed storage types are `i8` and `i16`.
+                PrimitiveType::F16 | PrimitiveType::Bf16 => WirType::U16,
                 PrimitiveType::Bool => WirType::Bool,
                 PrimitiveType::Char => WirType::Char,
             },

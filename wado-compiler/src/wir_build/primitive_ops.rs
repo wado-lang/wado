@@ -66,7 +66,8 @@ impl PrimitiveKind {
             PrimitiveType::U64 => Self::I64Unsigned,
             PrimitiveType::F32 => Self::F32,
             PrimitiveType::F64 => Self::F64,
-            PrimitiveType::V128 => return None,
+            // `v128` and the half types carry no arithmetic to classify.
+            PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => return None,
         })
     }
 }
@@ -370,7 +371,7 @@ impl FunctionTranslator<'_, '_> {
                 WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFF)))
             }
             PrimitiveType::I16 => WirInstr::I32Extend16S(Box::new(instr)),
-            PrimitiveType::U16 => {
+            PrimitiveType::U16 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
                 WirInstr::I32And(Box::new(instr), Box::new(WirInstr::I32Const(0xFFFF)))
             }
             // At or above i32 width: nothing to mask off.

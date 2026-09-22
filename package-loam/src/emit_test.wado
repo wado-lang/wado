@@ -1,0 +1,55 @@
+use { emit } from "./emit.wado";
+use { infer } from "./infer.wado";
+use { read } from "./onnx_text.wado";
+use { LayoutRule, Schema } from "./schema.wado";
+
+fn generated(source: String, dtype: String) -> String {
+    let graph = read(&source).unwrap();
+    let schema = Schema {
+        layout: [
+            LayoutRule { pattern: "X", axes: ["Batch"] },
+            LayoutRule { pattern: "W", axes: ["Batch"] },
+            LayoutRule { pattern: "Y", axes: ["Batch"] },
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    assert graph.inputs[0].dtype == dtype;
+    return emit(&graph, &shapes).unwrap();
+}
+
+test "a half precision boundary tensor names the Wado type" {
+    let out = generated(
+        `agraph (float16[2] X, float16[2] W) => (float16[2] Y) {
+            Y = Add(X, W)
+        }`,
+        "float16",
+    );
+    assert out.contains("Tensor<f16, [Batch]>");
+}
+
+test "bfloat16 names itself too" {
+    let out = generated(
+        `agraph (bfloat16[2] X, bfloat16[2] W) => (bfloat16[2] Y) {
+            Y = Add(X, W)
+        }`,
+        "bfloat16",
+    );
+    assert out.contains("Tensor<bf16, [Batch]>");
+}
+
+test "a dtype Wado has no name for is a build error" {
+    let source = `agraph (uint8[2] X, uint8[2] W) => (uint8[2] Y) {
+        Y = Add(X, W)
+    }`;
+    let graph = read(&source).unwrap();
+    let schema = Schema {
+        layout: [
+            LayoutRule { pattern: "X", axes: ["Batch"] },
+            LayoutRule { pattern: "W", axes: ["Batch"] },
+            LayoutRule { pattern: "Y", axes: ["Batch"] },
+        ],
+    };
+    let shapes = infer(&graph, &schema).unwrap();
+    let failed = emit(&graph, &shapes);
+    assert failed matches { Err(e) && e.dtype == "uint8" };
+}

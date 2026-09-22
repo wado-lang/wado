@@ -8,6 +8,7 @@ use crate::compiler_host::DependencyIndex;
 use crate::hashmap;
 use crate::intern::{InternedStr, StringInterner};
 use crate::stdlib::{ALL_CORE_WASM_ASSETS, BINDING_MODULE_PATHS, CORE_MODULE_PATHS};
+use crate::tir::PrimitiveType;
 use std::fmt;
 use std::sync::{Arc, LazyLock};
 
@@ -40,6 +41,8 @@ static CORE_PRELUDE_INT128: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/int128.wado"));
 static CORE_PRELUDE_PRIMITIVE: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/primitive.wado"));
+static CORE_PRELUDE_HALF: LazyLock<Arc<str>> =
+    LazyLock::new(|| Arc::<str>::from("prelude/half.wado"));
 static CORE_PRELUDE_TYPES: LazyLock<Arc<str>> =
     LazyLock::new(|| Arc::<str>::from("prelude/types.wado"));
 static CORE_PRELUDE_TRAITS: LazyLock<Arc<str>> =
@@ -74,6 +77,7 @@ fn well_known_arcs() -> Vec<Arc<str>> {
         CORE_PRELUDE_FORMAT.clone(),
         CORE_PRELUDE_INT128.clone(),
         CORE_PRELUDE_PRIMITIVE.clone(),
+        CORE_PRELUDE_HALF.clone(),
         CORE_PRELUDE_TYPES.clone(),
         CORE_PRELUDE_TRAITS.clone(),
         CORE_PRELUDE_RANGE.clone(),
@@ -577,6 +581,8 @@ impl ModuleSource {
         pub fn int128() = Core { name: CORE_PRELUDE_INT128 },
         /// `core:prelude/primitive.wado` — primitive type methods.
         pub fn primitive() = Core { name: CORE_PRELUDE_PRIMITIVE },
+        /// `core:prelude/half.wado` — the `f16` and `bf16` methods.
+        pub fn half() = Core { name: CORE_PRELUDE_HALF },
         /// `core:prelude/types.wado` — core type definitions.
         pub fn types() = Core { name: CORE_PRELUDE_TYPES },
         /// `core:prelude/traits.wado` — builtin trait definitions.
@@ -611,6 +617,36 @@ impl ModuleSource {
         pub fn entry_point_uninitialized() = EntryPoint { filename: ENTRY_FILENAME_UNINITIALIZED },
         /// `<stdin>` placeholder.
         pub fn entry_point_stdin() = EntryPoint { filename: ENTRY_FILENAME_STDIN },
+    }
+
+    /// The module holding `prim`'s impls — its own methods and the traits
+    /// written for it. `v128`'s are in `core:simd`, which every lookup reaches
+    /// by name from the `core:prelude/primitive.wado` key.
+    #[must_use]
+    pub fn of_primitive(prim: PrimitiveType) -> Self {
+        match prim {
+            PrimitiveType::F16 | PrimitiveType::Bf16 => Self::half(),
+            PrimitiveType::I8
+            | PrimitiveType::I16
+            | PrimitiveType::I32
+            | PrimitiveType::I64
+            | PrimitiveType::U8
+            | PrimitiveType::U16
+            | PrimitiveType::U32
+            | PrimitiveType::U64
+            | PrimitiveType::F32
+            | PrimitiveType::F64
+            | PrimitiveType::V128
+            | PrimitiveType::Bool
+            | PrimitiveType::Char => Self::primitive(),
+        }
+    }
+
+    /// [`Self::of_primitive`] for a caller holding the type's name; `None`
+    /// where the name is not a primitive's.
+    #[must_use]
+    pub fn of_primitive_name(name: &str) -> Option<Self> {
+        PrimitiveType::from_name(name).map(Self::of_primitive)
     }
 
     /// Convert to the legacy `Vec<String>` module path representation.
@@ -1112,6 +1148,7 @@ mod tests {
             (ModuleSource::format(), i.core("prelude/format.wado")),
             (ModuleSource::int128(), i.core("prelude/int128.wado")),
             (ModuleSource::primitive(), i.core("prelude/primitive.wado")),
+            (ModuleSource::half(), i.core("prelude/half.wado")),
             (ModuleSource::types(), i.core("prelude/types.wado")),
             (ModuleSource::traits(), i.core("prelude/traits.wado")),
             (ModuleSource::range(), i.core("prelude/range")),

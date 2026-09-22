@@ -176,6 +176,8 @@ impl Value {
             PrimitiveType::F32 | PrimitiveType::F64 => Some(Self::Float { value: 0.0, prim }),
             PrimitiveType::Bool => Some(Self::Bool(false)),
             PrimitiveType::Char => Some(Self::Char('\0')),
+            // A zero half is `0x0000`, which is `+0.0` in both formats.
+            PrimitiveType::F16 | PrimitiveType::Bf16 => Some(Self::Int { value: 0, prim }),
             PrimitiveType::V128 => None,
         }
     }
@@ -570,6 +572,8 @@ fn trunc_to_int(value: f64, target: PrimitiveType) -> Option<u64> {
             .then_some(truncated as u64),
         PrimitiveType::F32
         | PrimitiveType::F64
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
         | PrimitiveType::Bool
         | PrimitiveType::Char
         | PrimitiveType::V128 => panic!("trunc_to_int: non-integer target {target:?}"),

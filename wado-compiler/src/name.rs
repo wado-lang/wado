@@ -9,7 +9,7 @@ use crate::defs::{DefId, DefTable};
 use crate::kiln::InvocationIndex;
 use crate::module_source::{CmNamespace, ModuleSource, ModuleSourceInterner};
 use crate::path::{normalize, relative_path};
-use crate::tir::ResolvedType;
+use crate::tir::{PrimitiveType, ResolvedType};
 use crate::{ast, tir};
 use std::fmt;
 use std::hash::Hash;
@@ -2515,27 +2515,10 @@ pub fn is_builtin_shape_name(name: &str) -> bool {
             None => name,
         }
     }
+    let head = head_of(name);
     name.starts_with('&')
-        || matches!(
-            head_of(name),
-            "i8" | "i16"
-                | "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "v128"
-                | "bool"
-                | "char"
-                | "()"
-                | "!"
-                | "Array"
-                | "[]"
-                | "Fn"
-        )
+        || PrimitiveType::is_primitive_name(head)
+        || matches!(head, "()" | "!" | "Array" | "[]" | "Fn")
 }
 
 /// A receiver name in the form a mangled name may embed, carrying the declaring

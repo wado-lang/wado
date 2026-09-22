@@ -56,9 +56,10 @@ proposed. Lowering one as a `u16` would put a bit pattern on the wire under a
 name that says integer, and no other language's bindings would read it back as
 a float.
 
-So an `export fn` naming either type is a compile error, as it is for `v128`,
-and a WIT emission naming one is refused. A component that wants to carry those
-bytes declares a `list<u16>`.
+So an `export fn` naming either type is a compile error, as it is for `v128`.
+Every `export fn` is checked, not only the one the world names: each one lands
+on the component's surface. A component that wants to carry those bytes declares
+a `list<u16>`.
 
 ### The representation does not wait on the FP16 proposal
 
@@ -110,8 +111,8 @@ impl f16 {
 
 impl From<f16> for f32 { }
 impl From<f16> for f64 { }
-impl TryFrom<f32> for f16 { type Error = PrecisionLoss; }
-impl TryFrom<f64> for f16 { type Error = PrecisionLoss; }
+impl TryFrom<f32> for f16 { type Error = ConvertError; }
+impl TryFrom<f64> for f16 { type Error = ConvertError; }
 ```
 
 `bf16` carries the same set.
@@ -182,23 +183,8 @@ keeps: `f16` has the shorter exponent range, `bf16` the shorter mantissa.
 
 ## Roadmap
 
-1. The unsigned bit accessors. `f32` and `f64` answer and take `u32` / `u64`,
-   and the callers that undid the signedness stop doing so. Finished when no
-   caller in the corpus casts the signedness of a bit pattern.
-2. The primitives. The two types, their `u16` representation, the bit
-   reinterpretations, and the three refusals: arithmetic, `as`, and a component
-   boundary. Finished when a `List<f16>` is the same packed array as a
-   `List<u16>` and an `export fn` naming either type is refused.
-3. The prelude. The exact widening, `to_bits` / `from_bits` / `from_f32`,
-   `Display`, `Inspect`, `From` and `TryFrom`. Finished when the widening
-   agrees with a reference table across zero, subnormals, the extreme normals,
-   the infinities and NaN, for both types.
-4. Serialization. `Serialize` and `Deserialize` for both types, in
-   `core:serde`. Finished when a struct carrying a half precision field round
-   trips through JSON and through CBOR.
-5. The Loam element types. `float16` and `bfloat16` map to the new primitives.
-   Finished when a graph whose input or output is half precision compiles and
-   its tensor prints.
+Nothing outstanding. What the types do not yet reach is in Known gaps, and none
+of it is committed work.
 
 ## Known gaps
 

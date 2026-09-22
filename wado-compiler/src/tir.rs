@@ -310,6 +310,10 @@ pub enum PrimitiveType {
     U64,
     F32,
     F64,
+    /// IEEE 754 binary16. Bits only: Wasm has no half precision instruction.
+    F16,
+    /// The top 16 bits of an `f32`. Bits only, as [`Self::F16`] is.
+    Bf16,
     Bool,
     Char,
     V128,
@@ -330,10 +334,18 @@ impl PrimitiveType {
             Self::U64 => "u64",
             Self::F32 => "f32",
             Self::F64 => "f64",
+            Self::F16 => "f16",
+            Self::Bf16 => "bf16",
             Self::Bool => "bool",
             Self::Char => "char",
             Self::V128 => "v128",
         }
+    }
+
+    /// True for a type that carries bits and no arithmetic: `f16` and `bf16`.
+    #[must_use]
+    pub fn is_half(self) -> bool {
+        matches!(self, Self::F16 | Self::Bf16)
     }
 
     /// The largest value a scalar integer holds; `None` for every other
@@ -349,23 +361,51 @@ impl PrimitiveType {
             Self::U16 => u128::from(u16::MAX),
             Self::U32 => u128::from(u32::MAX),
             Self::U64 => u128::from(u64::MAX),
-            Self::F32 | Self::F64 | Self::Bool | Self::Char | Self::V128 => return None,
+            Self::F32
+            | Self::F64
+            | Self::F16
+            | Self::Bf16
+            | Self::Bool
+            | Self::Char
+            | Self::V128 => return None,
         })
+    }
+
+    /// Every variant. `i128` and `u128` are absent: they are prelude struct
+    /// declarations, which write their own operator impls.
+    pub const ALL: &'static [Self] = &[
+        Self::I8,
+        Self::I16,
+        Self::I32,
+        Self::I64,
+        Self::U8,
+        Self::U16,
+        Self::U32,
+        Self::U64,
+        Self::F32,
+        Self::F64,
+        Self::F16,
+        Self::Bf16,
+        Self::Bool,
+        Self::Char,
+        Self::V128,
+    ];
+
+    /// The primitive `name` spells, `None` for every other name.
+    #[must_use]
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.iter().copied().find(|p| p.as_str() == name)
     }
 
     /// Check if a name is a primitive type name.
     #[must_use]
     pub fn is_primitive_name(name: &str) -> bool {
-        Self::all_primitive_names().contains(&name)
+        Self::from_name(name).is_some()
     }
 
-    /// Every name this enum spells. `i128` and `u128` are absent: they are
-    /// prelude struct declarations, which write their own operator impls.
-    pub fn all_primitive_names() -> &'static [&'static str] {
-        &[
-            "i8", "i16", "i32", "i64", "u8", "u16", "u32", "u64", "f32", "f64", "bool", "char",
-            "v128",
-        ]
+    /// Every name this enum spells.
+    pub fn all_primitive_names() -> Vec<&'static str> {
+        Self::ALL.iter().map(Self::as_str).collect()
     }
 }
 
@@ -943,14 +983,16 @@ impl TypeTable {
     pub const U64: TypeId = TypeId(7);
     pub const F32: TypeId = TypeId(8);
     pub const F64: TypeId = TypeId(9);
-    pub const BOOL: TypeId = TypeId(10);
-    pub const CHAR: TypeId = TypeId(11);
-    pub const V128: TypeId = TypeId(12);
-    pub const UNIT: TypeId = TypeId(13);
-    pub const NEVER: TypeId = TypeId(14);
+    pub const F16: TypeId = TypeId(10);
+    pub const BF16: TypeId = TypeId(11);
+    pub const BOOL: TypeId = TypeId(12);
+    pub const CHAR: TypeId = TypeId(13);
+    pub const V128: TypeId = TypeId(14);
+    pub const UNIT: TypeId = TypeId(15);
+    pub const NEVER: TypeId = TypeId(16);
     // STRING removed - String is now a user-defined struct in core:prelude/string.wado
-    pub const UNKNOWN: TypeId = TypeId(15);
-    pub const ERROR: TypeId = TypeId(16);
+    pub const UNKNOWN: TypeId = TypeId(17);
+    pub const ERROR: TypeId = TypeId(18);
 
     /// The primitive spelling → well-known `TypeId` mapping, the single
     /// source for every by-name primitive resolution. `i128` / `u128` are
@@ -969,6 +1011,8 @@ impl TypeTable {
             "u64" => Some(Self::U64),
             "f32" => Some(Self::F32),
             "f64" => Some(Self::F64),
+            "f16" => Some(Self::F16),
+            "bf16" => Some(Self::BF16),
             "bool" => Some(Self::BOOL),
             "char" => Some(Self::CHAR),
             "v128" => Some(Self::V128),
@@ -1058,6 +1102,8 @@ impl TypeTable {
         table.intern(ResolvedType::Primitive(PrimitiveType::U64));
         table.intern(ResolvedType::Primitive(PrimitiveType::F32));
         table.intern(ResolvedType::Primitive(PrimitiveType::F64));
+        table.intern(ResolvedType::Primitive(PrimitiveType::F16));
+        table.intern(ResolvedType::Primitive(PrimitiveType::Bf16));
         table.intern(ResolvedType::Primitive(PrimitiveType::Bool));
         table.intern(ResolvedType::Primitive(PrimitiveType::Char));
         table.intern(ResolvedType::Primitive(PrimitiveType::V128));
@@ -2787,10 +2833,11 @@ impl TypeTable {
         self.primitive_head(id).is_some()
     }
 
-    /// Whether `id` bottoms out in a primitive Wasm *scalar* — every primitive
-    /// but `v128`, whose arithmetic is known only to the lane type's own impl.
+    /// Whether `id` bottoms out in a primitive that carries Wasm arithmetic.
+    /// `v128`'s belongs to the lane type's own impl, and the half types carry
+    /// none at all.
     pub fn is_scalar_primitive_like(&self, id: TypeId) -> bool {
-        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128)
+        matches!(self.primitive_head(id), Some(p) if p != PrimitiveType::V128 && !p.is_half())
     }
 
     /// Whether a value of this type leaves nothing on the Wasm stack: unit or

@@ -108,8 +108,8 @@ fn lower_to_flat_inner(
                 PrimitiveType::I64 | PrimitiveType::U64 => (TypeTable::I64, cm_abi::CmValType::I64),
                 PrimitiveType::F32 => (TypeTable::F32, cm_abi::CmValType::F32),
                 PrimitiveType::F64 => (TypeTable::F64, cm_abi::CmValType::F64),
-                PrimitiveType::V128 => {
-                    panic!("v128 cannot appear at CM boundary")
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16 => {
+                    panic!("{} cannot appear at CM boundary", p.as_str())
                 }
             };
             let cast_value = if flat_type_id == type_id {

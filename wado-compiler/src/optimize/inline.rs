@@ -78,6 +78,8 @@ fn wasm_shape(type_table: &TypeTable, id: TypeId) -> Option<PrimitiveType> {
         | PrimitiveType::U16
         | PrimitiveType::I32
         | PrimitiveType::U32
+        | PrimitiveType::F16
+        | PrimitiveType::Bf16
         | PrimitiveType::Bool
         | PrimitiveType::Char => Some(PrimitiveType::I32),
         PrimitiveType::I64 | PrimitiveType::U64 => Some(PrimitiveType::I64),

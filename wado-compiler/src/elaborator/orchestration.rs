@@ -3317,48 +3317,32 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                     return type_table.make_type_param(named.name.clone(), index as u32);
                 }
 
-                // Built-in primitives
-                match named.name.as_str() {
-                    "bool" => TypeTable::BOOL,
-                    "char" => TypeTable::CHAR,
-                    "v128" => TypeTable::V128,
-                    "i8" => TypeTable::I8,
-                    "i16" => TypeTable::I16,
-                    "i32" => TypeTable::I32,
-                    "i64" => TypeTable::I64,
-                    "u8" => TypeTable::U8,
-                    "u16" => TypeTable::U16,
-                    "u32" => TypeTable::U32,
-                    "u64" => TypeTable::U64,
-                    "f32" => TypeTable::F32,
-                    "f64" => TypeTable::F64,
-                    "()" => TypeTable::UNIT,
-                    "!" => TypeTable::NEVER,
-                    // `resolve_type_static[_with_params]` runs before the
-                    // elaborator instance exists — including the newtype
-                    // pre-pass (`annotate_modules`), which resolves newtype
-                    // base types *before* `intern_all_decl_types` mints and
-                    // registers struct/variant/enum/resource `TypeId`s. So
-                    // this one cannot reach an identity through a type that
-                    // may not be interned yet: it reads the declaring node
-                    // each registry entry already carries, which is the same
-                    // answer at every point in the bootstrap.
-                    _ => {
-                        let Some(def) = def else {
-                            return TypeTable::UNKNOWN;
-                        };
-                        if lookup.struct_fields_of(def).is_some() {
-                            type_table.make_struct(StructDef::Decl(def))
-                        } else if lookup.resource_type_of(def).is_some() {
-                            type_table.make_resource(def)
-                        } else if lookup.variant_cases_of(def).is_some() {
-                            type_table.make_variant(def)
-                        } else if lookup.enum_cases_of(def).is_some() {
-                            type_table.make_enum(def)
-                        } else {
-                            TypeTable::UNKNOWN
-                        }
-                    }
+                if let Some(primitive) = TypeTable::primitive_by_name(&named.name) {
+                    return primitive;
+                }
+
+                // `resolve_type_static[_with_params]` runs before the
+                // elaborator instance exists — including the newtype
+                // pre-pass (`annotate_modules`), which resolves newtype
+                // base types *before* `intern_all_decl_types` mints and
+                // registers struct/variant/enum/resource `TypeId`s. So
+                // this one cannot reach an identity through a type that
+                // may not be interned yet: it reads the declaring node
+                // each registry entry already carries, which is the same
+                // answer at every point in the bootstrap.
+                let Some(def) = def else {
+                    return TypeTable::UNKNOWN;
+                };
+                if lookup.struct_fields_of(def).is_some() {
+                    type_table.make_struct(StructDef::Decl(def))
+                } else if lookup.resource_type_of(def).is_some() {
+                    type_table.make_resource(def)
+                } else if lookup.variant_cases_of(def).is_some() {
+                    type_table.make_variant(def)
+                } else if lookup.enum_cases_of(def).is_some() {
+                    type_table.make_enum(def)
+                } else {
+                    TypeTable::UNKNOWN
                 }
             }
             Type::Generic(generic) => match generic.name.as_str() {

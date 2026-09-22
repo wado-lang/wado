@@ -626,6 +626,20 @@ impl Serialize for f64 {
     }
 }
 
+// A half goes on the wire as the `f32` it widens to: no format here spells
+// binary16, and every half is exact in `f32`.
+impl Serialize for f16 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f32(f32::from(*self));
+    }
+}
+
+impl Serialize for bf16 {
+    fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
+        return s.serialize_f32(f32::from(*self));
+    }
+}
+
 impl Serialize for bool {
     fn serialize<S: Serializer>(&self, s: &mut S) -> Result<(), SerializeError> {
         return s.serialize_bool(*self);
@@ -801,6 +815,20 @@ impl Deserialize for f32 {
 impl Deserialize for f64 {
     fn deserialize<D: Deserializer>(d: &mut D) -> Result<f64, DeserializeError> {
         return d.deserialize_f64();
+    }
+}
+
+// The wire carries an `f32`, so reading one back rounds. `from_f32` rounds to
+// nearest rather than refusing, which is what an interchange format asks for.
+impl Deserialize for f16 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<f16, DeserializeError> {
+        return Result::Ok(f16::from_f32(d.deserialize_f32()?));
+    }
+}
+
+impl Deserialize for bf16 {
+    fn deserialize<D: Deserializer>(d: &mut D) -> Result<bf16, DeserializeError> {
+        return Result::Ok(bf16::from_f32(d.deserialize_f32()?));
     }
 }
 

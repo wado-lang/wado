@@ -132,6 +132,7 @@ stdlib_table! {
     "core:prelude/fpfmt.wado" => "core/prelude/fpfmt.wado",
     "core:prelude/int128.wado" => "core/prelude/int128.wado",
     "core:prelude/intparse.wado" => "core/prelude/intparse.wado",
+    "core:prelude/half.wado" => "core/prelude/half.wado",
     "core:prelude/primitive.wado" => "core/prelude/primitive.wado",
     "core:prelude/range.wado" => "core/prelude/range.wado",
     "core:prelude/bytes.wado" => "core/prelude/bytes.wado",

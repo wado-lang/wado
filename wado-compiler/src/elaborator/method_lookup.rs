@@ -655,23 +655,10 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         site: Option<AstId>,
         struct_name: &str,
     ) -> ModuleSource {
-        // Primitive impl blocks live in `core:prelude/primitive.wado`. i128 /
-        // u128 are structs in `prelude/int128.wado`, not primitives.
-        if matches!(
-            struct_name,
-            "i8" | "i16"
-                | "i32"
-                | "i64"
-                | "u8"
-                | "u16"
-                | "u32"
-                | "u64"
-                | "f32"
-                | "f64"
-                | "bool"
-                | "char"
-        ) {
-            return ModuleSource::primitive();
+        // i128 / u128 are structs in `prelude/int128.wado`, not primitives, and
+        // `v128`'s methods are in `core:simd`, which answers `None` here.
+        if let Some(module) = ModuleSource::of_primitive_name(struct_name) {
+            return module;
         }
         if let Some(def) = site.map_or_else(
             || self.decl_key_or_local(struct_name),

@@ -275,13 +275,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 .borrow()
                 .nominal_head(base_type_id)
                 .expect("a nominal type names a declaration"),
-            // Primitive types have impl blocks in core:prelude/primitive
-            ResolvedType::Primitive(_) => (
+            // `v128` has no prelude impl block of its own, and lookup finds its
+            // `core:simd` methods by name from this key anyway.
+            ResolvedType::Primitive(prim) => (
                 self.tysys
                     .type_table
                     .borrow()
                     .mangle_type_name(base_type_id),
-                ModuleSource::primitive(),
+                ModuleSource::of_primitive(*prim),
             ),
             // Unit type () has impl blocks in core:prelude/primitive
             ResolvedType::Unit => (

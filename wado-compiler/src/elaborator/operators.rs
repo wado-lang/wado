@@ -222,14 +222,13 @@ impl TypeSystem {
             ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
             ResolvedType::Newtype { base_type, .. } => {
                 let ultimate = tt.representation_head(*base_type);
-                matches!(
-                    tt.get(ultimate),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        // SIMD aliases (`type f32x4 = v128`) — see the
-                        // `Primitive(V128)` arm below.
-                        | ResolvedType::Primitive(PrimitiveType::V128)
-                )
+                match tt.get(ultimate) {
+                    ResolvedType::Struct { .. } | ResolvedType::GenericInstance { .. } => true,
+                    // SIMD aliases (`type f32x4 = v128`) and half aliases —
+                    // see the `Primitive` arm below.
+                    ResolvedType::Primitive(p) => *p == PrimitiveType::V128 || p.is_half(),
+                    _ => false,
+                }
             }
             // Types with no native Wasm binary-op support and no prelude
             // trait impl. Without rejection, codegen emits `ref.eq` /
@@ -251,7 +250,12 @@ impl TypeSystem {
             // lane-wise via the `core:simd` builtins / methods, so reject the
             // scalar operator and route to the requires-trait diagnostic
             // (there is no `Eq`/`Ord`/`Add`/… impl for `v128`).
-            ResolvedType::Primitive(PrimitiveType::V128) => true,
+            // `f16` / `bf16` carry bits and no arithmetic: Wasm has no half
+            // precision instruction, and the `u16` they lower to would add two
+            // bit patterns. Widen to `f32` to compute.
+            ResolvedType::Primitive(
+                PrimitiveType::V128 | PrimitiveType::F16 | PrimitiveType::Bf16,
+            ) => true,
             // `()` pushes nothing, so the `i32.eq` below it underflows the
             // stack; its `Eq` / `Ord` are the prelude's impls for `()`, and
             // the other operators have none. `Never` is deliberately absent:

@@ -221,6 +221,53 @@ fn agrees_with_target(ty: TypeId, target: TypeId) -> bool {
     ty == target || ty == TypeTable::NEVER
 }
 
+/// The reason a cast naming `f16` or `bf16` is refused, or `None` where the
+/// cast is legal or names neither.
+///
+/// `as` converts a value everywhere else, and a half carries bits, so the two
+/// meanings are kept apart: bits go through `to_bits` / `from_bits` and values
+/// through `From` / `TryFrom` (WEP 2026-09-22). The one legal cast is the one
+/// every type has, between a newtype and the type it wraps.
+fn half_cast_hint(tt: &TypeTable, source: TypeId, target: TypeId) -> Option<String> {
+    let source_prim = tt.primitive_head(source);
+    let target_prim = tt.primitive_head(target);
+    let source_half = source_prim.is_some_and(PrimitiveType::is_half);
+    let target_half = target_prim.is_some_and(PrimitiveType::is_half);
+    let half = match (source_prim, target_prim) {
+        (Some(p), _) if p.is_half() => p.as_str(),
+        (_, Some(p)) if p.is_half() => p.as_str(),
+        _ => return None,
+    };
+    if tt.representation_head(source) == tt.representation_head(target) {
+        return None;
+    }
+    Some(if source_half && target_half {
+        "neither direction is exact: `f16` has the shorter exponent range and \
+         `bf16` the shorter mantissa"
+            .to_string()
+    } else if source_half {
+        if tt.is_float(target) {
+            format!(
+                "`as` does not convert `{half}`; use `{}::from(x)`",
+                tt.type_name(target)
+            )
+        } else if tt.is_integer(target) {
+            format!("`as` converts a value; use `to_bits()` to read the bits of `{half}`")
+        } else {
+            format!("`{half}` converts only through `to_bits()` and `From`")
+        }
+    } else if tt.is_float(source) {
+        format!(
+            "`as` does not convert to `{half}`; use `{half}::from_f32(x)` to round or \
+             `{half}::try_from(x)` to require an exact value"
+        )
+    } else if tt.is_integer(source) {
+        format!("`as` converts a value; use `{half}::from_bits(x)` to reinterpret the bits")
+    } else {
+        format!("`{half}` is built only by `from_bits`, `from_f32` and `try_from`")
+    })
+}
+
 /// A struct-literal field as the body walk knows it: the name it was written
 /// under, its declared position, and the type its value resolved to.
 pub(super) struct ResolvedField {
@@ -3492,6 +3539,21 @@ impl<H: CompilerHost> Elaborator<'_, H> {
 
         if source_type == TypeTable::ERROR {
             return TypeTable::ERROR;
+        }
+
+        let half_cast = {
+            let tt = self.tysys.type_table.borrow();
+            half_cast_hint(&tt, source_type, target_type)
+                .map(|hint| (tt.type_name(source_type), tt.type_name(target_type), hint))
+        };
+        if let Some((from, to, hint)) = half_cast {
+            let _ = self.emit(TypeError::InvalidCast {
+                from,
+                to,
+                hint,
+                span: cast.span,
+            });
+            return target_type;
         }
 
         // Every coercion above declined, so nothing relates these two: `as`
