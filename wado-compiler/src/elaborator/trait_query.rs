@@ -2782,10 +2782,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             } else {
                 vec![type_arg]
             };
-            for bound in &param.bounds.clone() {
-                if bound.fn_signature.is_some() {
-                    continue;
-                }
+            for bound in &param.real_bounds() {
                 let written = self
                     .tysys
                     .bound_written(bound)

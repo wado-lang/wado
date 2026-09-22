@@ -599,19 +599,19 @@ receiver.
 What `Self` means is three facts, not one: the type it stands for, the trait
 whose declaration names what is projected off it, and the bindings that trait's
 `impl` wrote. `Self::Assoc` needs all three, so a frame is installed whole or
-not at all — one that carries a receiver without its trait answers `Self` and
-leaves `Self::Assoc` unresolved, and one that keeps the enclosing walk's
-bindings answers it off the type it was standing on before.
+not at all. A frame carrying a receiver without its trait answers `Self` and
+leaves `Self::Assoc` unresolved. One that keeps the enclosing walk's bindings
+answers it off the type that walk was standing on.
 
 A free function declares no `Self`. A bound there that writes one is rejected at
 the declaration, naming the type parameter to write instead, at every position: a
 trait argument, and an associated-type constraint nested under one.
 
-A bound the trait solver's lowering cannot state — `O: Uses<Self::Item>`, whose
-argument is a projection it has no name for — narrows what can be answered about
-`O` alone. The frame is otherwise intact, so a question standing on any other
-type is answered as it would be without the bound. Declining the whole frame
-instead takes down every receiver in reach of the declaration.
+Some bounds the trait solver's lowering cannot state. `O: Uses<Self::Item>` is
+one: the argument is a projection it has no name for. Such a bound narrows what
+can be answered about `O` alone, and the rest of the frame stands. A question
+about any other type is answered as it would be without the bound. Declining the
+whole frame instead takes down every receiver the declaration reaches.
 
 Fixtures: `supertrait_binding_keeps_writer_frame.wado`,
 `bound_self_projection_in_trait_method.wado`,
@@ -830,4 +830,3 @@ names no instantiation, so the scrutinee's argument has nothing to disagree with
 What this admits is a body whose parameter is bound, at the instantiation being
 compiled, to a type the scrutinee's argument contradicts. The pattern is taken
 as matching, and nothing later rejects it.
-

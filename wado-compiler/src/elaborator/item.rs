@@ -860,17 +860,10 @@ impl<H: CompilerHost> TypeParamScope<'_, '_, H> {
             next_slot += 1;
         }
 
-        // Bind the trait's own type parameters to the impl's concrete trait
-        // args so that references like `T` inside a default method body resolve
-        // to the impl's instantiation (e.g., `impl Maker<i32> for IntMaker`
-        // binds the trait's `T` to `i32`). Impl type params were registered
-        // above, so `Maker<Container<U>>` in `impl<U> Maker<Container<U>> for
-        // Foo<U>` resolves correctly.
-        // The trait this block implements qualifies `Self::Assoc` inside the
-        // signatures of the defaults it inherits, where `Self` is concrete and
-        // carries no bound to read the declaring trait off. Established with the
-        // target and before the binding below, since the bounds that binding
-        // pins mean this `Self`, both halves of it.
+        // `Self` is established before the trait's parameters, whose bounds pin
+        // it, and after the impl's own, which `Maker<Container<U>>` names. Its
+        // trait comes off the header: a concrete `Self` carries no bound to read
+        // one from, and the defaults it inherits qualify `Self::Assoc` by it.
         let implementing = SelfBinding {
             type_id: self.resolve_type(impl_type),
             declaring_trait: trait_type.and_then(|t| {
@@ -1577,28 +1570,23 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
     ) -> (TypeParamScope<'_, 'a, H>, TypeId, u32) {
         let mut scope = self.enter_inherited_type_param_scope();
         scope.annotate_ctx.trait_ctx.type_params.clear();
-        scope.annotate_ctx.trait_ctx.assoc_type_bindings.clear();
 
         let self_slot = scope
             .tysys
             .type_table
             .borrow_mut()
             .make_type_param("Self".to_string(), 0);
-        // With the slot, since `Self::Assoc` inside the declaration means this
-        // trait's name. Left to the enclosing walk it would mean whatever that
-        // was implementing.
+        // Before the parameters, since each one's bounds pin the `Self` they
+        // mean, and `Self::Assoc` inside the declaration means this trait's
+        // name rather than whatever the enclosing walk was implementing.
         let declaring = SelfBinding {
             type_id: self_slot,
             declaring_trait: scope.tysys.resolutions.defs().of_ast_id(trait_decl.id),
         };
         scope.set_self_binding(declaring);
-        scope
-            .annotate_ctx
-            .trait_ctx
-            .type_params
-            .insert("Self".to_string(), BinderInScope::undeclared(0, self_slot));
-        scope.annotate_ctx.trait_ctx.type_param_bounds.insert(
-            "Self".to_string(),
+        scope.bind_param(
+            "Self",
+            BinderInScope::undeclared(0, self_slot),
             vec![ScopedBound::new(
                 ast::TraitBound {
                     // The trait's own declaration node, which the resolution walk
@@ -1615,7 +1603,6 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                 Some(declaring),
             )],
         );
-        // Before the parameters, so each one's bounds pin the `Self` they mean.
         let next_slot = scope.register_generic_params(&trait_decl.type_params, 1);
         (scope, self_slot, next_slot)
     }

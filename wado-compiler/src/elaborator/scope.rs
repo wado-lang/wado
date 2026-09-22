@@ -535,7 +535,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
         for scoped in bounds {
             let bound = &scoped.bound;
             self.merge_bound(&mut out, bound, None, scoped.scope(), known);
-            if bound.fn_signature.is_some() {
+            if !bound.names_a_trait() {
                 continue;
             }
             let Some(root) = self.bound_decl(bound, known) else {
@@ -576,7 +576,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
             inherited: inherited.clone(),
             self_type,
         };
-        if bound.fn_signature.is_some() {
+        if !bound.names_a_trait() {
             if !out
                 .iter()
                 .any(|(b, _)| b.bound.name == bound.name && b.bound.id == bound.id)
