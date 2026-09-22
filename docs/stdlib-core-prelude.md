@@ -642,10 +642,10 @@ Converts a value of type `T` into `Self`.
 
 ### `pub trait TryFrom<T> with ()`
 
-Fallible conversion trait.
-Returns `Result<Self, Self::Error>` so callers can handle conversion failures.
+Fallible conversion trait. `Err: Error`, so a caller reaching the failure
+through the bound can always report its reason.
 
-#### `fn try_from(value: T) -> Result<Self, Self::Error>`
+#### `fn try_from(value: T) -> Result<Self, Self::Err>`
 
 Attempts to convert a value of type `T` into `Self`.
 
