@@ -98,6 +98,7 @@ modules while tuples follow TypeScript.
 - `package-gale-highlight-wado` - A complete `Wado.g4` and a syntax highlighter for Wado source code, built with `package-gale`.
 - `package-jade` - A JSON Schema 2020-12 validator in Wado.
 - `package-marl` - A CommonMark subset in Wado.
+- `package-loam` - A tensor compiler in Wado: an ONNX graph becomes Wado source, shapes checked at build time.
 - `package-cm-catalog/` - A catalog of Wasm Component Model modules for demo and testing purposes.
 - `vendor/` — reference specs and runtimes, as git submodules.
 

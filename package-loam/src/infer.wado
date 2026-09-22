@@ -7,7 +7,7 @@ use { Axis, ExtentConflict, Shape } from "./shape.wado";
 use { Dim, Graph, Node, Rank, ValueInfo } from "./onnx_text.wado";
 use { Schema } from "./schema.wado";
 
-/// A tensor the schema does not reach. Geas does not fall back to positional
+/// A tensor the schema does not reach. Loam does not fall back to positional
 /// axes, for the same reason stage 0 does not fall back to a runtime check.
 pub struct UnnamedTensor {
     pub tensor: String,
@@ -50,7 +50,7 @@ pub struct OperandCountConflict {
     pub needed: i32,
 }
 
-/// Every operator Geas carries produces one value, so a node naming any other
+/// Every operator Loam carries produces one value, so a node naming any other
 /// number of outputs has nowhere to put them.
 pub struct OutputCountConflict {
     pub node: String,
@@ -302,7 +302,7 @@ fn binary_operands(node: &Node, shapes: &TreeMap<String, Shape>) -> Result<[Shap
     ]);
 }
 
-/// A graph that reached Geas has run once already, so a short operand list is
+/// A graph that reached Loam has run once already, so a short operand list is
 /// a hand-edited file rather than an exporter's output. It still reports.
 fn arity(node: &Node, needed: i32) -> Result<(), InferError> {
     if node.inputs.len() >= needed {

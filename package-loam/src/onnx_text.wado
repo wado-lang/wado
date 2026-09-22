@@ -130,7 +130,7 @@ fn read_value_info(s: &onnx::CstStore, toks: &onnx::TokenStream, vi: i32) -> Res
     let Some(tensor) = first_child_of_kind(s, type_node, onnx::RK_TENSOR_TYPE) else {
         return Result::Err(`${name}: only a tensor type is read, not a sequence or a map`);
     };
-    // Geas takes its weights from the checkpoint the invocation names, so
+    // Loam takes its weights from the checkpoint the invocation names, so
     // dropping this would leave a tensor whose data came from nowhere.
     if has_external_data(s, vi) {
         return Result::Err(
