@@ -11,10 +11,9 @@ oracle: `package-loam/conformance/` runs the generated kernels against the same
 inputs and compares. `light/` holds one larger model, read by the protobuf
 reader's own tests rather than compiled.
 
-These are committed rather than read out of `vendor/onnx`, which is a submodule
-and absent wherever one is not initialized. A file an import names has to be
-there for the module to compile, so a test that reads the submodule is a build
-failure rather than a skipped test.
+These are committed rather than read out of the `vendor/onnx` submodule, which
+is absent wherever it is not initialized. The Loam WEP says why under the
+conformance suite.
 
 To take a new model, copy it and its `test_data_set_0/` under the same upstream
 path and update this file's commit if it moved. `scripts/sync-vendor.sh` updates
