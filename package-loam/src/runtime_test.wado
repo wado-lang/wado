@@ -116,9 +116,8 @@ test "widening and narrowing keep a value f16 holds exactly" {
     assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
     assert wide.extents == half.extents;
 
-    // `f16` has no `Eq`, so the round trip is compared where it is wide.
     let back: Tensor<f16, [Row, Col]> = narrow(&wide);
-    assert widen(&back).data == wide.data;
+    assert back.data == half.data;
 }
 
 test "bf16 widens and narrows over the same axes" {
@@ -135,5 +134,5 @@ test "bf16 widens and narrows over the same axes" {
     assert wide.data == [0.5, -2.0, 3.0] as List<f32>;
 
     let back: Tensor<bf16, [Row, Col]> = narrow(&wide);
-    assert widen(&back).data == wide.data;
+    assert back.data == half.data;
 }

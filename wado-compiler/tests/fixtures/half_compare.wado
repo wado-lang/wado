@@ -1,0 +1,39 @@
+// `Eq`, `Ord` and `Default` for binary16 and bfloat16. Each answers what f32
+// answers for the widened value, so a NaN is equal to nothing and the two
+// zeroes are equal to each other — neither of which comparing bits would give.
+
+export fn run() {
+    assert f16::from_f32(1.0) == f16::from_f32(1.0);
+    assert f16::from_f32(1.0) != f16::from_f32(2.0);
+    // The two zeroes differ in every bit that matters and are one value.
+    assert f16::from_bits(0x0000) == f16::from_bits(0x8000);
+    // A NaN equals nothing, itself included, and its bits are its own.
+    assert f16::from_bits(0x7E00) != f16::from_bits(0x7E00);
+    assert !(f16::from_bits(0x7E00) == f16::from_bits(0x7E00));
+
+    assert f16::from_f32(1.0) < f16::from_f32(2.0);
+    assert f16::from_f32(-2.0) < f16::from_f32(-1.0);
+    assert f16::from_f32(65504.0) < f16::from_bits(0x7C00);
+    assert f16::from_f32(2.0) >= f16::from_f32(2.0);
+
+    let mut xs: List<f16> = [f16::from_f32(3.0), f16::from_f32(-1.0), f16::from_f32(2.0)];
+    xs.sort();
+    assert xs == [f16::from_f32(-1.0), f16::from_f32(2.0), f16::from_f32(3.0)] as List<f16>;
+
+    assert f16::default().to_bits() == 0x0000;
+    assert f16::default() == f16::from_f32(0.0);
+
+    assert bf16::from_f32(1.0) == bf16::from_f32(1.0);
+    assert bf16::from_bits(0x0000) == bf16::from_bits(0x8000);
+    assert bf16::from_bits(0x7FC0) != bf16::from_bits(0x7FC0);
+    assert bf16::from_f32(1.0) < bf16::from_f32(2.0);
+    assert bf16::default().to_bits() == 0x0000;
+
+    // A struct with a half field derives what its fields have.
+    struct Scale { gain: f16 = f16::from_bits(0x3C00), bias: bf16 }
+    assert Scale { gain: f16::from_f32(1.0), bias: bf16::default() }
+        == Scale { gain: f16::from_bits(0x3C00), bias: bf16::from_f32(0.0) };
+}
+
+__DATA__
+{}

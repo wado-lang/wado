@@ -199,6 +199,7 @@ i128, u128
 
 // half precision: storage only, no arithmetic and no `as` cast.
 // Bits via `to_bits` / `from_bits`, values via `From` / `TryFrom` / `from_f32`.
+// `==` and `<` answer what f32 answers for the widened value.
 f16, bf16
 
 // Composites

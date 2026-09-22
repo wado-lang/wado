@@ -2073,6 +2073,16 @@ impl Ord for () {
     }
 }
 
+/// All 128 bits equal. The lane-typed aliases are all the same `v128`, so
+/// there is no lane type whose own equality this could defer to, and a float
+/// lane's NaN is a bit pattern here rather than a value. Compare as `f32x4`
+/// where the IEEE reading is the one wanted.
+impl Eq for v128 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return builtin::i8x16_all_true(builtin::i8x16_eq(*self, *other));
+    }
+}
+
 /// Debug representation for the raw 128-bit SIMD register: 32 hex digits,
 /// most-significant lane first. The lane-typed aliases are all the same `v128`,
 /// so no canonical lane interpretation exists to print.

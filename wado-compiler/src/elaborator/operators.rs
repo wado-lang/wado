@@ -228,6 +228,20 @@ impl TypeSystem {
         }
     }
 
+    /// The receiver a primitive's own `Eq` / `Ord` impl attaches to, where the
+    /// operator has no Wasm instruction to lower to: the half types and
+    /// `v128`. `head` is `operand`'s representation head, so an alias
+    /// (`type f32x4 = v128`) reaches the impl its base writes. Every other
+    /// primitive lowers natively and must not be routed through a call.
+    fn primitive_op_receiver(&self, operand: TypeId, head: TypeId) -> Option<String> {
+        if !self.binop_operand_requires_trait(operand) {
+            return None;
+        }
+        let tt = self.type_table.borrow();
+        matches!(tt.get(head), ResolvedType::Primitive(_))
+            .then(|| tt.fq_base_type_name(head).into_string())
+    }
+
     /// Whether a binary operator on `type_id` needs a trait impl. Either
     /// operand answering true means no primitive instruction can carry it.
     fn binop_operand_requires_trait(&self, type_id: TypeId) -> bool {
@@ -394,19 +408,27 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                             .into_string(),
                     )
                 }
+                ResolvedType::Primitive(_) => self.tysys.primitive_op_receiver(left, left),
                 // No written impl answers, so the derivation the representation
                 // carries does — named by that head, not by one peel, which on a
                 // chain (`type B = A; type A = Point`) lands on another newtype.
                 ResolvedType::Newtype { base_type, .. } => {
+                    let ultimate = self
+                        .tysys
+                        .type_table
+                        .borrow()
+                        .representation_head(*base_type);
                     let tt = self.tysys.type_table.borrow();
-                    let ultimate = tt.representation_head(*base_type);
                     match tt.get(ultimate) {
                         ResolvedType::Struct { .. }
                         | ResolvedType::GenericInstance { .. }
                         | ResolvedType::Variant { .. } => {
                             Some(tt.fq_base_type_name(ultimate).into_string())
                         }
-                        _ => None,
+                        _ => {
+                            drop(tt);
+                            self.tysys.primitive_op_receiver(left, ultimate)
+                        }
                     }
                 }
                 _ => None,

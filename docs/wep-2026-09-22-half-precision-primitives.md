@@ -40,11 +40,19 @@ compiler knows their representation as it knows `v128`'s: a `u16` in every
 position. A `List<f16>` is the same packed array as a `List<u16>`, and a struct
 field of either packs the same way.
 
-They carry no arithmetic today. `+`, the bitwise operators and the comparisons
-are all rejected, on the same path that rejects them for `v128`. Neither caller
-computes in half precision, and Wasm has no instruction to lower an operator to.
-Whether Wado grows half precision arithmetic later is open; nothing decided here
-forecloses it.
+They carry no arithmetic today. `+` and the bitwise operators are rejected, on
+the same path that rejects them for `v128`. Neither caller computes in half
+precision, and Wasm has no instruction to lower an operator to. Whether Wado
+grows half precision arithmetic later is open; nothing decided here forecloses
+it.
+
+The comparisons are the exception, and they are not arithmetic. `Eq`, `Ord` and
+`Default` are written in `core:prelude/half.wado`, and each answers what `f32`
+answers for the widened value. Widening is exact, so that is a complete rule
+rather than a convention to remember: a NaN equals nothing, the two zeroes are
+one value, and both readings differ from what comparing the bits would give.
+Since Wasm has no half comparison either, the operator dispatches to the impl
+the way a struct's does, which is the one place a primitive does so.
 
 `bf16` is kept rather than converted to `f16` on load. That conversion is the
 one lossy direction, because bf16 has f32's exponent range and f16 does not,
@@ -187,11 +195,10 @@ of it is committed work.
 No arithmetic, so every computation widens to `f32` and narrows again to store.
 A generic body bounded on `Add` cannot be instantiated at either type.
 
-No `Eq` or `Ord`. `==` on a half is a compile error, and so is one on a struct
-carrying a half field, since the derivation needs the field's own `Eq`.
-Comparing either means widening to `f32` first. A bitwise comparison would not
-answer the question a float comparison asks: it says `-0.0` differs from `+0.0`,
-and that a NaN equals itself.
+A comparison widens both operands and calls, where `f32`'s is one instruction.
+The bits decide every case on their own — equal bits are equal values unless
+both are NaN, and different bits are different values unless both are zero — so
+an implementation that never widens exists. Nothing measured has asked for it.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.

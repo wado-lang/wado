@@ -1,0 +1,33 @@
+// `==` on a `v128` is all 128 bits equal. There is no lane type to defer to —
+// every lane-typed alias is the same `v128` — so a float lane's NaN is a bit
+// pattern here and equals itself, which no IEEE comparison would say.
+
+use { f32x4, i32x4 } from "core:simd";
+
+export fn run() {
+    let a = builtin::i32x4_splat(10);
+    let b = builtin::i32x4_splat(10);
+    let c = builtin::i32x4_splat(11);
+
+    assert a == b;
+    assert a != c;
+    // One lane differing is enough, which `i8x16.all_true` over the byte-wise
+    // comparison is what gives.
+    assert builtin::i32x4_replace_lane(3, a, 11) != a;
+
+    // The bits decide, so a NaN lane equals itself here.
+    let nan = builtin::f32x4_splat(f32::NAN);
+    assert nan == nan;
+    // And the two zeroes differ, which `f32x4::eq` lane-wise would not say.
+    assert builtin::f32x4_splat(0.0) != builtin::f32x4_splat(-0.0);
+
+    // A lane-typed alias is a newtype over `v128` and inherits the comparison.
+    let x: i32x4 = a as i32x4;
+    let y: i32x4 = b as i32x4;
+    assert x == y;
+    let z: f32x4 = nan as f32x4;
+    assert z == z;
+}
+
+__DATA__
+{}

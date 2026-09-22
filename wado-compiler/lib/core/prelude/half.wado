@@ -3,7 +3,7 @@
 //! `f16` and `bf16`: half precision as an interchange format, bits and no
 //! arithmetic. See [WEP: Half-Precision Primitives](../../../../docs/wep-2026-09-22-half-precision-primitives.md).
 
-use { ConvertError, Display, From, Inspect, TryFrom } from "core:prelude/traits.wado";
+use { ConvertError, Default, Display, Eq, From, Inspect, Ord, Ordering, TryFrom } from "core:prelude/traits.wado";
 use { Formatter } from "core:prelude/format.wado";
 use { Result } from "core:prelude/types.wado";
 
@@ -199,6 +199,45 @@ impl TryFrom<f64> for bf16 {
             return Result::Ok(half);
         }
         return Result::Err(ConvertError::new("value is not exact in bf16"));
+    }
+}
+
+// Every comparison is f32's on the widened value. Widening is exact, so this
+// is the only reading that agrees with what `Display` prints: a NaN equals
+// nothing and the two zeroes are one value, neither of which the bits give.
+impl Eq for f16 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return f32::from(*self) == f32::from(*other);
+    }
+}
+
+impl Eq for bf16 {
+    pub fn eq(&self, other: &Self) -> bool {
+        return f32::from(*self) == f32::from(*other);
+    }
+}
+
+impl Ord for f16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return f32::from(*self).cmp(&f32::from(*other));
+    }
+}
+
+impl Ord for bf16 {
+    pub fn cmp(&self, other: &Self) -> Ordering {
+        return f32::from(*self).cmp(&f32::from(*other));
+    }
+}
+
+impl Default for f16 {
+    pub fn default() -> f16 {
+        return f16::from_bits(0);
+    }
+}
+
+impl Default for bf16 {
+    pub fn default() -> bf16 {
+        return bf16::from_bits(0);
     }
 }
 
