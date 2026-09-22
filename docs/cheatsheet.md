@@ -1730,6 +1730,8 @@ let sig = to_bytes_canonical(&p);            // deterministic, for COSE/CWT
 
 ### Other core modules
 
+- [`core:protobuf`](./stdlib-core-protobuf.md) — the Protocol Buffers wire
+  format, keyed by `#[wire(number = N)]`
 - [`core:json_nsd`](./stdlib-core-json_nsd.md) — non-self-describing JSON
 - [`core:args`](./stdlib-core-args.md) — command-line argument parsing via serde
 - [`core:value`](./stdlib-core-value.md) — dynamic, format-agnostic value

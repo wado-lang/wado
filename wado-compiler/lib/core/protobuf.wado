@@ -1,8 +1,18 @@
 #![stdlib("core:protobuf")]
 //! Protocol Buffers over `core:serde`: the wire format, and nothing of
-//! `.proto`. See [WEP: Grog](../../../docs/wep-2026-09-22-grog.md).
+//! `.proto`. See `docs/wep-2026-09-22-grog.md`.
 
 use {
+    DEFAULT_MAX_DEPTH,
+    Deserialize,
+    DeserializeError,
+    DeserializeMap,
+    DeserializeSeq,
+    DeserializeStruct,
+    DeserializeVariant,
+    Deserializer,
+    DuplicateKeyPolicy,
+    FieldSchema,
     Serialize,
     SerializeError,
     SerializeErrorKind,
@@ -11,8 +21,29 @@ use {
     SerializeStruct,
     SerializeVariant,
     Serializer,
+    Visitor,
     WireNumbered,
+    deeper,
 } from "core:serde";
+
+#[synopsis]
+test {
+    struct Point {
+        #[wire(number = 1)]
+        x: i32 = 0,
+        #[wire(number = 2)]
+        y: i32 = 0,
+    }
+
+    let Ok(bytes) = to_bytes(&Point { x: 1, y: 150 }) else {
+        panic("the message did not encode");
+    };
+    let Ok(back) = from_bytes::<Point, ByteList>(bytes) else {
+        panic("the message did not decode");
+    };
+    assert back.x == 1;
+    assert back.y == 150;
+}
 
 /// What follows a tag, as the wire format numbers them.
 pub enum WireType {
@@ -611,4 +642,402 @@ pub fn to_bytes<T: Serialize + WireNumbered>(value: &T) -> Result<ByteList, Seri
     value.serialize::<WriteSerializer>(&mut write_pass)?;
     assert out.next == out.sizes.len();
     return Result::Ok(out.buf);
+}
+
+// ── Decoding ──
+
+fn undecodable<S: AsStrSlice>(what: S, offset: i32) -> DeserializeError {
+    return DeserializeError::unexpected_type(`protobuf cannot decode ${what}`, offset as i64);
+}
+
+/// The bytes, the region the current message ends at, and what the last tag
+/// said follows it.
+struct ProtobufReader {
+    input: ByteSlice,
+    pos: i32,
+    end: i32,
+    pending: Option<WireType>,
+    /// End of the packed-repeated run being read, or `-1` outside one.
+    packed_end: i32,
+    number: i32,
+    depth: i32,
+    max_depth: i32,
+}
+
+impl ProtobufReader {
+    fn varint(&mut self) -> Result<u64, DeserializeError> {
+        let Some([value, next]) = read_varint(&self.input, self.pos) else {
+            return Result::Err(DeserializeError::malformed("truncated varint", self.pos as i64));
+        };
+        if next > self.end {
+            return Result::Err(DeserializeError::malformed("varint runs past the message", self.pos as i64));
+        }
+        self.pos = next;
+        return Result::Ok(value);
+    }
+
+    /// Where a length-delimited record ends, leaving `pos` at its first byte.
+    fn read_len(&mut self) -> Result<i32, DeserializeError> {
+        if !self.pending matches { Some(Len) } {
+            return Result::Err(DeserializeError::unexpected_type(
+                "a length-delimited field",
+                self.pos as i64,
+            ));
+        }
+        let len = self.varint()? as i32;
+        let stop = self.pos + len;
+        if len < 0 || stop > self.end {
+            return Result::Err(DeserializeError::malformed("length runs past the message", self.pos as i64));
+        }
+        return Result::Ok(stop);
+    }
+
+    fn read_region(&mut self) -> Result<[i32, i32], DeserializeError> {
+        let stop = self.read_len()?;
+        let start = self.pos;
+        self.pos = stop;
+        return Result::Ok([start, stop]);
+    }
+
+    /// A scalar under a `LEN` tag is a packed repeated run, and this is where
+    /// that run is entered. Reading one scalar, the field is not repeated and
+    /// the tag is its own.
+    fn enter_packed(&mut self) -> Result<(), DeserializeError> {
+        if self.packed_end < 0 && self.pending matches { Some(Len) } {
+            self.packed_end = self.read_len()?;
+        }
+        return Result::Ok(());
+    }
+
+    fn scalar_varint(&mut self) -> Result<u64, DeserializeError> {
+        self.enter_packed()?;
+        return self.varint();
+    }
+
+    fn scalar_fixed32(&mut self) -> Result<u32, DeserializeError> {
+        self.enter_packed()?;
+        let Some([value, next]) = read_fixed32(&self.input, self.pos) else {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        };
+        if next > self.end {
+            return Result::Err(DeserializeError::malformed("fixed32 runs past the message", self.pos as i64));
+        }
+        self.pos = next;
+        return Result::Ok(value);
+    }
+
+    fn scalar_fixed64(&mut self) -> Result<u64, DeserializeError> {
+        self.enter_packed()?;
+        let Some([value, next]) = read_fixed64(&self.input, self.pos) else {
+            return Result::Err(DeserializeError::eof(self.pos as i64));
+        };
+        if next > self.end {
+            return Result::Err(DeserializeError::malformed("fixed64 runs past the message", self.pos as i64));
+        }
+        self.pos = next;
+        return Result::Ok(value);
+    }
+
+    /// The next tag's field number and wire type, without consuming it.
+    fn peek_tag(&mut self) -> Result<Option<[i32, WireType, i32]>, DeserializeError> {
+        if self.pos >= self.end {
+            return Result::Ok(null);
+        }
+        let at = self.pos;
+        let tag = self.varint()?;
+        let after = self.pos;
+        self.pos = at;
+        let Some(wire_type) = WireType::from_bits((tag & 7) as i32) else {
+            return Result::Err(DeserializeError::malformed("unknown wire type", at as i64));
+        };
+        return Result::Ok(Option::Some([(tag >> 3) as i32, wire_type, after]));
+    }
+}
+
+pub struct ProtobufDeserializer {
+    de: &mut ProtobufReader,
+}
+
+pub struct PbSeqAccess {
+    de: &mut ProtobufReader,
+    number: i32,
+    first: bool,
+}
+
+pub struct PbStructAccess {
+    de: &mut ProtobufReader,
+    outer_end: i32,
+    outer_depth: i32,
+}
+
+pub struct PbMapAccess {
+    de: &mut ProtobufReader,
+}
+
+pub struct PbVariantAccess {
+    de: &mut ProtobufReader,
+}
+
+impl DeserializeSeq for PbSeqAccess {
+    fn next_element<T: Deserialize>(&mut self) -> Result<Option<T>, DeserializeError> {
+        if self.de.packed_end >= 0 {
+            if self.de.pos >= self.de.packed_end {
+                self.de.packed_end = -1;
+                self.de.pending = null;
+                return Result::Ok(null);
+            }
+        } else if !self.first {
+            // Unpacked: the run continues only while the next tag repeats this
+            // field's number.
+            let Some([number, wire_type, after]) = self.de.peek_tag()? else {
+                return Result::Ok(null);
+            };
+            if number != self.number {
+                return Result::Ok(null);
+            }
+            self.de.pos = after;
+            self.de.pending = Option::Some(wire_type);
+        }
+        self.first = false;
+        let mut de = ProtobufDeserializer { de: self.de };
+        let value = T::deserialize(&mut de)?;
+        return Result::Ok(Option::Some(value));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+impl DeserializeMap for PbMapAccess {
+    fn next_key_string(&mut self) -> Result<Option<String>, DeserializeError> {
+        return Result::Err(undecodable("a map", self.de.pos));
+    }
+
+    fn next_value<V: Deserialize>(&mut self) -> Result<V, DeserializeError> {
+        return Result::Err(undecodable("a map", self.de.pos));
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Err(undecodable("a map", self.de.pos));
+    }
+}
+
+impl DeserializeVariant for PbVariantAccess {
+    fn variant_name(&mut self) -> Result<String, DeserializeError> {
+        return Result::Err(undecodable("a variant case name", self.de.pos));
+    }
+
+    fn disc(&mut self) -> Result<i32, DeserializeError> {
+        let raw = self.de.scalar_varint()?;
+        return Result::Ok(raw as i64 as i32);
+    }
+
+    fn payload<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        return Result::Err(undecodable("a variant case with a payload", self.de.pos));
+    }
+
+    fn is_unit(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(true);
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        return Result::Ok(());
+    }
+}
+
+/// The index a field number reaches, or `-1` for a number the type does not
+/// declare, which the derived body then skips. `null` ends the message.
+impl DeserializeStruct for PbStructAccess {
+    fn next_field<S: FieldSchema>(&mut self) -> Result<Option<i32>, DeserializeError> {
+        let Some([number, wire_type, after]) = self.de.peek_tag()? else {
+            return Result::Ok(null);
+        };
+        self.de.pos = after;
+        self.de.pending = Option::Some(wire_type);
+        self.de.number = number;
+        return Result::Ok(Option::Some(match S::by_number(number) {
+            Some(index) => index,
+            None => -1,
+        }));
+    }
+
+    fn value<T: Deserialize>(&mut self) -> Result<T, DeserializeError> {
+        let mut de = ProtobufDeserializer { de: self.de };
+        return T::deserialize(&mut de);
+    }
+
+    fn skip(&mut self) -> Result<(), DeserializeError> {
+        match self.de.pending {
+            Some(WireType::Varint) => {
+                self.de.varint()?;
+            },
+            Some(WireType::Fixed32) => {
+                self.de.scalar_fixed32()?;
+            },
+            Some(WireType::Fixed64) => {
+                self.de.scalar_fixed64()?;
+            },
+            Some(WireType::Len) => {
+                self.de.read_region()?;
+            },
+            None => {
+                return Result::Err(DeserializeError::malformed("no field to skip", self.de.pos as i64));
+            },
+        }
+        self.de.pending = null;
+        return Result::Ok(());
+    }
+
+    fn end(&mut self) -> Result<(), DeserializeError> {
+        if self.de.pos != self.de.end {
+            return Result::Err(DeserializeError::trailing(self.de.pos as i64));
+        }
+        self.de.end = self.outer_end;
+        self.de.depth = self.outer_depth;
+        self.de.pending = null;
+        return Result::Ok(());
+    }
+}
+
+impl Deserializer for ProtobufDeserializer {
+    type SeqAccess = PbSeqAccess;
+    type MapAccess = PbMapAccess;
+    type StructAccess = PbStructAccess;
+    type VariantAccess = PbVariantAccess;
+
+    fn deserialize_i32(&mut self) -> Result<i32, DeserializeError> {
+        let raw = self.de.scalar_varint()?;
+        return Result::Ok(raw as i64 as i32);
+    }
+
+    fn deserialize_i64(&mut self) -> Result<i64, DeserializeError> {
+        let raw = self.de.scalar_varint()?;
+        return Result::Ok(raw as i64);
+    }
+
+    fn deserialize_u32(&mut self) -> Result<u32, DeserializeError> {
+        let raw = self.de.scalar_varint()?;
+        return Result::Ok(raw as u32);
+    }
+
+    fn deserialize_u64(&mut self) -> Result<u64, DeserializeError> {
+        return self.de.scalar_varint();
+    }
+
+    fn deserialize_i128(&mut self) -> Result<i128, DeserializeError> {
+        return Result::Err(undecodable("an i128", self.de.pos));
+    }
+
+    fn deserialize_u128(&mut self) -> Result<u128, DeserializeError> {
+        return Result::Err(undecodable("a u128", self.de.pos));
+    }
+
+    fn deserialize_f32(&mut self) -> Result<f32, DeserializeError> {
+        let raw = self.de.scalar_fixed32()?;
+        return Result::Ok(f32::from_bits(raw as i32));
+    }
+
+    fn deserialize_f64(&mut self) -> Result<f64, DeserializeError> {
+        let raw = self.de.scalar_fixed64()?;
+        return Result::Ok(f64::from_bits(raw as i64));
+    }
+
+    fn deserialize_bool(&mut self) -> Result<bool, DeserializeError> {
+        let raw = self.de.scalar_varint()?;
+        return Result::Ok(raw != 0);
+    }
+
+    fn deserialize_char(&mut self) -> Result<char, DeserializeError> {
+        return Result::Err(undecodable("a char", self.de.pos));
+    }
+
+    fn deserialize_string(&mut self) -> Result<String, DeserializeError> {
+        let at = self.de.pos;
+        let [start, stop] = self.de.read_region()?;
+        let mut out = String::with_capacity(stop - start);
+        if let Err(_) = out.push_utf8(&self.de.input.slice(start, stop)) {
+            return Result::Err(DeserializeError::invalid_value("a string field is not UTF-8", at as i64));
+        }
+        return Result::Ok(out);
+    }
+
+    fn deserialize_bytes(&mut self) -> Result<ByteList, DeserializeError> {
+        let [start, stop] = self.de.read_region()?;
+        let mut out = ByteList::with_capacity(stop - start);
+        out.extend_from_slice(self.de.input.slice(start, stop) as Slice<u8>);
+        return Result::Ok(out);
+    }
+
+    /// Protobuf has no null. A field the wire left out never reaches here, so
+    /// what does reach it is present.
+    fn is_null(&mut self) -> Result<bool, DeserializeError> {
+        return Result::Ok(false);
+    }
+
+    /// The last occurrence of a non-repeated field wins, which is what the
+    /// specification says a reader must do.
+    fn on_duplicate_key(&self) -> DuplicateKeyPolicy {
+        return DuplicateKeyPolicy::PassThru;
+    }
+
+    fn begin_seq(&mut self) -> Result<PbSeqAccess, DeserializeError> {
+        return Result::Ok(PbSeqAccess {
+            de: self.de,
+            number: self.de.number,
+            first: true,
+        });
+    }
+
+    fn begin_map(&mut self) -> Result<PbMapAccess, DeserializeError> {
+        return Result::Err(undecodable("a map", self.de.pos));
+    }
+
+    fn begin_struct<S: AsStrSlice>(&mut self, name: S, num_fields: i32) -> Result<PbStructAccess, DeserializeError> {
+        let outer_end = self.de.end;
+        let outer_depth = self.de.depth;
+        if self.de.pending matches { Some(_) } {
+            self.de.end = self.de.read_len()?;
+            self.de.depth = deeper(self.de.depth, self.de.max_depth, self.de.pos as i64)?;
+        }
+        self.de.pending = null;
+        return Result::Ok(PbStructAccess {
+            de: self.de,
+            outer_end,
+            outer_depth,
+        });
+    }
+
+    fn begin_variant<S: AsStrSlice>(
+        &mut self,
+        type_name: S,
+        num_cases: i32,
+    ) -> Result<PbVariantAccess, DeserializeError> {
+        return Result::Ok(PbVariantAccess { de: self.de });
+    }
+
+    fn deserialize_any<V: Visitor>(&mut self, visitor: &mut V) -> Result<V::Value, DeserializeError> {
+        return Result::Err(undecodable("a value of unknown type", self.de.pos));
+    }
+}
+
+/// A message from protobuf bytes. A field the type does not declare is
+/// skipped, and its bytes are not kept.
+pub fn from_bytes<T: Deserialize + WireNumbered, S: AsByteSlice>(
+    input: S,
+    max_depth: i32 = DEFAULT_MAX_DEPTH,
+) -> Result<T, DeserializeError> {
+    let bytes = input.as_byte_slice();
+    let mut reader = ProtobufReader {
+        input: bytes,
+        pos: 0,
+        end: bytes.len(),
+        pending: null,
+        packed_end: -1,
+        number: 0,
+        depth: 0,
+        max_depth,
+    };
+    let mut de = ProtobufDeserializer { de: &mut reader };
+    return T::deserialize(&mut de);
 }

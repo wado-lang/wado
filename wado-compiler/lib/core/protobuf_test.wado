@@ -1,5 +1,6 @@
 use {
     WireType,
+    from_bytes,
     to_bytes,
     read_fixed32,
     read_fixed64,
@@ -14,7 +15,7 @@ use {
     zigzag_64,
 } from "core:protobuf";
 
-use { Serialize, WireNumbered } from "core:serde";
+use { Deserialize, Serialize, WireNumbered } from "core:serde";
 
 fn hex(bytes: &ByteList) -> String {
     let mut out = "";
@@ -190,4 +191,94 @@ test "the fixed-width and absent field forms" {
 
 test "a negative int32 is sign-extended to ten bytes" {
     assert encode(&Test1 { a: -1 }) == "08" + "ffffffffffffffffff01";
+}
+
+fn decode<T: Deserialize + WireNumbered>(bytes: ByteList) -> T {
+    let Ok(value) = from_bytes::<T, ByteList>(bytes) else {
+        panic("the message did not decode");
+    };
+    return value;
+}
+
+test "the specification's own bytes decode to the message they describe" {
+    assert decode::<Test1>(b"\x08\x96\x01").a == 150;
+    assert decode::<Test2>(b"\x12\x07testing").b == "testing";
+    assert decode::<Test3>(b"\x1a\x03\x08\x96\x01").c.a == 150;
+}
+
+test "a packed repeated field is one length-delimited run" {
+    struct Packed {
+        #[wire(number = 4)]
+        items: List<i32> = [],
+    }
+
+    // The specification's own example: field 4 holding 3, 270 and 86942.
+    let m = decode::<Packed>(b"\x22\x06\x03\x8e\x02\x9e\xa7\x05");
+    assert m.items.len() == 3;
+    assert m.items[0] == 3;
+    assert m.items[1] == 270;
+    assert m.items[2] == 86942;
+}
+
+test "a message round-trips through both passes" {
+    struct Inner {
+        #[wire(number = 1)]
+        label: String = "",
+        #[wire(number = 2)]
+        weight: f64 = 0.0,
+    }
+
+    struct Outer {
+        #[wire(number = 1)]
+        name: String = "",
+        #[wire(number = 2)]
+        counts: List<i64> = [],
+        #[wire(number = 3)]
+        children: List<Inner> = [],
+        #[wire(number = 4)]
+        raw: ByteList = b"",
+        #[wire(number = 5)]
+        flag: bool = false,
+    }
+
+    let original = Outer {
+        name: "model",
+        counts: [1, -2, 300],
+        children: [
+            Inner { label: "a", weight: 0.5 },
+            Inner { label: "b", weight: -1.25 },
+        ],
+        raw: b"\x00\xff",
+        flag: true,
+    };
+    let Ok(bytes) = to_bytes(&original) else {
+        panic("the message did not encode");
+    };
+    let back = decode::<Outer>(bytes);
+
+    assert back.name == "model";
+    assert back.counts.len() == 3;
+    assert back.counts[1] == -2;
+    assert back.children.len() == 2;
+    assert back.children[1].label == "b";
+    assert back.children[1].weight == -1.25;
+    assert back.raw.len() == 2;
+    assert back.raw[1] == 255;
+    assert back.flag;
+}
+
+test "a field the type does not declare is skipped" {
+    struct Narrow {
+        #[wire(number = 2)]
+        b: String = "",
+    }
+
+    // Field 1 is a varint and field 3 a submessage; neither is declared.
+    let m = decode::<Narrow>(b"\x08\x96\x01\x12\x07testing\x1a\x03\x08\x96\x01");
+    assert m.b == "testing";
+}
+
+test "a truncated message is an error, not a trap" {
+    assert from_bytes::<Test1, ByteList>(b"\x08\x96") matches { Err(_) };
+    assert from_bytes::<Test3, ByteList>(b"\x1a\x08\x08\x96\x01") matches { Err(_) };
 }
