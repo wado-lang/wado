@@ -10,7 +10,7 @@ Supports `http`, `https`, `ws`, and `wss` schemes.
 ## Synopsis
 
 ```wado
-assert Url::parse("https://wado.dev/docs?q=synopsis") matches { Ok(url) && url.scheme == "https"
+assert Url::from_str("https://wado.dev/docs?q=synopsis") matches { Ok(url) && url.scheme == "https"
     && url.host == "wado.dev"
     && url.path == "/docs"
     && url.query_get("q") matches { Some(v) && v == "synopsis" } };
@@ -83,11 +83,6 @@ The query string without the leading "?". None if absent.
 
 The fragment without the leading "#". None if absent.
 
-#### `pub fn parse<S: AsStrSlice>(input: S) -> Result<Url, ParseError>`
-
-Parses a URL string. Only special schemes (http, https, ws, wss)
-are accepted.
-
 #### `pub fn from_parts<S: AsStrSlice, S1: AsStrSlice>(scheme: S, authority: S1, path_with_query: Option<String>, fragment: Option<String>) -> Url`
 
 Constructs a Url from its scheme, authority, path-with-query, and
@@ -144,6 +139,10 @@ Computed from the raw query string to preserve duplicate keys.
 #### `pub fn with_query_pairs(&self, params: TreeMap<String, String>) -> Url`
 
 Returns a new Url with the query string replaced by the given params.
+
+#### `impl FromStr for Url`
+
+##### `fn from_str<S: AsStrSlice>(input: S) -> Result<Url, ParseError>`
 
 #### `impl Display for Url`
 
