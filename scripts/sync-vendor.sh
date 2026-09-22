@@ -53,7 +53,7 @@ fi
 
 # --- Other vendors: update to latest ---
 
-for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-model vendor/antlr4 vendor/wasi-webgpu vendor/protobuf-spec; do
+for submodule in vendor/wasm vendor/wasi vendor/wasm-tools vendor/component-model vendor/antlr4 vendor/wasi-webgpu vendor/protobuf-spec vendor/onnx; do
     echo ""
     echo "==> Updating ${submodule} to latest"
     git submodule update --init --remote "${submodule}"
