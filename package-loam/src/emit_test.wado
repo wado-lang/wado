@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 use { EmitError, emit } from "./emit.wado";
 use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
@@ -400,44 +399,4 @@ test "a constant is not a value a graph can return" {
     }).unwrap_err();
 
     assert `${e}` == "C: a graph cannot return a constant";
-||||||| ed4d10a1b35
-=======
-use { emit, UnmappedDtype } from "./emit.wado";
-use { infer } from "./infer.wado";
-use { read } from "./onnx_text.wado";
-use { LayoutRule, Schema } from "./schema.wado";
-
-/// Every tensor on one axis, so a graph here differs only in its dtype.
-fn one_axis_schema() -> Schema {
-    let mut layout: List<LayoutRule> = [];
-    for let tensor of ["X", "W", "Y"] {
-        layout.push(LayoutRule {
-            pattern: tensor,
-            axes: ["Batch"],
-        });
-    }
-    return Schema { layout };
-}
-
-fn generate(dtype: String) -> Result<String, UnmappedDtype> {
-    let source = `agraph (${dtype}[2] X, ${dtype}[2] W) => (${dtype}[2] Y) {
-        Y = Add(X, W)
-    }`;
-    let graph = read(&source).unwrap();
-    assert graph.inputs[0].dtype == dtype;
-    let shapes = infer(&graph, &one_axis_schema()).unwrap();
-    return emit(&graph, &shapes);
-}
-
-test "a half precision boundary tensor names the Wado type" {
-    assert generate("float16").unwrap().contains("Tensor<f16, [Batch]>");
-}
-
-test "bfloat16 names itself too" {
-    assert generate("bfloat16").unwrap().contains("Tensor<bf16, [Batch]>");
-}
-
-test "a dtype Wado has no name for is a build error" {
-    assert generate("uint8") matches { Err(e) && e.dtype == "uint8" };
->>>>>>> origin/main
 }
