@@ -3559,11 +3559,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             // A type parameter is only settled by monomorphization, and `!`
             // converts to anything.
             let source_base = tt.representation_head(source_type);
-            let source_settled = !matches!(
-                tt.get(source_base),
-                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_) | ResolvedType::Never
-            );
-            (is_aggregate(source_type) || (source_settled && is_aggregate(target_type)))
+            let source_judged_here = !tt.is_wide_int(source_type)
+                && !matches!(
+                    tt.get(source_base),
+                    ResolvedType::TypeParam { .. }
+                        | ResolvedType::InferVar(_)
+                        | ResolvedType::Never
+                );
+            (is_aggregate(source_type) || (source_judged_here && is_aggregate(target_type)))
                 && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
