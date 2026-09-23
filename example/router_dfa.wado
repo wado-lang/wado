@@ -119,7 +119,7 @@ impl DfaRouter {
             }
             // Try literal first via byte-range binary search (no allocation).
             // On miss fall back to param, then wildcard.
-            let target = bsearch_target_by_bytes(&self.states[state].literals, &view.sub_unchecked(pos, end));
+            let target = bsearch_target_by_bytes(&self.states[state].literals, &view.slice_unchecked(pos, end));
             if target >= 0 {
                 state = target;
             } else if self.states[state].param_target >= 0 {

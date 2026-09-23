@@ -160,9 +160,9 @@ impl Formatter {
             // Zero padding goes after the sign, so the value reads as one
             // figure: `-0000042`, never `0000-42`.
             let sign_len = leading_sign_byte_len(view, 0, view.len());
-            self.buf.push_str(view.sub_unchecked(0, sign_len));
+            self.buf.push_str(view.slice_unchecked(0, sign_len));
             self.write_char_n('0', padding);
-            self.buf.push_str(view.sub_unchecked(sign_len, view.len()));
+            self.buf.push_str(view.slice_unchecked(sign_len, view.len()));
             return;
         }
         let align = self.align;
@@ -412,7 +412,7 @@ fn pad_text<S: AsStrSlice>(f: &mut Formatter, text: S) {
         return;
     }
     let view = text.as_str_slice();
-    f.pad(view.sub_unchecked(0, view.char_prefix_end(f.precision)));
+    f.pad(view.slice_unchecked(0, view.char_prefix_end(f.precision)));
 }
 
 impl Display for String {

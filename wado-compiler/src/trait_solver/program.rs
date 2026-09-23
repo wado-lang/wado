@@ -248,6 +248,9 @@ pub struct TraitDef {
     /// supertrait's methods are not among them: an implementor writes a
     /// separate impl for each trait.
     pub methods: Vec<MethodId>,
+    /// The names it declares `#[unavailable]`. A call reaches one only where no
+    /// method answers, so it can say why rather than make the call ambiguous.
+    pub reserved: Vec<MethodId>,
     /// The bounds it declares on each associated type (`type Item: Display`),
     /// which a [`SolverType::Projection`] of it satisfies.
     pub assoc_bounds: IndexMap<AssocId, Vec<TraitDeclId>>,

@@ -97,6 +97,16 @@ and receives the reason rather than falling through to "no method named". It
 is excluded from everything else. It never satisfies a trait requirement, and
 it never reaches codegen.
 
+On a trait, it is not a requirement either: no impl owes it. Every type that
+implements the trait answers to the name, whether a call names the type or
+reaches it through a bound, and whether the method takes a receiver or not.
+Where another of its traits has a method by that name and kind, the call
+reaches that method: a reserved name answers only where no method of its kind
+does. A method whose trait the call site has not imported answers nothing
+there, so it does not displace an imported reservation. Through a bound the
+call does not tell the kinds apart, so a reserved static beside an instance
+method of the same name is an ambiguity, as two methods are.
+
 ### Placement
 
 Module-level `fn`, `impl` method, and trait method. Writing it anywhere else is

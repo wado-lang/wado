@@ -1739,6 +1739,7 @@ impl<'a, H: CompilerHost> Elaborator<'a, H> {
                         .body
                         .as_ref()
                         .map(|_| std::rc::Rc::new(method.clone())),
+                    is_reserved: method.unavailable_attr().is_some(),
                 },
             );
         }
