@@ -1461,13 +1461,13 @@ fn _parse_tree__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     p.expect(TK_SEP, &EMPTY_SYNC);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_STAR {
-        p.expect(TK_STAR, &EMPTY_SYNC);
+        p.take();
     } else if grp_kind == TK_LBRACE {
-        p.expect(TK_LBRACE, &SYNC_0);
-        p.expect(TK_ID, &SYNC_1);
+        p.take();
+        p.expect(TK_ID, &SYNC_0);
         p.expect(TK_RBRACE, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
     }
     return;
 }
@@ -1501,7 +1501,7 @@ fn _parse_tree__inner(p: &mut Parser, follow: i64 = 0) -> () {
     p.no_viable(
         "no alternative of tree matches",
         p.peek_span(),
-        &EXPECTED_3,
+        &EXPECTED_2,
     );
     return;
 }
@@ -1518,7 +1518,7 @@ fn _parse_tree(p: &mut Parser, follow: i64 = 0) -> () {
 }
 
 fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_ID, &SYNC_4);
+    p.expect(TK_ID, &SYNC_3);
     loop {
         if p.recovering { break; }
         if follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) { break; }
@@ -1540,7 +1540,7 @@ fn _parse_path__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
-        p.expect(TK_SEP, &SYNC_0);
+        p.expect(TK_SEP, &SYNC_4);
         p.expect(TK_ID, &EMPTY_SYNC);
     }
     return;
@@ -1622,11 +1622,11 @@ fn _kind_set_0(k: i32) -> bool {
 }
 
 global EMPTY_SYNC: List<i32> = [];
-global SYNC_0: List<i32> = [1];
-global SYNC_1: List<i32> = [16];
-global EXPECTED_2: List<i32> = [TK_LBRACE, TK_STAR];
-global EXPECTED_3: List<i32> = [TK_ID, TK_SEP];
-global SYNC_4: List<i32> = [2];
+global SYNC_0: List<i32> = [16];
+global EXPECTED_1: List<i32> = [TK_LBRACE, TK_STAR];
+global EXPECTED_2: List<i32> = [TK_ID, TK_SEP];
+global SYNC_3: List<i32> = [2];
+global SYNC_4: List<i32> = [1];
 
 global FOLLOW_SETS: List<List<i32>> = [[64], [2], [12]];
 global FOLLOW_MASK_0: i64 = 1;

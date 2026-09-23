@@ -2885,7 +2885,7 @@ fn _parse_expression__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.expect(TK_LIT_LPAREN, &EMPTY_SYNC);
                 _parse_expression(p, 0);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
-                    p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                    p.take();
                     _parse_expression(p, 0);
                 }
                 p.expect(TK_LIT_RPAREN, &EMPTY_SYNC);

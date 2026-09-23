@@ -1470,12 +1470,12 @@ fn _parse_primary(p: &mut Parser) -> () {
 fn _parse_closure__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_PIPEPIPE {
-        p.expect(TK_PIPEPIPE, &EMPTY_SYNC);
+        p.take();
     } else if grp_kind == TK_PIPE {
-        p.expect(TK_PIPE, &SYNC_1);
+        p.take();
         p.expect(TK_PIPE, &EMPTY_SYNC);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
     }
     _parse_expr(p);
     return;
@@ -1570,6 +1570,5 @@ fn _kind_set_1(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_INT, TK_PIPE, TK_PIPEPIPE];
-global SYNC_1: List<i32> = [4];
-global EXPECTED_2: List<i32> = [TK_PIPE, TK_PIPEPIPE];
+global EXPECTED_1: List<i32> = [TK_PIPE, TK_PIPEPIPE];
 

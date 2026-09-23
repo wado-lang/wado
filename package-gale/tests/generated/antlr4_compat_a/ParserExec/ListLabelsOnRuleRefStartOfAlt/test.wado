@@ -1547,7 +1547,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     _parse_expression(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 3);
                 }
                 while !p.recovering && ((p.peek_kind() == TK_AND) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    p.expect(TK_AND, &EMPTY_SYNC);
+                    p.take();
                     _parse_expression(p, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 3);
                 }
                 p.b.finish_node(p.last_end());
@@ -1565,7 +1565,7 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0, min_prec: i32 = 0) 
                     _parse_expression(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 2);
                 }
                 while !p.recovering && ((p.peek_kind() == TK_OR) && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    p.expect(TK_OR, &EMPTY_SYNC);
+                    p.take();
                     _parse_expression(p, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 2);
                 }
                 p.b.finish_node(p.last_end());

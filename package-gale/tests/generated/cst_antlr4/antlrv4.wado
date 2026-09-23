@@ -6338,9 +6338,9 @@ fn _parse_predicate_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     if grp_kind == TK_ACTION {
         _parse_action_block(p);
     } else if grp_kind == TK_INT {
-        p.expect(TK_INT, &EMPTY_SYNC);
+        p.take();
     } else if grp_kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_26);
     }
@@ -7013,9 +7013,9 @@ fn _parse_element_option__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     if _kind_set_1(grp_kind) {
         _parse_qualified_identifier(p, follow);
     } else if grp_kind == TK_STRING_LITERAL {
-        p.expect(TK_STRING_LITERAL, &EMPTY_SYNC);
+        p.take();
     } else if grp_kind == TK_INT {
-        p.expect(TK_INT, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_41);
     }

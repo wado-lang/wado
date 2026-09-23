@@ -1337,12 +1337,12 @@ impl Parser {
 fn _parse_tok__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_A {
-        p.expect(TK_A, &EMPTY_SYNC);
+        p.take();
         if !p.speculating {
              p.emit("a") 
         }
     } else if grp_kind == TK_B {
-        p.expect(TK_B, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }
@@ -1370,7 +1370,7 @@ fn _parse_gated__inner(p: &mut Parser) -> () {
              p.emit("x") 
         }
     } else if grp_kind == TK_B {
-        p.expect(TK_B, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
     }

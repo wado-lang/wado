@@ -1414,7 +1414,7 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
     let expression = _parse_expression(p);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_LIT_then {
-        let lit_then = p.expect(TK_LIT_then, &SYNC_1);
+        let lit_then = p.take();
         loop {
             if p.recovering { break; }
             let mut rep_scan_pos: i32 = -1;
@@ -1499,12 +1499,12 @@ fn _parse_if_statement__inner(p: &mut Parser) -> () {
         if p.peek_kind() == TK_LIT_a {
             let else_statement = _parse_else_statement(p);
         }
-        let lit_end = p.expect(TK_LIT_end, &SYNC_2);
+        let lit_end = p.expect(TK_LIT_end, &SYNC_1);
         let lit_if = p.expect(TK_LIT_if, &EMPTY_SYNC);
     } else if grp_kind == TK_LIT_a {
         let executable_statement = _parse_executable_statement(p);
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_3);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
     }
     return;
 }
@@ -1521,7 +1521,7 @@ fn _parse_if_statement(p: &mut Parser) -> () {
 }
 
 fn _parse_else_if_statement__inner(p: &mut Parser, follow: i64 = 0) -> () {
-    p.expect(TK_LIT_else, &SYNC_2);
+    p.expect(TK_LIT_else, &SYNC_1);
     p.expect(TK_LIT_if, &SYNC_0);
     _parse_expression(p);
     p.expect(TK_LIT_then, &SYNC_0);
@@ -1688,9 +1688,8 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 global EMPTY_SYNC: List<i32> = [];
 global SYNC_0: List<i32> = [64];
-global SYNC_1: List<i32> = [112];
-global SYNC_2: List<i32> = [4];
-global EXPECTED_3: List<i32> = [TK_LIT_a, TK_LIT_then];
+global SYNC_1: List<i32> = [4];
+global EXPECTED_2: List<i32> = [TK_LIT_a, TK_LIT_then];
 
 global FOLLOW_SETS: List<List<i32>> = [];
 

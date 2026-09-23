@@ -1448,7 +1448,7 @@ fn _parse_nongreedy__inner(p: &mut Parser) -> () {
         if grp_kind == TK_A && (pred_2(p)) {
             p.expect(TK_A, &EMPTY_SYNC);
         } else if grp_kind == TK_B {
-            p.expect(TK_B, &EMPTY_SYNC);
+            p.take();
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_0);
         }
@@ -1532,7 +1532,7 @@ fn _parse_list_label(p: &mut Parser) -> () {
 fn _parse_nested__inner(p: &mut Parser) -> () {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_A {
-        p.expect(TK_A, &SYNC_1);
+        p.take();
         if !p.speculating {
             if !( false ) {
                 p.no_viable("failed semantic predicate", p.peek_span(), &EMPTY_SYNC);
@@ -1541,9 +1541,9 @@ fn _parse_nested__inner(p: &mut Parser) -> () {
         }
         p.expect(TK_B, &EMPTY_SYNC);
     } else if grp_kind == TK_C {
-        p.expect(TK_C, &EMPTY_SYNC);
+        p.take();
     } else {
-        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_2);
+        p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_1);
     }
     return;
 }
@@ -1593,7 +1593,7 @@ fn _parse_solo_star__inner(p: &mut Parser) -> () {
         }
         if rep_scan_pos < 0 { break; }
         if !((p.peek_kind() == TK_A && (pred_5(p)))) { break; }
-        p.expect(TK_A, &SYNC_1);
+        p.expect(TK_A, &SYNC_2);
         p.expect(TK_B, &EMPTY_SYNC);
     }
     p.expect(TK_A, &EMPTY_SYNC);
@@ -1655,7 +1655,7 @@ fn _parse_shape_opt__inner(p: &mut Parser) -> () {
     p.no_viable(
         "no alternative of shape_opt matches",
         p.peek_span(),
-        &EXPECTED_2,
+        &EXPECTED_1,
     );
     return;
 }
@@ -1807,7 +1807,7 @@ fn _kind_set_0(k: i32) -> bool {
 
 global EMPTY_SYNC: List<i32> = [];
 global EXPECTED_0: List<i32> = [TK_A, TK_B];
-global SYNC_1: List<i32> = [2];
-global EXPECTED_2: List<i32> = [TK_A, TK_C];
+global EXPECTED_1: List<i32> = [TK_A, TK_C];
+global SYNC_2: List<i32> = [2];
 global SYNC_3: List<i32> = [16];
 

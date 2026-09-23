@@ -1897,7 +1897,7 @@ fn _parse_expr__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                 p.atn_ret_pending = 47;
                 _parse_expr(p, 0);
                 while !p.recovering && (p.peek_kind() == TK_LIT_COMMA) {
-                    p.expect(TK_LIT_COMMA, &EMPTY_SYNC);
+                    p.take();
                     p.atn_ret_pending = 56;
                     _parse_expr(p, 0);
                 }

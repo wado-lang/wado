@@ -927,6 +927,33 @@ ID : [a-z]+ ;
     assert !str_contains(&body, "p.expect(TK_LIT_DOT"), body;
 }
 
+test "a prefix operator set takes the token its arm tested" {
+    let input = "grammar T;
+s : e EOF ;
+e : e '*' e | ('-' | '!') e | ID ;
+ID : [a-z]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, "fn _parse_e__inner_atom(");
+    assert body.len() > 0, output;
+    assert !str_contains(&body, "p.expect_set("), body;
+}
+
+test "a group arm takes the token its branch tested" {
+    let input = "grammar T;
+s : (A B | C D) e EOF ;
+e : e '*' e | e (X | Y Z) | e (Q ID)? '!' | ID ;
+A : 'a' ; B : 'b' ; C : 'c' ; D : 'd' ; X : 'x' ; Y : 'y' ; Z : 'z' ; Q : 'q' ;
+ID : [e-p]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    for let kind of ["TK_A", "TK_C", "TK_Y", "TK_Q"] {
+        assert !str_contains(&output, `p.expect(${kind},`), output;
+    }
+}
+
 test "an element is bound only where an action reads it" {
     let input = "grammar T;
 options { language = Wado; }

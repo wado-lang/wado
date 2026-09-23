@@ -3692,7 +3692,8 @@ fn gen_alt_elements(
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, &mut name_counts, GroupEntry::Required);
+            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
+            gen_op_group(w, g_op, elem, ctx, &mut name_counts, GroupEntry::Required, null, &proven);
         } else {
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
@@ -3748,7 +3749,8 @@ fn gen_elements_with_non_greedy(
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
-            gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required);
+            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
+            gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required, null, &proven);
         } else {
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
@@ -3989,9 +3991,9 @@ fn gen_op_leaf(
 // Mirrors `cst_gen`'s emitter but against the builder-appending Parser, whose
 // match methods recover in place (infallible) instead of returning `Result`.
 
-fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>) {
-    for let op of ops {
-        gen_op(w, op, ctx, nc);
+fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>, proven_first: &List<String> = &EMPTY_SYNC) {
+    for let mut i = 0; i < ops.len(); i += 1 {
+        gen_op(w, &ops[i], ctx, nc, if i == 0 { proven_first } else { &EMPTY_SYNC });
     }
 }
 
@@ -4039,7 +4041,7 @@ fn gen_group_body(
         return;
     }
     if g.alts.len() == 1 {
-        gen_ops(w, &g.alts[0].ops, ctx, nc);
+        gen_ops(w, &g.alts[0].ops, ctx, nc, proven);
         return;
     }
     gen_alt_dispatch(w, &g.alts, &g.scan_group.alts, &g.dispatch, ctx, nc, decided);
@@ -4092,7 +4094,8 @@ fn gen_alt_dispatch(
         open_decision_branch(w, &branches, i, "_gk", ctx);
         let picked = &branches[i].alts;
         if picked.len() == 1 {
-            gen_ops(w, &alt_by_index(alts, picked[0]).ops, ctx, nc);
+            let proven = if decision_is_unconditional(&branches) { [] as List<String> } else { admits_kinds(&branches[i].test) };
+            gen_ops(w, &alt_by_index(alts, picked[0]).ops, ctx, nc, &proven);
         } else {
             let winner = gen_scan_winner_tournament(w, picked, scan_alts, ctx, nc);
             gen_alt_commit(w, alts, picked, &winner, ctx, nc);
@@ -4926,7 +4929,7 @@ fn gen_op_dispatch_element(
             };
             gen_op_repeat(w, rep, rep_op, ctx, name_counts);
         },
-        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required),
+        Group(g_op) => gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required, null, proven),
         ListLabel(ll) => gen_op_list_label(w, ll, elem, ctx, name_counts),
     }
 }
@@ -5728,6 +5731,7 @@ fn gen_op_group(
     name_counts: &mut List<[String, i32]>,
     entry: GroupEntry,
     decided: Option<String> = null,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     // Scalar `name=(a | b | …)` lowers via `rebind_op_field` so the
     // resulting op is `Op::Group` even though the surface element is
@@ -5740,7 +5744,7 @@ fn gen_op_group(
     let entry = open_group_entry(w, elem, ctx, entry);
     if let Group(g_elem) = peel_scalar_label(elem) {
         return match &g_op.shape {
-            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts),
+            TokenOnly(to) => gen_consume_token_group_op(w, to, &g_elem.alternatives, ctx, name_counts, proven),
             SingleAlt(_) => gen_consume_single_alt_group_op(
                 w,
                 &g_op.alts[0],
@@ -5748,6 +5752,7 @@ fn gen_op_group(
                 ctx,
                 name_counts,
                 &([] as List<String>),
+                proven,
             ),
             SimpleCst(_) => gen_rule_ref_group(
                 w,
@@ -5789,6 +5794,7 @@ fn gen_op_group(
                     name_counts,
                     &([] as List<String>),
                     &alt.actions,
+                    proven,
                 );
                 ctx.leave_group_body(outer);
             },
@@ -7834,7 +7840,8 @@ fn gen_group_dispatch(
         } else {
             w.else_begin(`else if ${render_branch_cond(&branches[g], &grp_var, ctx)}`);
         }
-        gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts);
+        let proven = if last_takes_rest { [] as List<String> } else { admits_kinds(&branches[g].test) };
+        gen_group_branch_body(w, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts, &proven);
     }
     if let Some(slot) = nullable_else {
         // Its own arm above still runs it for the tokens it selects; this one
@@ -7921,12 +7928,13 @@ fn gen_group_branch_body(
     kind: GroupBranchKind,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     if group.len() == 1 {
         let alt_index = group[0];
         match kind {
             RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
-            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx, name_counts),
+            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx, name_counts, proven),
         }
         return;
     }
@@ -8049,6 +8057,7 @@ fn gen_general_alt_parse_and_store(
     alt_index: i32,
     ctx: &mut GenContext,
     name_counts: &mut List<[String, i32]>,
+    proven: &List<String> = &EMPTY_SYNC,
 ) {
     let alt = &alts[alt_index];
 
@@ -8056,7 +8065,7 @@ fn gen_general_alt_parse_and_store(
     // An alt-initial predicate in here selects this alternative, so one the
     // dispatch could not gate must be reported rather than guarded inline.
     let outer = ctx.enter_group_body(true);
-    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>), &alt.actions);
+    gen_elements_with_non_greedy(w, &alt.elements, &body.ops, ctx, &mut nc, &([] as List<String>), &alt.actions, proven);
     ctx.leave_group_body(outer);
 }
 

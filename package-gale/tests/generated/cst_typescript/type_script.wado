@@ -13147,7 +13147,7 @@ fn _parse_optional_parameter__inner(p: &mut Parser, follow: i64 = 0) -> () with 
     _parse_identifier_or_pattern(p);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_QuestionMark {
-        p.expect(TK_QuestionMark, &SYNC_17);
+        p.take();
         if p.peek_kind() == TK_Colon && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
             _parse_type_annotation(p, follow);
         }
@@ -15536,7 +15536,7 @@ fn _parse_import_default(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptP
 fn _parse_import_namespace__inner(p: &mut Parser, follow: i64 = 0) -> () with TypeScriptParserBase {
     let grp_kind = p.peek_kind();
     if grp_kind == TK_Multiply {
-        p.expect(TK_Multiply, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_8(grp_kind) {
         _parse_identifier_name(p);
     } else {
@@ -17059,11 +17059,11 @@ fn _parse_function_declaration__inner(p: &mut Parser, follow: i64 = 0) -> () wit
     _parse_call_signature(p, FOLLOW_MASK_41);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
-        p.expect(TK_OpenBrace, &SYNC_27);
+        p.take();
         _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
     } else if grp_kind == TK_SemiColon {
-        p.expect(TK_SemiColon, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_26);
     }
@@ -17388,11 +17388,11 @@ fn _parse_property_member_declaration__inner_alt_1(p: &mut Parser, follow: i64 =
     _parse_call_signature(p, FOLLOW_MASK_41);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_OpenBrace {
-        p.expect(TK_OpenBrace, &SYNC_27);
+        p.take();
         _parse_function_body(p, (FOLLOW_MASK_7 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
         p.expect(TK_TemplateCloseBrace, &EMPTY_SYNC);
     } else if grp_kind == TK_SemiColon {
-        p.expect(TK_SemiColon, &EMPTY_SYNC);
+        p.take();
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_26);
     }

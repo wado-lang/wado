@@ -28671,7 +28671,7 @@ fn _parse_imports__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, FOLLOW_MASK_2);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
@@ -28721,7 +28721,7 @@ fn _parse_imports__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, FOLLOW_MASK_2);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
@@ -28768,7 +28768,7 @@ fn _parse_imports__inner_alt_2(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, FOLLOW_MASK_2);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
@@ -28812,7 +28812,7 @@ fn _parse_imports__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () {
     _parse_ws(p, FOLLOW_MASK_2);
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
@@ -28924,7 +28924,7 @@ fn _parse_namespace___inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, 0);
     } else {
@@ -28998,7 +28998,7 @@ fn _parse_namespace___inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
     }
     let grp_kind = p.peek_kind();
     if grp_kind == TK_String_ {
-        p.expect(TK_String_, &EMPTY_SYNC);
+        p.take();
     } else if _kind_set_2(grp_kind) {
         _parse_url(p, follow);
     } else {
@@ -29949,7 +29949,7 @@ fn _parse_attrib__inner(p: &mut Parser, follow: i64 = 0) -> () {
         if _kind_set_3(grp_kind) {
             _parse_ident(p);
         } else if grp_kind == TK_String_ {
-            p.expect(TK_String_, &EMPTY_SYNC);
+            p.take();
         } else {
             p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_25);
         }
@@ -30044,17 +30044,17 @@ fn _parse_expression__inner(p: &mut Parser, follow: i64 = 0) -> () {
         _plus_first = false;
         let grp_kind = p.peek_kind();
         if grp_kind == TK_Plus {
-            p.expect(TK_Plus, &EMPTY_SYNC);
+            p.take();
         } else if grp_kind == TK_Minus {
-            p.expect(TK_Minus, &EMPTY_SYNC);
+            p.take();
         } else if grp_kind == TK_Dimension {
-            p.expect(TK_Dimension, &EMPTY_SYNC);
+            p.take();
         } else if grp_kind == TK_UnknownDimension {
-            p.expect(TK_UnknownDimension, &EMPTY_SYNC);
+            p.take();
         } else if grp_kind == TK_Number {
-            p.expect(TK_Number, &EMPTY_SYNC);
+            p.take();
         } else if grp_kind == TK_String_ {
-            p.expect(TK_String_, &EMPTY_SYNC);
+            p.take();
         } else if _kind_set_3(grp_kind) {
             _parse_ident(p);
         } else {
@@ -31274,7 +31274,7 @@ fn _parse_at_rule__inner(p: &mut Parser, follow: i64 = 0) -> () {
     if grp_kind == TK_OpenBrace {
         _parse_block(p, follow);
     } else if grp_kind == TK_SemiColon {
-        p.expect(TK_SemiColon, &SYNC_3);
+        p.take();
         _parse_ws(p, follow);
     } else {
         p.no_viable("no viable alternative", p.peek_span(), &EXPECTED_41);
