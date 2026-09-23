@@ -14,6 +14,17 @@ test "an alt-initial predicate selects a single-token alternative" {
     assert result.output == "alt1", `output: '${result.output}'`;
 }
 
+// The jar gives `(pick a x)`: a context-independent predicate in the called rule
+// excludes it. Gale's scan evaluates no predicate it cannot read off the scan gate.
+#[TODO]
+test "a scan honours a called rule's predicate" {
+    let rejected = ps::parse_pick("a x");
+    assert rejected.ok(), `${rejected.diagnostics[0]}`;
+    assert ps::to_string_tree(&rejected) == "(pick a x)";
+    let accepted = ps::parse_pick("b x");
+    assert ps::to_string_tree(&accepted) == "(pick (gated b) x)";
+}
+
 test "a distinct single-token alt stays a plain branch" {
     let result = ps::parse_item("b");
     assert result.ok(), "clean parse of the distinct-token alt";

@@ -168,6 +168,23 @@ WS : [ \\t\\r\\n]+ -> skip ;
     assert out.contains("if !((gate.no_struct == 0)) { return -1; }"), `the candidate scan tests the gate: ${out}`;
 }
 
+test "a single-token rule with a gated alternative keeps the gate in its scan" {
+    let out = gen_source("grammar T;
+@parser::members {
+    int noStruct = 0;
+}
+start : r xs EOF | ID xs RB EOF | LB {noStruct = 1;} r {noStruct = 0;} RB ;
+r : {noStruct == 0}? ID | RB ;
+xs : LB+ ;
+ID : 'x' ; LB : '(' ; RB : ')' ;
+WS : [ \\t\\r\\n]+ -> skip ;
+");
+    let at = out.find("fn scan_r(").expect(`scan_r must be emitted: ${out}`);
+    let scan_r = out.as_str_slice().slice(at, out.len());
+    let end = scan_r.find("\n}\n").unwrap();
+    assert scan_r.slice(0, end).contains("gate.no_struct == 0"), `scan_r skips the gate: ${scan_r.slice(0, end)}`;
+}
+
 // The hit case, so the test above is not passing because nothing ever simulates:
 // the same grammar with a members block that does translate keeps its gate.
 test "a members block that translates keeps its field simulable" {

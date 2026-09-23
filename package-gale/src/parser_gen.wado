@@ -422,7 +422,7 @@ fn forwarded_scan_callee(body: &String, params: &String) -> Option<String> {
     if !text.starts_with(head) || !text.ends_with(&tail) || text.len() <= head.len() + tail.len() {
         return null;
     }
-    let callee = text.sub(head.len(), text.len() - tail.len());
+    let callee = text.slice(head.len(), text.len() - tail.len());
     if !callee.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         return null;
     }
@@ -593,6 +593,11 @@ fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut GenContext) -> bool 
     };
 }
 
+/// Every alternative is one token and no action runs, so one set test decides the rule.
+fn is_compact_single_token(rule: &ParserRule, ctx: &GenContext) -> bool {
+    return all_alts_are_single_token(&rule.alternatives) && !rule_has_emittable_actions(rule, ctx);
+}
+
 fn gen_scan_function_named<S: AsStrSlice>(
     w: &mut CodeWriter,
     rule: &ParserRule,
@@ -632,7 +637,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
         return;
     }
 
-    let multi_alt_plan = if rule.alternatives.len() > 1 && !all_alts_are_single_token(&rule.alternatives) {
+    let multi_alt_plan = if rule.alternatives.len() > 1 && !is_compact_single_token(rule, ctx) {
         if let MultiAlt(m) = lowered_rule {
             let plan = plan_scan_multi_alt(&rule.alternatives, ctx);
             let surface_alts: List<i32> = (0..<rule.alternatives.len()).collect();
@@ -692,7 +697,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
             w.line("if pos == scan_start { return -1; }");
         }
         w.line("return pos;");
-    } else if all_alts_are_single_token(&rule.alternatives) {
+    } else if is_compact_single_token(rule, ctx) {
         // Compact form: every alt matches exactly one fixed token, so the
         // entire scan reduces to "is the next token in this set?". A naive
         // multi-alt expansion would emit one labelled partition per token
@@ -3031,8 +3036,8 @@ fn single_statement_fn_body(text: &String) -> Option<String> {
     if !stmt.starts_with("    ") || !stmt.ends_with(";") {
         return null;
     }
-    let body = stmt.sub(4, stmt.len());
-    if body.sub(0, body.len() - 1).chars().any(|c| c == ';' || c == '{' || c == '}') {
+    let body = stmt.slice(4, stmt.len());
+    if body.slice(0, body.len() - 1).chars().any(|c| c == ';' || c == '{' || c == '}') {
         return null;
     }
     return Option::Some(body.to_string());
@@ -3317,9 +3322,7 @@ fn gen_parse_fn_named<S: AsStrSlice>(
     // construction instead of an N-way `if kind == TK_X` cascade. The scan
     // side already collapses these (`gen_scan_function_named`); the result is
     // far smaller and no slower than the cascade.
-    if all_alts_are_single_token(&rule.alternatives)
-        && !rule_has_emittable_actions(rule, ctx)
-        && !rule_emits_vals(ctx, rule) {
+    if is_compact_single_token(rule, ctx) && !rule_emits_vals(ctx, rule) {
         gen_parse_fn_single_token(w, rule, ctx, fn_name);
         return;
     }
@@ -3573,7 +3576,7 @@ fn forwarded_rule_call(body: &String) -> Option<String> {
     if !text.starts_with("_parse_") || !text.ends_with(tail) {
         return null;
     }
-    let call = text.sub(0, text.len() - tail.len() + 1);
+    let call = text.slice(0, text.len() - tail.len() + 1);
     if call.chars().any(|c| c == ';' || c == '\n') {
         return null;
     }

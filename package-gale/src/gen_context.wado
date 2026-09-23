@@ -310,7 +310,7 @@ pub struct GenContext {
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
     if !all_alts_are_single_token(&rule.alternatives)
-        || rule.alternatives.len() == 1 && !rule.alternatives[0].actions.is_empty() {
+        || rule.alternatives.iter_ref().any(|a| !a.actions.is_empty()) {
         return null;
     }
     let mut kinds: List<String> = [];

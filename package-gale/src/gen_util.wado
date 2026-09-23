@@ -52,13 +52,13 @@ fn collect_names(text: &String, out: &mut TreeSet<String>, calls_only: bool) {
             i += 1;
         }
         if !calls_only || i < n && text.get_byte_unchecked(i) == b'(' && !follows_fn_keyword(text, start) {
-            out.insert(text.as_str_slice().sub(start, i).to_string());
+            out.insert(text.as_str_slice().slice(start, i).to_string());
         }
     }
 }
 
 fn follows_fn_keyword(text: &String, start: i32) -> bool {
-    return start >= 3 && text.as_str_slice().sub(start - 3, start) == "fn ";
+    return start >= 3 && text.as_str_slice().slice(start - 3, start) == "fn ";
 }
 
 /// The top-level functions generated `text` defines.
@@ -68,12 +68,12 @@ pub fn defined_fn_names(text: &String) -> List<String> {
         if !line.starts_with("fn ") {
             continue;
         }
-        let rest = line.as_str_slice().sub(3, line.len());
+        let rest = line.as_str_slice().slice(3, line.len());
         let mut end = 0;
         while end < rest.len() && is_ident_byte(rest.get_byte_unchecked(end)) {
             end += 1;
         }
-        out.push(rest.sub(0, end).to_string());
+        out.push(rest.slice(0, end).to_string());
     }
     return out;
 }
