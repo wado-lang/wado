@@ -7,7 +7,7 @@
 use std::borrow::Borrow;
 use std::sync::Arc;
 
-use crate::ast::{self, Item, Module, Type};
+use crate::ast::{self, AstVisitor, Item, Module, Type};
 use crate::defs::{DefId, DefTable};
 use crate::elaborator::written::binder_of;
 use crate::hashmap::{IndexMap, IndexSet};
@@ -1368,6 +1368,7 @@ impl TraitEnv {
         let (supertrait_closures, cycles) =
             build_supertrait_closures(defs, &trait_decl_headers, &resolve_trait);
         violations.extend(cycles);
+        violations.extend(check_bounds_name_traits(modules, &resolve_trait));
 
         (
             Arc::new(Self {
@@ -2222,6 +2223,50 @@ fn through_clause(
     }
 }
 
+/// Every written bound that reaches no trait declaration, at the bound. One
+/// walk answers for every position a bound can be written in.
+fn check_bounds_name_traits(
+    modules: &IndexMap<ModuleSource, Module>,
+    resolve: ResolveTrait<'_>,
+) -> Vec<(ModuleSource, TypeError)> {
+    struct Bounds<'a> {
+        module: &'a ModuleSource,
+        resolve: ResolveTrait<'a>,
+        unknown: Vec<(ModuleSource, TypeError)>,
+    }
+    impl AstVisitor for Bounds<'_> {
+        fn visit_trait_bounds(&mut self, bounds: &[ast::TraitBound]) {
+            for bound in bounds {
+                let written = bound.resolved.is_none() && bound.fn_signature.is_none();
+                if written && (self.resolve)(bound).is_none() {
+                    self.unknown.push((
+                        self.module.clone(),
+                        TypeError::UnknownBound {
+                            name: bound.name.clone(),
+                            span: bound.span,
+                        },
+                    ));
+                }
+            }
+            ast::walk_trait_bounds(self, bounds);
+        }
+    }
+
+    let mut unknown = Vec::new();
+    for (module_source, module) in modules {
+        let mut walk = Bounds {
+            module: module_source,
+            resolve,
+            unknown: Vec::new(),
+        };
+        for item in &module.items {
+            walk.visit_item(item);
+        }
+        unknown.append(&mut walk.unknown);
+    }
+    unknown
+}
+
 /// Expand every trait's direct supertraits into its transitive closure,
 /// reporting each trait that reaches itself. A cycle's edge is cut rather than
 /// followed, keeping the closure finite.
@@ -2273,15 +2318,6 @@ fn expand_supertraits(
     let mut closure: Vec<InheritedBound> = Vec::new();
     for direct in &header.supertraits {
         let Some(super_loc) = resolve(direct) else {
-            // Blame the declaration, not every implementor of it.
-            cycles.push((
-                defs.module(loc).clone(),
-                TypeError::UnknownSupertrait {
-                    trait_name: header.name.clone(),
-                    supertrait: direct.name.clone(),
-                    span: direct.span,
-                },
-            ));
             continue;
         };
         // Before the push: `trait Loop: Loop` must not land in its own closure.
