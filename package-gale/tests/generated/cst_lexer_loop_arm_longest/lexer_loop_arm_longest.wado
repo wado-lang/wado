@@ -345,7 +345,20 @@ impl Diagnostic {
     }
 
     pub fn rule_path(&self) -> String {
-        return rule_path_of(&self.rule_stack);
+        let stack = &self.rule_stack;
+        let mut out = String::with_capacity(stack.len() * 8);
+        let n = stack.len();
+        for let mut i = 0; i < n; i += 1 {
+            let name = &stack[n - 1 - i];
+            if i > 0 {
+                if *name == stack[n - i] {
+                    continue;
+                }
+                out.push_str(" > ");
+            }
+            out.push_str(name);
+        }
+        return out;
     }
 }
 
@@ -355,42 +368,45 @@ impl Display for Diagnostic {
     }
 }
 
-pub fn rule_path_of(stack: &List<String>) -> String {
-    let mut out = String::with_capacity(stack.len() * 8);
-    let n = stack.len();
-    let mut written = 0;
-    for let mut i = 0; i < n; i += 1 {
-        let name = &stack[n - 1 - i];
-        if written > 0 && *name == stack[n - i] {
-            continue;
-        }
-        if written > 0 {
-            out.push_str(" > ");
-        }
-        out.push_str(name);
-        written += 1;
-    }
-    return out;
+fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
+    let mut message = String::from("token recognition error at: '");
+    push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
+    message.push('\'');
+    return Diagnostic::error(
+        DiagnosticCode::LexError,
+        message,
+        tokens.span_at(i),
+        [],
+        tokens.kinds[i],
+        RecoveryAction::None,
+    );
 }
 
-pub fn push_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
-    for let mut i = 0; i < tokens.len() && diagnostics.len() < max_errors; i += 1 {
+pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
+    let mut lex: List<Diagnostic> = [];
+    for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
-            let mut message = String::from("token recognition error at: '");
-            push_chars_escaped(&mut message, tokens.chars, tokens.starts[i], tokens.ends[i]);
-            message.push('\'');
-            diagnostics.push(
-                Diagnostic::error(
-                    DiagnosticCode::LexError,
-                    message,
-                    tokens.span_at(i),
-                    [],
-                    tokens.kinds[i],
-                    RecoveryAction::None,
-                ),
-            );
+            lex.push(lex_error_at(tokens, i));
         }
     }
+    if lex.is_empty() {
+        return;
+    }
+    let mut merged: List<Diagnostic> = [];
+    let mut next = 0;
+    for let d of lex {
+        while next < diagnostics.len() && diagnostics[next].span.start < d.span.start {
+            merged.push(diagnostics[next]);
+            next += 1;
+        }
+        merged.push(d);
+    }
+    while next < diagnostics.len() {
+        merged.push(diagnostics[next]);
+        next += 1;
+    }
+    merged.truncate(max_errors);
+    *diagnostics = merged;
 }
 
 pub fn resolve_positions(diagnostics: &mut List<Diagnostic>, chars: &List<char>) {
@@ -1571,13 +1587,13 @@ fn _run_parse_entry<S: AsStrSlice>(input: S, max_errors: i32, entry: fn(&mut Par
     let tokens = tokenize(input);
     let mut p = Parser::new(tokens);
     p.max_errors = max_errors;
-    push_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
     entry(&mut p);
     if p.recovering && p.diagnostics.len() < max_errors {
         if let Some(d) = p.pending {
             p.diagnostics.push(d);
         }
     }
+    merge_lex_errors(&p.tokens, &mut p.diagnostics, max_errors);
     resolve_positions(&mut p.diagnostics, p.tokens.chars);
     return ParseResult { cst: p.b.finish(), tokens: p.tokens, diagnostics: p.diagnostics };
 }
