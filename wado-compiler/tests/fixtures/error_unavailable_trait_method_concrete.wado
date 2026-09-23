@@ -1,0 +1,27 @@
+// A trait's unavailable method is owed by no impl, and a call on an
+// implementing type reaches it just as a call through a bound does.
+
+trait Named with () {
+    fn name(&self) -> i32;
+
+    #[unavailable("use `name`")]
+    fn old_name(&self);
+}
+
+struct A {
+    v: i32,
+}
+
+impl Named for A {
+    fn name(&self) -> i32 {
+        return self.v;
+    }
+}
+
+export fn run() {
+    let a = A { v: 1 };
+    a.old_name();
+}
+
+__DATA__
+{"compile_error": "`Named::old_name` is unavailable: use `name`"}
