@@ -266,7 +266,7 @@ pub(super) fn arm_spans(arms: &[ArmData], body: &Body) -> Option<(Vec<ArmSpan>, 
         }
         match case_key(body, arm.pattern)? {
             CaseKey::Spans(arm_spans) => {
-                spans.extend(arm_spans.into_iter().map(|(lo, hi)| (i, lo, hi)))
+                spans.extend(arm_spans.into_iter().map(|(lo, hi)| (i, lo, hi)));
             }
             CaseKey::Wildcard => return Some((spans, Some(i))),
         }
