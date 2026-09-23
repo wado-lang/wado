@@ -43,6 +43,8 @@ Creates a new empty TreeMap.
 
 #### `pub fn len(&self) -> i32`
 
+`#[compiler_item("tree_map_len")]`
+
 Returns the number of key-value pairs in the map.
 
 #### `pub fn is_empty(&self) -> bool`
@@ -85,6 +87,8 @@ The values, in insertion order.
 
 #### `pub fn entries(&self) -> TreeMapEntriesRefIter<K, V>`
 
+`#[compiler_item("tree_map_entries")]`
+
 The key-value pairs, in insertion order.
 
 #### `pub fn clear(&mut self)`
@@ -106,6 +110,8 @@ Returns a reference to the value stored under text equal to `key`.
 #### `impl IndexAssign<K> for TreeMap<K, V>`
 
 ##### `fn index_assign(&mut self, key: K, value: Self::Output)`
+
+`#[compiler_item("tree_map_index_assign")]`
 
 #### `impl IndexValue<K> for TreeMap<K, V>`
 
@@ -209,6 +215,8 @@ _Fields are private._
 #### `impl Iterator for TreeMapEntriesRefIter<K, V>`
 
 ##### `fn next(&mut self) -> Option<[&K, &V]>`
+
+`#[compiler_item("tree_map_entries_iter_next")]`
 
 ### `pub struct TreeMapEntriesValueIter<K, V>`
 

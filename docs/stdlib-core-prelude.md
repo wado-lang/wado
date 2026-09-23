@@ -925,6 +925,8 @@ Returns Some(value) when fulfilled, None if the writer dropped without writing.
 `#[cm("future-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -948,6 +950,8 @@ Fulfill the future with a value.
 `#[cm("future-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -979,6 +983,8 @@ traps, so a loop breaks on the result, never on an empty chunk.
 `#[cm("stream-cancel-read")]`
 
 Cancel an in-progress read. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
@@ -1022,6 +1028,8 @@ type is a compile error, and `write` is what carries it.
 `#[cm("stream-cancel-write")]`
 
 Cancel an in-progress write. Blocks until cancellation completes.
+Traps if this end is still joined to a `WaitableSet` — leave the set
+first.
 
 #### `fn drop(self)`
 
