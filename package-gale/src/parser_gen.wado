@@ -1628,8 +1628,8 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             return;
         }
         let body = &scan_alts[i];
-        let skip = guarded && guard_implies_first_token(body, guard_tokens);
-        if gen_scan_alt_candidate(w, i, body, skip, ctx, "break scan_alts;") {
+        let known = if guarded { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
+        if gen_scan_alt_candidate(w, i, body, &known, ctx, "break scan_alts;") {
             w.line("return -1;");
         }
         return;
@@ -1665,75 +1665,104 @@ fn gen_scan_partition_body<S: AsStrSlice>(
             continue;
         }
         let body = &scan_alts[i];
-        let skip = k < guarded_count && guard_implies_first_token(body, guard_tokens);
+        let known = if k < guarded_count { known_at_start(guard_tokens) } else { NOTHING_KNOWN };
         let commit = scan_gate_best_commit(ctx, "best", "pos > best", "pos");
-        let _ = gen_scan_alt_candidate(w, i, body, skip, ctx, &commit);
+        let _ = gen_scan_alt_candidate(w, i, body, &known, ctx, &commit);
     }
     gen_scan_rewind_break(w, ctx, "best", "best >= 0", "break scan_alts;");
     w.line("return -1;");
 }
 
-/// The partition guard already tested `alt_kind` against what the alt's
-/// first element would test again, so that re-test is dead. The guard reads
-/// the token at `start` (`TK_EOF` when there is none), so a guard set
-/// without `TK_EOF` implies `start < tokens.len()`; a single-token guard
-/// matching the leading `Token` element implies its kind check too. A rule
-/// call, a wildcard, or a many-token guard decides nothing — only a single
-/// matching `Token` does.
-///
-/// Sound only for an alt the guard actually selected: an unguarded alt rides
-/// along in every partition, and a hoisted one is reached from several.
-fn guard_implies_first_token(body: &ScanBody, guard_tokens: &List<String>) -> bool {
-    if guard_tokens.len() != 1 || guard_tokens[0] == "TK_EOF" || body.elements.is_empty() {
-        return false;
+/// What the scan has proved about the tokens ahead: `known[d]` holds every kind
+/// `tokens[pos + d]` can be. A walk re-tests none of it.
+global NOTHING_KNOWN: List<List<String>> = [];
+
+/// What a test of `tokens[pos]` against `kinds` proved, once it passed.
+fn known_at_start(kinds: &List<String>) -> List<List<String>> {
+    if kinds.is_empty() {
+        return [];
     }
-    if let Token(t) = &body.elements[0] {
-        if t.kind != guard_tokens[0] {
-            return false;
+    return [*kinds];
+}
+
+fn known_is(known: &List<List<String>>, kind: &String) -> bool {
+    return known_within(known, &[*kind]);
+}
+
+/// `known` once `se` has been walked: a one-token element moves it along a
+/// token, and anything else consumes an unknown count.
+fn known_after(se: &ScanElement, known: &List<List<String>>) -> List<List<String>> {
+    let mut rest: List<List<String>> = [];
+    if se matches { Token(_) | Wildcard | Excluded(_) } {
+        for let d of 1..<known.len() {
+            rest.push(known[d]);
         }
-        return body.elements.len() == 1 || scan_element_can_fail(&body.elements[1]);
+    }
+    return rest;
+}
+
+/// Whether walking `se` under `known` can run the failure statement it was
+/// handed, so a label that failure breaks to has a reader. A label nothing
+/// breaks to does not compile.
+fn scan_element_can_fail(se: &ScanElement, known: &List<List<String>>) -> bool {
+    return match se {
+        Token(t) => !known_is(known, &t.kind),
+        RuleCall(_) | Wildcard | Excluded(_) => true,
+        Repeat(re) => re.kind matches { Plus } && scan_element_can_fail(&re.body, known),
+        Group(ge) => !ge.lenient && scan_group_can_fail(ge, known),
+        OptionalLookahead(_) => false,
+    };
+}
+
+fn scan_elements_can_fail(elements: &List<ScanElement>, from: i32, known: &List<List<String>>) -> bool {
+    let mut k = *known;
+    for let i of from..<elements.len() {
+        if scan_element_can_fail(&elements[i], &k) {
+            return true;
+        }
+        k = known_after(&elements[i], &k);
     }
     return false;
 }
 
-/// Whether the element emits a failure branch, so a `try_` label around it has
-/// a reader. A repeat or a group may emit none, and a label nothing breaks to
-/// does not compile.
-fn scan_element_can_fail(se: &ScanElement) -> bool {
-    return se matches { Token(_) | RuleCall(_) | Wildcard | Excluded(_) };
+/// The element the walk of `elements` starts at: past a leading token `known`
+/// already proved, which the caller consumes as part of its rewind.
+fn scan_skip_known_token(elements: &List<ScanElement>, known: &List<List<String>>) -> i32 {
+    if !elements.is_empty() {
+        if let Token(t) = &elements[0] {
+            if known_is(known, &t.kind) {
+                return 1;
+            }
+        }
+    }
+    return 0;
 }
 
 /// Emits one alt as a scan candidate, ending in `commit_stmt`. A single-alt
 /// partition calls this once; a longest-match tournament calls it once per
-/// candidate.
+/// candidate. `pos` is scratch state every candidate overwrites before its own
+/// attempt, including one that loses, so a candidate that cannot fail commits
+/// unconditionally.
 ///
-/// When `skip` holds and the alt is just the token the guard already
-/// matched, the `try_` block collapses to `pos = start + 1;` then
-/// `commit_stmt`. `pos` is scratch state every candidate overwrites before
-/// its own attempt, including one that loses, so committing it
-/// unconditionally here is sound.
-///
-/// Returns whether the full `try_<i>:` block was emitted. A caller with its
-/// own fallthrough statement (the single-alt path's `return -1;`) must skip
-/// it when this returns false — the shortcut already committed
-/// unconditionally, making it unreachable.
+/// Returns whether the candidate can fail. A caller with its own fallthrough
+/// statement (the single-alt path's `return -1;`) must skip it when this
+/// returns false — the candidate already committed, making it unreachable.
 fn gen_scan_alt_candidate<S: AsStrSlice>(
     w: &mut CodeWriter,
     i: i32,
     body: &ScanBody,
-    skip: bool,
+    known: &List<List<String>>,
     ctx: &mut GenContext,
     commit_stmt: S,
 ) -> bool {
-    if skip && body.elements.len() == 1 && body.gates.is_empty() && body.gate_cond.is_empty() {
-        gen_scan_rewind(w, ctx, "start", /*skip=*/ 1);
-        w.line(commit_stmt);
-        return false;
-    }
+    let from = scan_skip_known_token(&body.elements, known);
+    let rest_known = if from == 1 { known_after(&body.elements[0], known) } else { *known };
+    gen_scan_rewind(w, ctx, "start", from);
+    let can_fail = !body.gate_cond.is_empty() || scan_elements_can_fail(&body.elements, from, &rest_known);
     let label = `try_${i}`;
-    gen_scan_rewind(w, ctx, "start", if skip { 1 } else { 0 });
-    w.begin(`${label}:`);
-    let from = if skip { 1 } else { 0 };
+    if can_fail {
+        w.begin(`${label}:`);
+    }
     gen_scan_op_elements_in_block(
         w,
         &body.elements,
@@ -1743,20 +1772,31 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
         &label,
         &body.gates,
         &body.gate_cond,
+        &rest_known,
     );
     w.line(commit_stmt);
-    w.end();
-    return true;
+    if can_fail {
+        w.end();
+    }
+    return can_fail;
 }
 
 /// Op-driven scan element emitter — dispatches on `ScanElement`
 /// variant. Lower has already resolved kind constants, variant ids,
 /// min-prec, repeat strategy / first sets, and group dispatch shape;
 /// emit reads them verbatim.
-fn gen_scan_op_element<S: AsStrSlice>(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext, fail_stmt: S) {
+fn gen_scan_op_element<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    se: &ScanElement,
+    ctx: &mut GenContext,
+    fail_stmt: S,
+    known: &List<List<String>> = &NOTHING_KNOWN,
+) {
     match se {
         Token(t) => {
-            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt} }`);
+            if !known_is(known, &t.kind) {
+                w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt} }`);
+            }
             w.line("pos += 1;");
         },
         RuleCall(rc) => {
@@ -1804,8 +1844,8 @@ fn gen_scan_op_element<S: AsStrSlice>(w: &mut CodeWriter, se: &ScanElement, ctx:
             w.line(`if pos >= tokens.len() || tokens[pos] == TK_EOF || ${check} { ${fail_stmt} }`);
             w.line("pos += 1;");
         },
-        Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt),
-        Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient),
+        Repeat(re) => gen_scan_op_repeat(w, re, ctx, fail_stmt, known),
+        Group(ge) => gen_scan_op_group(w, ge, ctx, fail_stmt, ge.lenient, known),
         OptionalLookahead(ole) => gen_scan_op_optional_lookahead(w, ole, ctx),
     }
 }
@@ -1813,10 +1853,19 @@ fn gen_scan_op_element<S: AsStrSlice>(w: &mut CodeWriter, se: &ScanElement, ctx:
 /// Op-driven scan emitter where failure sets `pos = -1` rather than
 /// running `fail_stmt`. Used inside Optional/Repeat loops where a
 /// failed iteration means "skip", not abort.
-fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut GenContext) {
+fn gen_scan_op_element_assign(
+    w: &mut CodeWriter,
+    se: &ScanElement,
+    ctx: &mut GenContext,
+    known: &List<List<String>> = &NOTHING_KNOWN,
+) {
     match se {
         Token(t) => {
-            w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
+            if known_is(known, &t.kind) {
+                w.line("pos += 1;");
+            } else {
+                w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
+            }
         },
         RuleCall(rc) => {
             let fn_name = `scan_${rc.target_snake}`;
@@ -1859,13 +1908,13 @@ fn gen_scan_op_element_assign(w: &mut CodeWriter, se: &ScanElement, ctx: &mut Ge
         Group(ge) => {
             // Group inside a repeat body — emit strict scan so a
             // 0-advance iteration cannot infinite-loop.
-            gen_scan_op_group(w, ge, ctx, "pos = -1;", false);
+            gen_scan_op_group(w, ge, ctx, "pos = -1;", false, known);
         },
         Repeat(_) | OptionalLookahead(_) => {
             // Nested Repeat / OptionalLookahead within a Repeat's loop
             // body: emit through fail_stmt = "pos = -1;" so the outer
             // loop sees failure as "stop iterating".
-            gen_scan_op_element(w, se, ctx, "pos = -1;");
+            gen_scan_op_element(w, se, ctx, "pos = -1;", known);
         },
     }
 }
@@ -1895,7 +1944,7 @@ fn gen_scan_optional_probe<S: AsStrSlice>(
 ) {
     w.begin(`if ${scan_repeat_guard(&re.inner_admits, caller_follow_gate, ctx)}`);
     gen_scan_mark(w, ctx, "sp");
-    gen_scan_op_element_assign(w, &re.body, ctx);
+    gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
     w.begin("if pos < 0");
     gen_scan_rewind(w, ctx, "sp");
     w.else_begin("else");
@@ -1946,7 +1995,7 @@ fn gen_scan_non_greedy_probe_loop(w: &mut CodeWriter, re: &ScanRepeatElement, ct
     w.line("if ng_exit { break; }");
     w.line(`if !(${guard}) { break; }`);
     gen_scan_mark(w, ctx, "sp");
-    gen_scan_op_element_assign(w, &re.body, ctx);
+    gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(&re.inner_admits)));
     gen_scan_iteration_rewind(w, ctx, /*looping=*/ true);
     w.line("if pos == sp { break; }");
     w.end();
@@ -2065,7 +2114,13 @@ fn admits_check_excluding<S: AsStrSlice>(
     return parts.join(" && ");
 }
 
-fn gen_scan_op_repeat<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement, ctx: &mut GenContext, fail_stmt: S) {
+fn gen_scan_op_repeat<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    re: &ScanRepeatElement,
+    ctx: &mut GenContext,
+    fail_stmt: S,
+    known: &List<List<String>>,
+) {
     let loop_admits = re.inner_admits;
 
     // Stop the scan where the caller's continuation matches, or the tournament
@@ -2117,7 +2172,7 @@ fn gen_scan_op_repeat<S: AsStrSlice>(w: &mut CodeWriter, re: &ScanRepeatElement,
 
     // A `+`'s first iteration is mandatory, so its failure is the element's.
     if re.kind matches { Plus } {
-        gen_scan_op_element(w, &re.body, ctx, fail_stmt);
+        gen_scan_op_element(w, &re.body, ctx, fail_stmt, known);
     }
     // `.*?` / `.+?` stop at the exit set: every token passes a kind guard, so
     // the loop below would run to EOF. Mirrors `compute_non_greedy_condition`.
@@ -2145,7 +2200,7 @@ fn gen_scan_iteration(w: &mut CodeWriter, re: &ScanRepeatElement, admits: &Admit
         return;
     }
     gen_scan_mark(w, ctx, "sp");
-    gen_scan_op_element_assign(w, &re.body, ctx);
+    gen_scan_op_element_assign(w, &re.body, ctx, &known_at_start(&admits_kinds(admits)));
     if !looping {
         gen_scan_iteration_rewind(w, ctx, /*looping=*/ false);
         return;
@@ -2235,8 +2290,18 @@ fn gen_scan_op_group<S: AsStrSlice>(
     ctx: &mut GenContext,
     fail_stmt: S,
     lenient: bool,
+    known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
+    if let Some(kinds) = scan_group_token_kinds(ge) {
+        gen_scan_token_set(w, &kinds, ctx, fail_stmt, lenient, known);
+        return;
+    }
     if ge.alts.len() == 1 {
+        let elements = &ge.alts[0].elements;
+        if !scan_elements_can_fail(elements, 0, known) {
+            gen_scan_op_elements(w, elements, 0, elements.len(), ctx, fail_stmt, &NO_SCAN_GATES, &NO_SCAN_GATE_COND, known);
+            return;
+        }
         // Single alt: outer `done` wraps inner `body`.
         //   sg_N_done: { sg_N: { ...; break sg_N_done; } fail_stmt; }
         // Element failure → break sg_N, falls to fail_stmt.
@@ -2250,7 +2315,17 @@ fn gen_scan_op_group<S: AsStrSlice>(
         }
         w.begin(`${done}:`);
         w.begin(`${body}:`);
-        gen_scan_op_elements_in_block(w, &ge.alts[0].elements, 0, ge.alts[0].elements.len(), ctx, &body);
+        gen_scan_op_elements_in_block(
+            w,
+            elements,
+            0,
+            elements.len(),
+            ctx,
+            &body,
+            &NO_SCAN_GATES,
+            &NO_SCAN_GATE_COND,
+            known,
+        );
         w.line(`break ${done};`);
         w.end();
         if lenient {
@@ -2261,11 +2336,15 @@ fn gen_scan_op_group<S: AsStrSlice>(
         w.end();
         return;
     }
+    let branches = scan_decision_branches(ge);
+    if branches.iter_ref().all(|b| b.alts.len() == 1) {
+        gen_scan_group_decided(w, ge, &branches, ctx, fail_stmt, lenient);
+        return;
+    }
     let gc = ctx.next_scan_group();
     let gp_var = `gp_${gc}`;
     let best_var = `sg_${gc}_best`;
     let kind_var = `sgk_${gc}`;
-    let branches = scan_decision_branches(ge);
     gen_scan_mark(w, ctx, &gp_var);
     if decision_reads_lookahead(&branches) {
         gen_kind_read(w, &kind_var, "tokens", "pos");
@@ -2278,13 +2357,30 @@ fn gen_scan_op_group<S: AsStrSlice>(
     gen_scan_gate_save(w, ctx, &best_var, /*mutable=*/ true);
     for let mut i = 0; i < branches.len(); i += 1 {
         open_decision_branch(w, &branches, i, &kind_var, ctx);
+        let branch_known = branch_proves(&branches, i);
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
+            let elements = &ge.alts[*ai].elements;
+            let can_fail = scan_elements_can_fail(elements, 0, &branch_known);
             gen_scan_rewind(w, ctx, &gp_var);
-            w.begin(`${inner}:`);
-            gen_scan_op_elements_in_block(w, &ge.alts[*ai].elements, 0, ge.alts[*ai].elements.len(), ctx, &inner);
+            if can_fail {
+                w.begin(`${inner}:`);
+            }
+            gen_scan_op_elements_in_block(
+                w,
+                elements,
+                0,
+                elements.len(),
+                ctx,
+                &inner,
+                &NO_SCAN_GATES,
+                &NO_SCAN_GATE_COND,
+                &branch_known,
+            );
             w.line(&scan_gate_best_commit(ctx, &best_var, `pos > ${best_var}`, "pos"));
-            w.end();
+            if can_fail {
+                w.end();
+            }
         }
     }
     close_decision_chain(w, &branches);
@@ -2297,6 +2393,134 @@ fn gen_scan_op_group<S: AsStrSlice>(
         w.line(fail_stmt);
     }
     w.end();
+}
+
+/// What branch `i` of a decision chain proved about `tokens[pos]` once taken.
+fn branch_proves(branches: &List<DecisionBranch>, i: i32) -> List<List<String>> {
+    if decision_is_unconditional(branches) {
+        return [];
+    }
+    return known_at_start(&admits_kinds(&branches[i].test));
+}
+
+/// A group whose branches each hold one alternative: the branch taken is the
+/// only candidate, so it commits on success rather than competing for the longest end.
+fn gen_scan_group_decided<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    ge: &ScanGroupElement,
+    branches: &List<DecisionBranch>,
+    ctx: &mut GenContext,
+    fail_stmt: S,
+    lenient: bool,
+) {
+    let gc = ctx.next_scan_group();
+    let gp_var = `gp_${gc}`;
+    let done = `sg_${gc}_done`;
+    let kind_var = `sgk_${gc}`;
+    if lenient {
+        gen_scan_mark(w, ctx, &gp_var);
+    }
+    w.begin(`${done}:`);
+    if decision_reads_lookahead(branches) {
+        gen_kind_read(w, &kind_var, "tokens", "pos");
+    }
+    for let mut i = 0; i < branches.len(); i += 1 {
+        open_decision_branch(w, branches, i, &kind_var, ctx);
+        let ai = branches[i].alts[0];
+        let inner = `sg_${gc}_${ai}`;
+        let elements = &ge.alts[ai].elements;
+        let known = branch_proves(branches, i);
+        let can_fail = scan_elements_can_fail(elements, 0, &known);
+        if can_fail {
+            w.begin(`${inner}:`);
+        }
+        gen_scan_op_elements_in_block(
+            w,
+            elements,
+            0,
+            elements.len(),
+            ctx,
+            &inner,
+            &NO_SCAN_GATES,
+            &NO_SCAN_GATE_COND,
+            &known,
+        );
+        w.line(`break ${done};`);
+        if can_fail {
+            w.end();
+        }
+    }
+    close_decision_chain(w, branches);
+    if lenient {
+        gen_scan_rewind(w, ctx, &gp_var);
+    } else {
+        w.line(fail_stmt);
+    }
+    w.end();
+}
+
+/// The kinds a group of single-token alternatives matches, or `null` for any
+/// other group.
+fn scan_group_token_kinds(ge: &ScanGroupElement) -> Option<List<String>> {
+    let mut kinds: List<String> = [];
+    for let alt of &ge.alts {
+        if alt.elements.len() != 1 {
+            return null;
+        }
+        let Token(t) = &alt.elements[0] else {
+            return null;
+        };
+        if !kinds.contains(&t.kind) {
+            kinds.push(t.kind);
+        }
+    }
+    return Option::Some(kinds);
+}
+
+/// Whether `known` proves `tokens[pos]` is in bounds and one of `kinds`. An EOF
+/// kind also stands for running off the end, so it proves no bound.
+fn known_within(known: &List<List<String>>, kinds: &List<String>) -> bool {
+    if known.is_empty() || known[0].is_empty() {
+        return false;
+    }
+    for let k of &known[0] {
+        if *k == "TK_EOF" || !kinds.contains(k) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/// One token out of `kinds`: a single set test rather than an arm per token.
+fn gen_scan_token_set<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    kinds: &List<String>,
+    ctx: &mut GenContext,
+    fail_stmt: S,
+    lenient: bool,
+    known: &List<List<String>>,
+) {
+    if known_within(known, kinds) {
+        w.line("pos += 1;");
+        return;
+    }
+    if lenient {
+        w.line(`if pos < tokens.len() && ${ctx.kind_check_str(kinds, "tokens[pos]")} { pos += 1; }`);
+        return;
+    }
+    w.line(`if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { ${fail_stmt} }`);
+    w.line("pos += 1;");
+}
+
+/// Whether `gen_scan_op_group` under `known` emits the failure it was handed.
+fn scan_group_can_fail(ge: &ScanGroupElement, known: &List<List<String>>) -> bool {
+    if let Some(kinds) = scan_group_token_kinds(ge) {
+        return !known_within(known, &kinds);
+    }
+    if ge.alts.len() == 1 {
+        return scan_elements_can_fail(&ge.alts[0].elements, 0, known);
+    }
+    return true;
 }
 
 /// Op-driven scan emitter for `ScanElement::OptionalLookahead` —
@@ -2319,13 +2543,27 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         // the elements after it and traps their `pos < tokens.len()` guard.
         let gc = ctx.next_scan_group();
         let body = `sol_${gc}`;
+        let elements = &ole.bodies[si].elements;
+        if !scan_elements_can_fail(elements, 0, sig) {
+            gen_scan_op_elements(w, elements, 0, elements.len(), ctx, "", &NO_SCAN_GATES, &NO_SCAN_GATE_COND, sig);
+            w.line(`break ${chain_done};`);
+            w.end();
+            continue;
+        }
         let save_var = `sol_${gc}_save`;
-        let fail = `break ${body};`;
         gen_scan_mark(w, ctx, &save_var);
         w.begin(`${body}:`);
-        for let elem_se of &ole.bodies[si].elements {
-            gen_scan_op_element(w, elem_se, ctx, &fail);
-        }
+        gen_scan_op_elements_in_block(
+            w,
+            elements,
+            0,
+            elements.len(),
+            ctx,
+            &body,
+            &NO_SCAN_GATES,
+            &NO_SCAN_GATE_COND,
+            sig,
+        );
         w.line(`break ${chain_done};`);
         w.end();
         gen_scan_rewind(w, ctx, &save_var);
@@ -2350,13 +2588,34 @@ fn gen_scan_op_elements<S: AsStrSlice>(
     fail_stmt: S,
     gates: &List<ScanGate> = &NO_SCAN_GATES,
     gate_cond: &String = &NO_SCAN_GATE_COND,
+    known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
     gen_scan_gate_check(w, gate_cond, fail_stmt);
+    let mut k = *known;
+    let mut proven_run = 0;
     for let mut i = start; i <= end; i += 1 {
         gen_scan_gates_before(w, gates, i, start, end);
-        if i < end {
-            gen_scan_op_element(w, &scan_elems[i], ctx, fail_stmt);
+        if i == end {
+            break;
         }
+        let se = &scan_elems[i];
+        let proven = if let Token(t) = se { known_is(&k, &t.kind) } else { false };
+        if proven {
+            proven_run += 1;
+        } else {
+            flush_proven_run(w, &mut proven_run);
+            gen_scan_op_element(w, se, ctx, fail_stmt, &k);
+        }
+        k = known_after(se, &k);
+    }
+    flush_proven_run(w, &mut proven_run);
+}
+
+/// Step over tokens the scan already proved, as one move.
+fn flush_proven_run(w: &mut CodeWriter, run: &mut i32) {
+    if *run > 0 {
+        w.line(`pos += ${*run};`);
+        *run = 0;
     }
 }
 
@@ -2426,15 +2685,9 @@ fn gen_scan_op_elements_in_block<S: AsStrSlice>(
     label: S,
     gates: &List<ScanGate> = &NO_SCAN_GATES,
     gate_cond: &String = &NO_SCAN_GATE_COND,
+    known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
-    let fail = `break ${label};`;
-    gen_scan_gate_check(w, gate_cond, &fail);
-    for let mut i = start; i <= end; i += 1 {
-        gen_scan_gates_before(w, gates, i, start, end);
-        if i < end {
-            gen_scan_op_element(w, &scan_elems[i], ctx, &fail);
-        }
-    }
+    gen_scan_op_elements(w, scan_elems, start, end, ctx, `break ${label};`, gates, gate_cond, known);
 }
 
 /// A rule's non-LR alt indices, their FIRST sets, and the overlap groups over
