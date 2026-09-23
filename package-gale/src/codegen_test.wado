@@ -1767,7 +1767,7 @@ test "a wildcard puts every alternative in one branch, epsilon included" {
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     let body = extract_fn_body(&output, "fn _parse_r__inner(");
     assert count_substr(&body, "if true") == 0, `one branch over every alternative needs no chain: ${body}`;
-    assert count_substr(&body, "gd_tourney") > 0, `the three alternatives must share a tournament: ${body}`;
+    assert count_substr(&body, "gd_winner") > 0, `the three alternatives must share a tournament: ${body}`;
     // Epsilon is `p.pos` — the empty alternative measured without scanning.
     assert count_substr(&body, "= p.pos;") > 0, `the empty alternative must be ranked, not dropped: ${body}`;
 }
@@ -1810,4 +1810,24 @@ test "a scan alt reached once stays inline" {
     let mut g = parse(REPEATED_SCAN_ALT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     assert !str_contains(&output, "fn scan_e_alt_2("), `single-use alt 2 was hoisted: ${output}`;
+}
+
+// `RustParser.g4`'s `crate : innerAttribute* item* EOF`: the reserve walks the
+// whole rest of the file, so it runs only where the loop cannot go on.
+global RESERVE_AFTER_LOOP_G4: String = "
+grammar T;
+r : inner* outer* EOF ;
+inner : '#' '!' ID ;
+outer : '#' ID | ID ;
+ID : [a-z]+ ;
+";
+
+test "the reserve probe runs only after the loop's own lookahead declines" {
+    let mut g = parse(RESERVE_AFTER_LOOP_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let body = extract_fn_body(&output, "fn _parse_r__inner(");
+    let kind_read = find_substr(&body, "let rep_body_end_kind =");
+    let probe = find_substr(&body, "rep_body_end_scan:");
+    assert kind_read >= 0 && probe >= 0, `expected a reserve on inner*: ${body}`;
+    assert kind_read < probe, `the probe walks before the lookahead can skip it: ${body}`;
 }
