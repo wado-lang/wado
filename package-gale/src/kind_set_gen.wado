@@ -124,7 +124,7 @@ pub fn gen_kind_set_helpers(w: &mut CodeWriter, lowered: &LoweredGrammar, ctx: &
 }
 
 /// Emit the runtime FOLLOW tables: `FOLLOW_SETS` holds every distinct position
-/// set once, as the bitset `follow_set_has` reads, and each `FOLLOW_MASK_<id>`
+/// set once, as the bitset `kind_set_has` reads, and each `FOLLOW_MASK_<id>`
 /// packs its positions into one `i64`. A continuation is therefore a scalar a
 /// call site composes with a shift, and a rule takes one parameter rather than
 /// a row of slots.
@@ -161,8 +161,8 @@ pub fn gen_follow_mask_globals(w: &mut CodeWriter, ctx: &GenContext) {
     w.blank();
 }
 
-/// A set of token kinds as the words `follow_set_has` and `in_set` test: kind
-/// `k` is bit `k & 31` of word `k >> 5`.
+/// A set of token kinds as the words `kind_set_has` tests: kind `k` is bit
+/// `k & 31` of word `k >> 5`.
 pub fn kind_bitset_words(set: &List<i32>) -> List<String> {
     let mut words: List<i32> = [];
     for let kind of set {

@@ -315,7 +315,8 @@ pub struct GenContext {
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
-    if !all_alts_are_single_token(&rule.alternatives) || (rule.alternatives.len() == 1 && !rule.alternatives[0].actions.is_empty()) {
+    if !all_alts_are_single_token(&rule.alternatives)
+        || rule.alternatives.len() == 1 && !rule.alternatives[0].actions.is_empty() {
         return null;
     }
     let mut kinds: List<String> = [];
@@ -436,7 +437,9 @@ impl GenContext {
             return null;
         };
         let rule = &self.parser_rules[i];
-        if rule.alternatives.len() != 1 || rule.init_action matches { Some(_) } || rule.after_action matches { Some(_) } {
+        if rule.alternatives.len() != 1
+            || rule.init_action matches { Some(_) }
+            || rule.after_action matches { Some(_) } {
             return null;
         }
         let alt = &rule.alternatives[0];
@@ -564,7 +567,7 @@ impl GenContext {
 
     pub fn record_alt_scan_fn<S: AsStrSlice>(&mut self, alt: i32, name: S) {
         let key = [self.current_rule_index, alt];
-        assert !self.alt_scan_fns.contains_key(key),`alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
+        assert !self.alt_scan_fns.contains_key(key), `alt ${alt} of rule ${self.current_rule_index} already has a scan function`;
         self.alt_scan_fns[key] = name.to_string();
     }
 
@@ -2328,7 +2331,9 @@ impl GenContext {
     /// `SYNC_<id>`, the set as the bits a membership test reads, or
     /// `EMPTY_SYNC`.
     pub fn sync_bits_ref(&mut self, tokens: &List<String>) -> String {
-        let Some(id) = self.intern_sync_set(tokens) else { return String::from("EMPTY_SYNC"); };
+        let Some(id) = self.intern_sync_set(tokens) else {
+            return String::from("EMPTY_SYNC");
+        };
         self.sync_bits_used.insert(id);
         return `SYNC_${id}`;
     }
@@ -2336,7 +2341,9 @@ impl GenContext {
     /// `EXPECTED_<id>`, the set as the kind list a diagnostic names, or
     /// `EMPTY_SYNC`.
     pub fn sync_list_ref(&mut self, tokens: &List<String>) -> String {
-        let Some(id) = self.intern_sync_set(tokens) else { return String::from("EMPTY_SYNC"); };
+        let Some(id) = self.intern_sync_set(tokens) else {
+            return String::from("EMPTY_SYNC");
+        };
         self.sync_list_used.insert(id);
         return `EXPECTED_${id}`;
     }
@@ -2346,7 +2353,10 @@ impl GenContext {
     pub fn sync_sets(&self) -> List<[KindSetEntry, bool, bool]> {
         let mut out: List<[KindSetEntry, bool, bool]> = [];
         for let entry of self.sync_set_registry.values().iter_value() {
-            out.push([entry, self.sync_bits_used.contains(entry.id), self.sync_list_used.contains(entry.id)]);
+            out.push([
+                entry, self.sync_bits_used.contains(entry.id),
+                self.sync_list_used.contains(entry.id),
+            ]);
         }
         return out;
     }

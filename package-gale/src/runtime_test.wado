@@ -7,9 +7,9 @@ use {
     line_starts,
     line_col_at,
     with_expected,
+    kind_set_has,
 } from "./runtime/lex.wado";
-use { follow_set_has } from "./runtime/follow.wado";
-use { follow_bitset_words } from "./kind_set_gen.wado";
+use { kind_bitset_words } from "./kind_set_gen.wado";
 use { to_lexer_string } from "./runtime/tools.wado";
 use {
     HighlightMapping,
@@ -149,15 +149,15 @@ test "line_col_at answers from the line starts" {
     assert char_pos_in_line(&chars, 4) == 1;
 }
 
-test "follow_set_has reads the bitset words the generator emits" {
-    assert follow_bitset_words(&[0, 5, 31, 32, 70]) == ["-2147483615", "1", "64"];
-    assert follow_bitset_words(&[31]) == ["i32::MIN"];
+test "kind_set_has reads the bitset words the generator emits" {
+    assert kind_bitset_words(&[0, 5, 31, 32, 70]) == ["-2147483615", "1", "64"];
+    assert kind_bitset_words(&[31]) == ["i32::MIN"];
     let set: List<i32> = [-2147483615, 1, 64];
     for let k of [0, 5, 31, 32, 70] {
-        assert follow_set_has(&set, k), `${k}`;
+        assert kind_set_has(&set, k), `${k}`;
     }
     for let k of [1, 30, 33, 69, 71, 200] {
-        assert !follow_set_has(&set, k), `${k}`;
+        assert !kind_set_has(&set, k), `${k}`;
     }
 }
 

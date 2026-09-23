@@ -1,3 +1,5 @@
+use { kind_set_has } from "./lex.wado";
+
 pub global FOLLOW_MAX_DEPTH: i32 = 4;
 
 pub global FOLLOW_SLOT_BITS: i64 = 8;
@@ -9,14 +11,6 @@ pub global FOLLOW_OPENS_BIT: i64 = 128;
 pub global FOLLOW_CONT_MASK: i64 = 0x00FF_FFFF_FFFF_FFFF;
 
 pub global FOLLOW_SEQUENCED: i64 = 0x007F_7F7F_7F7F_7F7F;
-
-pub fn follow_set_has(set: &List<i32>, kind: i32) -> bool {
-    let w = kind >> 5;
-    if w >= set.len() {
-        return false;
-    }
-    return set[w] >> (kind & 31) & 1 == 1;
-}
 
 pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<i32>>, eof_kind: i32) -> bool {
     let mut c = cont;
@@ -39,7 +33,7 @@ pub fn follow_yields(tokens: &Array<i32>, pos: i32, cont: i64, sets: &List<List<
                 if !set.is_empty() {
                     let idx = pos + depth;
                     let kind = if idx < tokens.len() { tokens[idx] } else { eof_kind };
-                    if !follow_set_has(set, kind) {
+                    if !kind_set_has(set, kind) {
                         alive = false;
                     }
                 }

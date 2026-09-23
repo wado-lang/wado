@@ -242,7 +242,9 @@ pub fn gen_parser(
     // it has a value struct at all.
     install_rule_captures(grammar, lowered, ctx);
     if ctx.emit_actions() {
-        ctx.set_binding_reads(grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect());
+        ctx.set_binding_reads(
+            grammar.parser_rules.iter_ref().map(|r| rule_binding_reads(r, &grammar.parser_rules)).collect(),
+        );
     }
 
     if ctx.has_parser_superclass() {
@@ -384,7 +386,13 @@ fn ensure_alt_scan_fn<S: AsStrSlice>(
 
 /// The one emitter of a whole-alternative scan function, which both the scan
 /// side and the parse side's tournament call.
-pub fn gen_alt_scan_fn<S: AsStrSlice>(w: &mut CodeWriter, name: S, body: &ScanBody, alt_index: i32, ctx: &mut GenContext) {
+pub fn gen_alt_scan_fn<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    name: S,
+    body: &ScanBody,
+    alt_index: i32,
+    ctx: &mut GenContext,
+) {
     let was_scan = ctx.set_in_scan_fn(true);
     let mut f = FnSpec::new(&name);
     add_scan_params(&mut f, ctx);
@@ -837,7 +845,9 @@ fn gen_scan_lr_functions<S: AsStrSlice>(
     }
     f2.set_return_type("i32");
     f2.emit_begin(w);
-    w.line(`let mut pos = ${atom_name}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`);
+    w.line(
+        `let mut pos = ${atom_name}(tokens, pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())});`,
+    );
     w.line("if pos < 0 { return -1; }");
     if atn_loop_dec >= 0 {
         gen_lr_suffix_dispatch_atn(w, fn_name, lr_alts, lr_dispatch, ctx, atn_loop_dec);
@@ -1708,16 +1718,7 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
         bodies.push(body.to_string());
     }
     let first_branch = arms.is_empty();
-    let [arms, bodies] = merge_identical_branches(&arms, &bodies);
-    for let mut g = 0; g < arms.len(); g += 1 {
-        let cond = ctx.admits_check_str(&arms[g].test, "alt_kind");
-        if g == 0 {
-            w.begin(`if ${cond}`);
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-        w.write(&bodies[g]);
-    }
+    emit_tested_arms(w, &arms, &bodies, "alt_kind", ctx);
 
     if unguarded_idx.len() > 0 {
         let empty_alts: List<i32> = [];
@@ -1743,13 +1744,19 @@ fn gen_scan_multi_alt<S: AsStrSlice>(
 
 /// Adjacent branches whose rendered bodies are the same, joined under the
 /// union of their tests. A gated branch, or one testing no token set, stays alone.
-fn merge_identical_branches(branches: &List<DecisionBranch>, bodies: &List<String>) -> [List<DecisionBranch>, List<String>] {
+fn merge_identical_branches(
+    branches: &List<DecisionBranch>,
+    bodies: &List<String>,
+) -> [List<DecisionBranch>, List<String>] {
     assert branches.len() == bodies.len(), "one rendered body per branch";
     let mut out: List<DecisionBranch> = [];
     let mut out_bodies: List<String> = [];
     for let mut i = 0; i < branches.len(); i += 1 {
         let n = out.len();
-        if n > 0 && branch_tests_tokens_only(&branches[i]) && branch_tests_tokens_only(&out[n - 1]) && out_bodies[n - 1] == bodies[i] {
+        if n > 0
+            && branch_tests_tokens_only(&branches[i])
+            && branch_tests_tokens_only(&out[n - 1])
+            && out_bodies[n - 1] == bodies[i] {
             let mut kinds = admits_kinds(&out[n - 1].test);
             dedup_append_arr(&mut kinds, &admits_kinds(&branches[i].test));
             out[n - 1].test = admits_kinds_of(&kinds);
@@ -1766,6 +1773,27 @@ fn merge_identical_branches(branches: &List<DecisionBranch>, bodies: &List<Strin
 
 fn branch_tests_tokens_only(b: &DecisionBranch) -> bool {
     return b.test matches { Kinds(_) } && b.gate.is_empty();
+}
+
+/// An `if` / `else if` chain testing each branch, left open for the caller's
+/// `else`, with the arms that write the same body merged.
+fn emit_tested_arms<S: AsStrSlice>(
+    w: &mut CodeWriter,
+    branches: &List<DecisionBranch>,
+    bodies: &List<String>,
+    kind_expr: S,
+    ctx: &mut GenContext,
+) {
+    let [merged, merged_bodies] = merge_identical_branches(branches, bodies);
+    for let mut i = 0; i < merged.len(); i += 1 {
+        let cond = render_branch_cond(&merged[i], &kind_expr, ctx);
+        if i == 0 {
+            w.begin(`if ${cond}`);
+        } else {
+            w.else_begin(`else if ${cond}`);
+        }
+        w.write(&merged_bodies[i]);
+    }
 }
 
 /// The arms of a decision chain over `branches`, each writing its rendered
@@ -1819,9 +1847,11 @@ fn gen_scan_partition_body<S: AsStrSlice>(
         let guarded = guarded_alts.len() == 1;
         let i = if guarded { guarded_alts[0] } else { unguarded_alts[0] };
         if plan.is_hoisted(i) {
-            w.line(`pos = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
-                ctx.current_rule_reads_follow(),
-            )});`);
+            w.line(
+                `pos = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
+                    ctx.current_rule_reads_follow(),
+                )});`,
+            );
             w.line("if pos >= 0 { break scan_alts; }");
             w.line("return -1;");
             return;
@@ -1858,7 +1888,8 @@ fn gen_scan_partition_body<S: AsStrSlice>(
                 gen_scan_gate_restore(w, ctx, "start");
             }
             w.line(
-                `let try_${i}_end = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg()}${follow_sep(
+                `let try_${i}_end = ${scan_helper_callee(scan_alt_helper_name(base_name, i), ctx)}(tokens, start${ctx.scan_gate_arg(
+                )}${follow_sep(
                     ctx.current_rule_reads_follow(),
                 )});`,
             );
@@ -2509,7 +2540,17 @@ fn gen_scan_op_group<S: AsStrSlice>(
     if ge.alts.len() == 1 {
         let elements = &ge.alts[0].elements;
         if !scan_elements_can_fail(elements, 0, known, ctx) {
-            gen_scan_op_elements(w, elements, 0, elements.len(), ctx, fail_stmt, &NO_SCAN_GATES, &NO_SCAN_GATE_COND, known);
+            gen_scan_op_elements(
+                w,
+                elements,
+                0,
+                elements.len(),
+                ctx,
+                fail_stmt,
+                &NO_SCAN_GATES,
+                &NO_SCAN_GATE_COND,
+                known,
+            );
             return;
         }
         // Single alt: outer `done` wraps inner `body`.
@@ -2609,10 +2650,15 @@ fn gen_scan_op_group<S: AsStrSlice>(
 
 /// What branch `i` of a decision chain proved about `tokens[pos]` once taken.
 fn branch_proves(branches: &List<DecisionBranch>, i: i32) -> List<List<String>> {
+    return known_at_start(&branch_proven_first(branches, i));
+}
+
+/// The kinds `tokens[pos]` is one of once branch `i` of a decision chain is taken.
+fn branch_proven_first(branches: &List<DecisionBranch>, i: i32) -> List<String> {
     if decision_is_unconditional(branches) {
         return [];
     }
-    return known_at_start(&admits_kinds(&branches[i].test));
+    return admits_kinds(&branches[i].test);
 }
 
 /// A group whose branches each hold one alternative: the branch taken is the
@@ -2734,7 +2780,9 @@ fn gen_scan_token_set_assign(w: &mut CodeWriter, kinds: &List<String>, ctx: &mut
         w.line("pos += 1;");
         return;
     }
-    w.line(`if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { pos = -1; } else { pos += 1; }`);
+    w.line(
+        `if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { pos = -1; } else { pos += 1; }`,
+    );
 }
 
 /// Whether `gen_scan_op_group` under `known` emits the failure it was handed.
@@ -3846,10 +3894,12 @@ fn gen_alt_elements(
     // leaves/groups/repeats append to the `TreeBuilder`. The surface elements
     // are required so group dispatch can reuse the shared prediction
     // (`build_prediction` / scan tournament).
+    let first_proven = element_proven_first(actions, proven_first);
     for let mut i = 0; i < elements.len(); i += 1 {
         gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
+        let proven = if i == 0 { &first_proven } else { &EMPTY_SYNC };
         if let Repeat(rep) = peel_scalar_label(elem) {
             let rep_op = if let Repeat(r) = op {
                 r;
@@ -3862,13 +3912,11 @@ fn gen_alt_elements(
             // inserts a missing terminal against (a recovery-only edit; on valid
             // input the leaf matches and `sync` is never read).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
-            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, &proven);
+            gen_op_leaf(w, op, ctx, &mut name_counts, &sync, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, &mut name_counts);
         } else if let Group(g_op) = op {
-            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
-            gen_op_group(w, g_op, elem, ctx, &mut name_counts, GroupEntry::Required, null, &proven);
+            gen_op_group(w, g_op, elem, ctx, &mut name_counts, GroupEntry::Required, null, proven);
         } else {
             panic("gen_alt_elements: unreachable op shape — every Op variant is handled");
         }
@@ -3901,10 +3949,12 @@ fn gen_elements_with_non_greedy(
     if ctx.emit_actions() && !actions.is_empty() {
         ctx.set_alt_bindings(collect_alt_bindings(ops));
     }
+    let first_proven = element_proven_first(actions, proven_first);
     for let mut i = 0; i < elements.len(); i += 1 {
         gen_alt_actions_at(w, actions, i, ctx);
         let elem = &elements[i];
         let op = &ops[i];
+        let proven = if i == 0 { &first_proven } else { &EMPTY_SYNC };
         if let Repeat(rep) = peel_scalar_label(elem) {
             let rep_op = if let Repeat(r) = op {
                 r;
@@ -3919,13 +3969,11 @@ fn gen_elements_with_non_greedy(
             // only deleted-or-unwound (recovery quality is uniform with the
             // top-level sequence).
             let sync = ctx.first_of_elements_from(elements, i + 1);
-            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
-            gen_op_leaf(w, op, ctx, name_counts, &sync, &proven);
+            gen_op_leaf(w, op, ctx, name_counts, &sync, proven);
         } else if let ListLabel(ll) = op {
             gen_op_list_label(w, ll, elem, ctx, name_counts);
         } else if let Group(g_op) = op {
-            let proven: List<String> = if i == 0 && !has_action_before(actions, 0) { *proven_first } else { [] };
-            gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required, null, &proven);
+            gen_op_group(w, g_op, elem, ctx, name_counts, GroupEntry::Required, null, proven);
         } else {
             panic("gen_elements_with_non_greedy: unreachable op shape — every Op variant is handled");
         }
@@ -4039,6 +4087,12 @@ fn leaf_binding<S: AsStrSlice, S1: AsStrSlice>(ctx: &GenContext, base: S, field:
         return `let ${field} = `;
     }
     return String::new();
+}
+
+/// What the first element may take as proven: nothing once an action runs
+/// ahead of it at surface index `first_index`.
+fn element_proven_first(actions: &List<AltAction>, proven_first: &List<String>, first_index: i32 = 0) -> List<String> {
+    return if has_action_before(actions, first_index) { [] as List<String> } else { *proven_first };
 }
 
 fn has_action_before(actions: &List<AltAction>, index: i32) -> bool {
@@ -4166,13 +4220,25 @@ fn gen_op_leaf(
 // Mirrors `cst_gen`'s emitter but against the builder-appending Parser, whose
 // match methods recover in place (infallible) instead of returning `Result`.
 
-fn gen_ops(w: &mut CodeWriter, ops: &List<Op>, ctx: &mut GenContext, nc: &mut List<[String, i32]>, proven_first: &List<String> = &EMPTY_SYNC) {
+fn gen_ops(
+    w: &mut CodeWriter,
+    ops: &List<Op>,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    proven_first: &List<String> = &EMPTY_SYNC,
+) {
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_op(w, &ops[i], ctx, nc, if i == 0 { proven_first } else { &EMPTY_SYNC });
     }
 }
 
-fn gen_op(w: &mut CodeWriter, op: &Op, ctx: &mut GenContext, nc: &mut List<[String, i32]>, proven: &List<String> = &EMPTY_SYNC) {
+fn gen_op(
+    w: &mut CodeWriter,
+    op: &Op,
+    ctx: &mut GenContext,
+    nc: &mut List<[String, i32]>,
+    proven: &List<String> = &EMPTY_SYNC,
+) {
     match *op {
         Repeat(r) => gen_repeat_body(w, &r, ctx, nc),
         Group(g) => gen_group_body(w, &g, ctx, nc, null, proven),
@@ -4270,8 +4336,7 @@ fn gen_alt_dispatch(
         let mut body = CodeWriter::with_capacity(256);
         let picked = &branches[i].alts;
         if picked.len() == 1 {
-            let proven = if decision_is_unconditional(&branches) { [] as List<String> } else { admits_kinds(&branches[i].test) };
-            gen_ops(&mut body, &alt_by_index(alts, picked[0]).ops, ctx, nc, &proven);
+            gen_ops(&mut body, &alt_by_index(alts, picked[0]).ops, ctx, nc, &branch_proven_first(&branches, i));
         } else {
             let winner = gen_scan_winner_tournament(&mut body, picked, scan_alts, ctx, nc);
             gen_alt_commit(&mut body, alts, picked, &winner, ctx, nc);
@@ -4531,7 +4596,9 @@ fn emit_lr_branch<S: AsStrSlice, S1: AsStrSlice>(
         // The other shape of a scan entry: the generated scan takes the tokens
         // and the position as arguments, so only the gate is left to hand it.
         gen_scan_gate_from(w, ctx, &ScanOrigin::Parser);
-        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${ctx.scan_gate_arg()}${follow_sep(ctx.current_rule_reads_follow())})`;
+        `${scan_fn}_lr_${lr.alt_index}(&p.kinds, p.pos${ctx.scan_gate_arg()}${follow_sep(
+            ctx.current_rule_reads_follow(),
+        )})`;
     };
     let matched = prebound matches { Some(_) };
     if mid_operand_gated {
@@ -4599,10 +4666,10 @@ fn emit_lr_branch_body<S: AsStrSlice>(
         // the `let {name} = _lr_acc;` bound above.
         ctx.set_alt_bindings(collect_alt_bindings(ops));
     }
+    let first_proven = element_proven_first(actions, proven_first, 1);
     for let mut i = 0; i < ops.len(); i += 1 {
         gen_alt_actions_at(w, actions, i + 1, ctx);
-        let proven: List<String> = if i == 0 && !has_action_before(actions, 1) { *proven_first } else { [] };
-        gen_op(w, &ops[i], ctx, nc, &proven);
+        gen_op(w, &ops[i], ctx, nc, if i == 0 { &first_proven } else { &EMPTY_SYNC });
     }
     gen_alt_actions_at(w, actions, ops.len() + 1, ctx, true);
     w.line("p.b.finish_node(p.last_end());");
@@ -5444,10 +5511,14 @@ fn gen_op_transparent_optional_with_cond<S: AsStrSlice>(
     let mut nc: List<[String, i32]> = [];
     let outer_choice = ctx.enter_group_body(false);
     let outer = enter_group_alt_bindings(&body.ops, &alt.actions, ctx);
+    let first_proven = element_proven_first(&alt.actions, proven_first);
     for let mut i = 0; i < alt.elements.len(); i += 1 {
         gen_alt_actions_at(w, &alt.actions, i, ctx);
-        let proven: List<String> = if i == 0 && !has_action_before(&alt.actions, 0) { *proven_first } else { [] };
-        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc, &proven);
+        gen_op_dispatch_element(w, &body.ops[i], &alt.elements[i], ctx, &mut nc, if i == 0 {
+            &first_proven;
+        } else {
+            &EMPTY_SYNC;
+        });
     }
     gen_alt_actions_at(w, &alt.actions, alt.elements.len(), ctx, true);
     leave_group_alt_bindings(&outer, &alt.actions, ctx);
@@ -8016,23 +8087,24 @@ fn gen_group_dispatch(
     for let mut g = 0; g < branches.len(); g += 1 {
         let proven = if g < tested { admits_kinds(&branches[g].test) } else { [] as List<String> };
         let mut body = CodeWriter::with_capacity(256);
-        gen_group_branch_body(&mut body, &branches[g].alts, alts, g_op_alts, g_op_scan_alts, kind, ctx, name_counts, &proven);
+        gen_group_branch_body(
+            &mut body,
+            &branches[g].alts,
+            alts,
+            g_op_alts,
+            g_op_scan_alts,
+            kind,
+            ctx,
+            name_counts,
+            &proven,
+        );
         bodies.push(body.to_string());
         if g < tested {
             tested_branches.push(branches[g]);
         }
     }
     let rest_body = if last_takes_rest { bodies.pop().unwrap() } else { String::new() };
-    let [merged, merged_bodies] = merge_identical_branches(&tested_branches, &bodies);
-    for let mut g = 0; g < merged.len(); g += 1 {
-        let cond = render_branch_cond(&merged[g], &grp_var, ctx);
-        if g == 0 {
-            w.begin(`if ${cond}`);
-        } else {
-            w.else_begin(`else if ${cond}`);
-        }
-        w.write(&merged_bodies[g]);
-    }
+    emit_tested_arms(w, &tested_branches, &bodies, &grp_var, ctx);
     if last_takes_rest {
         w.else_begin("else");
         w.write(&rest_body);
@@ -8128,7 +8200,15 @@ fn gen_group_branch_body(
         let alt_index = group[0];
         match kind {
             RuleRef => gen_simplecst_rulecall_value(w, &g_op_alts[alt_index].ops[0], ctx),
-            General => gen_general_alt_parse_and_store(w, alts, &g_op_alts[alt_index], alt_index, ctx, name_counts, proven),
+            General => gen_general_alt_parse_and_store(
+                w,
+                alts,
+                &g_op_alts[alt_index],
+                alt_index,
+                ctx,
+                name_counts,
+                proven,
+            ),
         }
         return;
     }
@@ -8803,9 +8883,23 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 `p.peek_at(${d.depth})`;
             };
             let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
-            if d.depth == 0 && skip == 0 && d.branches.len() == 1 && fallback.is_empty()
-                && !proven_first.is_empty() && all_contained(proven_first, &d.branches[0].tokens) {
-                gen_prediction_code_inner(w, &d.branches[0].child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
+            if d.depth == 0
+                && skip == 0
+                && d.branches.len() == 1
+                && fallback.is_empty()
+                && !proven_first.is_empty()
+                && all_contained(proven_first, &d.branches[0].tokens) {
+                gen_prediction_code_inner(
+                    w,
+                    &d.branches[0].child,
+                    fn_name,
+                    alts,
+                    lowered_rule,
+                    type_name,
+                    ctx,
+                    skip,
+                    rule_display,
+                );
                 return;
             }
             let mut arms: List<DecisionBranch> = [];
@@ -8826,16 +8920,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
                 arms.push(DecisionBranch { test: admits_or_everything(&branch.tokens), gate: "", alts: [] });
                 bodies.push(body.to_string());
             }
-            let [arms, bodies] = merge_identical_branches(&arms, &bodies);
-            for let mut i = 0; i < arms.len(); i += 1 {
-                let cond = ctx.admits_check_str(&arms[i].test, &check_var);
-                if i == 0 {
-                    w.begin(`if ${cond}`);
-                } else {
-                    w.else_begin(`else if ${cond}`);
-                }
-                w.write(&bodies[i]);
-            }
+            emit_tested_arms(w, &arms, &bodies, &check_var, ctx);
             // The cascade names only what the SLL walk enumerated, and that
             // walk approximates — a `Repeat` config is advanced past the repeat
             // as if it iterated once, so a second iteration's token reaches no

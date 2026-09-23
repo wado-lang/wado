@@ -46,6 +46,14 @@ pub fn push_chars_escaped(out: &mut String, chars: &List<char>, start: i32, end:
     }
 }
 
+pub fn kind_set_has(set: &List<i32>, kind: i32) -> bool {
+    let w = kind >> 5;
+    if w >= set.len() {
+        return false;
+    }
+    return set[w] >> (kind & 31) & 1 == 1;
+}
+
 pub fn with_expected<S: AsStrSlice>(message: S, expected: &List<String>) -> String {
     let n = expected.len();
     if n == 0 {
@@ -1081,12 +1089,6 @@ impl Parser {
         }
     }
 
-    fn in_set(&self, k: i32, set: &List<i32>) -> bool {
-        let w = k >> 5;
-        if w >= set.len() { return false; }
-        return set[w] >> (k & 31) & 1 == 1;
-    }
-
     fn report_extra(&mut self, kind: i32) {
         if self.diagnostics.len() >= self.max_errors { self.recovering = true; return; }
         self.diagnostics.push(Diagnostic::error(DiagnosticCode::ExtraToken, `extraneous input "${self.tokens.token_text(self.pos)}"`, self.tokens.span_at(self.pos), [kind], self.kinds[self.pos], RecoveryAction::Deleted));
@@ -1163,7 +1165,7 @@ impl Parser {
             self.b.token(_i);
             return _i;
         }
-        if self.in_set(self.kinds[self.pos], sync) {
+        if kind_set_has(sync, self.kinds[self.pos]) {
             self.report_missing(kind);
             let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);
             self.b.missing(_syn);
@@ -1175,7 +1177,7 @@ impl Parser {
                 self.b.start_error(self.tokens.span_at(self.pos).start);
                 loop {
                     let _k = self.kinds[self.pos];
-                    if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }
+                    if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }
                     let _sk = self.advance();
                     self.tokens.mark_skipped(_sk);
                     self.b.skip(_sk);
@@ -1225,7 +1227,7 @@ impl Parser {
     fn expect_not(&mut self, excluded: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if k != TK_EOF && !self.in_set(k, excluded) {
+        if k != TK_EOF && !kind_set_has(excluded, k) {
             let _i = self.advance();
             self.b.token(_i);
             return _i;
@@ -1237,7 +1239,7 @@ impl Parser {
     fn expect_set(&mut self, included: &List<i32>, expected: &List<i32>) -> i32 {
         if self.recovering { return self.pos; }
         let k = self.kinds[self.pos];
-        if self.in_set(k, included) {
+        if kind_set_has(included, k) {
             if k == TK_EOF {
                 self.b.token(self.pos);
                 return self.pos;

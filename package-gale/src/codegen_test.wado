@@ -750,7 +750,7 @@ Y : 'Y' ;
     let body = extract_fn_body(&output, "fn scan_a(");
     assert body.len() > 0, "expected a scan_a body";
     assert str_contains(&body, "while pos < tokens.len() && tokens[pos] == TK_LIT_COMMA");
-    assert !str_contains(&body, "tokens[pos] != TK_LIT_COMMA"),`the loop guard proved ','\n${body}`;
+    assert !str_contains(&body, "tokens[pos] != TK_LIT_COMMA"), `the loop guard proved ','\n${body}`;
     assert !str_contains(&body, "_best"), `a single-token alternation is a set test, not a tournament\n${body}`;
 }
 
@@ -1435,8 +1435,7 @@ test "a sync set is tested as bits, and listed only where a diagnostic names it"
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, "global SYNC_0: List<i32> = [2];"), output;
     assert !str_contains(&output, "global EXPECTED_"), output;
-    let in_set = extract_fn_body(&output, "fn in_set(");
-    assert !str_contains(&in_set, "for let"), in_set;
+    assert !str_contains(&output, "fn in_set("), output;
 }
 
 test "non-greedy optional (??) emits Option<T> + single if" {

@@ -72,7 +72,7 @@ internal fn gen_recover_helpers(w: &mut CodeWriter, entries: &List<RecoverFragme
     } else {
         w.line("let _k = p.kinds[p.pos];");
         for let mut i = 0; i < entries.len(); i += 1 {
-            w.begin(`if p.in_set(_k, &_FRAGMENT_FIRST_${i})`);
+            w.begin(`if kind_set_has(&_FRAGMENT_FIRST_${i}, _k)`);
             w.line(&entries[i].call);
             w.line("return true;");
             w.end();
@@ -659,18 +659,6 @@ pub fn gen_parser_struct<S: AsStrSlice>(
         w.blank();
     }
 
-    let mut iset = FnSpec::new("in_set");
-    iset.set_receiver("&self");
-    iset.add_param("k", "i32");
-    iset.add_param("set", "&List<i32>");
-    iset.set_return_type("bool");
-    iset.emit_begin(w);
-    w.line("let w = k >> 5;");
-    w.line("if w >= set.len() { return false; }");
-    w.line("return set[w] >> (k & 31) & 1 == 1;");
-    w.end();
-    w.blank();
-
     // Record a local recovery edit as a diagnostic and keep parsing (no
     // `recovering`): a deleted spurious terminal (`ExtraToken`) or an inserted
     // required terminal (`MissingToken`).
@@ -826,7 +814,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.end();
     // single-token insertion: the current token continues the rule, so the
     // expected one is missing.
-    w.begin("if self.in_set(self.kinds[self.pos], sync)");
+    w.begin("if kind_set_has(sync, self.kinds[self.pos])");
     w.line("self.report_missing(kind);");
     w.line("let _syn = self.tokens.push_synthetic(kind, self.tokens.span_at(self.pos).start);");
     w.line("self.b.missing(_syn);");
@@ -842,7 +830,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     w.line("self.b.start_error(self.tokens.span_at(self.pos).start);");
     w.begin("loop");
     w.line("let _k = self.kinds[self.pos];");
-    w.line("if _k == TK_EOF || _k == kind || self.in_set(_k, sync) { break; }");
+    w.line("if _k == TK_EOF || _k == kind || kind_set_has(sync, _k) { break; }");
     w.line("let _sk = self.advance();");
     w.line("self.tokens.mark_skipped(_sk);");
     w.line("self.b.skip(_sk);");
@@ -901,7 +889,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f10.emit_begin(w);
     w.line("if self.recovering { return self.pos; }");
     w.line("let k = self.kinds[self.pos];");
-    w.begin("if k != TK_EOF && !self.in_set(k, excluded)");
+    w.begin("if k != TK_EOF && !kind_set_has(excluded, k)");
     emit_consume_return(w);
     w.end();
     w.line("self.fail_on_token(\"unexpected token\", &EMPTY_SYNC, DiagnosticCode::UnexpectedToken);");
@@ -920,7 +908,7 @@ pub fn gen_parser_struct<S: AsStrSlice>(
     f11.emit_begin(w);
     w.line("if self.recovering { return self.pos; }");
     w.line("let k = self.kinds[self.pos];");
-    w.begin("if self.in_set(k, included)");
+    w.begin("if kind_set_has(included, k)");
     w.begin("if k == TK_EOF");
     w.line("self.b.token(self.pos);");
     w.line("return self.pos;");
