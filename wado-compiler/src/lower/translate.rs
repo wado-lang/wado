@@ -2337,16 +2337,14 @@ impl FunctionTranslator<'_, '_> {
         let (elem, repr_ty) = self.packed_layout(seq_type_id);
         let data = PackedData::new(bytes, elem);
         let len = i32::try_from(data.len()).expect("seq literal length fits i32");
-        if matches!(
-            self.base.type_table.borrow().get(repr_ty),
-            ResolvedType::BuiltinArray(_)
-        ) && self
-            .base
-            .type_table
-            .borrow()
-            .representation_head(seq_type_id)
-            == repr_ty
-        {
+        let is_array = {
+            let tt = self.base.type_table.borrow();
+            matches!(
+                tt.get(tt.representation_head(seq_type_id)),
+                ResolvedType::BuiltinArray(_)
+            )
+        };
+        if is_array {
             return self.alloc_expr(ExprKind::PackedArray(data), seq_type_id, span);
         }
         let packed = self.alloc_expr(ExprKind::PackedArray(data), repr_ty, span);

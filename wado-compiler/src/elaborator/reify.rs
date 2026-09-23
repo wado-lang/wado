@@ -3131,23 +3131,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 // only fits as the already-negative value, or a type
                 // mismatch when the operand's literal type differs).
                 if matches!(op, TirUnaryOp::Neg) {
-                    let half = {
-                        let tt = self.tysys.type_table.borrow();
-                        tt.primitive_head(inner.type_id)
-                            .filter(|p| p.is_half())
-                            .and_then(FloatFormat::of)
-                    };
+                    let half = self.half_format(inner.type_id);
                     match &inner.kind {
                         TirExprKind::IntLiteral { value, .. } if let Some(format) = half => {
-                            let bits = value ^ format.sign_bit();
-                            return TirExpr::new(
-                                TirExprKind::IntLiteral {
-                                    value: bits,
-                                    repr: format!("{bits:#06x}"),
-                                },
-                                inner.type_id,
-                                span,
-                            );
+                            return half_literal(value ^ format.sign_bit(), inner.type_id, span);
                         }
                         TirExprKind::IntLiteral { value, repr } => {
                             return TirExpr::new(
@@ -8325,10 +8312,16 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         deref_to_value(value, span, &self.tysys.type_table)
     }
 
-    /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
-    /// The arms below are ordered by precedence and each
-    /// documents the recorded fact it reads; nothing here re-resolves a
-    /// callee.
+    /// The format of `ty` when it is a half, whose value is carried as bits.
+    fn half_format(&self, ty: TypeId) -> Option<FloatFormat> {
+        self.tysys
+            .type_table
+            .borrow()
+            .primitive_head(ty)
+            .filter(|p| p.is_half())
+            .and_then(FloatFormat::of)
+    }
+
     /// Whether `func` reads little-endian elements out of bytes:
     /// `builtin::array_new_data` or `List::from_le_bytes`.
     fn reads_le_bytes(&self, func: &tir::FunctionRef) -> bool {
@@ -8379,6 +8372,10 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .then(|| TirExpr::new(TirExprKind::BytesLiteral(bytes.clone()), result, span))
     }
 
+    /// Reify a `CallExpr`, mirroring `Elaborator::resolve_call`
+    /// The arms below are ordered by precedence and each
+    /// documents the recorded fact it reads; nothing here re-resolves a
+    /// callee.
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -10115,6 +10112,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(recorded_type);
+        // A half has no float value of its own: its literal is its bits.
+        if let Some(format) = self.half_format(base_target) {
+            let bits = float_literal_bits(repr, format).unwrap_or(0);
+            return half_literal(bits, recorded_type, span);
+        }
         // A float-only literal (`1.0`, `0.0`, `1e2`) is a float regardless of
         // the recorded type: when the recorded type is missing/UNKNOWN (e.g. a
         // stdlib const body whose `expression_types` entry is absent from the
@@ -10122,23 +10124,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         // production's `resolve_numeric_literal`. An integer literal still
         // defers to the recorded type so `let x: f64 = 1` takes the float path
         // via `is_float_target`.
-        // A half has no float value of its own: its literal is its bits.
-        if base_target == TypeTable::F16 || base_target == TypeTable::BF16 {
-            let format = if base_target == TypeTable::F16 {
-                FloatFormat::F16
-            } else {
-                FloatFormat::BF16
-            };
-            let bits = float_literal_bits(repr, format).unwrap_or(0);
-            return TirExpr::new(
-                TirExprKind::IntLiteral {
-                    value: bits,
-                    repr: format!("{bits:#06x}"),
-                },
-                recorded_type,
-                span,
-            );
-        }
         let is_float_target = base_target == TypeTable::F32
             || base_target == TypeTable::F64
             || (recorded_type == TypeTable::UNKNOWN && util::is_float_only_literal(repr));
@@ -11499,4 +11484,16 @@ pub(crate) fn default_impl_methods(decl: &InterfaceDecl) -> Vec<ast::Function> {
             ..method.clone()
         })
         .collect()
+}
+
+/// A half precision literal, given as its bits.
+fn half_literal(bits: u64, ty: TypeId, span: Span) -> TirExpr {
+    TirExpr::new(
+        TirExprKind::IntLiteral {
+            value: bits,
+            repr: format!("{bits:#06x}"),
+        },
+        ty,
+        span,
+    )
 }

@@ -2528,8 +2528,8 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
             ExprKind::Call { .. } | ExprKind::IndirectCall { .. } | ExprKind::CmRawCall { .. } => {
                 Some(())
             }
-            ExprKind::PackedArray(bytes) => {
-                (!packed_array_is_eager(bytes, gate.string_inline_max_bytes, true)).then_some(())
+            ExprKind::PackedArray(data) => {
+                (!packed_array_is_eager(data, gate.string_inline_max_bytes, true)).then_some(())
             }
             ExprKind::ArrayLiteral { elements } => (elements.len() > ARRAY_NEW_FIXED_LIMIT
                 || array_literal_promotes_to_data(body, elements, gate))

@@ -1368,11 +1368,10 @@ impl<'a> Builder<'a> {
             }
 
             // ---- Other Skel-side leaves ----
-            // The backing bytes of a `String` / `List<u8>` literal are a
-            // constant the pool can name, so a literal keeps its identity
-            // through a binding instead of going opaque at the first `let`.
-            // Bounded by `const_eval::MAX_SEQ_ELEMENTS`: past it the walk would cost more
-            // than any fold it enables, and `Value::seq` declines.
+            // The backing array of a sequence literal is a constant the pool
+            // can name, so a literal keeps its identity through a binding
+            // instead of going opaque at the first `let`. `Value::seq` declines
+            // one too long for any fold to repay the walk.
             ExprKind::PackedArray(bytes) => {
                 let ty = self.body.exprs[expr].type_id;
                 Value::seq(ty, bytes.values()).map(|seq| self.pool.constant(&seq, ty))

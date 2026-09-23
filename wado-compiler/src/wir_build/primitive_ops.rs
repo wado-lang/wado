@@ -74,13 +74,12 @@ impl PrimitiveKind {
 }
 
 impl FunctionTranslator<'_, '_> {
-    /// Translate a raw constant `Array<u8>` (`ExprKind::PackedArray`) — the
-    /// `repr` of a `String` / `List<u8>` literal — to WIR.
+    /// Translate a constant array (`ExprKind::PackedArray`) to WIR.
     ///
-    /// Short payloads use a constant `array.new_fixed<u8>` (a valid Wasm const
-    /// instruction, so a const sequence global can be promoted eager by
-    /// `wir_optimize::const_global`); longer ones use a passive `array.new_data`
-    /// segment (compact, but not const). The `String` / `List<u8>` struct
+    /// A short byte payload uses a constant `array.new_fixed<u8>` (a valid Wasm
+    /// const instruction, so a const sequence global can be promoted eager by
+    /// `wir_optimize::const_global`); anything else uses a passive
+    /// `array.new_data` segment (compact, but not const). A `String` / `List`
     /// wrapping is emitted by the enclosing `StructLiteral`.
     pub(super) fn translate_packed_array(&self, data: &PackedData, type_id: TypeId) -> WirInstr {
         let array_type_id = if data.as_bytes().is_some() {
