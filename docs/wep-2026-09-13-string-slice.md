@@ -67,6 +67,9 @@ What follows:
   delegate to it. The ones that answer with part of their input return a view,
   so working on part of a string does not copy it out. `to_string` is where a
   caller that wants an owned string asks for one.
+- A byte range is cut with `slice(start, end)` and `slice_unchecked`, the names
+  `Slice<T>` uses for the same cut. `sub` would read as the `Sub` operator's
+  method, so it is declared unavailable and names `slice` instead.
 
 ## Known gaps
 

@@ -2356,7 +2356,7 @@ fn assert_escape_errors(cases: &List<[String, String]>) {
         let esc = cases[i].1;
         let err = parse(src).unwrap_err();
         assert err.message == `invalid escape sequence ${esc}`, err.message;
-        let at = src.as_str_slice().sub(err.span.start, err.span.end).to_string();
+        let at = src.as_str_slice().slice(err.span.start, err.span.end).to_string();
         assert at == esc, `${err.span.start}..${err.span.end} is "${at}", not "${esc}"`;
     }
 }

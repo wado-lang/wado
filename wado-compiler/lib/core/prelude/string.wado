@@ -673,7 +673,7 @@ impl String {
         if end <= start {
             return;
         }
-        self.push_str(s.as_str_slice().sub_unchecked(start, end));
+        self.push_str(s.as_str_slice().slice_unchecked(start, end));
     }
 
     /// Returns an iterator over the UTF-8 bytes of the string.
@@ -1350,10 +1350,10 @@ impl StrSlice {
     /// A sub-view over `[start, end)`, counted from this view's start.
     /// Panics if the range is out of bounds or either end is off a character
     /// boundary.
-    pub fn sub(&self, start: i32, end: i32) -> StrSlice {
+    pub fn slice(&self, start: i32, end: i32) -> StrSlice {
         assert 0 <= start <= end <= self.len(), "byte range out of bounds";
         assert self.is_char_boundary(start) && self.is_char_boundary(end), "byte range not on UTF-8 character boundaries";
-        return self.sub_unchecked(start, end);
+        return self.slice_unchecked(start, end);
     }
 
     /// A sub-view without bounds or UTF-8 boundary checks.
@@ -1362,9 +1362,15 @@ impl StrSlice {
     /// - `0 <= start <= end <= self.len()`.
     /// - `start` and `end` lie on UTF-8 character boundaries.
     #[inline]
-    pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
+    pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
         return StrSlice { repr: self.repr, start: self.start + start, end: self.start + end };
     }
+
+    #[unavailable("renamed to `slice`, as `Slice<T>` spells it")]
+    pub fn sub(&self);
+
+    #[unavailable("renamed to `slice_unchecked`, as `Slice<T>` spells it")]
+    pub fn sub_unchecked(&self);
 
     /// The backing array and this view's offset into it (stdlib use only):
     /// what a byte-at-a-time reader needs to index without a bounds check.
@@ -1463,7 +1469,7 @@ impl StrSlice {
         if !self.starts_with(prefix) {
             return null;
         }
-        return Option::Some(self.sub_unchecked(start, self.len()));
+        return Option::Some(self.slice_unchecked(start, self.len()));
     }
 
     /// The view with `suffix` removed from the end, or None when it does not
@@ -1473,7 +1479,7 @@ impl StrSlice {
         if !self.ends_with(suffix) {
             return null;
         }
-        return Option::Some(self.sub_unchecked(0, self.len() - suffix_len));
+        return Option::Some(self.slice_unchecked(0, self.len() - suffix_len));
     }
 
     /// Byte order against any text, the `cmp` a generic body cannot reach:
@@ -1634,8 +1640,8 @@ impl StrSlice {
 
     fn cut_at(&self, at: i32, sep_len: i32) -> [StrSlice, StrSlice] {
         return [
-            self.sub_unchecked(0, at),
-            self.sub_unchecked(at + sep_len, self.len()),
+            self.slice_unchecked(0, at),
+            self.slice_unchecked(at + sep_len, self.len()),
         ];
     }
 
@@ -1664,11 +1670,11 @@ impl StrSlice {
     }
 
     pub fn substr_bytes(&self, start: i32, end: i32) -> String {
-        return self.sub(start, end).to_string();
+        return self.slice(start, end).to_string();
     }
 
     pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String {
-        return self.sub_unchecked(start, end).to_string();
+        return self.slice_unchecked(start, end).to_string();
     }
 
     pub fn contains_char(&self, ch: char) -> bool {
@@ -1735,7 +1741,7 @@ impl StrSlice {
             }
         }
         if pos < len {
-            result.push_str(self.sub_unchecked(pos, len));
+            result.push_str(self.slice_unchecked(pos, len));
         }
         return result;
     }
@@ -1779,13 +1785,19 @@ pub trait AsStrSlice: Eq<String> with () {
         return self.as_str_slice().ceil_char_boundary(index);
     }
 
-    fn sub(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().sub(start, end);
+    fn slice(&self, start: i32, end: i32) -> StrSlice {
+        return self.as_str_slice().slice(start, end);
     }
 
-    fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice {
-        return self.as_str_slice().sub_unchecked(start, end);
+    fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice {
+        return self.as_str_slice().slice_unchecked(start, end);
     }
+
+    #[unavailable("renamed to `slice`, as `Slice<T>` spells it")]
+    fn sub(&self);
+
+    #[unavailable("renamed to `slice_unchecked`, as `Slice<T>` spells it")]
+    fn sub_unchecked(&self);
 
     fn as_bytes(&self) -> ByteSlice {
         return self.as_str_slice().as_bytes();
