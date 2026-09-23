@@ -1436,6 +1436,21 @@ impl Parser {
     }
 }
 
+fn scan_t(tokens: &Array<i32>, pos: i32) -> i32 {
+    let start = pos;
+    let mut pos = pos;
+    let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+    scan_alts: {
+        if _kind_set_0(alt_kind) {
+            pos = start + 1;
+            break scan_alts;
+        } else {
+            return -1;
+        }
+    }
+    return pos;
+}
+
 fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
     loop {
         if p.recovering { break; }
@@ -1444,8 +1459,8 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
-            pos += 1;
+            pos = scan_t(tokens, pos);
+            if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
