@@ -128,6 +128,7 @@ pub fn emit(graph: &Graph, shapes: &TreeMap<String, Shape>) -> Result<String, Em
     }
     out.push('\n');
     out.push_str(&RUNTIME);
+    out.push_str(&GRAPH_BANNER);
 
     emit_weights(&mut out, graph, shapes, &names, &held);
     emit_forward(&mut out, graph, shapes, &names, &held)?;
@@ -230,6 +231,15 @@ impl Names {
 /// The kernels every generated module carries, inlined rather than imported so
 /// the module stands on its own.
 global RUNTIME: String = #include_str("./runtime/tensor.wado");
+
+/// Where the inlined runtime ends and this graph's own code begins. A reader
+/// needs the line, and a test asserting a kernel is absent needs the boundary.
+internal global GRAPH_BANNER: String = `
+// ---------------------------------------------------------------------------
+// The rest is generated from this graph. Everything above is the Loam runtime,
+// the same in every module it emits.
+// ---------------------------------------------------------------------------
+`;
 
 /// The words Wado reserves, which an ONNX tensor may well be named after
 /// (`in`, `of`, `type`). From `wado-compiler/src/syntax.rs`.

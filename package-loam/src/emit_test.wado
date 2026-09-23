@@ -1,4 +1,4 @@
-use { EmitError, emit } from "./emit.wado";
+use { EmitError, GRAPH_BANNER, emit } from "./emit.wado";
 use { Attr, ConstTensor, Dim, Graph, Node, Rank, ValueInfo } from "./graph.wado";
 use { infer } from "./infer.wado";
 use { read } from "./onnx_text.wado";
@@ -14,10 +14,11 @@ fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitErro
     return emit(&graph, &shapes);
 }
 
-/// The emitted module without the runtime inlined above it. Asserting that a
-/// kernel is *absent* has to say where, since the runtime names every kernel.
+/// The part of the module generated from the graph, with the inlined runtime
+/// cut away. Asserting that a kernel is *absent* has to say where, since the
+/// runtime names every kernel.
 fn emitted(out: &String) -> String {
-    let start = out.find("pub fn forward(").unwrap();
+    let start = out.find(&GRAPH_BANNER).unwrap() + GRAPH_BANNER.len();
     return out.as_str_slice().sub(start, out.len()).to_string();
 }
 
@@ -41,6 +42,19 @@ fn mlp_layout() -> List<LayoutRule> {
         rule("W2", ["Hidden", "Out"]),
         rule("B2", ["Out"]),
     ];
+}
+
+test "a banner separates the inlined runtime from the graph's own code" {
+    let out = generate(MLP, mlp_layout()).unwrap();
+
+    // The runtime is above the banner and this graph's code below it, which is
+    // what lets a test say where a kernel call would have to appear.
+    let body = emitted(&out);
+    assert !body.contains("pub fn matmul");
+    assert !body.contains("pub fn map");
+    assert body.contains("pub struct Weights {");
+    assert body.contains("pub fn forward(");
+    assert out.contains("pub fn matmul");
 }
 
 test "the forward pass is one kernel call per operator" {
