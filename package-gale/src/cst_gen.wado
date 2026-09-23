@@ -146,8 +146,8 @@ fn gen_one_alt_enum(w: &mut CodeWriter, rule: &ParserRule) {
 /// `token_kind_name`). Used by driver tests; never called by the parser.
 pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens: &List<LitToken>, emit_actions: bool) {
     let n = num_token_kinds(&grammar.lexer_rules, lit_tokens);
-    // The renderers run from driver tests and build the table on demand;
-    // `$ctx.toStringTree()` runs inside a parse, so it caches one.
+    // `$ctx.toStringTree()` runs inside a parse, so an action grammar caches the
+    // table and the renderers share it; elsewhere they build it on demand.
     w.begin("fn _token_names() -> List<String>");
     w.line(`let mut v: List<String> = List::with_capacity(${n});`);
     w.begin(`for let mut k = 0; k < ${n}; k += 1`);
@@ -160,8 +160,9 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
         w.line("global CTX_TOKEN_NAMES: List<String> = _token_names();");
         w.blank();
     }
+    let names = if emit_actions { "&CTX_TOKEN_NAMES" } else { "&_token_names()" };
     w.begin("pub fn to_string_tree(result: &ParseResult) -> String");
-    w.line("return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, &_token_names());");
+    w.line(`return result.cst.to_string_tree(0, &result.tokens, &RULE_NAMES, ${names});`);
     w.end();
     w.blank();
 
@@ -180,7 +181,7 @@ pub fn gen_string_tree_helper(w: &mut CodeWriter, grammar: &Grammar, lit_tokens:
     w.line("if _kind < 0 { return String::new(); }");
     w.line("let _sub = result.cst.find_child(0, _kind as NodeKind);");
     w.begin("if _sub >= 0");
-    w.line("return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());");
+    w.line(`return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, ${names});`);
     w.end();
     w.line("return String::new();");
     w.end();

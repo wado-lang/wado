@@ -109,12 +109,12 @@ test "generate token kind" {
         source_files: [],
     };
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "pub enum TokenKind {");
-    assert str_contains(&output, "    NUMBER,");
-    assert str_contains(&output, "    WS,");
-    assert str_contains(&output, "    Eof,");
-    assert str_contains(&output, "    Error,");
-    assert !str_contains(&output, "    DIGIT,");
+    assert str_contains(&output, "pub global TK_NUMBER: i32 = 0;");
+    assert str_contains(&output, "pub global TK_WS: i32 = 1;");
+    assert str_contains(&output, "pub global TK_EOF: i32 = 2;");
+    assert str_contains(&output, "pub global TK_ERROR: i32 = 3;");
+    assert !str_contains(&output, "TK_DIGIT");
+    assert !str_contains(&output, "enum TokenKind");
 }
 
 test "node-kind constants are pub so consumers can dispatch on CstNode.kind" {
@@ -432,7 +432,7 @@ test "generate lexer type_override" {
     assert str_contains(&output, "best_kind = TK_ID");
     // TK_IF should still exist as a token kind (not renamed), because
     // type_override only rewrites emission, not the rule identifier.
-    assert str_contains(&output, "    IF,");
+    assert str_contains(&output, "pub global TK_IF: i32 = ");
 }
 
 test "generate lexer channel" {
@@ -909,11 +909,10 @@ ID : [a-z]+ ;";
 
 test "virtual tokens are marked and not match-generated" {
     // Virtual tokens (declared in `tokens { }` without a real lexer rule) must
-    // still appear in the TokenKind enum, the TK_<name> constant table, and
-    // the token_kind_name dispatch — but they must not get a try_<name>
-    // matcher (the tokenizer cannot produce them directly), and the emitted
-    // entries should be tagged `// virtual` so downstream tooling can see the
-    // distinction.
+    // still appear in the TK_<name> constant table and the token_kind_name
+    // dispatch — but they must not get a try_<name> matcher (the tokenizer
+    // cannot produce them directly), and the emitted entries should be tagged
+    // `// virtual` so downstream tooling can see the distinction.
     let input = "grammar Test;
 tokens { VIRTUAL_TOK }
 rule : ID ;
@@ -921,7 +920,6 @@ ID : [a-z]+ ;
 WS : [ \\t]+ -> skip ;";
     let mut grammar = parse_grammar(input, "test.g4");
     let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "    VIRTUAL_TOK,  // virtual");
     assert str_contains(&output, "global TK_VIRTUAL_TOK: i32 = ") && str_contains(&output, ";  // virtual");
     assert str_contains(&output, "TK_VIRTUAL_TOK => \"VIRTUAL_TOK\",  // virtual");
     assert !str_contains(&output, "fn try_VIRTUAL_TOK(");
@@ -1421,11 +1419,38 @@ test "wildcard caller suffix keeps the at-end conflict on the ATN" {
     assert !str_contains(&body, "_sd_best_i");
 }
 
-test "non-LR ATN grammar opts out of the decoder's LR tables" {
+test "non-LR ATN grammar carries prediction without the LR tables" {
     let mut g = parse(AT_END_CONFLICT_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
     assert str_contains(&output, "global ATN_SIM: AtnSim = atn_decode(&b\"");
-    assert str_contains(&output, "\", false);");
+    assert !str_contains(&output, "atn_with_lr_tables");
+    assert str_contains(&output, "pub fn atn_predict_with_stack(");
+    assert !str_contains(&output, "fn atn_lr_loop_decision(");
+}
+
+global LATN_ONLY_G4: String = "
+grammar T;
+s : ID* EOF ;
+ID : [a-z]+ ;
+COMMENT : '/*' (COMMENT | .)*? '*/' -> skip ;
+WS : ' ' -> skip ;
+";
+
+test "a lexer-ATN-only grammar carries the decoder and no parser simulator" {
+    let mut g = parse(LATN_ONLY_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, "pub fn latn_match(");
+    assert str_contains(&output, "pub fn atn_decode(");
+    assert !str_contains(&output, "fn atn_predict_with_stack(");
+    assert !str_contains(&output, "struct CtxArena");
+    assert !str_contains(&output, "fn atn_lr_loop_decision(");
+}
+
+test "runtime standard-library imports sit at the top of the file" {
+    let mut g = parse(LATN_ONLY_G4).unwrap();
+    let output = generate(&mut g, &DEFAULT_OPTIONS).source;
+    let std_use = output.find("use { TreeSet } from \"core:collections\";").unwrap();
+    assert std_use < output.find("pub struct Span").unwrap();
 }
 
 global LR_WILDCARD_CODEGEN_G4: String = "
@@ -1439,8 +1464,8 @@ WS : ' ' -> skip ;
 test "ATN-class LR grammar keeps the decoder's LR tables" {
     let mut g = parse(LR_WILDCARD_CODEGEN_G4).unwrap();
     let output = generate(&mut g, &DEFAULT_OPTIONS).source;
-    assert str_contains(&output, "global ATN_SIM: AtnSim = atn_decode(&b\"");
-    assert str_contains(&output, "\", true);");
+    assert str_contains(&output, "global ATN_SIM: AtnSim = atn_with_lr_tables(atn_decode(&b\"");
+    assert str_contains(&output, "pub fn atn_lr_loop_decision(");
 }
 
 fn count_substr<S: AsStrSlice, S1: AsStrSlice>(haystack: S, needle: S1) -> i32 {

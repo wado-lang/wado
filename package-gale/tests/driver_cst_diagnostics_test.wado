@@ -44,6 +44,29 @@ test "a valid parse reports no diagnostics" {
     assert r.ok(), "unexpected diagnostics";
 }
 
+test "a character no lexer rule matches is a LexError diagnostic" {
+    let r = json::parse("{\"a\": 1 #}");
+    let d = &r.diagnostics[0];
+    assert d.code matches { LexError }, `code ${d.code.name()}`;
+    assert d.message == "token recognition error at: '#'", d.message;
+    assert d.line == 1 && d.col == 8, `at ${d.line}:${d.col}`;
+    let mut flagged = 0;
+    for let mut i = 0; i < r.tokens.len(); i += 1 {
+        if r.tokens.is_lex_error(i) {
+            flagged += 1;
+        }
+    }
+    assert flagged == 1;
+}
+
+test "input ending inside a construct is an unterminated construct" {
+    let r = json::parse("[1, 2");
+    let d = &r.diagnostics[r.diagnostics.len() - 1];
+    assert d.code matches { UnterminatedConstruct }, `${d}`;
+    assert d.found == json::TK_EOF, `${d}`;
+    assert d.expected.len() == 1, `${d}`;
+}
+
 test "no viable alternative carries the NoViableAlternative code" {
     // `}` starts no `value` alternative, so the dispatch falls through to the
     // no-viable fallback.

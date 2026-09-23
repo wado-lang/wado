@@ -87,16 +87,18 @@ analysis.
 
 ```
 Diagnostic { severity, code, message, span, line, col,
-             expected: List<i32>, found: i32, rule_stack, recovery, related }
+             expected: List<i32>, found: i32, rule_stack, recovery }
 ```
 
 `expected`/`found` are token-kind ids (tooling reuses the grammar's name tables).
-A `message` says only what was found (`got ")"`); what was wanted lives in
-`expected`, and `ParseError::full_message` is the one place the two are
-combined.
-`code` is machine-switchable (`MissingToken`, `ExtraToken`, `NoViableAlternative`,
-`UnterminatedConstruct`, `LexError`, `UnexpectedToken`); `recovery` names the edit
-applied; `related` carries secondary notes (e.g. "'(' opened here").
+`message` reads `expected X or Y; got ")"`, composed once by `with_expected`.
+`code` is machine-switchable: `MissingToken`, `ExtraToken`, `UnexpectedToken`,
+`NoViableAlternative`, `UnterminatedConstruct` (the input ended inside a
+construct), and `LexError` (a character no lexer rule matched, `token
+recognition error at: 'x'`, one per `TOK_LEX_ERROR` token). `recovery` names the
+edit applied: `Inserted`, `Deleted`, `SkippedTo`, `FilledMissing` (an insertion at
+end of input), or `None` for a failure that unwound. `line` / `col` resolve once
+per parse, from one line index built only when there is a diagnostic.
 
 ## Public API
 
@@ -156,8 +158,9 @@ statement fragment builds full subtrees (opt-in, byte-identical when empty). See
   `NoViableAlternative` code but does not open an explicit `K_ERROR` node:
   the diagnostic's `rule_stack` is built on unwind, which is incompatible
   with placing a node and continuing. The fold represents the error region.
-- **`related`-note bracket hints (e.g. "'(' opened here").** Needs
+- **Related-note bracket hints (e.g. "'(' opened here").** Needs
   bracket-pair detection the IR does not support today — `LiteralOp` carries
   no literal text, and pairing openers/closers across nesting plus tracking
   the opener position at runtime is a feature in its own right. ANTLR4 does
-  not generate these automatically either. Revisit if a consumer needs it.
+  not generate these automatically either. `Diagnostic` carries no field for
+  them until a consumer needs one.
