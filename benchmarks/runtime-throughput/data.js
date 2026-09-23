@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790166763161,
+  "lastUpdate": 1790169482636,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -159425,6 +159425,270 @@ window.BENCHMARK_DATA = {
           {
             "name": "gale_gen (-O3)",
             "value": 0.33415,
+            "unit": "MB/s"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd26b6859833ae69f05e3f2d62aceff714003818",
+          "message": "Merge pull request #2135 from wado-lang/claude/wado-issue-2101-tah91g\n\nperf(optimize): delete dead calls whose traps are proven away; declare builtin traps and linear-memory access as attributes",
+          "timestamp": "2026-09-23T22:03:41+09:00",
+          "tree_id": "f8e4d9726b475740e98c45f0fe4f33ed123d2aae",
+          "url": "https://github.com/wado-lang/wado/commit/bd26b6859833ae69f05e3f2d62aceff714003818"
+        },
+        "date": 1790169481385,
+        "tool": "customBiggerIsBetter",
+        "benches": [
+          {
+            "name": "microgpt/train (-O1)",
+            "value": 0.00077262,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "microgpt/infer (-O1)",
+            "value": 0.00219,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "mandelbrot (-O1)",
+            "value": 7.11,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O1)",
+            "value": 114.84,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O1)",
+            "value": 24.37,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O1)",
+            "value": 98.42,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O1)",
+            "value": 426.91,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/ser (-O1)",
+            "value": 466.89,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/de (-O1)",
+            "value": 332.22,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/ser (-O1)",
+            "value": 229.3,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/de (-O1)",
+            "value": 273.72,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/ser (-O1)",
+            "value": 512.03,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/de (-O1)",
+            "value": 480.81,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O1)",
+            "value": 13.12,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O1)",
+            "value": 9.23,
+            "unit": "MB/s"
+          },
+          {
+            "name": "gale_gen (-O1)",
+            "value": 0.43564,
+            "unit": "MB/s"
+          },
+          {
+            "name": "microgpt/train (-O2)",
+            "value": 0.0014,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "microgpt/infer (-O2)",
+            "value": 0.00327,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "mandelbrot (-O2)",
+            "value": 7.21,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O2)",
+            "value": 397.17,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O2)",
+            "value": 27.66,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O2)",
+            "value": 120.93,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O2)",
+            "value": 544.27,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/ser (-O2)",
+            "value": 1200,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/de (-O2)",
+            "value": 374.38,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/ser (-O2)",
+            "value": 372.84,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/de (-O2)",
+            "value": 335.55,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/ser (-O2)",
+            "value": 2540,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/de (-O2)",
+            "value": 525.08,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O2)",
+            "value": 16.34,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O2)",
+            "value": 12.44,
+            "unit": "MB/s"
+          },
+          {
+            "name": "gale_gen (-O2)",
+            "value": 0.5596,
+            "unit": "MB/s"
+          },
+          {
+            "name": "microgpt/train (-O3)",
+            "value": 0.00108,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "microgpt/infer (-O3)",
+            "value": 0.0032,
+            "unit": "M tokens/s"
+          },
+          {
+            "name": "mandelbrot (-O3)",
+            "value": 7.26,
+            "unit": "M px/s"
+          },
+          {
+            "name": "sieve (-O3)",
+            "value": 419.51,
+            "unit": "M numbers/s"
+          },
+          {
+            "name": "fts (-O3)",
+            "value": 29.6,
+            "unit": "M conversions/s"
+          },
+          {
+            "name": "zlib/compress (-O3)",
+            "value": 128.25,
+            "unit": "MB/s"
+          },
+          {
+            "name": "zlib/decompress (-O3)",
+            "value": 564.21,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/ser (-O3)",
+            "value": 885.77,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/twitter/de (-O3)",
+            "value": 375.51,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/ser (-O3)",
+            "value": 388.36,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/canada/de (-O3)",
+            "value": 339.06,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/ser (-O3)",
+            "value": 1690,
+            "unit": "MB/s"
+          },
+          {
+            "name": "json/catalog/de (-O3)",
+            "value": 513.66,
+            "unit": "MB/s"
+          },
+          {
+            "name": "sqlite_parse (-O3)",
+            "value": 16.08,
+            "unit": "MB/s"
+          },
+          {
+            "name": "syntax_highlight (-O3)",
+            "value": 12.41,
+            "unit": "MB/s"
+          },
+          {
+            "name": "gale_gen (-O3)",
+            "value": 0.60453,
             "unit": "MB/s"
           }
         ]
