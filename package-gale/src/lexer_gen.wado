@@ -1474,9 +1474,8 @@ fn gen_lexer_alts<S: AsStrSlice>(
         gen_lexer_alts_longest(w, alts, plan, all_rules, fail_action, ci, ea, hm);
         return;
     }
-    // Each arm leaves the enclosing block on a match, so the arms are siblings
-    // rather than a `if !ok { ... }` cascade one level deeper per alternative —
-    // the css3 unit fragments nest eleven deep under one.
+    // Sibling arms leaving one block: a cascade of `if !ok` nests a level per
+    // alternative, eleven deep for a css3 unit fragment.
     let id = w.next_id();
     w.line(`let alts_saved_${id} = pos;`);
     w.begin(`alts_done_${id}:`);
@@ -1544,14 +1543,10 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
     w.line(`let mut sel_alt_${id} = -1;`);
     if longest {
         w.line(`let mut sel_best_${id} = -1;`);
+    } else {
+        w.begin(`sel_done_${id}:`);
     }
     for let mut i = 0; i < alts.len(); i += 1 {
-        // A first-match selection stops at the first arm that matches, so every
-        // later arm is guarded — as siblings, not one level deeper each.
-        let guarded = !longest && i > 0;
-        if guarded {
-            w.begin(`if sel_alt_${id} < 0`);
-        }
         let label = `sel_${id}_${i}`;
         w.begin(`${label}:`);
         w.line(`pos = sel_saved_${id};`);
@@ -1560,11 +1555,12 @@ fn gen_lexer_alts_replay<S: AsStrSlice>(
             w.line(`if pos > sel_best_${id} { sel_best_${id} = pos; sel_alt_${id} = ${i}; }`);
         } else {
             w.line(`sel_alt_${id} = ${i};`);
+            w.line(`break sel_done_${id};`);
         }
         w.end();
-        if guarded {
-            w.end();
-        }
+    }
+    if !longest {
+        w.end();
     }
     w.line(`if sel_alt_${id} < 0 { ${fail_action}; }`);
     w.line(`pos = sel_saved_${id};`);
@@ -4349,21 +4345,20 @@ fn build_range_index(ranges: &List<[char, char]>) -> RangeIndex {
 }
 
 fn range_index_matches(idx: &RangeIndex, c: char) -> bool {
-    let i = bound_char(&idx.starts, c, true) - 1;
+    let i = upper_bound(&idx.starts, c) - 1;
     if i < 0 {
         return false;
     }
     return idx.max_end[i] >= c;
 }
 
-/// First index whose element is > `c` (`after` true) or >= `c` (`after`
-/// false) in a sorted list.
-fn bound_char(chars: &List<char>, c: char, after: bool) -> i32 {
+/// First index of sorted `chars` whose element is greater than `c`.
+fn upper_bound(chars: &List<char>, c: char) -> i32 {
     let mut lo = 0;
     let mut hi = chars.len();
     while lo < hi {
         let mid = (lo + hi) / 2;
-        if chars[mid] < c || after && chars[mid] == c {
+        if chars[mid] <= c {
             lo = mid + 1;
         } else {
             hi = mid;
@@ -4382,12 +4377,8 @@ struct DispatchGroup {
     calls: List<i32>,
 }
 
-/// The arms of the emitted first-char dispatch, as a partition of the character
-/// space: every call's first-set ranges are cut at their shared boundaries, so
-/// an interval lies inside a range or outside it, never across one. Arms that
-/// carry the same call list fold into one however far apart they sit — `[\p{L}]`
-/// is ~700 ranges that all route to the same rules — which a partition may do
-/// and an ordered chain may not.
+/// The arms of the emitted first-char dispatch: a partition of the character
+/// space at every first-set boundary, one arm per distinct call list.
 fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
     let mut cuts = TreeSet::<i32>::new();
     for let call of calls {
@@ -4434,14 +4425,12 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
         // Grammar order, so a same-length match goes to the first rule in the
         // grammar (ANTLR4's tie-break). Insertion order does not carry it.
         members.sort();
-        for let span of &spans {
-            let pattern = `${char_range_pat(span.start..=span.end)}`;
-            if let Some(gi) = group_by_calls.get(members) {
-                groups[gi].pattern.push_str(` | ${pattern}`);
-            } else {
-                group_by_calls[members] = groups.len();
-                groups.push(DispatchGroup { pattern, calls: members });
-            }
+        let pattern = spans.iter_ref().map(|s| `${char_range_pat(s.start..=s.end)}`).collect().join(" | ");
+        if let Some(gi) = group_by_calls.get(members) {
+            groups[gi].pattern.push_str(` | ${pattern}`);
+        } else {
+            group_by_calls[members] = groups.len();
+            groups.push(DispatchGroup { pattern, calls: members });
         }
     }
 
@@ -4533,14 +4522,12 @@ fn gen_dispatch_groups(
     has_actions: bool,
     has_members: bool,
 ) {
-    // If only a wildcard group exists, emit calls directly without dispatch
     if groups.len() == 1 && groups[0].pattern == FALLBACK_PATTERN {
         gen_group_calls(w, calls, &groups[0].calls, needs_extras, has_actions, has_members);
         return;
     }
-    // One `match` rather than an else-if chain: the arms are a partition, so a
-    // chain's ordering buys nothing and puts the letter and digit ranges a real
-    // grammar spends its time on behind every punctuation branch.
+    // The arms are a partition, so an else-if chain's order buys nothing and
+    // would put the letters and digits behind every punctuation branch.
     let has_wildcard_arm = groups.iter_ref().any(|g| g.pattern == FALLBACK_PATTERN);
     w.begin("match first_char");
     for let g of groups {
