@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790140842258,
+  "lastUpdate": 1790142139087,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58665,6 +58665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/c795ffa9dddb02f1e698b52f4d144ce1ceb45517"
         },
         "date": 1790140842106,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "694124e1fc212ca32a5a2b5ee840e2cd7d2be9f6",
+          "message": "Merge pull request #2131 from wado-lang/claude/issue-2109-investigation-l91ear\n\nfix(elaborator): diagnose a bound naming no trait, wherever it is written",
+          "timestamp": "2026-09-23T14:09:57+09:00",
+          "tree_id": "91477bca9fb9af60dd1d8e6a230796e8727b6655",
+          "url": "https://github.com/wado-lang/wado/commit/694124e1fc212ca32a5a2b5ee840e2cd7d2be9f6"
+        },
+        "date": 1790142138128,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
