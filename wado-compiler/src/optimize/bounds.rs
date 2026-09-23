@@ -268,7 +268,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
         }
         // The last value the interior sees; the step must reach one past it.
         let last = match (negated, op) {
-            (true, NirBinaryOp::Lt) | (false, NirBinaryOp::GtEq) => n - 1,
+            (true, NirBinaryOp::Lt) | (false, NirBinaryOp::GtEq) => n.checked_sub(1)?,
             (true, NirBinaryOp::LtEq) | (false, NirBinaryOp::Gt) => n,
             _ => return None,
         };
@@ -342,7 +342,7 @@ impl<'b, F: Fn(FuncId) -> Option<Builtin<'b>>> Scan<'_, F> {
             TrapCheck::Negative(pos) => nonneg(Some(pos), 0).is_some(),
             TrapCheck::Outside { array, at, len } => matches!(
                 (self.array_len(arg(array), 0), nonneg(at, 0), nonneg(len, 1)),
-                (Some(l), Some(at), Some(n)) if at + n <= l
+                (Some(l), Some(at), Some(n)) if at.checked_add(n).is_some_and(|end| end <= l)
             ),
             TrapCheck::Unset(array) => self.elements_never_unset(arg(array)),
         };

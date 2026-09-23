@@ -42,10 +42,15 @@ pub(super) fn build_elide_box_local(
 impl Rule for ElideBoxLocalRule {
     fn apply_block(&self, engine: &mut Engine, block: BlockId) -> bool {
         let stmts = engine.body.blocks[block].stmts.clone();
+        let mut live = None;
         for i in 0..stmts.len() {
-            let Some((candidate, field_name, inner_mr)) =
-                describe_candidate(engine.body, stmts[i], &self.stats, &self.blacklist)
-            else {
+            let Some((candidate, field_name, inner_mr)) = describe_candidate(
+                engine.body,
+                stmts[i],
+                &self.stats,
+                &mut live,
+                &self.blacklist,
+            ) else {
                 continue;
             };
             let Some(j) = find_use_site(
@@ -285,6 +290,7 @@ fn describe_candidate(
     body: &Body,
     stmt: StmtId,
     stats: &IndexMap<u32, LocalStats>,
+    live: &mut Option<IndexMap<u32, LocalStats>>,
     blacklist: &IndexSet<u32>,
 ) -> Option<(u32, String, ModRef)> {
     let StmtKind::Let {
@@ -308,7 +314,7 @@ fn describe_candidate(
     }
     // The pristine `stats` only prefilter: `ref_elim` substitutes a referent at
     // each use of its alias, so a read can appear after the snapshot.
-    let live = collect_local_stats(body);
+    let live = live.get_or_insert_with(|| collect_local_stats(body));
     let s = live.get(&local_index).filter(|s| s.read_once())?;
     let inner_value = fields[0].value;
     let field_name = s.field_names.iter().next().unwrap().clone();
