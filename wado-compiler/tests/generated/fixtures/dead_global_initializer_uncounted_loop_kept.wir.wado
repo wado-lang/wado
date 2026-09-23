@@ -22,7 +22,7 @@ type "functype//wasi/wasi:cli/Stdout::write_via_stream" = fn(i32) -> i32;  // Ty
 
 type "functype//dead_global_initializer_uncounted_loop_kept.wado/collatz_steps" = fn(i64);  // TypeId(9)
 
-type "functype//dead_global_initializer_uncounted_loop_kept.wado/skips_its_step" = fn(i32);  // TypeId(10)
+type "functype//dead_global_initializer_uncounted_loop_kept.wado/counts_to_a_parameter" = fn(i32);  // TypeId(10)
 
 type "functype//dead_global_initializer_uncounted_loop_kept.wado/$cm_binding__Stdout_write_via_stream" = fn(i32) -> i32;  // TypeId(11)
 
@@ -63,28 +63,21 @@ fn "dead_global_initializer_uncounted_loop_kept.wado/collatz_steps"(start) {
     b0: block {
         l1: loop {
             break_if b0 n == 1_i64;
-            n = (if (n % 2_i64) == 0_i64 -> i64 {
-                n / 2_i64;
-            } else {
-                (3_i64 * n) + 1_i64;
-            });
+            n = select i64((n & 1_i64) == 0_i64, n >> 1_i64, (3_i64 * n) + 1_i64);
             continue l1;
         };
     };
     return;
 }
 
-fn "dead_global_initializer_uncounted_loop_kept.wado/skips_its_step"(limit) {
+fn "dead_global_initializer_uncounted_loop_kept.wado/counts_to_a_parameter"(limit) {
     let i: i32;
-    let odd: i32;
     i = 0;
-    odd = 0;
-    b3: block {
-        l4: loop {
-            break_if b3 i >= limit;
-            drop(odd + ((i % 2) == 1));
+    b2: block {
+        l3: loop {
+            break_if b2 i >= limit;
             i = i + 1;
-            continue l4;
+            continue l3;
         };
     };
     return;
@@ -123,7 +116,7 @@ fn "dead_global_initializer_uncounted_loop_kept.wado/$cm_export__run"() {
 
 fn "dead_global_initializer_uncounted_loop_kept.wado/$initialize_module"() {
     "dead_global_initializer_uncounted_loop_kept.wado/collatz_steps"(black_box(27_i64));
-    "dead_global_initializer_uncounted_loop_kept.wado/skips_its_step"(black_box(10));
+    "dead_global_initializer_uncounted_loop_kept.wado/counts_to_a_parameter"(black_box(10));
 }
 
 fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
@@ -159,14 +152,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l7: loop {
+        l6: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b8: block {
-                l9: loop {
-                    break_if b8 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b7: block {
+                l8: loop {
+                    break_if b7 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l9;
+                    continue l8;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -199,7 +192,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l7;
+            continue l6;
         };
     };
 }
