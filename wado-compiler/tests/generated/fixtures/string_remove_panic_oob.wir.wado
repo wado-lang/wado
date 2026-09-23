@@ -113,11 +113,9 @@ fn "string_remove_panic_oob.wado/$cm_export__run"() {
     let repr: ref Array<u8>;
     let b: u8;
     s = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 105), used: 2 };
-    if @unlikely((1 & 0) == 0) {
-        cold_path;
-        "core:prelude/string.wado/core:prelude/string.wado/String::remove$cold1"(2);
-        unreachable;
-    }
+    cold_path;
+    "core:prelude/string.wado/core:prelude/string.wado/String::remove$cold1"(2);
+    unreachable;
     $v2 = $inline_boundary_at_5: block -> bool {
         repr = s.repr;
         block {
@@ -209,9 +207,9 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
         builtin::array_set_u8(arr, offset, 48);
     } else {
         temp = val_i64;
-        b24: block {
-            l25: loop {
-                break_if b24 temp == 0_i64;
+        b23: block {
+            l24: loop {
+                break_if b23 temp == 0_i64;
                 pos = pos - 1;
                 digit = builtin::i32_wrap_i64(temp & mask64);
                 builtin::array_set_u8(arr, pos, (if digit < 10 -> i32 {
@@ -220,7 +218,7 @@ fn "core:prelude/primitive.wado/write_u64_base_digits"(arr, offset, val_i64, dig
                     select i32(upper, (65 + digit) - 10, (97 + digit) - 10);
                 }) & 255);
                 temp = temp >>u builtin::i64_extend_i32_s(bits_per_digit);
-                continue l25;
+                continue l24;
             };
         };
     }
@@ -538,9 +536,9 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
     $sroa_$iter_0_byte_index = 0;
     $licm_buf_141 = f;
     $tmpl_buf_142 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(16), used: 0 };
-    b37: block {
-        l38: loop {
-            break_if b37 $sroa_$iter_0_byte_index >= $mv$text$used;
+    b36: block {
+        l37: loop {
+            break_if b36 $sroa_$iter_0_byte_index >= $mv$text$used;
             $sroa_slot_134 = 0;
             $sroa_slot_135 = 0;
             $inline_decode_char_at_6: block {
@@ -574,7 +572,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
             $fused_slot_136 = $sroa_slot_134;
             if count >= 256 {
                 truncated = 1;
-                break b37;
+                break b36;
             }
             if $fused_slot_136 == 34 {
                 new_used_168 = $licm_buf_141.used + 1;
@@ -706,7 +704,7 @@ fn "core:prelude/format.wado/core/prelude/format.wado/inspect_text<core:prelude/
                 "core:prelude/string.wado/core:prelude/string.wado/String::push"($licm_buf_141, $fused_slot_136);
             }
             count = count + 1;
-            continue l38;
+            continue l37;
         };
     };
     new_used_322 = f.used + 1;
@@ -866,14 +864,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l78: loop {
+        l77: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b79: block {
-                l80: loop {
-                    break_if b79 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b78: block {
+                l79: loop {
+                    break_if b78 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l80;
+                    continue l79;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -906,7 +904,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
                 return;
             }
-            continue l78;
+            continue l77;
         };
     };
 }
@@ -968,14 +966,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b89: block {
-        l90: loop {
-            break_if b89 i >= digit_count_4;
+    b88: block {
+        l89: loop {
+            break_if b88 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l90;
+            continue l89;
         };
     };
 }

@@ -62,27 +62,25 @@ type "functype//core:prelude/primitive.wado/count_digits_u64" = fn(u64) -> i32; 
 
 type "functype//core:rt/panic" = fn(ref Array<u8>, i32);  // TypeId(21)
 
-type "functype//core:prelude/fpfmt.wado/$initialize_module" = fn();  // TypeId(22)
+type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32);  // TypeId(22)
 
-type "functype//core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0" = fn(i32);  // TypeId(23)
+type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(23)
 
-type "functype//core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect<i32>$spec0" = fn(ref Array<i32>, i32, ref "core:prelude/format.wado//Formatter", i32);  // TypeId(24)
+type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(24)
 
-type "functype//core:prelude/string.wado/core:prelude/string.wado/String::grow" = fn(ref "core:prelude/string.wado//String", i32);  // TypeId(25)
+type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(25)
 
-type "functype//core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_raw_all" = fn(i32, ref Array<u8>, i32, i32);  // TypeId(26)
+type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(26)
 
-type "functype//core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>$spec0$scalar" = fn(ref "core:prelude/string.wado//String", bool, i32) -> i32;  // TypeId(27)
+type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(27)
 
-type "functype//core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar" = fn(i32, ref "core:prelude/string.wado//String");  // TypeId(28)
+type "functype//wasi/task-return" = fn(i32);  // TypeId(28)
 
-type "functype//wasi/task-return" = fn(i32);  // TypeId(29)
+type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(29)
 
-type "functype//wasi/stream-new" = fn() -> i64;  // TypeId(30)
+type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(30)
 
-type "functype//wasi/stream-drop-writable" = fn(i32);  // TypeId(31)
-
-type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(32)
+type "functype//wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code" = fn(i32);  // TypeId(31)
 
 import fn mem/realloc from "mem/realloc";
 import fn wasi/stream-write from "wasi/stream-write";
@@ -140,7 +138,6 @@ fn "opt_large_seq_literal_compile.wado/run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_large_seq_literal_compile.wado::$modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "opt_large_seq_literal_compile.wado/$initialize_module"();
         global:opt_large_seq_literal_compile.wado::$modules_initialized = 1;
     };
@@ -189,7 +186,6 @@ fn "opt_large_seq_literal_compile.wado/$cm_export__run"() {
     $inline__initialize_modules_0: block {
         break_if $inline__initialize_modules_0 @likely(global:opt_large_seq_literal_compile.wado::$modules_initialized);
         cold_path;
-        "core:prelude/fpfmt.wado/$initialize_module"();
         "opt_large_seq_literal_compile.wado/$initialize_module"();
         global:opt_large_seq_literal_compile.wado::$modules_initialized = 1;
     };
@@ -575,9 +571,6 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(future_handle);
     cold_path;
     unreachable;
-}
-
-fn "core:prelude/fpfmt.wado/$initialize_module"() {
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0"($v1) {
