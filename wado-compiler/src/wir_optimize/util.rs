@@ -76,6 +76,93 @@ fn collect_ref_funcs_instr(instr: &WirInstr, pinned: &mut IndexSet<u32>) {
     instr.for_each_child(&mut |child| collect_ref_funcs_instr(child, pinned));
 }
 
+/// The state a subtree reads or writes: locals by name, and everything else
+/// (heap, globals, memory, tables) as one region.
+#[derive(Default)]
+pub(super) struct Footprint {
+    locals: IndexSet<String>,
+    shared: bool,
+}
+
+impl Footprint {
+    pub(super) fn reads(instr: &WirInstr) -> Self {
+        let mut footprint = Self::default();
+        footprint.add_reads(instr);
+        footprint
+    }
+
+    pub(super) fn writes(instr: &WirInstr) -> Self {
+        let mut footprint = Self::default();
+        footprint.add_writes(instr);
+        footprint
+    }
+
+    pub(super) fn overlaps(&self, other: &Self) -> bool {
+        (self.shared && other.shared) || self.locals.iter().any(|l| other.locals.contains(l))
+    }
+
+    fn add_reads(&mut self, instr: &WirInstr) {
+        match instr {
+            WirInstr::LocalGet { name, .. } => {
+                self.locals.insert(name.clone());
+            }
+            WirInstr::GlobalGet { .. }
+            | WirInstr::StructGet { .. }
+            | WirInstr::ArrayGet { .. }
+            | WirInstr::ArrayGetS { .. }
+            | WirInstr::ArrayGetU { .. }
+            | WirInstr::ArrayLen(_)
+            | WirInstr::ArrayCopy { .. }
+            | WirInstr::ArrayClone { .. }
+            | WirInstr::I32Load { .. }
+            | WirInstr::I32Load8U { .. }
+            | WirInstr::I32Load8S { .. }
+            | WirInstr::I32Load16U { .. }
+            | WirInstr::I32Load16S { .. }
+            | WirInstr::I64Load { .. }
+            | WirInstr::V128Load { .. }
+            | WirInstr::TableGet { .. }
+            | WirInstr::MemorySize
+            | WirInstr::Call { .. }
+            | WirInstr::CallIndirect { .. }
+            | WirInstr::CallRef { .. }
+            | WirInstr::BlackBox(_) => self.shared = true,
+            _ => {}
+        }
+        instr.for_each_child(&mut |child| self.add_reads(child));
+    }
+
+    fn add_writes(&mut self, instr: &WirInstr) {
+        match instr {
+            WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } => {
+                self.locals.insert(name.clone());
+            }
+            WirInstr::MultiValueLocalBind { locals, .. } => {
+                self.locals.extend(locals.iter().flatten().cloned());
+            }
+            WirInstr::GlobalSet { .. }
+            | WirInstr::StructSet { .. }
+            | WirInstr::ArraySet { .. }
+            | WirInstr::ArrayCopy { .. }
+            | WirInstr::ArrayFill { .. }
+            | WirInstr::TableSet { .. }
+            | WirInstr::I32Store { .. }
+            | WirInstr::I32Store8 { .. }
+            | WirInstr::I32Store16 { .. }
+            | WirInstr::I64Store { .. }
+            | WirInstr::V128Store { .. }
+            | WirInstr::MemoryGrow(_)
+            | WirInstr::MemoryFill { .. }
+            | WirInstr::Call { .. }
+            | WirInstr::CallIndirect { .. }
+            | WirInstr::CallRef { .. }
+            | WirInstr::BlackBox(_) => self.shared = true,
+            _ => {}
+        }
+        instr.for_each_child(&mut |child| self.add_writes(child));
+    }
+}
+
 /// True if no node in `instr`'s sub-tree is observable. Pure loads
 /// (`StructGet`, `ArrayGet*`, memory loads, `LocalGet`, `GlobalGet`) and
 /// arithmetic / ref ops are treated as side-effect-free.
