@@ -139,15 +139,13 @@ pub fn char_hex_name(c: char) -> String {
     return result;
 }
 
-/// A literal's base `TK_LIT_*` name. It folds case, so it is not unique:
-/// `collect_literal_tokens` suffixes the collisions.
+/// A literal's base `TK_LIT_*` name. A symbol's word can spell a letter
+/// literal (`'<'`, `'LT'`), so `collect_literal_tokens` suffixes the collisions.
 pub fn literal_const_name<S: AsStrSlice>(text: S) -> String {
     let mut result = String::with_capacity(text.len() + 8);
     result.push_str("TK_LIT_");
     for let c of text.chars() {
-        if c.is_ascii_lowercase() {
-            result.push(c.to_ascii_uppercase());
-        } else if c.is_ascii_uppercase() || '0' <= c <= '9' {
+        if c.is_ascii_alphanumeric() {
             result.push(c);
         } else if let Some(names) = symbol_char_names(c) {
             result.push_str(&names.1);

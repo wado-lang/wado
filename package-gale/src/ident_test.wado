@@ -1,6 +1,12 @@
-use { escape_ident } from "./ident.wado";
+use { escape_ident, literal_const_name } from "./ident.wado";
 
 test "escape_ident matches the vocabulary case-sensitively" {
     assert escape_ident("string") == "string";
     assert escape_ident("I32") == "I32";
+}
+
+test "literal_const_name keeps the literal's case" {
+    assert literal_const_name("self") == "TK_LIT_self";
+    assert literal_const_name("Self") == "TK_LIT_Self";
+    assert literal_const_name("lt") != literal_const_name("<");
 }
