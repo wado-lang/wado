@@ -1348,7 +1348,6 @@ impl Parser {
 }
 
 fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     sg_0_done: {
         let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1389,7 +1388,6 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 

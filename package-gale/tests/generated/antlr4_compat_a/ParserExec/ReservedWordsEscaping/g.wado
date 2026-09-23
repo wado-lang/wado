@@ -1455,18 +1455,13 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if alt_kind == TK_FOR {
-            pos = start;
-            try_0: {
-                pos = scan_for(tokens, pos);
-                if pos < 0 { break try_0; }
-                if pos < tokens.len() && tokens[pos] == TK_FOR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    pos = scan_for(tokens, pos);
-                    if pos < 0 { pos = sp; }
-                }
-                break scan_alts;
+            pos = start + 1;
+            if pos < tokens.len() && tokens[pos] == TK_FOR && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                let sp = pos;
+                pos += 1;
+                if pos < 0 { pos = sp; }
             }
-            return -1;
+            break scan_alts;
         } else if alt_kind == TK_BREAK {
             pos = start + 1;
             try_1: {
@@ -1475,20 +1470,8 @@ fn scan_continue_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 while pos < tokens.len() && tokens[pos] == TK_BREAK {
                     pos += 1;
                 }
-                sg_0_done: {
-                    let sgk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if sgk_0 == TK_FOR {
-                        sg_0_0: {
-                            pos = scan_for(tokens, pos);
-                            if pos < 0 { break sg_0_0; }
-                            break sg_0_done;
-                        }
-                    } else if sgk_0 == TK_IF {
-                        pos += 1;
-                        break sg_0_done;
-                    }
-                    break try_1;
-                }
+                if pos >= tokens.len() || !_kind_set_1(tokens[pos]) { break try_1; }
+                pos += 1;
                 break scan_alts;
             }
             return -1;
@@ -1537,11 +1520,9 @@ fn scan_continue(tokens: &Array<i32>, pos: i32, follow: i64 = 0, min_prec: i32 =
 }
 
 fn scan_args(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
-    pos = scan_for(tokens, pos);
-    if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_FOR { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1833,6 +1814,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
 
 fn _kind_set_0(k: i32) -> bool {
     return k matches { TK_BREAK | TK_FOR | TK_IF };
+}
+
+fn _kind_set_1(k: i32) -> bool {
+    return k matches { TK_FOR | TK_IF };
 }
 
 global EMPTY_SYNC: List<i32> = [];

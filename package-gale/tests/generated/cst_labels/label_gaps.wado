@@ -1420,8 +1420,8 @@ fn scan_pair_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_PAIR { return -1; }
     pos += 1;
-    pos = scan_key_rule(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_COLON { return -1; }
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }

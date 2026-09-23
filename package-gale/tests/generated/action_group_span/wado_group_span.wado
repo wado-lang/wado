@@ -1461,11 +1461,9 @@ fn scan_opt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_before(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_a(tokens, pos);
     if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1548,13 +1546,11 @@ fn scan_loop_text(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn scan_arg_reader(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_a(tokens, pos);
     if pos < 0 { return -1; }
     pos = scan_arg_taker(tokens, pos);
     if pos < 0 { return -1; }
-    if pos == scan_start { return -1; }
     return pos;
 }
 

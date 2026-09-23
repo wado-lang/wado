@@ -1370,7 +1370,6 @@ fn scan_prog(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_term(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -1388,12 +1387,10 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
 fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     pos = scan_factor(tokens, pos, follow);
     if pos < 0 { return -1; }
@@ -1411,7 +1408,6 @@ fn scan_term(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 

@@ -1225,14 +1225,14 @@ impl Parser {
 
 fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_x(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
     loop {
         let ep = pos;
         let mut ng_exit: bool = false;
         ng_exit_scan: {
-            pos = scan_y(tokens, pos);
-            if pos < 0 { break ng_exit_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_A { break ng_exit_scan; }
+            pos += 1;
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -1242,12 +1242,12 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
         if ng_exit { break; }
         if !(pos < tokens.len() && tokens[pos] == TK_A) { break; }
         let sp = pos;
-        pos = scan_x(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    pos = scan_y(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_A { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_EOF { return -1; }
     pos += 1;
     return pos;
@@ -1277,8 +1277,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         ng_exit_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_y(tokens, pos);
-            if pos < 0 { break ng_exit_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_A { break ng_exit_scan; }
+            pos += 1;
             if pos >= tokens.len() || tokens[pos] != TK_EOF { break ng_exit_scan; }
             pos += 1;
             let probe_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };

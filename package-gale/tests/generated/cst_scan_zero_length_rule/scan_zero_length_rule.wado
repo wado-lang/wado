@@ -1307,29 +1307,12 @@ fn scan_list(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     if pos < tokens.len() && tokens[pos] == TK_LIT_k {
         pos += 1;
     }
-    sg_2_done: {
-        let sgk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if sgk_2 == TK_LIT_a {
-            sg_2_0: {
-                pos = scan_sa(tokens, pos);
-                if pos < 0 { break sg_2_0; }
-                break sg_2_done;
-            }
-        } else if sgk_2 == TK_LIT_b {
-            sg_2_1: {
-                pos = scan_sb(tokens, pos);
-                if pos < 0 { break sg_2_1; }
-                break sg_2_done;
-            }
-        }
-        return -1;
-    }
-    if pos == scan_start { return -1; }
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1369,16 +1352,16 @@ fn _parse_list__inner(p: &mut Parser) -> () {
         rep_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            sg_3_done: {
-                sg_3: {
-                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_3; }
+            sg_2_done: {
+                sg_2: {
+                    if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break sg_2; }
                     pos += 1;
                     while pos < tokens.len() && tokens[pos] == TK_LIT_SEMI {
                         pos += 1;
                     }
                     pos = scan_stmt(tokens, pos);
-                    if pos < 0 { break sg_3; }
-                    break sg_3_done;
+                    if pos < 0 { break sg_2; }
+                    break sg_2_done;
                 }
                 break rep_scan_2;
             }
@@ -1570,6 +1553,10 @@ pub fn to_string_subtree<S: AsStrSlice>(result: &ParseResult, rule: S) -> String
         return result.cst.to_string_tree(_sub, &result.tokens, &RULE_NAMES, &_token_names());
     }
     return String::new();
+}
+
+fn _kind_set_0(k: i32) -> bool {
+    return k matches { TK_LIT_a | TK_LIT_b };
 }
 
 global EMPTY_SYNC: List<i32> = [];

@@ -1298,8 +1298,8 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_stat_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_expr(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
     return pos;
 }
 
@@ -1314,8 +1314,8 @@ fn scan_stat(tokens: &Array<i32>, pos: i32) -> i32 {
             try_0: {
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { break try_0; }
                 pos += 1;
-                pos = scan_expr(tokens, pos);
-                if pos < 0 { break try_0; }
+                if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break try_0; }
+                pos += 1;
                 if pos > best { best = pos; }
             }
             let try_1_end = scan_stat_alt_1(tokens, start);
@@ -1371,8 +1371,8 @@ fn _parse_stat__inner_scan_0(tokens: &Array<i32>, pos: i32) -> i32 {
     pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_EQ { return -1; }
     pos += 1;
-    pos = scan_expr(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
     return pos;
 }
 

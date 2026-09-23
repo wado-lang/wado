@@ -1989,16 +1989,14 @@ fn _parse_e__inner_scan_2(tokens: &Array<i32>, pos: i32) -> i32 {
 fn _parse_e__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_X {
-        if kind == TK_X {
-            let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);
-            if _atn_alt == 0 {
-                return _parse_e__inner_alt_0(p);
-            }
-            if _atn_alt == 1 {
-                return _parse_e__inner_alt_1(p);
-            }
-            return _parse_e__inner_alt_2(p);
+        let _atn_alt = atn_predict_with_stack(&ATN_SIM, 0, &p.atn_stack, &p.kinds, p.pos, TK_EOF, 0);
+        if _atn_alt == 0 {
+            return _parse_e__inner_alt_0(p);
         }
+        if _atn_alt == 1 {
+            return _parse_e__inner_alt_1(p);
+        }
+        return _parse_e__inner_alt_2(p);
     }
     p.no_viable(
         "no alternative of e matches",

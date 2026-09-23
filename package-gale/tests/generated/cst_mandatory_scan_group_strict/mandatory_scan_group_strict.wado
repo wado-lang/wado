@@ -1468,7 +1468,6 @@ fn scan_body(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_POUND {
         let sp = pos;
@@ -1493,7 +1492,6 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32) -> i32 {
         }
         return -1;
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 

@@ -9,7 +9,13 @@ use {
 } from "./ir.wado";
 use { SuperOp } from "./superclass.wado";
 use { LitToken } from "./lexer_gen.wado";
-use { is_single_alt_group, single_alt_group_type_name, dedup_append_arr } from "./gen_util.wado";
+use {
+    is_single_alt_group,
+    single_alt_group_type_name,
+    dedup_append_arr,
+    all_alts_are_single_token,
+    single_token_first,
+} from "./gen_util.wado";
 use { Admits, Diagnostic, DiagnosticKind, DiagnosticOwner, admits_or_everything } from "./gir.wado";
 use { AltBinding } from "./attr_resolve.wado";
 use { MemberNames } from "./java2wado/jmembers.wado";
@@ -294,13 +300,36 @@ pub struct GenContext {
     /// Whether the code being emitted is a scan function's, which reaches the
     /// gate through its parameter rather than through the parser.
     in_scan_fn: bool,
+    /// By snake name, the kinds of each rule whose scan is one token test.
+    one_token_rules: TreeMap<String, List<String>>,
+    snake_index: TreeMap<String, i32>,
+}
+
+fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
+    if !all_alts_are_single_token(&rule.alternatives) || (rule.alternatives.len() == 1 && !rule.alternatives[0].actions.is_empty()) {
+        return null;
+    }
+    let mut kinds: List<String> = [];
+    for let alt of &rule.alternatives {
+        let k = single_token_first(&alt.elements[0]);
+        if !kinds.contains(&k) {
+            kinds.push(k);
+        }
+    }
+    return Option::Some(kinds);
 }
 
 impl GenContext {
     pub fn new(parser_rules: &List<ParserRule>, lit_tokens: &List<LitToken>) -> GenContext {
         let mut rule_index = TreeMap::<String, i32>::new();
+        let mut one_token_rules = TreeMap::<String, List<String>>::new();
+        let mut snake_index = TreeMap::<String, i32>::new();
         for let mut i = 0; i < parser_rules.len(); i += 1 {
             rule_index[parser_rules[i].name] = i;
+            snake_index[parser_rules[i].snake_name] = i;
+            if let Some(kinds) = one_token_rule_kinds(&parser_rules[i]) {
+                one_token_rules[parser_rules[i].snake_name] = kinds;
+            }
         }
         let single_alt_owner = build_single_alt_owner_map(parser_rules);
         let rule_count = parser_rules.len();
@@ -365,7 +394,59 @@ impl GenContext {
             alt_scan_fns: TreeMap::new(),
             binding_reads: [],
             in_scan_fn: false,
+            one_token_rules,
+            snake_index,
         };
+    }
+
+    /// Whether the scan of the rule called by `snake` always consumes a token
+    /// when it matches: a single-alt scan guards that itself, and a multi-alt
+    /// one does where every alternative opens on an element that consumes.
+    pub fn scan_callee_consumes<S: AsStrSlice>(&mut self, snake: S) -> bool {
+        let Some(i) = self.snake_index.get_str(snake) else {
+            return false;
+        };
+        let mut visiting: List<i32> = [];
+        return self.rule_scan_consumes(i, &mut visiting);
+    }
+
+    fn rule_scan_consumes(&mut self, i: i32, visiting: &mut List<i32>) -> bool {
+        if visiting.contains(&i) {
+            return false;
+        }
+        let rule = &self.parser_rules[i];
+        if rule.alternatives.len() == 1 {
+            let name = rule.name;
+            let mut nullable_visiting: List<String> = [];
+            return !self.rule_is_nullable(&name, &mut nullable_visiting);
+        }
+        visiting.push(i);
+        let alts = rule.alternatives;
+        for let alt of &alts {
+            if alt.elements.is_empty() || !self.element_scan_consumes(&alt.elements[0], visiting) {
+                visiting.pop();
+                return false;
+            }
+        }
+        visiting.pop();
+        return true;
+    }
+
+    fn element_scan_consumes(&mut self, e: &Element, visiting: &mut List<i32>) -> bool {
+        return match e {
+            TokenRef(_) | Literal(_) => true,
+            Label(l) => self.element_scan_consumes(&l.element, visiting),
+            RuleRef(r) => {
+                let callee = self.rule_index_of(&r.name);
+                callee >= 0 && self.rule_scan_consumes(callee, visiting);
+            },
+            _ => false,
+        };
+    }
+
+    /// The kinds a rule matches when its scan is one token test, or `null`.
+    pub fn one_token_rule<S: AsStrSlice>(&self, snake: S) -> Option<List<String>> {
+        return self.one_token_rules.get_str(snake);
     }
 
     /// Enter or leave a scan function's body; returns the previous setting.

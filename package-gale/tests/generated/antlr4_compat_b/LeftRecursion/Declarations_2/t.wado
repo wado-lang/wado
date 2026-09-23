@@ -1439,8 +1439,8 @@ fn scan_declarator_lr_0(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LBRACKET { return -1; }
     pos += 1;
-    pos = scan_e(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_INT { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_RBRACKET { return -1; }
     pos += 1;
     return pos;
@@ -1471,24 +1471,22 @@ fn scan_declarator(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_LBRACKET {
-            if suffix_kind == TK_LIT_LBRACKET {
-                let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-                if second_kind == TK_INT {
-                    if 3 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_0(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+            let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+            if second_kind == TK_INT {
+                if 3 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = scan_declarator_lr_0(tokens, pos);
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
-                    if 2 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_declarator_lr_1(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+                    break;
+                }
+            } else {
+                if 2 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = scan_declarator_lr_1(tokens, pos);
+                    if pos < 0 { pos = lr_saved_pos; break; }
+                } else {
+                    break;
                 }
             }
         } else if suffix_kind == TK_LIT_LPAREN {
@@ -1571,32 +1569,30 @@ fn _parse_declarator__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_LBRACKET {
-            if _sk == TK_LIT_LBRACKET {
-                if p.peek_at(1) == TK_INT {
-                    if 3 >= min_prec {
-                        if scan_declarator_lr_0(&p.kinds, p.pos) < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                        p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                        _parse_e(p);
-                        p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+            if p.peek_at(1) == TK_INT {
+                if 3 >= min_prec {
+                    if scan_declarator_lr_0(&p.kinds, p.pos) < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_DECLARATOR, _start);
+                    p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                    _parse_e(p);
+                    p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
                 } else {
-                    if 2 >= min_prec {
-                        if scan_declarator_lr_1(&p.kinds, p.pos) < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_DECLARATOR, _start);
-                        p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
-                        p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+                    break;
+                }
+            } else {
+                if 2 >= min_prec {
+                    if scan_declarator_lr_1(&p.kinds, p.pos) < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_DECLARATOR, _start);
+                    p.expect(TK_LIT_LBRACKET, &EMPTY_SYNC);
+                    p.expect(TK_LIT_RBRACKET, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
+                } else {
+                    break;
                 }
             }
         } else if _sk == TK_LIT_LPAREN {

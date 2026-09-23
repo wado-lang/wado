@@ -1310,14 +1310,12 @@ fn scan_start(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_ID {
         let sp = pos;
         sg_0_done: {
             sg_0: {
-                pos = scan_arm(tokens, pos);
-                if pos < 0 { break sg_0; }
+                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0; }
                 pos += 1;
                 break sg_0_done;
@@ -1331,8 +1329,8 @@ fn scan_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             let rs_1 = pos;
             let mut rs_1_ok = false;
             rsv_1: {
-                pos = scan_arm(tokens, pos);
-                if pos < 0 { break rsv_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break rsv_1; }
+                pos += 1;
                 if pos < tokens.len() && tokens[pos] == TK_SEMI {
                     pos += 1;
                 }
@@ -1342,12 +1340,11 @@ fn scan_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             if !rs_1_ok { pos = sp; break; }
         }
     }
-    pos = scan_arm(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     if pos < tokens.len() && tokens[pos] == TK_SEMI && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         pos += 1;
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1384,8 +1381,8 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let mut pos: i32 = p.pos;
             sg_2_done: {
                 sg_2: {
-                    pos = scan_arm(tokens, pos);
-                    if pos < 0 { break sg_2; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
+                    pos += 1;
                     if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_2; }
                     pos += 1;
                     break sg_2_done;
@@ -1398,8 +1395,8 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 let rep_body_end = pos;
                 let mut rep_body_end_ok = false;
                 rep_body_end_scan: {
-                    pos = scan_arm(tokens, pos);
-                    if pos < 0 { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break rep_body_end_scan; }
+                    pos += 1;
                     if pos < tokens.len() && tokens[pos] == TK_SEMI {
                         pos += 1;
                     }

@@ -1255,7 +1255,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     pos += 1;
     if pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        pos = scan_t(tokens, pos);
+        pos += 1;
         if pos < 0 {
             pos = sp;
         } else {
@@ -1264,7 +1264,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
             opt_probe: {
                 while pos < tokens.len() && tokens[pos] == TK_NULL {
                     let sp = pos;
-                    pos = scan_c(tokens, pos);
+                    pos += 1;
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -1278,7 +1278,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
     }
     while pos < tokens.len() && tokens[pos] == TK_NULL {
         let sp = pos;
-        pos = scan_c(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1308,11 +1308,11 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         opt_enter_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_t(tokens, pos);
-            if pos < 0 { break opt_enter_scan; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break opt_enter_scan; }
+            pos += 1;
             while pos < tokens.len() && tokens[pos] == TK_NULL {
                 let sp = pos;
-                pos = scan_c(tokens, pos);
+                pos += 1;
                 if pos < 0 { pos = sp; break; }
                 if pos == sp { break; }
             }
@@ -1331,8 +1331,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_c(tokens, pos);
-            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_NULL { break rep_scan; }
+            pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

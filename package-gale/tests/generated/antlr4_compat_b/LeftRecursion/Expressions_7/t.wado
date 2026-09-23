@@ -1475,24 +1475,22 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
         if suffix_kind == TK_LIT_DOT {
-            if suffix_kind == TK_LIT_DOT {
-                let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
-                if second_kind == TK_ID {
-                    if 4 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_e_lr_0(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+            let second_kind = if pos + 1 < tokens.len() { tokens[pos + 1] } else { TK_EOF };
+            if second_kind == TK_ID {
+                if 4 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = scan_e_lr_0(tokens, pos);
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
-                    if 3 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_e_lr_1(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+                    break;
+                }
+            } else {
+                if 3 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = scan_e_lr_1(tokens, pos);
+                    if pos < 0 { pos = lr_saved_pos; break; }
+                } else {
+                    break;
                 }
             }
         } else if suffix_kind == TK_LIT_STAR {
@@ -1574,31 +1572,29 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_LIT_DOT {
-            if _sk == TK_LIT_DOT {
-                if p.peek_at(1) == TK_ID {
-                    if 4 >= min_prec {
-                        if scan_e_lr_0(&p.kinds, p.pos) < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_E, _start);
-                        p.expect(TK_LIT_DOT, &EMPTY_SYNC);
-                        p.expect(TK_ID, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+            if p.peek_at(1) == TK_ID {
+                if 4 >= min_prec {
+                    if scan_e_lr_0(&p.kinds, p.pos) < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_E, _start);
+                    p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                    p.expect(TK_ID, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
                 } else {
-                    if 3 >= min_prec {
-                        if scan_e_lr_1(&p.kinds, p.pos) < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_E, _start);
-                        p.expect(TK_LIT_DOT, &EMPTY_SYNC);
-                        p.expect(TK_LIT_this, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+                    break;
+                }
+            } else {
+                if 3 >= min_prec {
+                    if scan_e_lr_1(&p.kinds, p.pos) < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_E, _start);
+                    p.expect(TK_LIT_DOT, &EMPTY_SYNC);
+                    p.expect(TK_LIT_this, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
+                } else {
+                    break;
                 }
             }
         } else if _sk == TK_LIT_STAR {

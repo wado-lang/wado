@@ -2094,7 +2094,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2108,7 +2108,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
-                    pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                    pos += 1;
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -2117,7 +2117,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
-                    pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                    pos += 1;
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -2139,7 +2139,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2153,7 +2153,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 }
                 while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                     let sp = pos;
-                    pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                    pos += 1;
                     if pos < 0 { pos = sp; break; }
                     if pos == sp { break; }
                 }
@@ -2175,7 +2175,7 @@ fn scan_html_document(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
         let dk_2 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
@@ -2214,7 +2214,6 @@ fn scan_scriptlet_or_sea_ws(tokens: &Array<i32>, pos: i32) -> i32 {
 }
 
 fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_2(tokens[pos]) {
         let sp = pos;
@@ -2230,7 +2229,6 @@ fn scan_html_elements(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -2315,7 +2313,7 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_html_chardata(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; }
     }
     while pos < tokens.len() && _kind_set_7(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
@@ -2334,17 +2332,14 @@ fn scan_html_content(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         pos += 1;
                         break sg_6_done;
                     } else if _kind_set_5(sgk_6) {
-                        sg_6_2: {
-                            pos = scan_html_comment(tokens, pos);
-                            if pos < 0 { break sg_6_2; }
-                            break sg_6_done;
-                        }
+                        pos += 1;
+                        break sg_6_done;
                     }
                     break sg_5;
                 }
                 if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                     let sp = pos;
-                    pos = scan_html_chardata(tokens, pos);
+                    pos += 1;
                     if pos < 0 { pos = sp; }
                 }
                 break sg_5_done;
@@ -2390,13 +2385,8 @@ fn scan_html_misc(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_5(alt_kind) {
-            pos = start;
-            try_0: {
-                pos = scan_html_comment(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_SEA_WS {
             pos = start + 1;
             break scan_alts;
@@ -2440,8 +2430,8 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_scriptlet_or_sea_ws(tokens, pos);
-            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
+            pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }
@@ -2457,7 +2447,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                        pos += 1;
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2466,7 +2456,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                        pos += 1;
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2509,8 +2499,8 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan_2: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_scriptlet_or_sea_ws(tokens, pos);
-            if pos < 0 { break rep_scan_2; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan_2; }
+            pos += 1;
             if pos <= p.pos { break rep_scan_2; }
             rep_scan_pos_2 = pos;
         }
@@ -2526,7 +2516,7 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
                     }
                     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
                         let sp = pos;
-                        pos = scan_scriptlet_or_sea_ws(tokens, pos);
+                        pos += 1;
                         if pos < 0 { pos = sp; break; }
                         if pos == sp { break; }
                     }
@@ -2569,8 +2559,8 @@ fn _parse_html_document__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan_3: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_scriptlet_or_sea_ws(tokens, pos);
-            if pos < 0 { break rep_scan_3; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan_3; }
+            pos += 1;
             if pos <= p.pos { break rep_scan_3; }
             rep_scan_pos_3 = pos;
         }
@@ -2873,17 +2863,14 @@ fn _parse_html_content__inner(p: &mut Parser, follow: i64 = 0) -> () {
                             pos += 1;
                             break sg_9_done;
                         } else if _kind_set_5(sgk_9) {
-                            sg_9_2: {
-                                pos = scan_html_comment(tokens, pos);
-                                if pos < 0 { break sg_9_2; }
-                                break sg_9_done;
-                            }
+                            pos += 1;
+                            break sg_9_done;
                         }
                         break sg_8;
                     }
                     if pos < tokens.len() && _kind_set_6(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                         let sp = pos;
-                        pos = scan_html_chardata(tokens, pos);
+                        pos += 1;
                         if pos < 0 { pos = sp; }
                     }
                     break sg_8_done;

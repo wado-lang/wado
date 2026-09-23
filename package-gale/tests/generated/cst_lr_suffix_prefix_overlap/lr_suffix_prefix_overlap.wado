@@ -1335,24 +1335,22 @@ fn scan_e(tokens: &Array<i32>, pos: i32, min_prec: i32 = 0) -> i32 {
         let suffix_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
         let _lr_pos0 = pos;
         if suffix_kind == TK_DOT {
-            if suffix_kind == TK_DOT {
-                let _lr_scan_0 = scan_e_lr_0(tokens, pos);
-                if _lr_scan_0 >= 0 {
-                    if 2 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = _lr_scan_0;
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+            let _lr_scan_0 = scan_e_lr_0(tokens, pos);
+            if _lr_scan_0 >= 0 {
+                if 2 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = _lr_scan_0;
+                    if pos < 0 { pos = lr_saved_pos; break; }
                 } else {
-                    if 1 >= min_prec {
-                        let lr_saved_pos = pos;
-                        pos = scan_e_lr_1(tokens, pos);
-                        if pos < 0 { pos = lr_saved_pos; break; }
-                    } else {
-                        break;
-                    }
+                    break;
+                }
+            } else {
+                if 1 >= min_prec {
+                    let lr_saved_pos = pos;
+                    pos = scan_e_lr_1(tokens, pos);
+                    if pos < 0 { pos = lr_saved_pos; break; }
+                } else {
+                    break;
                 }
             }
         } else {
@@ -1407,36 +1405,34 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
         if p.recovering { break; }
         let _sk = p.peek_kind();
         if _sk == TK_DOT {
-            if _sk == TK_DOT {
-                let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
-                if _lr_scan_0 >= 0 {
-                    if 2 >= min_prec {
-                        if _lr_scan_0 < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_E, _start);
-                        p.b.set_alt(0);
-                        p.expect(TK_DOT, &EMPTY_SYNC);
-                        p.expect(TK_ID, &EMPTY_SYNC);
-                        p.expect(TK_LPAREN, &EMPTY_SYNC);
-                        p.expect(TK_RPAREN, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+            let _lr_scan_0 = scan_e_lr_0(&p.kinds, p.pos);
+            if _lr_scan_0 >= 0 {
+                if 2 >= min_prec {
+                    if _lr_scan_0 < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_E, _start);
+                    p.b.set_alt(0);
+                    p.expect(TK_DOT, &EMPTY_SYNC);
+                    p.expect(TK_ID, &EMPTY_SYNC);
+                    p.expect(TK_LPAREN, &EMPTY_SYNC);
+                    p.expect(TK_RPAREN, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
                 } else {
-                    if 1 >= min_prec {
-                        if scan_e_lr_1(&p.kinds, p.pos) < 0 {
-                            break;
-                        }
-                        p.b.start_node_at(_cp, RK_E, _start);
-                        p.b.set_alt(1);
-                        p.expect(TK_DOT, &EMPTY_SYNC);
-                        p.expect(TK_ID, &EMPTY_SYNC);
-                        p.b.finish_node(p.last_end());
-                    } else {
+                    break;
+                }
+            } else {
+                if 1 >= min_prec {
+                    if scan_e_lr_1(&p.kinds, p.pos) < 0 {
                         break;
                     }
+                    p.b.start_node_at(_cp, RK_E, _start);
+                    p.b.set_alt(1);
+                    p.expect(TK_DOT, &EMPTY_SYNC);
+                    p.expect(TK_ID, &EMPTY_SYNC);
+                    p.b.finish_node(p.last_end());
+                } else {
+                    break;
                 }
             }
         } else {

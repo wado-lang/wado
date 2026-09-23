@@ -1298,15 +1298,15 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                     if sgk_0 == TK_A {
                         sg_0_0: {
                             pos += 1;
-                            pos = scan_t(tokens, pos);
-                            if pos < 0 { break sg_0_0; }
+                            if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0_0; }
+                            pos += 1;
                             break sg_0_done;
                         }
                     } else if sgk_0 == TK_B {
                         sg_0_1: {
                             pos += 1;
-                            pos = scan_t(tokens, pos);
-                            if pos < 0 { break sg_0_1; }
+                            if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_0_1; }
+                            pos += 1;
                             break sg_0_done;
                         }
                     }
@@ -1319,15 +1319,15 @@ fn scan_s(tokens: &Array<i32>, pos: i32) -> i32 {
                         if sgk_1 == TK_A {
                             sg_1_0: {
                                 pos += 1;
-                                pos = scan_t(tokens, pos);
-                                if pos < 0 { break sg_1_0; }
+                                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_1_0; }
+                                pos += 1;
                                 break sg_1_done;
                             }
                         } else if sgk_1 == TK_B {
                             sg_1_1: {
                                 pos += 1;
-                                pos = scan_t(tokens, pos);
-                                if pos < 0 { break sg_1_1; }
+                                if pos >= tokens.len() || tokens[pos] != TK_SEMI { break sg_1_1; }
+                                pos += 1;
                                 break sg_1_done;
                             }
                         }
@@ -1433,8 +1433,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     let mut pos: i32 = p.pos;
                     if pos >= tokens.len() || tokens[pos] != TK_A { break gd_scan; }
                     pos += 1;
-                    pos = scan_t(tokens, pos);
-                    if pos < 0 { break gd_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SEMI { break gd_scan; }
+                    pos += 1;
                     gd_best = pos;
                 }
             } else if gd_kind == TK_B {
@@ -1444,8 +1444,8 @@ fn _parse_s__inner(p: &mut Parser) -> () {
                     let mut pos: i32 = p.pos;
                     if pos >= tokens.len() || tokens[pos] != TK_B { break gd_scan_2; }
                     pos += 1;
-                    pos = scan_t(tokens, pos);
-                    if pos < 0 { break gd_scan_2; }
+                    if pos >= tokens.len() || tokens[pos] != TK_SEMI { break gd_scan_2; }
+                    pos += 1;
                     gd_best = pos;
                 }
             }

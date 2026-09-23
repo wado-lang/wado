@@ -1326,7 +1326,7 @@ fn scan_program(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
         let sp = pos;
-        pos = scan_reset(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1350,8 +1350,8 @@ fn _parse_program__inner(p: &mut Parser) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_reset(tokens, pos);
-            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
+            pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

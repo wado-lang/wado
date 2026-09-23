@@ -1572,28 +1572,26 @@ fn _parse_pick__inner_scan_1(tokens: &Array<i32>, pos: i32, gate: &mut ScanGate)
 fn _parse_pick__inner(p: &mut Parser) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        if kind == TK_ID {
-            let _sd_tokens = &p.kinds;
-            let _sd_pos = p.pos;
-            p.scan_gate.no_brace = p.no_brace;
-            let _sd_p_0 = _parse_pick__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
-            p.scan_gate.no_brace = p.no_brace;
-            let _sd_p_1 = _parse_pick__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
-                return _parse_pick__inner_alt_0(p);
-            }
-            return _parse_pick__inner_alt_1(p);
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        p.scan_gate.no_brace = p.no_brace;
+        let _sd_p_0 = _parse_pick__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        p.scan_gate.no_brace = p.no_brace;
+        let _sd_p_1 = _parse_pick__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
         }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i == 0 {
+            return _parse_pick__inner_alt_0(p);
+        }
+        return _parse_pick__inner_alt_1(p);
     }
     p.no_viable(
         "no alternative of pick matches",

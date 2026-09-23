@@ -1430,8 +1430,8 @@ fn scan_tail(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 
 fn scan_e_atom_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { return -1; }
+    pos += 1;
     return pos;
 }
 

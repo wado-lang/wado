@@ -1445,10 +1445,8 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     scan_alts: {
         if alt_kind == TK_ID {
             let mut best: i32 = -1;
-            pos = start;
+            pos = start + 1;
             try_1: {
-                pos = scan_name(tokens, pos);
-                if pos < 0 { break try_1; }
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { break try_1; }
                 pos += 1;
                 pos = scan_inner(tokens, pos);
@@ -1457,58 +1455,54 @@ fn scan_item(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 pos += 1;
                 if pos > best { best = pos; }
             }
-            pos = start;
-            try_0: {
-                pos = scan_name(tokens, pos);
-                if pos < 0 { break try_0; }
-                osl_0_done: {
-                    if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
-                        let sol_1_save = pos;
-                        sol_1: {
-                            pos += 1;
-                            pos = scan_alias(tokens, pos);
-                            if pos < 0 { break sol_1; }
-                            break osl_0_done;
-                        }
-                        pos = sol_1_save;
+            pos = start + 1;
+            osl_0_done: {
+                if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
+                    let sol_1_save = pos;
+                    sol_1: {
+                        pos += 1;
+                        pos = scan_alias(tokens, pos);
+                        if pos < 0 { break sol_1; }
                         break osl_0_done;
                     }
-                    if pos < tokens.len() && _kind_set_1(tokens[pos]) {
-                        let sol_2_save = pos;
-                        sol_2: {
-                            pos = scan_alias(tokens, pos);
-                            if pos < 0 { break sol_2; }
-                            break osl_0_done;
-                        }
-                        pos = sol_2_save;
+                    pos = sol_1_save;
+                    break osl_0_done;
+                }
+                if pos < tokens.len() && _kind_set_1(tokens[pos]) {
+                    let sol_2_save = pos;
+                    sol_2: {
+                        pos = scan_alias(tokens, pos);
+                        if pos < 0 { break sol_2; }
                         break osl_0_done;
                     }
+                    pos = sol_2_save;
+                    break osl_0_done;
                 }
-                if pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    let sp = pos;
-                    sg_3_done: {
-                        let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                        if sgk_3 == TK_LIT_idx {
-                            sg_3_0: {
-                                pos += 1;
-                                pos = scan_name(tokens, pos);
-                                if pos < 0 { break sg_3_0; }
-                                break sg_3_done;
-                            }
-                        } else if sgk_3 == TK_LIT_no {
-                            sg_3_1: {
-                                pos += 1;
-                                if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_3_1; }
-                                pos += 1;
-                                break sg_3_done;
-                            }
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 { pos = sp; }
-                }
-                if pos > best { best = pos; }
             }
+            if pos < tokens.len() && _kind_set_2(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
+                let sp = pos;
+                sg_3_done: {
+                    let sgk_3 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    if sgk_3 == TK_LIT_idx {
+                        sg_3_0: {
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_3_0; }
+                            pos += 1;
+                            break sg_3_done;
+                        }
+                    } else if sgk_3 == TK_LIT_no {
+                        sg_3_1: {
+                            pos += 1;
+                            if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break sg_3_1; }
+                            pos += 1;
+                            break sg_3_done;
+                        }
+                    }
+                    pos = -1;
+                }
+                if pos < 0 { pos = sp; }
+            }
+            if pos > best { best = pos; }
             if best >= 0 { pos = best; break scan_alts; }
             return -1;
         } else {
@@ -1622,26 +1616,24 @@ fn _parse_stmt__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
 fn _parse_stmt__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        if kind == TK_ID {
-            let _sd_tokens = &p.kinds;
-            let _sd_pos = p.pos;
-            let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos, follow);
-            let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos, follow);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_0 > _sd_best_p {
-                _sd_best_p = _sd_p_0;
-                _sd_best_i = 0;
-            }
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_best_i == 0 {
-                return _parse_stmt__inner_alt_0(p, follow);
-            }
-            return _parse_stmt__inner_alt_1(p, follow);
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_0 = _parse_stmt__inner_scan_0(_sd_tokens, _sd_pos, follow);
+        let _sd_p_1 = _parse_stmt__inner_scan_1(_sd_tokens, _sd_pos, follow);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_0 > _sd_best_p {
+            _sd_best_p = _sd_p_0;
+            _sd_best_i = 0;
         }
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
+        }
+        if _sd_best_i == 0 {
+            return _parse_stmt__inner_alt_0(p, follow);
+        }
+        return _parse_stmt__inner_alt_1(p, follow);
     }
     p.no_viable(
         "no alternative of stmt matches",
@@ -1672,8 +1664,8 @@ fn _parse_item__inner_alt_1(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_item__inner_scan_1(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_LPAREN { return -1; }
     pos += 1;
     pos = scan_inner(tokens, pos);
@@ -1704,8 +1696,8 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
                 let mut pos: i32 = p.pos;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_idx { break gd_scan; }
                 pos += 1;
-                pos = scan_name(tokens, pos);
-                if pos < 0 { break gd_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break gd_scan; }
+                pos += 1;
                 gd_best = pos;
             }
         } else if gd_kind == TK_LIT_no {
@@ -1735,8 +1727,8 @@ fn _parse_item__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () {
 
 fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
-    pos = scan_name(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     osl_4_done: {
         if pos < tokens.len() && tokens[pos] == TK_LIT_as && pos + 1 < tokens.len() && _kind_set_1(tokens[pos + 1]) {
             let sol_5_save = pos;
@@ -1767,8 +1759,8 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
             if sgk_7 == TK_LIT_idx {
                 sg_7_0: {
                     pos += 1;
-                    pos = scan_name(tokens, pos);
-                    if pos < 0 { break sg_7_0; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_7_0; }
+                    pos += 1;
                     break sg_7_done;
                 }
             } else if sgk_7 == TK_LIT_no {
@@ -1789,49 +1781,47 @@ fn _parse_item__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> 
 fn _parse_item__inner(p: &mut Parser, follow: i64 = 0) -> () {
     let kind = p.peek_kind();
     if kind == TK_ID {
-        if kind == TK_ID {
-            if _kind_set_3(p.peek_at(1)) {
-                return _parse_item__inner_alt_0(p, follow);
-            } else if p.peek_at(1) == TK_LIT_LPAREN {
-                let _sd_tokens = &p.kinds;
-                let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
-                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
+        if _kind_set_3(p.peek_at(1)) {
+            return _parse_item__inner_alt_0(p, follow);
+        } else if p.peek_at(1) == TK_LIT_LPAREN {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 1 {
+                return _parse_item__inner_alt_1(p, follow);
+            }
+            return _parse_item__inner_alt_0(p, follow);
+        } else {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
+            let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i >= 0 {
                 if _sd_best_i == 1 {
                     return _parse_item__inner_alt_1(p, follow);
                 }
                 return _parse_item__inner_alt_0(p, follow);
-            } else {
-                let _sd_tokens = &p.kinds;
-                let _sd_pos = p.pos;
-                let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos, follow);
-                let _sd_p_0 = _parse_item__inner_scan_0(_sd_tokens, _sd_pos, follow);
-                let mut _sd_best_i: i32 = -1;
-                let mut _sd_best_p: i32 = -1;
-                if _sd_p_0 > _sd_best_p {
-                    _sd_best_p = _sd_p_0;
-                    _sd_best_i = 0;
-                }
-                if _sd_p_1 > _sd_best_p {
-                    _sd_best_p = _sd_p_1;
-                    _sd_best_i = 1;
-                }
-                if _sd_best_i >= 0 {
-                    if _sd_best_i == 1 {
-                        return _parse_item__inner_alt_1(p, follow);
-                    }
-                    return _parse_item__inner_alt_0(p, follow);
-                }
             }
         }
     }

@@ -1268,7 +1268,7 @@ fn scan_body(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && tokens[pos] == TK_LIT_a && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_member(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1308,8 +1308,8 @@ fn _parse_body__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_member(tokens, pos);
-            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_LIT_a { break rep_scan; }
+            pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

@@ -1350,8 +1350,8 @@ fn scan_stmt(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             try_0: {
                 pos = scan_a(tokens, pos, (FOLLOW_MASK_1 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
                 if pos < 0 { break try_0; }
-                pos = scan_t(tokens, pos);
-                if pos < 0 { break try_0; }
+                if pos >= tokens.len() || tokens[pos] != TK_Y { break try_0; }
+                pos += 1;
                 if pos >= tokens.len() || tokens[pos] != TK_LIT_SEMI { break try_0; }
                 pos += 1;
                 break scan_alts;

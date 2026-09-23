@@ -1398,17 +1398,16 @@ fn scan_expr(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
 }
 
 fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
-    pos = scan_field(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
         sg_1_done: {
             sg_1: {
                 pos += 1;
-                pos = scan_field(tokens, pos);
-                if pos < 0 { break sg_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_1; }
+                pos += 1;
                 break sg_1_done;
             }
             pos = -1;
@@ -1471,7 +1470,6 @@ fn scan_fields(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     } else {
         pos = gp_4;
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1558,8 +1556,8 @@ fn _parse_fields__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 sg_5: {
                     if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_5; }
                     pos += 1;
-                    pos = scan_field(tokens, pos);
-                    if pos < 0 { break sg_5; }
+                    if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_5; }
+                    pos += 1;
                     break sg_5_done;
                 }
                 break rep_scan;

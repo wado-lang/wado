@@ -1298,8 +1298,8 @@ fn scan_r(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         sg_0_0: {
             pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
             if pos < 0 { break sg_0_0; }
-            pos = scan_b(tokens, pos);
-            if pos < 0 { break sg_0_0; }
+            if pos >= tokens.len() || tokens[pos] != TK_Y { break sg_0_0; }
+            pos += 1;
             if pos > sg_0_best { sg_0_best = pos; }
         }
         pos = gp_0;
@@ -1364,8 +1364,8 @@ fn _parse_r__inner(p: &mut Parser, follow: i64 = 0) -> () {
             let mut pos: i32 = p.pos;
             pos = scan_a(tokens, pos, (FOLLOW_MASK_0 | (follow & FOLLOW_SEQUENCED) << 16) & FOLLOW_CONT_MASK);
             if pos < 0 { break gd_scan; }
-            pos = scan_b(tokens, pos);
-            if pos < 0 { break gd_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_Y { break gd_scan; }
+            pos += 1;
             gd_end = pos;
         }
         if gd_end > gd_best {

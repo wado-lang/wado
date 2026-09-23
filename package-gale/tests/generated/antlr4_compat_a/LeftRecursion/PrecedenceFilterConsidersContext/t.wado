@@ -1307,15 +1307,15 @@ fn scan_prog(tokens: &Array<i32>, pos: i32) -> i32 {
 
 fn scan_statement_atom(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_letter_a(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
     return pos;
 }
 
 fn scan_statement_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
-    pos = scan_letter_a(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_LIT_a { return -1; }
+    pos += 1;
     if pos >= tokens.len() || tokens[pos] != TK_LIT_b { return -1; }
     pos += 1;
     return pos;

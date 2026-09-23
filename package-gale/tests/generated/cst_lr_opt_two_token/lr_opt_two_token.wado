@@ -1325,8 +1325,7 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
                     let sp = pos;
                     sg_1_done: {
                         sg_1: {
-                            pos = scan_d(tokens, pos);
-                            if pos < 0 { break sg_1; }
+                            pos += 1;
                             if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_1; }
                             pos += 1;
                             break sg_1_done;
@@ -1335,8 +1334,8 @@ fn scan_e_lr_1(tokens: &Array<i32>, pos: i32) -> i32 {
                     }
                     if pos < 0 { pos = sp; }
                 }
-                pos = scan_t(tokens, pos);
-                if pos < 0 { break sg_0_1; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_0_1; }
+                pos += 1;
                 break sg_0_done;
             }
         }
@@ -1442,8 +1441,8 @@ fn _parse_e__inner(p: &mut Parser, min_prec: i32 = 0) -> () {
                         let mut pos: i32 = p.pos;
                         sg_2_done: {
                             sg_2: {
-                                pos = scan_d(tokens, pos);
-                                if pos < 0 { break sg_2; }
+                                if pos >= tokens.len() || tokens[pos] != TK_ID { break sg_2; }
+                                pos += 1;
                                 if pos >= tokens.len() || tokens[pos] != TK_LIT_DOT { break sg_2; }
                                 pos += 1;
                                 break sg_2_done;

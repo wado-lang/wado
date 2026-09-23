@@ -776,6 +776,48 @@ C2 : 'c' ;
     assert !str_contains(&t, "p.expect(kind"), `the dispatch proved the token\n${t}`;
 }
 
+test "a dispatch never re-tests the token its arm tested" {
+    let input = "grammar T;
+s : r e EOF ;
+r : a | b ;
+a : X Y* ;
+b : X Y* Z ;
+e : e '.' ID | e '.' ID '(' ')' | ID ;
+X : 'x' ;
+Y : 'y' ;
+Z : 'z' ;
+ID : [a-w]+ ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let mut prev = "";
+    for let line of output.split("\n") {
+        let t = line.trim().to_string();
+        assert !(t.starts_with("if ") && t.ends_with("{") && t == prev), `nested re-test: ${t}`;
+        prev = t;
+    }
+}
+
+test "a scan tests a one-token rule inline, and trusts a callee that consumes" {
+    let input = "grammar T;
+s : n EOF ;
+n : a ;
+a : ID | k | '(' a ')' ;
+k : K1 | K2 ;
+ID : [a-z]+ ;
+K1 : 'K' ;
+K2 : 'J' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    let a = extract_fn_body(&output, "fn scan_a(");
+    assert a.len() > 0, output;
+    assert !str_contains(&a, "scan_k("), `the partition proved k's token\n${a}`;
+    let n = extract_fn_body(&output, "fn scan_n(");
+    assert n.len() > 0, output;
+    assert !str_contains(&n, "scan_start"), `scan_a never matches empty\n${n}`;
+}
+
 test "an element is bound only where an action reads it" {
     let input = "grammar T;
 options { language = Wado; }
@@ -1335,8 +1377,8 @@ test "an optional group's entry guard is the scan its dispatch decides on" {
     // dispatch reads the winner the entry guard already found.
     let input = "grammar Test;
 stmt : 'k' ( a | b | a '.' b )? ;
-a : A ;
-b : B ;
+a : A+ ;
+b : B+ ;
 A : 'a' ;
 B : 'b' ;
 ";

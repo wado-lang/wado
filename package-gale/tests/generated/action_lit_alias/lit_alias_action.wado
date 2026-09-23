@@ -1442,7 +1442,7 @@ fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
     let mut pos = pos;
     while pos < tokens.len() && _kind_set_0(tokens[pos]) && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_t(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
@@ -1464,8 +1464,8 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
         rep_scan: {
             let tokens = &p.kinds;
             let mut pos: i32 = p.pos;
-            pos = scan_t(tokens, pos);
-            if pos < 0 { break rep_scan; }
+            if pos >= tokens.len() || !_kind_set_0(tokens[pos]) { break rep_scan; }
+            pos += 1;
             if pos <= p.pos { break rep_scan; }
             rep_scan_pos = pos;
         }

@@ -1385,17 +1385,15 @@ impl Parser {
 }
 
 fn scan_s(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
-    let scan_start = pos;
     let mut pos = pos;
-    pos = scan_a(tokens, pos);
-    if pos < 0 { return -1; }
+    if pos >= tokens.len() || tokens[pos] != TK_ID { return -1; }
+    pos += 1;
     while pos < tokens.len() && tokens[pos] == TK_ID && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
         let sp = pos;
-        pos = scan_a(tokens, pos);
+        pos += 1;
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
     }
-    if pos == scan_start { return -1; }
     return pos;
 }
 
@@ -1416,8 +1414,8 @@ fn _parse_s__inner(p: &mut Parser, follow: i64 = 0) -> () {
             rep_scan: {
                 let tokens = &p.kinds;
                 let mut pos: i32 = p.pos;
-                pos = scan_a(tokens, pos);
-                if pos < 0 { break rep_scan; }
+                if pos >= tokens.len() || tokens[pos] != TK_ID { break rep_scan; }
+                pos += 1;
                 if pos <= p.pos { break rep_scan; }
                 rep_scan_pos = pos;
             }

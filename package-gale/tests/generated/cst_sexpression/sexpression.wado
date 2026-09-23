@@ -1400,13 +1400,8 @@ fn scan_item(tokens: &Array<i32>, pos: i32) -> i32 {
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
         if _kind_set_1(alt_kind) {
-            pos = start;
-            try_0: {
-                pos = scan_atom(tokens, pos);
-                if pos < 0 { break try_0; }
-                break scan_alts;
-            }
-            return -1;
+            pos = start + 1;
+            break scan_alts;
         } else if alt_kind == TK_LPAREN {
             let mut best: i32 = -1;
             pos = start + 1;
@@ -1545,26 +1540,24 @@ fn _parse_item__inner(p: &mut Parser) -> () {
         return;
     }
     if kind == TK_LPAREN {
-        if kind == TK_LPAREN {
-            let _sd_tokens = &p.kinds;
-            let _sd_pos = p.pos;
-            let _sd_p_2 = _parse_item__inner_scan_2(_sd_tokens, _sd_pos);
-            let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
-            let mut _sd_best_i: i32 = -1;
-            let mut _sd_best_p: i32 = -1;
-            if _sd_p_1 > _sd_best_p {
-                _sd_best_p = _sd_p_1;
-                _sd_best_i = 1;
-            }
-            if _sd_p_2 > _sd_best_p {
-                _sd_best_p = _sd_p_2;
-                _sd_best_i = 2;
-            }
-            if _sd_best_i == 2 {
-                return _parse_item__inner_alt_2(p);
-            }
-            return _parse_item__inner_alt_1(p);
+        let _sd_tokens = &p.kinds;
+        let _sd_pos = p.pos;
+        let _sd_p_2 = _parse_item__inner_scan_2(_sd_tokens, _sd_pos);
+        let _sd_p_1 = _parse_item__inner_scan_1(_sd_tokens, _sd_pos);
+        let mut _sd_best_i: i32 = -1;
+        let mut _sd_best_p: i32 = -1;
+        if _sd_p_1 > _sd_best_p {
+            _sd_best_p = _sd_p_1;
+            _sd_best_i = 1;
         }
+        if _sd_p_2 > _sd_best_p {
+            _sd_best_p = _sd_p_2;
+            _sd_best_i = 2;
+        }
+        if _sd_best_i == 2 {
+            return _parse_item__inner_alt_2(p);
+        }
+        return _parse_item__inner_alt_1(p);
     }
     p.no_viable(
         "no alternative of item matches",

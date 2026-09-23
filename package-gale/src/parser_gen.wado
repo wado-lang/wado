@@ -477,24 +477,21 @@ fn gen_scan_gate_scope_wrapper<S: AsStrSlice, S1: AsStrSlice>(
 /// the only shape where the non-nullable post-condition can fire. A body
 /// holding any element that must consume never reaches it, so emitting the
 /// check there would be dead code in every generated scan.
-fn scan_body_can_match_empty(elements: &List<ScanElement>) -> bool {
+fn scan_body_can_match_empty(elements: &List<ScanElement>, ctx: &mut GenContext) -> bool {
     for let e of elements {
-        if !scan_element_can_match_empty(e) {
+        if !scan_element_can_match_empty(e, ctx) {
             return false;
         }
     }
     return true;
 }
 
-fn scan_element_can_match_empty(se: &ScanElement) -> bool {
+fn scan_element_can_match_empty(se: &ScanElement, ctx: &mut GenContext) -> bool {
     return match se {
         Token(_) | Wildcard | Excluded(_) => false,
-        // Only the snake name reaches scan IR, so the callee's nullability is
-        // out of reach here; assume it can be empty and let the body's other
-        // elements decide.
-        RuleCall(_) => true,
+        RuleCall(rc) => !ctx.scan_callee_consumes(&rc.target_snake),
         Repeat(re) => if let Plus = re.kind {
-            scan_element_can_match_empty(&re.body);
+            scan_element_can_match_empty(&re.body, ctx);
         } else {
             true;
         },
@@ -504,7 +501,7 @@ fn scan_element_can_match_empty(se: &ScanElement) -> bool {
             } else {
                 let mut any = false;
                 for let alt of &ge.alts {
-                    if scan_body_can_match_empty(&alt.elements) {
+                    if scan_body_can_match_empty(&alt.elements, ctx) {
                         any = true;
                         break;
                     }
@@ -599,7 +596,7 @@ fn gen_scan_function_named<S: AsStrSlice>(
         // only the whole-rule result is checked.
         let mut nullable_visiting: List<String> = [];
         let non_nullable = !ctx.rule_is_nullable(&rule.name, &mut nullable_visiting)
-            && scan_body_can_match_empty(&scan_body.elements);
+            && scan_body_can_match_empty(&scan_body.elements, ctx);
         if non_nullable {
             w.line("let scan_start = pos;");
         }
@@ -1201,6 +1198,7 @@ fn emit_lr_group_chain(
                 ctx,
                 &mut nc,
                 mid_operand_gated,
+                union_first.len() == 1,
             );
         }
     }
@@ -1227,6 +1225,7 @@ fn emit_lr_overlap(
     ctx: &mut GenContext,
     nc: &mut List<[String, i32]>,
     mid_operand_gated: bool,
+    token_proven: bool,
 ) {
     let mut emitted = TreeSet::<String>::new();
     let mut chained = false;
@@ -1245,7 +1244,9 @@ fn emit_lr_overlap(
                 }
             }
             if !shared {
-                begin_lr_arm(w, site, tk, chained);
+                if !token_proven {
+                    begin_lr_arm(w, site, tk, chained);
+                }
                 chained = true;
                 let lr = &lr_alts[lr_dispatch.valid_lr_alts[group[k]]];
                 emit_lr_overlap_branch(w, site, lr, rule, ctx, nc, mid_operand_gated);
@@ -1264,7 +1265,9 @@ fn emit_lr_overlap(
         }
     }
     for let shared_tk of &shared_tokens {
-        begin_lr_arm(w, site, shared_tk, chained);
+        if !token_proven {
+            begin_lr_arm(w, site, shared_tk, chained);
+        }
         chained = true;
         let mut last_k = -1;
         for let mut k = 0; k < group.len(); k += 1 {
@@ -1357,7 +1360,7 @@ fn emit_lr_overlap(
         }
         emitted.insert(*shared_tk);
     }
-    if chained {
+    if chained && !token_proven {
         w.end();
     }
 }
@@ -1698,15 +1701,27 @@ fn known_at_start(kinds: &List<String>) -> List<List<String>> {
     return [*kinds];
 }
 
-fn known_is(known: &List<List<String>>, kind: &String) -> bool {
-    return known_within(known, &[*kind]);
+/// The kinds `se` matches when it is exactly one token test, or `null`.
+fn scan_one_token_kinds(se: &ScanElement, ctx: &GenContext) -> Option<List<String>> {
+    return match se {
+        Token(t) => Option::Some([t.kind]),
+        RuleCall(rc) => ctx.one_token_rule(&rc.target_snake),
+        _ => null,
+    };
+}
+
+fn scan_element_is_proven(se: &ScanElement, known: &List<List<String>>, ctx: &GenContext) -> bool {
+    if let Some(kinds) = scan_one_token_kinds(se, ctx) {
+        return known_within(known, &kinds);
+    }
+    return false;
 }
 
 /// `known` once `se` has been walked: a one-token element moves it along a
 /// token, and anything else consumes an unknown count.
-fn known_after(se: &ScanElement, known: &List<List<String>>) -> List<List<String>> {
+fn known_after(se: &ScanElement, known: &List<List<String>>, ctx: &GenContext) -> List<List<String>> {
     let mut rest: List<List<String>> = [];
-    if se matches { Token(_) | Wildcard | Excluded(_) } {
+    if se matches { Wildcard | Excluded(_) } || scan_one_token_kinds(se, ctx) matches { Some(_) } {
         for let d of 1..<known.len() {
             rest.push(known[d]);
         }
@@ -1717,36 +1732,32 @@ fn known_after(se: &ScanElement, known: &List<List<String>>) -> List<List<String
 /// Whether walking `se` under `known` can run the failure statement it was
 /// handed, so a label that failure breaks to has a reader. A label nothing
 /// breaks to does not compile.
-fn scan_element_can_fail(se: &ScanElement, known: &List<List<String>>) -> bool {
+fn scan_element_can_fail(se: &ScanElement, known: &List<List<String>>, ctx: &GenContext) -> bool {
     return match se {
-        Token(t) => !known_is(known, &t.kind),
-        RuleCall(_) | Wildcard | Excluded(_) => true,
-        Repeat(re) => re.kind matches { Plus } && scan_element_can_fail(&re.body, known),
-        Group(ge) => !ge.lenient && scan_group_can_fail(ge, known),
+        Token(_) | RuleCall(_) => !scan_element_is_proven(se, known, ctx),
+        Wildcard | Excluded(_) => true,
+        Repeat(re) => re.kind matches { Plus } && scan_element_can_fail(&re.body, known, ctx),
+        Group(ge) => !ge.lenient && scan_group_can_fail(ge, known, ctx),
         OptionalLookahead(_) => false,
     };
 }
 
-fn scan_elements_can_fail(elements: &List<ScanElement>, from: i32, known: &List<List<String>>) -> bool {
+fn scan_elements_can_fail(elements: &List<ScanElement>, from: i32, known: &List<List<String>>, ctx: &GenContext) -> bool {
     let mut k = *known;
     for let i of from..<elements.len() {
-        if scan_element_can_fail(&elements[i], &k) {
+        if scan_element_can_fail(&elements[i], &k, ctx) {
             return true;
         }
-        k = known_after(&elements[i], &k);
+        k = known_after(&elements[i], &k, ctx);
     }
     return false;
 }
 
 /// The element the walk of `elements` starts at: past a leading token `known`
 /// already proved, which the caller consumes as part of its rewind.
-fn scan_skip_known_token(elements: &List<ScanElement>, known: &List<List<String>>) -> i32 {
-    if !elements.is_empty() {
-        if let Token(t) = &elements[0] {
-            if known_is(known, &t.kind) {
-                return 1;
-            }
-        }
+fn scan_skip_known_token(elements: &List<ScanElement>, known: &List<List<String>>, ctx: &GenContext) -> i32 {
+    if !elements.is_empty() && scan_element_is_proven(&elements[0], known, ctx) {
+        return 1;
     }
     return 0;
 }
@@ -1768,10 +1779,10 @@ fn gen_scan_alt_candidate<S: AsStrSlice>(
     ctx: &mut GenContext,
     commit_stmt: S,
 ) -> bool {
-    let from = scan_skip_known_token(&body.elements, known);
-    let rest_known = if from == 1 { known_after(&body.elements[0], known) } else { *known };
+    let from = scan_skip_known_token(&body.elements, known, ctx);
+    let rest_known = if from == 1 { known_after(&body.elements[0], known, ctx) } else { *known };
     gen_scan_rewind(w, ctx, "start", from);
-    let can_fail = !body.gate_cond.is_empty() || scan_elements_can_fail(&body.elements, from, &rest_known);
+    let can_fail = !body.gate_cond.is_empty() || scan_elements_can_fail(&body.elements, from, &rest_known, ctx);
     let label = `try_${i}`;
     if can_fail {
         w.begin(`${label}:`);
@@ -1807,12 +1818,13 @@ fn gen_scan_op_element<S: AsStrSlice>(
 ) {
     match se {
         Token(t) => {
-            if !known_is(known, &t.kind) {
-                w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { ${fail_stmt} }`);
-            }
-            w.line("pos += 1;");
+            gen_scan_token_set(w, &[t.kind], ctx, fail_stmt, false, known);
         },
         RuleCall(rc) => {
+            if let Some(kinds) = ctx.one_token_rule(&rc.target_snake) {
+                gen_scan_token_set(w, &kinds, ctx, fail_stmt, false, known);
+                return;
+            }
             // Single scan callee + runtime FOLLOW arg.
             let fn_name = `scan_${rc.target_snake}`;
             let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
@@ -1874,14 +1886,12 @@ fn gen_scan_op_element_assign(
     known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
     match se {
-        Token(t) => {
-            if known_is(known, &t.kind) {
-                w.line("pos += 1;");
-            } else {
-                w.line(`if pos >= tokens.len() || tokens[pos] != ${t.kind} { pos = -1; } else { pos += 1; }`);
-            }
-        },
+        Token(t) => gen_scan_token_set_assign(w, &[t.kind], ctx, known),
         RuleCall(rc) => {
+            if let Some(kinds) = ctx.one_token_rule(&rc.target_snake) {
+                gen_scan_token_set_assign(w, &kinds, ctx, known);
+                return;
+            }
             let fn_name = `scan_${rc.target_snake}`;
             let follow_arg_str = follow_arg_sep(ctx, ctx.rule_reads_follow(&rc.target_snake), &rc.follow_arg);
             // `_assign` only fires inside Repeat bodies — never reachable
@@ -2306,13 +2316,13 @@ fn gen_scan_op_group<S: AsStrSlice>(
     lenient: bool,
     known: &List<List<String>> = &NOTHING_KNOWN,
 ) {
-    if let Some(kinds) = scan_group_token_kinds(ge) {
+    if let Some(kinds) = scan_group_token_kinds(ge, ctx) {
         gen_scan_token_set(w, &kinds, ctx, fail_stmt, lenient, known);
         return;
     }
     if ge.alts.len() == 1 {
         let elements = &ge.alts[0].elements;
-        if !scan_elements_can_fail(elements, 0, known) {
+        if !scan_elements_can_fail(elements, 0, known, ctx) {
             gen_scan_op_elements(w, elements, 0, elements.len(), ctx, fail_stmt, &NO_SCAN_GATES, &NO_SCAN_GATE_COND, known);
             return;
         }
@@ -2375,7 +2385,7 @@ fn gen_scan_op_group<S: AsStrSlice>(
         for let ai of &branches[i].alts {
             let inner = `sg_${gc}_${*ai}`;
             let elements = &ge.alts[*ai].elements;
-            let can_fail = scan_elements_can_fail(elements, 0, &branch_known);
+            let can_fail = scan_elements_can_fail(elements, 0, &branch_known, ctx);
             gen_scan_rewind(w, ctx, &gp_var);
             if can_fail {
                 w.begin(`${inner}:`);
@@ -2444,7 +2454,7 @@ fn gen_scan_group_decided<S: AsStrSlice>(
         let inner = `sg_${gc}_${ai}`;
         let elements = &ge.alts[ai].elements;
         let known = branch_proves(branches, i);
-        let can_fail = scan_elements_can_fail(elements, 0, &known);
+        let can_fail = scan_elements_can_fail(elements, 0, &known, ctx);
         if can_fail {
             w.begin(`${inner}:`);
         }
@@ -2475,17 +2485,19 @@ fn gen_scan_group_decided<S: AsStrSlice>(
 
 /// The kinds a group of single-token alternatives matches, or `null` for any
 /// other group.
-fn scan_group_token_kinds(ge: &ScanGroupElement) -> Option<List<String>> {
+fn scan_group_token_kinds(ge: &ScanGroupElement, ctx: &GenContext) -> Option<List<String>> {
     let mut kinds: List<String> = [];
     for let alt of &ge.alts {
         if alt.elements.len() != 1 {
             return null;
         }
-        let Token(t) = &alt.elements[0] else {
+        let Some(alt_kinds) = scan_one_token_kinds(&alt.elements[0], ctx) else {
             return null;
         };
-        if !kinds.contains(&t.kind) {
-            kinds.push(t.kind);
+        for let k of &alt_kinds {
+            if !kinds.contains(k) {
+                kinds.push(*k);
+            }
         }
     }
     return Option::Some(kinds);
@@ -2526,13 +2538,22 @@ fn gen_scan_token_set<S: AsStrSlice>(
     w.line("pos += 1;");
 }
 
+/// `gen_scan_token_set` where a miss sets `pos = -1`.
+fn gen_scan_token_set_assign(w: &mut CodeWriter, kinds: &List<String>, ctx: &mut GenContext, known: &List<List<String>>) {
+    if known_within(known, kinds) {
+        w.line("pos += 1;");
+        return;
+    }
+    w.line(`if pos >= tokens.len() || ${ctx.kind_negate_check_str(kinds, "tokens[pos]")} { pos = -1; } else { pos += 1; }`);
+}
+
 /// Whether `gen_scan_op_group` under `known` emits the failure it was handed.
-fn scan_group_can_fail(ge: &ScanGroupElement, known: &List<List<String>>) -> bool {
-    if let Some(kinds) = scan_group_token_kinds(ge) {
+fn scan_group_can_fail(ge: &ScanGroupElement, known: &List<List<String>>, ctx: &GenContext) -> bool {
+    if let Some(kinds) = scan_group_token_kinds(ge, ctx) {
         return !known_within(known, &kinds);
     }
     if ge.alts.len() == 1 {
-        return scan_elements_can_fail(&ge.alts[0].elements, 0, known);
+        return scan_elements_can_fail(&ge.alts[0].elements, 0, known, ctx);
     }
     return true;
 }
@@ -2558,7 +2579,7 @@ fn gen_scan_op_optional_lookahead(w: &mut CodeWriter, ole: &ScanOptionalLookahea
         let gc = ctx.next_scan_group();
         let body = `sol_${gc}`;
         let elements = &ole.bodies[si].elements;
-        if !scan_elements_can_fail(elements, 0, sig) {
+        if !scan_elements_can_fail(elements, 0, sig, ctx) {
             gen_scan_op_elements(w, elements, 0, elements.len(), ctx, "", &NO_SCAN_GATES, &NO_SCAN_GATE_COND, sig);
             w.line(`break ${chain_done};`);
             w.end();
@@ -2613,14 +2634,14 @@ fn gen_scan_op_elements<S: AsStrSlice>(
             break;
         }
         let se = &scan_elems[i];
-        let proven = if let Token(t) = se { known_is(&k, &t.kind) } else { false };
+        let proven = scan_element_is_proven(se, &k, ctx);
         if proven {
             proven_run += 1;
         } else {
             flush_proven_run(w, &mut proven_run);
             gen_scan_op_element(w, se, ctx, fail_stmt, &k);
         }
-        k = known_after(se, &k);
+        k = known_after(se, &k, ctx);
     }
     flush_proven_run(w, &mut proven_run);
 }
@@ -3755,14 +3776,23 @@ fn has_action_before(actions: &List<AltAction>, index: i32) -> bool {
     return false;
 }
 
+fn all_contained(xs: &List<String>, set: &List<String>) -> bool {
+    for let x of xs {
+        if !set.contains(x) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// A token leaf whose kind the enclosing dispatch has already tested.
 fn leaf_is_proven(op: &Op, proven_first: &List<String>) -> bool {
-    if proven_first.len() != 1 {
+    if proven_first.is_empty() {
         return false;
     }
     return match *op {
-        Token(t) => t.kind == proven_first[0],
-        Literal(l) => l.kind == proven_first[0],
+        Token(t) => all_contained(proven_first, &[t.kind]),
+        Literal(l) => all_contained(proven_first, &[l.kind]),
         _ => false,
     };
 }
@@ -8084,8 +8114,9 @@ fn gen_prediction_code<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     type_name: S1,
     ctx: &mut GenContext,
     rule_display: S2,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
-    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display);
+    gen_prediction_code_inner(w, node, fn_name, alts, lowered_rule, type_name, ctx, 0, rule_display, proven_first);
 }
 
 
@@ -8324,6 +8355,7 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
     ctx: &mut GenContext,
     skip: i32,
     rule_display: S2,
+    proven_first: &List<String> = &EMPTY_SYNC,
 ) {
     match node {
         Leaf(idx) => {
@@ -8416,6 +8448,12 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             } else {
                 `p.peek_at(${d.depth})`;
             };
+            let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
+            if d.depth == 0 && skip == 0 && d.branches.len() == 1 && fallback.is_empty()
+                && !proven_first.is_empty() && all_contained(proven_first, &d.branches[0].tokens) {
+                gen_prediction_code_inner(w, &d.branches[0].child, fn_name, alts, lowered_rule, type_name, ctx, skip, rule_display);
+                return;
+            }
             for let mut i = 0; i < d.branches.len(); i += 1 {
                 let branch = &d.branches[i];
                 let cond = ctx.admits_check_str(&admits_or_everything(&branch.tokens), &check_var);
@@ -8442,7 +8480,6 @@ fn gen_prediction_code_inner<S: AsStrSlice, S1: AsStrSlice, S2: AsStrSlice>(
             // branch (`a : X+ Y | X Z` on `X X Y`). Falling through would
             // reject valid input, so hand those tokens to the tournament
             // lowering already chose for this overlap group.
-            let fallback = dispatch_fallback_indices(d, alts, ctx, skip);
             if !fallback.is_empty() {
                 w.else_begin("else");
                 // The tournament scans each alt from its first element, as
@@ -8578,7 +8615,17 @@ fn gen_multi_alt_body_alt<S: AsStrSlice, S1: AsStrSlice>(
             );
         } else {
             let tree = build_group_prediction_tree(&rule.alternatives, group, first_sets, non_lr_indices, ctx);
-            gen_prediction_code(w, &tree, fn_name, &rule.alternatives, lowered_rule, type_name, ctx, &rule.name);
+            gen_prediction_code(
+                w,
+                &tree,
+                fn_name,
+                &rule.alternatives,
+                lowered_rule,
+                type_name,
+                ctx,
+                &rule.name,
+                &slot_first_union(group, first_sets),
+            );
         }
 
         w.end();
