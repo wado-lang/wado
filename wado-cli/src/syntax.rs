@@ -1,7 +1,8 @@
 //! Syntax definition generator subcommand
 //!
 //! Transforms canonical syntax definitions from wado-compiler into
-//! editor-specific formats (`TextMate` grammar, VS Code language configuration).
+//! editor-specific formats (`TextMate` grammar, VS Code language configuration),
+//! and the reserved vocabulary as JSON for tools that generate Wado source.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -11,7 +12,10 @@ use lexopt::Arg::Value;
 use lexopt::Parser;
 use serde_json::json;
 
-use wado_compiler::syntax::SyntaxDefinition;
+use wado_compiler::prelude_names;
+use wado_compiler::syntax::{
+    CONTEXTUAL_KEYWORDS, KEYWORDS, KeywordCategory, NAME_KEYWORDS, SyntaxDefinition,
+};
 
 use crate::args::{self, CliExit};
 use crate::compile::announce_artifact;
@@ -20,6 +24,7 @@ use crate::compile::announce_artifact;
 pub enum SyntaxFormat {
     TmLanguage,
     LanguageConfig,
+    Json,
 }
 
 impl SyntaxFormat {
@@ -27,6 +32,7 @@ impl SyntaxFormat {
         match s {
             "tmLanguage" | "tmlanguage" | "textmate" => Some(Self::TmLanguage),
             "language-config" | "languageConfig" => Some(Self::LanguageConfig),
+            "json" => Some(Self::Json),
             _ => None,
         }
     }
@@ -53,7 +59,7 @@ impl Opt {
                 long: Some("format"),
                 short: None,
                 value: Some("<fmt>"),
-                desc: "Output format: tmLanguage, language-config (default: tmLanguage)",
+                desc: "Output format: tmLanguage, language-config, json (default: tmLanguage)",
             },
             Self::Output => args::OptSpec {
                 long: Some("output"),
@@ -90,6 +96,7 @@ fn format_usage() -> String {
         "  wado syntax --format language-config -o language-configuration.json"
     )
     .unwrap();
+    writeln!(buf, "  wado syntax --format json -o wado-syntax.json").unwrap();
     buf
 }
 
@@ -134,6 +141,8 @@ pub fn run(opts: SyntaxOptions) -> Result<(), CliExit> {
             let config = generate_language_configuration(&def);
             serde_json::to_string_pretty(&config).expect("failed to serialize language config")
         }
+        SyntaxFormat::Json => serde_json::to_string_pretty(&generate_vocabulary())
+            .expect("failed to serialize vocabulary"),
     };
 
     if let Some(path) = opts.output {
@@ -147,6 +156,24 @@ pub fn run(opts: SyntaxOptions) -> Result<(), CliExit> {
         println!();
     }
     Ok(())
+}
+
+/// The words a generator of Wado source must not declare unescaped: the
+/// keywords, and every name the prelude puts in scope with what it declares.
+fn generate_vocabulary() -> serde_json::Value {
+    fn texts(words: &[(&'static str, KeywordCategory)]) -> Vec<&'static str> {
+        words.iter().map(|(text, _)| *text).collect()
+    }
+    let prelude: Vec<serde_json::Value> = prelude_names()
+        .into_iter()
+        .map(|(name, kind)| json!({ "name": name, "kind": kind.label(), "is_type": kind.is_type() }))
+        .collect();
+    json!({
+        "keywords": texts(KEYWORDS),
+        "contextual_keywords": texts(CONTEXTUAL_KEYWORDS),
+        "name_keywords": NAME_KEYWORDS,
+        "prelude": prelude,
+    })
 }
 
 /// Generate `TextMate` grammar JSON for VS Code

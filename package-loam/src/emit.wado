@@ -2,6 +2,7 @@
 //! the graph's operators lower to, and a `forward` that runs them in order.
 
 use { TreeMap, TreeSet } from "core:collections";
+use { is_reserved } from "lib:wadopoet";
 use { Axis, Shape } from "./shape.wado";
 use { Graph, Node, ValueInfo } from "./graph.wado";
 use { constant_value, gemm_options, has_bias, transpose_perm } from "./infer.wado";
@@ -163,7 +164,7 @@ impl Names {
     fn of(graph: &Graph, axes: &List<String>) -> Result<Names, EmitError> {
         let mut reserved = module_idents();
         for let axis of *axes {
-            if reserved.contains(axis) {
+            if reserved.contains(axis) || is_reserved(axis) {
                 builtin::cold_path();
                 return Result::Err(EmitError::ReservedAxis(axis));
             }
@@ -190,7 +191,7 @@ impl Names {
         let mut ident = sanitize(tensor);
         // A name the generated module already binds is not this tensor's to
         // take, and a trailing `_` is a name no other rule here produces.
-        while self.reserved.contains(ident) {
+        while self.reserved.contains(ident) || is_reserved(ident) {
             ident = `${ident}_`;
         }
         if let Some(other) = taken.get(ident) {
@@ -215,23 +216,11 @@ impl Names {
 /// the module stands on its own.
 global RUNTIME: String = #include_str("./runtime/tensor.wado");
 
-/// The words Wado reserves, which an ONNX tensor may well be named after
-/// (`in`, `of`, `type`). From `wado-compiler/src/syntax.rs`.
-global KEYWORDS: List<String> = [
-    "if", "else", "while", "for", "loop", "break", "continue", "return", "match", "fn", "let", "global", "const",
-    "struct", "enum", "variant", "flags", "impl", "trait", "type", "resource", "extends", "world", "effect", "interface",
-    "pub", "internal", "export", "mut", "async", "unique", "reactive", "use", "from", "import", "as", "with", "in", "of",
-    "assert", "true", "false", "null", "matches", "self", "Self",
-];
-
-/// The names the generated module binds before it names an axis or a tensor.
-/// The runtime's are read out of the runtime itself, so adding a kernel there
-/// cannot leave this behind.
+/// The names the generated module binds before it names an axis or a tensor,
+/// beyond the language's own. The runtime's are read out of the runtime itself,
+/// so adding a kernel there cannot leave this behind.
 fn module_idents() -> TreeSet<String> {
     let mut reserved = TreeSet::<String>::new();
-    for let word of KEYWORDS {
-        reserved.insert(word);
-    }
     for let name of declared_in(&RUNTIME) {
         reserved.insert(name);
     }

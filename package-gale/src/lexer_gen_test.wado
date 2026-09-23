@@ -15,8 +15,9 @@ use {
     LitToken,
     compute_elem_first_chars,
     resolve_ci,
+    lit_name,
 } from "./lexer_gen.wado";
-use { CodeWriter } from "./wadopoet.wado";
+use { CodeWriter } from "lib:wadopoet";
 use { MemberDecls, MemberField, MemberMethod } from "./java2wado/jmembers.wado";
 use { SuperOp } from "./superclass.wado";
 use { TreeMap } from "core:collections";
@@ -358,4 +359,25 @@ test "compute_elem_first_chars: a callee folding a different case stays wildcard
     );
     let [is_wildcard, _first] = rule_first_chars(&g, "OUTER");
     assert is_wildcard, "a case-insensitive callee must fall back to wildcard";
+}
+
+test "lit_name renders a grammar literal the way ANTLR4's vocabulary does" {
+    assert `${lit_name("+")}` == "'+'";
+    assert `${lit_name("and")}` == "'and'";
+    // Printable non-ASCII stays verbatim, as in any Wado literal Gale emits.
+    assert `${lit_name("あ")}` == "'あ'";
+    // `LitToken.text` has its escapes resolved, so a real newline goes back to
+    // `\n` — a readable rendering, not a round-trip.
+    let mut nl = String::new();
+    nl.push('\n');
+    assert `${lit_name(nl)}` == "'\\n'";
+    // The delimiter it escapes is `'`, not `"`.
+    let mut apos = String::new();
+    apos.push('i');
+    apos.push('\'');
+    apos.push('s');
+    assert `${lit_name(apos)}` == "'i\\'s'";
+    let mut quote = String::new();
+    quote.push('"');
+    assert `${lit_name(quote)}` == "'\"'";
 }

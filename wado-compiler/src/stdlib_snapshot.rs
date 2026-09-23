@@ -15,7 +15,7 @@ use crate::compiler_host::{
     CompilerHost, Diagnostic, GeneratorRequest, GeneratorResponse, GeneratorRunnerError, LogLevel,
     SourceError,
 };
-use crate::defs::DefId;
+use crate::defs::{DefId, DefKind};
 use crate::hashmap::{IndexMap, IndexSet};
 use crate::loader::ModuleLoader;
 use crate::logger::Logger;
@@ -84,6 +84,25 @@ pub(crate) fn get_or_init_snapshot() -> Option<Rc<Semantics>> {
 /// called re-entrantly from inside `build_snapshot`.
 pub fn prewarm() {
     let _ = get_or_init_snapshot();
+}
+
+/// Every name `core:prelude` puts in scope in every module, with what it
+/// declares, sorted by name.
+///
+/// # Panics
+/// If called from inside [`build_snapshot`].
+pub fn prelude_names() -> Vec<(String, DefKind)> {
+    let snap = get_or_init_snapshot().expect("prelude_names is not called while the snapshot builds");
+    let resolutions = snap
+        .resolutions()
+        .expect("the stdlib snapshot is complete");
+    let defs = resolutions.defs();
+    let mut names: Vec<(String, DefKind)> = resolutions
+        .prelude_names()
+        .map(|(name, def)| (name.to_string(), defs.kind(def)))
+        .collect();
+    names.sort_by(|a, b| a.0.cmp(&b.0));
+    names
 }
 
 /// Drive the full loader + `semantics_with_logger` pipeline on an empty
@@ -273,6 +292,17 @@ impl CompilerHost for SnapshotHost {
 mod tests {
     use super::*;
     use crate::module_source::ModuleSource;
+
+    #[test]
+    fn prelude_names_are_the_prelude_tier_and_its_cases() {
+        let names = prelude_names();
+        let kind_of = |name: &str| names.iter().find(|(n, _)| n == name).map(|(_, k)| *k);
+        assert_eq!(kind_of("i32"), Some(DefKind::BuiltinType));
+        assert_eq!(kind_of("Option"), Some(DefKind::Variant));
+        assert_eq!(kind_of("Some"), Some(DefKind::VariantCase));
+        assert_eq!(kind_of("panic"), Some(DefKind::Function));
+        assert!(names.is_sorted_by(|a, b| a.0 <= b.0));
+    }
 
     #[test]
     fn snapshot_builds_and_contains_stdlib_closure() {

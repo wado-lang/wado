@@ -1,0 +1,28 @@
+use { is_reserved, escape_ident } from "./ident.wado";
+
+test "a keyword is reserved, contextual ones included" {
+    assert is_reserved("fn");
+    assert is_reserved("internal");
+    assert is_reserved("resume");
+    assert is_reserved("forward");
+}
+
+test "a name the prelude puts in scope is reserved" {
+    assert is_reserved("List");
+    assert is_reserved("Ordering");
+    assert is_reserved("i128");
+    assert is_reserved("Some");
+    assert is_reserved("panic");
+}
+
+test "an ordinary name is not reserved" {
+    assert !is_reserved("expr");
+    assert !is_reserved("list");
+    assert !is_reserved("");
+}
+
+test "escape_ident appends an underscore to a reserved name only" {
+    assert escape_ident("type") == "type_";
+    assert escape_ident("String") == "String_";
+    assert escape_ident("expr") == "expr";
+}
