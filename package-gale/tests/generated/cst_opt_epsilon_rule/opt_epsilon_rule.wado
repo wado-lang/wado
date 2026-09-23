@@ -1151,18 +1151,24 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '+' } {
-            end = try_lit_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char matches { 'a' } {
-            end = try_A(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_A; }
-        } else if first_char matches { 'k' } {
-            end = try_lit_k(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_K; }
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '+' => {
+                end = try_lit_plus(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
+            },
+            'a' => {
+                end = try_A(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_A; }
+            },
+            'k' => {
+                end = try_lit_k(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_K; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

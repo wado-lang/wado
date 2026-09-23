@@ -1148,15 +1148,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { 'k' } {
-            end = try_K(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_K; }
-        } else if first_char matches { 'z' } {
-            end = try_Z(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Z; }
+        match first_char {
+            ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            'k' => {
+                end = try_K(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_K; }
+            },
+            'z' => {
+                end = try_Z(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_Z; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

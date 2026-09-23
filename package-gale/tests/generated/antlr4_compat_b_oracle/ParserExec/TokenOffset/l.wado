@@ -1237,22 +1237,21 @@ impl Lexer {
 fn try_WS(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     let alts_saved_0 = pos;
-    let mut alts_ok_0 = false;
-    alts_0_0: {
-        pos = alts_saved_0;
-        if pos >= chars.len() || chars[pos] != ' ' { break alts_0_0; }
-        pos += 1;
-        alts_ok_0 = true;
-    }
-    if !alts_ok_0 {
+    alts_done_0: {
+        alts_0_0: {
+            pos = alts_saved_0;
+            if pos >= chars.len() || chars[pos] != ' ' { break alts_0_0; }
+            pos += 1;
+            break alts_done_0;
+        }
         alts_0_1: {
             pos = alts_saved_0;
             if pos >= chars.len() || chars[pos] != '\n' { break alts_0_1; }
             pos += 1;
-            alts_ok_0 = true;
+            break alts_done_0;
         }
+        return -1;
     }
-    if !alts_ok_0 { return -1; }
     return pos;
 }
 
@@ -1719,150 +1718,162 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '1' } {
-            end = try_lit_1(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_1; }
-            end = try_lit_10(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_10; }
-            end = try_lit_11(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_11; }
-            end = try_lit_12(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_12; }
-            end = try_lit_13(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_13; }
-            end = try_lit_14(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_14; }
-            end = try_lit_15(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_15; }
-            end = try_lit_16(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_16; }
-            end = try_lit_17(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_17; }
-            end = try_lit_18(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_18; }
-            end = try_lit_19(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_19; }
-        } else if first_char matches { '2' } {
-            end = try_lit_2(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_2; }
-            end = try_lit_20(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_20; }
-            end = try_lit_21(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_21; }
-            end = try_lit_22(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_22; }
-            end = try_lit_23(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_23; }
-            end = try_lit_24(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_24; }
-            end = try_lit_25(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_25; }
-            end = try_lit_26(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_26; }
-            end = try_lit_27(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_27; }
-            end = try_lit_28(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_28; }
-            end = try_lit_29(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_29; }
-        } else if first_char matches { '3' } {
-            end = try_lit_3(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_3; }
-            end = try_lit_30(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_30; }
-            end = try_lit_31(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_31; }
-            end = try_lit_32(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_32; }
-            end = try_lit_33(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_33; }
-            end = try_lit_34(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_34; }
-            end = try_lit_35(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_35; }
-            end = try_lit_36(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_36; }
-            end = try_lit_37(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_37; }
-            end = try_lit_38(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_38; }
-            end = try_lit_39(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_39; }
-        } else if first_char matches { '4' } {
-            end = try_lit_4(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_4; }
-            end = try_lit_40(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_40; }
-            end = try_lit_41(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_41; }
-            end = try_lit_42(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_42; }
-            end = try_lit_43(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_43; }
-            end = try_lit_44(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_44; }
-            end = try_lit_45(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_45; }
-            end = try_lit_46(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_46; }
-            end = try_lit_47(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_47; }
-            end = try_lit_48(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_48; }
-            end = try_lit_49(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_49; }
-        } else if first_char matches { '5' } {
-            end = try_lit_5(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_5; }
-            end = try_lit_50(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_50; }
-            end = try_lit_51(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_51; }
-            end = try_lit_52(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_52; }
-            end = try_lit_53(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_53; }
-            end = try_lit_54(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_54; }
-            end = try_lit_55(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_55; }
-            end = try_lit_56(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_56; }
-            end = try_lit_57(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_57; }
-            end = try_lit_58(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_58; }
-            end = try_lit_59(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_59; }
-        } else if first_char matches { '6' } {
-            end = try_lit_6(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_6; }
-            end = try_lit_60(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_60; }
-            end = try_lit_61(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_61; }
-            end = try_lit_62(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_62; }
-            end = try_lit_63(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_63; }
-            end = try_lit_64(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_64; }
-            end = try_lit_65(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_65; }
-            end = try_lit_66(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_66; }
-        } else if first_char matches { '7' } {
-            end = try_lit_7(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_7; }
-        } else if first_char matches { '8' } {
-            end = try_lit_8(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_8; }
-        } else if first_char matches { '9' } {
-            end = try_lit_9(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_9; }
+        match first_char {
+            '\n' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '1' => {
+                end = try_lit_1(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_1; }
+                end = try_lit_10(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_10; }
+                end = try_lit_11(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_11; }
+                end = try_lit_12(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_12; }
+                end = try_lit_13(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_13; }
+                end = try_lit_14(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_14; }
+                end = try_lit_15(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_15; }
+                end = try_lit_16(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_16; }
+                end = try_lit_17(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_17; }
+                end = try_lit_18(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_18; }
+                end = try_lit_19(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_19; }
+            },
+            '2' => {
+                end = try_lit_2(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_2; }
+                end = try_lit_20(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_20; }
+                end = try_lit_21(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_21; }
+                end = try_lit_22(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_22; }
+                end = try_lit_23(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_23; }
+                end = try_lit_24(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_24; }
+                end = try_lit_25(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_25; }
+                end = try_lit_26(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_26; }
+                end = try_lit_27(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_27; }
+                end = try_lit_28(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_28; }
+                end = try_lit_29(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_29; }
+            },
+            '3' => {
+                end = try_lit_3(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_3; }
+                end = try_lit_30(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_30; }
+                end = try_lit_31(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_31; }
+                end = try_lit_32(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_32; }
+                end = try_lit_33(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_33; }
+                end = try_lit_34(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_34; }
+                end = try_lit_35(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_35; }
+                end = try_lit_36(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_36; }
+                end = try_lit_37(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_37; }
+                end = try_lit_38(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_38; }
+                end = try_lit_39(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_39; }
+            },
+            '4' => {
+                end = try_lit_4(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_4; }
+                end = try_lit_40(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_40; }
+                end = try_lit_41(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_41; }
+                end = try_lit_42(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_42; }
+                end = try_lit_43(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_43; }
+                end = try_lit_44(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_44; }
+                end = try_lit_45(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_45; }
+                end = try_lit_46(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_46; }
+                end = try_lit_47(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_47; }
+                end = try_lit_48(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_48; }
+                end = try_lit_49(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_49; }
+            },
+            '5' => {
+                end = try_lit_5(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_5; }
+                end = try_lit_50(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_50; }
+                end = try_lit_51(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_51; }
+                end = try_lit_52(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_52; }
+                end = try_lit_53(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_53; }
+                end = try_lit_54(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_54; }
+                end = try_lit_55(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_55; }
+                end = try_lit_56(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_56; }
+                end = try_lit_57(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_57; }
+                end = try_lit_58(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_58; }
+                end = try_lit_59(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_59; }
+            },
+            '6' => {
+                end = try_lit_6(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_6; }
+                end = try_lit_60(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_60; }
+                end = try_lit_61(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_61; }
+                end = try_lit_62(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_62; }
+                end = try_lit_63(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_63; }
+                end = try_lit_64(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_64; }
+                end = try_lit_65(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_65; }
+                end = try_lit_66(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_66; }
+            },
+            '7' => {
+                end = try_lit_7(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_7; }
+            },
+            '8' => {
+                end = try_lit_8(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_8; }
+            },
+            '9' => {
+                end = try_lit_9(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LIT_9; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

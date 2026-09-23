@@ -1294,41 +1294,50 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '(' } {
-            end = try_LPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LPAREN; }
-        } else if first_char matches { ')' } {
-            end = try_RPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RPAREN; }
-        } else if first_char matches { '.' } {
-            end = try_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_DOT; }
-        } else if first_char matches { ';' } {
-            end = try_SEMI(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_SEMI; }
-        } else if first_char matches { '=' } {
-            end = try_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_EQ; }
-        } else if first_char matches { 'l' } {
-            end = try_LET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LET; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '{' } {
-            end = try_LB(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LB; }
-        } else if first_char matches { '}' } {
-            end = try_RB(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_RB; }
-        } else if first_char matches { 'a'..='z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
+        match first_char {
+            '\t' | '\n' | '\r' | ' ' => {
+                end = try_WS(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_WS; }
+            },
+            '(' => {
+                end = try_LPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LPAREN; }
+            },
+            ')' => {
+                end = try_RPAREN(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RPAREN; }
+            },
+            '.' => {
+                end = try_DOT(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_DOT; }
+            },
+            ';' => {
+                end = try_SEMI(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_SEMI; }
+            },
+            '=' => {
+                end = try_EQ(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_EQ; }
+            },
+            'a'..='k' | 'm'..='z' => {
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            'l' => {
+                end = try_LET(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LET; }
+                end = try_ID(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_ID; }
+            },
+            '{' => {
+                end = try_LB(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_LB; }
+            },
+            '}' => {
+                end = try_RB(&lexer.chars, start);
+                if end > best_end { best_end = end; best_kind = TK_RB; }
+            },
+            _ => {},
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
