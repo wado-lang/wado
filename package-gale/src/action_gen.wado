@@ -1127,9 +1127,7 @@ fn emit_gated_pick<S: AsStrSlice, S1: AsStrSlice>(
     if ctx.is_trace() {
         w.line(wado`trace_pick(p, "${rule_display.to_string()}", ${idx});`);
     }
-    w.line(
-        `return ${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)});`,
-    );
+    w.line(&ctx.alt_exit(`${fn_name}_alt_${idx}(p${follow_sep(ctx.current_rule_reads_follow())}${alt_vals_arg(ctx)})`));
 }
 
 /// Join predicate conditions into one short-circuit `(c0) && (c1)` guard.

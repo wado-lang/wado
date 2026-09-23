@@ -940,6 +940,24 @@ ID : [a-z]+ ;
     assert !str_contains(&body, "p.expect_set("), body;
 }
 
+test "a rule's @after is emitted once, whichever alternative finished" {
+    let input = "grammar T;
+options { language = Wado; }
+r returns [i32 v]
+    @after { p.emit(`a${$v}`); }
+    : A { $v = 1; }
+    | B { $v = 2; }
+    | s
+    | s C
+    ;
+s : A+ ;
+A : 'a' ; B : 'b' ; C : 'c' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert count_substr(&output, "p.emit(`a${") == 1, output;
+}
+
 test "arms that emit the same body are one arm" {
     let input = "grammar T;
 s : (l | l X)* e EOF ;

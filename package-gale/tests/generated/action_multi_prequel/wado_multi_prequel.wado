@@ -1323,32 +1323,32 @@ fn _parse_r__inner(p: &mut Parser) -> RVals {
     if !p.speculating {
          vals.v = 10; p.emit("i"); 
     }
-    let kind = p.peek_kind();
-    if kind == TK_A {
-        p.take();
-        if !p.speculating {
-             vals.v = 1; p.emit("A"); 
+    vals = alt_done: {
+        let kind = p.peek_kind();
+        if kind == TK_A {
+            p.take();
+            if !p.speculating {
+                 vals.v = 1; p.emit("A"); 
+            }
+            break alt_done: vals;
         }
-        if !p.speculating {
-             p.emit(`a${vals.v}`); 
+        if kind == TK_B {
+            p.take();
+            if !p.speculating {
+                 vals.v = 2; p.emit("B"); 
+            }
+            break alt_done: vals;
         }
+        p.no_viable(
+            "no alternative of r matches",
+            p.peek_span(),
+            &EXPECTED_0,
+        );
         return vals;
+    };
+    if !p.speculating {
+         p.emit(`a${vals.v}`); 
     }
-    if kind == TK_B {
-        p.take();
-        if !p.speculating {
-             vals.v = 2; p.emit("B"); 
-        }
-        if !p.speculating {
-             p.emit(`a${vals.v}`); 
-        }
-        return vals;
-    }
-    p.no_viable(
-        "no alternative of r matches",
-        p.peek_span(),
-        &EXPECTED_0,
-    );
     return vals;
 }
 

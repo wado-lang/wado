@@ -19658,9 +19658,6 @@ fn _parse_array_elements__inner_alt_0(p: &mut Parser, follow: i64 = 0, vals: Arr
     if p.peek_kind() == TK_COMMA && !follow_yields(&p.kinds, p.pos, follow, &FOLLOW_SETS, TK_EOF) {
         p.take();
     }
-    if !p.speculating {
-        p.no_struct = vals.sv;
-    }
     return vals;
 }
 
@@ -19720,9 +19717,6 @@ fn _parse_array_elements__inner_alt_1(p: &mut Parser, follow: i64 = 0, vals: Arr
     _parse_expression(p, FOLLOW_MASK_36);
     p.expect(TK_SEMI, &SYNC_39);
     _parse_expression(p, follow);
-    if !p.speculating {
-        p.no_struct = vals.sv;
-    }
     return vals;
 }
 
@@ -19742,34 +19736,40 @@ fn _parse_array_elements__inner(p: &mut Parser, follow: i64 = 0) -> ArrayElement
     if !p.speculating {
         vals.sv = p.no_struct; p.no_struct = 0;
     }
-    let kind = p.peek_kind();
-    if _kind_set_31(kind) {
-        let _sd_tokens = &p.kinds;
-        let _sd_pos = p.pos;
-        p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_0 = _parse_array_elements__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
-        p.scan_gate.no_struct = p.no_struct;
-        let _sd_p_1 = _parse_array_elements__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
-        let mut _sd_best_i: i32 = -1;
-        let mut _sd_best_p: i32 = -1;
-        if _sd_p_0 > _sd_best_p {
-            _sd_best_p = _sd_p_0;
-            _sd_best_i = 0;
+    vals = alt_done: {
+        let kind = p.peek_kind();
+        if _kind_set_31(kind) {
+            let _sd_tokens = &p.kinds;
+            let _sd_pos = p.pos;
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_0 = _parse_array_elements__inner_scan_0(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            p.scan_gate.no_struct = p.no_struct;
+            let _sd_p_1 = _parse_array_elements__inner_scan_1(_sd_tokens, _sd_pos, &mut p.scan_gate, follow);
+            let mut _sd_best_i: i32 = -1;
+            let mut _sd_best_p: i32 = -1;
+            if _sd_p_0 > _sd_best_p {
+                _sd_best_p = _sd_p_0;
+                _sd_best_i = 0;
+            }
+            if _sd_p_1 > _sd_best_p {
+                _sd_best_p = _sd_p_1;
+                _sd_best_i = 1;
+            }
+            if _sd_best_i == 0 {
+                break alt_done: _parse_array_elements__inner_alt_0(p, follow, vals);
+            }
+            break alt_done: _parse_array_elements__inner_alt_1(p, follow, vals);
         }
-        if _sd_p_1 > _sd_best_p {
-            _sd_best_p = _sd_p_1;
-            _sd_best_i = 1;
-        }
-        if _sd_best_i == 0 {
-            return _parse_array_elements__inner_alt_0(p, follow, vals);
-        }
-        return _parse_array_elements__inner_alt_1(p, follow, vals);
+        p.no_viable(
+            "no alternative of arrayElements matches",
+            p.peek_span(),
+            &EXPECTED_39,
+        );
+        return vals;
+    };
+    if !p.speculating {
+        p.no_struct = vals.sv;
     }
-    p.no_viable(
-        "no alternative of arrayElements matches",
-        p.peek_span(),
-        &EXPECTED_39,
-    );
     return vals;
 }
 

@@ -1304,33 +1304,30 @@ impl Parser {
 }
 
 fn _parse_a__inner(p: &mut Parser) -> () {
-    let kind = p.peek_kind();
-    if kind == TK_LIT_a {
-        p.take();
-        if !p.speculating {
-            p.emit(`${p.input_text()}\n`);
+    alt_done: {
+        let kind = p.peek_kind();
+        if kind == TK_LIT_a {
+            p.take();
+            break alt_done;
         }
+        if kind == TK_LIT_b {
+            p.take();
+            break alt_done;
+        }
+        if kind == TK_LIT_c {
+            p.take();
+            break alt_done;
+        }
+        p.no_viable(
+            "no alternative of a matches",
+            p.peek_span(),
+            &EXPECTED_0,
+        );
         return;
     }
-    if kind == TK_LIT_b {
-        p.take();
-        if !p.speculating {
-            p.emit(`${p.input_text()}\n`);
-        }
-        return;
+    if !p.speculating {
+        p.emit(`${p.input_text()}\n`);
     }
-    if kind == TK_LIT_c {
-        p.take();
-        if !p.speculating {
-            p.emit(`${p.input_text()}\n`);
-        }
-        return;
-    }
-    p.no_viable(
-        "no alternative of a matches",
-        p.peek_span(),
-        &EXPECTED_0,
-    );
     return;
 }
 

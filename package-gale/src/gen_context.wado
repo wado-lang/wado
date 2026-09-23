@@ -306,6 +306,9 @@ pub struct GenContext {
     follow_mask_used: TreeSet<i32>,
     sync_bits_used: TreeSet<i32>,
     sync_list_used: TreeSet<i32>,
+    /// The block a finished alternative leaves by, where the rule's `@after`
+    /// follows it; a finished alternative returns where this is `null`.
+    alt_exit_label: Option<String>,
 }
 
 fn one_token_rule_kinds(rule: &ParserRule) -> Option<List<String>> {
@@ -402,6 +405,7 @@ impl GenContext {
             follow_mask_used: TreeSet::new(),
             sync_bits_used: TreeSet::new(),
             sync_list_used: TreeSet::new(),
+            alt_exit_label: null,
         };
     }
 
@@ -2294,6 +2298,19 @@ impl GenContext {
         let id = self.sync_set_registry.len();
         self.sync_set_registry[key] = KindSetEntry { id, tokens: ids };
         return Option::<i32>::Some(id);
+    }
+
+    pub fn set_alt_exit_label(&mut self, label: Option<String>) {
+        self.alt_exit_label = label;
+    }
+
+    /// The statement a finished alternative leaves by, handing on `value`
+    /// (empty for none).
+    pub fn alt_exit<S: AsStrSlice>(&self, value: S) -> String {
+        let Some(label) = &self.alt_exit_label else {
+            return if value.len() == 0 { String::from("return;") } else { `return ${value};` };
+        };
+        return if value.len() == 0 { `break ${label};` } else { `break ${label}: ${value};` };
     }
 
     /// `SYNC_<id>`, the set as the bits a membership test reads, or
