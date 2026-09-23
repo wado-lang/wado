@@ -3551,15 +3551,24 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     if tt.struct_head_name(*def) == "i128" || tt.struct_head_name(*def) == "u128")
             };
             // A tuple is a `GenericInstance` of a tuple head, so no arm of its own.
+            let is_aggregate = |id| {
+                !wide_int(id)
+                    && matches!(
+                        tt.get(tt.representation_head(id)),
+                        ResolvedType::Struct { .. }
+                            | ResolvedType::GenericInstance { .. }
+                            | ResolvedType::Variant { .. }
+                    )
+            };
+            // A type parameter is only settled by monomorphization, and `!`
+            // converts to anything.
             let source_base = tt.representation_head(source_type);
-            let source_is_aggregate = !wide_int(source_type)
-                && matches!(
-                    tt.get(source_base),
-                    ResolvedType::Struct { .. }
-                        | ResolvedType::GenericInstance { .. }
-                        | ResolvedType::Variant { .. }
-                );
-            source_is_aggregate && source_base != tt.representation_head(target_type)
+            let source_settled = !matches!(
+                tt.get(source_base),
+                ResolvedType::TypeParam { .. } | ResolvedType::InferVar(_) | ResolvedType::Never
+            );
+            (is_aggregate(source_type) || (source_settled && is_aggregate(target_type)))
+                && source_base != tt.representation_head(target_type)
         };
         if unrelated_aggregate {
             let tt = self.tysys.type_table.borrow();
