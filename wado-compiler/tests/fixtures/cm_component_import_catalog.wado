@@ -1,4 +1,5 @@
 use { CmCatalog, Color, Point, Single, Shape, Perms, Mixed, Meters, Status } from "./sub/cm-catalog.wasm" with { type: "wasm" };
+use { TreeMap } from "core:collections";
 
 test "primitives round-trip" {
     assert CmCatalog::id_bool(true) == true;
@@ -109,7 +110,7 @@ test "nested containers round-trip" {
     assert CmCatalog::id_list_tuple_record([[Point { x: 1.0, y: 2.0 }, 9]]) == [[Point { x: 1.0, y: 2.0 }, 9]];
 }
 
-// An `Option` param puts every param in one buffer, each at the offset the
+// Five flat params put every param in one buffer, each at the offset the
 // tuple layout gives it. The `wir_expect` below is what pins the store widths.
 test "narrow scalars in the indirect params buffer" {
     let packed = CmCatalog::narrow_scalars_in_params_buffer(
@@ -119,6 +120,29 @@ test "narrow scalars in the indirect params buffer" {
         Status::Inactive,
     ).wait();
     assert packed == 2007052;
+}
+
+test "map round-trip" {
+    let m = { a: 1, b: 2 } as TreeMap<String, u32>;
+    let back = CmCatalog::id_map_string_u32(m);
+    assert back.len() == 2;
+    assert back["a"] == 1;
+    assert back["b"] == 2;
+    assert CmCatalog::id_map_string_u32(TreeMap::<String, u32>::new()).len() == 0;
+
+    let nested = CmCatalog::id_option_map(Option::Some(m));
+    assert nested.unwrap()["b"] == 2;
+    assert CmCatalog::id_list_map([m])[0]["a"] == 1;
+}
+
+test "map in the indirect params buffer" {
+    let m = { a: 1, b: 2 } as TreeMap<String, u32>;
+    assert CmCatalog::map_in_params_buffer(m, Option::Some(7), 9).wait() == 30709;
+}
+
+test "async option within the flat params" {
+    assert CmCatalog::option_passed_flat(Option::Some(4)).wait() == 5;
+    assert CmCatalog::option_passed_flat(null).wait() == 1;
 }
 
 // A component operation is pure, so a global initializer may call one. The
@@ -135,9 +159,13 @@ __DATA__
     "wir_expect:O0": [
         "builtin::store_u8($params_buf, c)",
         "builtin::store_u8($params_buf + 3, p)",
-        "builtin::store_u8($params_buf + 4, $variant_val.discriminant)"
+        "builtin::store_u8($params_buf + 4, $variant_val.discriminant)",
+        "builtin::store_i32($params_buf, $base)",
+        "builtin::store_i32($params_buf + 4, $len)",
+        "builtin::store_u8($params_buf + 10, tail)"
     ],
     "wir_not_expect:O0": [
-        "builtin::store_i32($params_buf"
+        "builtin::store_i32($params_buf, c)",
+        "builtin::store_i32($params_buf + 3, p)"
     ]
 }

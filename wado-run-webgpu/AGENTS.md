@@ -6,7 +6,7 @@ runs the component on a wasmtime host that serves `wasi:webgpu`.
 ## Rules
 
 - This crate is a workspace of its own and is excluded from the repository's.
-  It needs wasmtime 48 where the workspace pins 47.0.3, and one workspace
+  It needs wasmtime 48 where the workspace pins 49.0.0, and one workspace
   resolves one version of a crate. Nothing here is built by `cargo build` at the
   repository root, `mise run test`, or the repository's clippy and fmt jobs. The
   `test-webgpu` CI job is what builds, lints and tests it, on every change that

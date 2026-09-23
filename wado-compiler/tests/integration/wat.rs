@@ -119,7 +119,7 @@ fn test_branch_hint_offsets_point_at_branch_opcodes() {
     // matching the body ranges wasmparser reports.
     fn check_module(fixture: &str, module: &[u8]) -> (usize, bool) {
         let mut num_imported_funcs = 0u32;
-        let mut body_ranges: Vec<std::ops::Range<usize>> = Vec::new();
+        let mut body_ranges: Vec<std::ops::Range<u64>> = Vec::new();
         let mut hints: Vec<(u32, u32)> = Vec::new();
         for payload in Parser::new(0).parse_all(module) {
             match payload.unwrap() {
@@ -155,12 +155,12 @@ fn test_branch_hint_offsets_point_at_branch_opcodes() {
                 .unwrap_or_else(|| panic!("{fixture}: hint on imported function {func}"))
                 as usize;
             let body = &body_ranges[local_idx];
-            let pos = body.start + offset as usize;
+            let pos = body.start + u64::from(offset);
             assert!(
                 pos < body.end,
                 "{fixture}: hint offset {offset} in function {func} is past the body"
             );
-            let opcode = module[pos];
+            let opcode = module[pos as usize];
             assert!(
                 opcode == 0x04 || opcode == 0x0D,
                 "{fixture}: hint offset {offset} in function {func} points at \
@@ -187,7 +187,10 @@ fn test_branch_hint_offsets_point_at_branch_opcodes() {
                 unchecked_range, ..
             } = payload.unwrap()
             {
-                let (count, br_if) = check_module(fixture, &wasm[unchecked_range]);
+                let (count, br_if) = check_module(
+                    fixture,
+                    &wasm[unchecked_range.start as usize..unchecked_range.end as usize],
+                );
                 total_hints += count;
                 saw_br_if |= br_if;
             }

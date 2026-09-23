@@ -1,19 +1,16 @@
-//! Canary: wasmtime does not yet execute the Component Model's donut-wrapping
-//! callback shape (Linking.md "Higher-order Shared-Nothing Linking") — its
-//! fused-adapter compiler turns any lift/lower adapter between ancestor-related
-//! instances into an unconditional `cannot enter component instance` trap
-//! (`crates/environ/src/fact/trampoline.rs`), over-approximating the spec's
-//! recursive-reentry-only guard. See `docs/research-cm-boundary-callbacks.md`.
+//! Canary: wasmtime executes the Component Model's donut-wrapping callback
+//! shape (Linking.md "Higher-order Shared-Nothing Linking"). Through 48 it
+//! trapped every adapter between ancestor-related instances; 49 runs them. See
+//! `docs/research-cm-boundary-callbacks.md`.
 //!
 //! The component below is a valid donut: the parent satisfies the nested
 //! child's `cb` import with a lift of its own core trampoline
 //! (`shim → lift → child → lower → main`, fixup fills the funcref table), and
 //! `go(x)` = child's `run(x)` = parent's `impl(x) + 1`. It validates and
-//! instantiates; the first parent→child call traps.
+//! instantiates, and `go(5)` = 51.
 //!
-//! When this test FAILS, wasmtime has started executing donut adapters —
-//! revisit the research note: dynamic cross-component effect handlers become
-//! implementable without the host effect pump.
+//! When this test FAILS, wasmtime traps donut adapters again: revisit the
+//! research note before building on them.
 
 const DONUT_WAT: &str = r#"
 (component
@@ -79,7 +76,7 @@ const DONUT_WAT: &str = r#"
 "#;
 
 #[test]
-fn wasmtime_still_traps_donut_adapters() {
+fn wasmtime_executes_donut_adapters() {
     let bytes = wat::parse_str(DONUT_WAT).expect("donut WAT parses");
 
     let mut config = wasmtime::Config::new();
@@ -96,15 +93,8 @@ fn wasmtime_still_traps_donut_adapters() {
     let go = instance
         .get_typed_func::<(u32,), (u32,)>(&mut store, "go")
         .expect("go export");
-    match go.call(&mut store, (5,)) {
-        Err(e) => assert!(
-            format!("{e:?}").contains("cannot enter component instance"),
-            "expected the FACT ancestor-adapter trap, got: {e:?}"
-        ),
-        Ok((r,)) => panic!(
-            "wasmtime now executes donut adapters (go(5) = {r}, expected trap) — \
-             see docs/research-cm-boundary-callbacks.md: dynamic cross-component \
-             effect handlers are now implementable"
-        ),
-    }
+    let (r,) = go
+        .call(&mut store, (5,))
+        .expect("wasmtime runs the donut parent→child call");
+    assert_eq!(r, 51, "go(5) = impl(5) + 1");
 }

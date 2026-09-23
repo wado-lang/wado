@@ -9,9 +9,8 @@ use wasmtime::{
 };
 use wasmtime_wasi::filesystem::WasiFilesystemCtx;
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 use wasmtime_wasi_tls::{
     Error as WasiTlsError, TlsProvider, TlsStream, TlsTransport, WasiTlsCtx, WasiTlsCtxBuilder,
     WasiTlsCtxView, WasiTlsView,
@@ -203,7 +202,7 @@ impl WasiState {
         }
         builder.args(args);
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // `wado run` and `wado test` are invoked directly by the developer,
         // so mirror native CLI tools by letting `wasi:sockets`/`wasi:tls`
@@ -213,6 +212,10 @@ impl WasiState {
         // Hermetic test harnesses (compiler `tests/common.rs`) build their
         // own `WasiCtx` and are unaffected.
         builder.inherit_network();
+        // wasmtime denies creating a socket by default; `inherit_network`
+        // relaxes only the per-address check that comes after it.
+        builder.allow_tcp(true);
+        builder.allow_udp(true);
         builder.allow_ip_name_lookup(true);
         let ctx = builder.build();
         let table = ResourceTable::new();
@@ -252,7 +255,7 @@ impl Preopens {
     pub fn open(preopened_dirs: &[(String, String)]) -> Result<Self> {
         let mut builder = WasiCtx::builder();
         for (host_path, guest_path) in preopened_dirs {
-            builder.preopened_dir(host_path, guest_path, DirPerms::all(), FilePerms::all())?;
+            builder.preopened_dir(host_path, guest_path, FsPerms::ReadWrite)?;
         }
         // We only need the filesystem half of the WasiCtx; the rest is
         // rebuilt fresh per request. `WasiFilesystemCtx` is `Clone` (with
@@ -405,10 +408,9 @@ pub fn parse_gc_heap_size(s: &str) -> Result<u64, String> {
 pub fn create_config(opt_level: OptLevel, profile: &ProfileMode, knobs: RuntimeKnobs) -> Config {
     let mut config = Config::new();
     config.wasm_component_model_gc(true);
-    config.wasm_component_model_async(true);
     config.wasm_component_model_more_async_builtins(true);
     config.wasm_component_model_async_stackful(true);
-    config.wasm_wide_arithmetic(true);
+    config.wasm_component_model_map(true);
     // config.wasm_stack_switching(true); // Not supported on macOS
     // Honor the `metadata.code.branch_hint` custom section so Cranelift can
     // lay out hinted branches (from `builtin::cold_path()`) for the

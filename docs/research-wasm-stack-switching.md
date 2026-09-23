@@ -439,7 +439,7 @@ suspension truly invisible at the language level.
 
 ## Appendix: Wasmtime Status
 
-As of wasmtime v47.0.3 (the pinned version), per `wado-cli/src/runtime.rs`:
+As of wasmtime v49.0.0 (the pinned version), per `wado-cli/src/runtime.rs`:
 
 | Feature              | Config Flag                                      | Status                                                          |
 | -------------------- | ------------------------------------------------ | --------------------------------------------------------------- |
