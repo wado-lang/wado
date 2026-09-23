@@ -799,9 +799,9 @@ literals stops folding to one.
 
 #### `fn ceil_char_boundary(&self, index: i32) -> i32`
 
-#### `fn sub(&self, start: i32, end: i32) -> StrSlice`
+#### `fn slice(&self, start: i32, end: i32) -> StrSlice`
 
-#### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+#### `fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
 #### `fn as_bytes(&self) -> ByteSlice`
 
@@ -4419,13 +4419,13 @@ Panics if `index` is negative.
 The smallest character boundary `>= index`, or `len()` beyond it.
 Panics if `index` is negative.
 
-#### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn slice(&self, start: i32, end: i32) -> StrSlice`
 
 A sub-view over `[start, end)`, counted from this view's start.
 Panics if the range is out of bounds or either end is off a character
 boundary.
 
-#### `pub fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
+#### `pub fn slice_unchecked(&self, start: i32, end: i32) -> StrSlice`
 
 `#[inline]`
 
