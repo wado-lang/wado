@@ -1,0 +1,33 @@
+// A bound names a trait wherever it is written. A name that reaches no trait,
+// or reaches a declaration that is not one, is an error at the bound.
+struct NotATrait { v: i32 }
+
+fn f<T: NoSuchFn>(x: T) -> i32 { return 1; }
+struct S<T: NoSuchStruct> { v: T }
+variant V<T: NoSuchVariant> { A(T), B }
+trait Outer with () { type Iter: NoSuchAssoc; fn m<U: NoSuchTraitMethod>(u: U) -> i32; }
+trait Sub: NoSuchSuper with () { }
+impl<T: NoSuchImpl> S<T> { fn g<U: NoSuchMethod>(u: U) -> i32 { return 1; } }
+fn p<..P: NoSuchPack>(x: [..P]) -> i32 { return 1; }
+fn n<T: NotATrait>(x: T) -> i32 { return 1; }
+fn ok<T: Eq + Ord, F: fn(i32) -> i32, effect E>(x: T, f: F) -> i32 { return 1; }
+
+export fn run() {
+}
+
+__DATA__
+{
+    "compile_error": ":5:9: analysis error: 'NoSuchFn' is not a declared trait",
+    "compile_errors_contains": [
+        "'NoSuchStruct' is not a declared trait",
+        "'NoSuchVariant' is not a declared trait",
+        "'NoSuchAssoc' is not a declared trait",
+        "'NoSuchTraitMethod' is not a declared trait",
+        "'NoSuchSuper' is not a declared trait",
+        "'NoSuchImpl' is not a declared trait",
+        "'NoSuchMethod' is not a declared trait",
+        "'NoSuchPack' is not a declared trait",
+        "'NotATrait' is not a declared trait"
+    ],
+    "compile_error_codes": ["UNKNOWN_TYPE"]
+}
