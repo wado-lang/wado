@@ -109,8 +109,8 @@ pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
     };
 }
 
-pub fn map<Axes>(t: &Tensor<f32, Axes>, op: fn(f32) -> f32) -> Tensor<f32, Axes> {
-    let mut out = List::<f32>::with_capacity(t.data.len());
+pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
+    let mut out = List::<B>::with_capacity(t.data.len());
     for let v of t.data {
         out.push(op(v));
     }
@@ -123,4 +123,39 @@ pub fn sigmoid_f32(v: f32) -> f32 {
     }
     let e = f32::exp(v);
     return e / (1.0 + e);
+}
+
+/// An element type a tensor is held in and no kernel computes in. Wado's half
+/// precision carries bits and no arithmetic, so f32 is the only side with any.
+pub trait Held with () {
+    fn to_wide(&self) -> f32;
+    fn from_wide(v: f32) -> Self;
+}
+
+impl Held for f16 {
+    fn to_wide(&self) -> f32 {
+        return f32::from(*self);
+    }
+
+    fn from_wide(v: f32) -> f16 {
+        return f16::from_f32(v);
+    }
+}
+
+impl Held for bf16 {
+    fn to_wide(&self) -> f32 {
+        return f32::from(*self);
+    }
+
+    fn from_wide(v: f32) -> bf16 {
+        return bf16::from_f32(v);
+    }
+}
+
+pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
+    return map(t, |v| v.to_wide());
+}
+
+pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
+    return map(t, |v| E::from_wide(v));
 }

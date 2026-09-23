@@ -42,12 +42,22 @@ impl<T> Eq for &mut T {
     }
 }
 
-/// Trait for ordering comparisons.
-/// Types implementing this trait can be compared with `<`, `<=`, `>`, `>=` operators.
+/// A total order over the type: what `sort`, `TreeMap` and a `T: Ord` bound
+/// read. A float's is IEEE 754-2019 `totalOrder`, which its `<` is not.
 #[compiler_item("ord")]
 pub trait Ord: Eq with () {
     /// Compares self with other and returns an Ordering.
     fn cmp(&self, other: &Self) -> Ordering;
+}
+
+/// What `<`, `<=`, `>` and `>=` mean where the operator order is not the total
+/// order. A float's instructions already carry that split; a half has none.
+#[compiler_item("operator_ord")]
+internal trait OperatorOrd with () {
+    fn lt(&self, other: &Self) -> bool;
+    fn le(&self, other: &Self) -> bool;
+    fn gt(&self, other: &Self) -> bool;
+    fn ge(&self, other: &Self) -> bool;
 }
 
 /// Trait for providing a default value for a type.
