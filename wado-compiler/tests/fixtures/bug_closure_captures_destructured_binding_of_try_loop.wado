@@ -1,6 +1,5 @@
 // Issue #2058: a closure capturing a tuple-destructured for-of binding, in a
 // loop over a `?` expression, read the capture through a box it did not have.
-use { println, Stdout } from "core:cli";
 
 fn listing(fail: bool) -> Result<List<[String, String]>, String> {
     if fail {
@@ -27,18 +26,20 @@ fn collect(fail: bool, stop_on_empty: bool) -> Result<List<i32>, String> {
     return Result::Ok(out);
 }
 
-fn show(r: Result<List<i32>, String>) with Stdout {
-    match r {
-        Ok(v) => println(`${v:?}`),
-        Err(e) => println(e),
-    }
+test "the loop runs to the end" {
+    let v = collect(false, false).unwrap();
+    assert v.len() == 2;
+    assert v[0] == 2;
+    assert v[1] == 3;
 }
 
-export fn run() with Stdout {
-    show(collect(false, false));
-    show(collect(false, true));
-    show(collect(true, false));
+test "the closure reads the captured binding" {
+    assert collect(false, true).unwrap_err() == "b.md: empty";
+}
+
+test "a failing loop subject returns early" {
+    assert collect(true, false).unwrap_err() == "no listing";
 }
 
 __DATA__
-{"stdout": "[2, 3]\nb.md: empty\nno listing\n"}
+{"test": {}}
