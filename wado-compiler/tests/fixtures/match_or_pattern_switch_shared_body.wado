@@ -1,0 +1,30 @@
+// An or-pattern arm of char ranges lowers to one `br_table` whose offsets all
+// reach the one arm body, rather than one body per alternative or per value.
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn classify(c: char) -> i32 {
+    let n = c as i32;
+    return match c {
+        'A'..='W' | 'Y'..='Z' | '_' | 'a'..='w' | 'y'..='z' => n * 2 + n * 3 + n * 4 + n * 5 + n * 6 + n * 7 + n * 8 + n * 9 + n * 10 + n * 11 + n * 12 + n * 13 + n * 14 + n * 15 + n * 16 + n * 17 + n * 18 + n * 19 + n * 20 + n * 21,
+        'x' | 'X' => 1,
+        '0'..='9' => 2,
+        _ => 0,
+    };
+}
+
+export fn run() with Stdout {
+    println(`${classify('a')}`);
+    println(`${classify('x')}`);
+    println(`${classify('X')}`);
+    println(`${classify('7')}`);
+    println(`${classify('_')}`);
+    println(`${classify('!')}`);
+}
+
+__DATA__
+{
+    "stdout": "22310\n1\n1\n2\n21850\n0\n",
+    "wir_expect:O0": ["br_table"],
+    "wir_expect:O2": ["br_table"]
+}

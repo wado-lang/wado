@@ -52,6 +52,7 @@ impl FunctionTranslator<'_, '_> {
         &mut self,
         scrutinee: Operand,
         min_value: i64,
+        table: &[Option<usize>],
         arms: &[BlockId],
         default: BlockId,
         result_type: TypeId,
@@ -91,11 +92,13 @@ impl FunctionTranslator<'_, '_> {
 
         let num_arms = arms.len();
 
-        // br_table targets: target[i] = i + 1 (depth to arm[i]'s wrapper block)
-        // Block nesting (innermost to outermost): default, arm[0], arm[1], ..., arm[n-1], result
-        // From br_table: depth 0 = default block, depth i+1 = arm[i]'s block
-        let targets: Vec<u32> = (1..=num_arms as u32).collect();
-        let default_target = 0u32; // Default block is innermost
+        // Block nesting (innermost to outermost): default, arm[0], ..., arm[n-1], result,
+        // so from the br_table depth 0 is the default and depth i+1 is arm[i].
+        let targets: Vec<u32> = table
+            .iter()
+            .map(|arm| arm.map_or(0, |i| i as u32 + 1))
+            .collect();
+        let default_target = 0u32;
 
         let br_table = WirInstr::BrTable {
             index: Box::new(adjusted),

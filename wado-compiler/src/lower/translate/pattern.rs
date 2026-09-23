@@ -288,6 +288,22 @@ fn binds_by_value(pattern: &TirPattern, type_table: &TypeTable) -> bool {
     }
 }
 
+/// A pattern naming one value or a range of them, with no binding and nothing
+/// the match pre-pass rewrites into a guard.
+fn is_plain_value_pattern(pattern: &TirPattern) -> bool {
+    match pattern {
+        TirPattern::Literal(lit) => !matches!(lit, TirLiteralPattern::String(_)),
+        TirPattern::Enum { .. } | TirPattern::Range { .. } => true,
+        TirPattern::Wildcard
+        | TirPattern::Binding { .. }
+        | TirPattern::Tuple(..)
+        | TirPattern::Variant { .. }
+        | TirPattern::Struct { .. }
+        | TirPattern::Or(_)
+        | TirPattern::ConstantValue { .. } => false,
+    }
+}
+
 impl<'a> PatternLowerer<'a> {
     fn new(
         local_count: u32,
@@ -2076,20 +2092,24 @@ impl<'a> PatternLowerer<'a> {
                     self.lower_expr(&mut arm.body, type_table);
                 }
 
-                // Expand or-patterns: `A | B => body` becomes `A => body, B => body`
+                // `A | B => body` becomes `A => body, B => body` where an alternative needs
+                // the per-arm rewrites below; a set of plain values stays one arm, one body.
                 let mut expanded_arms = Vec::new();
                 for arm in arms.drain(..) {
-                    if let TirPattern::Or(alternatives) = arm.pattern {
-                        for alt in alternatives {
-                            expanded_arms.push(TirMatchArm {
-                                pattern: alt,
-                                guard: arm.guard.clone(),
-                                body: arm.body.clone(),
-                                span: arm.span,
-                            });
+                    match arm.pattern {
+                        TirPattern::Or(alternatives)
+                            if !alternatives.iter().all(is_plain_value_pattern) =>
+                        {
+                            for alt in alternatives {
+                                expanded_arms.push(TirMatchArm {
+                                    pattern: alt,
+                                    guard: arm.guard.clone(),
+                                    body: arm.body.clone(),
+                                    span: arm.span,
+                                });
+                            }
                         }
-                    } else {
-                        expanded_arms.push(arm);
+                        pattern => expanded_arms.push(TirMatchArm { pattern, ..arm }),
                     }
                 }
                 *arms = expanded_arms;

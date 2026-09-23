@@ -1623,11 +1623,13 @@ impl<'a> Engine<'a> {
             ExprKind::Switch {
                 scrutinee,
                 min_value,
+                table,
                 arms,
                 default,
             } => ExprKind::Switch {
                 scrutinee: self.clone_operand(scrutinee),
                 min_value,
+                table,
                 arms: arms.into_iter().map(|a| self.clone_block(a)).collect(),
                 default: self.clone_block(default),
             },
