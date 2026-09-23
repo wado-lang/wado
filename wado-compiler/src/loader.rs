@@ -1433,7 +1433,7 @@ impl<'a, H: CompilerHost> ModuleLoader<'a, H> {
         }
 
         // Now that every component import (file-path and registry-coordinate)
-        // has been seen, load the WASI packages behind their host-leaf imports.
+        // has been seen, load the stdlib modules they need.
         self.load_pending_component_stdlib_deps();
         let queued = std::mem::take(&mut self.pending_implicit_wasm_imports);
         for (from_ms, kind, use_decl) in queued {
