@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790143525833,
+  "lastUpdate": 1790147964813,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58753,6 +58753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/5e7bc063d03e54e8bc3da0e9eb21337748548300"
         },
         "date": 1790143525305,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300579,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f83cd2925edf5a351b085fbb724dc0d65456dc3",
+          "message": "Merge pull request #2130 from wado-lang/claude/wado-package-separation-ldiwa7\n\nfeat(wadopoet): one package for generating Wado source, its reserved words drawn from the compiler",
+          "timestamp": "2026-09-23T16:01:59+09:00",
+          "tree_id": "71ff5f2d79c50b64c05c25bb9a826966ca83842b",
+          "url": "https://github.com/wado-lang/wado/commit/1f83cd2925edf5a351b085fbb724dc0d65456dc3"
+        },
+        "date": 1790147964291,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
