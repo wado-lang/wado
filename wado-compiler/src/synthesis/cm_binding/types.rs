@@ -542,27 +542,6 @@ pub(crate) fn kebab_to_pascal(s: &str) -> String {
     s.to_upper_camel_case()
 }
 
-pub(super) fn is_gc_passthrough_param(
-    ty: &Type,
-    cm_interface_registry: &CmInterfaceRegistry,
-    names: &CmStdlibNames,
-) -> bool {
-    match ty {
-        Type::Named(n) if n.name == names.string => true,
-        Type::Named(n) => cm_interface_registry.source_interface(n).is_some_and(|s| {
-            cm_interface_registry
-                .get_variant_cases_by_source(&s, &n.name)
-                .is_some()
-                || cm_interface_registry
-                    .get_struct_fields_by_source(&s, &n.name)
-                    .is_some()
-        }),
-        Type::Generic(g) if g.name == names.array && g.args.len() == 1 => true,
-        Type::Generic(g) if g.name == names.option && g.args.len() == 1 => true,
-        _ => false,
-    }
-}
-
 pub(super) fn is_wasm_flat_type(type_id: TypeId) -> bool {
     matches!(
         type_id,

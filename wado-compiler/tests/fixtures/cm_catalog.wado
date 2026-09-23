@@ -640,6 +640,21 @@ export async fn narrow_scalars_in_params_buffer(c: Color, o: Option<u8>, p: Perm
     task return seen + p as u32 * 10 + o.unwrap_or(0) as u32 * 1000 + tag * 1000000;
 }
 
+// Five flat params put the call on the one-buffer path, where the `map` is
+// stored as its `(ptr, count)` and what follows must land past both halves.
+export async fn map_in_params_buffer(m: TreeMap<String, u32>, o: Option<u8>, tail: u8) -> u32 {
+    let mut total: u32 = 0;
+    for let [_, v] of m.entries() {
+        total += *v;
+    }
+    task return total * 10000 + o.unwrap_or(0) as u32 * 100 + tail as u32;
+}
+
+// Within four flat params an async call passes them directly, `Option` included.
+export async fn option_passed_flat(o: Option<u32>) -> u32 {
+    task return o.unwrap_or(0) + 1;
+}
+
 // The empty test block makes `e2e.rs` accept this as a test-world fixture: it
 // confirms a library-shaped source compiles and instantiates under the test
 // world. The lift/lower round-trip lives in `cm_catalog.rs`.

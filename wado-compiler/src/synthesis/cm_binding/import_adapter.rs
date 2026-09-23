@@ -29,8 +29,7 @@ use super::lift::{
 use super::lower::{
     flatten_cm_record_fields, synthesize_flatten_option_to_flat_args,
     synthesize_flatten_result_to_flat_args, synthesize_flatten_value_to_flat_args,
-    synthesize_lower_option_to_memory, synthesize_lower_wasi_type_to_memory,
-    synthesize_lower_wasi_variant_to_memory,
+    synthesize_lower_wasi_type_to_memory,
 };
 use super::types::{
     CmStdlibNames, LiftContext, LowerContext, binary_add, cm_held_type_to_type_id, cm_layout_i32,
@@ -577,9 +576,17 @@ pub(super) fn synthesize_adapter(
         body_stmts: Vec::new(),
         flat_args: Vec::new(),
         auxiliary: Vec::new(),
+        params_in_buffer: false,
     };
 
     let plans = builder.plan_params();
+    let flat_param_count: usize = plans
+        .iter()
+        .map(|plan| {
+            flatten_param_type(plan.ty, cm_interface_registry, &builder.lower_ctx.names).len()
+        })
+        .sum();
+    builder.params_in_buffer = func_info.is_async && flat_param_count > MAX_FLAT_ASYNC_PARAMS;
     builder.emit_param_lowering(&plans);
 
     let async_outptr = if func_info.is_async {
@@ -649,18 +656,20 @@ enum ParamLowering<'a> {
     /// General List<T>: single placeholder param; elements are lowered into a
     /// realloc'd linear-memory buffer passed as (ptr, len).
     ListBuffer { elem: &'a Type },
-    /// WASI record: single GC-ref param; fields flatten into flat slots.
+    /// The aggregates below each take a single GC-ref param, flattened into
+    /// flat slots or, on a params-buffer call, lowered into the buffer.
+    /// WASI record.
     RecordFlatten { named: &'a NamedType },
-    /// WASI variant: single GC-ref param. Async passes the ref through (it is
-    /// memory-lowered by the indirect params buffer); sync flattens it.
-    Variant { named: &'a NamedType },
-    /// Option<T>: single GC-ref param. Async passes the ref through; sync
-    /// flattens to discriminant + payload slots.
+    /// WASI variant.
+    Variant,
+    /// Option<T>.
     OptionValue { payload: &'a Type },
-    /// Result<T, E>: single GC-ref param, flattened (sync only).
+    /// Result<T, E>.
     ResultValue { ok: &'a Type, err: &'a Type },
-    /// Non-empty tuple: single GC-ref param, flattened (sync only).
+    /// Non-empty tuple.
     TupleFlatten,
+    /// `TreeMap<K, V>`, as a pair buffer's (ptr, count).
+    MapValue,
     /// Scalars/handles: flat params matching the CM ABI, forwarded unchanged.
     Direct,
 }
@@ -674,6 +683,17 @@ struct ParamPlan<'a> {
     first_param: usize,
     param_count: usize,
     lowering: ParamLowering<'a>,
+}
+
+/// Whether the import adapter takes `ty` as one GC value, which the call site
+/// passes through rather than flattening.
+pub(super) fn is_gc_passthrough_param(
+    ty: &Type,
+    registry: &CmInterfaceRegistry,
+    names: &CmStdlibNames,
+) -> bool {
+    !flatten_param_type(ty, registry, names).is_empty()
+        && !matches!(classify_param(ty, registry, names), ParamLowering::Direct)
 }
 
 fn classify_param<'t>(
@@ -711,7 +731,7 @@ fn classify_param<'t>(
                 .as_deref()
                 .is_some_and(|s| registry.get_variant_cases_by_source(s, &n.name).is_some()) =>
         {
-            ParamLowering::Variant { named: n }
+            ParamLowering::Variant
         }
         Type::Generic(g) if g.name == names.option && g.args.len() == 1 => {
             ParamLowering::OptionValue {
@@ -723,6 +743,11 @@ fn classify_param<'t>(
                 ok: &g.args[0],
                 err: &g.args[1],
             }
+        }
+        Type::Generic(g)
+            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+        {
+            ParamLowering::MapValue
         }
         Type::Tuple(elems) if !elems.is_empty() => ParamLowering::TupleFlatten,
         // Scalars, plain enums/flags, and resource handles are a single flat
@@ -738,6 +763,9 @@ fn classify_param<'t>(
         other => panic!("unsupported param type shape for CM import lowering: {other:?}"),
     }
 }
+
+/// The flat params an async call passes directly; more go through one buffer.
+const MAX_FLAT_ASYNC_PARAMS: usize = 4;
 
 /// A realloc'd result buffer: the local holding its address plus the
 /// allocation's size/align (needed again to free it or to embed it in an
@@ -771,6 +799,9 @@ struct AdapterBuilder<'a> {
     body_stmts: Vec<TirStmt>,
     flat_args: Vec<TirExpr>,
     auxiliary: Vec<Rc<RefCell<TirFunction>>>,
+    /// An async call whose flat params exceed [`MAX_FLAT_ASYNC_PARAMS`] passes
+    /// them all through one linear-memory buffer instead.
+    params_in_buffer: bool,
 }
 
 impl<'a> AdapterBuilder<'a> {
@@ -841,10 +872,11 @@ impl<'a> AdapterBuilder<'a> {
                     self.push_param(param_name.clone(), TypeTable::I32);
                 }
                 ParamLowering::RecordFlatten { .. }
-                | ParamLowering::Variant { .. }
+                | ParamLowering::Variant
                 | ParamLowering::OptionValue { .. }
                 | ParamLowering::ResultValue { .. }
-                | ParamLowering::TupleFlatten => {
+                | ParamLowering::TupleFlatten
+                | ParamLowering::MapValue => {
                     let type_id = self.cm_type_id(param_type);
                     self.push_param(param_name.clone(), type_id);
                 }
@@ -873,7 +905,6 @@ impl<'a> AdapterBuilder<'a> {
     /// Emit the per-parameter lowering code that turns adapter params into
     /// flat CM args. Intermediate locals land after all param locals.
     fn emit_param_lowering(&mut self, plans: &[ParamPlan<'a>]) {
-        let func_info = self.func_info;
         for plan in plans {
             match plan.lowering {
                 ParamLowering::Unit => {}
@@ -884,6 +915,18 @@ impl<'a> AdapterBuilder<'a> {
                 ParamLowering::ListBuffer { elem } => {
                     let param_local = self.params[plan.first_param].local_index;
                     self.emit_list_buffer(plan.name, param_local, elem);
+                }
+                ParamLowering::RecordFlatten { .. }
+                | ParamLowering::Variant
+                | ParamLowering::OptionValue { .. }
+                | ParamLowering::ResultValue { .. }
+                | ParamLowering::TupleFlatten
+                | ParamLowering::MapValue
+                    if self.params_in_buffer =>
+                {
+                    let param = &self.params[plan.first_param];
+                    self.flat_args
+                        .push(local_ref(param.local_index, plan.name, param.type_id));
                 }
                 ParamLowering::RecordFlatten { named } => {
                     let source = self
@@ -914,55 +957,35 @@ impl<'a> AdapterBuilder<'a> {
                         &self.lower_ctx,
                     );
                 }
-                ParamLowering::Variant { .. } => {
+                ParamLowering::Variant => {
                     let param = &self.params[plan.first_param];
                     let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    if func_info.is_async {
-                        // Async: pass the GC ref through; the indirect params
-                        // buffer memory-lowers it.
-                        self.flat_args.push(param_ref);
-                    } else {
-                        synthesize_flatten_value_to_flat_args(
-                            plan.ty,
-                            param_ref,
-                            &format!("${}", plan.name),
-                            &mut self.next_local,
-                            &mut self.body_stmts,
-                            &mut self.locals,
-                            &mut self.flat_args,
-                            &self.lower_ctx,
-                        );
-                    }
+                    synthesize_flatten_value_to_flat_args(
+                        plan.ty,
+                        param_ref,
+                        &format!("${}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
+                    );
                 }
                 ParamLowering::OptionValue { payload } => {
                     let param = &self.params[plan.first_param];
                     let param_ref = local_ref(param.local_index, plan.name, param.type_id);
-                    if func_info.is_async {
-                        // Async: pass the GC ref through; the indirect params
-                        // buffer memory-lowers it.
-                        self.flat_args.push(param_ref);
-                    } else {
-                        synthesize_flatten_option_to_flat_args(
-                            payload,
-                            param_ref,
-                            &format!("${}", plan.name),
-                            &mut self.next_local,
-                            &mut self.body_stmts,
-                            &mut self.locals,
-                            &mut self.flat_args,
-                            &self.lower_ctx,
-                        );
-                    }
+                    synthesize_flatten_option_to_flat_args(
+                        payload,
+                        param_ref,
+                        &format!("${}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
+                    );
                 }
                 ParamLowering::ResultValue { ok, err } => {
-                    // The async params-to-memory lowering for `Result` is unbuilt
-                    // (no async CM import needs it yet); fail loud instead.
-                    assert!(
-                        !func_info.is_async,
-                        "CM import '{}#{}' takes a `Result` parameter on an async \
-                         function; async Result-param lowering is not yet implemented",
-                        func_info.interface_name, func_info.method_name
-                    );
                     let param = &self.params[plan.first_param];
                     let param_ref = local_ref(param.local_index, plan.name, param.type_id);
                     synthesize_flatten_result_to_flat_args(
@@ -978,12 +1001,20 @@ impl<'a> AdapterBuilder<'a> {
                     );
                 }
                 ParamLowering::TupleFlatten => {
-                    assert!(
-                        !func_info.is_async,
-                        "CM import '{}#{}' takes a tuple parameter on an async \
-                         function; async tuple-param lowering is not yet implemented",
-                        func_info.interface_name, func_info.method_name
+                    let param = &self.params[plan.first_param];
+                    let param_ref = local_ref(param.local_index, plan.name, param.type_id);
+                    synthesize_flatten_value_to_flat_args(
+                        plan.ty,
+                        param_ref,
+                        &format!("${}", plan.name),
+                        &mut self.next_local,
+                        &mut self.body_stmts,
+                        &mut self.locals,
+                        &mut self.flat_args,
+                        &self.lower_ctx,
                     );
+                }
+                ParamLowering::MapValue => {
                     let param = &self.params[plan.first_param];
                     let param_ref = local_ref(param.local_index, plan.name, param.type_id);
                     synthesize_flatten_value_to_flat_args(
@@ -1198,22 +1229,8 @@ impl<'a> AdapterBuilder<'a> {
     /// `results_ptr` exists only then) and switch to a single indirect params
     /// buffer when the flat params exceed the limit or need memory lowering.
     fn prepare_async_args(&mut self, plans: &[ParamPlan<'a>]) -> Option<OutptrBuffer> {
-        // Callback-style async: MAX_FLAT_ASYNC_PARAMS flat params before
-        // all params are passed via a single params_ptr.
-        const MAX_FLAT_ASYNC_PARAMS: usize = 4;
-
         let async_outptr = self.alloc_async_outptr();
-
-        // Variant and Option params force the indirect path: they need
-        // memory lowering, not direct flat passing.
-        let needs_indirect = self.flat_args.len() > MAX_FLAT_ASYNC_PARAMS
-            || plans.iter().any(|p| {
-                matches!(
-                    p.lowering,
-                    ParamLowering::Variant { .. } | ParamLowering::OptionValue { .. }
-                )
-            });
-        if needs_indirect {
+        if self.params_in_buffer {
             self.emit_indirect_params_buffer(plans, async_outptr);
         } else if let Some(outptr) = async_outptr {
             self.flat_args
@@ -1291,46 +1308,26 @@ impl<'a> AdapterBuilder<'a> {
         let mut flat_idx = 0usize;
         for (plan, base_offset) in plans.iter().zip(param_offsets) {
             match plan.lowering {
-                // WASI variants: lower directly to the buffer using
-                // registry-aware layout. flat_args has one entry (the GC ref).
-                ParamLowering::Variant { named } => {
-                    let source = self
-                        .lower_ctx
-                        .cm_interface_registry
-                        .source_interface(named)
-                        .expect("classified WASI variant has a source interface");
-                    let variant_value = self.flat_args[flat_idx].clone();
+                ParamLowering::RecordFlatten { .. }
+                | ParamLowering::Variant
+                | ParamLowering::OptionValue { .. }
+                | ParamLowering::ResultValue { .. }
+                | ParamLowering::TupleFlatten
+                | ParamLowering::MapValue => {
+                    let value = self.flat_args[flat_idx].clone();
                     flat_idx += 1;
-                    synthesize_lower_wasi_variant_to_memory(
-                        named,
-                        &source,
-                        variant_value,
+                    self.body_stmts.extend(synthesize_lower_wasi_type_to_memory(
+                        plan.ty,
+                        value,
                         params_buf_addr(params_buf_local, base_offset),
                         &mut self.next_local,
-                        &mut self.body_stmts,
                         &mut self.locals,
                         &self.lower_ctx,
-                    );
-                }
-                ParamLowering::OptionValue { payload } => {
-                    let option_value = self.flat_args[flat_idx].clone();
-                    flat_idx += 1;
-                    synthesize_lower_option_to_memory(
-                        payload,
-                        option_value,
-                        params_buf_addr(params_buf_local, base_offset),
-                        &mut self.next_local,
-                        &mut self.body_stmts,
-                        &mut self.locals,
-                        &self.lower_ctx,
-                    );
+                    ));
                 }
                 ParamLowering::Unit
                 | ParamLowering::PackedPtrLen { .. }
                 | ParamLowering::ListBuffer { .. }
-                | ParamLowering::RecordFlatten { .. }
-                | ParamLowering::ResultValue { .. }
-                | ParamLowering::TupleFlatten
                 | ParamLowering::Direct => {
                     let stores = cm_param_store_plan(plan.ty, registry, &self.lower_ctx.names);
                     for (sub_offset, store_name) in &stores {

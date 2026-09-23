@@ -20,10 +20,8 @@ use crate::tir_visitor::{TirMutVisitor, TirRefVisitor};
 
 use crate::synthesis::common::{cast, i32_const, option_none, synth_span};
 
-use super::types::{
-    CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_gc_passthrough_param,
-    is_wasm_flat_type,
-};
+use super::import_adapter::is_gc_passthrough_param;
+use super::types::{CmStdlibNames, cm_type_to_type_id, flatten_param_type, is_wasm_flat_type};
 use crate::name::FqTypeName;
 
 /// Recursively replace WASI-derived types with user types in the binding.
@@ -1200,35 +1198,23 @@ fn rewrite_calls_in_expr(
                     type_table,
                     applied_returns,
                 );
-                // Fix up adapter param types for GC pass-through params (String,
-                // List<T>) where the binding receives the GC value directly.
-                // Do NOT fix up params that get flattened (Option, resource handles)
-                // because taken_args indices don't match flat adapter param indices.
                 if let Some(func_info) = &wasi_func_info {
-                    let mut flat_idx = 0;
+                    let mut adapter_idx = 0;
                     for (i, (_name, _, param_type)) in func_info.params.iter().enumerate() {
-                        let is_gc_passthrough = matches!(
-                            param_type,
-                            Type::Named(n) if n.name == names.string
-                        ) || matches!(
-                            param_type,
-                            Type::Generic(g) if g.name == names.array && g.args.len() == 1
-                        );
-                        if is_gc_passthrough {
+                        if is_gc_passthrough_param(param_type, cm_interface_registry, names) {
                             if let Some(arg) = taken_args.get(i) {
                                 fixup_adapter_param_from_call_site(
                                     &mut adapter,
-                                    flat_idx,
+                                    adapter_idx,
                                     arg.type_id,
                                     true,
                                     false,
                                 );
                             }
-                            flat_idx += 1;
+                            adapter_idx += 1;
                         } else {
-                            let flat_tys =
-                                flatten_param_type(param_type, cm_interface_registry, names);
-                            flat_idx += flat_tys.len().max(1);
+                            adapter_idx +=
+                                flatten_param_type(param_type, cm_interface_registry, names).len();
                         }
                     }
                 }

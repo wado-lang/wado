@@ -123,13 +123,6 @@ run` / `test` / `serve` accept what the compiler emits.
   method is simply absent by the time the binding names it. Registering it is
   also what lets the binding ask the registry for the name instead of spelling
   it.
-
-## Known gap
-
-A `map` parameter on an _imported_ function is not lowered. `classify_param`
-(`import_adapter.rs`), `cm_param_store_plan`, and `is_gc_passthrough_param`
-grew no `TreeMap` arm, so such a signature reaches the import path's
-`unsupported param type shape` panic. Closing it takes a `ParamLowering` case
-carrying the `(ptr, count)` pair, matching store-plan and type-fixup arms, and
-a catalog import row to test it against. Export signatures — what the catalog
-covers — are unaffected.
+- An imported component's `map` crosses in both directions too: its binding
+  module imports `TreeMap` from `core:collections`, and the import adapter
+  lowers a `TreeMap` argument through the same pair buffer.

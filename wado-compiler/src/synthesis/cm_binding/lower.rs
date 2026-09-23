@@ -1402,6 +1402,16 @@ pub(super) fn synthesize_flatten_value_to_flat_args(
             flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
             flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
         }
+        Type::Generic(g)
+            if names.tree_map.as_deref() == Some(g.name.as_str()) && g.args.len() == 2 =>
+        {
+            let (map_stmts, base_local, len_local) = synthesize_lower_map_to_buffer(
+                &g.args[0], &g.args[1], value, next_local, locals, ctx,
+            );
+            stmts.extend(map_stmts);
+            flat_args.push(local_ref(base_local, "$list_base", TypeTable::I32));
+            flat_args.push(local_ref(len_local, "$list_len", TypeTable::I32));
+        }
         Type::Tuple(elems) if !elems.is_empty() => synthesize_flatten_tuple_to_flat_args(
             elems, value, prefix, next_local, stmts, locals, flat_args, ctx,
         ),
