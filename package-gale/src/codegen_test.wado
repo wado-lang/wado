@@ -715,6 +715,26 @@ Y : 'Y' ;
     assert str_contains(&tout, "fn _parse_s__inner_scan_0(");
 }
 
+test "an alternative's scan helper is emitted once for the scan and the parse" {
+    // Alt 0 opens both of `scan_r`'s partitions, so the scan side hoists it;
+    // the parse side's tournament scans it too, and must call that function.
+    let input = "grammar T;
+s : r EOF ;
+r : a X | A a Y | B a Z ;
+a : (A|B)+ ;
+A : 'A' ;
+B : 'B' ;
+X : 'X' ;
+Y : 'Y' ;
+Z : 'Z' ;
+";
+    let mut grammar = parse_grammar(input, "test.g4");
+    let output = generate(&mut grammar, &DEFAULT_OPTIONS).source;
+    assert str_contains(&output, "fn scan_r_alt_0(");
+    assert !str_contains(&output, "fn _parse_r__inner_scan_0(");
+    assert str_contains(&output, "let _sd_p_0 = scan_r_alt_0(_sd_tokens, _sd_pos");
+}
+
 test "trace option instruments the scan tournament and alt picks" {
     // A rule whose alts share an opaque rule-ref prefix (`b X` vs `b Y`)
     // lowers to the longest-match scan tournament (the disambiguating token
