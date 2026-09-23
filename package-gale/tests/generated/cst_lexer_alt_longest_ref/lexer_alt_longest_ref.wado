@@ -1160,13 +1160,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_X; }
                 end = try_Y(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_Y; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
-            _ => {
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
-            },
+            _ => {},
+        }
+        if best_end <= start {
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

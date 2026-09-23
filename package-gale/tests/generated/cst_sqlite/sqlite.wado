@@ -1298,15 +1298,7 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
                         alts_2_0: {
                             pos = alts_saved_2;
                             if pos >= chars.len() { break alts_2_0; }
-                            let not_saved_3 = pos;
-                            let mut not_matched_3 = false;
-                            not_3: {
-                                if pos >= chars.len() || chars[pos] != '"' { break not_3; }
-                                pos += 1;
-                                not_matched_3 = true;
-                            }
-                            pos = not_saved_3;
-                            if not_matched_3 { break alts_2_0; }
+                            if (chars[pos] matches { '"' }) { break alts_2_0; }
                             pos += 1;
                             break alts_done_2;
                         }
@@ -1334,38 +1326,30 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '`' { break alts_0_1; }
             pos += 1;
             loop {
-                let rep_saved_4 = pos;
-                rep_4: {
-                    let alts_saved_5 = pos;
-                    alts_done_5: {
-                        alts_5_0: {
-                            pos = alts_saved_5;
-                            if pos >= chars.len() { break alts_5_0; }
-                            let not_saved_6 = pos;
-                            let mut not_matched_6 = false;
-                            not_6: {
-                                if pos >= chars.len() || chars[pos] != '`' { break not_6; }
-                                pos += 1;
-                                not_matched_6 = true;
-                            }
-                            pos = not_saved_6;
-                            if not_matched_6 { break alts_5_0; }
+                let rep_saved_3 = pos;
+                rep_3: {
+                    let alts_saved_4 = pos;
+                    alts_done_4: {
+                        alts_4_0: {
+                            pos = alts_saved_4;
+                            if pos >= chars.len() { break alts_4_0; }
+                            if (chars[pos] matches { '`' }) { break alts_4_0; }
                             pos += 1;
-                            break alts_done_5;
+                            break alts_done_4;
                         }
-                        alts_5_1: {
-                            pos = alts_saved_5;
-                            if pos >= chars.len() || chars[pos] != '`' { break alts_5_1; }
+                        alts_4_1: {
+                            pos = alts_saved_4;
+                            if pos >= chars.len() || chars[pos] != '`' { break alts_4_1; }
                             pos += 1;
-                            if pos >= chars.len() || chars[pos] != '`' { break alts_5_1; }
+                            if pos >= chars.len() || chars[pos] != '`' { break alts_4_1; }
                             pos += 1;
-                            break alts_done_5;
+                            break alts_done_4;
                         }
-                        break rep_4;
+                        break rep_3;
                     }
                     continue;
                 }
-                pos = rep_saved_4;
+                pos = rep_saved_3;
                 break;
             }
             if pos >= chars.len() || chars[pos] != '`' { break alts_0_1; }
@@ -1377,22 +1361,14 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
             if pos >= chars.len() || chars[pos] != '[' { break alts_0_2; }
             pos += 1;
             loop {
-                let rep_saved_7 = pos;
-                rep_7: {
-                    if pos >= chars.len() { break rep_7; }
-                    let not_saved_8 = pos;
-                    let mut not_matched_8 = false;
-                    not_8: {
-                        if pos >= chars.len() || chars[pos] != ']' { break not_8; }
-                        pos += 1;
-                        not_matched_8 = true;
-                    }
-                    pos = not_saved_8;
-                    if not_matched_8 { break rep_7; }
+                let rep_saved_5 = pos;
+                rep_5: {
+                    if pos >= chars.len() { break rep_5; }
+                    if (chars[pos] matches { ']' }) { break rep_5; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_7;
+                pos = rep_saved_5;
                 break;
             }
             if pos >= chars.len() || chars[pos] != ']' { break alts_0_2; }
@@ -1405,14 +1381,14 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
             if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' })) { break alts_0_3; }
             pos += 1;
             loop {
-                let rep_saved_9 = pos;
-                rep_9: {
-                    if pos >= chars.len() { break rep_9; }
-                    if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' })) { break rep_9; }
+                let rep_saved_6 = pos;
+                rep_6: {
+                    if pos >= chars.len() { break rep_6; }
+                    if !((chars[pos] matches { 'a'..='z' | 'A'..='Z' | '_' | '0'..='9' })) { break rep_6; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_9;
+                pos = rep_saved_6;
                 break;
             }
             break alts_done_0;
@@ -1424,112 +1400,141 @@ fn try_IDENTIFIER(chars: &List<char>, start: i32) -> i32 {
 
 fn try_NUMERIC_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let alts_saved_10 = pos;
-    let mut alts_best_10 = -1;
-    alts_10_0: {
-        pos = alts_saved_10;
-        if pos >= chars.len() { break alts_10_0; }
-        if !((chars[pos] matches { '0'..='9' })) { break alts_10_0; }
-        pos += 1;
-        loop {
-            let rep_saved_11 = pos;
-            rep_11: {
-                if pos >= chars.len() { break rep_11; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_11; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_11;
-            break;
-        }
-        let opt_saved_13 = pos;
-        let mut opt_ok_13 = false;
-        rep_13: {
-            if pos >= chars.len() || chars[pos] != '.' { break rep_13; }
+    let alts_saved_7 = pos;
+    alts_done_7: {
+        alts_7_0: {
+            pos = alts_saved_7;
+            if pos >= chars.len() { break alts_7_0; }
+            if !((chars[pos] matches { '0'..='9' })) { break alts_7_0; }
             pos += 1;
             loop {
-                let rep_saved_14 = pos;
-                rep_14: {
-                    if pos >= chars.len() { break rep_14; }
-                    if !((chars[pos] matches { '0'..='9' })) { break rep_14; }
+                let rep_saved_8 = pos;
+                rep_8: {
+                    if pos >= chars.len() { break rep_8; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_8; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_14;
+                pos = rep_saved_8;
                 break;
             }
-            opt_ok_13 = true;
-        }
-        if !opt_ok_13 { pos = opt_saved_13; }
-        let opt_saved_15 = pos;
-        let mut opt_ok_15 = false;
-        rep_15: {
-            if pos >= chars.len() { break rep_15; }
-            if !((chars[pos] matches { 'e' | 'E' })) { break rep_15; }
-            pos += 1;
-            let opt_saved_16 = pos;
-            let mut opt_ok_16 = false;
-            rep_16: {
-                if pos >= chars.len() { break rep_16; }
-                if !((chars[pos] matches { '-' | '+' })) { break rep_16; }
+            let opt_saved_10 = pos;
+            let mut opt_ok_10 = false;
+            opt_10: {
+                if pos >= chars.len() || chars[pos] != '.' { break opt_10; }
                 pos += 1;
-                opt_ok_16 = true;
+                loop {
+                    let rep_saved_11 = pos;
+                    rep_11: {
+                        if pos >= chars.len() { break rep_11; }
+                        if !((chars[pos] matches { '0'..='9' })) { break rep_11; }
+                        pos += 1;
+                        continue;
+                    }
+                    pos = rep_saved_11;
+                    break;
+                }
+                opt_ok_10 = true;
             }
-            if !opt_ok_16 { pos = opt_saved_16; }
-            if pos >= chars.len() { break rep_15; }
-            if !((chars[pos] matches { '0'..='9' })) { break rep_15; }
+            if !opt_ok_10 { pos = opt_saved_10; }
+            let opt_saved_12 = pos;
+            let mut opt_ok_12 = false;
+            opt_12: {
+                if pos >= chars.len() { break opt_12; }
+                if !((chars[pos] matches { 'E' | 'e' })) { break opt_12; }
+                pos += 1;
+                let opt_saved_13 = pos;
+                let mut opt_ok_13 = false;
+                opt_13: {
+                    if pos >= chars.len() { break opt_13; }
+                    if !((chars[pos] matches { '-' | '+' })) { break opt_13; }
+                    pos += 1;
+                    opt_ok_13 = true;
+                }
+                if !opt_ok_13 { pos = opt_saved_13; }
+                if pos >= chars.len() { break opt_12; }
+                if !((chars[pos] matches { '0'..='9' })) { break opt_12; }
+                pos += 1;
+                loop {
+                    let rep_saved_14 = pos;
+                    rep_14: {
+                        if pos >= chars.len() { break rep_14; }
+                        if !((chars[pos] matches { '0'..='9' })) { break rep_14; }
+                        pos += 1;
+                        continue;
+                    }
+                    pos = rep_saved_14;
+                    break;
+                }
+                opt_ok_12 = true;
+            }
+            if !opt_ok_12 { pos = opt_saved_12; }
+            break alts_done_7;
+        }
+        alts_7_1: {
+            pos = alts_saved_7;
+            if pos >= chars.len() || chars[pos] != '.' { break alts_7_1; }
+            pos += 1;
+            if pos >= chars.len() { break alts_7_1; }
+            if !((chars[pos] matches { '0'..='9' })) { break alts_7_1; }
             pos += 1;
             loop {
-                let rep_saved_17 = pos;
-                rep_17: {
-                    if pos >= chars.len() { break rep_17; }
-                    if !((chars[pos] matches { '0'..='9' })) { break rep_17; }
+                let rep_saved_16 = pos;
+                rep_16: {
+                    if pos >= chars.len() { break rep_16; }
+                    if !((chars[pos] matches { '0'..='9' })) { break rep_16; }
                     pos += 1;
                     continue;
                 }
-                pos = rep_saved_17;
+                pos = rep_saved_16;
                 break;
             }
-            opt_ok_15 = true;
+            let opt_saved_18 = pos;
+            let mut opt_ok_18 = false;
+            opt_18: {
+                if pos >= chars.len() { break opt_18; }
+                if !((chars[pos] matches { 'E' | 'e' })) { break opt_18; }
+                pos += 1;
+                let opt_saved_19 = pos;
+                let mut opt_ok_19 = false;
+                opt_19: {
+                    if pos >= chars.len() { break opt_19; }
+                    if !((chars[pos] matches { '-' | '+' })) { break opt_19; }
+                    pos += 1;
+                    opt_ok_19 = true;
+                }
+                if !opt_ok_19 { pos = opt_saved_19; }
+                if pos >= chars.len() { break opt_18; }
+                if !((chars[pos] matches { '0'..='9' })) { break opt_18; }
+                pos += 1;
+                loop {
+                    let rep_saved_20 = pos;
+                    rep_20: {
+                        if pos >= chars.len() { break rep_20; }
+                        if !((chars[pos] matches { '0'..='9' })) { break rep_20; }
+                        pos += 1;
+                        continue;
+                    }
+                    pos = rep_saved_20;
+                    break;
+                }
+                opt_ok_18 = true;
+            }
+            if !opt_ok_18 { pos = opt_saved_18; }
+            break alts_done_7;
         }
-        if !opt_ok_15 { pos = opt_saved_15; }
-        if pos > alts_best_10 { alts_best_10 = pos; }
+        return -1;
     }
-    alts_10_1: {
-        pos = alts_saved_10;
-        if pos >= chars.len() || chars[pos] != '.' { break alts_10_1; }
-        pos += 1;
-        if pos >= chars.len() { break alts_10_1; }
-        if !((chars[pos] matches { '0'..='9' })) { break alts_10_1; }
-        pos += 1;
-        loop {
-            let rep_saved_19 = pos;
-            rep_19: {
-                if pos >= chars.len() { break rep_19; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_19; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_19;
-            break;
-        }
-        let opt_saved_21 = pos;
-        let mut opt_ok_21 = false;
-        rep_21: {
-            if pos >= chars.len() { break rep_21; }
-            if !((chars[pos] matches { 'e' | 'E' })) { break rep_21; }
-            pos += 1;
-            let opt_saved_22 = pos;
-            let mut opt_ok_22 = false;
-            rep_22: {
-                if pos >= chars.len() { break rep_22; }
-                if !((chars[pos] matches { '-' | '+' })) { break rep_22; }
-                pos += 1;
-                opt_ok_22 = true;
-            }
-            if !opt_ok_22 { pos = opt_saved_22; }
-            if pos >= chars.len() { break rep_21; }
-            if !((chars[pos] matches { '0'..='9' })) { break rep_21; }
+    return pos;
+}
+
+fn try_BIND_PARAMETER(chars: &List<char>, start: i32) -> i32 {
+    let mut pos = start;
+    let alts_saved_22 = pos;
+    alts_done_22: {
+        alts_22_0: {
+            pos = alts_saved_22;
+            if pos >= chars.len() || chars[pos] != '?' { break alts_22_0; }
             pos += 1;
             loop {
                 let rep_saved_23 = pos;
@@ -1542,48 +1547,19 @@ fn try_NUMERIC_LITERAL(chars: &List<char>, start: i32) -> i32 {
                 pos = rep_saved_23;
                 break;
             }
-            opt_ok_21 = true;
+            break alts_done_22;
         }
-        if !opt_ok_21 { pos = opt_saved_21; }
-        if pos > alts_best_10 { alts_best_10 = pos; }
-    }
-    if alts_best_10 < 0 { return -1; }
-    pos = alts_best_10;
-    return pos;
-}
-
-fn try_BIND_PARAMETER(chars: &List<char>, start: i32) -> i32 {
-    let mut pos = start;
-    let alts_saved_25 = pos;
-    let mut alts_best_25 = -1;
-    alts_25_0: {
-        pos = alts_saved_25;
-        if pos >= chars.len() || chars[pos] != '?' { break alts_25_0; }
-        pos += 1;
-        loop {
-            let rep_saved_26 = pos;
-            rep_26: {
-                if pos >= chars.len() { break rep_26; }
-                if !((chars[pos] matches { '0'..='9' })) { break rep_26; }
-                pos += 1;
-                continue;
-            }
-            pos = rep_saved_26;
-            break;
+        alts_22_1: {
+            pos = alts_saved_22;
+            if pos >= chars.len() { break alts_22_1; }
+            if !((chars[pos] matches { ':' | '@' | '$' })) { break alts_22_1; }
+            pos += 1;
+            pos = try_IDENTIFIER(chars, pos);
+            if pos < 0 { break alts_22_1; }
+            break alts_done_22;
         }
-        if pos > alts_best_25 { alts_best_25 = pos; }
+        return -1;
     }
-    alts_25_1: {
-        pos = alts_saved_25;
-        if pos >= chars.len() { break alts_25_1; }
-        if !((chars[pos] matches { ':' | '@' | '$' })) { break alts_25_1; }
-        pos += 1;
-        pos = try_IDENTIFIER(chars, pos);
-        if pos < 0 { break alts_25_1; }
-        if pos > alts_best_25 { alts_best_25 = pos; }
-    }
-    if alts_best_25 < 0 { return -1; }
-    pos = alts_best_25;
     return pos;
 }
 
@@ -1592,38 +1568,30 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_27 = pos;
-        rep_27: {
-            let alts_saved_28 = pos;
-            alts_done_28: {
-                alts_28_0: {
-                    pos = alts_saved_28;
-                    if pos >= chars.len() { break alts_28_0; }
-                    let not_saved_29 = pos;
-                    let mut not_matched_29 = false;
-                    not_29: {
-                        if pos >= chars.len() || chars[pos] != '\'' { break not_29; }
-                        pos += 1;
-                        not_matched_29 = true;
-                    }
-                    pos = not_saved_29;
-                    if not_matched_29 { break alts_28_0; }
+        let rep_saved_24 = pos;
+        rep_24: {
+            let alts_saved_25 = pos;
+            alts_done_25: {
+                alts_25_0: {
+                    pos = alts_saved_25;
+                    if pos >= chars.len() { break alts_25_0; }
+                    if (chars[pos] matches { '\'' }) { break alts_25_0; }
                     pos += 1;
-                    break alts_done_28;
+                    break alts_done_25;
                 }
-                alts_28_1: {
-                    pos = alts_saved_28;
-                    if pos >= chars.len() || chars[pos] != '\'' { break alts_28_1; }
+                alts_25_1: {
+                    pos = alts_saved_25;
+                    if pos >= chars.len() || chars[pos] != '\'' { break alts_25_1; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '\'' { break alts_28_1; }
+                    if pos >= chars.len() || chars[pos] != '\'' { break alts_25_1; }
                     pos += 1;
-                    break alts_done_28;
+                    break alts_done_25;
                 }
-                break rep_27;
+                break rep_24;
             }
             continue;
         }
-        pos = rep_saved_27;
+        pos = rep_saved_24;
         break;
     }
     if pos >= chars.len() || chars[pos] != '\'' { return -1; }
@@ -1634,7 +1602,7 @@ fn try_STRING_LITERAL(chars: &List<char>, start: i32) -> i32 {
 fn try_BLOB_LITERAL(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
     if pos >= chars.len() { return -1; }
-    if !((chars[pos] matches { 'x' | 'X' })) { return -1; }
+    if !((chars[pos] matches { 'X' | 'x' })) { return -1; }
     pos += 1;
     pos = try_STRING_LITERAL(chars, pos);
     if pos < 0 { return -1; }
@@ -1648,14 +1616,14 @@ fn try_SINGLE_LINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '-' { return -1; }
     pos += 1;
     loop {
-        let rep_saved_30 = pos;
-        rep_30: {
-            if pos >= chars.len() { break rep_30; }
-            if (chars[pos] matches { '\r' | '\n' }) { break rep_30; }
+        let rep_saved_26 = pos;
+        rep_26: {
+            if pos >= chars.len() { break rep_26; }
+            if (chars[pos] matches { '\r' | '\n' }) { break rep_26; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_30;
+        pos = rep_saved_26;
         break;
     }
     return pos;
@@ -1668,32 +1636,32 @@ fn try_MULTILINE_COMMENT(chars: &List<char>, start: i32) -> i32 {
     if pos >= chars.len() || chars[pos] != '*' { return -1; }
     pos += 1;
     loop {
-        let ng_saved_31 = pos;
-        let mut ng_exit_31 = false;
-        ng_31: {
-            let alts_saved_32 = pos;
-            alts_done_32: {
-                alts_32_0: {
-                    pos = alts_saved_32;
-                    if pos >= chars.len() || chars[pos] != '*' { break alts_32_0; }
+        let ng_saved_27 = pos;
+        let mut ng_exit_27 = false;
+        ng_27: {
+            let alts_saved_28 = pos;
+            alts_done_28: {
+                alts_28_0: {
+                    pos = alts_saved_28;
+                    if pos >= chars.len() || chars[pos] != '*' { break alts_28_0; }
                     pos += 1;
-                    if pos >= chars.len() || chars[pos] != '/' { break alts_32_0; }
+                    if pos >= chars.len() || chars[pos] != '/' { break alts_28_0; }
                     pos += 1;
-                    break alts_done_32;
+                    break alts_done_28;
                 }
-                alts_32_1: {
-                    pos = alts_saved_32;
-                    if pos < chars.len() { break alts_32_1; }
-                    break alts_done_32;
+                alts_28_1: {
+                    pos = alts_saved_28;
+                    if pos < chars.len() { break alts_28_1; }
+                    break alts_done_28;
                 }
-                break ng_31;
+                break ng_27;
             }
-            ng_exit_31 = true;
+            ng_exit_27 = true;
         }
-        if ng_exit_31 {
+        if ng_exit_27 {
             break;
         }
-        pos = ng_saved_31;
+        pos = ng_saved_27;
         if pos >= chars.len() { return -1; }
         pos += 1;
     }
@@ -1716,229 +1684,368 @@ fn try_UNEXPECTED_CHAR(chars: &List<char>, start: i32) -> i32 {
 }
 
 fn classify_keyword(chars: &List<char>, start: i32, end: i32) -> i32 {
-    let len = end - start;
-    if len == 2 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 1].eq_ignore_ascii_case(&'s') { return TK_K_AS; }
-        } else if chars[start].eq_ignore_ascii_case(&'b') {
-            if chars[start + 1].eq_ignore_ascii_case(&'y') { return TK_K_BY; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'f') { return TK_K_IF; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') { return TK_K_IN; }
-            if chars[start + 1].eq_ignore_ascii_case(&'s') { return TK_K_IS; }
-        } else if chars[start].eq_ignore_ascii_case(&'n') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') { return TK_K_NO; }
-        } else if chars[start].eq_ignore_ascii_case(&'o') {
-            if chars[start + 1].eq_ignore_ascii_case(&'f') { return TK_K_OF; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') { return TK_K_ON; }
-            if chars[start + 1].eq_ignore_ascii_case(&'r') { return TK_K_OR; }
-        } else if chars[start].eq_ignore_ascii_case(&'t') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') { return TK_K_TO; }
-        }
-    } else if len == 3 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 1].eq_ignore_ascii_case(&'d') && chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_ADD; }
-            if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'l') { return TK_K_ALL; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_AND; }
-            if chars[start + 1].eq_ignore_ascii_case(&'s') && chars[start + 2].eq_ignore_ascii_case(&'c') { return TK_K_ASC; }
-        } else if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_END; }
-        } else if chars[start].eq_ignore_ascii_case(&'f') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'r') { return TK_K_FOR; }
-        } else if chars[start].eq_ignore_ascii_case(&'k') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'y') { return TK_K_KEY; }
-        } else if chars[start].eq_ignore_ascii_case(&'n') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'t') { return TK_K_NOT; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'w') { return TK_K_ROW; }
-        } else if chars[start].eq_ignore_ascii_case(&'s') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'t') { return TK_K_SET; }
-        }
-    } else if len == 4 {
-        if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'e') { return TK_K_CASE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') { return TK_K_CAST; }
-        } else if chars[start].eq_ignore_ascii_case(&'d') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'c') { return TK_K_DESC; }
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'p') { return TK_K_DROP; }
-        } else if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'h') { return TK_K_EACH; }
-            if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'e') { return TK_K_ELSE; }
-        } else if chars[start].eq_ignore_ascii_case(&'f') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_FAIL; }
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'m') { return TK_K_FROM; }
-            if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_FULL; }
-        } else if chars[start].eq_ignore_ascii_case(&'g') {
-            if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'b') { return TK_K_GLOB; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'o') { return TK_K_INTO; }
-        } else if chars[start].eq_ignore_ascii_case(&'j') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_JOIN; }
-        } else if chars[start].eq_ignore_ascii_case(&'l') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'t') { return TK_K_LEFT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'k') && chars[start + 3].eq_ignore_ascii_case(&'e') { return TK_K_LIKE; }
-        } else if chars[start].eq_ignore_ascii_case(&'n') {
-            if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_NULL; }
-        } else if chars[start].eq_ignore_ascii_case(&'p') {
-            if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_PLAN; }
-        } else if chars[start].eq_ignore_ascii_case(&'t') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'p') { return TK_K_TEMP; }
-            if chars[start + 1].eq_ignore_ascii_case(&'h') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_THEN; }
-        } else if chars[start].eq_ignore_ascii_case(&'v') {
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'w') { return TK_K_VIEW; }
-        } else if chars[start].eq_ignore_ascii_case(&'w') {
-            if chars[start + 1].eq_ignore_ascii_case(&'h') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_WHEN; }
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'h') { return TK_K_WITH; }
-        }
-    } else if len == 5 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 1].eq_ignore_ascii_case(&'b') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_ABORT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'f') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_AFTER; }
-            if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_ALTER; }
-        } else if chars[start].eq_ignore_ascii_case(&'b') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'g') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'n') { return TK_K_BEGIN; }
-        } else if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'h') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'k') { return TK_K_CHECK; }
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'s') { return TK_K_CROSS; }
-        } else if chars[start].eq_ignore_ascii_case(&'g') {
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'p') { return TK_K_GROUP; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') { return TK_K_INDEX; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_INNER; }
-        } else if chars[start].eq_ignore_ascii_case(&'l') {
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_LIMIT; }
-        } else if chars[start].eq_ignore_ascii_case(&'m') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'h') { return TK_K_MATCH; }
-        } else if chars[start].eq_ignore_ascii_case(&'o') {
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_ORDER; }
-            if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_OUTER; }
-        } else if chars[start].eq_ignore_ascii_case(&'q') {
-            if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'y') { return TK_K_QUERY; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_RAISE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'g') && chars[start + 3].eq_ignore_ascii_case(&'h') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_RIGHT; }
-        } else if chars[start].eq_ignore_ascii_case(&'t') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'b') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_TABLE; }
-        } else if chars[start].eq_ignore_ascii_case(&'u') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'n') { return TK_K_UNION; }
-            if chars[start + 1].eq_ignore_ascii_case(&'s') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'g') { return TK_K_USING; }
-        } else if chars[start].eq_ignore_ascii_case(&'w') {
-            if chars[start + 1].eq_ignore_ascii_case(&'h') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_WHERE; }
-        }
-    } else if len == 6 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 1].eq_ignore_ascii_case(&'c') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'n') { return TK_K_ACTION; }
-            if chars[start + 1].eq_ignore_ascii_case(&'t') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'h') { return TK_K_ATTACH; }
-        } else if chars[start].eq_ignore_ascii_case(&'b') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_BEFORE; }
-        } else if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'n') { return TK_K_COLUMN; }
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'m') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_COMMIT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_CREATE; }
-        } else if chars[start].eq_ignore_ascii_case(&'d') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_DELETE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'h') { return TK_K_DETACH; }
-        } else if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 1].eq_ignore_ascii_case(&'s') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_ESCAPE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_EXCEPT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'s') { return TK_K_EXISTS; }
-        } else if chars[start].eq_ignore_ascii_case(&'h') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'v') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'n') && chars[start + 5].eq_ignore_ascii_case(&'g') { return TK_K_HAVING; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'g') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_IGNORE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_INSERT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'s') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'l') && chars[start + 5].eq_ignore_ascii_case(&'l') { return TK_K_ISNULL; }
-        } else if chars[start].eq_ignore_ascii_case(&'o') {
-            if chars[start + 1].eq_ignore_ascii_case(&'f') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_OFFSET; }
-        } else if chars[start].eq_ignore_ascii_case(&'p') {
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'g') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'a') { return TK_K_PRAGMA; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'g') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') && chars[start + 5].eq_ignore_ascii_case(&'p') { return TK_K_REGEXP; }
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_RENAME; }
-        } else if chars[start].eq_ignore_ascii_case(&'s') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_SELECT; }
-        } else if chars[start].eq_ignore_ascii_case(&'u') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'q') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_UNIQUE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'p') && chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_UPDATE; }
-        } else if chars[start].eq_ignore_ascii_case(&'v') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'m') { return TK_K_VACUUM; }
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'s') { return TK_K_VALUES; }
-        }
-    } else if len == 7 {
-        if chars[start].eq_ignore_ascii_case(&'a') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'y') && chars[start + 5].eq_ignore_ascii_case(&'z') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_ANALYZE; }
-        } else if chars[start].eq_ignore_ascii_case(&'b') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'w') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_BETWEEN; }
-        } else if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'d') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_CASCADE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'t') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_COLLATE; }
-        } else if chars[start].eq_ignore_ascii_case(&'d') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'l') && chars[start + 6].eq_ignore_ascii_case(&'t') { return TK_K_DEFAULT; }
-        } else if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'p') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_EXPLAIN; }
-        } else if chars[start].eq_ignore_ascii_case(&'f') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'g') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_FOREIGN; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'d') { return TK_K_INDEXED; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'d') { return TK_K_INSTEAD; }
-        } else if chars[start].eq_ignore_ascii_case(&'n') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_NATURAL; }
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'l') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_NOTNULL; }
-        } else if chars[start].eq_ignore_ascii_case(&'p') {
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'m') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'y') { return TK_K_PRIMARY; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'d') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'x') { return TK_K_REINDEX; }
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_RELEASE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'p') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'c') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_REPLACE; }
-        } else if chars[start].eq_ignore_ascii_case(&'t') {
-            if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'g') && chars[start + 4].eq_ignore_ascii_case(&'g') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'r') { return TK_K_TRIGGER; }
-        } else if chars[start].eq_ignore_ascii_case(&'v') {
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_VIRTUAL; }
-        } else if chars[start].eq_ignore_ascii_case(&'w') {
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'h') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'u') && chars[start + 6].eq_ignore_ascii_case(&'t') { return TK_K_WITHOUT; }
-        }
-    } else if len == 8 {
-        if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'f') && chars[start + 4].eq_ignore_ascii_case(&'l') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_CONFLICT; }
-        } else if chars[start].eq_ignore_ascii_case(&'d') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'b') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'s') && chars[start + 7].eq_ignore_ascii_case(&'e') { return TK_K_DATABASE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'e') && chars[start + 7].eq_ignore_ascii_case(&'d') { return TK_K_DEFERRED; }
-            if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_DISTINCT; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_RESTRICT; }
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'b') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'k') { return TK_K_ROLLBACK; }
-        }
-    } else if len == 9 {
-        if chars[start].eq_ignore_ascii_case(&'e') {
-            if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'v') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_EXCLUSIVE; }
-        } else if chars[start].eq_ignore_ascii_case(&'i') {
-            if chars[start + 1].eq_ignore_ascii_case(&'m') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'d') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'t') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_IMMEDIATE; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') && chars[start + 7].eq_ignore_ascii_case(&'l') && chars[start + 8].eq_ignore_ascii_case(&'y') { return TK_K_INITIALLY; }
-            if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'e') && chars[start + 7].eq_ignore_ascii_case(&'c') && chars[start + 8].eq_ignore_ascii_case(&'t') { return TK_K_INTERSECT; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'v') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_RECURSIVE; }
-        } else if chars[start].eq_ignore_ascii_case(&'s') {
-            if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'v') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'o') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'n') && chars[start + 8].eq_ignore_ascii_case(&'t') { return TK_K_SAVEPOINT; }
-        } else if chars[start].eq_ignore_ascii_case(&'t') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'p') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'r') && chars[start + 8].eq_ignore_ascii_case(&'y') { return TK_K_TEMPORARY; }
-        }
-    } else if len == 10 {
-        if chars[start].eq_ignore_ascii_case(&'c') {
-            if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'i') && chars[start + 8].eq_ignore_ascii_case(&'n') && chars[start + 9].eq_ignore_ascii_case(&'t') { return TK_K_CONSTRAINT; }
-        } else if chars[start].eq_ignore_ascii_case(&'d') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'b') && chars[start + 8].eq_ignore_ascii_case(&'l') && chars[start + 9].eq_ignore_ascii_case(&'e') { return TK_K_DEFERRABLE; }
-        } else if chars[start].eq_ignore_ascii_case(&'r') {
-            if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'n') && chars[start + 7].eq_ignore_ascii_case(&'c') && chars[start + 8].eq_ignore_ascii_case(&'e') && chars[start + 9].eq_ignore_ascii_case(&'s') { return TK_K_REFERENCES; }
-        }
-    } else if len == 11 {
-        if chars[start + 0].eq_ignore_ascii_case(&'t') && chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'s') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') && chars[start + 8].eq_ignore_ascii_case(&'i') && chars[start + 9].eq_ignore_ascii_case(&'o') && chars[start + 10].eq_ignore_ascii_case(&'n') { return TK_K_TRANSACTION; }
-    } else if len == 12 {
-        if chars[start + 0].eq_ignore_ascii_case(&'c') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'t') && chars[start + 7] == '_' && chars[start + 8].eq_ignore_ascii_case(&'d') && chars[start + 9].eq_ignore_ascii_case(&'a') && chars[start + 10].eq_ignore_ascii_case(&'t') && chars[start + 11].eq_ignore_ascii_case(&'e') { return TK_K_CURRENT_DATE; }
-        if chars[start + 0].eq_ignore_ascii_case(&'c') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'t') && chars[start + 7] == '_' && chars[start + 8].eq_ignore_ascii_case(&'t') && chars[start + 9].eq_ignore_ascii_case(&'i') && chars[start + 10].eq_ignore_ascii_case(&'m') && chars[start + 11].eq_ignore_ascii_case(&'e') { return TK_K_CURRENT_TIME; }
-    } else if len == 13 {
-        if chars[start + 0].eq_ignore_ascii_case(&'a') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'r') && chars[start + 8].eq_ignore_ascii_case(&'e') && chars[start + 9].eq_ignore_ascii_case(&'m') && chars[start + 10].eq_ignore_ascii_case(&'e') && chars[start + 11].eq_ignore_ascii_case(&'n') && chars[start + 12].eq_ignore_ascii_case(&'t') { return TK_K_AUTOINCREMENT; }
-    } else if len == 17 {
-        if chars[start + 0].eq_ignore_ascii_case(&'c') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'t') && chars[start + 7] == '_' && chars[start + 8].eq_ignore_ascii_case(&'t') && chars[start + 9].eq_ignore_ascii_case(&'i') && chars[start + 10].eq_ignore_ascii_case(&'m') && chars[start + 11].eq_ignore_ascii_case(&'e') && chars[start + 12].eq_ignore_ascii_case(&'s') && chars[start + 13].eq_ignore_ascii_case(&'t') && chars[start + 14].eq_ignore_ascii_case(&'a') && chars[start + 15].eq_ignore_ascii_case(&'m') && chars[start + 16].eq_ignore_ascii_case(&'p') { return TK_K_CURRENT_TIMESTAMP; }
+    match end - start {
+        2 => {
+            match chars[start] {
+                'A' | 'a' => { if chars[start + 1].eq_ignore_ascii_case(&'s') { return TK_K_AS; } },
+                'B' | 'b' => { if chars[start + 1].eq_ignore_ascii_case(&'y') { return TK_K_BY; } },
+                'I' | 'i' => {
+                    match chars[start + 1] {
+                        'F' | 'f' => { return TK_K_IF; },
+                        'N' | 'n' => { return TK_K_IN; },
+                        'S' | 's' => { return TK_K_IS; },
+                        _ => {},
+                    }
+                },
+                'N' | 'n' => { if chars[start + 1].eq_ignore_ascii_case(&'o') { return TK_K_NO; } },
+                'O' | 'o' => {
+                    match chars[start + 1] {
+                        'F' | 'f' => { return TK_K_OF; },
+                        'N' | 'n' => { return TK_K_ON; },
+                        'R' | 'r' => { return TK_K_OR; },
+                        _ => {},
+                    }
+                },
+                'T' | 't' => { if chars[start + 1].eq_ignore_ascii_case(&'o') { return TK_K_TO; } },
+                _ => {},
+            }
+        },
+        3 => {
+            match chars[start] {
+                'A' | 'a' => {
+                    match chars[start + 1] {
+                        'D' | 'd' => { if chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_ADD; } },
+                        'L' | 'l' => { if chars[start + 2].eq_ignore_ascii_case(&'l') { return TK_K_ALL; } },
+                        'N' | 'n' => { if chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_AND; } },
+                        'S' | 's' => { if chars[start + 2].eq_ignore_ascii_case(&'c') { return TK_K_ASC; } },
+                        _ => {},
+                    }
+                },
+                'E' | 'e' => { if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'d') { return TK_K_END; } },
+                'F' | 'f' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'r') { return TK_K_FOR; } },
+                'K' | 'k' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'y') { return TK_K_KEY; } },
+                'N' | 'n' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'t') { return TK_K_NOT; } },
+                'R' | 'r' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'w') { return TK_K_ROW; } },
+                'S' | 's' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'t') { return TK_K_SET; } },
+                _ => {},
+            }
+        },
+        4 => {
+            match chars[start] {
+                'C' | 'c' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'s') {
+                        match chars[start + 3] {
+                            'E' | 'e' => { return TK_K_CASE; },
+                            'T' | 't' => { return TK_K_CAST; },
+                            _ => {},
+                        }
+                    }
+                },
+                'D' | 'd' => {
+                    match chars[start + 1] {
+                        'E' | 'e' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'c') { return TK_K_DESC; } },
+                        'R' | 'r' => { if chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'p') { return TK_K_DROP; } },
+                        _ => {},
+                    }
+                },
+                'E' | 'e' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'h') { return TK_K_EACH; } },
+                        'L' | 'l' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'e') { return TK_K_ELSE; } },
+                        _ => {},
+                    }
+                },
+                'F' | 'f' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_FAIL; } },
+                        'R' | 'r' => { if chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'m') { return TK_K_FROM; } },
+                        'U' | 'u' => { if chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_FULL; } },
+                        _ => {},
+                    }
+                },
+                'G' | 'g' => { if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'b') { return TK_K_GLOB; } },
+                'I' | 'i' => { if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'o') { return TK_K_INTO; } },
+                'J' | 'j' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_JOIN; } },
+                'L' | 'l' => {
+                    match chars[start + 1] {
+                        'E' | 'e' => { if chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'t') { return TK_K_LEFT; } },
+                        'I' | 'i' => { if chars[start + 2].eq_ignore_ascii_case(&'k') && chars[start + 3].eq_ignore_ascii_case(&'e') { return TK_K_LIKE; } },
+                        _ => {},
+                    }
+                },
+                'N' | 'n' => { if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') { return TK_K_NULL; } },
+                'P' | 'p' => { if chars[start + 1].eq_ignore_ascii_case(&'l') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_PLAN; } },
+                'T' | 't' => {
+                    match chars[start + 1] {
+                        'E' | 'e' => { if chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'p') { return TK_K_TEMP; } },
+                        'H' | 'h' => { if chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_THEN; } },
+                        _ => {},
+                    }
+                },
+                'V' | 'v' => { if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'w') { return TK_K_VIEW; } },
+                'W' | 'w' => {
+                    match chars[start + 1] {
+                        'H' | 'h' => { if chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'n') { return TK_K_WHEN; } },
+                        'I' | 'i' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'h') { return TK_K_WITH; } },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            }
+        },
+        5 => {
+            match chars[start] {
+                'A' | 'a' => {
+                    match chars[start + 1] {
+                        'B' | 'b' => { if chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_ABORT; } },
+                        'F' | 'f' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_AFTER; } },
+                        'L' | 'l' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_ALTER; } },
+                        _ => {},
+                    }
+                },
+                'B' | 'b' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'g') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'n') { return TK_K_BEGIN; } },
+                'C' | 'c' => {
+                    match chars[start + 1] {
+                        'H' | 'h' => { if chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'k') { return TK_K_CHECK; } },
+                        'R' | 'r' => { if chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'s') { return TK_K_CROSS; } },
+                        _ => {},
+                    }
+                },
+                'G' | 'g' => { if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'o') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'p') { return TK_K_GROUP; } },
+                'I' | 'i' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'n') {
+                        match chars[start + 2] {
+                            'D' | 'd' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') { return TK_K_INDEX; } },
+                            'N' | 'n' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_INNER; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'L' | 'l' => { if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_LIMIT; } },
+                'M' | 'm' => { if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'h') { return TK_K_MATCH; } },
+                'O' | 'o' => {
+                    match chars[start + 1] {
+                        'R' | 'r' => { if chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_ORDER; } },
+                        'U' | 'u' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') { return TK_K_OUTER; } },
+                        _ => {},
+                    }
+                },
+                'Q' | 'q' => { if chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'y') { return TK_K_QUERY; } },
+                'R' | 'r' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_RAISE; } },
+                        'I' | 'i' => { if chars[start + 2].eq_ignore_ascii_case(&'g') && chars[start + 3].eq_ignore_ascii_case(&'h') && chars[start + 4].eq_ignore_ascii_case(&'t') { return TK_K_RIGHT; } },
+                        _ => {},
+                    }
+                },
+                'T' | 't' => { if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'b') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_TABLE; } },
+                'U' | 'u' => {
+                    match chars[start + 1] {
+                        'N' | 'n' => { if chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'n') { return TK_K_UNION; } },
+                        'S' | 's' => { if chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'g') { return TK_K_USING; } },
+                        _ => {},
+                    }
+                },
+                'W' | 'w' => { if chars[start + 1].eq_ignore_ascii_case(&'h') && chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') { return TK_K_WHERE; } },
+                _ => {},
+            }
+        },
+        6 => {
+            match chars[start] {
+                'A' | 'a' => {
+                    match chars[start + 1] {
+                        'C' | 'c' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'n') { return TK_K_ACTION; } },
+                        'T' | 't' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'h') { return TK_K_ATTACH; } },
+                        _ => {},
+                    }
+                },
+                'B' | 'b' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_BEFORE; } },
+                'C' | 'c' => {
+                    match chars[start + 1] {
+                        'O' | 'o' => {
+                            match chars[start + 2] {
+                                'L' | 'l' => { if chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'n') { return TK_K_COLUMN; } },
+                                'M' | 'm' => { if chars[start + 3].eq_ignore_ascii_case(&'m') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_COMMIT; } },
+                                _ => {},
+                            }
+                        },
+                        'R' | 'r' => { if chars[start + 2].eq_ignore_ascii_case(&'e') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_CREATE; } },
+                        _ => {},
+                    }
+                },
+                'D' | 'd' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'e') {
+                        match chars[start + 2] {
+                            'L' | 'l' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_DELETE; } },
+                            'T' | 't' => { if chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'h') { return TK_K_DETACH; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'E' | 'e' => {
+                    match chars[start + 1] {
+                        'S' | 's' => { if chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_ESCAPE; } },
+                        'X' | 'x' => {
+                            match chars[start + 2] {
+                                'C' | 'c' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_EXCEPT; } },
+                                'I' | 'i' => { if chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'s') { return TK_K_EXISTS; } },
+                                _ => {},
+                            }
+                        },
+                        _ => {},
+                    }
+                },
+                'H' | 'h' => { if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'v') && chars[start + 3].eq_ignore_ascii_case(&'i') && chars[start + 4].eq_ignore_ascii_case(&'n') && chars[start + 5].eq_ignore_ascii_case(&'g') { return TK_K_HAVING; } },
+                'I' | 'i' => {
+                    match chars[start + 1] {
+                        'G' | 'g' => { if chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_IGNORE; } },
+                        'N' | 'n' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_INSERT; } },
+                        'S' | 's' => { if chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'l') && chars[start + 5].eq_ignore_ascii_case(&'l') { return TK_K_ISNULL; } },
+                        _ => {},
+                    }
+                },
+                'O' | 'o' => { if chars[start + 1].eq_ignore_ascii_case(&'f') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_OFFSET; } },
+                'P' | 'p' => { if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'g') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'a') { return TK_K_PRAGMA; } },
+                'R' | 'r' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'e') {
+                        match chars[start + 2] {
+                            'G' | 'g' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') && chars[start + 5].eq_ignore_ascii_case(&'p') { return TK_K_REGEXP; } },
+                            'N' | 'n' => { if chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'m') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_RENAME; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'S' | 's' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'c') && chars[start + 5].eq_ignore_ascii_case(&'t') { return TK_K_SELECT; } },
+                'U' | 'u' => {
+                    match chars[start + 1] {
+                        'N' | 'n' => { if chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'q') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_UNIQUE; } },
+                        'P' | 'p' => { if chars[start + 2].eq_ignore_ascii_case(&'d') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'e') { return TK_K_UPDATE; } },
+                        _ => {},
+                    }
+                },
+                'V' | 'v' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'a') {
+                        match chars[start + 2] {
+                            'C' | 'c' => { if chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'m') { return TK_K_VACUUM; } },
+                            'L' | 'l' => { if chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'s') { return TK_K_VALUES; } },
+                            _ => {},
+                        }
+                    }
+                },
+                _ => {},
+            }
+        },
+        7 => {
+            match chars[start] {
+                'A' | 'a' => { if chars[start + 1].eq_ignore_ascii_case(&'n') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'y') && chars[start + 5].eq_ignore_ascii_case(&'z') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_ANALYZE; } },
+                'B' | 'b' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'w') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_BETWEEN; } },
+                'C' | 'c' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'c') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'d') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_CASCADE; } },
+                        'O' | 'o' => { if chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'t') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_COLLATE; } },
+                        _ => {},
+                    }
+                },
+                'D' | 'd' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'l') && chars[start + 6].eq_ignore_ascii_case(&'t') { return TK_K_DEFAULT; } },
+                'E' | 'e' => { if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'p') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_EXPLAIN; } },
+                'F' | 'f' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'g') && chars[start + 6].eq_ignore_ascii_case(&'n') { return TK_K_FOREIGN; } },
+                'I' | 'i' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'n') {
+                        match chars[start + 2] {
+                            'D' | 'd' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'x') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'d') { return TK_K_INDEXED; } },
+                            'S' | 's' => { if chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'d') { return TK_K_INSTEAD; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'N' | 'n' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_NATURAL; } },
+                        'O' | 'o' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'l') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_NOTNULL; } },
+                        _ => {},
+                    }
+                },
+                'P' | 'p' => { if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'m') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'y') { return TK_K_PRIMARY; } },
+                'R' | 'r' => {
+                    if chars[start + 1].eq_ignore_ascii_case(&'e') {
+                        match chars[start + 2] {
+                            'I' | 'i' => { if chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'d') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'x') { return TK_K_REINDEX; } },
+                            'L' | 'l' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_RELEASE; } },
+                            'P' | 'p' => { if chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'a') && chars[start + 5].eq_ignore_ascii_case(&'c') && chars[start + 6].eq_ignore_ascii_case(&'e') { return TK_K_REPLACE; } },
+                            _ => {},
+                        }
+                    }
+                },
+                'T' | 't' => { if chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'i') && chars[start + 3].eq_ignore_ascii_case(&'g') && chars[start + 4].eq_ignore_ascii_case(&'g') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'r') { return TK_K_TRIGGER; } },
+                'V' | 'v' => { if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') { return TK_K_VIRTUAL; } },
+                'W' | 'w' => { if chars[start + 1].eq_ignore_ascii_case(&'i') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'h') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'u') && chars[start + 6].eq_ignore_ascii_case(&'t') { return TK_K_WITHOUT; } },
+                _ => {},
+            }
+        },
+        8 => {
+            match chars[start] {
+                'C' | 'c' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'f') && chars[start + 4].eq_ignore_ascii_case(&'l') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_CONFLICT; } },
+                'D' | 'd' => {
+                    match chars[start + 1] {
+                        'A' | 'a' => { if chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'a') && chars[start + 4].eq_ignore_ascii_case(&'b') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'s') && chars[start + 7].eq_ignore_ascii_case(&'e') { return TK_K_DATABASE; } },
+                        'E' | 'e' => { if chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'e') && chars[start + 7].eq_ignore_ascii_case(&'d') { return TK_K_DEFERRED; } },
+                        'I' | 'i' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_DISTINCT; } },
+                        _ => {},
+                    }
+                },
+                'R' | 'r' => {
+                    match chars[start + 1] {
+                        'E' | 'e' => { if chars[start + 2].eq_ignore_ascii_case(&'s') && chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') { return TK_K_RESTRICT; } },
+                        'O' | 'o' => { if chars[start + 2].eq_ignore_ascii_case(&'l') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'b') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'k') { return TK_K_ROLLBACK; } },
+                        _ => {},
+                    }
+                },
+                _ => {},
+            }
+        },
+        9 => {
+            match chars[start] {
+                'E' | 'e' => { if chars[start + 1].eq_ignore_ascii_case(&'x') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'l') && chars[start + 4].eq_ignore_ascii_case(&'u') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'v') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_EXCLUSIVE; } },
+                'I' | 'i' => {
+                    match chars[start + 1] {
+                        'M' | 'm' => { if chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'d') && chars[start + 5].eq_ignore_ascii_case(&'i') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'t') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_IMMEDIATE; } },
+                        'N' | 'n' => {
+                            match chars[start + 2] {
+                                'I' | 'i' => { if chars[start + 3].eq_ignore_ascii_case(&'t') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'l') && chars[start + 7].eq_ignore_ascii_case(&'l') && chars[start + 8].eq_ignore_ascii_case(&'y') { return TK_K_INITIALLY; } },
+                                'T' | 't' => { if chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'e') && chars[start + 7].eq_ignore_ascii_case(&'c') && chars[start + 8].eq_ignore_ascii_case(&'t') { return TK_K_INTERSECT; } },
+                                _ => {},
+                            }
+                        },
+                        _ => {},
+                    }
+                },
+                'R' | 'r' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'c') && chars[start + 3].eq_ignore_ascii_case(&'u') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'s') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'v') && chars[start + 8].eq_ignore_ascii_case(&'e') { return TK_K_RECURSIVE; } },
+                'S' | 's' => { if chars[start + 1].eq_ignore_ascii_case(&'a') && chars[start + 2].eq_ignore_ascii_case(&'v') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'p') && chars[start + 5].eq_ignore_ascii_case(&'o') && chars[start + 6].eq_ignore_ascii_case(&'i') && chars[start + 7].eq_ignore_ascii_case(&'n') && chars[start + 8].eq_ignore_ascii_case(&'t') { return TK_K_SAVEPOINT; } },
+                'T' | 't' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'m') && chars[start + 3].eq_ignore_ascii_case(&'p') && chars[start + 4].eq_ignore_ascii_case(&'o') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'r') && chars[start + 8].eq_ignore_ascii_case(&'y') { return TK_K_TEMPORARY; } },
+                _ => {},
+            }
+        },
+        10 => {
+            match chars[start] {
+                'C' | 'c' => { if chars[start + 1].eq_ignore_ascii_case(&'o') && chars[start + 2].eq_ignore_ascii_case(&'n') && chars[start + 3].eq_ignore_ascii_case(&'s') && chars[start + 4].eq_ignore_ascii_case(&'t') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'i') && chars[start + 8].eq_ignore_ascii_case(&'n') && chars[start + 9].eq_ignore_ascii_case(&'t') { return TK_K_CONSTRAINT; } },
+                'D' | 'd' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'r') && chars[start + 6].eq_ignore_ascii_case(&'a') && chars[start + 7].eq_ignore_ascii_case(&'b') && chars[start + 8].eq_ignore_ascii_case(&'l') && chars[start + 9].eq_ignore_ascii_case(&'e') { return TK_K_DEFERRABLE; } },
+                'R' | 'r' => { if chars[start + 1].eq_ignore_ascii_case(&'e') && chars[start + 2].eq_ignore_ascii_case(&'f') && chars[start + 3].eq_ignore_ascii_case(&'e') && chars[start + 4].eq_ignore_ascii_case(&'r') && chars[start + 5].eq_ignore_ascii_case(&'e') && chars[start + 6].eq_ignore_ascii_case(&'n') && chars[start + 7].eq_ignore_ascii_case(&'c') && chars[start + 8].eq_ignore_ascii_case(&'e') && chars[start + 9].eq_ignore_ascii_case(&'s') { return TK_K_REFERENCES; } },
+                _ => {},
+            }
+        },
+        11 => { if chars[start].eq_ignore_ascii_case(&'t') && chars[start + 1].eq_ignore_ascii_case(&'r') && chars[start + 2].eq_ignore_ascii_case(&'a') && chars[start + 3].eq_ignore_ascii_case(&'n') && chars[start + 4].eq_ignore_ascii_case(&'s') && chars[start + 5].eq_ignore_ascii_case(&'a') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'t') && chars[start + 8].eq_ignore_ascii_case(&'i') && chars[start + 9].eq_ignore_ascii_case(&'o') && chars[start + 10].eq_ignore_ascii_case(&'n') { return TK_K_TRANSACTION; } },
+        12 => {
+            if chars[start].eq_ignore_ascii_case(&'c') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'t') && chars[start + 7] == '_' {
+                match chars[start + 8] {
+                    'D' | 'd' => { if chars[start + 9].eq_ignore_ascii_case(&'a') && chars[start + 10].eq_ignore_ascii_case(&'t') && chars[start + 11].eq_ignore_ascii_case(&'e') { return TK_K_CURRENT_DATE; } },
+                    'T' | 't' => { if chars[start + 9].eq_ignore_ascii_case(&'i') && chars[start + 10].eq_ignore_ascii_case(&'m') && chars[start + 11].eq_ignore_ascii_case(&'e') { return TK_K_CURRENT_TIME; } },
+                    _ => {},
+                }
+            }
+        },
+        13 => { if chars[start].eq_ignore_ascii_case(&'a') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'t') && chars[start + 3].eq_ignore_ascii_case(&'o') && chars[start + 4].eq_ignore_ascii_case(&'i') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'c') && chars[start + 7].eq_ignore_ascii_case(&'r') && chars[start + 8].eq_ignore_ascii_case(&'e') && chars[start + 9].eq_ignore_ascii_case(&'m') && chars[start + 10].eq_ignore_ascii_case(&'e') && chars[start + 11].eq_ignore_ascii_case(&'n') && chars[start + 12].eq_ignore_ascii_case(&'t') { return TK_K_AUTOINCREMENT; } },
+        17 => { if chars[start].eq_ignore_ascii_case(&'c') && chars[start + 1].eq_ignore_ascii_case(&'u') && chars[start + 2].eq_ignore_ascii_case(&'r') && chars[start + 3].eq_ignore_ascii_case(&'r') && chars[start + 4].eq_ignore_ascii_case(&'e') && chars[start + 5].eq_ignore_ascii_case(&'n') && chars[start + 6].eq_ignore_ascii_case(&'t') && chars[start + 7] == '_' && chars[start + 8].eq_ignore_ascii_case(&'t') && chars[start + 9].eq_ignore_ascii_case(&'i') && chars[start + 10].eq_ignore_ascii_case(&'m') && chars[start + 11].eq_ignore_ascii_case(&'e') && chars[start + 12].eq_ignore_ascii_case(&'s') && chars[start + 13].eq_ignore_ascii_case(&'t') && chars[start + 14].eq_ignore_ascii_case(&'a') && chars[start + 15].eq_ignore_ascii_case(&'m') && chars[start + 16].eq_ignore_ascii_case(&'p') { return TK_K_CURRENT_TIMESTAMP; } },
+        _ => {},
     }
     return -1;
 }
@@ -1962,20 +2069,14 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '!' => {
                 end = try_NOT_EQ1(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT_EQ1; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '"' | 'A'..='W' | 'Y'..='Z' | '[' | '_' | '`' | 'a'..='w' | 'y'..='z' => {
                 end = try_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '$' | ':' | '?' | '@' => {
                 end = try_BIND_PARAMETER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_BIND_PARAMETER; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '%' => {
                 end = try_MOD(&lexer.chars, start);
@@ -1988,8 +2089,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             '\'' => {
                 end = try_STRING_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_STRING_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '(' => {
                 end = try_OPEN_PAR(&lexer.chars, start);
@@ -2016,30 +2115,22 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_MINUS; best_channel = 0; }
                 end = try_SINGLE_LINE_COMMENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_SINGLE_LINE_COMMENT; best_channel = 1; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '.' => {
                 end = try_DOT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_DOT; best_channel = 0; }
                 end = try_NUMERIC_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '/' => {
                 end = try_DIV(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_DIV; best_channel = 0; }
                 end = try_MULTILINE_COMMENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_MULTILINE_COMMENT; best_channel = 1; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '0'..='9' => {
                 end = try_NUMERIC_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NUMERIC_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             ';' => {
                 end = try_SCOL(&lexer.chars, start);
@@ -2054,16 +2145,12 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_LT_EQ; best_channel = 0; }
                 end = try_NOT_EQ2(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_NOT_EQ2; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '=' => {
                 end = try_ASSIGN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ASSIGN; best_channel = 0; }
                 end = try_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_EQ; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '>' => {
                 end = try_GT2(&lexer.chars, start);
@@ -2072,43 +2159,38 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_GT; best_channel = 0; }
                 end = try_GT_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_GT_EQ; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             'X' | 'x' => {
                 end = try_IDENTIFIER(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_IDENTIFIER; best_channel = 0; }
                 end = try_BLOB_LITERAL(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_BLOB_LITERAL; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '|' => {
                 end = try_PIPE2(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_PIPE2; best_channel = 0; }
                 end = try_PIPE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_PIPE; best_channel = 0; }
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
             },
             '~' => {
                 end = try_TILDE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_TILDE; best_channel = 0; }
             },
-            _ => {
-                end = try_UNEXPECTED_CHAR(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
-            },
+            _ => {},
         }
-        if best_end > start {
-            let kw_kind = classify_keyword(&lexer.chars, start, best_end);
-            if kw_kind >= 0 { best_kind = kw_kind; }
+        if best_end <= start {
+            end = try_UNEXPECTED_CHAR(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_UNEXPECTED_CHAR; best_channel = 0; }
         }
         if best_end <= start {
             let _ = ts.push_token_flagged(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark(), TokenFlags::LexError);
             triv_lo = ts.trivia_mark();
             lexer.pos = start + 1;
         } else {
+            if best_kind == TK_IDENTIFIER {
+                let kw_kind = classify_keyword(&lexer.chars, start, best_end);
+                if kw_kind >= 0 { best_kind = kw_kind; best_channel = 0; }
+            }
             let tok_start = start;
             if best_channel != 0 {
                 ts.push_trivia(best_kind, tok_start, best_end, best_channel);

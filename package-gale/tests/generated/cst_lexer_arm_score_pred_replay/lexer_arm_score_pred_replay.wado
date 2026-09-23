@@ -1151,12 +1151,28 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
     let mut la_reach_0: i32 = -1;
     let mut la_end_0: i32 = -1;
     let mut la_win_0: i32 = -1;
+    let mut la_arm_0_0: i32 = -1;
     la_alt_0_0: {
         pos = la_saved_0;
         if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_0; }
         pos += 1;
-        let la_arm_0_0 = pos;
-        let mut la_tot_0_0: i32 = -1;
+        la_arm_0_0 = pos;
+    }
+    let mut la_arm_0_1: i32 = -1;
+    la_alt_0_1: {
+        pos = la_saved_0;
+        if !( pos - start != 0 ) { break la_alt_0_1; }
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_0_1; }
+        pos += 1;
+        la_arm_0_1 = pos;
+    }
+    for let mut la_i_0 = 0; la_i_0 < 2; la_i_0 += 1 {
+        let la_at_0 = match la_i_0 { 0 => la_arm_0_0, _ => la_arm_0_1 };
+        if la_at_0 < 0 { continue; }
+        pos = la_at_0;
+        let mut la_tot_0: i32 = -1;
         let peek_save_1 = pos;
         let mut peek_ok_1 = false;
         let mut peek_end_1: i32 = -1;
@@ -1169,41 +1185,12 @@ fn apply_T_actions(lx: &mut Lexer, start: i32, end: i32) {
         }
         pos = peek_save_1;
         if peek_ok_1 {
-            la_tot_0_0 = peek_end_1;
+            la_tot_0 = peek_end_1;
         }
-        if la_tot_0_0 > la_reach_0 {
-            la_reach_0 = la_tot_0_0;
-            la_end_0 = la_arm_0_0;
-            la_win_0 = 0;
-        }
-    }
-    la_alt_0_1: {
-        pos = la_saved_0;
-        if !( pos - start != 0 ) { break la_alt_0_1; }
-        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_0_1; }
-        pos += 1;
-        let la_arm_0_1 = pos;
-        let mut la_tot_0_1: i32 = -1;
-        let peek_save_2 = pos;
-        let mut peek_ok_2 = false;
-        let mut peek_end_2: i32 = -1;
-        peek_2: {
-            if pos >= chars.len() { break peek_2; }
-            if !((chars[pos] matches { 'b'..='z' })) { break peek_2; }
-            pos += 1;
-            peek_end_2 = pos;
-            peek_ok_2 = true;
-        }
-        pos = peek_save_2;
-        if peek_ok_2 {
-            la_tot_0_1 = peek_end_2;
-        }
-        if la_tot_0_1 > la_reach_0 {
-            la_reach_0 = la_tot_0_1;
-            la_end_0 = la_arm_0_1;
-            la_win_0 = 1;
+        if la_tot_0 > la_reach_0 {
+            la_reach_0 = la_tot_0;
+            la_end_0 = la_at_0;
+            la_win_0 = la_i_0;
         }
     }
     if la_win_0 < 0 { return; }
@@ -1235,67 +1222,54 @@ fn apply_MARK_actions(lx: &mut Lexer, start: i32, end: i32) {
 fn try_T(lx: &Lexer, start: i32) -> i32 {
     let chars = &lx.chars;
     let mut pos = start;
-    let la_saved_3 = pos;
-    let mut la_reach_3: i32 = -1;
-    let mut la_end_3: i32 = -1;
-    let mut la_win_3: i32 = -1;
-    la_alt_3_0: {
-        pos = la_saved_3;
-        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_3_0; }
+    let la_saved_2 = pos;
+    let mut la_reach_2: i32 = -1;
+    let mut la_end_2: i32 = -1;
+    let mut la_win_2: i32 = -1;
+    let mut la_arm_2_0: i32 = -1;
+    la_alt_2_0: {
+        pos = la_saved_2;
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_2_0; }
         pos += 1;
-        let la_arm_3_0 = pos;
-        let mut la_tot_3_0: i32 = -1;
-        let peek_save_4 = pos;
-        let mut peek_ok_4 = false;
-        let mut peek_end_4: i32 = -1;
-        peek_4: {
-            if pos >= chars.len() { break peek_4; }
-            if !((chars[pos] matches { 'b'..='z' })) { break peek_4; }
+        la_arm_2_0 = pos;
+    }
+    let mut la_arm_2_1: i32 = -1;
+    la_alt_2_1: {
+        pos = la_saved_2;
+        if !( pos - start != 0 ) { break la_alt_2_1; }
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_2_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_2_1; }
+        pos += 1;
+        la_arm_2_1 = pos;
+    }
+    for let mut la_i_2 = 0; la_i_2 < 2; la_i_2 += 1 {
+        let la_at_2 = match la_i_2 { 0 => la_arm_2_0, _ => la_arm_2_1 };
+        if la_at_2 < 0 { continue; }
+        pos = la_at_2;
+        let mut la_tot_2: i32 = -1;
+        let peek_save_3 = pos;
+        let mut peek_ok_3 = false;
+        let mut peek_end_3: i32 = -1;
+        peek_3: {
+            if pos >= chars.len() { break peek_3; }
+            if !((chars[pos] matches { 'b'..='z' })) { break peek_3; }
             pos += 1;
-            peek_end_4 = pos;
-            peek_ok_4 = true;
+            peek_end_3 = pos;
+            peek_ok_3 = true;
         }
-        pos = peek_save_4;
-        if peek_ok_4 {
-            la_tot_3_0 = peek_end_4;
+        pos = peek_save_3;
+        if peek_ok_3 {
+            la_tot_2 = peek_end_3;
         }
-        if la_tot_3_0 > la_reach_3 {
-            la_reach_3 = la_tot_3_0;
-            la_end_3 = la_arm_3_0;
-            la_win_3 = 0;
+        if la_tot_2 > la_reach_2 {
+            la_reach_2 = la_tot_2;
+            la_end_2 = la_at_2;
+            la_win_2 = la_i_2;
         }
     }
-    la_alt_3_1: {
-        pos = la_saved_3;
-        if !( pos - start != 0 ) { break la_alt_3_1; }
-        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_3_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_3_1; }
-        pos += 1;
-        let la_arm_3_1 = pos;
-        let mut la_tot_3_1: i32 = -1;
-        let peek_save_5 = pos;
-        let mut peek_ok_5 = false;
-        let mut peek_end_5: i32 = -1;
-        peek_5: {
-            if pos >= chars.len() { break peek_5; }
-            if !((chars[pos] matches { 'b'..='z' })) { break peek_5; }
-            pos += 1;
-            peek_end_5 = pos;
-            peek_ok_5 = true;
-        }
-        pos = peek_save_5;
-        if peek_ok_5 {
-            la_tot_3_1 = peek_end_5;
-        }
-        if la_tot_3_1 > la_reach_3 {
-            la_reach_3 = la_tot_3_1;
-            la_end_3 = la_arm_3_1;
-            la_win_3 = 1;
-        }
-    }
-    if la_win_3 < 0 { return -1; }
-    pos = la_end_3;
+    if la_win_2 < 0 { return -1; }
+    pos = la_end_2;
     if pos >= chars.len() { return -1; }
     if !((chars[pos] matches { 'b'..='z' })) { return -1; }
     pos += 1;
@@ -1334,14 +1308,14 @@ fn try_WS(lx: &Lexer, start: i32) -> i32 {
     if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { return -1; }
     pos += 1;
     loop {
-        let rep_saved_6 = pos;
-        rep_6: {
-            if pos >= chars.len() { break rep_6; }
-            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_6; }
+        let rep_saved_4 = pos;
+        rep_4: {
+            if pos >= chars.len() { break rep_4; }
+            if !((chars[pos] matches { ' ' | '\t' | '\r' | '\n' })) { break rep_4; }
             pos += 1;
             continue;
         }
-        pos = rep_saved_6;
+        pos = rep_saved_4;
         break;
     }
     return pos;

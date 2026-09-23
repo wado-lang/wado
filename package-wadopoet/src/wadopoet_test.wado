@@ -101,6 +101,25 @@ test "next_id generates unique ids" {
     assert c == 2;
 }
 
+test "hoist_fn defines each distinct key once, where write_hoisted is" {
+    let mut w = CodeWriter::new();
+    let define = |name: &String| `fn ${*name}() {}\n`;
+    let a = w.hoist_fn("x", "f", define);
+    let b = w.hoist_fn("y", "f", define);
+    let again = w.hoist_fn("x", "f", define);
+    w.line("// body");
+    w.write_hoisted();
+    assert a == "f0" && b == "f1" && again == "f0";
+    assert w.to_string() == "// body\nfn f0() {}\nfn f1() {}\n", `got: ${w.to_string()}`;
+}
+
+#[expect_trap]
+test "to_string refuses a hoisted definition never written" {
+    let mut w = CodeWriter::new();
+    w.hoist_fn("x", "f", |name: &String| `fn ${*name}() {}\n`);
+    w.to_string();
+}
+
 test "else_begin for if/else-if chain" {
     let mut w = CodeWriter::new();
     w.begin("if x > 0");

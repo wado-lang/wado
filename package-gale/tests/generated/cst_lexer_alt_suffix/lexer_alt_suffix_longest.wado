@@ -1111,12 +1111,27 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
     let mut la_reach_0: i32 = -1;
     let mut la_end_0: i32 = -1;
     let mut la_win_0: i32 = -1;
+    let mut la_arm_0_0: i32 = -1;
     la_alt_0_0: {
         pos = la_saved_0;
         if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_0; }
         pos += 1;
-        let la_arm_0_0 = pos;
-        let mut la_tot_0_0: i32 = -1;
+        la_arm_0_0 = pos;
+    }
+    let mut la_arm_0_1: i32 = -1;
+    la_alt_0_1: {
+        pos = la_saved_0;
+        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_0_1; }
+        pos += 1;
+        la_arm_0_1 = pos;
+    }
+    for let mut la_i_0 = 0; la_i_0 < 2; la_i_0 += 1 {
+        let la_at_0 = match la_i_0 { 0 => la_arm_0_0, _ => la_arm_0_1 };
+        if la_at_0 < 0 { continue; }
+        pos = la_at_0;
+        let mut la_tot_0: i32 = -1;
         let peek_save_1 = pos;
         let mut peek_ok_1 = false;
         let mut peek_end_1: i32 = -1;
@@ -1130,41 +1145,12 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
         }
         pos = peek_save_1;
         if peek_ok_1 {
-            la_tot_0_0 = peek_end_1;
+            la_tot_0 = peek_end_1;
         }
-        if la_tot_0_0 > la_reach_0 {
-            la_reach_0 = la_tot_0_0;
-            la_end_0 = la_arm_0_0;
-            la_win_0 = 0;
-        }
-    }
-    la_alt_0_1: {
-        pos = la_saved_0;
-        if pos >= chars.len() || chars[pos] != 'a' { break la_alt_0_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'b' { break la_alt_0_1; }
-        pos += 1;
-        let la_arm_0_1 = pos;
-        let mut la_tot_0_1: i32 = -1;
-        let peek_save_2 = pos;
-        let mut peek_ok_2 = false;
-        let mut peek_end_2: i32 = -1;
-        peek_2: {
-            if pos >= chars.len() || chars[pos] != 'b' { break peek_2; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != 'c' { break peek_2; }
-            pos += 1;
-            peek_end_2 = pos;
-            peek_ok_2 = true;
-        }
-        pos = peek_save_2;
-        if peek_ok_2 {
-            la_tot_0_1 = peek_end_2;
-        }
-        if la_tot_0_1 > la_reach_0 {
-            la_reach_0 = la_tot_0_1;
-            la_end_0 = la_arm_0_1;
-            la_win_0 = 1;
+        if la_tot_0 > la_reach_0 {
+            la_reach_0 = la_tot_0;
+            la_end_0 = la_at_0;
+            la_win_0 = la_i_0;
         }
     }
     if la_win_0 < 0 { return -1; }
@@ -1178,68 +1164,54 @@ fn try_I(chars: &List<char>, start: i32) -> i32 {
 
 fn try_K(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_3 = pos;
-    let mut la_reach_3: i32 = -1;
-    let mut la_end_3: i32 = -1;
-    let mut la_win_3: i32 = -1;
-    la_alt_3_0: {
-        pos = la_saved_3;
-        if pos >= chars.len() || chars[pos] != 'x' { break la_alt_3_0; }
+    let la_saved_2 = pos;
+    let mut la_reach_2: i32 = -1;
+    let mut la_end_2: i32 = -1;
+    let mut la_win_2: i32 = -1;
+    let mut la_arm_2_0: i32 = -1;
+    la_alt_2_0: {
+        pos = la_saved_2;
+        if pos >= chars.len() || chars[pos] != 'x' { break la_alt_2_0; }
         pos += 1;
-        let la_arm_3_0 = pos;
-        let mut la_tot_3_0: i32 = -1;
-        let peek_save_4 = pos;
-        let mut peek_ok_4 = false;
-        let mut peek_end_4: i32 = -1;
-        peek_4: {
-            if pos >= chars.len() || chars[pos] != 'y' { break peek_4; }
+        la_arm_2_0 = pos;
+    }
+    let mut la_arm_2_1: i32 = -1;
+    la_alt_2_1: {
+        pos = la_saved_2;
+        if pos >= chars.len() || chars[pos] != 'x' { break la_alt_2_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_2_1; }
+        pos += 1;
+        la_arm_2_1 = pos;
+    }
+    for let mut la_i_2 = 0; la_i_2 < 2; la_i_2 += 1 {
+        let la_at_2 = match la_i_2 { 0 => la_arm_2_0, _ => la_arm_2_1 };
+        if la_at_2 < 0 { continue; }
+        pos = la_at_2;
+        let mut la_tot_2: i32 = -1;
+        let peek_save_3 = pos;
+        let mut peek_ok_3 = false;
+        let mut peek_end_3: i32 = -1;
+        peek_3: {
+            if pos >= chars.len() || chars[pos] != 'y' { break peek_3; }
             pos += 1;
-            if pos >= chars.len() || chars[pos] != 'z' { break peek_4; }
+            if pos >= chars.len() || chars[pos] != 'z' { break peek_3; }
             pos += 1;
-            peek_end_4 = pos;
-            peek_ok_4 = true;
+            peek_end_3 = pos;
+            peek_ok_3 = true;
         }
-        pos = peek_save_4;
-        if peek_ok_4 {
-            la_tot_3_0 = peek_end_4;
+        pos = peek_save_3;
+        if peek_ok_3 {
+            la_tot_2 = peek_end_3;
         }
-        if la_tot_3_0 > la_reach_3 {
-            la_reach_3 = la_tot_3_0;
-            la_end_3 = la_arm_3_0;
-            la_win_3 = 0;
+        if la_tot_2 > la_reach_2 {
+            la_reach_2 = la_tot_2;
+            la_end_2 = la_at_2;
+            la_win_2 = la_i_2;
         }
     }
-    la_alt_3_1: {
-        pos = la_saved_3;
-        if pos >= chars.len() || chars[pos] != 'x' { break la_alt_3_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'y' { break la_alt_3_1; }
-        pos += 1;
-        let la_arm_3_1 = pos;
-        let mut la_tot_3_1: i32 = -1;
-        let peek_save_5 = pos;
-        let mut peek_ok_5 = false;
-        let mut peek_end_5: i32 = -1;
-        peek_5: {
-            if pos >= chars.len() || chars[pos] != 'y' { break peek_5; }
-            pos += 1;
-            if pos >= chars.len() || chars[pos] != 'z' { break peek_5; }
-            pos += 1;
-            peek_end_5 = pos;
-            peek_ok_5 = true;
-        }
-        pos = peek_save_5;
-        if peek_ok_5 {
-            la_tot_3_1 = peek_end_5;
-        }
-        if la_tot_3_1 > la_reach_3 {
-            la_reach_3 = la_tot_3_1;
-            la_end_3 = la_arm_3_1;
-            la_win_3 = 1;
-        }
-    }
-    if la_win_3 < 0 { return -1; }
-    pos = la_end_3;
+    if la_win_2 < 0 { return -1; }
+    pos = la_end_2;
     if pos >= chars.len() || chars[pos] != 'y' { return -1; }
     pos += 1;
     if pos >= chars.len() || chars[pos] != 'z' { return -1; }
@@ -1249,120 +1221,90 @@ fn try_K(chars: &List<char>, start: i32) -> i32 {
 
 fn try_P(chars: &List<char>, start: i32) -> i32 {
     let mut pos = start;
-    let la_saved_6 = pos;
-    let mut la_reach_6: i32 = -1;
-    let mut la_end_6: i32 = -1;
-    let mut la_win_6: i32 = -1;
-    la_alt_6_0: {
-        pos = la_saved_6;
-        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_6_0; }
+    let la_saved_4 = pos;
+    let mut la_reach_4: i32 = -1;
+    let mut la_end_4: i32 = -1;
+    let mut la_win_4: i32 = -1;
+    let mut la_arm_4_0: i32 = -1;
+    la_alt_4_0: {
+        pos = la_saved_4;
+        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_4_0; }
         pos += 1;
-        let la_arm_6_0 = pos;
-        let mut la_tot_6_0: i32 = -1;
-        let peek_save_7 = pos;
-        let mut peek_ok_7 = false;
-        let mut peek_end_7: i32 = -1;
-        peek_7: {
-            let alts_saved_8 = pos;
-            let mut alts_best_8 = -1;
-            alts_8_0: {
-                pos = alts_saved_8;
-                if pos >= chars.len() || chars[pos] != 'q' { break alts_8_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != 'r' { break alts_8_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != 's' { break alts_8_0; }
-                pos += 1;
-                if pos > alts_best_8 { alts_best_8 = pos; }
+        la_arm_4_0 = pos;
+    }
+    let mut la_arm_4_1: i32 = -1;
+    la_alt_4_1: {
+        pos = la_saved_4;
+        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_4_1; }
+        pos += 1;
+        if pos >= chars.len() || chars[pos] != 'q' { break la_alt_4_1; }
+        pos += 1;
+        la_arm_4_1 = pos;
+    }
+    for let mut la_i_4 = 0; la_i_4 < 2; la_i_4 += 1 {
+        let la_at_4 = match la_i_4 { 0 => la_arm_4_0, _ => la_arm_4_1 };
+        if la_at_4 < 0 { continue; }
+        pos = la_at_4;
+        let mut la_tot_4: i32 = -1;
+        let peek_save_5 = pos;
+        let mut peek_ok_5 = false;
+        let mut peek_end_5: i32 = -1;
+        peek_5: {
+            let alts_saved_6 = pos;
+            alts_done_6: {
+                alts_6_0: {
+                    pos = alts_saved_6;
+                    if pos >= chars.len() || chars[pos] != 'q' { break alts_6_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 'r' { break alts_6_0; }
+                    pos += 1;
+                    if pos >= chars.len() || chars[pos] != 's' { break alts_6_0; }
+                    pos += 1;
+                    break alts_done_6;
+                }
+                alts_6_1: {
+                    pos = alts_saved_6;
+                    if pos >= chars.len() || chars[pos] != 'r' { break alts_6_1; }
+                    pos += 1;
+                    break alts_done_6;
+                }
+                break peek_5;
             }
-            alts_8_1: {
-                pos = alts_saved_8;
-                if pos >= chars.len() || chars[pos] != 'r' { break alts_8_1; }
-                pos += 1;
-                if pos > alts_best_8 { alts_best_8 = pos; }
-            }
-            if alts_best_8 < 0 { break peek_7; }
-            pos = alts_best_8;
-            peek_end_7 = pos;
-            peek_ok_7 = true;
+            peek_end_5 = pos;
+            peek_ok_5 = true;
         }
-        pos = peek_save_7;
-        if peek_ok_7 {
-            la_tot_6_0 = peek_end_7;
+        pos = peek_save_5;
+        if peek_ok_5 {
+            la_tot_4 = peek_end_5;
         }
-        if la_tot_6_0 > la_reach_6 {
-            la_reach_6 = la_tot_6_0;
-            la_end_6 = la_arm_6_0;
-            la_win_6 = 0;
+        if la_tot_4 > la_reach_4 {
+            la_reach_4 = la_tot_4;
+            la_end_4 = la_at_4;
+            la_win_4 = la_i_4;
         }
     }
-    la_alt_6_1: {
-        pos = la_saved_6;
-        if pos >= chars.len() || chars[pos] != 'p' { break la_alt_6_1; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'q' { break la_alt_6_1; }
-        pos += 1;
-        let la_arm_6_1 = pos;
-        let mut la_tot_6_1: i32 = -1;
-        let peek_save_9 = pos;
-        let mut peek_ok_9 = false;
-        let mut peek_end_9: i32 = -1;
-        peek_9: {
-            let alts_saved_10 = pos;
-            let mut alts_best_10 = -1;
-            alts_10_0: {
-                pos = alts_saved_10;
-                if pos >= chars.len() || chars[pos] != 'q' { break alts_10_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != 'r' { break alts_10_0; }
-                pos += 1;
-                if pos >= chars.len() || chars[pos] != 's' { break alts_10_0; }
-                pos += 1;
-                if pos > alts_best_10 { alts_best_10 = pos; }
-            }
-            alts_10_1: {
-                pos = alts_saved_10;
-                if pos >= chars.len() || chars[pos] != 'r' { break alts_10_1; }
-                pos += 1;
-                if pos > alts_best_10 { alts_best_10 = pos; }
-            }
-            if alts_best_10 < 0 { break peek_9; }
-            pos = alts_best_10;
-            peek_end_9 = pos;
-            peek_ok_9 = true;
+    if la_win_4 < 0 { return -1; }
+    pos = la_end_4;
+    let alts_saved_7 = pos;
+    alts_done_7: {
+        alts_7_0: {
+            pos = alts_saved_7;
+            if pos >= chars.len() || chars[pos] != 'q' { break alts_7_0; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 'r' { break alts_7_0; }
+            pos += 1;
+            if pos >= chars.len() || chars[pos] != 's' { break alts_7_0; }
+            pos += 1;
+            break alts_done_7;
         }
-        pos = peek_save_9;
-        if peek_ok_9 {
-            la_tot_6_1 = peek_end_9;
+        alts_7_1: {
+            pos = alts_saved_7;
+            if pos >= chars.len() || chars[pos] != 'r' { break alts_7_1; }
+            pos += 1;
+            break alts_done_7;
         }
-        if la_tot_6_1 > la_reach_6 {
-            la_reach_6 = la_tot_6_1;
-            la_end_6 = la_arm_6_1;
-            la_win_6 = 1;
-        }
+        return -1;
     }
-    if la_win_6 < 0 { return -1; }
-    pos = la_end_6;
-    let alts_saved_11 = pos;
-    let mut alts_best_11 = -1;
-    alts_11_0: {
-        pos = alts_saved_11;
-        if pos >= chars.len() || chars[pos] != 'q' { break alts_11_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 'r' { break alts_11_0; }
-        pos += 1;
-        if pos >= chars.len() || chars[pos] != 's' { break alts_11_0; }
-        pos += 1;
-        if pos > alts_best_11 { alts_best_11 = pos; }
-    }
-    alts_11_1: {
-        pos = alts_saved_11;
-        if pos >= chars.len() || chars[pos] != 'r' { break alts_11_1; }
-        pos += 1;
-        if pos > alts_best_11 { alts_best_11 = pos; }
-    }
-    if alts_best_11 < 0 { return -1; }
-    pos = alts_best_11;
     return pos;
 }
 
@@ -1387,25 +1329,20 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
             'a' => {
                 end = try_I(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_I; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'p' => {
                 end = try_P(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_P; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
             'x' => {
                 end = try_K(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_K; }
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
             },
-            _ => {
-                end = try_J(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_J; }
-            },
+            _ => {},
+        }
+        if best_end <= start {
+            end = try_J(&lexer.chars, start);
+            if end > best_end { best_end = end; best_kind = TK_J; }
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
