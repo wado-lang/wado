@@ -7,7 +7,9 @@
 use crate::compiler_trace;
 use crate::wir::{WirInstr, WirPackage, WirType, WirTypeDef, WirTypeId};
 use crate::wir_optimize::nullability::Nullability;
-use crate::wir_optimize::util::{self, is_same_free_read, is_side_effect_free, may_trap_in};
+use crate::wir_optimize::util::{
+    self, Footprint, is_same_free_read, is_side_effect_free, may_trap_in,
+};
 use crate::wir_visitor::{WirMutVisitor, WirRefVisitor};
 use indexmap::{IndexMap, IndexSet};
 
@@ -388,6 +390,7 @@ pub(super) fn run_peephole(instrs: &mut [WirInstr], null: &Nullability, _types: 
         // must get there first — a `select` is past the reach of
         // `try_eliminate_const_if`.
         changed |= rewrite_everywhere(instrs, &mut |instr| try_select_pure_if(instr, null));
+        changed |= rewrite_everywhere(instrs, &mut |instr| try_fold_boolean_select(instr, null));
         changed |= fuse_local_tees(instrs);
         if !changed {
             break;
@@ -702,24 +705,18 @@ fn try_fold_branchless_increment(instr: &mut WirInstr) -> bool {
     if !is_boolean_valued(condition.peel_hint()) {
         return false;
     }
-    // The fold turns `if cond { x = x + 1 }` into `x = x + cond`, which is
-    // only sound when evaluating `cond` does not itself write to `x` —
-    // Wasm reads `x` for the LHS of the add before evaluating `cond`,
-    // so any in-cond `local.set x` would be clobbered by the post-fold
-    // store. This pattern arises from HFS's call-site sync wrapper,
-    // whose re-read inserts `local.set _hfs_v` inside an expression
-    // when the HFS scalar is being incremented in the if's then-branch.
-    if writes_local(condition.peel_hint(), name) {
+    // `x + cond` reads `x` before `cond` runs, where the `if` read it after.
+    let get = Box::new(WirInstr::LocalGet {
+        name: name.clone(),
+        result_ty: WirType::I32,
+    });
+    if Footprint::writes(condition.peel_hint()).overlaps(&Footprint::reads(&get)) {
         return false;
     }
     // Transform: x = x + condition. The branch is gone, so a branch hint on
     // the condition is dropped rather than kept around the added operand.
     let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
     cond.take_branch_hint();
-    let get = Box::new(WirInstr::LocalGet {
-        name: name.clone(),
-        result_ty: WirType::I32,
-    });
     *instr = WirInstr::LocalSet {
         name: name.clone(),
         value: Box::new(WirInstr::I32Add(get, cond)),
@@ -765,8 +762,7 @@ fn within_node_budget(instr: &WirInstr, budget: u32) -> bool {
 /// `select` evaluates both arms, so both must be observation-free and unable to
 /// trap; the node budget keeps the speculated work smaller than the branch it
 /// replaces. It also evaluates them *before* its condition — Wasm pops the
-/// condition last — so the condition must be observation-free too, or the
-/// reorder is visible. All three pure makes the order immaterial.
+/// condition last — so the condition must write nothing they read.
 fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     const ARM_NODE_BUDGET: u32 = 5;
     let WirInstr::If {
@@ -791,16 +787,15 @@ fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
     if matches!(condition.peel_hint(), WirInstr::I32Const(_)) {
         return false;
     }
-    if !is_side_effect_free(condition.peel_hint()) {
-        return false;
-    }
     let (Some(a), Some(b)) = (sole_arm_value(then_body), sole_arm_value(else_body)) else {
         return false;
     };
+    let cond_writes = Footprint::writes(condition.peel_hint());
     let arm_ok = |arm: &WirInstr| {
         is_side_effect_free(arm)
             && !may_trap_in(arm, null)
             && within_node_budget(arm, ARM_NODE_BUDGET)
+            && !cond_writes.overlaps(&Footprint::reads(arm))
     };
     if !arm_ok(a) || !arm_ok(b) {
         return false;
@@ -817,6 +812,40 @@ fn try_select_pure_if(instr: &mut WirInstr, null: &Nullability) -> bool {
         if_false,
         ty: Some(ty),
     };
+    true
+}
+
+/// Fold a `select` over 0/1 values into the connective it computes:
+/// `select(c, x, 0)` is `c & x`, `select(c, 1, x)` is `c | x`.
+fn try_fold_boolean_select(instr: &mut WirInstr, null: &Nullability) -> bool {
+    let WirInstr::Select {
+        condition,
+        if_true,
+        if_false,
+        ty: Some(WirType::I32),
+    } = instr
+    else {
+        return false;
+    };
+    let (build, other): (fn(Box<WirInstr>, Box<WirInstr>) -> WirInstr, &WirInstr) =
+        match (if_true.as_ref(), if_false.as_ref()) {
+            (x, WirInstr::I32Const(0)) => (WirInstr::I32And, x),
+            (WirInstr::I32Const(1), x) => (WirInstr::I32Or, x),
+            _ => return false,
+        };
+    // The connective evaluates `x` after `c`, where the `select` evaluated it before.
+    if !is_boolean_valued(condition.peel_hint())
+        || !is_boolean_valued(other)
+        || !is_side_effect_free(other)
+        || may_trap_in(other, null)
+        || Footprint::writes(condition.peel_hint()).overlaps(&Footprint::reads(other))
+    {
+        return false;
+    }
+    let other = Box::new(other.clone());
+    let mut cond = std::mem::replace(condition, Box::new(WirInstr::Nop));
+    cond.take_branch_hint();
+    *instr = build(cond, other);
     true
 }
 
@@ -1060,28 +1089,11 @@ fn power_of_two_minus_one_width(v: i32) -> Option<u32> {
     }
 }
 
-/// Returns true if evaluating `instr` (or any of its sub-instructions)
-/// performs `local.set` / `local.tee` against the local named
-/// `target_name`. Used by `fold_branchless_increment` to refuse the
-/// fold when the condition mutates the very local being incremented —
-/// the fold relies on `cond` being a pure rvalue.
-fn writes_local(instr: &WirInstr, target_name: &str) -> bool {
-    if let WirInstr::LocalSet { name, .. } | WirInstr::LocalTee { name, .. } = instr
-        && name == target_name
-    {
-        return true;
-    }
-    let mut found = false;
-    instr.for_each_child(&mut |child| {
-        if !found && writes_local(child, target_name) {
-            found = true;
-        }
-    });
-    found
-}
-
 /// Returns true if the instruction is guaranteed to produce 0 or 1.
 fn is_boolean_valued(instr: &WirInstr) -> bool {
+    if let WirInstr::I32And(l, r) | WirInstr::I32Or(l, r) | WirInstr::I32Xor(l, r) = instr {
+        return is_boolean_valued(l) && is_boolean_valued(r);
+    }
     matches!(
         instr,
         // Integer comparisons
@@ -1118,6 +1130,7 @@ fn is_boolean_valued(instr: &WirInstr) -> bool {
             | WirInstr::F64Gt(..)
             | WirInstr::F64Le(..)
             | WirInstr::F64Ge(..)
+            | WirInstr::I32Const(0 | 1)
             // Eqz / null checks
             | WirInstr::I32Eqz(..)
             | WirInstr::I64Eqz(..)
@@ -1675,6 +1688,64 @@ mod tests {
             WirInstr::I32Extend8S(inner) | WirInstr::I32Extend16S(inner) => inner,
             _ => panic!("not an extend"),
         }
+    }
+
+    fn boolean_select(condition: WirInstr, if_true: WirInstr, if_false: WirInstr) -> WirInstr {
+        WirInstr::Select {
+            condition: Box::new(condition),
+            if_true: Box::new(if_true),
+            if_false: Box::new(if_false),
+            ty: Some(WirType::I32),
+        }
+    }
+
+    #[test]
+    fn boolean_select_folds_to_connective() {
+        let mut and = boolean_select(
+            WirInstr::I32Eqz(Box::new(local_get("a", WirType::I32))),
+            WirInstr::I32Eqz(Box::new(local_get("b", WirType::I32))),
+            WirInstr::I32Const(0),
+        );
+        assert!(try_fold_boolean_select(
+            &mut and,
+            &Nullability::new(&WirLocals::default())
+        ));
+        assert_matches!(and, WirInstr::I32And(..));
+    }
+
+    #[test]
+    fn boolean_select_keeps_order_when_condition_writes() {
+        // `select` reads `x` before the condition's tee writes it; `&` would not.
+        let mut instr = boolean_select(
+            WirInstr::I32Eqz(Box::new(WirInstr::LocalTee {
+                name: "x".to_string(),
+                value: Box::new(WirInstr::I32Const(0)),
+            })),
+            WirInstr::I32Eqz(Box::new(local_get("x", WirType::I32))),
+            WirInstr::I32Const(0),
+        );
+        assert!(!try_fold_boolean_select(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
+        assert_matches!(instr, WirInstr::Select { .. });
+    }
+
+    #[test]
+    fn boolean_select_folds_past_a_write_it_does_not_read() {
+        let mut instr = boolean_select(
+            WirInstr::I32Eqz(Box::new(WirInstr::LocalTee {
+                name: "y".to_string(),
+                value: Box::new(WirInstr::I32Const(0)),
+            })),
+            WirInstr::I32Eqz(Box::new(local_get("x", WirType::I32))),
+            WirInstr::I32Const(0),
+        );
+        assert!(try_fold_boolean_select(
+            &mut instr,
+            &Nullability::new(&WirLocals::default())
+        ));
+        assert_matches!(instr, WirInstr::I32And(..));
     }
 
     #[test]

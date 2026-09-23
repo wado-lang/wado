@@ -124,18 +124,19 @@ global global:index_ref_mut_field_assign.wado::$const_obj_35: ref null Array<u8>
 global mut global:index_ref_mut_field_assign.wado::$const_obj_39: ref null Array<u8> = ref.null none;
 
 fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscript_writes_into_the_element"() {
+    let $load_0: i32;
     let $v0_1: i32;
     let $v0_3: i32;
     let $sroa_h_cell: ref "index_ref_mut_field_assign.wado//Cell";
     $sroa_h_cell = struct.new "index_ref_mut_field_assign.wado//Cell" { n: 1 };
     $sroa_h_cell.n = 7;
-    $v0_1 = $sroa_h_cell.n;
+    $v0_1 = local.tee $load_0($sroa_h_cell.n);
     if @unlikely($v0_1 != 7) {
         cold_path;
         "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscript_writes_into_the_element$cold1"($v0_1);
         unreachable;
     }
-    $sroa_h_cell.n = $sroa_h_cell.n + 3;
+    $sroa_h_cell.n = $load_0 + 3;
     $v0_3 = $sroa_h_cell.n;
     if @unlikely($v0_3 != 10) {
         cold_path;
@@ -145,19 +146,20 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
 }
 
 fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them"() {
+    let $load_0: ref "index_ref_mut_field_assign.wado//Cell";
     let $v0_1: i32;
     let $v0_3: i32;
     let $sroa_o_inner: ref "index_ref_mut_field_assign.wado//Holder<i32>";
     $sroa_o_inner = struct.new "index_ref_mut_field_assign.wado//Holder<i32>" { item: 1, cell: struct.new "index_ref_mut_field_assign.wado//Cell" { n: 1 } };
-    $sroa_o_inner.cell.n = 7;
-    $v0_1 = $sroa_o_inner.cell.n;
+    local.tee $load_0($sroa_o_inner.cell).n = 7;
+    $v0_1 = $load_0.n;
     if @unlikely($v0_1 != 7) {
         cold_path;
         "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them$cold1"($v0_1);
         unreachable;
     }
-    $sroa_o_inner.cell.n = $sroa_o_inner.cell.n + 3;
-    $v0_3 = $sroa_o_inner.cell.n;
+    $load_0.n = $load_0.n + 3;
+    $v0_3 = $load_0.n;
     if @unlikely($v0_3 != 10) {
         cold_path;
         "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them$cold0"($v0_3);
@@ -190,6 +192,8 @@ fn "index_ref_mut_field_assign.wado/$cm_export__$test_2_an_indexassign_target_re
 }
 
 fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscript_writes_into_the_element$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -210,21 +214,21 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
     let start_72: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(127), used: 0 };
     $local_7.used = 126;
-    self_18 = $local_7.repr;
+    self_18 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_18, 0, global:index_ref_mut_field_assign.wado::$const_obj_8, 0, 20);
-    self_22 = $local_7.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     if ref.is_null(global:index_ref_mut_field_assign.wado::$const_obj_7) {
         global:index_ref_mut_field_assign.wado::$const_obj_7 = array.new_data<u8>("$test_0_a_field_assignment_through_a_subscript_writes_into_the_element");
     }
     builtin::array_copy<u8>(self_22, offset_23, global:index_ref_mut_field_assign.wado::$const_obj_7, 0, 70);
-    self_26 = $local_7.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 90;
     builtin::array_copy<u8>(self_26, offset_27, global:index_ref_mut_field_assign.wado::$const_obj_6, 0, 4);
-    self_30 = $local_7.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 94;
     builtin::array_copy<u8>(self_30, offset_31, global:index_ref_mut_field_assign.wado::$const_obj_5, 0, 31);
-    self_34 = $local_7.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 125;
     builtin::array_copy<u8>(self_34, offset_35, global:index_ref_mut_field_assign.wado::$const_obj_4, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -236,9 +240,9 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
     }
     start_46 = $local_7.used;
     $local_7.used = new_used_45;
-    self_48 = $local_7.repr;
+    self_48 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_48, start_46, global:index_ref_mut_field_assign.wado::$const_obj_3, 0, 27);
-    self_52 = $local_7.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 27;
     builtin::array_copy<u8>(self_52, offset_53, global:index_ref_mut_field_assign.wado::$const_obj_2, 0, 10);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -256,6 +260,8 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
 }
 
 fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscript_writes_into_the_element$cold1"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -276,21 +282,21 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
     let start_72: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
     $local_5.used = 126;
-    self_18 = $local_5.repr;
+    self_18 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_18, 0, global:index_ref_mut_field_assign.wado::$const_obj_8, 0, 20);
-    self_22 = $local_5.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     if ref.is_null(global:index_ref_mut_field_assign.wado::$const_obj_15) {
         global:index_ref_mut_field_assign.wado::$const_obj_15 = array.new_data<u8>("$test_0_a_field_assignment_through_a_subscript_writes_into_the_element");
     }
     builtin::array_copy<u8>(self_22, offset_23, global:index_ref_mut_field_assign.wado::$const_obj_15, 0, 70);
-    self_26 = $local_5.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 90;
     builtin::array_copy<u8>(self_26, offset_27, global:index_ref_mut_field_assign.wado::$const_obj_6, 0, 4);
-    self_30 = $local_5.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 94;
     builtin::array_copy<u8>(self_30, offset_31, global:index_ref_mut_field_assign.wado::$const_obj_5, 0, 31);
-    self_34 = $local_5.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 125;
     builtin::array_copy<u8>(self_34, offset_35, global:index_ref_mut_field_assign.wado::$const_obj_4, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -302,9 +308,9 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
     }
     start_46 = $local_5.used;
     $local_5.used = new_used_45;
-    self_48 = $local_5.repr;
+    self_48 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_48, start_46, global:index_ref_mut_field_assign.wado::$const_obj_11, 0, 26);
-    self_52 = $local_5.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 26;
     builtin::array_copy<u8>(self_52, offset_53, global:index_ref_mut_field_assign.wado::$const_obj_2, 0, 10);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -322,6 +328,8 @@ fn "index_ref_mut_field_assign.wado/$test_0_a_field_assignment_through_a_subscri
 }
 
 fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -342,18 +350,18 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
     let start_72: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(139), used: 0 };
     $local_7.used = 118;
-    self_18 = $local_7.repr;
+    self_18 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_18, 0, global:index_ref_mut_field_assign.wado::$const_obj_8, 0, 20);
-    self_22 = $local_7.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     builtin::array_copy<u8>(self_22, offset_23, global:index_ref_mut_field_assign.wado::$const_obj_23, 0, 62);
-    self_26 = $local_7.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 82;
     builtin::array_copy<u8>(self_26, offset_27, global:index_ref_mut_field_assign.wado::$const_obj_6, 0, 4);
-    self_30 = $local_7.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 86;
     builtin::array_copy<u8>(self_30, offset_31, global:index_ref_mut_field_assign.wado::$const_obj_5, 0, 31);
-    self_34 = $local_7.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 117;
     builtin::array_copy<u8>(self_34, offset_35, global:index_ref_mut_field_assign.wado::$const_obj_4, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -365,9 +373,9 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
     }
     start_46 = $local_7.used;
     $local_7.used = new_used_45;
-    self_48 = $local_7.repr;
+    self_48 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_48, start_46, global:index_ref_mut_field_assign.wado::$const_obj_19, 0, 33);
-    self_52 = $local_7.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 33;
     builtin::array_copy<u8>(self_52, offset_53, global:index_ref_mut_field_assign.wado::$const_obj_18, 0, 16);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -385,6 +393,8 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
 }
 
 fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through_every_one_of_them$cold1"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_18: ref Array<u8>;
@@ -405,18 +415,18 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
     let start_72: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(138), used: 0 };
     $local_5.used = 118;
-    self_18 = $local_5.repr;
+    self_18 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_18, 0, global:index_ref_mut_field_assign.wado::$const_obj_8, 0, 20);
-    self_22 = $local_5.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 20;
     builtin::array_copy<u8>(self_22, offset_23, global:index_ref_mut_field_assign.wado::$const_obj_23, 0, 62);
-    self_26 = $local_5.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 82;
     builtin::array_copy<u8>(self_26, offset_27, global:index_ref_mut_field_assign.wado::$const_obj_6, 0, 4);
-    self_30 = $local_5.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 86;
     builtin::array_copy<u8>(self_30, offset_31, global:index_ref_mut_field_assign.wado::$const_obj_5, 0, 31);
-    self_34 = $local_5.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 117;
     builtin::array_copy<u8>(self_34, offset_35, global:index_ref_mut_field_assign.wado::$const_obj_4, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -428,9 +438,9 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
     }
     start_46 = $local_5.used;
     $local_5.used = new_used_45;
-    self_48 = $local_5.repr;
+    self_48 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_48, start_46, global:index_ref_mut_field_assign.wado::$const_obj_27, 0, 32);
-    self_52 = $local_5.repr;
+    self_52 = $load_5;
     offset_53 = start_46 + 32;
     builtin::array_copy<u8>(self_52, offset_53, global:index_ref_mut_field_assign.wado::$const_obj_18, 0, 16);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -448,6 +458,8 @@ fn "index_ref_mut_field_assign.wado/$test_1_a_chain_of_subscripts_writes_through
 }
 
 fn "index_ref_mut_field_assign.wado/$test_2_an_indexassign_target_reaches_its_receiver_through_indexrefmut$cold0"($v0) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_3: ref "core:prelude/string.wado//String";
     let $local_4: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -468,21 +480,21 @@ fn "index_ref_mut_field_assign.wado/$test_2_an_indexassign_target_reaches_its_re
     let start_68: i32;
     $local_3 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(126), used: 0 };
     $local_3.used = 126;
-    self_14 = $local_3.repr;
+    self_14 = local.tee $load_0($local_3.repr);
     builtin::array_copy<u8>(self_14, 0, global:index_ref_mut_field_assign.wado::$const_obj_8, 0, 20);
-    self_18 = $local_3.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     if ref.is_null(global:index_ref_mut_field_assign.wado::$const_obj_39) {
         global:index_ref_mut_field_assign.wado::$const_obj_39 = array.new_data<u8>("$test_2_an_indexassign_target_reaches_its_receiver_through_indexrefmut");
     }
     builtin::array_copy<u8>(self_18, offset_19, global:index_ref_mut_field_assign.wado::$const_obj_39, 0, 70);
-    self_22 = $local_3.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 90;
     builtin::array_copy<u8>(self_22, offset_23, global:index_ref_mut_field_assign.wado::$const_obj_6, 0, 4);
-    self_26 = $local_3.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 94;
     builtin::array_copy<u8>(self_26, offset_27, global:index_ref_mut_field_assign.wado::$const_obj_5, 0, 31);
-    self_30 = $local_3.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 125;
     builtin::array_copy<u8>(self_30, offset_31, global:index_ref_mut_field_assign.wado::$const_obj_4, 0, 1);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -494,9 +506,9 @@ fn "index_ref_mut_field_assign.wado/$test_2_an_indexassign_target_reaches_its_re
     }
     start_42 = $local_3.used;
     $local_3.used = new_used_41;
-    self_44 = $local_3.repr;
+    self_44 = local.tee $load_5($local_3.repr);
     builtin::array_copy<u8>(self_44, start_42, global:index_ref_mut_field_assign.wado::$const_obj_35, 0, 26);
-    self_48 = $local_3.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 26;
     builtin::array_copy<u8>(self_48, offset_49, global:index_ref_mut_field_assign.wado::$const_obj_34, 0, 10);
     $local_4 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_3 };
@@ -596,19 +608,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -671,7 +684,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l40;

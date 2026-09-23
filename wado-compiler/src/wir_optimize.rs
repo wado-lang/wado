@@ -17,6 +17,7 @@ mod nullability;
 mod nullable_ref;
 mod peephole;
 mod prune_dead_data;
+mod reuse_loads;
 mod sroa_variant_return;
 mod util;
 
@@ -183,6 +184,9 @@ fn optimize_scoped(
     // flatten seq assignments so the copy propagation below sees the
     // destructures they hide. Leftover Nops/dead locals are cleaned in phase 7.
     profiler.span_start(&scope.name("phase5_peephole"));
+    wir_pass(scope, "reuse_struct_loads", module, profiler, |m| {
+        reuse_loads::reuse_struct_loads(m);
+    });
     wir_pass(scope, "run_peephole", module, profiler, |m| {
         let types = &m.types;
         for func in &mut m.functions {

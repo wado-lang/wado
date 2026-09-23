@@ -97,6 +97,7 @@ global mut global:value_copy_mut_receiver_alias.wado::$const_obj_7: ref null Arr
 global global:value_copy_mut_receiver_alias.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(65, 115, 115, 101, 114, 116, 105, 111, 110, 32, 102, 97, 105, 108, 101, 100, 32, 105, 110, 32);
 
 fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_the_mutated__mut_self_receiver"() {
+    let $load_1: i32;
     let n: i32;
     let t: ref "core:prelude//List<i32>";
     let v_11: ref "core:prelude//List<i32>";
@@ -109,12 +110,12 @@ fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_th
     let $array_clone_src_1: ref Array<i32>;
     $array_clone_src_1 = t.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = t.used;
+    $array_clone_len_3 = local.tee $load_1(t.used);
     let $array_clone_dst_2: ref Array<i32>;
     $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3);
     builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
     drop($array_clone_dst_2);
-    $sroa_snapshot_used = t.used;
+    $sroa_snapshot_used = $load_1;
     if ref.is_null($sroa_w_payload) == 0 {
         v_11 = ref.as_non_null($sroa_w_payload);
         used = v_11.used;
@@ -140,6 +141,8 @@ fn "value_copy_mut_receiver_alias.wado/$cm_export__$test_0_by_value_arg_is_indep
 }
 
 fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_the_mutated__mut_self_receiver$cold0"(n) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let start_14: i32;
@@ -164,21 +167,21 @@ fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_th
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_4, 128);
     start_14 = $local_4.used;
     $local_4.used = 128;
-    self_16 = $local_4.repr;
+    self_16 = local.tee $load_1($local_4.repr);
     builtin::array_copy<u8>(self_16, start_14, global:value_copy_mut_receiver_alias.wado::$const_obj_8, 0, 20);
-    self_20 = $local_4.repr;
+    self_20 = $load_1;
     offset_21 = start_14 + 20;
     if ref.is_null(global:value_copy_mut_receiver_alias.wado::$const_obj_7) {
         global:value_copy_mut_receiver_alias.wado::$const_obj_7 = array.new_data<u8>("$test_0_by_value_arg_is_independent_of_the_mutated__mut_self_receiver");
     }
     builtin::array_copy<u8>(self_20, offset_21, global:value_copy_mut_receiver_alias.wado::$const_obj_7, 0, 69);
-    self_24 = $local_4.repr;
+    self_24 = $load_1;
     offset_25 = start_14 + 89;
     builtin::array_copy<u8>(self_24, offset_25, global:value_copy_mut_receiver_alias.wado::$const_obj_6, 0, 4);
-    self_28 = $local_4.repr;
+    self_28 = $load_1;
     offset_29 = start_14 + 93;
     builtin::array_copy<u8>(self_28, offset_29, global:value_copy_mut_receiver_alias.wado::$const_obj_5, 0, 34);
-    self_32 = $local_4.repr;
+    self_32 = $load_1;
     offset_33 = start_14 + 127;
     builtin::array_copy<u8>(self_32, offset_33, global:value_copy_mut_receiver_alias.wado::$const_obj_4, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -190,9 +193,9 @@ fn "value_copy_mut_receiver_alias.wado/$test_0_by_value_arg_is_independent_of_th
     }
     start_44 = $local_4.used;
     $local_4.used = new_used_43;
-    self_46 = $local_4.repr;
+    self_46 = local.tee $load_6($local_4.repr);
     builtin::array_copy<u8>(self_46, start_44, global:value_copy_mut_receiver_alias.wado::$const_obj_3, 0, 19);
-    self_50 = $local_4.repr;
+    self_50 = $load_6;
     offset_51 = start_44 + 19;
     builtin::array_copy<u8>(self_50, offset_51, global:value_copy_mut_receiver_alias.wado::$const_obj_2, 0, 3);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -292,19 +295,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -367,7 +371,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l28;
@@ -376,13 +380,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 

@@ -354,6 +354,8 @@ condition: arr[1] == 20
 }
 
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back"() {
+    let $load_0: i32;
+    let $load_1: ref "Array<core:prelude/list.wado/List<i32>>";
     let m: ref "core:prelude//List<core:prelude/list.wado/List<i32>>";
     let $cond_2: bool;
     let $v0_3: i32;
@@ -378,18 +380,18 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
     m = struct.new "core:prelude//List<core:prelude/list.wado/List<i32>>" { repr: array.new_fixed<ref "core:prelude//List<i32>">(struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 }, struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(3, 4), used: 2 }), used: 2 };
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    $v1_30 = m.used;
+    $v1_30 = local.tee $load_0(m.used);
     if @unlikely(0 >= $v1_30) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(m, $v1_30);
         unreachable;
     }
-    self_20 = builtin::array_get_value<ref "core:prelude//List<i32>">(m.repr, 0);
-    value_22 = $v1_36 = m.used; if @unlikely(0 >= $v1_36) {
+    self_20 = builtin::array_get_value<ref "core:prelude//List<i32>">(local.tee $load_1(m.repr), 0);
+    value_22 = $v1_36 = $load_0; if @unlikely(0 >= $v1_36) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(m, $v1_36);
         unreachable;
-    }; self_40 = builtin::array_get_value<ref "core:prelude//List<i32>">(m.repr, 0); $v1_42 = self_40.used; if @unlikely(1 >= $v1_42) {
+    }; self_40 = builtin::array_get_value<ref "core:prelude//List<i32>">($load_1, 0); $v1_42 = self_40.used; if @unlikely(1 >= $v1_42) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_42);
         unreachable;
@@ -407,13 +409,13 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold3"();
         unreachable;
     }
-    $v1_57 = m.used;
+    $v1_57 = $load_0;
     if @unlikely(0 >= $v1_57) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1_57);
         unreachable;
     }
-    self_49 = builtin::array_get_value<ref "core:prelude//List<i32>">(m.repr, 0);
+    self_49 = builtin::array_get_value<ref "core:prelude//List<i32>">($load_1, 0);
     $v1_51 = self_49.used;
     if @unlikely(1 >= $v1_51) {
         cold_path;
@@ -426,13 +428,13 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold2"($v0_3);
         unreachable;
     }
-    $v1_71 = m.used;
+    $v1_71 = $load_0;
     if @unlikely(0 >= $v1_71) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1_71);
         unreachable;
     }
-    self_63 = builtin::array_get_value<ref "core:prelude//List<i32>">(m.repr, 0);
+    self_63 = builtin::array_get_value<ref "core:prelude//List<i32>">($load_1, 0);
     $v1_65 = self_63.used;
     if @unlikely(0 >= $v1_65) {
         cold_path;
@@ -445,13 +447,13 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
         "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold1"($v0_5);
         unreachable;
     }
-    $v1_85 = m.used;
+    $v1_85 = $load_0;
     if @unlikely(1 >= $v1_85) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_85);
         unreachable;
     }
-    self_77 = builtin::array_get_value<ref "core:prelude//List<i32>">(m.repr, 1);
+    self_77 = builtin::array_get_value<ref "core:prelude//List<i32>">($load_1, 1);
     $v1_79 = self_77.used;
     if @unlikely(0 >= $v1_79) {
         cold_path;
@@ -467,6 +469,8 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back"() {
+    let $load_0: i32;
+    let $load_1: ref "Array<compound_assign_side_effects.wado/Holder>";
     let a: ref "core:prelude//List<compound_assign_side_effects.wado/Holder>";
     let $cond_2: bool;
     let $v0_3: i32;
@@ -478,36 +482,36 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     global:compound_assign_side_effects.wado::CALL_COUNT = 0;
     a = struct.new "core:prelude//List<compound_assign_side_effects.wado/Holder>" { repr: array.new_fixed<ref "compound_assign_side_effects.wado//Holder">(struct.new "compound_assign_side_effects.wado//Holder" { value: 1 }, struct.new "compound_assign_side_effects.wado//Holder" { value: 2 }), used: 2 };
     global:compound_assign_side_effects.wado::CALL_COUNT = global:compound_assign_side_effects.wado::CALL_COUNT + 1;
-    $v1_16 = a.used; if @unlikely(0 >= $v1_16) {
+    $v1_16 = local.tee $load_0(a.used); if @unlikely(0 >= $v1_16) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(a, $v1_16);
         unreachable;
-    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">(a.repr, 0).value = $v1_22 = a.used; if @unlikely(0 >= $v1_22) {
+    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">(local.tee $load_1(a.repr), 0).value = $v1_22 = $load_0; if @unlikely(0 >= $v1_22) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(a, $v1_22);
         unreachable;
-    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">(a.repr, 0).value + 5;
+    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">($load_1, 0).value + 5;
     $cond_2 = global:compound_assign_side_effects.wado::CALL_COUNT == 1;
     if @unlikely($cond_2 == 0) {
         cold_path;
         "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold2"();
         unreachable;
     }
-    $v0_3 = $v1_28 = a.used; if @unlikely(0 >= $v1_28) {
+    $v0_3 = $v1_28 = $load_0; if @unlikely(0 >= $v1_28) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1_28);
         unreachable;
-    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">(a.repr, 0).value;
+    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">($load_1, 0).value;
     if @unlikely($v0_3 != 6) {
         cold_path;
         "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold1"($v0_3);
         unreachable;
     }
-    $v0_5 = $v1_34 = a.used; if @unlikely(1 >= $v1_34) {
+    $v0_5 = $v1_34 = $load_0; if @unlikely(1 >= $v1_34) {
         cold_path;
         "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1_34);
         unreachable;
-    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">(a.repr, 1).value;
+    }; builtin::array_get_value<ref "compound_assign_side_effects.wado//Holder">($load_1, 1).value;
     if @unlikely($v0_5 != 2) {
         cold_path;
         "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold0"($v0_5);
@@ -771,6 +775,8 @@ fn "compound_assign_side_effects.wado/$cm_export__$test_8_plain_local_x____1_sti
 }
 
 fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_subscript_once$cold0"() {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_21: ref Array<u8>;
@@ -792,18 +798,18 @@ fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_sub
     let start_75: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 };
     $local_7.used = 111;
-    self_21 = $local_7.repr;
+    self_21 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_21, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_25 = $local_7.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 20;
     builtin::array_copy<u8>(self_25, offset_26, global:compound_assign_side_effects.wado::$const_obj_26, 0, 53);
-    self_29 = $local_7.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 73;
     builtin::array_copy<u8>(self_29, offset_30, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_33 = $local_7.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 77;
     builtin::array_copy<u8>(self_33, offset_34, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_37 = $local_7.repr;
+    self_37 = $load_0;
     offset_38 = 0 + 110;
     builtin::array_copy<u8>(self_37, offset_38, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -815,9 +821,9 @@ fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_sub
     }
     start_49 = $local_7.used;
     $local_7.used = new_used_48;
-    self_51 = $local_7.repr;
+    self_51 = local.tee $load_5($local_7.repr);
     builtin::array_copy<u8>(self_51, start_49, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_55 = $local_7.repr;
+    self_55 = $load_5;
     offset_56 = start_49 + 28;
     builtin::array_copy<u8>(self_55, offset_56, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -835,6 +841,8 @@ fn "compound_assign_side_effects.wado/$test_0_arr_bump_______1_evaluates_the_sub
 }
 
 fn "compound_assign_side_effects.wado/$test_1_custom_indexassign_obj_bump_______1_evaluates_the_subscript_once$cold1"() {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_17: ref Array<u8>;
@@ -856,21 +864,21 @@ fn "compound_assign_side_effects.wado/$test_1_custom_indexassign_obj_bump_______
     let start_71: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 };
     $local_5.used = 130;
-    self_17 = $local_5.repr;
+    self_17 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_17, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_21 = $local_5.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_42) {
         global:compound_assign_side_effects.wado::$const_obj_42 = array.new_data<u8>("$test_1_custom_indexassign_obj_bump_______1_evaluates_the_subscript_once");
     }
     builtin::array_copy<u8>(self_21, offset_22, global:compound_assign_side_effects.wado::$const_obj_42, 0, 72);
-    self_25 = $local_5.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 92;
     builtin::array_copy<u8>(self_25, offset_26, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_29 = $local_5.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 96;
     builtin::array_copy<u8>(self_29, offset_30, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_33 = $local_5.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 129;
     builtin::array_copy<u8>(self_33, offset_34, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -882,9 +890,9 @@ fn "compound_assign_side_effects.wado/$test_1_custom_indexassign_obj_bump_______
     }
     start_45 = $local_5.used;
     $local_5.used = new_used_44;
-    self_47 = $local_5.repr;
+    self_47 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_47, start_45, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_51 = $local_5.repr;
+    self_51 = $load_5;
     offset_52 = start_45 + 28;
     builtin::array_copy<u8>(self_51, offset_52, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -902,6 +910,8 @@ fn "compound_assign_side_effects.wado/$test_1_custom_indexassign_obj_bump_______
 }
 
 fn "compound_assign_side_effects.wado/$test_2_get_obj___field____1_calls_get_obj_once$cold0"() {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_2: ref "core:prelude/string.wado//String";
     let $local_3: ref "core:prelude/format.wado//Formatter";
     let self_12: ref Array<u8>;
@@ -923,18 +933,18 @@ fn "compound_assign_side_effects.wado/$test_2_get_obj___field____1_calls_get_obj
     let start_66: i32;
     $local_2 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     $local_2.used = 105;
-    self_12 = $local_2.repr;
+    self_12 = local.tee $load_0($local_2.repr);
     builtin::array_copy<u8>(self_12, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_16 = $local_2.repr;
+    self_16 = $load_0;
     offset_17 = 0 + 20;
     builtin::array_copy<u8>(self_16, offset_17, global:compound_assign_side_effects.wado::$const_obj_50, 0, 47);
-    self_20 = $local_2.repr;
+    self_20 = $load_0;
     offset_21 = 0 + 67;
     builtin::array_copy<u8>(self_20, offset_21, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_24 = $local_2.repr;
+    self_24 = $load_0;
     offset_25 = 0 + 71;
     builtin::array_copy<u8>(self_24, offset_25, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_28 = $local_2.repr;
+    self_28 = $load_0;
     offset_29 = 0 + 104;
     builtin::array_copy<u8>(self_28, offset_29, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -946,9 +956,9 @@ fn "compound_assign_side_effects.wado/$test_2_get_obj___field____1_calls_get_obj
     }
     start_40 = $local_2.used;
     $local_2.used = new_used_39;
-    self_42 = $local_2.repr;
+    self_42 = local.tee $load_5($local_2.repr);
     builtin::array_copy<u8>(self_42, start_40, global:compound_assign_side_effects.wado::$const_obj_46, 0, 27);
-    self_46 = $local_2.repr;
+    self_46 = $load_5;
     offset_47 = start_40 + 27;
     builtin::array_copy<u8>(self_46, offset_47, global:compound_assign_side_effects.wado::$const_obj_45, 0, 11);
     $local_3 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_2 };
@@ -966,6 +976,8 @@ fn "compound_assign_side_effects.wado/$test_2_get_obj___field____1_calls_get_obj
 }
 
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold0"($v0) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_15: ref "core:prelude/string.wado//String";
     let $local_16: ref "core:prelude/format.wado//Formatter";
     let start_24: i32;
@@ -990,21 +1002,21 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_15, 140);
     start_24 = $local_15.used;
     $local_15.used = 140;
-    self_26 = $local_15.repr;
+    self_26 = local.tee $load_1($local_15.repr);
     builtin::array_copy<u8>(self_26, start_24, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_30 = $local_15.repr;
+    self_30 = $load_1;
     offset_31 = start_24 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_58) {
         global:compound_assign_side_effects.wado::$const_obj_58 = array.new_data<u8>("$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_58, 0, 82);
-    self_34 = $local_15.repr;
+    self_34 = $load_1;
     offset_35 = start_24 + 102;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_38 = $local_15.repr;
+    self_38 = $load_1;
     offset_39 = start_24 + 106;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_42 = $local_15.repr;
+    self_42 = $load_1;
     offset_43 = start_24 + 139;
     builtin::array_copy<u8>(self_42, offset_43, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 };
@@ -1016,9 +1028,9 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     }
     start_54 = $local_15.used;
     $local_15.used = new_used_53;
-    self_56 = $local_15.repr;
+    self_56 = local.tee $load_6($local_15.repr);
     builtin::array_copy<u8>(self_56, start_54, global:compound_assign_side_effects.wado::$const_obj_54, 0, 25);
-    self_60 = $local_15.repr;
+    self_60 = $load_6;
     offset_61 = start_54 + 25;
     builtin::array_copy<u8>(self_60, offset_61, global:compound_assign_side_effects.wado::$const_obj_53, 0, 9);
     $local_16 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_15 };
@@ -1036,6 +1048,8 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold1"($v0) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_14: ref "core:prelude/format.wado//Formatter";
     let start_24: i32;
@@ -1060,21 +1074,21 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_13, 140);
     start_24 = $local_13.used;
     $local_13.used = 140;
-    self_26 = $local_13.repr;
+    self_26 = local.tee $load_1($local_13.repr);
     builtin::array_copy<u8>(self_26, start_24, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_30 = $local_13.repr;
+    self_30 = $load_1;
     offset_31 = start_24 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_66) {
         global:compound_assign_side_effects.wado::$const_obj_66 = array.new_data<u8>("$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_66, 0, 82);
-    self_34 = $local_13.repr;
+    self_34 = $load_1;
     offset_35 = start_24 + 102;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_38 = $local_13.repr;
+    self_38 = $load_1;
     offset_39 = start_24 + 106;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_42 = $local_13.repr;
+    self_42 = $load_1;
     offset_43 = start_24 + 139;
     builtin::array_copy<u8>(self_42, offset_43, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
@@ -1086,9 +1100,9 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     }
     start_54 = $local_13.used;
     $local_13.used = new_used_53;
-    self_56 = $local_13.repr;
+    self_56 = local.tee $load_6($local_13.repr);
     builtin::array_copy<u8>(self_56, start_54, global:compound_assign_side_effects.wado::$const_obj_62, 0, 25);
-    self_60 = $local_13.repr;
+    self_60 = $load_6;
     offset_61 = start_54 + 25;
     builtin::array_copy<u8>(self_60, offset_61, global:compound_assign_side_effects.wado::$const_obj_61, 0, 9);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
@@ -1106,6 +1120,8 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold2"($v0) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/format.wado//Formatter";
     let start_24: i32;
@@ -1130,21 +1146,21 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, 140);
     start_24 = $local_11.used;
     $local_11.used = 140;
-    self_26 = $local_11.repr;
+    self_26 = local.tee $load_1($local_11.repr);
     builtin::array_copy<u8>(self_26, start_24, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_30 = $local_11.repr;
+    self_30 = $load_1;
     offset_31 = start_24 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_74) {
         global:compound_assign_side_effects.wado::$const_obj_74 = array.new_data<u8>("$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_74, 0, 82);
-    self_34 = $local_11.repr;
+    self_34 = $load_1;
     offset_35 = start_24 + 102;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_38 = $local_11.repr;
+    self_38 = $load_1;
     offset_39 = start_24 + 106;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_42 = $local_11.repr;
+    self_42 = $load_1;
     offset_43 = start_24 + 139;
     builtin::array_copy<u8>(self_42, offset_43, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -1156,9 +1172,9 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     }
     start_54 = $local_11.used;
     $local_11.used = new_used_53;
-    self_56 = $local_11.repr;
+    self_56 = local.tee $load_6($local_11.repr);
     builtin::array_copy<u8>(self_56, start_54, global:compound_assign_side_effects.wado::$const_obj_70, 0, 26);
-    self_60 = $local_11.repr;
+    self_60 = $load_6;
     offset_61 = start_54 + 26;
     builtin::array_copy<u8>(self_60, offset_61, global:compound_assign_side_effects.wado::$const_obj_69, 0, 9);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -1176,6 +1192,8 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back$cold3"() {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let start_23: i32;
@@ -1201,21 +1219,21 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, 140);
     start_23 = $local_9.used;
     $local_9.used = 140;
-    self_25 = $local_9.repr;
+    self_25 = local.tee $load_1($local_9.repr);
     builtin::array_copy<u8>(self_25, start_23, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_29 = $local_9.repr;
+    self_29 = $load_1;
     offset_30 = start_23 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_82) {
         global:compound_assign_side_effects.wado::$const_obj_82 = array.new_data<u8>("$test_3_nested_matrix_bump____j_____1_evaluates_the_row_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_29, offset_30, global:compound_assign_side_effects.wado::$const_obj_82, 0, 82);
-    self_33 = $local_9.repr;
+    self_33 = $load_1;
     offset_34 = start_23 + 102;
     builtin::array_copy<u8>(self_33, offset_34, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_37 = $local_9.repr;
+    self_37 = $load_1;
     offset_38 = start_23 + 106;
     builtin::array_copy<u8>(self_37, offset_38, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_41 = $local_9.repr;
+    self_41 = $load_1;
     offset_42 = start_23 + 139;
     builtin::array_copy<u8>(self_41, offset_42, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_9 };
@@ -1227,9 +1245,9 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
     }
     start_53 = $local_9.used;
     $local_9.used = new_used_52;
-    self_55 = $local_9.repr;
+    self_55 = local.tee $load_6($local_9.repr);
     builtin::array_copy<u8>(self_55, start_53, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_59 = $local_9.repr;
+    self_59 = $load_6;
     offset_60 = start_53 + 28;
     builtin::array_copy<u8>(self_59, offset_60, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_9 };
@@ -1247,6 +1265,8 @@ fn "compound_assign_side_effects.wado/$test_3_nested_matrix_bump____j_____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold0"($v0) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_11: ref "core:prelude/string.wado//String";
     let $local_12: ref "core:prelude/format.wado//Formatter";
     let start_20: i32;
@@ -1271,21 +1291,21 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_11, 136);
     start_20 = $local_11.used;
     $local_11.used = 136;
-    self_22 = $local_11.repr;
+    self_22 = local.tee $load_1($local_11.repr);
     builtin::array_copy<u8>(self_22, start_20, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_26 = $local_11.repr;
+    self_26 = $load_1;
     offset_27 = start_20 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_90) {
         global:compound_assign_side_effects.wado::$const_obj_90 = array.new_data<u8>("$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_26, offset_27, global:compound_assign_side_effects.wado::$const_obj_90, 0, 78);
-    self_30 = $local_11.repr;
+    self_30 = $load_1;
     offset_31 = start_20 + 98;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_34 = $local_11.repr;
+    self_34 = $load_1;
     offset_35 = start_20 + 102;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_38 = $local_11.repr;
+    self_38 = $load_1;
     offset_39 = start_20 + 135;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -1297,9 +1317,9 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     }
     start_50 = $local_11.used;
     $local_11.used = new_used_49;
-    self_52 = $local_11.repr;
+    self_52 = local.tee $load_6($local_11.repr);
     builtin::array_copy<u8>(self_52, start_50, global:compound_assign_side_effects.wado::$const_obj_86, 0, 28);
-    self_56 = $local_11.repr;
+    self_56 = $load_6;
     offset_57 = start_50 + 28;
     builtin::array_copy<u8>(self_56, offset_57, global:compound_assign_side_effects.wado::$const_obj_85, 0, 12);
     $local_12 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_11 };
@@ -1317,6 +1337,8 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold1"($v0) {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_9: ref "core:prelude/string.wado//String";
     let $local_10: ref "core:prelude/format.wado//Formatter";
     let start_20: i32;
@@ -1341,21 +1363,21 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_9, 136);
     start_20 = $local_9.used;
     $local_9.used = 136;
-    self_22 = $local_9.repr;
+    self_22 = local.tee $load_1($local_9.repr);
     builtin::array_copy<u8>(self_22, start_20, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_26 = $local_9.repr;
+    self_26 = $load_1;
     offset_27 = start_20 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_98) {
         global:compound_assign_side_effects.wado::$const_obj_98 = array.new_data<u8>("$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_26, offset_27, global:compound_assign_side_effects.wado::$const_obj_98, 0, 78);
-    self_30 = $local_9.repr;
+    self_30 = $load_1;
     offset_31 = start_20 + 98;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_34 = $local_9.repr;
+    self_34 = $load_1;
     offset_35 = start_20 + 102;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_38 = $local_9.repr;
+    self_38 = $load_1;
     offset_39 = start_20 + 135;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_9 };
@@ -1367,9 +1389,9 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     }
     start_50 = $local_9.used;
     $local_9.used = new_used_49;
-    self_52 = $local_9.repr;
+    self_52 = local.tee $load_6($local_9.repr);
     builtin::array_copy<u8>(self_52, start_50, global:compound_assign_side_effects.wado::$const_obj_94, 0, 28);
-    self_56 = $local_9.repr;
+    self_56 = $load_6;
     offset_57 = start_50 + 28;
     builtin::array_copy<u8>(self_56, offset_57, global:compound_assign_side_effects.wado::$const_obj_93, 0, 12);
     $local_10 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_9 };
@@ -1387,6 +1409,8 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back$cold2"() {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let start_19: i32;
@@ -1412,21 +1436,21 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_7, 136);
     start_19 = $local_7.used;
     $local_7.used = 136;
-    self_21 = $local_7.repr;
+    self_21 = local.tee $load_1($local_7.repr);
     builtin::array_copy<u8>(self_21, start_19, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_25 = $local_7.repr;
+    self_25 = $load_1;
     offset_26 = start_19 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_106) {
         global:compound_assign_side_effects.wado::$const_obj_106 = array.new_data<u8>("$test_4_nested_arr_bump____field____1_evaluates_the_index_once_and_writes_back");
     }
     builtin::array_copy<u8>(self_25, offset_26, global:compound_assign_side_effects.wado::$const_obj_106, 0, 78);
-    self_29 = $local_7.repr;
+    self_29 = $load_1;
     offset_30 = start_19 + 98;
     builtin::array_copy<u8>(self_29, offset_30, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_33 = $local_7.repr;
+    self_33 = $load_1;
     offset_34 = start_19 + 102;
     builtin::array_copy<u8>(self_33, offset_34, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_37 = $local_7.repr;
+    self_37 = $load_1;
     offset_38 = start_19 + 135;
     builtin::array_copy<u8>(self_37, offset_38, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -1438,9 +1462,9 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
     }
     start_49 = $local_7.used;
     $local_7.used = new_used_48;
-    self_51 = $local_7.repr;
+    self_51 = local.tee $load_6($local_7.repr);
     builtin::array_copy<u8>(self_51, start_49, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_55 = $local_7.repr;
+    self_55 = $load_6;
     offset_56 = start_49 + 28;
     builtin::array_copy<u8>(self_55, offset_56, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -1458,6 +1482,8 @@ fn "compound_assign_side_effects.wado/$test_4_nested_arr_bump____field____1_eval
 }
 
 fn "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once$cold0"() {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_8: ref "core:prelude/string.wado//String";
     let $local_9: ref "core:prelude/format.wado//Formatter";
     let self_22: ref Array<u8>;
@@ -1479,21 +1505,21 @@ fn "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_sub
     let start_76: i32;
     $local_8 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(128), used: 0 };
     $local_8.used = 124;
-    self_22 = $local_8.repr;
+    self_22 = local.tee $load_0($local_8.repr);
     builtin::array_copy<u8>(self_22, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_26 = $local_8.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_114) {
         global:compound_assign_side_effects.wado::$const_obj_114 = array.new_data<u8>("$test_5_side_effecting_custom_index_as_subscript_is_evaluated_once");
     }
     builtin::array_copy<u8>(self_26, offset_27, global:compound_assign_side_effects.wado::$const_obj_114, 0, 66);
-    self_30 = $local_8.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 86;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_34 = $local_8.repr;
+    self_34 = $load_0;
     offset_35 = 0 + 90;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_38 = $local_8.repr;
+    self_38 = $load_0;
     offset_39 = 0 + 123;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -1505,9 +1531,9 @@ fn "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_sub
     }
     start_50 = $local_8.used;
     $local_8.used = new_used_49;
-    self_52 = $local_8.repr;
+    self_52 = local.tee $load_5($local_8.repr);
     builtin::array_copy<u8>(self_52, start_50, global:compound_assign_side_effects.wado::$const_obj_110, 0, 27);
-    self_56 = $local_8.repr;
+    self_56 = $load_5;
     offset_57 = start_50 + 27;
     builtin::array_copy<u8>(self_56, offset_57, global:compound_assign_side_effects.wado::$const_obj_109, 0, 11);
     $local_9 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_8 };
@@ -1525,6 +1551,8 @@ fn "compound_assign_side_effects.wado/$test_5_side_effecting_custom_index_as_sub
 }
 
 fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_assign_captures_the_right_local$cold0"() {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
     let $local_13: ref "core:prelude/string.wado//String";
     let $local_14: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -1546,21 +1574,21 @@ fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_a
     let start_77: i32;
     $local_13 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(130), used: 0 };
     $local_13.used = 130;
-    self_23 = $local_13.repr;
+    self_23 = local.tee $load_0($local_13.repr);
     builtin::array_copy<u8>(self_23, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_27 = $local_13.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_122) {
         global:compound_assign_side_effects.wado::$const_obj_122 = array.new_data<u8>("$test_6_closure_after_an_impure_compound_assign_captures_the_right_local");
     }
     builtin::array_copy<u8>(self_27, offset_28, global:compound_assign_side_effects.wado::$const_obj_122, 0, 72);
-    self_31 = $local_13.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 92;
     builtin::array_copy<u8>(self_31, offset_32, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_35 = $local_13.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 96;
     builtin::array_copy<u8>(self_35, offset_36, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_39 = $local_13.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 129;
     builtin::array_copy<u8>(self_39, offset_40, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
@@ -1572,9 +1600,9 @@ fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_a
     }
     start_51 = $local_13.used;
     $local_13.used = new_used_50;
-    self_53 = $local_13.repr;
+    self_53 = local.tee $load_5($local_13.repr);
     builtin::array_copy<u8>(self_53, start_51, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_57 = $local_13.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 28;
     builtin::array_copy<u8>(self_57, offset_58, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_14 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_13 };
@@ -1592,6 +1620,8 @@ fn "compound_assign_side_effects.wado/$test_6_closure_after_an_impure_compound_a
 }
 
 fn "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure$cold0"() {
+    let $load_1: ref Array<u8>;
+    let $load_6: ref Array<u8>;
     let $local_16: ref "core:prelude/string.wado//String";
     let $local_17: ref "core:prelude/format.wado//Formatter";
     let start_24: i32;
@@ -1617,21 +1647,21 @@ fn "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_
     "core:prelude/string.wado/core:prelude/string.wado/String::grow"($local_16, 138);
     start_24 = $local_16.used;
     $local_16.used = 138;
-    self_26 = $local_16.repr;
+    self_26 = local.tee $load_1($local_16.repr);
     builtin::array_copy<u8>(self_26, start_24, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_30 = $local_16.repr;
+    self_30 = $load_1;
     offset_31 = start_24 + 20;
     if ref.is_null(global:compound_assign_side_effects.wado::$const_obj_138) {
         global:compound_assign_side_effects.wado::$const_obj_138 = array.new_data<u8>("$test_7_match_subscript_with_inner_locals_keeps_frame_parity_for_a_later_closure");
     }
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_138, 0, 80);
-    self_34 = $local_16.repr;
+    self_34 = $load_1;
     offset_35 = start_24 + 100;
     builtin::array_copy<u8>(self_34, offset_35, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_38 = $local_16.repr;
+    self_38 = $load_1;
     offset_39 = start_24 + 104;
     builtin::array_copy<u8>(self_38, offset_39, global:compound_assign_side_effects.wado::$const_obj_24, 0, 33);
-    self_42 = $local_16.repr;
+    self_42 = $load_1;
     offset_43 = start_24 + 137;
     builtin::array_copy<u8>(self_42, offset_43, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_16 };
@@ -1643,9 +1673,9 @@ fn "compound_assign_side_effects.wado/$test_7_match_subscript_with_inner_locals_
     }
     start_54 = $local_16.used;
     $local_16.used = new_used_53;
-    self_56 = $local_16.repr;
+    self_56 = local.tee $load_6($local_16.repr);
     builtin::array_copy<u8>(self_56, start_54, global:compound_assign_side_effects.wado::$const_obj_22, 0, 28);
-    self_60 = $local_16.repr;
+    self_60 = $load_6;
     offset_61 = start_54 + 28;
     builtin::array_copy<u8>(self_60, offset_61, global:compound_assign_side_effects.wado::$const_obj_21, 0, 12);
     $local_17 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_16 };
@@ -2038,6 +2068,9 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(self, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_15: ref Array<u8>;
@@ -2067,18 +2100,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     let start_95: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 66;
-    self_15 = $local_4.repr;
+    self_15 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_15, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_19 = $local_4.repr;
+    self_19 = $load_0;
     offset_20 = 0 + 20;
     builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_178, 0, 19);
-    self_23 = $local_4.repr;
+    self_23 = $load_0;
     offset_24 = 0 + 39;
     builtin::array_copy<u8>(self_23, offset_24, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_27 = $local_4.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 43;
     builtin::array_copy<u8>(self_27, offset_28, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_31 = $local_4.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 65;
     builtin::array_copy<u8>(self_31, offset_32, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2090,15 +2123,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_43 = $local_4.used;
     $local_4.used = new_used_42;
-    self_45 = $local_4.repr;
+    self_45 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_45, start_43, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_49 = $local_4.repr;
+    self_49 = $load_5;
     offset_50 = start_43 + 2;
     builtin::array_copy<u8>(self_49, offset_50, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_53 = $local_4.repr;
+    self_53 = $load_5;
     offset_54 = start_43 + 21;
     builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_57 = $local_4.repr;
+    self_57 = $load_5;
     offset_58 = start_43 + 51;
     builtin::array_copy<u8>(self_57, offset_58, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2110,9 +2143,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_69 = $local_4.used;
     $local_4.used = new_used_68;
-    self_71 = $local_4.repr;
+    self_71 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_71, start_69, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_75 = $local_4.repr;
+    self_75 = $load_10;
     offset_76 = start_69 + 1;
     builtin::array_copy<u8>(self_75, offset_76, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2130,6 +2163,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexRefMut<i32>::index_ref_mut$cold0"(self, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_15: ref Array<u8>;
@@ -2159,18 +2195,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     let start_95: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 66;
-    self_15 = $local_4.repr;
+    self_15 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_15, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_19 = $local_4.repr;
+    self_19 = $load_0;
     offset_20 = 0 + 20;
     builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_178, 0, 19);
-    self_23 = $local_4.repr;
+    self_23 = $load_0;
     offset_24 = 0 + 39;
     builtin::array_copy<u8>(self_23, offset_24, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_27 = $local_4.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 43;
     builtin::array_copy<u8>(self_27, offset_28, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_31 = $local_4.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 65;
     builtin::array_copy<u8>(self_31, offset_32, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2182,15 +2218,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_43 = $local_4.used;
     $local_4.used = new_used_42;
-    self_45 = $local_4.repr;
+    self_45 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_45, start_43, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_49 = $local_4.repr;
+    self_49 = $load_5;
     offset_50 = start_43 + 2;
     builtin::array_copy<u8>(self_49, offset_50, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_53 = $local_4.repr;
+    self_53 = $load_5;
     offset_54 = start_43 + 21;
     builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_57 = $local_4.repr;
+    self_57 = $load_5;
     offset_58 = start_43 + 51;
     builtin::array_copy<u8>(self_57, offset_58, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2202,9 +2238,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_69 = $local_4.used;
     $local_4.used = new_used_68;
-    self_71 = $local_4.repr;
+    self_71 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_71, start_69, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_75 = $local_4.repr;
+    self_75 = $load_10;
     offset_76 = start_69 + 1;
     builtin::array_copy<u8>(self_75, offset_76, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2222,6 +2258,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2251,18 +2290,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2274,15 +2313,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2294,9 +2333,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2314,6 +2353,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2343,18 +2385,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2366,15 +2408,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2386,9 +2428,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2406,6 +2448,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.wado/IndexAssign<i32>::index_assign$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_6: ref "core:prelude/string.wado//String";
     let $local_7: ref "core:prelude/format.wado//Formatter";
     let self_15: ref Array<u8>;
@@ -2435,18 +2480,26 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     let start_95: i32;
     $local_6 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(178), used: 0 };
     $local_6.used = 65;
-    self_15 = $local_6.repr;
+    self_15 = local.tee $load_0($local_6.repr);
     builtin::array_copy<u8>(self_15, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_19 = $local_6.repr;
+    self_19 = $load_0;
     offset_20 = 0 + 20;
+<<<<<<< HEAD
     builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_275, 0, 18);
     self_23 = $local_6.repr;
+||||||| c10699556
+    builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_251, 0, 18);
+    self_23 = $local_6.repr;
+=======
+    builtin::array_copy<u8>(self_19, offset_20, global:core:prelude/list.wado::$const_obj_251, 0, 18);
+    self_23 = $load_0;
+>>>>>>> origin/main
     offset_24 = 0 + 38;
     builtin::array_copy<u8>(self_23, offset_24, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_27 = $local_6.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 42;
     builtin::array_copy<u8>(self_27, offset_28, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_31 = $local_6.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 64;
     builtin::array_copy<u8>(self_31, offset_32, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
@@ -2458,15 +2511,23 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_43 = $local_6.used;
     $local_6.used = new_used_42;
-    self_45 = $local_6.repr;
+    self_45 = local.tee $load_5($local_6.repr);
     builtin::array_copy<u8>(self_45, start_43, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_49 = $local_6.repr;
+    self_49 = $load_5;
     offset_50 = start_43 + 2;
     builtin::array_copy<u8>(self_49, offset_50, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_53 = $local_6.repr;
+    self_53 = $load_5;
     offset_54 = start_43 + 21;
+<<<<<<< HEAD
     builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_269, 0, 35);
     self_57 = $local_6.repr;
+||||||| c10699556
+    builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_245, 0, 35);
+    self_57 = $local_6.repr;
+=======
+    builtin::array_copy<u8>(self_53, offset_54, global:core:prelude/list.wado::$const_obj_245, 0, 35);
+    self_57 = $load_5;
+>>>>>>> origin/main
     offset_58 = start_43 + 56;
     builtin::array_copy<u8>(self_57, offset_58, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
@@ -2478,9 +2539,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
     }
     start_69 = $local_6.used;
     $local_6.used = new_used_68;
-    self_71 = $local_6.repr;
+    self_71 = local.tee $load_10($local_6.repr);
     builtin::array_copy<u8>(self_71, start_69, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_75 = $local_6.repr;
+    self_75 = $load_10;
     offset_76 = start_69 + 1;
     builtin::array_copy<u8>(self_75, offset_76, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_7 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_6 };
@@ -2498,6 +2559,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>^core:prelude/traits.
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2527,18 +2591,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2550,15 +2614,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2570,9 +2634,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2590,6 +2654,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/List<i32>>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2619,18 +2686,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2642,15 +2709,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2662,9 +2729,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2682,6 +2749,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<core:prelude/list.wado/Li
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec0"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2711,18 +2781,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2734,15 +2804,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2754,9 +2824,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2774,6 +2844,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effects.wado/Holder>^core:prelude/traits.wado/IndexValue<i32>::index_value$cold0$spec1"($v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_4: ref "core:prelude/string.wado//String";
     let $local_5: ref "core:prelude/format.wado//Formatter";
     let self_14: ref Array<u8>;
@@ -2803,18 +2876,18 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     let start_94: i32;
     $local_4 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(173), used: 0 };
     $local_4.used = 64;
-    self_14 = $local_4.repr;
+    self_14 = local.tee $load_0($local_4.repr);
     builtin::array_copy<u8>(self_14, 0, global:compound_assign_side_effects.wado::$const_obj_27, 0, 20);
-    self_18 = $local_4.repr;
+    self_18 = $load_0;
     offset_19 = 0 + 20;
     builtin::array_copy<u8>(self_18, offset_19, global:core:prelude/list.wado::$const_obj_239, 0, 17);
-    self_22 = $local_4.repr;
+    self_22 = $load_0;
     offset_23 = 0 + 37;
     builtin::array_copy<u8>(self_22, offset_23, global:compound_assign_side_effects.wado::$const_obj_25, 0, 4);
-    self_26 = $local_4.repr;
+    self_26 = $load_0;
     offset_27 = 0 + 41;
     builtin::array_copy<u8>(self_26, offset_27, global:core:prelude/list.wado::$const_obj_176, 0, 22);
-    self_30 = $local_4.repr;
+    self_30 = $load_0;
     offset_31 = 0 + 63;
     builtin::array_copy<u8>(self_30, offset_31, global:compound_assign_side_effects.wado::$const_obj_23, 0, 1);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2826,15 +2899,15 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_42 = $local_4.used;
     $local_4.used = new_used_41;
-    self_44 = $local_4.repr;
+    self_44 = local.tee $load_5($local_4.repr);
     builtin::array_copy<u8>(self_44, start_42, global:core:prelude/list.wado::$const_obj_174, 0, 2);
-    self_48 = $local_4.repr;
+    self_48 = $load_5;
     offset_49 = start_42 + 2;
     builtin::array_copy<u8>(self_48, offset_49, global:core:prelude/list.wado::$const_obj_173, 0, 19);
-    self_52 = $local_4.repr;
+    self_52 = $load_5;
     offset_53 = start_42 + 21;
     builtin::array_copy<u8>(self_52, offset_53, global:core:prelude/list.wado::$const_obj_172, 0, 30);
-    self_56 = $local_4.repr;
+    self_56 = $load_5;
     offset_57 = start_42 + 51;
     builtin::array_copy<u8>(self_56, offset_57, global:core:prelude/list.wado::$const_obj_171, 0, 7);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2846,9 +2919,9 @@ fn "core:prelude/list.wado/core:prelude/list.wado/List<compound_assign_side_effe
     }
     start_68 = $local_4.used;
     $local_4.used = new_used_67;
-    self_70 = $local_4.repr;
+    self_70 = local.tee $load_10($local_4.repr);
     builtin::array_copy<u8>(self_70, start_68, global:compound_assign_side_effects.wado::$const_obj_20, 0, 1);
-    self_74 = $local_4.repr;
+    self_74 = $load_10;
     offset_75 = start_68 + 1;
     builtin::array_copy<u8>(self_74, offset_75, global:core:prelude/list.wado::$const_obj_169, 0, 11);
     $local_5 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_4 };
@@ -2882,19 +2955,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -2912,6 +2986,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_6: i32;
     let byte: u8;
     let new_used: i32;
     let start_9: i32;
@@ -2935,9 +3010,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $av_51 + 4);
     }
-    self.used = self.used + $inline_encode_char_6: block -> i32 {
+    self.used = local.tee $load_6(self.used) + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
-        pos = self.used;
+        pos = $load_6;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
             break $inline_encode_char_6: 1;
@@ -3020,7 +3095,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l160;
@@ -3029,6 +3104,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
+    let $load_0: bool;
+    let $load_2: i32;
     let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
@@ -3121,12 +3198,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let $av_308: bool;
     let $av_309: i32;
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$alt_prefix$repr, start: 0, end: $mv$alt_prefix$used };
-    $av_308 = self.sign_plus;
+    $av_308 = local.tee $load_0(self.sign_plus);
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
     prefix_len = select i32(self.alternate, $mv$alt_prefix$used, 0);
     content_len = (sign_len + prefix_len) + digit_count;
-    $av_309 = self.width;
-    if select i32($av_309 <= 0, 1, content_len >= $av_309) {
+    $av_309 = local.tee $load_2(self.width);
+    if ($av_309 <= 0) | (content_len >= $av_309) {
         if is_negative {
             self_21 = self.buf;
             new_used_26 = self_21.used + 1;
@@ -3168,7 +3245,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
         }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
     }
-    padding = self.width - content_len;
+    padding = $load_2 - content_len;
     if self.zero_pad {
         if is_negative {
             self_72 = self.buf;
@@ -3180,7 +3257,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_78 = self_72.used;
             self_72.used = new_used_77;
             builtin::array_set_u8(self_72.repr, start_78, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_86 = self.buf;
             new_used_91 = self_86.used + 1;
             if @unlikely(new_used_91 > builtin::array_len(self_86.repr)) {
@@ -3240,7 +3317,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_133 = self_127.used;
             self_127.used = new_used_132;
             builtin::array_set_u8(self_127.repr, start_133, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_141 = self.buf;
             new_used_146 = self_141.used + 1;
             if @unlikely(new_used_146 > builtin::array_len(self_141.repr)) {

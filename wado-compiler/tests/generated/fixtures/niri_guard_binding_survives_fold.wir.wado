@@ -110,11 +110,7 @@ fn "niri_guard_binding_survives_fold.wado/run"() with Stdout {
     let tx_69: i32;
     let $match_scrut_0: ref "niri_guard_binding_survives_fold.wado//Line";
     $match_scrut_0 = struct.new "niri_guard_binding_survives_fold.wado//Line" { start: struct.new "niri_guard_binding_survives_fold.wado//Point" { x: 0, y: 0 }, end: struct.new "niri_guard_binding_survives_fold.wado//Point" { x: 10, y: 20 } };
-    d = (if $local_6 = $match_scrut_0.start; $local_10 = $match_scrut_0.end; (if (if $local_6.x == 0 -> i32 {
-        select i32($local_6.y == 0, 1, 0);
-    } else {
-        0;
-    }) -> i32 {
+    d = (if $local_6 = $match_scrut_0.start; $local_10 = $match_scrut_0.end; (if ($local_6.x == 0) & (($local_6.y == 0) & 1) -> i32 {
         x = $local_10.x;
         y = $local_10.y;
         1;
@@ -237,19 +233,20 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -275,14 +272,14 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
     end_3 = $mv$data$start + ($mv$data$end - $mv$data$start);
     offset = $mv$data$start;
     block {
-        l27: loop {
+        l26: loop {
             $sroa_data_start = offset;
-            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b28: block {
-                l29: loop {
-                    break_if b28 i >= len_23;
+            ptr_14 = builtin::i32_wrap_i64(local.tee packed_13(len_23 = end_3 - $sroa_data_start; ptr_24 = "mem/realloc"(0, 0, 1, len_23); i = 0; b27: block {
+                l28: loop {
+                    break_if b27 i >= len_23;
                     builtin::store_u8(ptr_24 + i, builtin::array_get_value_u8($mv$data$repr, $sroa_data_start + i));
                     i = i + 1;
-                    continue l29;
+                    continue l28;
                 };
             }; builtin::i64_extend_i32_s(ptr_24) | (builtin::i64_extend_i32_s(len_23) << 32_i64)));
             raw_len = builtin::i32_wrap_i64(packed_13 >> 32_i64);
@@ -312,10 +309,10 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
-            continue l27;
+            continue l26;
         };
     };
 }
@@ -338,14 +335,14 @@ fn "core:prelude/primitive.wado/i32::fmt_decimal$scalar$spec0$scalar"(self, f) {
     pos = offset_5 + digit_count_4;
     t = abs_val;
     i = 0;
-    b34: block {
-        l35: loop {
-            break_if b34 i >= digit_count_4;
+    b33: block {
+        l34: loop {
+            break_if b33 i >= digit_count_4;
             pos = pos - 1;
             builtin::array_set_u8(arr, pos, (48 + builtin::i32_wrap_i64(t %u 10_i64)) & 255);
             t = t /u 10_i64;
             i = i + 1;
-            continue l35;
+            continue l34;
         };
     };
 }

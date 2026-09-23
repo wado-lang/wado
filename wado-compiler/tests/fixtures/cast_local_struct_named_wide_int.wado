@@ -1,0 +1,12 @@
+// A struct that merely shares the name `u128` is not the prelude's wide
+// integer: only the declaration makes one, so this is an ordinary struct cast.
+
+export fn run() {
+    struct u128 {
+        a: i32,
+    }
+    let t = 1 as u128;
+}
+
+__DATA__
+{"compile_error": "cannot cast 'i32' to 'u128': the two types share no representation; `as` reinterprets only across a newtype boundary"}

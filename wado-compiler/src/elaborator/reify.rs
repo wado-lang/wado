@@ -9662,6 +9662,12 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         TirExpr::new(TirExprKind::Unit, TypeTable::ERROR, ident.span)
     }
 
+    /// Which wide-integer prelude struct `head` is, with the name its methods mangle under.
+    fn wide_int_of(&self, head: TypeId) -> Option<(CompilerItem, FqTypeName)> {
+        let tt = self.tysys.type_table.borrow();
+        Some((tt.wide_int_item(head)?, tt.fq_base_type_name(head)))
+    }
+
     /// Replay an `i128` / `u128` numeric-literal coercion recorded by annotate,
     /// returning `None` for every other shape. The 128-bit types are prelude
     /// structs, so the value is materialized by a `from_u64` / `from_i64` /
@@ -9673,24 +9679,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             return None;
         }
         let target_type = choice.target_type;
-        let name = match self.tysys.type_table.borrow().get(target_type).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_type)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_type)?;
 
         // Every shape the coercion admits, the negated `-NUM` among them, whose
         // coercion is keyed on the enclosing `Unary` node. Reading the one
@@ -9703,7 +9692,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             NumericLiteralKind::Byte(raw) => unescape_byte(raw).ok()?.to_string(),
         };
 
-        let parse_result = if name.decl_name() == "u128" {
+        let parse_result = if item == CompilerItem::U128 {
             parse_u128_literal(&repr).map(|v| v as i128)
         } else if negated {
             parse_i128_literal(&format!("-{repr}"))
@@ -9713,6 +9702,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         let value = parse_result.ok()?;
 
         Some(build_int128_literal_call(
+            item,
             &name,
             value,
             &repr,
@@ -9735,36 +9725,20 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             .type_table
             .borrow()
             .representation_head(target_type);
-        let name = match self.tysys.type_table.borrow().get(target_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys
-                    .type_table
-                    .borrow()
-                    .fq_base_type_name(target_base)
-            }
-            _ => return None,
-        };
+        let (item, name) = self.wide_int_of(target_base)?;
 
         // Literal operand: `1042 as u128`.
         if let ast::Expr::Literal(lit) = &cast.expr
             && let Some(repr) = int_literal_repr(lit)
         {
-            let parsed = if name.decl_name() == "u128" {
+            let parsed = if item == CompilerItem::U128 {
                 parse_u128_literal(repr).map(|v| v as i128)
             } else {
                 parse_i128_literal(repr)
             };
             if let Ok(value) = parsed {
                 return Some(build_int128_literal_call(
+                    item,
                     &name,
                     value,
                     repr,
@@ -9776,7 +9750,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         }
 
         // Negated literal operand (i128 only): `-170... as i128`.
-        if name.decl_name() == "i128"
+        if item == CompilerItem::I128
             && let ast::Expr::Unary(unary) = &cast.expr
             && unary.op == ast::UnaryOp::Neg
             && let ast::Expr::Literal(ast::LiteralExpr {
@@ -9787,6 +9761,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             && let Ok(value) = parse_i128_literal(&format!("-{repr}"))
         {
             return Some(build_int128_literal_call(
+                item,
                 &name,
                 value,
                 repr,
@@ -9815,7 +9790,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 cast.span,
             ));
         }
-        let intermediate_type = if name.decl_name() == "u128" {
+        let intermediate_type = if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -9829,6 +9804,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
             cast.span,
         );
         Some(build_int128_from_intermediate(
+            item,
             &name,
             casted,
             target_type,
@@ -9850,7 +9826,6 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         target_type: TypeId,
         ctx: &mut FunctionContext,
     ) -> Option<TirExpr> {
-        use crate::compiler_item::CompilerItem;
         use crate::primitive::PrimitiveType;
         use crate::tir::{ResolvedType, TypeTable};
 
@@ -9865,22 +9840,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 tt.representation_head(target_type),
             )
         };
-        let source_name = match self.tysys.type_table.borrow().get(source_base).clone() {
-            ResolvedType::Struct { def, .. }
-                if matches!(
-                    self.tysys
-                        .type_table
-                        .borrow()
-                        .struct_head_name(def)
-                        .as_str(),
-                    "u128" | "i128"
-                ) =>
-            {
-                self.tysys.type_table.borrow().struct_head_name(def)
-            }
-            _ => return None,
+        let (source_item, target_item) = {
+            let tt = self.tysys.type_table.borrow();
+            (
+                tt.wide_int_item(source_base)?,
+                tt.wide_int_item(target_base),
+            )
         };
-        let signed_source = source_name == "i128";
+        let signed_source = source_item == CompilerItem::I128;
 
         enum Lowering {
             /// `i128 as i128` / `u128 as u128` — no-op.
@@ -9913,29 +9880,22 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 | PrimitiveType::I8
                 | PrimitiveType::U8,
             ) => Lowering::LowThenCast,
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == source_name =>
-            {
-                if target_type == source_type {
-                    Lowering::Identity
-                } else {
-                    // Same wide base but a newtype on either side: the
-                    // bare `Cast` emitted by the caller is the correct
-                    // repr-compatible reinterpret.
-                    return None;
+            _ => match target_item {
+                Some(item) if item == source_item => {
+                    if target_type == source_type {
+                        Lowering::Identity
+                    } else {
+                        // Same wide base but a newtype on either side: the
+                        // bare `Cast` emitted by the caller is the correct
+                        // repr-compatible reinterpret.
+                        return None;
+                    }
                 }
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "i128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::I128FromU128)
-            }
-            ResolvedType::Struct { def, .. }
-                if self.tysys.type_table.borrow().struct_head_name(def) == "u128" =>
-            {
-                Lowering::Reinterpret(CompilerItem::U128FromI128)
-            }
-            _ => return None,
+                Some(CompilerItem::I128) => Lowering::Reinterpret(CompilerItem::I128FromU128),
+                Some(CompilerItem::U128) => Lowering::Reinterpret(CompilerItem::U128FromI128),
+                Some(other) => unreachable!("wide_int_item answered {other:?}"),
+                None => return None,
+            },
         };
 
         let make_func_ref = |tysys: &TypeSystem, item: CompilerItem| {
@@ -11175,6 +11135,7 @@ fn deref_to_value(
 /// Build the `from_pair` call that materializes a 128-bit value from its
 /// `(low: u64, high: u64/i64)` halves.
 fn build_int128_from_pair(
+    item: CompilerItem,
     type_name: &FqTypeName,
     low: u64,
     high: i64,
@@ -11194,7 +11155,7 @@ fn build_int128_from_pair(
             value: high.cast_unsigned(),
             repr: high.to_string(),
         },
-        if type_name.decl_name() == "u128" {
+        if item == CompilerItem::U128 {
             TypeTable::U64
         } else {
             TypeTable::I64
@@ -11229,6 +11190,7 @@ fn build_int128_from_pair(
 /// admits the cheaper `from_u64` / `from_i64`; the negated `-NUM` shape denies
 /// it and always takes `from_pair`.
 fn build_int128_literal_call(
+    item: CompilerItem,
     name: &FqTypeName,
     value: i128,
     repr: &str,
@@ -11237,14 +11199,14 @@ fn build_int128_literal_call(
     span: Span,
 ) -> TirExpr {
     let use_small = allow_small
-        && if name.decl_name() == "u128" {
+        && if item == CompilerItem::U128 {
             u64::try_from(value).is_ok()
         } else {
             i64::try_from(value).is_ok()
         };
 
     if use_small {
-        let (inner_type, method_name, store_value) = if name.decl_name() == "u128" {
+        let (inner_type, method_name, store_value) = if item == CompilerItem::U128 {
             (
                 TypeTable::U64,
                 "from_u64",
@@ -11290,18 +11252,19 @@ fn build_int128_literal_call(
     }
 
     let (low, high) = unpack_i128(value);
-    build_int128_from_pair(name, low, high, target_type, span)
+    build_int128_from_pair(item, name, low, high, target_type, span)
 }
 
 /// Build `u128::from_u64(inner)` / `i128::from_i64(inner)` for the general
 /// (non-literal) `expr as i128/u128` cast. `intermediate` is already `u64`/`i64`.
 fn build_int128_from_intermediate(
+    item: CompilerItem,
     name: &FqTypeName,
     intermediate: TirExpr,
     target_type: TypeId,
     span: Span,
 ) -> TirExpr {
-    let method_name = if name.decl_name() == "u128" {
+    let method_name = if item == CompilerItem::U128 {
         "from_u64"
     } else {
         "from_i64"

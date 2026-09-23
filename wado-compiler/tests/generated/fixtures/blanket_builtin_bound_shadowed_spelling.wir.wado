@@ -234,7 +234,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l6;
@@ -243,6 +243,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_0"(self) {
+    let $load_1: i32;
+    let $load_2: ref Array<i32>;
     let acc: i32;
     let item_7: i32;
     let item_9: i32;
@@ -252,12 +254,12 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
     let $av_18: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
         $av_18 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 $av_18 >= self.end;
-        item_7 = builtin::array_get_value<i32>(self.repr, $av_18);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 $av_18 >= local.tee $load_1(self.end);
+        item_7 = builtin::array_get_value<i32>(local.tee $load_2(self.repr), $av_18);
         self.index = $av_18 + 1;
         acc = item_7;
-        $licm_end_15 = self.end;
-        $licm_repr_16 = self.repr;
+        $licm_end_15 = $load_1;
+        $licm_repr_16 = $load_2;
         $hfs_index_17 = self.index;
         b13: block {
             l14: loop {
@@ -277,6 +279,8 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
 }
 
 fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceValueIter<i32>^core:prelude/traits.wado/Iterator::reduce$$Closure_1"(self) {
+    let $load_1: i32;
+    let $load_2: ref Array<i32>;
     let acc: i32;
     let item_7: i32;
     let item_9: i32;
@@ -286,12 +290,12 @@ fn "blanket_builtin_bound_shadowed_spelling.wado/core:prelude/slice.wado/SliceVa
     let $av_18: i32;
     $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0: block {
         $av_18 = self.index;
-        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 $av_18 >= self.end;
-        item_7 = builtin::array_get_value<i32>(self.repr, $av_18);
+        break_if $fused_$inline_core_prelude_slice_wado_SliceValueIter_i32__core_prelude_traits_wado_Iterator__next_0 $av_18 >= local.tee $load_1(self.end);
+        item_7 = builtin::array_get_value<i32>(local.tee $load_2(self.repr), $av_18);
         self.index = $av_18 + 1;
         acc = item_7;
-        $licm_end_15 = self.end;
-        $licm_repr_16 = self.repr;
+        $licm_end_15 = $load_1;
+        $licm_repr_16 = $load_2;
         $hfs_index_17 = self.index;
         b16: block {
             l17: loop {

@@ -154,7 +154,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     $mv_arg_2 = global:wasi_random.wado::$const_obj_11;
     "core:rt/write_string_to_stream"(tx_14, $mv_arg_2.repr, $mv_arg_2.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_10);
-    if select i32(r1 != 0_i64, 1, r2 != 0_i64) {
+    if (r1 != 0_i64) | (r2 != 0_i64) {
         rx_25 = builtin::i32_wrap_i64(local.tee packed_24("wasi/stream-new"()));
         tx_26 = builtin::i32_wrap_i64(packed_24 >> 32_i64);
         handle_22 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_25);
@@ -224,7 +224,7 @@ fn "wasi_random.wado/run"() with Stdout, Random, Insecure, InsecureSeed {
     $mv_arg_18 = global:wasi_random.wado::$const_obj_3;
     "core:rt/write_string_to_stream"(tx_110, $mv_arg_18.repr, $mv_arg_18.used);
     "wasi/future-drop-readable:transmission-wasi/cli/types.wado#error-code"(handle_106);
-    if select i32(seed_low != 0_i64, 1, seed_high != 0_i64) {
+    if (seed_low != 0_i64) | (seed_high != 0_i64) {
         rx_121 = builtin::i32_wrap_i64(local.tee packed_120("wasi/stream-new"()));
         tx_122 = builtin::i32_wrap_i64(packed_120 >> 32_i64);
         handle_118 = "wasi_random.wado/$cm_binding__Stdout_write_via_stream"(rx_121);
@@ -348,7 +348,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l6;

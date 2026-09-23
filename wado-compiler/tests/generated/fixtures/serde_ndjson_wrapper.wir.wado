@@ -106,6 +106,7 @@ fn "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"(data) with S
 }
 
 fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
+    let $load_1: i32;
     let message_0: ref "core:prelude/string.wado//String";
     let handle: i32;
     let body: ref "core:prelude/string.wado//String";
@@ -123,7 +124,7 @@ fn "serde_ndjson_wrapper.wado/$cm_export__run"() {
     } else {
         unreachable;
     }), struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(10), used: 1 });
-    message_0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = body.repr; let $array_clone_len_3: i32; $array_clone_len_3 = body.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: body.used };
+    message_0 = struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = body.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(body.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
     rx_11 = builtin::i32_wrap_i64(local.tee packed("wasi/stream-new"()));
     tx_12 = builtin::i32_wrap_i64(packed >> 32_i64);
     handle = "serde_ndjson_wrapper.wado/$cm_binding__Stdout_write_via_stream"(rx_11);
@@ -171,6 +172,7 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>"(value, trailing_char) {
+    let $load_1: i32;
     let buf: ref "core:prelude/string.wado//String";
     let ser: ref "core:json//JsonSerializer";
     let $qm_e: ref "core:serde//SerializeError";
@@ -190,10 +192,14 @@ fn "core:json/core/json/to_string<serde_ndjson_wrapper.wado/Message>"(value, tra
         "core:prelude/string.wado/core:prelude/string.wado/String::push"(buf, c);
     } else {
     }
-    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; let $array_clone_len_3: i32; $array_clone_len_3 = buf.used; let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: buf.used }, ref.null none;
+    return 0, struct.new "core:prelude/string.wado//String" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<u8>; $array_clone_src_1 = buf.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(buf.used); let $array_clone_dst_2: ref Array<u8>; $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3); builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 }, ref.null none;
 }
 
 fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"(buf, name, count) {
+    let $load_3: ref Array<u8>;
+    let $load_6: ref Array<u8>;
+    let $load_11: ref Array<u8>;
+    let $load_14: ref Array<u8>;
     let new_used_17: i32;
     let start_18: i32;
     let new_used_23: i32;
@@ -216,17 +222,17 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
         }
         start_18 = buf.used;
         buf.used = new_used_17;
-        builtin::array_copy<u8>(buf.repr, start_18, global:core:json::$const_obj_34, 0, 2);
+        builtin::array_copy<u8>(local.tee $load_3(buf.repr), start_18, global:core:json::$const_obj_34, 0, 2);
         new_used_23 = buf.used + 4;
-        if @unlikely(new_used_23 > builtin::array_len(buf.repr)) {
+        if @unlikely(new_used_23 > builtin::array_len($load_3)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_23);
         }
         start_24 = buf.used;
         buf.used = new_used_23;
-        self_26 = buf.repr;
+        self_26 = local.tee $load_6(buf.repr);
         builtin::array_copy<u8>(self_26, start_24, name.repr, 0, 2);
-        self_30 = buf.repr;
+        self_30 = $load_6;
         offset_31 = start_24 + 2;
         builtin::array_copy<u8>(self_30, offset_31, global:core:json::$const_obj_32, 0, 2);
         return;
@@ -238,39 +244,41 @@ fn "core:json/core/json/write_plain_key<&core:prelude/string.wado/String>$spec0"
     }
     start_40 = buf.used;
     buf.used = new_used_39;
-    builtin::array_set_u8(buf.repr, start_40, 34);
+    builtin::array_set_u8(local.tee $load_11(buf.repr), start_40, 34);
     new_used_51 = buf.used + 4;
-    if @unlikely(new_used_51 > builtin::array_len(buf.repr)) {
+    if @unlikely(new_used_51 > builtin::array_len($load_11)) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(buf, new_used_51);
     }
     start_52 = buf.used;
     buf.used = new_used_51;
-    self_54 = buf.repr;
+    self_54 = local.tee $load_14(buf.repr);
     builtin::array_copy<u8>(self_54, start_52, name.repr, 0, 2);
-    self_58 = buf.repr;
+    self_58 = $load_14;
     offset_59 = start_52 + 2;
     builtin::array_copy<u8>(self_58, offset_59, global:core:json::$const_obj_32, 0, 2);
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_6: i32;
     let byte: u8;
     let new_used: i32;
     let start_9: i32;
@@ -294,9 +302,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $av_51 + 4);
     }
-    self.used = self.used + $inline_encode_char_6: block -> i32 {
+    self.used = local.tee $load_6(self.used) + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
-        pos = self.used;
+        pos = $load_6;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
             break $inline_encode_char_6: 1;
@@ -321,15 +329,16 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String^core:prelude/traits.wado/Add::add"(self, other) {
+    let $load_0: i32;
     let result: ref "core:prelude/string.wado//String";
     let n_14: i32;
     let start_19: i32;
     let n_29: i32;
     let new_used_33: i32;
     let start_34: i32;
-    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(self.used + other.used), used: 0 };
+    result = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(local.tee $load_0(self.used) + other.used), used: 0 };
     $inline_core_prelude_string_wado_String__internal_push_string_6: block {
-        n_14 = self.used;
+        n_14 = $load_0;
         break_if $inline_core_prelude_string_wado_String__internal_push_string_6 n_14 == 0;
         if @unlikely(n_14 > builtin::array_len(result.repr)) {
             cold_path;
@@ -413,7 +422,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l23;

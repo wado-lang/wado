@@ -130,11 +130,14 @@ global global:serde_serialize_array.wado::$const_obj_1: ref null Array<u8> = arr
 global global:serde_serialize_array.wado::$const_obj_5: ref null Array<u8> = array.new_fixed<u8>(69, 109, 112, 116, 121, 58, 32);
 global global:serde_serialize_array.wado::$const_obj_6: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 60, 83, 116, 114, 105, 110, 103, 62, 58, 32);
 global global:serde_serialize_array.wado::$const_obj_7: ref null Array<u8> = array.new_fixed<u8>(76, 105, 115, 116, 60, 105, 51, 50, 62, 58, 32);
-global global:serde_serialize_array.wado::$const_obj_8: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(93), used: 1 };
+global global:serde_serialize_array.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(93);
 global global:serde_serialize_array.wado::$const_obj_9: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(44), used: 1 };
-global global:serde_serialize_array.wado::$const_obj_10: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(91), used: 1 };
+global global:serde_serialize_array.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(91);
 
 fn "serde_serialize_array.wado/run"() with Stdout {
+    let $load_3: i32;
+    let $load_11: i32;
+    let $load_19: i32;
     let ser: ref "serde_serialize_array.wado//JsonSerializer";
     let nums: ref "core:prelude//List<i32>";
     let strs: ref "core:prelude//List<core:prelude/string.wado/String>";
@@ -177,11 +180,11 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v_29.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = v_29.used;
+    $array_clone_len_3 = local.tee $load_3(v_29.used);
     let $array_clone_dst_2: ref Array<u8>;
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $sroa_other_used_139 = v_29.used;
+    $sroa_other_used_139 = $load_3;
     $inline_core_prelude_string_wado_String__internal_push_string_12: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_12 $sroa_other_used_139 == 0;
         new_used_38 = 11 + $sroa_other_used_139;
@@ -208,11 +211,11 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     let $array_clone_src_6: ref Array<u8>;
     $array_clone_src_6 = v_70.repr;
     let $array_clone_len_8: i32;
-    $array_clone_len_8 = v_70.used;
+    $array_clone_len_8 = local.tee $load_11(v_70.used);
     let $array_clone_dst_7: ref Array<u8>;
     $array_clone_dst_7 = builtin::array_new<u8>($array_clone_len_8);
     builtin::array_copy<u8>($array_clone_dst_7, 0, $array_clone_src_6, 0, $array_clone_len_8);
-    $sroa_other_used_143 = v_70.used;
+    $sroa_other_used_143 = $load_11;
     $inline_core_prelude_string_wado_String__internal_push_string_29: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_29 $sroa_other_used_143 == 0;
         new_used_79 = 14 + $sroa_other_used_143;
@@ -240,11 +243,11 @@ fn "serde_serialize_array.wado/run"() with Stdout {
     let $array_clone_src_11: ref Array<u8>;
     $array_clone_src_11 = v_111.repr;
     let $array_clone_len_13: i32;
-    $array_clone_len_13 = v_111.used;
+    $array_clone_len_13 = local.tee $load_19(v_111.used);
     let $array_clone_dst_12: ref Array<u8>;
     $array_clone_dst_12 = builtin::array_new<u8>($array_clone_len_13);
     builtin::array_copy<u8>($array_clone_dst_12, 0, $array_clone_src_11, 0, $array_clone_len_13);
-    $sroa_other_used_147 = v_111.used;
+    $sroa_other_used_147 = $load_19;
     $inline_core_prelude_string_wado_String__internal_push_string_46: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_46 $sroa_other_used_147 == 0;
         new_used_120 = 7 + $sroa_other_used_147;
@@ -345,23 +348,25 @@ fn "core:rt/write_string_to_stream"(tx, $mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "serde_serialize_array.wado/serde_serialize_array.wado/JsonSerializer^serde_serialize_array.wado/Serializer::serialize_string"(self, v) {
+    let $load_2: i32;
     let $local_2: ref "core:prelude/string.wado//String";
     let new_used_30: i32;
     let start_31: i32;
@@ -378,11 +383,11 @@ fn "serde_serialize_array.wado/serde_serialize_array.wado/JsonSerializer^serde_s
     let $array_clone_src_1: ref Array<u8>;
     $array_clone_src_1 = v.repr;
     let $array_clone_len_3: i32;
-    $array_clone_len_3 = v.used;
+    $array_clone_len_3 = local.tee $load_2(v.used);
     let $array_clone_dst_2: ref Array<u8>;
     $array_clone_dst_2 = builtin::array_new<u8>($array_clone_len_3);
     builtin::array_copy<u8>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3);
-    $sroa_other_used_62 = v.used;
+    $sroa_other_used_62 = $load_2;
     $inline_core_prelude_string_wado_String__internal_push_string_10: block {
         break_if $inline_core_prelude_string_wado_String__internal_push_string_10 $sroa_other_used_62 == 0;
         new_used_30 = 1 + $sroa_other_used_62;
@@ -422,20 +427,17 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
     let seq_2: ref "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_array.wado/JsonSeqSerializer>, core:prelude/types.wado/Option<serde_serialize_array.wado/SerializeError>]";
     let $local_6: ref "serde_serialize_array.wado//JsonSeqSerializer";
     let $match_7: ref "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>";
-    let other_13: ref "core:prelude/string.wado//String";
     let out_17: ref "core:prelude/string.wado//String";
     let new_used_24: i32;
     let start_25: i32;
     let end: i32;
     let ref_val: ref "core:prelude/string.wado//String";
-    let other_38: ref "core:prelude/string.wado//String";
     let out_42: ref "core:prelude/string.wado//String";
     let new_used_49: i32;
     let start_50: i32;
     let $licm_ser_54: ref "serde_serialize_array.wado//JsonSerializer";
     let $sroa_$iter_0_repr: ref "Array<core:prelude/string.wado/String>";
     let $sroa_$iter_0_index: i32;
-    other_13 = global:serde_serialize_array.wado::$const_obj_10;
     out_17 = s.buf;
     new_used_24 = out_17.used + 1;
     if @unlikely(new_used_24 > builtin::array_len(out_17.repr)) {
@@ -444,7 +446,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
     }
     start_25 = out_17.used;
     out_17.used = new_used_24;
-    builtin::array_copy<u8>(out_17.repr, start_25, other_13.repr, 0, 1);
+    builtin::array_copy<u8>(out_17.repr, start_25, global:serde_serialize_array.wado::$const_obj_10, 0, 1);
     seq_2 = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_array.wado/JsonSeqSerializer>, core:prelude/types.wado/Option<serde_serialize_array.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 }, 2: ref.null none };
     $match_7 = block -> ref "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(seq_2.1) };
@@ -468,10 +470,10 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<core:prelude/string.w
                 continue l30;
             };
         };
-        return other_38 = global:serde_serialize_array.wado::$const_obj_8, out_42 = $local_6.ser.buf, new_used_49 = out_42.used + 1, if @unlikely(new_used_49 > builtin::array_len(out_42.repr)) {
+        return out_42 = $local_6.ser.buf, new_used_49 = out_42.used + 1, if @unlikely(new_used_49 > builtin::array_len(out_42.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, new_used_49);
-        }, start_50 = out_42.used, out_42.used = new_used_49, builtin::array_copy<u8>(out_42.repr, start_50, other_38.repr, 0, 1), ref.null none;
+        }, start_50 = out_42.used, out_42.used = new_used_49, builtin::array_copy<u8>(out_42.repr, start_50, global:serde_serialize_array.wado::$const_obj_8, 0, 1), ref.null none;
     } else {
     }
     return struct.new "serde_serialize_array.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
@@ -481,21 +483,18 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
     let seq_2: ref "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_array.wado/JsonSeqSerializer>, core:prelude/types.wado/Option<serde_serialize_array.wado/SerializeError>]";
     let $local_6: ref "serde_serialize_array.wado//JsonSeqSerializer";
     let $match_7: ref "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>";
-    let other_13: ref "core:prelude/string.wado//String";
     let out_17: ref "core:prelude/string.wado//String";
     let new_used_24: i32;
     let start_25: i32;
     let end: i32;
     let ref_val: ref "core:prelude/types.wado//Box<i32>";
-    let other_38: ref "core:prelude/string.wado//String";
     let out_42: ref "core:prelude/string.wado//String";
     let new_used_49: i32;
     let start_50: i32;
     let $licm_ser_54: ref "serde_serialize_array.wado//JsonSerializer";
+    let $licm_buf_55: ref "core:prelude/string.wado//String";
     let $sroa_$iter_0_repr: ref Array<i32>;
     let $sroa_$iter_0_index: i32;
-    let $licm_buf_58: ref "core:prelude/string.wado//String";
-    other_13 = global:serde_serialize_array.wado::$const_obj_10;
     out_17 = s.buf;
     new_used_24 = out_17.used + 1;
     if @unlikely(new_used_24 > builtin::array_len(out_17.repr)) {
@@ -504,7 +503,7 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
     }
     start_25 = out_17.used;
     out_17.used = new_used_24;
-    builtin::array_copy<u8>(out_17.repr, start_25, other_13.repr, 0, 1);
+    builtin::array_copy<u8>(out_17.repr, start_25, global:serde_serialize_array.wado::$const_obj_10, 0, 1);
     seq_2 = struct.new "tuple//[i32, core:prelude/types.wado/Option<serde_serialize_array.wado/JsonSeqSerializer>, core:prelude/types.wado/Option<serde_serialize_array.wado/SerializeError>]" { 0: 0, 1: struct.new "serde_serialize_array.wado//JsonSeqSerializer" { ser: s, count: 0 }, 2: ref.null none };
     $match_7 = block -> ref "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>" {
         struct.new "core:prelude/types.wado//Result<serde_serialize_array.wado/JsonSeqSerializer,serde_serialize_array.wado/SerializeError>::Ok" { discriminant: 0, payload_0: ref.as_non_null(seq_2.1) };
@@ -515,24 +514,24 @@ fn "serde_serialize_array.wado/core:prelude/list.wado/List<i32>^serde_serialize_
         $sroa_$iter_0_repr = self.repr;
         $sroa_$iter_0_index = 0;
         $licm_ser_54 = $local_6.ser;
-        $licm_buf_58 = $licm_ser_54.buf;
+        $licm_buf_55 = $licm_ser_54.buf;
         b36: block {
             l37: loop {
                 break_if b36 $sroa_$iter_0_index >= end;
                 ref_val = struct.new "core:prelude/types.wado//Box<i32>" { value: builtin::array_get_value<i32>($sroa_$iter_0_repr, $sroa_$iter_0_index) };
                 $sroa_$iter_0_index = $sroa_$iter_0_index + 1;
                 if $local_6.count > 0 {
-                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($licm_buf_58, global:serde_serialize_array.wado::$const_obj_9);
+                    "core:prelude/string.wado/core:prelude/string.wado/String::push_str<&core:prelude/string.wado/String>"($licm_buf_55, global:serde_serialize_array.wado::$const_obj_9);
                 }
-                drop("serde_serialize_array.wado/i32^serde_serialize_array.wado/Serialize::serialize<serde_serialize_array.wado/JsonSerializer>$scalar"(ref_val, $licm_buf_58));
+                drop("serde_serialize_array.wado/i32^serde_serialize_array.wado/Serialize::serialize<serde_serialize_array.wado/JsonSerializer>$scalar"(ref_val, $licm_buf_55));
                 $local_6.count = $local_6.count + 1;
                 continue l37;
             };
         };
-        return other_38 = global:serde_serialize_array.wado::$const_obj_8, out_42 = $local_6.ser.buf, new_used_49 = out_42.used + 1, if @unlikely(new_used_49 > builtin::array_len(out_42.repr)) {
+        return out_42 = $local_6.ser.buf, new_used_49 = out_42.used + 1, if @unlikely(new_used_49 > builtin::array_len(out_42.repr)) {
             cold_path;
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(out_42, new_used_49);
-        }, start_50 = out_42.used, out_42.used = new_used_49, builtin::array_copy<u8>(out_42.repr, start_50, other_38.repr, 0, 1), ref.null none;
+        }, start_50 = out_42.used, out_42.used = new_used_49, builtin::array_copy<u8>(out_42.repr, start_50, global:serde_serialize_array.wado::$const_obj_8, 0, 1), ref.null none;
     } else {
     }
     return struct.new "serde_serialize_array.wado//SerializeError" { message: struct.new "core:prelude/string.wado//String" { repr: array.new_data<u8>("begin_seq failed"), used: 16 } };
@@ -597,7 +596,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l42;
