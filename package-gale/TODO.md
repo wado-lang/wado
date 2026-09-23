@@ -31,8 +31,6 @@ Design in [`action.md`](./action.md). Landed: every lexer emit the match can tak
 
 One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) covers the whole input and is built after tokenizing, so a read while lexing would rescan from the start. The alternative is a lexer that counts lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
 
-A context-independent predicate in a called rule is ignored by a caller's scan. `action.md` says the scan tournament evaluates one, and the jar does. Gale's scan reads only what the scan gate simulates, so `pick : gated X | A X ; gated : {false}? A | B ;` takes `gated` on `a x` and then fails its predicate. `driver_action_pred_single_test` pins the case as `#[TODO]`. Closing it needs such a predicate reachable from a scan function, which has no `p`.
-
 ### Not Stage C, and blocked
 
 - Both remaining `[stage_c_todo]` entries are held by something other than action execution, so no amount of Stage C work closes them: `FullContextParsing/AmbiguityNoLoop` is ambiguity _reporting_ (its `@init` asks for `LL_EXACT_AMBIG_DETECTION`), and `ParseTrees/ExtraTokensAndAltLabels` is the recovery divergence its own triage line describes.

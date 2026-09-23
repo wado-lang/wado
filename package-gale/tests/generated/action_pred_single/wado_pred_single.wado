@@ -1379,7 +1379,14 @@ fn scan_gated(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     let alt_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
     scan_alts: {
-        if _kind_set_0(alt_kind) {
+        if alt_kind == TK_A {
+            pos = start + 1;
+            try_0: {
+                if !((false)) { break try_0; }
+                break scan_alts;
+            }
+            return -1;
+        } else if alt_kind == TK_B {
             pos = start + 1;
             break scan_alts;
         } else {

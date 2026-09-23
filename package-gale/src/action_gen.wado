@@ -736,12 +736,12 @@ fn is_gateable_alt_initial_predicate(a: &AltAction, ctx: &GenContext) -> bool {
 /// joined — or `""` when the scan cannot answer them.
 ///
 /// A scan has no parser, so it can only evaluate a condition that reads nothing
-/// but simulated fields. The condition is the dispatch's own, rendered with the
-/// handle pointed at the scan gate; whatever names something else — a method, an
-/// unsimulated field, the parser — leaves the scan ungated, as it was before
-/// this existed.
+/// but simulated fields — or nothing at all, which needs no scan gate. The
+/// condition is the dispatch's own, rendered with the handle pointed at the
+/// scan gate; whatever names something else — a method, an unsimulated field,
+/// the parser — leaves the scan ungated.
 pub fn alt_scan_gate_conditions(alt: &Alternative, ctx: &GenContext) -> String {
-    if !ctx.emit_scan_gate() {
+    if !ctx.emit_actions() {
         return String::new();
     }
     let mut conds: List<String> = [];

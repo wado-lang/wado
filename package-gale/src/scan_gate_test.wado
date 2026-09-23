@@ -472,6 +472,14 @@ test "reads_only_scan_gate_fields: a parser read" {
     assert !reads_only_scan_gate_fields("(p.no_struct == 0)", &["no_struct"]);
 }
 
+test "reads_only_scan_gate_fields: a constant, with no fields at all" {
+    let none: List<String> = [];
+    assert reads_only_scan_gate_fields("false", &none);
+    assert reads_only_scan_gate_fields("(1 == 2 || true)", &none);
+    assert !reads_only_scan_gate_fields("falsey", &none);
+    assert !reads_only_scan_gate_fields("(p.no_struct == 0)", &none);
+}
+
 test "reads_only_scan_gate_fields: a call on the recognizer" {
     assert !reads_only_scan_gate_fields("pred_3(p)", &["no_struct"]);
 }
