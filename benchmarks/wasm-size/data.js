@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1790121022433,
+  "lastUpdate": 1790135978536,
   "repoUrl": "https://github.com/wado-lang/wado",
   "entries": {
     "Benchmark": [
@@ -58577,6 +58577,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/wado-lang/wado/commit/0080d5ee3ba4721e6317fe1e9828f8760b675d2e"
         },
         "date": 1790121021682,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "hello_world",
+            "value": 1868,
+            "unit": "bytes"
+          },
+          {
+            "name": "pi_approx",
+            "value": 6450,
+            "unit": "bytes"
+          },
+          {
+            "name": "zlib",
+            "value": 19544,
+            "unit": "bytes"
+          },
+          {
+            "name": "sqlite_highlight",
+            "value": 300955,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "g.psy.va@gmail.com",
+            "name": "FUJI Goro",
+            "username": "gfx"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8dc1347e3a18f7e655b69f402bcf0b9cbc6177c0",
+          "message": "Merge pull request #2128 from wado-lang/claude/loam-half\n\nfeat: half-precision tensors through Loam, one comparison rule per float",
+          "timestamp": "2026-09-23T12:45:38+09:00",
+          "tree_id": "dfe17402b9b0d942b48b64570fb3f9b4d6b871da",
+          "url": "https://github.com/wado-lang/wado/commit/8dc1347e3a18f7e655b69f402bcf0b9cbc6177c0"
+        },
+        "date": 1790135977901,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
