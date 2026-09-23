@@ -279,6 +279,37 @@ test "truncate rolls the builder back to a checkpoint" {
     assert s.to_string_tree(0, &ts, &names(["expr", "term"]), &names(["ID"])) == "(expr a)";
 }
 
+test "the last finished node survives a wrap inserted in front of it" {
+    let ts = stream_of("1+", [
+        [0, 0, 1],
+        [1, 1, 2],
+    ]);
+    let mut b = TreeBuilder::new();
+    let cp = b.checkpoint();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    b.finish_node(1);
+    b.start_node_at(cp, 0 as NodeKind, 0);
+    b.token(1);
+    assert b.render_last_finished(&ts, &names(["expr"]), &names(["INT", "PLUS"])) == "(expr 1)";
+}
+
+test "a rollback forgets the finished node it removes" {
+    let ts = stream_of("a b", [
+        [0, 0, 1],
+        [0, 2, 3],
+    ]);
+    let mut b = TreeBuilder::new();
+    b.start_node(0 as NodeKind, 0);
+    b.token(0);
+    let cp = b.checkpoint();
+    b.start_node(1 as NodeKind, 2);
+    b.token(1);
+    b.finish_node(3);
+    b.truncate(cp);
+    assert b.render_last_finished(&ts, &names(["expr", "term"]), &names(["ID"])) == "";
+}
+
 test "next_sibling on the root returns -1 without indexing past the columns" {
     let mut b = TreeBuilder::new();
     b.start_node(0 as NodeKind, 0);

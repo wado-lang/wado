@@ -781,6 +781,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -792,6 +795,9 @@ impl TreeBuilder {
         }
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1638,7 +1644,7 @@ fn scan_e_atom(tokens: &Array<i32>, pos: i32) -> i32 {
         if alt_kind == TK_LIT_MINUS {
             pos = start + 1;
             try_0: {
-                pos = scan_e(tokens, pos, 0);
+                pos = scan_e(tokens, pos, 3);
                 if pos < 0 { break try_0; }
                 break scan_alts;
             }

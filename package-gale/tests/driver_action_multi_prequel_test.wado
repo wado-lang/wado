@@ -16,3 +16,11 @@ test "@init seeds, the chosen alt runs, @after reads on a multi-alt rule" {
     assert b.ok(), "clean parse of b";
     assert b.output == "iBa2", `output: '${b.output}'`;
 }
+
+// ANTLR4 runs `@after` inside the rule's `try`, so a rule that fails skips it:
+// the jar prints `i` for empty input against the same rule.
+test "@after does not run when no alternative matches" {
+    let none = mp::parse("");
+    assert !none.ok(), "empty input matches no alternative";
+    assert none.output == "i", `output: '${none.output}'`;
+}

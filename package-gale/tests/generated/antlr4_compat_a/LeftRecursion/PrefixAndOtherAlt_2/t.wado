@@ -781,6 +781,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -792,6 +795,9 @@ impl TreeBuilder {
         }
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1580,7 +1586,7 @@ fn scan_expr_atom_alt_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_op(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_expr(tokens, pos, 0);
+    pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -1705,7 +1711,7 @@ fn _parse_expr__inner_scan_1(tokens: &Array<i32>, pos: i32) -> i32 {
     let mut pos = pos;
     pos = scan_op(tokens, pos);
     if pos < 0 { return -1; }
-    pos = scan_expr(tokens, pos, 2147483647);
+    pos = scan_expr(tokens, pos, 2);
     if pos < 0 { return -1; }
     return pos;
 }

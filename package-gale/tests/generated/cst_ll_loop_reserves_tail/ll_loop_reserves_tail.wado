@@ -781,6 +781,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -792,6 +795,9 @@ impl TreeBuilder {
         }
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -1550,19 +1556,21 @@ fn scan_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
         }
         if pos < 0 { pos = sp; break; }
         if pos == sp { break; }
-        let rs_1 = pos;
-        let mut rs_1_ok = false;
-        rsv_1: {
-            pos = scan_arm(tokens, pos);
-            if pos < 0 { break rsv_1; }
-            if pos < tokens.len() && tokens[pos] == TK_SEMI {
-                pos += 1;
-            }
-            rs_1_ok = true;
-        }
-        pos = rs_1;
         let rk_1 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_1_ok && !(rk_1 == TK_ID) { pos = sp; break; }
+        if !(rk_1 == TK_ID) {
+            let rs_1 = pos;
+            let mut rs_1_ok = false;
+            rsv_1: {
+                pos = scan_arm(tokens, pos);
+                if pos < 0 { break rsv_1; }
+                if pos < tokens.len() && tokens[pos] == TK_SEMI {
+                    pos += 1;
+                }
+                rs_1_ok = true;
+            }
+            pos = rs_1;
+            if !rs_1_ok { pos = sp; break; }
+        }
     }
     pos = scan_arm(tokens, pos);
     if pos < 0 { return -1; }
@@ -1615,19 +1623,21 @@ fn _parse_arms__inner(p: &mut Parser, follow: i64 = 0) -> () {
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                pos = scan_arm(tokens, pos);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos < tokens.len() && tokens[pos] == TK_SEMI {
-                    pos += 1;
-                }
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_ID) { break rep_scan; }
+            if !(rep_body_end_kind == TK_ID) {
+                let rep_body_end = pos;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    pos = scan_arm(tokens, pos);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos < tokens.len() && tokens[pos] == TK_SEMI {
+                        pos += 1;
+                    }
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }

@@ -787,6 +787,9 @@ impl TreeBuilder {
         self.b.insert(checkpoint, start);
         self.alt.insert(checkpoint, -1);
         self.open.push(checkpoint);
+        if self.last_finished >= checkpoint {
+            self.last_finished += 1;
+        }
     }
 
     pub fn truncate(&mut self, checkpoint: i32) {
@@ -798,6 +801,9 @@ impl TreeBuilder {
         }
         while self.open.len() > 0 && self.open[self.open.len() - 1] >= checkpoint {
             let _ = self.open.pop();
+        }
+        if self.last_finished >= checkpoint {
+            self.last_finished = -1;
         }
     }
 
@@ -6910,32 +6916,34 @@ fn scan_crate(tokens: &Array<i32>, pos: i32) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_0 = pos;
-        let rs_0_gate = SCAN_GATE;
-        let mut rs_0_ok = false;
-        rsv_0: {
-            while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_item(tokens, pos);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
-            pos += 1;
-            rs_0_ok = true;
-        }
-        pos = rs_0;
-        SCAN_GATE = rs_0_gate;
         let rk_0 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_0_ok && !(rk_0 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_0 == TK_POUND) {
+            let rs_0 = pos;
+            let rs_0_gate = SCAN_GATE;
+            let mut rs_0_ok = false;
+            rsv_0: {
+                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_item(tokens, pos);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rsv_0; }
+                pos += 1;
+                rs_0_ok = true;
+            }
+            pos = rs_0;
+            SCAN_GATE = rs_0_gate;
+            if !rs_0_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     while pos < tokens.len() && _kind_set_0(tokens[pos]) {
@@ -7994,32 +8002,34 @@ fn scan_module(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                     break;
                 }
                 if pos == sp { break; }
-                let rs_7 = pos;
-                let rs_7_gate = SCAN_GATE;
-                let mut rs_7_ok = false;
-                rsv_7: {
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                        let sp = pos;
-                        let sp_gate = SCAN_GATE;
-                        pos = scan_item(tokens, pos);
-                        if pos < 0 {
-                            pos = sp;
-                            SCAN_GATE = sp_gate;
-                            break;
-                        }
-                        if pos == sp { break; }
-                    }
-                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_7; }
-                    pos += 1;
-                    rs_7_ok = true;
-                }
-                pos = rs_7;
-                SCAN_GATE = rs_7_gate;
                 let rk_7 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rs_7_ok && !(rk_7 == TK_POUND) {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
+                if !(rk_7 == TK_POUND) {
+                    let rs_7 = pos;
+                    let rs_7_gate = SCAN_GATE;
+                    let mut rs_7_ok = false;
+                    rsv_7: {
+                        while pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                            let sp = pos;
+                            let sp_gate = SCAN_GATE;
+                            pos = scan_item(tokens, pos);
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE = sp_gate;
+                                break;
+                            }
+                            if pos == sp { break; }
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_7; }
+                        pos += 1;
+                        rs_7_ok = true;
+                    }
+                    pos = rs_7;
+                    SCAN_GATE = rs_7_gate;
+                    if !rs_7_ok {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
                 }
             }
             while pos < tokens.len() && _kind_set_0(tokens[pos]) {
@@ -9517,32 +9527,34 @@ fn scan_trait_(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_45 = pos;
-        let rs_45_gate = SCAN_GATE;
-        let mut rs_45_ok = false;
-        rsv_45: {
-            while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_associated_item(tokens, pos);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_45; }
-            pos += 1;
-            rs_45_ok = true;
-        }
-        pos = rs_45;
-        SCAN_GATE = rs_45_gate;
         let rk_45 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_45_ok && !(rk_45 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_45 == TK_POUND) {
+            let rs_45 = pos;
+            let rs_45_gate = SCAN_GATE;
+            let mut rs_45_ok = false;
+            rsv_45: {
+                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_associated_item(tokens, pos);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_45; }
+                pos += 1;
+                rs_45_ok = true;
+            }
+            pos = rs_45;
+            SCAN_GATE = rs_45_gate;
+            if !rs_45_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -9643,32 +9655,34 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_46 = pos;
-                    let rs_46_gate = SCAN_GATE;
-                    let mut rs_46_ok = false;
-                    rsv_46: {
-                        while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                            let sp = pos;
-                            let sp_gate = SCAN_GATE;
-                            pos = scan_associated_item(tokens, pos);
-                            if pos < 0 {
-                                pos = sp;
-                                SCAN_GATE = sp_gate;
-                                break;
-                            }
-                            if pos == sp { break; }
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_46; }
-                        pos += 1;
-                        rs_46_ok = true;
-                    }
-                    pos = rs_46;
-                    SCAN_GATE = rs_46_gate;
                     let rk_46 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_46_ok && !(rk_46 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_46 == TK_POUND) {
+                        let rs_46 = pos;
+                        let rs_46_gate = SCAN_GATE;
+                        let mut rs_46_ok = false;
+                        rsv_46: {
+                            while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                                let sp = pos;
+                                let sp_gate = SCAN_GATE;
+                                pos = scan_associated_item(tokens, pos);
+                                if pos < 0 {
+                                    pos = sp;
+                                    SCAN_GATE = sp_gate;
+                                    break;
+                                }
+                                if pos == sp { break; }
+                            }
+                            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_46; }
+                            pos += 1;
+                            rs_46_ok = true;
+                        }
+                        pos = rs_46;
+                        SCAN_GATE = rs_46_gate;
+                        if !rs_46_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -9719,32 +9733,34 @@ fn scan_inherent_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_47 = pos;
-        let rs_47_gate = SCAN_GATE;
-        let mut rs_47_ok = false;
-        rsv_47: {
-            while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_associated_item(tokens, pos);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_47; }
-            pos += 1;
-            rs_47_ok = true;
-        }
-        pos = rs_47;
-        SCAN_GATE = rs_47_gate;
         let rk_47 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_47_ok && !(rk_47 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_47 == TK_POUND) {
+            let rs_47 = pos;
+            let rs_47_gate = SCAN_GATE;
+            let mut rs_47_ok = false;
+            rsv_47: {
+                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_associated_item(tokens, pos);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_47; }
+                pos += 1;
+                rs_47_ok = true;
+            }
+            pos = rs_47;
+            SCAN_GATE = rs_47_gate;
+            if !rs_47_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -9809,32 +9825,34 @@ fn scan_trait_impl(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_48 = pos;
-        let rs_48_gate = SCAN_GATE;
-        let mut rs_48_ok = false;
-        rsv_48: {
-            while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_associated_item(tokens, pos);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_48; }
-            pos += 1;
-            rs_48_ok = true;
-        }
-        pos = rs_48;
-        SCAN_GATE = rs_48_gate;
         let rk_48 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_48_ok && !(rk_48 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_48 == TK_POUND) {
+            let rs_48 = pos;
+            let rs_48_gate = SCAN_GATE;
+            let mut rs_48_ok = false;
+            rsv_48: {
+                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_associated_item(tokens, pos);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_48; }
+                pos += 1;
+                rs_48_ok = true;
+            }
+            pos = rs_48;
+            SCAN_GATE = rs_48_gate;
+            if !rs_48_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -9881,32 +9899,34 @@ fn scan_extern_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_49 = pos;
-        let rs_49_gate = SCAN_GATE;
-        let mut rs_49_ok = false;
-        rsv_49: {
-            while pos < tokens.len() && _kind_set_24(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_external_item(tokens, pos);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_49; }
-            pos += 1;
-            rs_49_ok = true;
-        }
-        pos = rs_49;
-        SCAN_GATE = rs_49_gate;
         let rk_49 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_49_ok && !(rk_49 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_49 == TK_POUND) {
+            let rs_49 = pos;
+            let rs_49_gate = SCAN_GATE;
+            let mut rs_49_ok = false;
+            rsv_49: {
+                while pos < tokens.len() && _kind_set_24(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_external_item(tokens, pos);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_49; }
+                pos += 1;
+                rs_49_ok = true;
+            }
+            pos = rs_49;
+            SCAN_GATE = rs_49_gate;
+            if !rs_49_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     while pos < tokens.len() && _kind_set_24(tokens[pos]) {
@@ -10035,24 +10055,26 @@ fn scan_generic_params(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_54 = pos;
-                    let rs_54_gate = SCAN_GATE;
-                    let mut rs_54_ok = false;
-                    rsv_54: {
-                        pos = scan_generic_param(tokens, pos);
-                        if pos < 0 { break rsv_54; }
-                        if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                            pos += 1;
-                        }
-                        rs_54_ok = true;
-                    }
-                    pos = rs_54;
-                    SCAN_GATE = rs_54_gate;
                     let rk_54 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_54_ok && !(_kind_set_27(rk_54)) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(_kind_set_27(rk_54)) {
+                        let rs_54 = pos;
+                        let rs_54_gate = SCAN_GATE;
+                        let mut rs_54_ok = false;
+                        rsv_54: {
+                            pos = scan_generic_param(tokens, pos);
+                            if pos < 0 { break rsv_54; }
+                            if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                pos += 1;
+                            }
+                            rs_54_ok = true;
+                        }
+                        pos = rs_54;
+                        SCAN_GATE = rs_54_gate;
+                        if !rs_54_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 pos = scan_generic_param(tokens, pos);
@@ -10087,54 +10109,56 @@ fn scan_generic_param(tokens: &Array<i32>, pos: i32) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_55 = pos;
-        let rs_55_gate = SCAN_GATE;
-        let mut rs_55_ok = false;
-        rsv_55: {
-            let gp_56 = pos;
-            let gp_56_gate = SCAN_GATE;
-            let sgk_56 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            let mut sg_56_best = -1;
-            let mut sg_56_best_gate = SCAN_GATE;
-            if _kind_set_28(sgk_56) {
-                pos = gp_56;
-                SCAN_GATE = gp_56_gate;
-                sg_56_0: {
-                    pos = scan_lifetime_param(tokens, pos, 0);
-                    if pos < 0 { break sg_56_0; }
-                    if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
-                }
-                pos = gp_56;
-                SCAN_GATE = gp_56_gate;
-                sg_56_1: {
-                    pos = scan_type_param(tokens, pos, 0);
-                    if pos < 0 { break sg_56_1; }
-                    if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
-                }
-            } else if sgk_56 == TK_KW_CONST {
-                pos = gp_56;
-                SCAN_GATE = gp_56_gate;
-                sg_56_2: {
-                    pos = scan_const_param(tokens, pos, 0);
-                    if pos < 0 { break sg_56_2; }
-                    if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
-                }
-            }
-            if sg_56_best >= 0 {
-                pos = sg_56_best;
-                SCAN_GATE = sg_56_best_gate;
-            } else {
-                break rsv_55;
-            }
-            rs_55_ok = true;
-        }
-        pos = rs_55;
-        SCAN_GATE = rs_55_gate;
         let rk_55 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_55_ok && !(rk_55 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_55 == TK_POUND) {
+            let rs_55 = pos;
+            let rs_55_gate = SCAN_GATE;
+            let mut rs_55_ok = false;
+            rsv_55: {
+                let gp_56 = pos;
+                let gp_56_gate = SCAN_GATE;
+                let sgk_56 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                let mut sg_56_best = -1;
+                let mut sg_56_best_gate = SCAN_GATE;
+                if _kind_set_28(sgk_56) {
+                    pos = gp_56;
+                    SCAN_GATE = gp_56_gate;
+                    sg_56_0: {
+                        pos = scan_lifetime_param(tokens, pos, 0);
+                        if pos < 0 { break sg_56_0; }
+                        if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
+                    }
+                    pos = gp_56;
+                    SCAN_GATE = gp_56_gate;
+                    sg_56_1: {
+                        pos = scan_type_param(tokens, pos, 0);
+                        if pos < 0 { break sg_56_1; }
+                        if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
+                    }
+                } else if sgk_56 == TK_KW_CONST {
+                    pos = gp_56;
+                    SCAN_GATE = gp_56_gate;
+                    sg_56_2: {
+                        pos = scan_const_param(tokens, pos, 0);
+                        if pos < 0 { break sg_56_2; }
+                        if pos > sg_56_best { sg_56_best = pos; sg_56_best_gate = SCAN_GATE; }
+                    }
+                }
+                if sg_56_best >= 0 {
+                    pos = sg_56_best;
+                    SCAN_GATE = sg_56_best_gate;
+                } else {
+                    break rsv_55;
+                }
+                rs_55_ok = true;
+            }
+            pos = rs_55;
+            SCAN_GATE = rs_55_gate;
+            if !rs_55_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     let gp_57 = pos;
@@ -10948,24 +10972,26 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_71 = pos;
-                    let rs_71_gate = SCAN_GATE;
-                    let mut rs_71_ok = false;
-                    rsv_71: {
-                        pos = scan_expression(tokens, pos, follow, 0);
-                        if pos < 0 { break rsv_71; }
-                        rs_71_ok = true;
-                    }
-                    pos = rs_71;
-                    SCAN_GATE = rs_71_gate;
                     let rk_71 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_71_ok && !(rk_71 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_71 == TK_POUND) {
+                        let rs_71 = pos;
+                        let rs_71_gate = SCAN_GATE;
+                        let mut rs_71_ok = false;
+                        rsv_71: {
+                            pos = scan_expression(tokens, pos, follow, 0);
+                            if pos < 0 { break rsv_71; }
+                            rs_71_ok = true;
+                        }
+                        pos = rs_71;
+                        SCAN_GATE = rs_71_gate;
+                        if !rs_71_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 22);
                 if pos < 0 { break try_0; }
                 if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
@@ -11095,7 +11121,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 } else {
                     break try_3;
                 }
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 15);
                 if pos < 0 { break try_3; }
                 if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
@@ -11133,7 +11159,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
                     pos += 1;
                 }
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 15);
                 if pos < 0 { break try_4; }
                 if pos > best { best = pos; best_gate = SCAN_GATE; }
             }
@@ -11147,7 +11173,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             SCAN_GATE = start_gate;
             try_5: {
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 15);
                 if pos < 0 { break try_5; }
                 break scan_alts;
             }
@@ -11184,7 +11210,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                 } else {
                     break try_6;
                 }
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 15);
                 if pos < 0 { break try_6; }
                 break scan_alts;
             }
@@ -11211,7 +11237,7 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             pos = start + 1;
             SCAN_GATE = start_gate;
             try_8: {
-                pos = scan_expression(tokens, pos, follow, 0);
+                pos = scan_expression(tokens, pos, follow, 4);
                 if pos < 0 { break try_8; }
                 break scan_alts;
             }
@@ -11295,23 +11321,25 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_76 = pos;
-                    let rs_76_gate = SCAN_GATE;
-                    let mut rs_76_ok = false;
-                    rsv_76: {
-                        pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                        if pos < 0 { break rsv_76; }
-                        if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_76; }
-                        pos += 1;
-                        rs_76_ok = true;
-                    }
-                    pos = rs_76;
-                    SCAN_GATE = rs_76_gate;
                     let rk_76 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_76_ok && !(rk_76 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_76 == TK_POUND) {
+                        let rs_76 = pos;
+                        let rs_76_gate = SCAN_GATE;
+                        let mut rs_76_ok = false;
+                        rsv_76: {
+                            pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                            if pos < 0 { break rsv_76; }
+                            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_76; }
+                            pos += 1;
+                            rs_76_ok = true;
+                        }
+                        pos = rs_76;
+                        SCAN_GATE = rs_76_gate;
+                        if !rs_76_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
@@ -11335,30 +11363,32 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_77 = pos;
-                    let rs_77_gate = SCAN_GATE;
-                    let mut rs_77_ok = false;
-                    rsv_77: {
-                        if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                            let sp = pos;
-                            let sp_gate = SCAN_GATE;
-                            pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                            if pos < 0 {
-                                pos = sp;
-                                SCAN_GATE = sp_gate;
-                            }
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_77; }
-                        pos += 1;
-                        rs_77_ok = true;
-                    }
-                    pos = rs_77;
-                    SCAN_GATE = rs_77_gate;
                     let rk_77 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_77_ok && !(rk_77 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_77 == TK_POUND) {
+                        let rs_77 = pos;
+                        let rs_77_gate = SCAN_GATE;
+                        let mut rs_77_ok = false;
+                        rsv_77: {
+                            if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                                let sp = pos;
+                                let sp_gate = SCAN_GATE;
+                                pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                                if pos < 0 {
+                                    pos = sp;
+                                    SCAN_GATE = sp_gate;
+                                }
+                            }
+                            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_77; }
+                            pos += 1;
+                            rs_77_ok = true;
+                        }
+                        pos = rs_77;
+                        SCAN_GATE = rs_77_gate;
+                        if !rs_77_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
@@ -11396,30 +11426,32 @@ fn scan_expression_atom(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_78 = pos;
-                    let rs_78_gate = SCAN_GATE;
-                    let mut rs_78_ok = false;
-                    rsv_78: {
-                        if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                            let sp = pos;
-                            let sp_gate = SCAN_GATE;
-                            pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                            if pos < 0 {
-                                pos = sp;
-                                SCAN_GATE = sp_gate;
-                            }
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rsv_78; }
-                        pos += 1;
-                        rs_78_ok = true;
-                    }
-                    pos = rs_78;
-                    SCAN_GATE = rs_78_gate;
                     let rk_78 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_78_ok && !(rk_78 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_78 == TK_POUND) {
+                        let rs_78 = pos;
+                        let rs_78_gate = SCAN_GATE;
+                        let mut rs_78_ok = false;
+                        rsv_78: {
+                            if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                                let sp = pos;
+                                let sp_gate = SCAN_GATE;
+                                pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                                if pos < 0 {
+                                    pos = sp;
+                                    SCAN_GATE = sp_gate;
+                                }
+                            }
+                            if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rsv_78; }
+                            pos += 1;
+                            rs_78_ok = true;
+                        }
+                        pos = rs_78;
+                        SCAN_GATE = rs_78_gate;
+                        if !rs_78_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 if pos < tokens.len() && _kind_set_31(tokens[pos]) {
@@ -12202,21 +12234,23 @@ fn scan_expression_with_block(tokens: &Array<i32>, pos: i32, follow: i64 = 0) ->
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_82 = pos;
-                    let rs_82_gate = SCAN_GATE;
-                    let mut rs_82_ok = false;
-                    rsv_82: {
-                        pos = scan_expression_with_block(tokens, pos, follow);
-                        if pos < 0 { break rsv_82; }
-                        rs_82_ok = true;
-                    }
-                    pos = rs_82;
-                    SCAN_GATE = rs_82_gate;
                     let rk_82 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_82_ok && !(rk_82 == TK_POUND) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(rk_82 == TK_POUND) {
+                        let rs_82 = pos;
+                        let rs_82_gate = SCAN_GATE;
+                        let mut rs_82_ok = false;
+                        rsv_82: {
+                            pos = scan_expression_with_block(tokens, pos, follow);
+                            if pos < 0 { break rsv_82; }
+                            rs_82_ok = true;
+                        }
+                        pos = rs_82;
+                        SCAN_GATE = rs_82_gate;
+                        if !rs_82_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 pos = scan_expression_with_block(tokens, pos, follow);
@@ -12352,30 +12386,32 @@ fn scan_block_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             break;
         }
         if pos == sp { break; }
-        let rs_83 = pos;
-        let rs_83_gate = SCAN_GATE;
-        let mut rs_83_ok = false;
-        rsv_83: {
-            if pos < tokens.len() && _kind_set_33(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_83; }
-            pos += 1;
-            rs_83_ok = true;
-        }
-        pos = rs_83;
-        SCAN_GATE = rs_83_gate;
         let rk_83 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_83_ok && !(rk_83 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_83 == TK_POUND) {
+            let rs_83 = pos;
+            let rs_83_gate = SCAN_GATE;
+            let mut rs_83_ok = false;
+            rsv_83: {
+                if pos < tokens.len() && _kind_set_33(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_83; }
+                pos += 1;
+                rs_83_ok = true;
+            }
+            pos = rs_83;
+            SCAN_GATE = rs_83_gate;
+            if !rs_83_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     if pos < tokens.len() && _kind_set_33(tokens[pos]) {
@@ -12743,57 +12779,59 @@ fn scan_struct_expr_struct(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i3
             break;
         }
         if pos == sp { break; }
-        let rs_90 = pos;
-        let rs_90_gate = SCAN_GATE;
-        let mut rs_90_ok = false;
-        rsv_90: {
-            if pos < tokens.len() && _kind_set_35(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                let gp_91 = pos;
-                let gp_91_gate = SCAN_GATE;
-                let sgk_91 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_91_best = -1;
-                let mut sg_91_best_gate = SCAN_GATE;
-                if _kind_set_34(sgk_91) {
-                    pos = gp_91;
-                    SCAN_GATE = gp_91_gate;
-                    sg_91_0: {
-                        pos = scan_struct_expr_fields(tokens, pos, 0);
-                        if pos < 0 { break sg_91_0; }
-                        if pos > sg_91_best { sg_91_best = pos; sg_91_best_gate = SCAN_GATE; }
-                    }
-                } else if sgk_91 == TK_DOTDOT {
-                    pos = gp_91;
-                    SCAN_GATE = gp_91_gate;
-                    sg_91_1: {
-                        pos = scan_struct_base(tokens, pos, 0);
-                        if pos < 0 { break sg_91_1; }
-                        if pos > sg_91_best { sg_91_best = pos; sg_91_best_gate = SCAN_GATE; }
-                    }
-                }
-                if sg_91_best >= 0 {
-                    pos = sg_91_best;
-                    SCAN_GATE = sg_91_best_gate;
-                } else {
-                    pos = -1;
-                }
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_90; }
-            pos += 1;
-            rs_90_ok = true;
-        }
-        pos = rs_90;
-        SCAN_GATE = rs_90_gate;
         let rk_90 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_90_ok && !(rk_90 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_90 == TK_POUND) {
+            let rs_90 = pos;
+            let rs_90_gate = SCAN_GATE;
+            let mut rs_90_ok = false;
+            rsv_90: {
+                if pos < tokens.len() && _kind_set_35(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    let gp_91 = pos;
+                    let gp_91_gate = SCAN_GATE;
+                    let sgk_91 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    let mut sg_91_best = -1;
+                    let mut sg_91_best_gate = SCAN_GATE;
+                    if _kind_set_34(sgk_91) {
+                        pos = gp_91;
+                        SCAN_GATE = gp_91_gate;
+                        sg_91_0: {
+                            pos = scan_struct_expr_fields(tokens, pos, 0);
+                            if pos < 0 { break sg_91_0; }
+                            if pos > sg_91_best { sg_91_best = pos; sg_91_best_gate = SCAN_GATE; }
+                        }
+                    } else if sgk_91 == TK_DOTDOT {
+                        pos = gp_91;
+                        SCAN_GATE = gp_91_gate;
+                        sg_91_1: {
+                            pos = scan_struct_base(tokens, pos, 0);
+                            if pos < 0 { break sg_91_1; }
+                            if pos > sg_91_best { sg_91_best = pos; sg_91_best_gate = SCAN_GATE; }
+                        }
+                    }
+                    if sg_91_best >= 0 {
+                        pos = sg_91_best;
+                        SCAN_GATE = sg_91_best_gate;
+                    } else {
+                        pos = -1;
+                    }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_90; }
+                pos += 1;
+                rs_90_ok = true;
+            }
+            pos = rs_90;
+            SCAN_GATE = rs_90_gate;
+            if !rs_90_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     if pos < tokens.len() && _kind_set_35(tokens[pos]) {
@@ -13048,60 +13086,62 @@ fn scan_struct_expr_tuple(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32
             break;
         }
         if pos == sp { break; }
-        let rs_99 = pos;
-        let rs_99_gate = SCAN_GATE;
-        let mut rs_99_ok = false;
-        rsv_99: {
-            if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                sg_100_done: {
-                    sg_100: {
-                        pos = scan_expression(tokens, pos, 0, 0);
-                        if pos < 0 { break sg_100; }
-                        while pos < tokens.len() && tokens[pos] == TK_COMMA {
-                            let sp = pos;
-                            let sp_gate = SCAN_GATE;
-                            sg_101_done: {
-                                sg_101: {
-                                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_101; }
-                                    pos += 1;
-                                    pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-                                    if pos < 0 { break sg_101; }
-                                    break sg_101_done;
-                                }
-                                pos = -1;
-                            }
-                            if pos < 0 {
-                                pos = sp;
-                                SCAN_GATE = sp_gate;
-                                break;
-                            }
-                            if pos == sp { break; }
-                        }
-                        if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                            pos += 1;
-                        }
-                        break sg_100_done;
-                    }
-                    pos = -1;
-                }
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_99; }
-            pos += 1;
-            rs_99_ok = true;
-        }
-        pos = rs_99;
-        SCAN_GATE = rs_99_gate;
         let rk_99 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_99_ok && !(rk_99 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_99 == TK_POUND) {
+            let rs_99 = pos;
+            let rs_99_gate = SCAN_GATE;
+            let mut rs_99_ok = false;
+            rsv_99: {
+                if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    sg_100_done: {
+                        sg_100: {
+                            pos = scan_expression(tokens, pos, 0, 0);
+                            if pos < 0 { break sg_100; }
+                            while pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                let sp = pos;
+                                let sp_gate = SCAN_GATE;
+                                sg_101_done: {
+                                    sg_101: {
+                                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_101; }
+                                        pos += 1;
+                                        pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                                        if pos < 0 { break sg_101; }
+                                        break sg_101_done;
+                                    }
+                                    pos = -1;
+                                }
+                                if pos < 0 {
+                                    pos = sp;
+                                    SCAN_GATE = sp_gate;
+                                    break;
+                                }
+                                if pos == sp { break; }
+                            }
+                            if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                pos += 1;
+                            }
+                            break sg_100_done;
+                        }
+                        pos = -1;
+                    }
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_99; }
+                pos += 1;
+                rs_99_ok = true;
+            }
+            pos = rs_99;
+            SCAN_GATE = rs_99_gate;
+            if !rs_99_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
@@ -14007,30 +14047,32 @@ fn scan_match_expression(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 
             break;
         }
         if pos == sp { break; }
-        let rs_125 = pos;
-        let rs_125_gate = SCAN_GATE;
-        let mut rs_125_ok = false;
-        rsv_125: {
-            if pos < tokens.len() && _kind_set_37(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_125; }
-            pos += 1;
-            rs_125_ok = true;
-        }
-        pos = rs_125;
-        SCAN_GATE = rs_125_gate;
         let rk_125 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_125_ok && !(rk_125 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_125 == TK_POUND) {
+            let rs_125 = pos;
+            let rs_125_gate = SCAN_GATE;
+            let mut rs_125_ok = false;
+            rsv_125: {
+                if pos < tokens.len() && _kind_set_37(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_125; }
+                pos += 1;
+                rs_125_ok = true;
+            }
+            pos = rs_125;
+            SCAN_GATE = rs_125_gate;
+            if !rs_125_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     if pos < tokens.len() && _kind_set_37(tokens[pos]) {
@@ -14070,28 +14112,30 @@ fn scan_match_arms(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
             break;
         }
         if pos == sp { break; }
-        let rs_127 = pos;
-        let rs_127_gate = SCAN_GATE;
-        let mut rs_127_ok = false;
-        rsv_127: {
-            pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
-            if pos < 0 { break rsv_127; }
-            if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break rsv_127; }
-            pos += 1;
-            pos = scan_expression(tokens, pos, follow, 0);
-            if pos < 0 { break rsv_127; }
-            if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                pos += 1;
-            }
-            rs_127_ok = true;
-        }
-        pos = rs_127;
-        SCAN_GATE = rs_127_gate;
         let rk_127 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_127_ok && !(_kind_set_37(rk_127)) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(_kind_set_37(rk_127)) {
+            let rs_127 = pos;
+            let rs_127_gate = SCAN_GATE;
+            let mut rs_127_ok = false;
+            rsv_127: {
+                pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
+                if pos < 0 { break rsv_127; }
+                if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break rsv_127; }
+                pos += 1;
+                pos = scan_expression(tokens, pos, follow, 0);
+                if pos < 0 { break rsv_127; }
+                if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                    pos += 1;
+                }
+                rs_127_ok = true;
+            }
+            pos = rs_127;
+            SCAN_GATE = rs_127_gate;
+            if !rs_127_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
@@ -16060,36 +16104,38 @@ fn scan_maybe_named_function_parameters_variadic(tokens: &Array<i32>, pos: i32, 
             break;
         }
         if pos == sp { break; }
-        let rs_156 = pos;
-        let rs_156_gate = SCAN_GATE;
-        let mut rs_156_ok = false;
-        rsv_156: {
-            pos = scan_maybe_named_param(tokens, pos, FOLLOW_MASK_22);
-            if pos < 0 { break rsv_156; }
-            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break rsv_156; }
-            pos += 1;
-            while pos < tokens.len() && tokens[pos] == TK_POUND {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_outer_attribute(tokens, pos, 0);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
-                }
-                if pos == sp { break; }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rsv_156; }
-            pos += 1;
-            rs_156_ok = true;
-        }
-        pos = rs_156;
-        SCAN_GATE = rs_156_gate;
         let rk_156 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_156_ok && !(_kind_set_44(rk_156)) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(_kind_set_44(rk_156)) {
+            let rs_156 = pos;
+            let rs_156_gate = SCAN_GATE;
+            let mut rs_156_ok = false;
+            rsv_156: {
+                pos = scan_maybe_named_param(tokens, pos, FOLLOW_MASK_22);
+                if pos < 0 { break rsv_156; }
+                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break rsv_156; }
+                pos += 1;
+                while pos < tokens.len() && tokens[pos] == TK_POUND {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_outer_attribute(tokens, pos, 0);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
+                    if pos == sp { break; }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rsv_156; }
+                pos += 1;
+                rs_156_ok = true;
+            }
+            pos = rs_156;
+            SCAN_GATE = rs_156_gate;
+            if !rs_156_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     pos = scan_maybe_named_param(tokens, pos, FOLLOW_MASK_22);
@@ -16656,26 +16702,28 @@ fn scan_generic_args(tokens: &Array<i32>, pos: i32, follow: i64 = 0) -> i32 {
                         break;
                     }
                     if pos == sp { break; }
-                    let rs_168 = pos;
-                    let rs_168_gate = SCAN_GATE;
-                    let mut rs_168_ok = false;
-                    rsv_168: {
-                        pos = scan_generic_arg(tokens, pos, 0);
-                        if pos < 0 { break rsv_168; }
-                        if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                            pos += 1;
-                        }
-                        if pos >= tokens.len() || tokens[pos] != TK_GT { break rsv_168; }
-                        pos += 1;
-                        rs_168_ok = true;
-                    }
-                    pos = rs_168;
-                    SCAN_GATE = rs_168_gate;
                     let rk_168 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rs_168_ok && !(_kind_set_48(rk_168)) {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
+                    if !(_kind_set_48(rk_168)) {
+                        let rs_168 = pos;
+                        let rs_168_gate = SCAN_GATE;
+                        let mut rs_168_ok = false;
+                        rsv_168: {
+                            pos = scan_generic_arg(tokens, pos, 0);
+                            if pos < 0 { break rsv_168; }
+                            if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                pos += 1;
+                            }
+                            if pos >= tokens.len() || tokens[pos] != TK_GT { break rsv_168; }
+                            pos += 1;
+                            rs_168_ok = true;
+                        }
+                        pos = rs_168;
+                        SCAN_GATE = rs_168_gate;
+                        if !rs_168_ok {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
                     }
                 }
                 pos = scan_generic_arg(tokens, pos, 0);
@@ -17419,29 +17467,31 @@ fn _parse_crate__inner(p: &mut Parser) -> () with RustParserBase {
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_item(tokens, pos);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_item(tokens, pos);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_EOF { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -18683,44 +18733,39 @@ fn _parse_item__inner(p: &mut Parser) -> () with RustParserBase {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_vis_item(tokens, pos, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_macro_item(tokens, pos, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_vis_item(tokens, pos, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_macro_item(tokens, pos, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             let vis_item = _parse_vis_item(p, 0);
@@ -18753,144 +18798,124 @@ fn _parse_vis_item__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParser
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_module(tokens, pos, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_extern_crate(tokens, pos, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_3: i32 = -1;
-            let mut gd_end_3_gate = SCAN_GATE;
-            gd_scan_3: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_function_(tokens, pos, 0);
-                if pos < 0 { break gd_scan_3; }
-                gd_end_3 = pos;
-                gd_end_3_gate = SCAN_GATE;
-            }
-            if gd_end_3 > gd_best {
-                SCAN_GATE = gd_end_3_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_3;
-                gd_winner = 3;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_4: i32 = -1;
-            let mut gd_end_4_gate = SCAN_GATE;
-            gd_scan_4: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_constant_item(tokens, pos, 0);
-                if pos < 0 { break gd_scan_4; }
-                gd_end_4 = pos;
-                gd_end_4_gate = SCAN_GATE;
-            }
-            if gd_end_4 > gd_best {
-                SCAN_GATE = gd_end_4_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_4;
-                gd_winner = 8;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_5: i32 = -1;
-            let mut gd_end_5_gate = SCAN_GATE;
-            gd_scan_5: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_trait_(tokens, pos, 0);
-                if pos < 0 { break gd_scan_5; }
-                gd_end_5 = pos;
-                gd_end_5_gate = SCAN_GATE;
-            }
-            if gd_end_5 > gd_best {
-                SCAN_GATE = gd_end_5_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_5;
-                gd_winner = 10;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_6: i32 = -1;
-            let mut gd_end_6_gate = SCAN_GATE;
-            gd_scan_6: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_implementation(tokens, pos, 0);
-                if pos < 0 { break gd_scan_6; }
-                gd_end_6 = pos;
-                gd_end_6_gate = SCAN_GATE;
-            }
-            if gd_end_6 > gd_best {
-                SCAN_GATE = gd_end_6_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_6;
-                gd_winner = 11;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_7: i32 = -1;
-            let mut gd_end_7_gate = SCAN_GATE;
-            gd_scan_7: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_extern_block(tokens, pos, 0);
-                if pos < 0 { break gd_scan_7; }
-                gd_end_7 = pos;
-                gd_end_7_gate = SCAN_GATE;
-            }
-            if gd_end_7 > gd_best {
-                SCAN_GATE = gd_end_7_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_7;
-                gd_winner = 12;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_module(tokens, pos, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_extern_crate(tokens, pos, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
+        }
+        let mut gd_end_3: i32 = -1;
+        let mut gd_end_3_gate = SCAN_GATE;
+        gd_scan_3: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_function_(tokens, pos, 0);
+            if pos < 0 { break gd_scan_3; }
+            gd_end_3 = pos;
+            gd_end_3_gate = SCAN_GATE;
+        }
+        if gd_end_3 > gd_best {
+            SCAN_GATE = gd_end_3_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_3;
+            gd_winner = 3;
+        }
+        let mut gd_end_4: i32 = -1;
+        let mut gd_end_4_gate = SCAN_GATE;
+        gd_scan_4: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_constant_item(tokens, pos, 0);
+            if pos < 0 { break gd_scan_4; }
+            gd_end_4 = pos;
+            gd_end_4_gate = SCAN_GATE;
+        }
+        if gd_end_4 > gd_best {
+            SCAN_GATE = gd_end_4_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_4;
+            gd_winner = 8;
+        }
+        let mut gd_end_5: i32 = -1;
+        let mut gd_end_5_gate = SCAN_GATE;
+        gd_scan_5: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_trait_(tokens, pos, 0);
+            if pos < 0 { break gd_scan_5; }
+            gd_end_5 = pos;
+            gd_end_5_gate = SCAN_GATE;
+        }
+        if gd_end_5 > gd_best {
+            SCAN_GATE = gd_end_5_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_5;
+            gd_winner = 10;
+        }
+        let mut gd_end_6: i32 = -1;
+        let mut gd_end_6_gate = SCAN_GATE;
+        gd_scan_6: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_implementation(tokens, pos, 0);
+            if pos < 0 { break gd_scan_6; }
+            gd_end_6 = pos;
+            gd_end_6_gate = SCAN_GATE;
+        }
+        if gd_end_6 > gd_best {
+            SCAN_GATE = gd_end_6_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_6;
+            gd_winner = 11;
+        }
+        let mut gd_end_7: i32 = -1;
+        let mut gd_end_7_gate = SCAN_GATE;
+        gd_scan_7: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_extern_block(tokens, pos, 0);
+            if pos < 0 { break gd_scan_7; }
+            gd_end_7 = pos;
+            gd_end_7_gate = SCAN_GATE;
+        }
+        if gd_end_7 > gd_best {
+            SCAN_GATE = gd_end_7_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_7;
+            gd_winner = 12;
         }
         if gd_winner == 0 {
             let module = _parse_module(p, 0);
@@ -19028,29 +19053,31 @@ fn _parse_module__inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
                 pos = scan_inner_attribute(tokens, pos, 0);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
-                let rep_body_end = pos;
-                let rep_body_end_gate = SCAN_GATE;
-                let mut rep_body_end_ok = false;
-                rep_body_end_scan: {
-                    while pos < tokens.len() && _kind_set_0(tokens[pos]) {
-                        let sp = pos;
-                        let sp_gate = SCAN_GATE;
-                        pos = scan_item(tokens, pos);
-                        if pos < 0 {
-                            pos = sp;
-                            SCAN_GATE = sp_gate;
-                            break;
-                        }
-                        if pos == sp { break; }
-                    }
-                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                    pos += 1;
-                    rep_body_end_ok = true;
-                }
-                pos = rep_body_end;
-                SCAN_GATE = rep_body_end_gate;
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+                if !(rep_body_end_kind == TK_POUND) {
+                    let rep_body_end = pos;
+                    let rep_body_end_gate = SCAN_GATE;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        while pos < tokens.len() && _kind_set_0(tokens[pos]) {
+                            let sp = pos;
+                            let sp_gate = SCAN_GATE;
+                            pos = scan_item(tokens, pos);
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE = sp_gate;
+                                break;
+                            }
+                            if pos == sp { break; }
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    SCAN_GATE = rep_body_end_gate;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {
@@ -19879,44 +19906,39 @@ fn _parse_self_param__inner(p: &mut Parser) -> () with RustParserBase {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_shorthand_self(tokens, pos, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_typed_self(tokens, pos, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_shorthand_self(tokens, pos, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_typed_self(tokens, pos, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             let shorthand_self = _parse_shorthand_self(p, 0);
@@ -20021,44 +20043,39 @@ fn _parse_function_param__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_function_param_pattern(tokens, pos, follow);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_type_(tokens, pos, follow);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 2;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_function_param_pattern(tokens, pos, follow);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_type_(tokens, pos, follow);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 2;
         }
         if gd_winner == 0 {
             let function_param_pattern = _parse_function_param_pattern(p, follow);
@@ -20863,29 +20880,31 @@ fn _parse_trait___inner(p: &mut Parser, follow: i64 = 0) -> () with RustParserBa
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_associated_item(tokens, pos);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_associated_item(tokens, pos);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -21053,32 +21072,34 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
                     break;
                 }
                 if pos == sp { break; }
-                let rs_202 = pos;
-                let rs_202_gate = SCAN_GATE;
-                let mut rs_202_ok = false;
-                rsv_202: {
-                    while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                        let sp = pos;
-                        let sp_gate = SCAN_GATE;
-                        pos = scan_associated_item(tokens, pos);
-                        if pos < 0 {
-                            pos = sp;
-                            SCAN_GATE = sp_gate;
-                            break;
-                        }
-                        if pos == sp { break; }
-                    }
-                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_202; }
-                    pos += 1;
-                    rs_202_ok = true;
-                }
-                pos = rs_202;
-                SCAN_GATE = rs_202_gate;
                 let rk_202 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rs_202_ok && !(rk_202 == TK_POUND) {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                    break;
+                if !(rk_202 == TK_POUND) {
+                    let rs_202 = pos;
+                    let rs_202_gate = SCAN_GATE;
+                    let mut rs_202_ok = false;
+                    rsv_202: {
+                        while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                            let sp = pos;
+                            let sp_gate = SCAN_GATE;
+                            pos = scan_associated_item(tokens, pos);
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE = sp_gate;
+                                break;
+                            }
+                            if pos == sp { break; }
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rsv_202; }
+                        pos += 1;
+                        rs_202_ok = true;
+                    }
+                    pos = rs_202;
+                    SCAN_GATE = rs_202_gate;
+                    if !rs_202_ok {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                        break;
+                    }
                 }
             }
             while pos < tokens.len() && _kind_set_23(tokens[pos]) {
@@ -21116,29 +21137,31 @@ fn _parse_inherent_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_associated_item(tokens, pos);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_associated_item(tokens, pos);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -21230,29 +21253,31 @@ fn _parse_trait_impl__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                while pos < tokens.len() && _kind_set_23(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_associated_item(tokens, pos);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && _kind_set_23(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_associated_item(tokens, pos);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -21335,29 +21360,31 @@ fn _parse_extern_block__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPa
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                while pos < tokens.len() && _kind_set_24(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_external_item(tokens, pos);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    while pos < tokens.len() && _kind_set_24(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_external_item(tokens, pos);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -21509,24 +21536,26 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                 break;
             }
             if pos == sp { break; }
-            let rs_204 = pos;
-            let rs_204_gate = SCAN_GATE;
-            let mut rs_204_ok = false;
-            rsv_204: {
-                pos = scan_generic_param(tokens, pos);
-                if pos < 0 { break rsv_204; }
-                if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                    pos += 1;
-                }
-                rs_204_ok = true;
-            }
-            pos = rs_204;
-            SCAN_GATE = rs_204_gate;
             let rk_204 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rs_204_ok && !(_kind_set_27(rk_204)) {
-                pos = sp;
-                SCAN_GATE = sp_gate;
-                break;
+            if !(_kind_set_27(rk_204)) {
+                let rs_204 = pos;
+                let rs_204_gate = SCAN_GATE;
+                let mut rs_204_ok = false;
+                rsv_204: {
+                    pos = scan_generic_param(tokens, pos);
+                    if pos < 0 { break rsv_204; }
+                    if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                        pos += 1;
+                    }
+                    rs_204_ok = true;
+                }
+                pos = rs_204;
+                SCAN_GATE = rs_204_gate;
+                if !rs_204_ok {
+                    pos = sp;
+                    SCAN_GATE = sp_gate;
+                    break;
+                }
             }
         }
         pos = scan_generic_param(tokens, pos);
@@ -21555,21 +21584,23 @@ fn _parse_generic_params__inner(p: &mut Parser, follow: i64 = 0) -> () with Rust
                     break rep_scan;
                 }
                 if pos <= p.pos { break rep_scan; }
-                let rep_body_end = pos;
-                let rep_body_end_gate = SCAN_GATE;
-                let mut rep_body_end_ok = false;
-                rep_body_end_scan: {
-                    pos = scan_generic_param(tokens, pos);
-                    if pos < 0 { break rep_body_end_scan; }
-                    if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                        pos += 1;
-                    }
-                    rep_body_end_ok = true;
-                }
-                pos = rep_body_end;
-                SCAN_GATE = rep_body_end_gate;
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(_kind_set_27(rep_body_end_kind)) { break rep_scan; }
+                if !(_kind_set_27(rep_body_end_kind)) {
+                    let rep_body_end = pos;
+                    let rep_body_end_gate = SCAN_GATE;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        pos = scan_generic_param(tokens, pos);
+                        if pos < 0 { break rep_body_end_scan; }
+                        if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                            pos += 1;
+                        }
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    SCAN_GATE = rep_body_end_gate;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 { break; }
@@ -21607,51 +21638,53 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
             pos = scan_outer_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                let gp_206 = pos;
-                let gp_206_gate = SCAN_GATE;
-                let sgk_206 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_206_best = -1;
-                let mut sg_206_best_gate = SCAN_GATE;
-                if _kind_set_28(sgk_206) {
-                    pos = gp_206;
-                    SCAN_GATE = gp_206_gate;
-                    sg_206_0: {
-                        pos = scan_lifetime_param(tokens, pos, 0);
-                        if pos < 0 { break sg_206_0; }
-                        if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
-                    }
-                    pos = gp_206;
-                    SCAN_GATE = gp_206_gate;
-                    sg_206_1: {
-                        pos = scan_type_param(tokens, pos, 0);
-                        if pos < 0 { break sg_206_1; }
-                        if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
-                    }
-                } else if sgk_206 == TK_KW_CONST {
-                    pos = gp_206;
-                    SCAN_GATE = gp_206_gate;
-                    sg_206_2: {
-                        pos = scan_const_param(tokens, pos, 0);
-                        if pos < 0 { break sg_206_2; }
-                        if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
-                    }
-                }
-                if sg_206_best >= 0 {
-                    pos = sg_206_best;
-                    SCAN_GATE = sg_206_best_gate;
-                } else {
-                    break rep_body_end_scan;
-                }
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    let gp_206 = pos;
+                    let gp_206_gate = SCAN_GATE;
+                    let sgk_206 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                    let mut sg_206_best = -1;
+                    let mut sg_206_best_gate = SCAN_GATE;
+                    if _kind_set_28(sgk_206) {
+                        pos = gp_206;
+                        SCAN_GATE = gp_206_gate;
+                        sg_206_0: {
+                            pos = scan_lifetime_param(tokens, pos, 0);
+                            if pos < 0 { break sg_206_0; }
+                            if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
+                        }
+                        pos = gp_206;
+                        SCAN_GATE = gp_206_gate;
+                        sg_206_1: {
+                            pos = scan_type_param(tokens, pos, 0);
+                            if pos < 0 { break sg_206_1; }
+                            if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
+                        }
+                    } else if sgk_206 == TK_KW_CONST {
+                        pos = gp_206;
+                        SCAN_GATE = gp_206_gate;
+                        sg_206_2: {
+                            pos = scan_const_param(tokens, pos, 0);
+                            if pos < 0 { break sg_206_2; }
+                            if pos > sg_206_best { sg_206_best = pos; sg_206_best_gate = SCAN_GATE; }
+                        }
+                    }
+                    if sg_206_best >= 0 {
+                        pos = sg_206_best;
+                        SCAN_GATE = sg_206_best_gate;
+                    } else {
+                        break rep_body_end_scan;
+                    }
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -21676,44 +21709,39 @@ fn _parse_generic_param__inner(p: &mut Parser) -> () with RustParserBase {
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_lifetime_param(tokens, pos, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_type_param(tokens, pos, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_lifetime_param(tokens, pos, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_type_param(tokens, pos, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             let lifetime_param = _parse_lifetime_param(p, 0);
@@ -22075,44 +22103,39 @@ fn _parse_associated_item__inner(p: &mut Parser) -> () with RustParserBase {
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
             let mut gd_best_gate = SCAN_GATE;
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                let mut gd_end_gate = SCAN_GATE;
-                gd_scan: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_constant_item(tokens, pos, 0);
-                    if pos < 0 { break gd_scan; }
-                    gd_end = pos;
-                    gd_end_gate = SCAN_GATE;
-                }
-                if gd_end > gd_best {
-                    SCAN_GATE = gd_end_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end;
-                    gd_winner = 1;
-                }
-                if gd_best >= p.kinds.len() {
-                    break gd_tourney;
-                }
-                let mut gd_end_2: i32 = -1;
-                let mut gd_end_2_gate = SCAN_GATE;
-                gd_scan_2: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_function_(tokens, pos, 0);
-                    if pos < 0 { break gd_scan_2; }
-                    gd_end_2 = pos;
-                    gd_end_2_gate = SCAN_GATE;
-                }
-                if gd_end_2 > gd_best {
-                    SCAN_GATE = gd_end_2_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end_2;
-                    gd_winner = 2;
-                }
+            let mut gd_end: i32 = -1;
+            let mut gd_end_gate = SCAN_GATE;
+            gd_scan: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_constant_item(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+                gd_end_gate = SCAN_GATE;
+            }
+            if gd_end > gd_best {
+                SCAN_GATE = gd_end_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end;
+                gd_winner = 1;
+            }
+            let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_gate = SCAN_GATE;
+            gd_scan_2: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_function_(tokens, pos, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+                gd_end_2_gate = SCAN_GATE;
+            }
+            if gd_end_2 > gd_best {
+                SCAN_GATE = gd_end_2_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end_2;
+                gd_winner = 2;
             }
             if gd_winner == 1 {
                 let constant_item = _parse_constant_item(p, 0);
@@ -22585,18 +22608,20 @@ fn _parse_expression__inner_alt_0(p: &mut Parser, follow: i64 = 0) -> () with Ru
                 pos = scan_outer_attribute(tokens, pos, 0);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
-                let rep_body_end = pos;
-                let rep_body_end_gate = SCAN_GATE;
-                let mut rep_body_end_ok = false;
-                rep_body_end_scan: {
-                    pos = scan_expression(tokens, pos, follow, 0);
-                    if pos < 0 { break rep_body_end_scan; }
-                    rep_body_end_ok = true;
-                }
-                pos = rep_body_end;
-                SCAN_GATE = rep_body_end_gate;
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+                if !(rep_body_end_kind == TK_POUND) {
+                    let rep_body_end = pos;
+                    let rep_body_end_gate = SCAN_GATE;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        pos = scan_expression(tokens, pos, follow, 0);
+                        if pos < 0 { break rep_body_end_scan; }
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    SCAN_GATE = rep_body_end_gate;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {
@@ -22636,24 +22661,26 @@ fn _parse_expression__inner_scan_0(tokens: &Array<i32>, pos: i32, follow: i64 = 
             break;
         }
         if pos == sp { break; }
-        let rs_208 = pos;
-        let rs_208_gate = SCAN_GATE;
-        let mut rs_208_ok = false;
-        rsv_208: {
-            pos = scan_expression(tokens, pos, follow, 0);
-            if pos < 0 { break rsv_208; }
-            rs_208_ok = true;
-        }
-        pos = rs_208;
-        SCAN_GATE = rs_208_gate;
         let rk_208 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_208_ok && !(rk_208 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_208 == TK_POUND) {
+            let rs_208 = pos;
+            let rs_208_gate = SCAN_GATE;
+            let mut rs_208_ok = false;
+            rsv_208: {
+                pos = scan_expression(tokens, pos, follow, 0);
+                if pos < 0 { break rsv_208; }
+                rs_208_ok = true;
+            }
+            pos = rs_208;
+            SCAN_GATE = rs_208_gate;
+            if !rs_208_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
-    pos = scan_expression(tokens, pos, follow, 2147483647);
+    pos = scan_expression(tokens, pos, follow, 22);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -22781,7 +22808,7 @@ fn _parse_expression__inner_scan_10(tokens: &Array<i32>, pos: i32, follow: i64 =
     } else {
         return -1;
     }
-    pos = scan_expression(tokens, pos, follow, 2147483647);
+    pos = scan_expression(tokens, pos, follow, 15);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -22829,7 +22856,7 @@ fn _parse_expression__inner_scan_11(tokens: &Array<i32>, pos: i32, follow: i64 =
     if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
         pos += 1;
     }
-    pos = scan_expression(tokens, pos, follow, 2147483647);
+    pos = scan_expression(tokens, pos, follow, 15);
     if pos < 0 { return -1; }
     return pos;
 }
@@ -22850,20 +22877,22 @@ fn _parse_expression__inner_alt_33(p: &mut Parser, follow: i64 = 0) -> () with R
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -22903,23 +22932,25 @@ fn _parse_expression__inner_scan_33(tokens: &Array<i32>, pos: i32, follow: i64 =
             break;
         }
         if pos == sp { break; }
-        let rs_212 = pos;
-        let rs_212_gate = SCAN_GATE;
-        let mut rs_212_ok = false;
-        rsv_212: {
-            pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
-            if pos < 0 { break rsv_212; }
-            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_212; }
-            pos += 1;
-            rs_212_ok = true;
-        }
-        pos = rs_212;
-        SCAN_GATE = rs_212_gate;
         let rk_212 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_212_ok && !(rk_212 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_212 == TK_POUND) {
+            let rs_212 = pos;
+            let rs_212_gate = SCAN_GATE;
+            let mut rs_212_ok = false;
+            rsv_212: {
+                pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
+                if pos < 0 { break rsv_212; }
+                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_212; }
+                pos += 1;
+                rs_212_ok = true;
+            }
+            pos = rs_212;
+            SCAN_GATE = rs_212_gate;
+            if !rs_212_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     pos = scan_expression(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK, 0);
@@ -22942,27 +22973,29 @@ fn _parse_expression__inner_alt_35(p: &mut Parser, follow: i64 = 0) -> () with R
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                    }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                        }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -23003,30 +23036,32 @@ fn _parse_expression__inner_scan_35(tokens: &Array<i32>, pos: i32, follow: i64 =
             break;
         }
         if pos == sp { break; }
-        let rs_213 = pos;
-        let rs_213_gate = SCAN_GATE;
-        let mut rs_213_ok = false;
-        rsv_213: {
-            if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                let sp = pos;
-                let sp_gate = SCAN_GATE;
-                pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                if pos < 0 {
-                    pos = sp;
-                    SCAN_GATE = sp_gate;
-                }
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_213; }
-            pos += 1;
-            rs_213_ok = true;
-        }
-        pos = rs_213;
-        SCAN_GATE = rs_213_gate;
         let rk_213 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_213_ok && !(rk_213 == TK_POUND) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(rk_213 == TK_POUND) {
+            let rs_213 = pos;
+            let rs_213_gate = SCAN_GATE;
+            let mut rs_213_ok = false;
+            rsv_213: {
+                if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                    let sp = pos;
+                    let sp_gate = SCAN_GATE;
+                    pos = scan_tuple_elements(tokens, pos, (FOLLOW_MASK_21 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                    if pos < 0 {
+                        pos = sp;
+                        SCAN_GATE = sp_gate;
+                    }
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rsv_213; }
+                pos += 1;
+                rs_213_ok = true;
+            }
+            pos = rs_213;
+            SCAN_GATE = rs_213_gate;
+            if !rs_213_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     if pos < tokens.len() && _kind_set_31(tokens[pos]) {
@@ -23319,27 +23354,29 @@ fn _parse_expression__inner_atom(p: &mut Parser, follow: i64 = 0, min_prec: i32 
                 pos = scan_inner_attribute(tokens, pos, 0);
                 if pos < 0 { break rep_scan; }
                 if pos <= p.pos { break rep_scan; }
-                let rep_body_end = pos;
-                let rep_body_end_gate = SCAN_GATE;
-                let mut rep_body_end_ok = false;
-                rep_body_end_scan: {
-                    if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                        let sp = pos;
-                        let sp_gate = SCAN_GATE;
-                        pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                        if pos < 0 {
-                            pos = sp;
-                            SCAN_GATE = sp_gate;
-                        }
-                    }
-                    if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rep_body_end_scan; }
-                    pos += 1;
-                    rep_body_end_ok = true;
-                }
-                pos = rep_body_end;
-                SCAN_GATE = rep_body_end_gate;
                 let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+                if !(rep_body_end_kind == TK_POUND) {
+                    let rep_body_end = pos;
+                    let rep_body_end_gate = SCAN_GATE;
+                    let mut rep_body_end_ok = false;
+                    rep_body_end_scan: {
+                        if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                            let sp = pos;
+                            let sp_gate = SCAN_GATE;
+                            pos = scan_array_elements(tokens, pos, (FOLLOW_MASK_33 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                            if pos < 0 {
+                                pos = sp;
+                                SCAN_GATE = sp_gate;
+                            }
+                        }
+                        if pos >= tokens.len() || tokens[pos] != TK_RSQUAREBRACKET { break rep_body_end_scan; }
+                        pos += 1;
+                        rep_body_end_ok = true;
+                    }
+                    pos = rep_body_end;
+                    SCAN_GATE = rep_body_end_gate;
+                    if !rep_body_end_ok { break rep_scan; }
+                }
                 rep_scan_pos = pos;
             }
             if rep_scan_pos < 0 {
@@ -23934,18 +23971,20 @@ fn _parse_expression_with_block__inner(p: &mut Parser, follow: i64 = 0) -> () wi
                     pos = scan_outer_attribute(tokens, pos, 0);
                     if pos < 0 { break rep_scan; }
                     if pos <= p.pos { break rep_scan; }
-                    let rep_body_end = pos;
-                    let rep_body_end_gate = SCAN_GATE;
-                    let mut rep_body_end_ok = false;
-                    rep_body_end_scan: {
-                        pos = scan_expression_with_block(tokens, pos, follow);
-                        if pos < 0 { break rep_body_end_scan; }
-                        rep_body_end_ok = true;
-                    }
-                    pos = rep_body_end;
-                    SCAN_GATE = rep_body_end_gate;
                     let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+                    if !(rep_body_end_kind == TK_POUND) {
+                        let rep_body_end = pos;
+                        let rep_body_end_gate = SCAN_GATE;
+                        let mut rep_body_end_ok = false;
+                        rep_body_end_scan: {
+                            pos = scan_expression_with_block(tokens, pos, follow);
+                            if pos < 0 { break rep_body_end_scan; }
+                            rep_body_end_ok = true;
+                        }
+                        pos = rep_body_end;
+                        SCAN_GATE = rep_body_end_gate;
+                        if !rep_body_end_ok { break rep_scan; }
+                    }
                     rep_scan_pos = pos;
                 }
                 if rep_scan_pos < 0 {
@@ -24110,27 +24149,29 @@ fn _parse_block_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos < tokens.len() && _kind_set_33(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                    }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos < tokens.len() && _kind_set_33(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_statements(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                        }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -24758,54 +24799,56 @@ fn _parse_struct_expr_struct__inner(p: &mut Parser, follow: i64 = 0) -> () with 
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos < tokens.len() && _kind_set_35(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    let gp_219 = pos;
-                    let gp_219_gate = SCAN_GATE;
-                    let sgk_219 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                    let mut sg_219_best = -1;
-                    let mut sg_219_best_gate = SCAN_GATE;
-                    if _kind_set_34(sgk_219) {
-                        pos = gp_219;
-                        SCAN_GATE = gp_219_gate;
-                        sg_219_0: {
-                            pos = scan_struct_expr_fields(tokens, pos, 0);
-                            if pos < 0 { break sg_219_0; }
-                            if pos > sg_219_best { sg_219_best = pos; sg_219_best_gate = SCAN_GATE; }
-                        }
-                    } else if sgk_219 == TK_DOTDOT {
-                        pos = gp_219;
-                        SCAN_GATE = gp_219_gate;
-                        sg_219_1: {
-                            pos = scan_struct_base(tokens, pos, 0);
-                            if pos < 0 { break sg_219_1; }
-                            if pos > sg_219_best { sg_219_best = pos; sg_219_best_gate = SCAN_GATE; }
-                        }
-                    }
-                    if sg_219_best >= 0 {
-                        pos = sg_219_best;
-                        SCAN_GATE = sg_219_best_gate;
-                    } else {
-                        pos = -1;
-                    }
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                    }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos < tokens.len() && _kind_set_35(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        let gp_219 = pos;
+                        let gp_219_gate = SCAN_GATE;
+                        let sgk_219 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+                        let mut sg_219_best = -1;
+                        let mut sg_219_best_gate = SCAN_GATE;
+                        if _kind_set_34(sgk_219) {
+                            pos = gp_219;
+                            SCAN_GATE = gp_219_gate;
+                            sg_219_0: {
+                                pos = scan_struct_expr_fields(tokens, pos, 0);
+                                if pos < 0 { break sg_219_0; }
+                                if pos > sg_219_best { sg_219_best = pos; sg_219_best_gate = SCAN_GATE; }
+                            }
+                        } else if sgk_219 == TK_DOTDOT {
+                            pos = gp_219;
+                            SCAN_GATE = gp_219_gate;
+                            sg_219_1: {
+                                pos = scan_struct_base(tokens, pos, 0);
+                                if pos < 0 { break sg_219_1; }
+                                if pos > sg_219_best { sg_219_best = pos; sg_219_best_gate = SCAN_GATE; }
+                            }
+                        }
+                        if sg_219_best >= 0 {
+                            pos = sg_219_best;
+                            SCAN_GATE = sg_219_best_gate;
+                        } else {
+                            pos = -1;
+                        }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                        }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -24951,47 +24994,42 @@ fn _parse_struct_expr_fields__inner(p: &mut Parser, follow: i64 = 0) -> () with 
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break gd_scan; }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break gd_scan; }
+            pos += 1;
+            pos = scan_struct_base(tokens, pos, follow);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
                 pos += 1;
-                pos = scan_struct_base(tokens, pos, follow);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
             }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos < tokens.len() && tokens[pos] == TK_COMMA && !(follow_yields(tokens, pos, follow, &FOLLOW_SETS, TK_EOF)) {
-                    pos += 1;
-                }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
-            }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 0 {
             let comma = p.expect(TK_COMMA, &SYNC_79);
@@ -25055,74 +25093,69 @@ fn _parse_struct_expr_field__inner(p: &mut Parser, follow: i64 = 0) -> () with R
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_identifier(tokens, pos);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 0;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                let gp_222 = pos;
-                let gp_222_gate = SCAN_GATE;
-                let sgk_222 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-                let mut sg_222_best = -1;
-                let mut sg_222_best_gate = SCAN_GATE;
-                if _kind_set_4(sgk_222) {
-                    pos = gp_222;
-                    SCAN_GATE = gp_222_gate;
-                    sg_222_0: {
-                        pos = scan_identifier(tokens, pos);
-                        if pos < 0 { break sg_222_0; }
-                        if pos > sg_222_best { sg_222_best = pos; sg_222_best_gate = SCAN_GATE; }
-                    }
-                } else if sgk_222 == TK_INTEGER_LITERAL {
-                    pos = gp_222;
-                    SCAN_GATE = gp_222_gate;
-                    sg_222_1: {
-                        pos = scan_tuple_index(tokens, pos);
-                        if pos < 0 { break sg_222_1; }
-                        if pos > sg_222_best { sg_222_best = pos; sg_222_best_gate = SCAN_GATE; }
-                    }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 0;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            let gp_222 = pos;
+            let gp_222_gate = SCAN_GATE;
+            let sgk_222 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
+            let mut sg_222_best = -1;
+            let mut sg_222_best_gate = SCAN_GATE;
+            if _kind_set_4(sgk_222) {
+                pos = gp_222;
+                SCAN_GATE = gp_222_gate;
+                sg_222_0: {
+                    pos = scan_identifier(tokens, pos);
+                    if pos < 0 { break sg_222_0; }
+                    if pos > sg_222_best { sg_222_best = pos; sg_222_best_gate = SCAN_GATE; }
                 }
-                if sg_222_best >= 0 {
-                    pos = sg_222_best;
-                    SCAN_GATE = sg_222_best_gate;
-                } else {
-                    break gd_scan_2;
+            } else if sgk_222 == TK_INTEGER_LITERAL {
+                pos = gp_222;
+                SCAN_GATE = gp_222_gate;
+                sg_222_1: {
+                    pos = scan_tuple_index(tokens, pos);
+                    if pos < 0 { break sg_222_1; }
+                    if pos > sg_222_best { sg_222_best = pos; sg_222_best_gate = SCAN_GATE; }
                 }
-                if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan_2; }
-                pos += 1;
-                pos = scan_expression(tokens, pos, follow, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
             }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 1;
+            if sg_222_best >= 0 {
+                pos = sg_222_best;
+                SCAN_GATE = sg_222_best_gate;
+            } else {
+                break gd_scan_2;
             }
+            if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan_2; }
+            pos += 1;
+            pos = scan_expression(tokens, pos, follow, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 1;
         }
         if gd_winner == 1 {
             let grp_kind = p.peek_kind();
@@ -25185,57 +25218,59 @@ fn _parse_struct_expr_tuple__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos < tokens.len() && _kind_set_31(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    sg_223_done: {
-                        sg_223: {
-                            pos = scan_expression(tokens, pos, 0, 0);
-                            if pos < 0 { break sg_223; }
-                            while pos < tokens.len() && tokens[pos] == TK_COMMA {
-                                let sp = pos;
-                                let sp_gate = SCAN_GATE;
-                                sg_224_done: {
-                                    sg_224: {
-                                        if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_224; }
-                                        pos += 1;
-                                        pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
-                                        if pos < 0 { break sg_224; }
-                                        break sg_224_done;
-                                    }
-                                    pos = -1;
-                                }
-                                if pos < 0 {
-                                    pos = sp;
-                                    SCAN_GATE = sp_gate;
-                                    break;
-                                }
-                                if pos == sp { break; }
-                            }
-                            if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                                pos += 1;
-                            }
-                            break sg_223_done;
-                        }
-                        pos = -1;
-                    }
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                    }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos < tokens.len() && _kind_set_31(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        sg_223_done: {
+                            sg_223: {
+                                pos = scan_expression(tokens, pos, 0, 0);
+                                if pos < 0 { break sg_223; }
+                                while pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                    let sp = pos;
+                                    let sp_gate = SCAN_GATE;
+                                    sg_224_done: {
+                                        sg_224: {
+                                            if pos >= tokens.len() || tokens[pos] != TK_COMMA { break sg_224; }
+                                            pos += 1;
+                                            pos = scan_expression(tokens, pos, (FOLLOW_MASK_35 | (follow & FOLLOW_SEQUENCED | FOLLOW_OPENS_BIT) << 16) & FOLLOW_CONT_MASK, 0);
+                                            if pos < 0 { break sg_224; }
+                                            break sg_224_done;
+                                        }
+                                        pos = -1;
+                                    }
+                                    if pos < 0 {
+                                        pos = sp;
+                                        SCAN_GATE = sp_gate;
+                                        break;
+                                    }
+                                    if pos == sp { break; }
+                                }
+                                if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                                    pos += 1;
+                                }
+                                break sg_223_done;
+                            }
+                            pos = -1;
+                        }
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                        }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RPAREN { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -25959,44 +25994,39 @@ fn _parse_loop_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Rus
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_predicate_loop_expression(tokens, pos, 0);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
-            }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 1;
-            }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_predicate_pattern_loop_expression(tokens, pos, 0);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 2;
-            }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_predicate_loop_expression(tokens, pos, 0);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 1;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_predicate_pattern_loop_expression(tokens, pos, 0);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 2;
         }
         if gd_winner == 1 {
             let predicate_loop_expression = _parse_predicate_loop_expression(p, 0);
@@ -26239,44 +26269,39 @@ fn _parse_if_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with RustP
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
             let mut gd_best_gate = SCAN_GATE;
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                let mut gd_end_gate = SCAN_GATE;
-                gd_scan: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_if_expression(tokens, pos, 0);
-                    if pos < 0 { break gd_scan; }
-                    gd_end = pos;
-                    gd_end_gate = SCAN_GATE;
-                }
-                if gd_end > gd_best {
-                    SCAN_GATE = gd_end_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end;
-                    gd_winner = 1;
-                }
-                if gd_best >= p.kinds.len() {
-                    break gd_tourney;
-                }
-                let mut gd_end_2: i32 = -1;
-                let mut gd_end_2_gate = SCAN_GATE;
-                gd_scan_2: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_if_let_expression(tokens, pos, 0);
-                    if pos < 0 { break gd_scan_2; }
-                    gd_end_2 = pos;
-                    gd_end_2_gate = SCAN_GATE;
-                }
-                if gd_end_2 > gd_best {
-                    SCAN_GATE = gd_end_2_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end_2;
-                    gd_winner = 2;
-                }
+            let mut gd_end: i32 = -1;
+            let mut gd_end_gate = SCAN_GATE;
+            gd_scan: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_if_expression(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+                gd_end_gate = SCAN_GATE;
+            }
+            if gd_end > gd_best {
+                SCAN_GATE = gd_end_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end;
+                gd_winner = 1;
+            }
+            let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_gate = SCAN_GATE;
+            gd_scan_2: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_if_let_expression(tokens, pos, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+                gd_end_2_gate = SCAN_GATE;
+            }
+            if gd_end_2 > gd_best {
+                SCAN_GATE = gd_end_2_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end_2;
+                gd_winner = 2;
             }
             if gd_winner == 1 {
                 let if_expression = _parse_if_expression(p, 0);
@@ -26352,44 +26377,39 @@ fn _parse_if_let_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with R
             let mut gd_winner: i32 = -1;
             let mut gd_best: i32 = -1;
             let mut gd_best_gate = SCAN_GATE;
-            gd_tourney: {
-                let mut gd_end: i32 = -1;
-                let mut gd_end_gate = SCAN_GATE;
-                gd_scan: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_if_expression(tokens, pos, 0);
-                    if pos < 0 { break gd_scan; }
-                    gd_end = pos;
-                    gd_end_gate = SCAN_GATE;
-                }
-                if gd_end > gd_best {
-                    SCAN_GATE = gd_end_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end;
-                    gd_winner = 1;
-                }
-                if gd_best >= p.kinds.len() {
-                    break gd_tourney;
-                }
-                let mut gd_end_2: i32 = -1;
-                let mut gd_end_2_gate = SCAN_GATE;
-                gd_scan_2: {
-                    SCAN_GATE.no_struct = p.no_struct;
-                    let tokens = &p.kinds;
-                    let mut pos: i32 = p.pos;
-                    pos = scan_if_let_expression(tokens, pos, 0);
-                    if pos < 0 { break gd_scan_2; }
-                    gd_end_2 = pos;
-                    gd_end_2_gate = SCAN_GATE;
-                }
-                if gd_end_2 > gd_best {
-                    SCAN_GATE = gd_end_2_gate;
-                    gd_best_gate = SCAN_GATE;
-                    gd_best = gd_end_2;
-                    gd_winner = 2;
-                }
+            let mut gd_end: i32 = -1;
+            let mut gd_end_gate = SCAN_GATE;
+            gd_scan: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_if_expression(tokens, pos, 0);
+                if pos < 0 { break gd_scan; }
+                gd_end = pos;
+                gd_end_gate = SCAN_GATE;
+            }
+            if gd_end > gd_best {
+                SCAN_GATE = gd_end_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end;
+                gd_winner = 1;
+            }
+            let mut gd_end_2: i32 = -1;
+            let mut gd_end_2_gate = SCAN_GATE;
+            gd_scan_2: {
+                SCAN_GATE.no_struct = p.no_struct;
+                let tokens = &p.kinds;
+                let mut pos: i32 = p.pos;
+                pos = scan_if_let_expression(tokens, pos, 0);
+                if pos < 0 { break gd_scan_2; }
+                gd_end_2 = pos;
+                gd_end_2_gate = SCAN_GATE;
+            }
+            if gd_end_2 > gd_best {
+                SCAN_GATE = gd_end_2_gate;
+                gd_best_gate = SCAN_GATE;
+                gd_best = gd_end_2;
+                gd_winner = 2;
             }
             if gd_winner == 1 {
                 let if_expression = _parse_if_expression(p, 0);
@@ -26460,27 +26480,29 @@ fn _parse_match_expression__inner(p: &mut Parser, follow: i64 = 0) -> () with Ru
             pos = scan_inner_attribute(tokens, pos, 0);
             if pos < 0 { break rep_scan; }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                if pos < tokens.len() && _kind_set_37(tokens[pos]) {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                    }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(rep_body_end_kind == TK_POUND) { break rep_scan; }
+            if !(rep_body_end_kind == TK_POUND) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    if pos < tokens.len() && _kind_set_37(tokens[pos]) {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_match_arms(tokens, pos, (FOLLOW_MASK_8 | (follow & FOLLOW_SEQUENCED) << 8) & FOLLOW_CONT_MASK);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                        }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_RCURLYBRACE { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 {
@@ -26539,25 +26561,27 @@ fn _parse_match_arms__inner(p: &mut Parser, follow: i64 = 0) -> () with RustPars
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break rep_body_end_scan; }
-                pos += 1;
-                pos = scan_expression(tokens, pos, follow, 0);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                    pos += 1;
-                }
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_kind_set_37(rep_body_end_kind)) { break rep_scan; }
+            if !(_kind_set_37(rep_body_end_kind)) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    pos = scan_match_arm(tokens, pos, FOLLOW_MASK_44);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_FATARROW { break rep_body_end_scan; }
+                    pos += 1;
+                    pos = scan_expression(tokens, pos, follow, 0);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                        pos += 1;
+                    }
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
@@ -27829,54 +27853,49 @@ fn _parse_struct_pattern_field__inner(p: &mut Parser, follow: i64 = 0) -> () wit
         let mut gd_winner: i32 = -1;
         let mut gd_best: i32 = -1;
         let mut gd_best_gate = SCAN_GATE;
-        gd_tourney: {
-            let mut gd_end: i32 = -1;
-            let mut gd_end_gate = SCAN_GATE;
-            gd_scan: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                pos = scan_identifier(tokens, pos);
-                if pos < 0 { break gd_scan; }
-                if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan; }
+        let mut gd_end: i32 = -1;
+        let mut gd_end_gate = SCAN_GATE;
+        gd_scan: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break gd_scan; }
+            if pos >= tokens.len() || tokens[pos] != TK_COLON { break gd_scan; }
+            pos += 1;
+            pos = scan_pattern(tokens, pos, follow);
+            if pos < 0 { break gd_scan; }
+            gd_end = pos;
+            gd_end_gate = SCAN_GATE;
+        }
+        if gd_end > gd_best {
+            SCAN_GATE = gd_end_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end;
+            gd_winner = 1;
+        }
+        let mut gd_end_2: i32 = -1;
+        let mut gd_end_2_gate = SCAN_GATE;
+        gd_scan_2: {
+            SCAN_GATE.no_struct = p.no_struct;
+            let tokens = &p.kinds;
+            let mut pos: i32 = p.pos;
+            if pos < tokens.len() && tokens[pos] == TK_KW_REF {
                 pos += 1;
-                pos = scan_pattern(tokens, pos, follow);
-                if pos < 0 { break gd_scan; }
-                gd_end = pos;
-                gd_end_gate = SCAN_GATE;
             }
-            if gd_end > gd_best {
-                SCAN_GATE = gd_end_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end;
-                gd_winner = 1;
+            if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
+                pos += 1;
             }
-            if gd_best >= p.kinds.len() {
-                break gd_tourney;
-            }
-            let mut gd_end_2: i32 = -1;
-            let mut gd_end_2_gate = SCAN_GATE;
-            gd_scan_2: {
-                SCAN_GATE.no_struct = p.no_struct;
-                let tokens = &p.kinds;
-                let mut pos: i32 = p.pos;
-                if pos < tokens.len() && tokens[pos] == TK_KW_REF {
-                    pos += 1;
-                }
-                if pos < tokens.len() && tokens[pos] == TK_KW_MUT {
-                    pos += 1;
-                }
-                pos = scan_identifier(tokens, pos);
-                if pos < 0 { break gd_scan_2; }
-                gd_end_2 = pos;
-                gd_end_2_gate = SCAN_GATE;
-            }
-            if gd_end_2 > gd_best {
-                SCAN_GATE = gd_end_2_gate;
-                gd_best_gate = SCAN_GATE;
-                gd_best = gd_end_2;
-                gd_winner = 2;
-            }
+            pos = scan_identifier(tokens, pos);
+            if pos < 0 { break gd_scan_2; }
+            gd_end_2 = pos;
+            gd_end_2_gate = SCAN_GATE;
+        }
+        if gd_end_2 > gd_best {
+            SCAN_GATE = gd_end_2_gate;
+            gd_best_gate = SCAN_GATE;
+            gd_best = gd_end_2;
+            gd_winner = 2;
         }
         if gd_winner == 1 {
             let identifier = _parse_identifier(p);
@@ -29301,33 +29320,35 @@ fn _parse_maybe_named_function_parameters_variadic__inner(p: &mut Parser, follow
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                pos = scan_maybe_named_param(tokens, pos, FOLLOW_MASK_22);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos >= tokens.len() || tokens[pos] != TK_COMMA { break rep_body_end_scan; }
-                pos += 1;
-                while pos < tokens.len() && tokens[pos] == TK_POUND {
-                    let sp = pos;
-                    let sp_gate = SCAN_GATE;
-                    pos = scan_outer_attribute(tokens, pos, 0);
-                    if pos < 0 {
-                        pos = sp;
-                        SCAN_GATE = sp_gate;
-                        break;
-                    }
-                    if pos == sp { break; }
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_kind_set_44(rep_body_end_kind)) { break rep_scan; }
+            if !(_kind_set_44(rep_body_end_kind)) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    pos = scan_maybe_named_param(tokens, pos, FOLLOW_MASK_22);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos >= tokens.len() || tokens[pos] != TK_COMMA { break rep_body_end_scan; }
+                    pos += 1;
+                    while pos < tokens.len() && tokens[pos] == TK_POUND {
+                        let sp = pos;
+                        let sp_gate = SCAN_GATE;
+                        pos = scan_outer_attribute(tokens, pos, 0);
+                        if pos < 0 {
+                            pos = sp;
+                            SCAN_GATE = sp_gate;
+                            break;
+                        }
+                        if pos == sp { break; }
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_DOTDOTDOT { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
@@ -30020,23 +30041,25 @@ fn _parse_generic_args__inner_alt_3(p: &mut Parser, follow: i64 = 0) -> () with 
                 break rep_scan;
             }
             if pos <= p.pos { break rep_scan; }
-            let rep_body_end = pos;
-            let rep_body_end_gate = SCAN_GATE;
-            let mut rep_body_end_ok = false;
-            rep_body_end_scan: {
-                pos = scan_generic_arg(tokens, pos, 0);
-                if pos < 0 { break rep_body_end_scan; }
-                if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                    pos += 1;
-                }
-                if pos >= tokens.len() || tokens[pos] != TK_GT { break rep_body_end_scan; }
-                pos += 1;
-                rep_body_end_ok = true;
-            }
-            pos = rep_body_end;
-            SCAN_GATE = rep_body_end_gate;
             let rep_body_end_kind = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-            if !rep_body_end_ok && !(_kind_set_48(rep_body_end_kind)) { break rep_scan; }
+            if !(_kind_set_48(rep_body_end_kind)) {
+                let rep_body_end = pos;
+                let rep_body_end_gate = SCAN_GATE;
+                let mut rep_body_end_ok = false;
+                rep_body_end_scan: {
+                    pos = scan_generic_arg(tokens, pos, 0);
+                    if pos < 0 { break rep_body_end_scan; }
+                    if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                        pos += 1;
+                    }
+                    if pos >= tokens.len() || tokens[pos] != TK_GT { break rep_body_end_scan; }
+                    pos += 1;
+                    rep_body_end_ok = true;
+                }
+                pos = rep_body_end;
+                SCAN_GATE = rep_body_end_gate;
+                if !rep_body_end_ok { break rep_scan; }
+            }
             rep_scan_pos = pos;
         }
         if rep_scan_pos < 0 { break; }
@@ -30074,26 +30097,28 @@ fn _parse_generic_args__inner_scan_3(tokens: &Array<i32>, pos: i32, follow: i64 
             break;
         }
         if pos == sp { break; }
-        let rs_260 = pos;
-        let rs_260_gate = SCAN_GATE;
-        let mut rs_260_ok = false;
-        rsv_260: {
-            pos = scan_generic_arg(tokens, pos, 0);
-            if pos < 0 { break rsv_260; }
-            if pos < tokens.len() && tokens[pos] == TK_COMMA {
-                pos += 1;
-            }
-            if pos >= tokens.len() || tokens[pos] != TK_GT { break rsv_260; }
-            pos += 1;
-            rs_260_ok = true;
-        }
-        pos = rs_260;
-        SCAN_GATE = rs_260_gate;
         let rk_260 = if pos < tokens.len() { tokens[pos] } else { TK_EOF };
-        if !rs_260_ok && !(_kind_set_48(rk_260)) {
-            pos = sp;
-            SCAN_GATE = sp_gate;
-            break;
+        if !(_kind_set_48(rk_260)) {
+            let rs_260 = pos;
+            let rs_260_gate = SCAN_GATE;
+            let mut rs_260_ok = false;
+            rsv_260: {
+                pos = scan_generic_arg(tokens, pos, 0);
+                if pos < 0 { break rsv_260; }
+                if pos < tokens.len() && tokens[pos] == TK_COMMA {
+                    pos += 1;
+                }
+                if pos >= tokens.len() || tokens[pos] != TK_GT { break rsv_260; }
+                pos += 1;
+                rs_260_ok = true;
+            }
+            pos = rs_260;
+            SCAN_GATE = rs_260_gate;
+            if !rs_260_ok {
+                pos = sp;
+                SCAN_GATE = sp_gate;
+                break;
+            }
         }
     }
     pos = scan_generic_arg(tokens, pos, 0);
