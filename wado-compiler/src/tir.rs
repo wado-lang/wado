@@ -1215,8 +1215,8 @@ impl TypeTable {
         self.resource_chain(sub).any(|current| current == sup)
     }
 
-    /// Whether only the host can tell a `value` is a `target`: `target` is an
-    /// unrestricted resource strictly extending `value`'s.
+    /// Whether only the host can tell a `value` is a `target`: `target` is a
+    /// resource strictly extending `value`'s, which makes both unrestricted.
     #[must_use]
     pub fn is_resource_narrowing(&self, value: TypeId, target: TypeId) -> bool {
         let (ResolvedType::Resource { def: value }, ResolvedType::Resource { def: target }) =
@@ -1224,10 +1224,7 @@ impl TypeTable {
         else {
             return false;
         };
-        value != target
-            && self.is_resource_subtype(*target, *value)
-            && self.is_unrestricted_resource(*target)
-            && self.is_unrestricted_resource(*value)
+        value != target && self.is_resource_subtype(*target, *value)
     }
 
     /// The root resource whose `$same` compares `a` and `b` by identity: both

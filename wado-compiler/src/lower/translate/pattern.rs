@@ -310,6 +310,23 @@ fn narrow_into_binding(pattern: &mut TirPattern) -> (TirPattern, TirExpr) {
     (binding, *test)
 }
 
+/// Make `arm` hold only where `cond` does, tested ahead of its own guard.
+fn guard_arm(arm: &mut TirMatchArm, cond: TirExpr) {
+    let span = arm.span;
+    arm.guard = Some(match arm.guard.take() {
+        Some(existing) => TirExpr::new(
+            TirExprKind::Binary {
+                op: TirBinaryOp::And,
+                left: Box::new(cond),
+                right: Box::new(existing),
+            },
+            TypeTable::BOOL,
+            span,
+        ),
+        None => cond,
+    });
+}
+
 /// A pattern naming one value or a range of them, with no binding and nothing
 /// the match pre-pass rewrites into a guard.
 fn is_plain_value_pattern(pattern: &TirPattern) -> bool {
@@ -1000,29 +1017,10 @@ impl<'a> PatternLowerer<'a> {
                 );
                 TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
             }
-            TirPattern::Narrow {
-                name,
-                local_index,
-                type_id,
-                test,
-            } => {
-                let mut test = test.as_ref().clone();
+            TirPattern::Narrow { .. } => {
+                let (binding, mut test) = narrow_into_binding(&mut pattern.clone());
                 self.lower_expr(&mut test, type_table);
-                let let_stmt = TirStmt::new(
-                    TirStmtKind::Let {
-                        name: name
-                            .clone()
-                            .unwrap_or_else(|| format!("$narrowed_{local_index}")),
-                        local_index: *local_index,
-                        is_mut: false,
-                        is_reactive: false,
-                        type_id: *type_id,
-                        value,
-                        skip_value_copy: false,
-                    },
-                    span,
-                );
-                let and_expr = TirExpr::new(
+                let tested = TirExpr::new(
                     TirExprKind::Binary {
                         op: TirBinaryOp::And,
                         left: Box::new(test),
@@ -1031,11 +1029,7 @@ impl<'a> PatternLowerer<'a> {
                     TypeTable::BOOL,
                     span,
                 );
-                let block = TirBlock::new(
-                    vec![let_stmt, TirStmt::new(TirStmtKind::Expr(and_expr), span)],
-                    span,
-                );
-                TirExpr::new(TirExprKind::Block(block), TypeTable::BOOL, span)
+                self.build_pattern_check(&binding, value, pattern_type, span, type_table, tested)
             }
             TirPattern::Enum {
                 enum_type,
@@ -2227,18 +2221,7 @@ impl<'a> PatternLowerer<'a> {
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
-                        arm.guard = Some(match arm.guard.take() {
-                            Some(existing) => TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(cond),
-                                    right: Box::new(existing),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            ),
-                            None => cond,
-                        });
+                        guard_arm(arm, cond);
                     }
                 }
 
@@ -2305,39 +2288,16 @@ impl<'a> PatternLowerer<'a> {
                             local_index: temp_index,
                             type_id: scrutinee_type_id,
                         };
-                        arm.guard = Some(match arm.guard.take() {
-                            Some(existing) => TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(cond),
-                                    right: Box::new(existing),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            ),
-                            None => cond,
-                        });
+                        guard_arm(arm, cond);
                     }
                 }
 
                 for arm in arms.iter_mut() {
                     if let TirPattern::Narrow { .. } = &arm.pattern {
-                        let span = arm.span;
                         let (binding, mut test) = narrow_into_binding(&mut arm.pattern);
                         self.lower_expr(&mut test, type_table);
                         arm.pattern = binding;
-                        arm.guard = Some(match arm.guard.take() {
-                            Some(existing) => TirExpr::new(
-                                TirExprKind::Binary {
-                                    op: TirBinaryOp::And,
-                                    left: Box::new(test),
-                                    right: Box::new(existing),
-                                },
-                                TypeTable::BOOL,
-                                span,
-                            ),
-                            None => test,
-                        });
+                        guard_arm(arm, test);
                     }
                 }
 

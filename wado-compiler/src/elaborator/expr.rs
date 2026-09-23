@@ -2980,12 +2980,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         let mut shadowed = Vec::new();
         {
             let tt = self.tysys.type_table.borrow();
-            let is_resource_subtype = |sub: TypeId, sup: TypeId| match (tt.get(sub), tt.get(sup)) {
-                (ResolvedType::Resource { def: sub }, ResolvedType::Resource { def: sup }) => {
-                    tt.is_resource_subtype(*sub, *sup)
-                }
-                _ => false,
-            };
             for (later, (_, pattern)) in classified.iter().enumerate() {
                 let ExhPattern::Narrow(target) = pattern else {
                     continue;
@@ -2995,7 +2989,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .find_map(|(guardless, earlier)| match earlier {
                             ExhPattern::Narrow(earlier) if *guardless => {
-                                is_resource_subtype(*target, *earlier).then_some(*earlier)
+                                let takes = tt.type_key(*earlier) == tt.type_key(*target)
+                                    || tt.is_resource_narrowing(*earlier, *target);
+                                takes.then_some(*earlier)
                             }
                             _ => None,
                         });

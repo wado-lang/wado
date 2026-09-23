@@ -2752,7 +2752,7 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
 
     /// Reify `let pat[: T] = expr;`.
     fn reify_let(&mut self, let_stmt: &ast::LetStmt, ctx: &mut FunctionContext) -> TirStmt {
-        use crate::tir::{TirStmtKind, TypeTable};
+        use crate::tir::TirStmtKind;
         // Uninitialised `let x: T;` — the parser guarantees `ty`
         // is present. The WIR builder zero-initialises the slot;
         // reify emits a Unit placeholder as the `value` and the
@@ -2908,17 +2908,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                     let_stmt.span,
                 )
             }
-            ast::Pattern::Literal(_)
-            | ast::Pattern::Or(_)
-            | ast::Pattern::Range { .. }
-            | ast::Pattern::Typed { .. } => {
-                let _ = type_id;
-                let _ = TypeTable::UNKNOWN;
-                // `let 42 = expr;` etc. are refutable patterns and the
-                // elaborator rejects them at annotate time (only
-                // irrefutable patterns are valid in `let`). Hitting
-                // this branch means annotate let a refutable pattern
-                // through — surface the invariant violation here.
+            ast::Pattern::Typed { .. } => {
+                unreachable!("the parser keeps a `let`'s top-level ascription in `LetStmt::ty`")
+            }
+            ast::Pattern::Literal(_) | ast::Pattern::Or(_) | ast::Pattern::Range { .. } => {
+                // Annotate rejects a refutable `let` pattern.
                 panic!(
                     "reify_let: refutable pattern {:?} in let binding (annotate should have rejected)",
                     let_stmt.pattern
@@ -10739,24 +10733,23 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
         span: Span,
         ctx: &mut FunctionContext,
     ) -> TirPattern {
-        let (name, local_index) = match inner {
+        let (name, local_name, local_index) = match inner {
             ast::Pattern::Ident { id, name, span } | ast::Pattern::MutIdent { id, name, span } => {
                 let is_mut = matches!(inner, ast::Pattern::MutIdent { .. });
                 let local_index = ctx.add_local_at(name.clone(), target, is_mut, Some(*id), *span);
-                (Some(name.clone()), local_index)
+                (Some(name.clone()), name.clone(), local_index)
             }
-            ast::Pattern::Wildcard => (
-                None,
-                ctx.add_local(format!("{INTERNAL_PREFIX}narrowed"), target, false, None),
-            ),
+            ast::Pattern::Wildcard => {
+                let local_name = format!("{INTERNAL_PREFIX}narrowed");
+                let local_index = ctx.add_local(local_name.clone(), target, false, None);
+                (None, local_name, local_index)
+            }
             other => panic!("annotate rejects a narrowing over {other:?}"),
         };
         let receiver = TirExpr::new(
             TirExprKind::Local {
                 index: local_index,
-                name: name
-                    .clone()
-                    .unwrap_or_else(|| format!("{INTERNAL_PREFIX}narrowed")),
+                name: local_name,
             },
             target,
             span,

@@ -449,8 +449,7 @@ degrades to a plain annotation, so a generator may emit the same shape whether o
 not the narrowing turns out to be trivial. The sibling and unrelated rows stay
 errors — neither can ever match.
 
-Both `S` and `T` must be unrestricted. The check is redundant given the v1 gating
-(`extends` requires it), but the compiler validates it defensively.
+Both `S` and `T` are unrestricted, because `extends` requires it on both sides.
 
 #### Generic targets are forbidden in v1
 
