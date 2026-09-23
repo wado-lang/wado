@@ -59,6 +59,7 @@ struct DumpOut {
     route_matcher: i32 = 0,
     route_keyword: i32 = 0,
     route_literal: i32 = 0,
+    route_subsumed: i32 = 0,
     route_inlined_fragment: i32 = 0,
     route_recursive_fragment: i32 = 0,
     route_virtual: i32 = 0,
@@ -70,6 +71,7 @@ struct DumpOut {
     group_arm_scoring: i32 = 0,
     alts_first_match: i32 = 0,
     alts_maximal_munch: i32 = 0,
+    char_sets: i32 = 0,
 }
 
 /// Render the per-rule lexer emit report for a grammar.
@@ -149,6 +151,7 @@ fn count_route(o: &mut DumpOut, route: &LexerRuleRoute) {
         Virtual => o.route_virtual += 1,
         Keyword(_) => o.route_keyword += 1,
         SharedLiteral(_) => o.route_literal += 1,
+        Subsumed(_) => o.route_subsumed += 1,
     }
 }
 
@@ -161,6 +164,10 @@ fn route_label(rule: &LexerRule, route: &LexerRuleRoute) -> String {
         Virtual => "virtual token: no text to match",
         Keyword(k) => `keyword classifier (carrier ${k.carrier})${also_matcher_suffix(k.also_matcher, &try_fn)}`,
         SharedLiteral(l) => `shared literal matcher (${l.const_name})${also_matcher_suffix(l.also_matcher, &try_fn)}`,
+        Subsumed(s) => `subsumed by ${s.by.join(", ")}: never the longest match${also_matcher_suffix(
+            s.also_matcher,
+            &try_fn,
+        )}`,
     };
 }
 
@@ -180,6 +187,7 @@ fn route_emits_body(route: &LexerRuleRoute) -> bool {
         Virtual | InlinedFragment => false,
         Keyword(k) => k.also_matcher,
         SharedLiteral(l) => l.also_matcher,
+        Subsumed(s) => s.also_matcher,
     };
 }
 
@@ -303,6 +311,15 @@ fn render_elem(o: &mut DumpOut, ctx: &DumpCtx, elem: &LexerElement, plan: &Lexer
             };
             render_elem(o, ctx, &n.element, &nested.inner);
         },
+        CharSet(set) => {
+            if !elem matches { Not(_) } {
+                o.char_sets += 1;
+                decision_line(
+                    o,
+                    `set ${elem_text(elem, 0)} — one class test of ${set.ranges.len()} ranges: every arm is one char`,
+                );
+            }
+        },
         Leaf => {
         },
     }
@@ -344,6 +361,7 @@ fn alts_emit_label(emit: LexerAltsEmit) -> String {
         FirstMatchNotTail => "first-match: not in tail position, a longer arm could strand what follows",
         FirstMatchSingleArm => "first-match: one arm",
         FirstMatchFixedLenArms => "first-match: every arm consumes the same fixed length",
+        FirstMatchArmsDisjoint => "first-match: no two arms can match at the same position",
     };
 }
 
@@ -377,10 +395,10 @@ fn repeat_emit_label(emit: LexerRepeatEmit) -> String {
 // ==========================================================================
 
 fn render_summary(o: &mut DumpOut) {
-    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
+    let routes = `routes: matcher ${o.route_matcher}, keyword classifier ${o.route_keyword}, shared literal ${o.route_literal}, subsumed ${o.route_subsumed}, inlined fragment ${o.route_inlined_fragment}, recursive fragment ${o.route_recursive_fragment}, virtual ${o.route_virtual}, ATN-class ${o.route_atn}`;
     let repeats = `greedy repeat: plain ${o.repeat_plain}, lookahead-aware ${o.repeat_lookahead}; non-greedy repeat: ${o.repeat_non_greedy}`;
     let groups = `alternation + suffix: first-match ${o.group_first_match}, arm scoring ${o.group_arm_scoring}`;
-    let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}`;
+    let alts = `alternation: first-match ${o.alts_first_match}, maximal munch ${o.alts_maximal_munch}; char set ${o.char_sets}`;
     o.text.push_str(`\nstrategies:\n  ${routes}\n  ${repeats}\n  ${groups}\n  ${alts}\n`);
 }
 

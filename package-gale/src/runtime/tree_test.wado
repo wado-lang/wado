@@ -284,7 +284,7 @@ test "the last finished node survives a wrap inserted in front of it" {
         [0, 0, 1],
         [1, 1, 2],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     let cp = b.checkpoint();
     b.start_node(0 as NodeKind, 0);
     b.token(0);
@@ -299,7 +299,7 @@ test "a rollback forgets the finished node it removes" {
         [0, 0, 1],
         [0, 2, 3],
     ]);
-    let mut b = TreeBuilder::new();
+    let mut b = TreeBuilder::with_capacity(0);
     b.start_node(0 as NodeKind, 0);
     b.token(0);
     let cp = b.checkpoint();
