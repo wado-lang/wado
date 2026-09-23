@@ -18,7 +18,7 @@ export fn run() {
     let one = f16::from_bits(F16_ONE);
 
     // Every comparison against a NaN is false, whichever NaN and whichever
-    // side it is on. The total order would answer true for four of these.
+    // side it is on. The total order answers almost all of these true.
     assert !(neg_nan < pos_inf);
     assert !(neg_nan <= pos_inf);
     assert !(pos_inf < pos_nan);
@@ -68,14 +68,18 @@ export fn run() {
     assert !(pos_nan == pos_nan);
     assert neg_zero == pos_zero;
 
-    // Reached through a `T: Ord` bound there is no operator, so the total
-    // order is what answers — as it does for f32.
-    assert total_less(&neg_nan, &pos_inf);
-    assert total_less(&neg_zero, &pos_zero);
+    // The `<` in a generic body has no instruction to reach whatever `T` is,
+    // so it reads `cmp` and answers the total order. That is the one place a
+    // half and an `f32` still differ from their concrete selves, and it is the
+    // known gap in docs/wep-2026-09-23-comparison-traits.md.
+    assert bound_less(neg_nan, pos_inf);
+    assert !(neg_nan < pos_inf);
+    assert bound_less(0.0 as f32 * -1.0, 0.0 as f32);
+    assert !(0.0 as f32 * -1.0 < 0.0 as f32);
 }
 
-fn total_less<T: Ord>(a: &T, b: &T) -> bool {
-    return a.cmp(b) matches { Less };
+fn bound_less<T: Ord>(a: T, b: T) -> bool {
+    return a < b;
 }
 
 __DATA__

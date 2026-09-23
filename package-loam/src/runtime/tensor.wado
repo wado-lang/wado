@@ -109,8 +109,8 @@ pub fn transpose2<A, B>(t: &Tensor<f32, [A, B]>) -> Tensor<f32, [B, A]> {
     };
 }
 
-pub fn map<Axes>(t: &Tensor<f32, Axes>, op: fn(f32) -> f32) -> Tensor<f32, Axes> {
-    let mut out = List::<f32>::with_capacity(t.data.len());
+pub fn map<A, B, Axes>(t: &Tensor<A, Axes>, op: fn(A) -> B) -> Tensor<B, Axes> {
+    let mut out = List::<B>::with_capacity(t.data.len());
     for let v of t.data {
         out.push(op(v));
     }
@@ -153,17 +153,9 @@ impl Held for bf16 {
 }
 
 pub fn widen<E: Held, Axes>(t: &Tensor<E, Axes>) -> Tensor<f32, Axes> {
-    let mut out = List::<f32>::with_capacity(t.data.len());
-    for let v of t.data {
-        out.push(v.to_wide());
-    }
-    return Tensor { data: out, extents: t.extents };
+    return map(t, |v| v.to_wide());
 }
 
 pub fn narrow<E: Held, Axes>(t: &Tensor<f32, Axes>) -> Tensor<E, Axes> {
-    let mut out = List::<E>::with_capacity(t.data.len());
-    for let v of t.data {
-        out.push(E::from_wide(v));
-    }
-    return Tensor { data: out, extents: t.extents };
+    return map(t, |v| E::from_wide(v));
 }

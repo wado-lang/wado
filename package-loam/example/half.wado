@@ -30,19 +30,19 @@ use { Batch, In, Out, Tensor, Weights, forward } from "./half.onnxtext"
         },
     };
 
-fn half_tensor_2d(rows: i32, cols: i32, value: f32) -> List<f16> {
-    return List::<f16>::filled(rows * cols, f16::from_f32(value));
+fn halves(count: i32, value: f32) -> List<f16> {
+    return List::<f16>::filled(count, f16::from_f32(value));
 }
 
 /// Stand-ins for a checkpoint, which roadmap step 3 reads.
 fn weights() -> Weights {
     return Weights {
         W: Tensor::<f16, [In, Out]> {
-            data: half_tensor_2d(4, 2, 0.5),
+            data: halves(4 * 2, 0.5),
             extents: [4, 2],
         },
         B: Tensor::<f16, [Out]> {
-            data: half_tensor_2d(2, 1, 1.0),
+            data: halves(2, 1.0),
             extents: [2],
         },
     };
@@ -50,7 +50,7 @@ fn weights() -> Weights {
 
 fn ones_input() -> Tensor<f16, [Batch, In]> {
     return Tensor {
-        data: half_tensor_2d(1, 4, 1.0),
+        data: halves(4, 1.0),
         extents: [1, 4],
     };
 }

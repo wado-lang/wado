@@ -14,6 +14,13 @@ fn generate(source: String, layout: List<LayoutRule>) -> Result<String, EmitErro
     return emit(&graph, &shapes);
 }
 
+/// The emitted module without the runtime inlined above it. Asserting that a
+/// kernel is *absent* has to say where, since the runtime names every kernel.
+fn emitted(out: &String) -> String {
+    let start = out.find("pub fn forward(").unwrap();
+    return out.as_str_slice().sub(start, out.len()).to_string();
+}
+
 global MLP: String = `
 mlp (float[N, 4] X) => (float[N, 2] Y)
 <float[4, 3] W1, float[3] B1, float[3, 2] W2, float[2] B2>
@@ -179,8 +186,8 @@ g (float[2, 3] A, float[3, 4] B) => (float[2, 4] Y)
     let out = generate(source, layout).unwrap();
 
     assert out.contains("matmul(");
-    assert !out.contains("map(");
-    assert !out.contains("transpose2(");
+    assert !emitted(&out).contains("map(");
+    assert !emitted(&out).contains("transpose2(");
 }
 
 test "a rank-2 Transpose lowers to the kernel" {
@@ -206,7 +213,7 @@ g (float[2, 3] X) => (float[2, 3] Y)
 `;
     let out = generate(source, [rule("*", ["A", "B"])]).unwrap();
 
-    assert !out.contains("transpose2(");
+    assert !emitted(&out).contains("transpose2(");
     // Every node result is bound as a value, so the operand is read as one.
     assert out.contains("let Y = *X;");
 }
