@@ -795,6 +795,10 @@ literals stops folding to one.
 
 #### `fn is_char_boundary(&self, index: i32) -> bool`
 
+#### `fn floor_char_boundary(&self, index: i32) -> i32`
+
+#### `fn ceil_char_boundary(&self, index: i32) -> i32`
+
 #### `fn sub(&self, start: i32, end: i32) -> StrSlice`
 
 #### `fn sub_unchecked(&self, start: i32, end: i32) -> StrSlice`
@@ -4022,8 +4026,8 @@ here directly, skipping `encode_char`'s width dispatch.
 
 #### `pub fn truncate(&mut self, byte_len: i32)`
 
-Truncates the string to the given byte length.
-Panics if `byte_len` is negative or not on a UTF-8 character boundary.
+Truncates the string to the given byte length. Panics if `byte_len` is
+negative or off a character boundary; round a budget with `floor_char_boundary`.
 
 #### `pub fn truncate_unchecked(&mut self, byte_len: i32)`
 
@@ -4043,6 +4047,16 @@ If `char_count` >= number of characters, the string is unchanged.
 
 Returns true if `byte_index` is 0, `self.len()`, or the start of a
 UTF-8 character in this string.
+
+#### `pub fn floor_char_boundary(&self, byte_index: i32) -> i32`
+
+The largest character boundary `<= byte_index`, or `len()` beyond it:
+cuts to a byte budget with `truncate` or `substr_bytes`. Panics if negative.
+
+#### `pub fn ceil_char_boundary(&self, byte_index: i32) -> i32`
+
+The smallest character boundary `>= byte_index`, or `len()` beyond it.
+Panics if `byte_index` is negative.
 
 #### `pub fn pop(&mut self) -> Option<char>`
 
@@ -4081,8 +4095,8 @@ Non-ASCII bytes are compared exactly.
 
 #### `pub fn substr_bytes(&self, start: i32, end: i32) -> String`
 
-Extract a substring by byte range `[start, end)`.
-Panics if the range is out of bounds or either end is not on a UTF-8 boundary.
+Extract a substring by byte range `[start, end)`. Panics if the range is out
+of bounds or off a character boundary; round a budget with `floor_char_boundary`.
 
 #### `pub fn substr_bytes_unchecked(&self, start: i32, end: i32) -> String`
 
@@ -4394,6 +4408,16 @@ checks.
 
 Returns true if `index`, counted from the view's start, is 0, `len()`,
 or the start of a character.
+
+#### `pub fn floor_char_boundary(&self, index: i32) -> i32`
+
+The largest character boundary `<= index`, or `len()` beyond it.
+Panics if `index` is negative.
+
+#### `pub fn ceil_char_boundary(&self, index: i32) -> i32`
+
+The smallest character boundary `>= index`, or `len()` beyond it.
+Panics if `index` is negative.
 
 #### `pub fn sub(&self, start: i32, end: i32) -> StrSlice`
 
