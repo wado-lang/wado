@@ -47,7 +47,7 @@ The names read backwards. `Eq` carries no methods and means "equality here is an
 equivalence relation", while `PartialEq` is the one that supplies `==`. A reader
 expects the plain name to be the ordinary one.
 
-Wado already refused the first two: a float implements `Ord`, so `List<f32>`
+Wado does not have the first two. A float implements `Ord`, so `List<f32>`
 sorts and a struct holding one is a `TreeMap` key. Keeping that is not in
 question here.
 

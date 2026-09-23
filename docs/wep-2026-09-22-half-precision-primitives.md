@@ -218,10 +218,11 @@ page from different modules, and nothing carries a trait's visibility across
 that boundary.
 
 A comparison widens both operands and calls, where `f32`'s is one instruction.
-Both have an implementation that never widens: `Eq` reads the bits, since equal
-bits are equal values unless both are NaN and different bits are different
-values unless both are zero, and `Ord` takes the sign-magnitude key `f32`'s own
-uses at sixteen bits. Nothing measured has asked for either.
+Both could be answered from the bits instead. Equal bits are equal values
+except for a NaN, and different bits are different values except for the two
+zeroes, which is all `Eq` needs. `Ord` would take the sign-magnitude key
+`f32`'s own uses, computed on sixteen bits. Nothing measured has asked for
+either.
 
 No associated constants. `f16::NAN` and its siblings cannot be written, because
 a constant initializer is a literal and these types have none.

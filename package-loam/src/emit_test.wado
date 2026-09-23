@@ -22,9 +22,12 @@ fn emitted(out: &String) -> String {
     return out.as_str_slice().sub(start, out.len()).to_string();
 }
 
-global MLP: String = `
-mlp (float[N, 4] X) => (float[N, 2] Y)
-<float[4, 3] W1, float[3] B1, float[3, 2] W2, float[2] B2>
+/// The same two-layer graph at any boundary element type, which is the one
+/// thing that changes between the f32 tests and the half precision ones.
+fn mlp(dtype: String) -> String {
+    return `
+mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
+<${dtype}[4, 3] W1, ${dtype}[3] B1, ${dtype}[3, 2] W2, ${dtype}[2] B2>
 {
     H = MatMul(X, W1)
     HB = Add(H, B1)
@@ -33,6 +36,9 @@ mlp (float[N, 4] X) => (float[N, 2] Y)
     Y = Add(T, B2)
 }
 `;
+}
+
+global MLP: String = mlp("float");
 
 fn mlp_layout() -> List<LayoutRule> {
     return [
@@ -321,20 +327,6 @@ g (float[1, 2, 3] X, float[4, 3, 5] Z) => (float[4, 2, 5] Y)
     assert `${e}` == "Y = MatMul: no kernel broadcasts [Batch, M, K] against [Batch, M, K]";
 }
 
-fn half_mlp(dtype: String) -> String {
-    return `
-mlp (${dtype}[N, 4] X) => (${dtype}[N, 2] Y)
-<${dtype}[4, 3] W1, ${dtype}[3] B1, ${dtype}[3, 2] W2, ${dtype}[2] B2>
-{
-    H = MatMul(X, W1)
-    HB = Add(H, B1)
-    A = Relu(HB)
-    T = MatMul(A, W2)
-    Y = Add(T, B2)
-}
-`;
-}
-
 fn refused_dtype(dtype: String) -> String {
     let source = `
 g (${dtype}[N, 2] X) => (${dtype}[N, 2] Y)
@@ -352,7 +344,7 @@ test "an element type the kernels cannot compute in names itself" {
 }
 
 test "a half precision boundary states its own element type" {
-    let out = generate(half_mlp("float16"), mlp_layout()).unwrap();
+    let out = generate(mlp("float16"), mlp_layout()).unwrap();
 
     assert out.contains(
         "pub fn forward(X: &Tensor<f16, [Batch, In]>, weights: &Weights) -> Tensor<f16, [Batch, Out]> {",
@@ -363,7 +355,7 @@ test "a half precision boundary states its own element type" {
 // The kernels compute in f32 and half precision has no arithmetic, so every
 // half operand is widened on the way in and the result narrowed on the way out.
 test "a half precision boundary is widened into the f32 the kernels compute in" {
-    let out = generate(half_mlp("float16"), mlp_layout()).unwrap();
+    let out = generate(mlp("float16"), mlp_layout()).unwrap();
 
     assert out.contains("let X = widen(X);");
     assert out.contains("let W1 = widen(&weights.W1);");
@@ -372,7 +364,7 @@ test "a half precision boundary is widened into the f32 the kernels compute in" 
 }
 
 test "bfloat16 is the same boundary with the other primitive" {
-    let out = generate(half_mlp("bfloat16"), mlp_layout()).unwrap();
+    let out = generate(mlp("bfloat16"), mlp_layout()).unwrap();
 
     assert out.contains("pub fn forward(X: &Tensor<bf16, [Batch, In]>");
     assert out.contains("let X = widen(X);");
