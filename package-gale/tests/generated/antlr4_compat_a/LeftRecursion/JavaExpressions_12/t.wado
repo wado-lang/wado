@@ -2539,320 +2539,15 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-<<<<<<< HEAD
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '!' } {
-            end = try_lit_BANG(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
-            end = try_lit_BANGEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
-        } else if first_char matches { '$' | '_' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '%' } {
-            end = try_lit_PERCENT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
-            end = try_lit_PERCENTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PERCENTEQ; }
-        } else if first_char matches { '&' } {
-            end = try_lit_AMP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-            end = try_lit_AMPAMP(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMPAMP; }
-            end = try_lit_AMPEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMPEQ; }
-        } else if first_char matches { '(' } {
-            end = try_lit_LPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char matches { ')' } {
-            end = try_lit_RPAREN(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char matches { '*' } {
-            end = try_lit_STAR(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-            end = try_lit_STAREQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAREQ; }
-        } else if first_char matches { '+' } {
-            end = try_lit_PLUSPLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUSPLUS; }
-            end = try_lit_PLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-            end = try_lit_PLUSEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUSEQ; }
-        } else if first_char matches { ',' } {
-            end = try_lit_COMMA(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char matches { '-' } {
-            end = try_lit_MINUSMINUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUSMINUS; }
-            end = try_lit_MINUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-            end = try_lit_MINUSEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUSEQ; }
-        } else if first_char matches { '.' } {
-            end = try_lit_DOT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        } else if first_char matches { '/' } {
-            end = try_lit_SLASH(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-            end = try_lit_SLASHEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASHEQ; }
-        } else if first_char matches { ':' } {
-            end = try_lit_COLON(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
-        } else if first_char matches { '<' } {
-            end = try_lit_LTLT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
-            end = try_lit_LTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-            end = try_lit_LT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-            end = try_lit_LTLTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTLTEQ; }
-        } else if first_char matches { '=' } {
-            end = try_lit_EQEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
-            end = try_lit_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        } else if first_char matches { '>' } {
-            end = try_lit_GTGTGT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGT; }
-            end = try_lit_GTGT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-            end = try_lit_GTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-            end = try_lit_GT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-            end = try_lit_GTGTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTEQ; }
-            end = try_lit_GTGTGTEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGTEQ; }
-        } else if first_char matches { '?' } {
-            end = try_lit_QUESTION(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_QUESTION; }
-        } else if first_char matches { '[' } {
-            end = try_lit_LBRACKET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char matches { ']' } {
-            end = try_lit_RBRACKET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        } else if first_char matches { '^' } {
-            end = try_lit_CARET(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
-            end = try_lit_CARETEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_CARETEQ; }
-        } else if first_char matches { 'c' } {
-            end = try_lit_class(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_class; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'i' } {
-            end = try_lit_instanceof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_instanceof; }
-            end = try_lit_int(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_int; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'n' } {
-            end = try_lit_new(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_new; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 's' } {
-            end = try_lit_super(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_super; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 't' } {
-            end = try_lit_this(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_this; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '|' } {
-            end = try_lit_PIPE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-            end = try_lit_PIPEPIPE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-            end = try_lit_PIPEEQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPEEQ; }
-        } else if first_char matches { '~' } {
-            end = try_lit_TILDE(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
-        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-||||||| 8dc1347e3
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '!' } {
-            end = try_lit_bang(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
-            end = try_lit_bangeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
-        } else if first_char matches { '$' | '_' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '%' } {
-            end = try_lit_percent(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
-            end = try_lit_percenteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PERCENTEQ; }
-        } else if first_char matches { '&' } {
-            end = try_lit_amp(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-            end = try_lit_ampamp(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMPAMP; }
-            end = try_lit_ampeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_AMPEQ; }
-        } else if first_char matches { '(' } {
-            end = try_lit_lparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
-        } else if first_char matches { ')' } {
-            end = try_lit_rparen(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
-        } else if first_char matches { '*' } {
-            end = try_lit_star(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-            end = try_lit_stareq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_STAREQ; }
-        } else if first_char matches { '+' } {
-            end = try_lit_plusplus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUSPLUS; }
-            end = try_lit_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-            end = try_lit_pluseq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUSEQ; }
-        } else if first_char matches { ',' } {
-            end = try_lit_comma(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
-        } else if first_char matches { '-' } {
-            end = try_lit_minusminus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUSMINUS; }
-            end = try_lit_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-            end = try_lit_minuseq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUSEQ; }
-        } else if first_char matches { '.' } {
-            end = try_lit_dot(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
-        } else if first_char matches { '/' } {
-            end = try_lit_slash(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-            end = try_lit_slasheq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SLASHEQ; }
-        } else if first_char matches { ':' } {
-            end = try_lit_colon(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
-        } else if first_char matches { '<' } {
-            end = try_lit_ltlt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
-            end = try_lit_lteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-            end = try_lit_lt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-            end = try_lit_ltlteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LTLTEQ; }
-        } else if first_char matches { '=' } {
-            end = try_lit_eqeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
-            end = try_lit_eq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        } else if first_char matches { '>' } {
-            end = try_lit_gtgtgt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGT; }
-            end = try_lit_gtgt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-            end = try_lit_gteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-            end = try_lit_gt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-            end = try_lit_gtgteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTEQ; }
-            end = try_lit_gtgtgteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGTEQ; }
-        } else if first_char matches { '?' } {
-            end = try_lit_question(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_QUESTION; }
-        } else if first_char matches { '[' } {
-            end = try_lit_lbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
-        } else if first_char matches { ']' } {
-            end = try_lit_rbracket(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
-        } else if first_char matches { '^' } {
-            end = try_lit_caret(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
-            end = try_lit_careteq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_CARETEQ; }
-        } else if first_char matches { 'c' } {
-            end = try_lit_class(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_CLASS; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'i' } {
-            end = try_lit_instanceof(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_INSTANCEOF; }
-            end = try_lit_int(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_INT; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 'n' } {
-            end = try_lit_new(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_NEW; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 's' } {
-            end = try_lit_super(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_SUPER; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { 't' } {
-            end = try_lit_this(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_THIS; }
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '|' } {
-            end = try_lit_pipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-            end = try_lit_pipepipe(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-            end = try_lit_pipeeq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PIPEEQ; }
-        } else if first_char matches { '~' } {
-            end = try_lit_tilde(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
-        } else if first_char matches { 'a'..='z' | 'A'..='Z' } {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_ID(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_ID; }
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-=======
         match first_char {
             '\n' | ' ' => {
                 end = try_WS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '!' => {
-                end = try_lit_bang(&lexer.chars, start);
+                end = try_lit_BANG(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_BANG; }
-                end = try_lit_bangeq(&lexer.chars, start);
+                end = try_lit_BANGEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_BANGEQ; }
             },
             '$' | 'A'..='Z' | '_' | 'a'..='b' | 'd'..='h' | 'j'..='m' | 'o'..='r' | 'u'..='z' => {
@@ -2860,61 +2555,61 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             '%' => {
-                end = try_lit_percent(&lexer.chars, start);
+                end = try_lit_PERCENT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PERCENT; }
-                end = try_lit_percenteq(&lexer.chars, start);
+                end = try_lit_PERCENTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PERCENTEQ; }
             },
             '&' => {
-                end = try_lit_amp(&lexer.chars, start);
+                end = try_lit_AMP(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_AMP; }
-                end = try_lit_ampamp(&lexer.chars, start);
+                end = try_lit_AMPAMP(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_AMPAMP; }
-                end = try_lit_ampeq(&lexer.chars, start);
+                end = try_lit_AMPEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_AMPEQ; }
             },
             '(' => {
-                end = try_lit_lparen(&lexer.chars, start);
+                end = try_lit_LPAREN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LPAREN; }
             },
             ')' => {
-                end = try_lit_rparen(&lexer.chars, start);
+                end = try_lit_RPAREN(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_RPAREN; }
             },
             '*' => {
-                end = try_lit_star(&lexer.chars, start);
+                end = try_lit_STAR(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_STAR; }
-                end = try_lit_stareq(&lexer.chars, start);
+                end = try_lit_STAREQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_STAREQ; }
             },
             '+' => {
-                end = try_lit_plusplus(&lexer.chars, start);
+                end = try_lit_PLUSPLUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PLUSPLUS; }
-                end = try_lit_plus(&lexer.chars, start);
+                end = try_lit_PLUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-                end = try_lit_pluseq(&lexer.chars, start);
+                end = try_lit_PLUSEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PLUSEQ; }
             },
             ',' => {
-                end = try_lit_comma(&lexer.chars, start);
+                end = try_lit_COMMA(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_COMMA; }
             },
             '-' => {
-                end = try_lit_minusminus(&lexer.chars, start);
+                end = try_lit_MINUSMINUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_MINUSMINUS; }
-                end = try_lit_minus(&lexer.chars, start);
+                end = try_lit_MINUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-                end = try_lit_minuseq(&lexer.chars, start);
+                end = try_lit_MINUSEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_MINUSEQ; }
             },
             '.' => {
-                end = try_lit_dot(&lexer.chars, start);
+                end = try_lit_DOT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_DOT; }
             },
             '/' => {
-                end = try_lit_slash(&lexer.chars, start);
+                end = try_lit_SLASH(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_SLASH; }
-                end = try_lit_slasheq(&lexer.chars, start);
+                end = try_lit_SLASHEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_SLASHEQ; }
             },
             '0'..='9' => {
@@ -2922,103 +2617,102 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_INT; }
             },
             ':' => {
-                end = try_lit_colon(&lexer.chars, start);
+                end = try_lit_COLON(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_COLON; }
             },
             '<' => {
-                end = try_lit_ltlt(&lexer.chars, start);
+                end = try_lit_LTLT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LTLT; }
-                end = try_lit_lteq(&lexer.chars, start);
+                end = try_lit_LTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LTEQ; }
-                end = try_lit_lt(&lexer.chars, start);
+                end = try_lit_LT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-                end = try_lit_ltlteq(&lexer.chars, start);
+                end = try_lit_LTLTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LTLTEQ; }
             },
             '=' => {
-                end = try_lit_eqeq(&lexer.chars, start);
+                end = try_lit_EQEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQEQ; }
-                end = try_lit_eq(&lexer.chars, start);
+                end = try_lit_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
             },
             '>' => {
-                end = try_lit_gtgtgt(&lexer.chars, start);
+                end = try_lit_GTGTGT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGT; }
-                end = try_lit_gtgt(&lexer.chars, start);
+                end = try_lit_GTGT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GTGT; }
-                end = try_lit_gteq(&lexer.chars, start);
+                end = try_lit_GTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GTEQ; }
-                end = try_lit_gt(&lexer.chars, start);
+                end = try_lit_GT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-                end = try_lit_gtgteq(&lexer.chars, start);
+                end = try_lit_GTGTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GTGTEQ; }
-                end = try_lit_gtgtgteq(&lexer.chars, start);
+                end = try_lit_GTGTGTEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GTGTGTEQ; }
             },
             '?' => {
-                end = try_lit_question(&lexer.chars, start);
+                end = try_lit_QUESTION(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_QUESTION; }
             },
             '[' => {
-                end = try_lit_lbracket(&lexer.chars, start);
+                end = try_lit_LBRACKET(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LBRACKET; }
             },
             ']' => {
-                end = try_lit_rbracket(&lexer.chars, start);
+                end = try_lit_RBRACKET(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_RBRACKET; }
             },
             '^' => {
-                end = try_lit_caret(&lexer.chars, start);
+                end = try_lit_CARET(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_CARET; }
-                end = try_lit_careteq(&lexer.chars, start);
+                end = try_lit_CARETEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_CARETEQ; }
             },
             'c' => {
                 end = try_lit_class(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_CLASS; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_class; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'i' => {
                 end = try_lit_instanceof(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_INSTANCEOF; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_instanceof; }
                 end = try_lit_int(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_INT; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_int; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             'n' => {
                 end = try_lit_new(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_NEW; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_new; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             's' => {
                 end = try_lit_super(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_SUPER; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_super; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             't' => {
                 end = try_lit_this(&lexer.chars, start);
-                if end > best_end { best_end = end; best_kind = TK_LIT_THIS; }
+                if end > best_end { best_end = end; best_kind = TK_LIT_this; }
                 end = try_ID(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_ID; }
             },
             '|' => {
-                end = try_lit_pipe(&lexer.chars, start);
+                end = try_lit_PIPE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PIPE; }
-                end = try_lit_pipepipe(&lexer.chars, start);
+                end = try_lit_PIPEPIPE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PIPEPIPE; }
-                end = try_lit_pipeeq(&lexer.chars, start);
+                end = try_lit_PIPEEQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PIPEEQ; }
             },
             '~' => {
-                end = try_lit_tilde(&lexer.chars, start);
+                end = try_lit_TILDE(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_TILDE; }
             },
             _ => {},
->>>>>>> origin/main
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

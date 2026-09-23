@@ -1170,45 +1170,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-<<<<<<< HEAD
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '<' } {
-            end = try_lit_LT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-        } else if first_char matches { '=' } {
-            end = try_lit_EQ(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        } else if first_char matches { '>' } {
-            end = try_lit_GT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-||||||| 8dc1347e3
-        if first_char matches { '\t' | '\n' | '\r' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '<' } {
-            end = try_lit_lt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
-        } else if first_char matches { '=' } {
-            end = try_lit_eq(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
-        } else if first_char matches { '>' } {
-            end = try_lit_gt(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-        } else {
-            end = try_INT(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_INT; }
-=======
         match first_char {
             '\t' | '\n' | '\r' | ' ' => {
                 end = try_WS(&lexer.chars, start);
@@ -1219,19 +1180,18 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_INT; }
             },
             '<' => {
-                end = try_lit_lt(&lexer.chars, start);
+                end = try_lit_LT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_LT; }
             },
             '=' => {
-                end = try_lit_eq(&lexer.chars, start);
+                end = try_lit_EQ(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_EQ; }
             },
             '>' => {
-                end = try_lit_gt(&lexer.chars, start);
+                end = try_lit_GT(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_GT; }
             },
             _ => {},
->>>>>>> origin/main
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());

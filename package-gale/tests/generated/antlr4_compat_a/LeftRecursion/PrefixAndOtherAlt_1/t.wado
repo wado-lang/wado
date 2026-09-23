@@ -1165,50 +1165,17 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
         let mut best_kind: i32 = TK_ERROR;
         let mut end: i32 = -1;
         let first_char = lexer.chars[start];
-<<<<<<< HEAD
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '+' } {
-            end = try_lit_PLUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char matches { '-' } {
-            end = try_lit_MINUS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_Integer(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Integer; }
-        } else {
-            end = try_Integer(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Integer; }
-||||||| 8dc1347e3
-        if first_char matches { '\n' | ' ' } {
-            end = try_WS(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_WS; }
-        } else if first_char matches { '+' } {
-            end = try_lit_plus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
-        } else if first_char matches { '-' } {
-            end = try_lit_minus(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
-        } else if first_char matches { '0'..='9' } {
-            end = try_Integer(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Integer; }
-        } else {
-            end = try_Integer(&lexer.chars, start);
-            if end > best_end { best_end = end; best_kind = TK_Integer; }
-=======
         match first_char {
             '\n' | ' ' => {
                 end = try_WS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_WS; }
             },
             '+' => {
-                end = try_lit_plus(&lexer.chars, start);
+                end = try_lit_PLUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_PLUS; }
             },
             '-' => {
-                end = try_lit_minus(&lexer.chars, start);
+                end = try_lit_MINUS(&lexer.chars, start);
                 if end > best_end { best_end = end; best_kind = TK_LIT_MINUS; }
             },
             '0'..='9' => {
@@ -1216,7 +1183,6 @@ pub fn tokenize<S: AsStrSlice>(input: S) -> TokenStream {
                 if end > best_end { best_end = end; best_kind = TK_Integer; }
             },
             _ => {},
->>>>>>> origin/main
         }
         if best_end <= start {
             ts.push_token(TK_ERROR, start, start + 1, triv_lo, ts.trivia_mark());
