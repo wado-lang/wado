@@ -13,6 +13,7 @@ use crate::tir::TypeTable;
 use crate::wir::{
     WirFunction, WirGlobal, WirImport, WirImportDesc, WirInstr, WirMeta, WirName, WirType,
 };
+use crate::wir_build::packed_array_is_eager;
 
 use super::context::{PendingFunctionBody, WirContext};
 use super::translate::{OPTION_NONE_CASE, resolve_param_names};
@@ -542,10 +543,10 @@ fn register_literal_data(ctx: &mut WirContext<'_>) {
 fn synthesized_packed_payloads(package: &NirPackage, threshold: usize) -> Vec<Vec<u8>> {
     fn collect(body: &nir_arena::Body, threshold: usize, out: &mut Vec<Vec<u8>>) {
         for e in reachable_exprs(body) {
-            if let ExprKind::PackedArray(bytes) = &body.exprs[e].kind
-                && bytes.len() > threshold
+            if let ExprKind::PackedArray(data) = &body.exprs[e].kind
+                && !packed_array_is_eager(data, threshold, false)
             {
-                out.push(bytes.clone());
+                out.push(data.bytes.clone());
             }
         }
     }

@@ -1,0 +1,42 @@
+// `List::from_le_bytes` reads little-endian elements out of bytes. A literal
+// argument is folded into a data segment; any other decodes at run time, and
+// both read alike.
+
+fn floats(bytes: ByteList) -> List<f32> {
+    return List::<f32>::from_le_bytes(bytes);
+}
+
+export fn run() {
+    let f = List::<f32>::from_le_bytes(b"\x00\x00\x80\x3f\x00\x00\x20\xc0");
+    assert f.len() == 2;
+    assert f[0] == 1.0;
+    assert f[1] == -2.5;
+    let g = floats(builtin::black_box(b"\x00\x00\x80\x3f\x00\x00\x20\xc0"));
+    assert g == f;
+
+    let u: List<u16> = List::from_le_bytes(b"\x34\x12\xff\xff");
+    assert u == [0x1234, 0xFFFF] as List<u16>;
+    let i = List::<i8>::from_le_bytes(b"\xff\x7f\x80");
+    assert i == [-1, 127, -128] as List<i8>;
+    let h = List::<bf16>::from_le_bytes(b"\x80\x3f");
+    assert h[0].to_bits() == 0x3F80;
+    let d = List::<f64>::from_le_bytes(b"\x00\x00\x00\x00\x00\x00\xf8\x3f");
+    assert d[0] == 1.5;
+    let l = List::<i64>::from_le_bytes(b"\xfe\xff\xff\xff\xff\xff\xff\xff");
+    assert l[0] == -2;
+
+    let empty = List::<f32>::from_le_bytes(b"");
+    assert empty.is_empty();
+
+    // A folded list is an ordinary one: it grows and mutates.
+    let mut m = List::<u16>::from_le_bytes(b"\x01\x00\x02\x00");
+    m.push(3);
+    m[0] = 7;
+    assert m == [7, 2, 3] as List<u16>;
+
+    let from_view = List::<u16>::from_le_bytes(b"\x01\x00\x02\x00".as_byte_slice());
+    assert from_view == [1, 2] as List<u16>;
+}
+
+__DATA__
+{}

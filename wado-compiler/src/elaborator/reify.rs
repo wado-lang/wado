@@ -38,11 +38,11 @@ use crate::ast::{
     AttrArg, Attribute, InterfaceDecl, Visibility, WIRE_NUMBER_MAX, WIRE_NUMBER_MIN,
     WIRE_NUMBER_RESERVED, wire_number_of, wire_number_written,
 };
-use crate::compiler_item::CompilerItem;
+use crate::compiler_item::{CompilerItem, Resolved};
 use crate::defs::DefId;
 use crate::elaborator::Elaborator;
 use crate::elaborator::assert::{NOT_EVALUATED, render_local_name, seen_local_name};
-use crate::elaborator::call::omits_a_default;
+use crate::elaborator::call::{ARRAY_NEW_DATA, omits_a_default};
 use crate::elaborator::closure::relink_recorded_captures;
 use crate::elaborator::control_flow::{CtrlFlowCtx, find_return_type_in_block};
 use crate::elaborator::expr::{
@@ -8003,6 +8003,14 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 static_call.span,
                 ctx,
             );
+            if let Some(folded) = self.fold_le_bytes_call(
+                &dispatch.function_ref,
+                &args,
+                recorded_type,
+                static_call.span,
+            ) {
+                return folded;
+            }
 
             // Replay the production `Call`'s exact type args (method-level;
             // impl args ride along in `function_ref.monomorph_info`).
@@ -8321,6 +8329,56 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
     /// The arms below are ordered by precedence and each
     /// documents the recorded fact it reads; nothing here re-resolves a
     /// callee.
+    /// Whether `func` reads little-endian elements out of bytes:
+    /// `builtin::array_new_data` or `List::from_le_bytes`.
+    fn reads_le_bytes(&self, func: &tir::FunctionRef) -> bool {
+        if func.module_source.is_builtin() {
+            return func.name == ARRAY_NEW_DATA;
+        }
+        let tt = self.tysys.type_table.borrow();
+        let items = tt.compiler_items();
+        let Some(Resolved::Method {
+            module_source,
+            owner_head: Some(owner),
+            name,
+            ..
+        }) = items.get(CompilerItem::ListFromLeBytes)
+        else {
+            return false;
+        };
+        func.module_source == *module_source
+            && func.method_info.as_ref().is_some_and(|info| {
+                info.trait_name.is_none()
+                    && info.method_name == *name
+                    && info.receiver == Receiver::Type(owner.clone())
+            })
+    }
+
+    /// A call reading `T`s out of a byte literal, as that literal typed as the
+    /// result, so lowering places it in a data segment with no decode loop.
+    fn fold_le_bytes_call(
+        &self,
+        func: &tir::FunctionRef,
+        args: &[CallArg],
+        result: TypeId,
+        span: Span,
+    ) -> Option<TirExpr> {
+        let [arg] = args else {
+            return None;
+        };
+        let TirExprKind::BytesLiteral(bytes) = &arg.expr.kind else {
+            return None;
+        };
+        let width = self
+            .tysys
+            .type_table
+            .borrow()
+            .packed_element(result)?
+            .data_width()?;
+        (bytes.len() % width == 0 && self.reads_le_bytes(func))
+            .then(|| TirExpr::new(TirExprKind::BytesLiteral(bytes.clone()), result, span))
+    }
+
     fn reify_call(
         &mut self,
         call: &ast::CallExpr,
@@ -8463,6 +8521,11 @@ impl<'a, H: CompilerHost> Reify<'a, H> {
                 span,
                 ctx,
             );
+            if let Some(folded) =
+                self.fold_le_bytes_call(&dispatch.function_ref, &arg_exprs, recorded_type, span)
+            {
+                return folded;
+            }
             // Type args: replay exactly what the production builder put on
             // the `Call`. This already folds in any explicit turbofish and,
             // crucially, carries only the method-level type args — a generic

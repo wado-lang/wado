@@ -295,11 +295,7 @@ impl Interpreter<'_> {
                 self.array_literal_lattice(body, node.type_id, elements)
             }
             ExprKind::PackedArray(bytes) => {
-                let elements = bytes.iter().map(|b| Value::Int {
-                    value: u64::from(*b),
-                    prim: PrimitiveType::U8,
-                });
-                Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
+                Value::seq(node.type_id, bytes.values()).map_or(Lattice::NonConst, Lattice::Const)
             }
             // A plain enum case is its discriminant, which is the whole value:
             // an enum carries no payload, so nothing else distinguishes two

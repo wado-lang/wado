@@ -1170,6 +1170,29 @@ The barrier holds for the whole Wado pipeline: every NIR and WIR pass sees an
 unknown value. It ends at codegen, which emits the operand where the call stood,
 so the Wasm engine downstream is free to fold the constant.
 
+### Embedded Data
+
+`List::<T>::from_le_bytes(bytes)` reads `bytes` as little-endian `T`s, back to
+back, for any `T: FromLeBytes`: the fixed-width integers, `f16`, `bf16`, `f32`
+and `f64`. It panics when the byte count is not a whole number of `T`s.
+
+When the argument is a byte string literal or `#include_bytes` and `T` is
+concrete, the compiler folds the call. The bytes become a data segment, and the
+list is created from it with one `array.new_data`, so no decode loop runs at
+startup and the Wasm grows by the byte count alone. The folded list is an
+ordinary `List<T>`. A ragged literal is not folded, and panics as it would at
+run time.
+
+`builtin::array_new_data::<T>(bytes)` is the same fold returning an `Array<T>`,
+for a caller building its own container. It has no run-time form, so its
+argument must be a literal, `T` must be a numeric primitive, and the byte count
+must be a whole number of `T`s. Each is a compile error otherwise.
+
+```wado
+let weights = List::<f32>::from_le_bytes(#include_bytes("./weights.bin"));
+let bias = List::<bf16>::from_le_bytes(b"\x80\x3f\x00\x40");   // [1.0, 2.0]
+```
+
 ## Memory Model
 
 ### Core Principles

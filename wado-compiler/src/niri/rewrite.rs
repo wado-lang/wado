@@ -8,8 +8,8 @@ use crate::compiler_item::SeqField;
 use crate::const_eval::Value;
 use crate::nir::{NirBinaryOp, NirUnaryOp};
 use crate::nir_arena::{
-    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand, PatId,
-    PatKind, StmtId, StmtKind,
+    ArenaStructField, ArmData, BlockId, Body, ExprId, ExprKind, ExprNode, NodeRef, Operand,
+    PackedData, PatId, PatKind, StmtId, StmtKind,
 };
 use crate::nir_value_graph::{Side, ValueKind, neutral_int};
 use crate::nir_visitor::NirRefVisitor;
@@ -430,12 +430,12 @@ impl Interpreter<'_> {
                 bytes.push(u8::try_from(byte).ok()?);
             }
             if let Some(Operand::Expr(previous)) = existing
-                && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(b) if *b == bytes)
+                && matches!(&sink.body().exprs[previous].kind, ExprKind::PackedArray(b) if b.as_bytes() == Some(bytes.as_slice()))
             {
                 return existing;
             }
             return Some(Operand::Expr(sink.alloc_expr(
-                ExprKind::PackedArray(bytes),
+                ExprKind::PackedArray(PackedData::of_bytes(bytes)),
                 type_id,
                 span,
             )));

@@ -3862,6 +3862,18 @@ impl TypeTable {
         self.representation_head(a) == self.representation_head(b)
     }
 
+    /// The fixed-width primitive a sequence type (`Array<T>`, `List<T>`, or a
+    /// newtype over either) reads from little-endian data; `None` for the rest.
+    pub fn packed_element(&self, seq: TypeId) -> Option<PrimitiveType> {
+        let head = self.representation_head(seq);
+        let elem = match self.get(head) {
+            ResolvedType::BuiltinArray(elem) => *elem,
+            _ => self.as_list(head)?,
+        };
+        self.primitive_head(elem)
+            .filter(|p| p.data_width().is_some())
+    }
+
     /// Check if a type is `List<T>` and return the element type if so.
     /// Also unwraps Ref/MutRef types to check the inner type.
     pub fn as_list(&self, id: TypeId) -> Option<TypeId> {

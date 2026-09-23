@@ -887,6 +887,19 @@ UTF-8 bytes view directly), so byte-reading APIs (e.g. `core:cbor` /
 
 #### `fn as_byte_slice(&self) -> ByteSlice`
 
+### `pub trait FromLeBytes with ()`
+
+A fixed-width number that reads from little-endian bytes, as
+`List::from_le_bytes` does.
+
+#### `fn le_width() -> i32`
+
+Bytes one value takes.
+
+#### `fn from_le_at(bytes: ByteSlice, at: i32) -> Self`
+
+The value whose `le_width()` bytes start at `at`.
+
 ### `pub trait Step with ()`
 
 Types that can be incremented by one step (for range iteration).
@@ -1425,6 +1438,12 @@ Creates an f32 from its bit representation.
 
 ##### `pub fn try_from(value: u64) -> Result<f32, ConvertError>`
 
+#### `impl FromLeBytes for f32`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f32`
+
 ### `f64`
 
 #### `pub const PI: f64`
@@ -1698,6 +1717,12 @@ Creates an f64 from its bit representation.
 
 ##### `pub fn try_from(value: u64) -> Result<f64, ConvertError>`
 
+#### `impl FromLeBytes for f64`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f64`
+
 ### `f16`
 
 #### `pub fn to_bits(&self) -> u16`
@@ -1755,6 +1780,12 @@ True for a NaN, quiet or signaling.
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
 
+#### `impl FromLeBytes for f16`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> f16`
+
 ### `bf16`
 
 #### `pub fn to_bits(&self) -> u16`
@@ -1811,6 +1842,12 @@ True for a NaN, quiet or signaling.
 #### `impl Inspect for bf16`
 
 ##### `pub fn inspect(&self, f: &mut Formatter)`
+
+#### `impl FromLeBytes for bf16`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> bf16`
 
 ### `i64`
 
@@ -1932,6 +1969,12 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: u64) -> Result<i64, ConvertError>`
 
+#### `impl FromLeBytes for i64`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i64`
+
 #### `impl Step for i64`
 
 ##### `fn next_step(&self) -> Option<i64>`
@@ -2032,6 +2075,12 @@ Counts the number of set bits (population count).
 
 ##### `pub fn try_from(value: i64) -> Result<u64, ConvertError>`
 
+#### `impl FromLeBytes for u64`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u64`
+
 #### `impl Step for u64`
 
 ##### `fn next_step(&self) -> Option<u64>`
@@ -2119,6 +2168,12 @@ Counts the number of set bits (population count).
 #### `impl TryFrom<i16> for i8`
 
 ##### `pub fn try_from(value: i16) -> Result<i8, ConvertError>`
+
+#### `impl FromLeBytes for i8`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i8`
 
 #### `impl Step for i8`
 
@@ -2211,6 +2266,12 @@ Counts the number of set bits (population count).
 #### `impl TryFrom<i32> for i16`
 
 ##### `pub fn try_from(value: i32) -> Result<i16, ConvertError>`
+
+#### `impl FromLeBytes for i16`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i16`
 
 #### `impl Step for i16`
 
@@ -2323,6 +2384,12 @@ Counts the number of set bits (population count).
 #### `impl TryFrom<i64> for i32`
 
 ##### `pub fn try_from(value: i64) -> Result<i32, ConvertError>`
+
+#### `impl FromLeBytes for i32`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> i32`
 
 #### `impl Step for i32`
 
@@ -2450,6 +2517,12 @@ Checks that two bytes are an ASCII case-insensitive match.
 
 ##### `pub fn try_from(value: u16) -> Result<u8, ConvertError>`
 
+#### `impl FromLeBytes for u8`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u8`
+
 #### `impl Step for u8`
 
 ##### `fn next_step(&self) -> Option<u8>`
@@ -2533,6 +2606,12 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl TryFrom<u32> for u16`
 
 ##### `pub fn try_from(value: u32) -> Result<u16, ConvertError>`
+
+#### `impl FromLeBytes for u16`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u16`
 
 #### `impl Step for u16`
 
@@ -2629,6 +2708,12 @@ Checks that two bytes are an ASCII case-insensitive match.
 #### `impl TryFrom<u64> for u32`
 
 ##### `pub fn try_from(value: u64) -> Result<u32, ConvertError>`
+
+#### `impl FromLeBytes for u32`
+
+##### `fn le_width() -> i32`
+
+##### `fn from_le_at(bytes: ByteSlice, at: i32) -> u32`
 
 #### `impl Step for u32`
 
@@ -4667,6 +4752,14 @@ Returns a new list containing this list's elements repeated `n` times.
 Copies `count` elements from `self[src_start..]` and appends them.
 Handles overlapping regions correctly for both non-overlapping and DEFLATE-style
 run-length expansion (where src < dst). Forward order is correct in both cases.
+
+#### `pub fn from_le_bytes<B: AsByteSlice>(bytes: B) -> List<T>`
+
+`#[compiler_item("list_from_le_bytes")]`
+
+The `T`s `bytes` holds, little-endian and back to back. A byte string
+literal or `#include_bytes` argument becomes a data segment, read with
+no decode loop. Panics when `bytes` is not a whole number of `T`s.
 
 #### `pub fn contains(&self, value: &T) -> bool`
 

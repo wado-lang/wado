@@ -5,22 +5,26 @@
 //! Emission (`WirPackage` → Wasm bytes) is handled by `codegen`.
 
 use crate::name::INLINE_REF_EAGER_MAX_BYTES;
+use crate::nir_arena::PackedData;
 use crate::nir_package::NirPackage;
 use crate::wir::WirPackage;
 
-/// Whether a `PackedArray` of `len` bytes gets the constant
-/// `array.new_fixed<u8>` repr — the choice `translate_packed_array` makes,
-/// shared so `const_object_globalization` predicts the same verdict when it
-/// decides whether a hoist needs the lazy-init guard.
+/// Whether a `PackedArray` gets a constant `array.new_fixed` rather than a
+/// data segment — the choice `translate_packed_array` makes, shared so
+/// `const_object_globalization` predicts the same verdict when it decides
+/// whether a hoist needs the lazy-init guard. Only bytes go inline: a typed
+/// array is embedded data, which a segment holds at one byte per byte.
 #[must_use]
 pub(crate) fn packed_array_is_eager(
-    len: usize,
+    data: &PackedData,
     string_inline_max_bytes: usize,
     prefer_fixed: bool,
 ) -> bool {
+    let len = data.bytes.len();
     len == 0
-        || len <= string_inline_max_bytes
-        || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES)
+        || (data.as_bytes().is_some()
+            && (len <= string_inline_max_bytes
+                || (prefer_fixed && len <= INLINE_REF_EAGER_MAX_BYTES)))
 }
 
 mod calls;

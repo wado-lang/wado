@@ -1574,6 +1574,13 @@ let src = #include_str("./runtime.wado");  // include file as String
 let icon = #include_bytes("./icon.png");   // include file as ByteList
 ```
 
+A literal read as numbers becomes a data segment, with no decode loop at startup.
+See [the spec](./spec.md#embedded-data).
+
+```wado
+let w = List::<f32>::from_le_bytes(#include_bytes("./w.bin"));  // little-endian f32s
+```
+
 Paths in `#include_str` and `#include_bytes` are resolved relative to the source file. See [WEP: Compile-Time File Inclusion](./wep-2026-03-02-include-str.md).
 
 ## Compile-Time Parameters

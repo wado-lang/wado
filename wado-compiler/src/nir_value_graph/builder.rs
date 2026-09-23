@@ -1374,12 +1374,8 @@ impl<'a> Builder<'a> {
             // Bounded by `const_eval::MAX_SEQ_ELEMENTS`: past it the walk would cost more
             // than any fold it enables, and `Value::seq` declines.
             ExprKind::PackedArray(bytes) => {
-                let elements = bytes.iter().map(|b| Value::Int {
-                    value: u64::from(*b),
-                    prim: PrimitiveType::U8,
-                });
                 let ty = self.body.exprs[expr].type_id;
-                Value::seq(ty, elements).map(|seq| self.pool.constant(&seq, ty))
+                Value::seq(ty, bytes.values()).map(|seq| self.pool.constant(&seq, ty))
             }
             ExprKind::GlobalVarGet { .. } => None,
         }

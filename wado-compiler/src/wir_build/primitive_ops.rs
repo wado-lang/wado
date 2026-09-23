@@ -11,7 +11,7 @@ use crate::tir::{ResolvedType, TypeId, TypeTable};
 use crate::wir::{WirInstr, WirType};
 
 use super::translate::FunctionTranslator;
-use crate::nir_arena::Operand;
+use crate::nir_arena::{Operand, PackedData};
 use crate::wir_build::packed_array_is_eager;
 
 /// Classification of a TIR primitive type by the Wasm numeric type family
@@ -82,26 +82,29 @@ impl FunctionTranslator<'_, '_> {
     /// `wir_optimize::const_global`); longer ones use a passive `array.new_data`
     /// segment (compact, but not const). The `String` / `List<u8>` struct
     /// wrapping is emitted by the enclosing `StructLiteral`.
-    pub(super) fn translate_packed_array(&self, b: &[u8]) -> WirInstr {
-        let byte_len = b.len();
-        let array_type_id = self
-            .ctx
-            .array_type_by_name
-            .get("u8")
-            .cloned()
-            .expect("[WIR] PackedArray: u8 array type not registered");
+    pub(super) fn translate_packed_array(&self, data: &PackedData, type_id: TypeId) -> WirInstr {
+        let array_type_id = if data.as_bytes().is_some() {
+            self.ctx
+                .array_type_by_name
+                .get("u8")
+                .cloned()
+                .expect("[WIR] PackedArray: u8 array type not registered")
+        } else {
+            self.ref_type_id(type_id)
+        };
 
-        if byte_len == 0 {
+        if data.is_empty() {
             WirInstr::ArrayNewDefault {
                 type_id: array_type_id,
                 len: Box::new(WirInstr::I32Const(0)),
             }
         } else if packed_array_is_eager(
-            byte_len,
+            data,
             self.ctx.package.string_inline_max_bytes,
             self.force_fixed_string_repr,
         ) {
-            let elements = b
+            let elements = data
+                .bytes
                 .iter()
                 .map(|&x| WirInstr::I32Const(i32::from(x)))
                 .collect();
@@ -114,11 +117,12 @@ impl FunctionTranslator<'_, '_> {
             // by `register_literal_data` under the same threshold, so a miss here
             // means the two partitions disagreed — fail loudly instead of
             // silently emitting segment 0 (a different literal's bytes).
-            let data_index = self.ctx.packed_data_map.get(b).copied().expect(
+            let data_index = self.ctx.packed_data_map.get(&data.bytes).copied().expect(
                 "[WIR] PackedArray: long payload missing from packed_data_map (registration must cover every >threshold literal)",
             );
-            let len_i32 = i32::try_from(byte_len)
-                .unwrap_or_else(|_| panic!("[WIR] literal of {byte_len} bytes exceeds i32 length"));
+            let len = data.len();
+            let len_i32 = i32::try_from(len)
+                .unwrap_or_else(|_| panic!("[WIR] literal of {len} elements exceeds i32 length"));
             WirInstr::ArrayNewData {
                 type_id: array_type_id,
                 data_index,

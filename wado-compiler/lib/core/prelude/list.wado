@@ -35,6 +35,7 @@ use {
     SliceChunks,
 } from "core:prelude/slice.wado";
 use { panic } from "core:rt";
+use { AsByteSlice, FromLeBytes } from "core:prelude/bytes.wado";
 
 #[compiler_item("list")]
 pub struct List<T> {
@@ -306,6 +307,26 @@ impl<T> List<T> {
             }
         }
         self.used = new_used;
+    }
+}
+
+impl<T: FromLeBytes> List<T> {
+    /// The `T`s `bytes` holds, little-endian and back to back. A byte string
+    /// literal or `#include_bytes` argument becomes a data segment, read with
+    /// no decode loop. Panics when `bytes` is not a whole number of `T`s.
+    #[compiler_item("list_from_le_bytes")]
+    pub fn from_le_bytes<B: AsByteSlice>(bytes: B) -> List<T> {
+        let view = bytes.as_byte_slice();
+        let width = T::le_width();
+        if view.len() % width != 0 {
+            panic(`from_le_bytes: ${view.len()} bytes is not a whole number of ${width}-byte elements`);
+        }
+        let n = view.len() / width;
+        let mut out = List::<T>::with_capacity(n);
+        for let mut i = 0; i < n; i += 1 {
+            out.push(T::from_le_at(view, i * width));
+        }
+        return out;
     }
 }
 

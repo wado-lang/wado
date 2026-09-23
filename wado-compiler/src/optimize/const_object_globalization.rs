@@ -2529,8 +2529,7 @@ fn needs_lazy_guard(body: &Body, expr: ExprId, gate: &Gate<'_>) -> bool {
                 Some(())
             }
             ExprKind::PackedArray(bytes) => {
-                (!packed_array_is_eager(bytes.len(), gate.string_inline_max_bytes, true))
-                    .then_some(())
+                (!packed_array_is_eager(bytes, gate.string_inline_max_bytes, true)).then_some(())
             }
             ExprKind::ArrayLiteral { elements } => (elements.len() > ARRAY_NEW_FIXED_LIMIT
                 || array_literal_promotes_to_data(body, elements, gate))

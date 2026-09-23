@@ -9,6 +9,7 @@ use std::ops::ControlFlow;
 use cranelift_entity::{EntityRef, PrimaryMap, entity_impl};
 
 use crate::canonical::CmCallTarget;
+use crate::const_eval::Value;
 use crate::hashmap;
 use crate::hashmap::IndexSet;
 use crate::module_source::ModuleSource;
@@ -16,6 +17,7 @@ use crate::name::{is_template_block, plain_block_label};
 use crate::nir::{FuncId, NirBinaryOp, NirLiteralPattern, NirLocal, NirUnaryOp};
 use crate::nir_value_graph::builder::ValueGraphBuild;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::primitive::PrimitiveType;
 use crate::tir::TypeId;
 use crate::token::Span;
 
@@ -187,6 +189,93 @@ pub struct ArenaStructPatternField {
     pub pattern: PatId,
 }
 
+/// A constant array given as the little-endian bytes of its elements.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackedData {
+    pub bytes: Vec<u8>,
+    pub elem: PrimitiveType,
+}
+
+impl PackedData {
+    pub fn new(bytes: Vec<u8>, elem: PrimitiveType) -> Self {
+        let width = elem
+            .data_width()
+            .unwrap_or_else(|| panic!("`{}` has no data width", elem.as_str()));
+        assert!(
+            bytes.len().is_multiple_of(width),
+            "packed data is whole `{}` elements",
+            elem.as_str()
+        );
+        Self { bytes, elem }
+    }
+
+    pub fn of_bytes(bytes: Vec<u8>) -> Self {
+        Self::new(bytes, PrimitiveType::U8)
+    }
+
+    /// The bytes of a `u8` array, which is what a string or byte buffer holds.
+    pub fn as_bytes(&self) -> Option<&[u8]> {
+        (self.elem == PrimitiveType::U8).then_some(self.bytes.as_slice())
+    }
+
+    pub fn len(&self) -> usize {
+        self.bytes.len() / self.width()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.bytes.is_empty()
+    }
+
+    fn width(&self) -> usize {
+        self.elem.data_width().expect("checked at construction")
+    }
+
+    /// Each element as a compile-time value.
+    pub fn values(&self) -> impl ExactSizeIterator<Item = Value> + '_ {
+        let elem = self.elem;
+        self.bytes.chunks_exact(self.width()).map(move |chunk| {
+            let mut raw = [0u8; 8];
+            raw[..chunk.len()].copy_from_slice(chunk);
+            let bits = u64::from_le_bytes(raw);
+            match elem {
+                PrimitiveType::F32 => Value::Float {
+                    value: f64::from(f32::from_bits(bits as u32)),
+                    prim: elem,
+                },
+                PrimitiveType::F64 => Value::Float {
+                    value: f64::from_bits(bits),
+                    prim: elem,
+                },
+                PrimitiveType::I8 => Value::Int {
+                    value: i64::from(bits as u8 as i8).cast_unsigned(),
+                    prim: elem,
+                },
+                PrimitiveType::I16 => Value::Int {
+                    value: i64::from(bits as u16 as i16).cast_unsigned(),
+                    prim: elem,
+                },
+                PrimitiveType::I32 => Value::Int {
+                    value: i64::from(bits as u32 as i32).cast_unsigned(),
+                    prim: elem,
+                },
+                PrimitiveType::I64
+                | PrimitiveType::U8
+                | PrimitiveType::U16
+                | PrimitiveType::U32
+                | PrimitiveType::U64
+                | PrimitiveType::F16
+                | PrimitiveType::Bf16 => Value::Int {
+                    value: bits,
+                    prim: elem,
+                },
+                PrimitiveType::Bool | PrimitiveType::Char | PrimitiveType::V128 => {
+                    unreachable!("checked at construction")
+                }
+            }
+        })
+    }
+}
+
 /// Expression kinds: leaf data is stored inline, children by id.
 #[derive(Debug, Clone)]
 pub enum ExprKind {
@@ -196,7 +285,7 @@ pub enum ExprKind {
     /// reclaimed by DCE. (Distinct from the unit value, which is a pooled
     /// `ValueKind::Unit` operand.)
     Dead,
-    PackedArray(Vec<u8>),
+    PackedArray(PackedData),
     Local {
         index: u32,
         name: String,

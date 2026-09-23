@@ -37,11 +37,12 @@ use crate::nir::{
 };
 use crate::nir_arena::{
     ArenaCallArg, ArenaStructField, ArenaStructPatternField, ArmData, BlockId, BlockNode,
-    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PatId, PatKind, PatNode,
-    StmtId, StmtKind, StmtNode,
+    BlockRole, Body, ExprBody, ExprId, ExprKind, ExprNode, Operand, PackedData, PatId, PatKind,
+    PatNode, StmtId, StmtKind, StmtNode,
 };
 use crate::nir_package::NirPackage;
 use crate::nir_value_graph::{ValueId, ValueKind, ValuePool};
+use crate::primitive::PrimitiveType;
 use crate::tir::{
     CallArg, CaptureSource, ClosureFunctor, FunctionRef, GlobalInit, MonomorphInfo, ResolvedType,
     StructDef, TirBlock, TirCapture, TirEnum, TirEnumCase, TirExpr, TirExprKind, TirField,
@@ -2314,11 +2315,41 @@ impl FunctionTranslator<'_, '_> {
             .expect("String struct (repr field) is always loaded")
     }
 
+    /// The element of a sequence literal's type, and the array type holding
+    /// it. A `String` and every byte sequence share one `Array<u8>`.
+    fn packed_layout(&self, seq_type_id: tir::TypeId) -> (PrimitiveType, tir::TypeId) {
+        let elem = self.base.type_table.borrow().packed_element(seq_type_id);
+        match elem {
+            Some(PrimitiveType::U8) | None => (PrimitiveType::U8, self.seq_u8_repr_type()),
+            Some(prim) => {
+                let array = self
+                    .base
+                    .type_table
+                    .borrow_mut()
+                    .make_builtin_array(TypeTable::primitive_type_id(prim));
+                (prim, array)
+            }
+        }
+    }
+
     fn seq_literal(&self, seq_type_id: tir::TypeId, bytes: Vec<u8>, span: Span) -> ExprId {
         use crate::compiler_item::SeqField;
-        let len = i32::try_from(bytes.len()).expect("seq literal length fits i32");
-        let array_u8_ty = self.seq_u8_repr_type();
-        let packed = self.alloc_expr(ExprKind::PackedArray(bytes), array_u8_ty, span);
+        let (elem, repr_ty) = self.packed_layout(seq_type_id);
+        let data = PackedData::new(bytes, elem);
+        let len = i32::try_from(data.len()).expect("seq literal length fits i32");
+        if matches!(
+            self.base.type_table.borrow().get(repr_ty),
+            ResolvedType::BuiltinArray(_)
+        ) && self
+            .base
+            .type_table
+            .borrow()
+            .representation_head(seq_type_id)
+            == repr_ty
+        {
+            return self.alloc_expr(ExprKind::PackedArray(data), seq_type_id, span);
+        }
+        let packed = self.alloc_expr(ExprKind::PackedArray(data), repr_ty, span);
         let used_val = self.arena.borrow_mut().values.alloc_unshared(
             ValueKind::Int(i64::from(len) as u64, TypeTable::I32),
             TypeTable::I32,

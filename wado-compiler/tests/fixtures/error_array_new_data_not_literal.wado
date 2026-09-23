@@ -1,0 +1,9 @@
+// The bytes become a data segment, so they must be known at compile time.
+
+export fn run() {
+    let bytes: ByteList = [0, 0, 128, 63];
+    let _a = builtin::array_new_data::<f32>(bytes);
+}
+
+__DATA__
+{"compile_error": "`builtin::array_new_data` needs a byte string literal or `#include_bytes`"}
