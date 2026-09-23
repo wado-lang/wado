@@ -4390,7 +4390,9 @@ fn build_dispatch_groups(calls: &List<TryCall>) -> List<DispatchGroup> {
             cuts.insert(r[1] as i32 + 1);
         }
     }
-    let points: List<i32> = cuts.into_iter().collect();
+    // A TreeSet iterates in insertion order.
+    let mut points: List<i32> = cuts.into_iter().collect();
+    points.sort();
 
     let mut range_indexes: List<RangeIndex> = [];
     for let call of calls {
