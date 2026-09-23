@@ -31,6 +31,8 @@ Design in [`action.md`](./action.md). Landed: every lexer emit the match can tak
 
 One narrow gap remains in the surface itself: the lexer's `$line` has no `$`-form. The runtime's line index (`line_starts`) covers the whole input and is built after tokenizing, so a read while lexing would rescan from the start. The alternative is a lexer that counts lines as it goes, for an attribute no grammar asks for. A reference to it is a loud error.
 
+A caller's scan evaluates a called rule's predicate only when it reads no parser state or only fields the scan gate simulates. `action.md` counts every predicate without `$arg` / `$local` / `$ret` as context-independent, so one calling `p.la(1)` or a base method is still read as true there. A scan has no `p`, and `scan_gate.wado` says why handing it the parser would read stale state.
+
 ### Not Stage C, and blocked
 
 - Both remaining `[stage_c_todo]` entries are held by something other than action execution, so no amount of Stage C work closes them: `FullContextParsing/AmbiguityNoLoop` is ambiguity _reporting_ (its `@init` asks for `LL_EXACT_AMBIG_DETECTION`), and `ParseTrees/ExtraTokensAndAltLabels` is the recovery divergence its own triage line describes.
