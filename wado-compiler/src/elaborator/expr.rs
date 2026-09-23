@@ -481,6 +481,18 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         }
     }
 
+    /// The expectation a branching expression takes as its result type: one
+    /// still holding an inference variable is for its branches to answer.
+    fn settled_result_expectation(&self, expected_type: Option<TypeId>) -> Option<TypeId> {
+        expected_type.filter(|&t| !self.type_has_infer_hole(t))
+    }
+
+    /// Whether a branch's type waits on its siblings: one still unresolved,
+    /// or one carrying an inference variable the branches are to answer.
+    fn is_undecided_branch(&self, branch: TypeId) -> bool {
+        self.tysys.type_table.borrow().is_indefinite(branch) || self.type_has_infer_hole(branch)
+    }
+
     /// The type of a labeled block expression: its `break` values and its
     /// fall-through tail unified into one, every disagreement reported.
     fn unify_labeled_block(
@@ -489,12 +501,14 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         break_types: &[TypeId],
         expected_type: Option<TypeId>,
     ) -> TypeId {
+        let expected_type = self.settled_result_expectation(expected_type);
         let tail_type = self.labeled_block_tail_type(lb);
-        let branch_types: Vec<TypeId> = break_types
+        let mut branch_types: Vec<TypeId> = break_types
             .iter()
             .copied()
             .chain(std::iter::once(tail_type))
             .collect();
+        self.settle_branch_holes(&mut branch_types, expected_type);
         let result_type =
             expected_type.unwrap_or_else(|| self.representative_branch_type(&branch_types));
 
@@ -2083,6 +2097,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 );
                 ctx.exit_scope();
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2167,6 +2182,7 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                     self.resolve_block_value(b, ctx, expected_type);
                 }
 
+                let expected_type = self.settled_result_expectation(expected_type);
                 let type_id = if let Some(ty) = expected_type {
                     ty
                 } else {
@@ -2417,7 +2433,9 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 then_type = t;
             }
         }
-        (then_type, else_type)
+        let mut branches = [then_type, else_type];
+        self.settle_branch_holes(&mut branches, None);
+        branches.into()
     }
 
     /// Give a numeric-literal branch tail the type a sibling branch fixed, as
@@ -2571,6 +2589,34 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         agreed
     }
 
+    /// Solve the inference holes `branches` carry against the expected type, or
+    /// else a settled sibling, and apply them.
+    pub(super) fn settle_branch_holes(
+        &mut self,
+        branches: &mut [TypeId],
+        expected_type: Option<TypeId>,
+    ) {
+        if !branches.iter().any(|&t| self.type_has_infer_hole(t)) {
+            return;
+        }
+        let target = expected_type
+            .filter(|&t| t != TypeTable::UNKNOWN)
+            .or_else(|| {
+                branches
+                    .iter()
+                    .copied()
+                    .find(|&t| t != TypeTable::NEVER && !self.is_undecided_branch(t))
+            });
+        if let Some(target) = target {
+            for &branch in &*branches {
+                self.solve_infer_holes_against(branch, target);
+            }
+        }
+        for branch in branches {
+            *branch = self.apply_infer_holes(*branch);
+        }
+    }
+
     fn agree_two_branches(&self, a: TypeId, b: TypeId) -> Option<TypeId> {
         if a == b {
             return Some(a);
@@ -2581,14 +2627,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         if b == TypeTable::NEVER {
             return Some(a);
         }
-        let (a_unknown, b_unknown) = {
-            let tt = self.tysys.type_table.borrow();
-            (tt.is_indefinite(a), tt.is_indefinite(b))
-        };
-        if a_unknown && !b_unknown {
+        let (a_undecided, b_undecided) = (self.is_undecided_branch(a), self.is_undecided_branch(b));
+        if a_undecided && !b_undecided {
             return Some(b);
         }
-        if b_unknown && !a_unknown {
+        if b_undecided && !a_undecided {
             return Some(a);
         }
         self.tysys.type_table.borrow().resource_join(a, b)
@@ -2610,33 +2653,16 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             .iter()
             .map(|arm| self.resolve_match_arm(arm, scrutinee_type, ctx, expected_type))
             .collect();
+        let expected_type = self.settled_result_expectation(expected_type);
 
-        // A hole from a generic scrutinee (`match gen() { … }`) flows through
-        // the bindings into the arm bodies (same `TypeId`). Solve it against the
-        // expected type or a concrete sibling arm and concretise before the
-        // result-type selection below.
-        if arm_bodies.iter().any(|&(t, _)| self.type_has_infer_hole(t))
-            || self.type_has_infer_hole(scrutinee_type)
-        {
-            let target = expected_type
-                .filter(|&t| t != TypeTable::UNKNOWN && !self.type_has_infer_hole(t))
-                .or_else(|| {
-                    arm_bodies.iter().map(|(t, _)| *t).find(|&t| {
-                        t != TypeTable::NEVER
-                            && !self.type_has_infer_hole(t)
-                            && !self.tysys.type_table.borrow().is_indefinite(t)
-                    })
-                });
-            if let Some(target) = target {
-                for &(arm_type, _) in &arm_bodies {
-                    self.solve_infer_holes_against(arm_type, target);
-                }
-            }
-            for (t, _) in &mut arm_bodies {
-                *t = self.apply_infer_holes(*t);
-            }
-            scrutinee_type = self.apply_infer_holes(scrutinee_type);
+        let mut arm_types: Vec<TypeId> = arm_bodies.iter().map(|&(t, _)| t).collect();
+        self.settle_branch_holes(&mut arm_types, expected_type);
+        for ((t, _), settled) in arm_bodies.iter_mut().zip(arm_types) {
+            *t = settled;
         }
+        // A hole from a generic scrutinee (`match gen() { … }`) flows through
+        // the bindings into the arm bodies (same `TypeId`).
+        scrutinee_type = self.apply_infer_holes(scrutinee_type);
 
         self.check_match_exhaustiveness(&match_expr.arms, scrutinee_type, match_expr.span);
 

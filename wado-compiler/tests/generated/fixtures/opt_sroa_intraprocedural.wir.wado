@@ -105,6 +105,9 @@ fn "opt_sroa_intraprocedural.wado/$cm_export__run"() {
 }
 
 fn "opt_sroa_intraprocedural.wado/run$cold5"($v0, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
     let $local_20: ref "core:prelude/string.wado//String";
     let $local_21: ref "core:prelude/format.wado//Formatter";
     let self_43: ref Array<u8>;
@@ -130,18 +133,18 @@ fn "opt_sroa_intraprocedural.wado/run$cold5"($v0, $v1) {
     let start_115: i32;
     $local_20 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(236), used: 0 };
     $local_20.used = 57;
-    self_43 = $local_20.repr;
+    self_43 = local.tee $load_0($local_20.repr);
     builtin::array_copy<u8>(self_43, 0, global:opt_sroa_intraprocedural.wado::$const_obj_54, 0, 20);
-    self_47 = $local_20.repr;
+    self_47 = $load_0;
     offset_48 = 0 + 20;
     builtin::array_copy<u8>(self_47, offset_48, global:opt_sroa_intraprocedural.wado::$const_obj_53, 0, 3);
-    self_51 = $local_20.repr;
+    self_51 = $load_0;
     offset_52 = 0 + 23;
     builtin::array_copy<u8>(self_51, offset_52, global:opt_sroa_intraprocedural.wado::$const_obj_52, 0, 4);
-    self_55 = $local_20.repr;
+    self_55 = $load_0;
     offset_56 = 0 + 27;
     builtin::array_copy<u8>(self_55, offset_56, global:opt_sroa_intraprocedural.wado::$const_obj_51, 0, 29);
-    self_59 = $local_20.repr;
+    self_59 = $load_0;
     offset_60 = 0 + 56;
     builtin::array_copy<u8>(self_59, offset_60, global:opt_sroa_intraprocedural.wado::$const_obj_50, 0, 1);
     $local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_20 };
@@ -153,9 +156,9 @@ fn "opt_sroa_intraprocedural.wado/run$cold5"($v0, $v1) {
     }
     start_71 = $local_20.used;
     $local_20.used = new_used_70;
-    self_73 = $local_20.repr;
+    self_73 = local.tee $load_5($local_20.repr);
     builtin::array_copy<u8>(self_73, start_71, global:opt_sroa_intraprocedural.wado::$const_obj_49, 0, 62);
-    self_77 = $local_20.repr;
+    self_77 = $load_5;
     offset_78 = start_71 + 62;
     builtin::array_copy<u8>(self_77, offset_78, global:opt_sroa_intraprocedural.wado::$const_obj_48, 0, 23);
     $local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_20 };
@@ -167,9 +170,9 @@ fn "opt_sroa_intraprocedural.wado/run$cold5"($v0, $v1) {
     }
     start_89 = $local_20.used;
     $local_20.used = new_used_88;
-    self_91 = $local_20.repr;
+    self_91 = local.tee $load_10($local_20.repr);
     builtin::array_copy<u8>(self_91, start_89, global:opt_sroa_intraprocedural.wado::$const_obj_45, 0, 1);
-    self_95 = $local_20.repr;
+    self_95 = $load_10;
     offset_96 = start_89 + 1;
     builtin::array_copy<u8>(self_95, offset_96, global:opt_sroa_intraprocedural.wado::$const_obj_46, 0, 44);
     $local_21 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_20 };
@@ -269,19 +272,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -344,7 +348,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l26;

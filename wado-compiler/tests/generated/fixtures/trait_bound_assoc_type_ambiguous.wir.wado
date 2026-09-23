@@ -159,34 +159,37 @@ fn "trait_bound_assoc_type_ambiguous.wado/$cm_export__run"() {
 }
 
 fn "core:prelude/intparse.wado/digit_value"(b) {
-    if select i32(b >= 48, b <= 57, 0) {
+    if (b >= 48) & (b <= 57) {
         return b - 48;
     }
-    if select i32(b >= 97, b <= 122, 0) {
+    if (b >= 97) & (b <= 122) {
         return (b - 97) + 10;
     }
-    if select i32(b >= 65, b <= 90, 0) {
+    if (b >= 65) & (b <= 90) {
         return (b - 65) + 10;
     }
     return -1;
 }
 
 fn "core:prelude/intparse.wado/split_plus"(s) {
+    let $load_0: i32;
+    let $load_1: i32;
+    let $load_2: ref Array<u8>;
     let len: i32;
     let self_9: ref Array<u8>;
     let $av_11: i32;
-    $av_11 = s.start;
-    len = s.end - $av_11;
+    $av_11 = local.tee $load_0(s.start);
+    len = local.tee $load_1(s.end) - $av_11;
     if len == 0 {
         return 1, ref.null none, 0;
     }
-    if self_9 = s.repr; builtin::array_get_value<u8>(self_9, $av_11) == 43 {
+    if self_9 = local.tee $load_2(s.repr); builtin::array_get_value<u8>(self_9, $av_11) == 43 {
         if len == 1 {
             return 1, ref.null none, 1;
         }
-        return 0, struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: $av_11 + 1, end: $av_11 + len }, 0;
+        return 0, struct.new "core:prelude/string.wado//StrSlice" { repr: $load_2, start: $av_11 + 1, end: $av_11 + len }, 0;
     }
-    return 0, struct.new "core:prelude/string.wado//StrSlice" { repr: s.repr, start: s.start, end: s.end }, 0;
+    return 0, struct.new "core:prelude/string.wado//StrSlice" { repr: $load_2, start: $load_0, end: $load_1 }, 0;
 }
 
 fn "core:prelude/intparse.wado/parse_u64_radix"(s) {
@@ -294,6 +297,7 @@ fn "core:rt/write_string_to_stream$spec0"(tx, $mv$message$repr, $mv$message$used
 }
 
 fn "core:prelude/intparse.wado/parse_u64_digits$spec0"(s) {
+    let $load_1: i32;
     let len: i32;
     let acc: u64;
     let i: i32;
@@ -301,26 +305,26 @@ fn "core:prelude/intparse.wado/parse_u64_digits$spec0"(s) {
     let d64: u64;
     let $licm_repr_13: ref Array<u8>;
     let $licm_start_14: i32;
-    len = s.end - s.start;
+    len = s.end - local.tee $load_1(s.start);
     if len == 0 {
         return 1, 0_i64, 0;
     }
     acc = 0_i64;
     i = 0;
     $licm_repr_13 = s.repr;
-    $licm_start_14 = s.start;
+    $licm_start_14 = $load_1;
     b35: block {
         l36: loop {
             break_if b35 i >= len;
             d = "core:prelude/intparse.wado/digit_value"(builtin::array_get_value<u8>($licm_repr_13, $licm_start_14 + i));
-            if select i32(d < 0, 1, d >= 10) {
+            if (d < 0) | (d >= 10) {
                 return 1, 0_i64, 1;
             }
             d64 = builtin::i64_extend_i32_s(d);
             if (if acc >u 1844674407370955161_i64 -> i32 {
                 1;
             } else {
-                select i32(acc == 1844674407370955161_i64, d64 >u 5_i64, 0);
+                (acc == 1844674407370955161_i64) & (d64 >u 5_i64);
             }) {
                 return 1, 0_i64, 2;
             }
@@ -333,19 +337,20 @@ fn "core:prelude/intparse.wado/parse_u64_digits$spec0"(s) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -408,7 +413,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l43;

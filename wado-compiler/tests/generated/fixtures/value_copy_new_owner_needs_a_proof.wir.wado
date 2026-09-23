@@ -153,15 +153,15 @@ global global:value_copy_new_owner_needs_a_proof.wado::$const_obj_5: ref null "c
 global global:core:prelude/traits.wado::$const_obj_8: ref null Array<u8> = array.new_fixed<u8>(32, 125);
 global global:core:prelude/traits.wado::$const_obj_9: ref null Array<u8> = array.new_fixed<u8>(58, 32);
 global global:core:prelude/traits.wado::$const_obj_10: ref null Array<u8> = array.new_fixed<u8>(32, 123, 32);
-global global:core:prelude/traits.wado::$const_obj_11: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(104, 101, 108, 100), used: 4 };
-global global:core:prelude/traits.wado::$const_obj_12: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 86), used: 2 };
+global global:core:prelude/traits.wado::$const_obj_11: ref null Array<u8> = array.new_fixed<u8>(104, 101, 108, 100);
+global global:core:prelude/traits.wado::$const_obj_12: ref null Array<u8> = array.new_fixed<u8>(72, 86);
 global global:core:prelude/array.wado::$const_obj_14: ref null Array<u8> = array.new_fixed<u8>(46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_15: ref null Array<u8> = array.new_fixed<u8>(44, 32, 46, 46, 46);
 global global:core:prelude/array.wado::$const_obj_16: ref null Array<u8> = array.new_fixed<u8>(44, 32);
 global global:core:prelude/traits.wado::$const_obj_17: ref null Array<u8> = array.new_fixed<u8>(58, 58);
-global global:core:prelude/traits.wado::$const_obj_18: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(72, 101, 108, 100), used: 4 };
-global global:core:prelude/traits.wado::$const_obj_21: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(69, 109, 112, 116, 121), used: 5 };
-global global:core:prelude/traits.wado::$const_obj_22: ref null "core:prelude/string.wado//String" = struct.new "core:prelude/string.wado//String" { repr: array.new_fixed<u8>(70, 117, 108, 108), used: 4 };
+global global:core:prelude/traits.wado::$const_obj_18: ref null Array<u8> = array.new_fixed<u8>(72, 101, 108, 100);
+global global:core:prelude/traits.wado::$const_obj_21: ref null Array<u8> = array.new_fixed<u8>(69, 109, 112, 116, 121);
+global global:core:prelude/traits.wado::$const_obj_22: ref null Array<u8> = array.new_fixed<u8>(70, 117, 108, 108);
 global global:core:prelude/traits.wado::$const_obj_40: ref null Array<u8> = array.new_fixed<u8>(41);
 global global:core:prelude/traits.wado::$const_obj_41: ref null Array<u8> = array.new_fixed<u8>(40);
 global global:core:prelude/traits.wado::$const_obj_43: ref null Array<u8> = array.new_fixed<u8>(32, 32);
@@ -183,6 +183,7 @@ global global:core:prelude/traits.wado::$const_obj_65: ref null Array<u8> = arra
 global global:core:prelude/traits.wado::$const_obj_70: ref null Array<u8> = array.new_fixed<u8>(32, 123);
 
 fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_licenses_no_new_owner"() {
+    let $load_1: i32;
     let $v0: bool;
     let $v1_2: i32;
     let z: ref "core:prelude//List<i32>";
@@ -206,7 +207,7 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
             if $v0 {
                 $sroa_h_held = ref.null none;
             }
-            x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = a.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: a.used };
+            x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(a.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
             used = x.used;
             if @unlikely(used >= builtin::array_len(x.repr)) {
                 cold_path;
@@ -266,6 +267,7 @@ condition: z.len() == 2
 }
 
 fn "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fresh_holder_is_not_its_owner"() {
+    let $load_1: i32;
     let a: ref "core:prelude//List<i32>";
     let x: ref "core:prelude//List<i32>";
     let $v1_3: i32;
@@ -285,7 +287,7 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_2_an_arm_binding_out_of_a_fres
     let $sroa_h_held: ref null "core:prelude//List<i32>";
     $sroa_h_held = struct.new "core:prelude//List<i32>" { repr: array.new_fixed<i32>(1, 2), used: 2 };
     a = ref.as_non_null($sroa_h_held);
-    x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = a.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: a.used };
+    x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(a.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
     used = x.used;
     if @unlikely(used >= builtin::array_len(x.repr)) {
         cold_path;
@@ -357,6 +359,8 @@ condition: h.count() == 2
 }
 
 fn "value_copy_new_owner_needs_a_proof.wado/$cm_export__$test_0_a_repoint_does_not_license_two_arm_bindings"() {
+    let $load_1: i32;
+    let $load_6: i32;
     let $local_4_4: ref "core:prelude/string.wado//String";
     let $local_5_5: ref "core:prelude/format.wado//Formatter";
     let $fuse_at_6: i32;
@@ -381,7 +385,7 @@ fn "value_copy_new_owner_needs_a_proof.wado/$cm_export__$test_0_a_repoint_does_n
             if ref.is_null($local_5_16) == 0 {
                 b_13 = ref.as_non_null($local_5_16);
                 $sroa_h_held = ref.null none;
-                x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = a.used; let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: a.used };
+                x = struct.new "core:prelude//List<i32>" { repr: ref.as_non_null(let $array_clone_src_1: ref Array<i32>; $array_clone_src_1 = a.repr; let $array_clone_len_3: i32; $array_clone_len_3 = local.tee $load_1(a.used); let $array_clone_dst_2: ref Array<i32>; $array_clone_dst_2 = builtin::array_new<i32>($array_clone_len_3); builtin::array_copy<i32>($array_clone_dst_2, 0, $array_clone_src_1, 0, $array_clone_len_3); $array_clone_dst_2), used: $load_1 };
                 used = x.used;
                 if @unlikely(used >= builtin::array_len(x.repr)) {
                     cold_path;
@@ -401,11 +405,11 @@ fn "value_copy_new_owner_needs_a_proof.wado/$cm_export__$test_0_a_repoint_does_n
     let $array_clone_src_4: ref Array<i32>;
     $array_clone_src_4 = v_10.repr;
     let $array_clone_len_6: i32;
-    $array_clone_len_6 = v_10.used;
+    $array_clone_len_6 = local.tee $load_6(v_10.used);
     let $array_clone_dst_5: ref Array<i32>;
     $array_clone_dst_5 = builtin::array_new<i32>($array_clone_len_6);
     builtin::array_copy<i32>($array_clone_dst_5, 0, $array_clone_src_4, 0, $array_clone_len_6);
-    $sroa_b_used = v_10.used;
+    $sroa_b_used = $load_6;
     if @unlikely($sroa_b_used != 2) {
         cold_path;
         $local_4_4 = "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(144);
@@ -449,6 +453,9 @@ fn "value_copy_new_owner_needs_a_proof.wado/$cm_export__$test_2_an_arm_binding_o
 }
 
 fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_licenses_no_new_owner$cold0"($v0, $v1) {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_12: ref Array<u8>;
     let $local_7: ref "core:prelude/string.wado//String";
     let $local_8: ref "core:prelude/format.wado//Formatter";
     let self_23: ref Array<u8>;
@@ -475,18 +482,18 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
     let start_96: i32;
     $local_7 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(250), used: 0 };
     $local_7.used = 119;
-    self_23 = $local_7.repr;
+    self_23 = local.tee $load_0($local_7.repr);
     builtin::array_copy<u8>(self_23, 0, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_63, 0, 20);
-    self_27 = $local_7.repr;
+    self_27 = $load_0;
     offset_28 = 0 + 20;
     builtin::array_copy<u8>(self_27, offset_28, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_62, 0, 55);
-    self_31 = $local_7.repr;
+    self_31 = $load_0;
     offset_32 = 0 + 75;
     builtin::array_copy<u8>(self_31, offset_32, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_61, 0, 4);
-    self_35 = $local_7.repr;
+    self_35 = $load_0;
     offset_36 = 0 + 79;
     builtin::array_copy<u8>(self_35, offset_36, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_60, 0, 39);
-    self_39 = $local_7.repr;
+    self_39 = $load_0;
     offset_40 = 0 + 118;
     builtin::array_copy<u8>(self_39, offset_40, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_59, 0, 1);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -498,14 +505,14 @@ fn "value_copy_new_owner_needs_a_proof.wado/$test_1_a_repoint_that_never_runs_li
     }
     start_51 = $local_7.used;
     $local_7.used = new_used_50;
-    self_53 = $local_7.repr;
+    self_53 = local.tee $load_5($local_7.repr);
     if ref.is_null(global:value_copy_new_owner_needs_a_proof.wado::$const_obj_58) {
         global:value_copy_new_owner_needs_a_proof.wado::$const_obj_58 = array.new_data<u8>("
 condition: maybe_repoint(&mut h, builtin::black_box(false)) == 3
 ");
     }
     builtin::array_copy<u8>(self_53, start_51, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_58, 0, 66);
-    self_57 = $local_7.repr;
+    self_57 = $load_5;
     offset_58 = start_51 + 66;
     builtin::array_copy<u8>(self_57, offset_58, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_57, 0, 27);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -524,9 +531,9 @@ condition: maybe_repoint(&mut h, builtin::black_box(false)) == 3
     }
     start_70 = $local_7.used;
     $local_7.used = new_used_69;
-    self_72 = $local_7.repr;
+    self_72 = local.tee $load_12($local_7.repr);
     builtin::array_copy<u8>(self_72, start_70, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_54, 0, 1);
-    self_76 = $local_7.repr;
+    self_76 = $load_12;
     offset_77 = start_70 + 1;
     builtin::array_copy<u8>(self_76, offset_77, global:value_copy_new_owner_needs_a_proof.wado::$const_obj_55, 0, 50);
     $local_8 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_7 };
@@ -1078,7 +1085,6 @@ fn "core:prelude/array.wado/core/prelude/array.wado/write_seq_inspect_alt<i32>"(
 }
 
 fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_new_owner_needs_a_proof.wado/HV,[value_copy_new_owner_needs_a_proof.wado/Held]>$scalar"(v, f) {
-    let s_9: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1090,7 +1096,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
     let new_used_59: i32;
     let start_60: i32;
     let self_65: ref "core:prelude/string.wado//String";
-    let other_66: ref "core:prelude/string.wado//String";
     let new_used_77: i32;
     let start_78: i32;
     let self_80: ref "core:prelude/string.wado//String";
@@ -1114,7 +1119,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
     let start_242: i32;
     let new_used_257: i32;
     let start_258: i32;
-    s_9 = global:core:prelude/traits.wado::$const_obj_12;
     self_10 = f.buf;
     new_used_22 = self_10.used + 2;
     if @unlikely(new_used_22 > builtin::array_len(self_10.repr)) {
@@ -1123,7 +1127,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
     }
     start_23 = self_10.used;
     self_10.used = new_used_22;
-    builtin::array_copy<u8>(self_10.repr, start_23, s_9.repr, 0, 2);
+    builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_12, 0, 2);
     self_27 = f.buf;
     new_used_39 = self_27.used + 2;
     if @unlikely(new_used_39 > builtin::array_len(self_27.repr)) {
@@ -1162,7 +1166,6 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
         };
     };
     self_65 = f.buf;
-    other_66 = global:core:prelude/traits.wado::$const_obj_11;
     new_used_77 = self_65.used + 4;
     if @unlikely(new_used_77 > builtin::array_len(self_65.repr)) {
         cold_path;
@@ -1170,7 +1173,7 @@ fn "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<v
     }
     start_78 = self_65.used;
     self_65.used = new_used_77;
-    builtin::array_copy<u8>(self_65.repr, start_78, other_66.repr, 0, 4);
+    builtin::array_copy<u8>(self_65.repr, start_78, global:core:prelude/traits.wado::$const_obj_11, 0, 4);
     self_80 = f.buf;
     new_used_92 = self_80.used + 2;
     if @unlikely(new_used_92 > builtin::array_len(self_80.repr)) {
@@ -1247,19 +1250,20 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::with_capacity"(cap
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -1277,6 +1281,7 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::internal_reserve_u
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
+    let $load_6: i32;
     let byte: u8;
     let new_used: i32;
     let start_9: i32;
@@ -1300,9 +1305,9 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
         cold_path;
         "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, $av_51 + 4);
     }
-    self.used = self.used + $inline_encode_char_6: block -> i32 {
+    self.used = local.tee $load_6(self.used) + $inline_encode_char_6: block -> i32 {
         repr = self.repr;
-        pos = self.used;
+        pos = $load_6;
         if c <u 128 {
             builtin::array_set_u8(repr, pos, c & 255);
             break $inline_encode_char_6: 1;
@@ -1327,7 +1332,6 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push"(self, c) {
 }
 
 fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let s_8: ref "core:prelude/string.wado//String";
     let self_9: ref "core:prelude/string.wado//String";
     let new_used_21: i32;
     let start_22: i32;
@@ -1335,7 +1339,6 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:pre
     let new_used_52: i32;
     let start_53: i32;
     let self_58: ref "core:prelude/string.wado//String";
-    let other_59: ref "core:prelude/string.wado//String";
     let new_used_70: i32;
     let start_71: i32;
     let self_73: ref "core:prelude/string.wado//String";
@@ -1349,7 +1352,6 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:pre
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_struct_alternate<value_copy_new_owner_needs_a_proof.wado/HV,[value_copy_new_owner_needs_a_proof.wado/Held]>$scalar"(self.held, f);
         return;
     }
-    s_8 = global:core:prelude/traits.wado::$const_obj_12;
     self_9 = f.buf;
     new_used_21 = self_9.used + 2;
     if @unlikely(new_used_21 > builtin::array_len(self_9.repr)) {
@@ -1358,7 +1360,7 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:pre
     }
     start_22 = self_9.used;
     self_9.used = new_used_21;
-    builtin::array_copy<u8>(self_9.repr, start_22, s_8.repr, 0, 2);
+    builtin::array_copy<u8>(self_9.repr, start_22, global:core:prelude/traits.wado::$const_obj_12, 0, 2);
     self_40 = f.buf;
     new_used_52 = self_40.used + 3;
     if @unlikely(new_used_52 > builtin::array_len(self_40.repr)) {
@@ -1369,7 +1371,6 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:pre
     self_40.used = new_used_52;
     builtin::array_copy<u8>(self_40.repr, start_53, global:core:prelude/traits.wado::$const_obj_10, 0, 3);
     self_58 = f.buf;
-    other_59 = global:core:prelude/traits.wado::$const_obj_11;
     new_used_70 = self_58.used + 4;
     if @unlikely(new_used_70 > builtin::array_len(self_58.repr)) {
         cold_path;
@@ -1377,7 +1378,7 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/HV^core:pre
     }
     start_71 = self_58.used;
     self_58.used = new_used_70;
-    builtin::array_copy<u8>(self_58.repr, start_71, other_59.repr, 0, 4);
+    builtin::array_copy<u8>(self_58.repr, start_71, global:core:prelude/traits.wado::$const_obj_11, 0, 4);
     self_73 = f.buf;
     new_used_85 = self_73.used + 2;
     if @unlikely(new_used_85 > builtin::array_len(self_73.repr)) {
@@ -1458,7 +1459,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l117;
@@ -1467,6 +1468,8 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
 }
 
 fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_write<core:prelude/string.wado/String>"(self, is_negative, $mv$alt_prefix$repr, $mv$alt_prefix$used, digit_count) {
+    let $load_0: bool;
+    let $load_2: i32;
     let prefix: ref "core:prelude/string.wado//StrSlice";
     let sign_len: i32;
     let prefix_len: i32;
@@ -1559,12 +1562,12 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
     let $av_308: bool;
     let $av_309: i32;
     prefix = struct.new "core:prelude/string.wado//StrSlice" { repr: $mv$alt_prefix$repr, start: 0, end: $mv$alt_prefix$used };
-    $av_308 = self.sign_plus;
+    $av_308 = local.tee $load_0(self.sign_plus);
     sign_len = select i32(select i32(is_negative, 1, $av_308), 1, 0);
     prefix_len = select i32(self.alternate, $mv$alt_prefix$used, 0);
     content_len = (sign_len + prefix_len) + digit_count;
-    $av_309 = self.width;
-    if select i32($av_309 <= 0, 1, content_len >= $av_309) {
+    $av_309 = local.tee $load_2(self.width);
+    if ($av_309 <= 0) | (content_len >= $av_309) {
         if is_negative {
             self_21 = self.buf;
             new_used_26 = self_21.used + 1;
@@ -1606,7 +1609,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self_65, new_used_67);
         }, start_68 = self_65.used, self_65.used = new_used_67, start_68;
     }
-    padding = self.width - content_len;
+    padding = $load_2 - content_len;
     if self.zero_pad {
         if is_negative {
             self_72 = self.buf;
@@ -1618,7 +1621,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_78 = self_72.used;
             self_72.used = new_used_77;
             builtin::array_set_u8(self_72.repr, start_78, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_86 = self.buf;
             new_used_91 = self_86.used + 1;
             if @unlikely(new_used_91 > builtin::array_len(self_86.repr)) {
@@ -1678,7 +1681,7 @@ fn "core:prelude/format.wado/core:prelude/format.wado/Formatter::prepare_int_wri
             start_133 = self_127.used;
             self_127.used = new_used_132;
             builtin::array_set_u8(self_127.repr, start_133, 45);
-        } else if self.sign_plus {
+        } else if $load_0 {
             self_141 = self.buf;
             new_used_146 = self_141.used + 1;
             if @unlikely(new_used_146 > builtin::array_len(self_141.repr)) {
@@ -1877,18 +1880,18 @@ fn "core:prelude/string.wado/core:prelude/string.wado/String::push_str<core:prel
 }
 
 fn "core:prelude/list.wado/core:prelude/list.wado/List<i32>::grow"(self) {
+    let $load_0: ref Array<i32>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<i32>;
     let a: i32;
-    a = local.tee capacity(builtin::array_len(self.repr)) * 2;
+    a = local.tee capacity(builtin::array_len(local.tee $load_0(self.repr))) * 2;
     new_repr = builtin::array_new<i32>(local.tee new_capacity(select i32(a > 4, a, 4)));
-    builtin::array_copy<i32>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<i32>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
 fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:prelude/traits.wado/Inspect::inspect"(self, f) {
-    let s_9: ref "core:prelude/string.wado//String";
     let self_10: ref "core:prelude/string.wado//String";
     let new_used_22: i32;
     let start_23: i32;
@@ -1896,11 +1899,9 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
     let new_used_37: i32;
     let start_38: i32;
     let self_43: ref "core:prelude/string.wado//String";
-    let other_44: ref "core:prelude/string.wado//String";
     let new_used_55: i32;
     let start_56: i32;
     let v_60: ref null "core:prelude//List<i32>";
-    let s_64: ref "core:prelude/string.wado//String";
     let self_65: ref "core:prelude/string.wado//String";
     let new_used_77: i32;
     let start_78: i32;
@@ -1908,11 +1909,9 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
     let new_used_92: i32;
     let start_93: i32;
     let self_98: ref "core:prelude/string.wado//String";
-    let other_99: ref "core:prelude/string.wado//String";
     let new_used_110: i32;
     let start_111: i32;
     if ref.is_null(self.value) == 0 {
-        s_9 = global:core:prelude/traits.wado::$const_obj_18;
         self_10 = f.buf;
         new_used_22 = self_10.used + 4;
         if @unlikely(new_used_22 > builtin::array_len(self_10.repr)) {
@@ -1921,7 +1920,7 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         }
         start_23 = self_10.used;
         self_10.used = new_used_22;
-        builtin::array_copy<u8>(self_10.repr, start_23, s_9.repr, 0, 4);
+        builtin::array_copy<u8>(self_10.repr, start_23, global:core:prelude/traits.wado::$const_obj_18, 0, 4);
         self_25 = f.buf;
         new_used_37 = self_25.used + 2;
         if @unlikely(new_used_37 > builtin::array_len(self_25.repr)) {
@@ -1932,7 +1931,6 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         self_25.used = new_used_37;
         builtin::array_copy<u8>(self_25.repr, start_38, global:core:prelude/traits.wado::$const_obj_17, 0, 2);
         self_43 = f.buf;
-        other_44 = global:core:prelude/traits.wado::$const_obj_22;
         new_used_55 = self_43.used + 4;
         if @unlikely(new_used_55 > builtin::array_len(self_43.repr)) {
             cold_path;
@@ -1940,13 +1938,12 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         }
         start_56 = self_43.used;
         self_43.used = new_used_55;
-        builtin::array_copy<u8>(self_43.repr, start_56, other_44.repr, 0, 4);
+        builtin::array_copy<u8>(self_43.repr, start_56, global:core:prelude/traits.wado::$const_obj_22, 0, 4);
         "core:prelude/traits.wado/core/prelude/traits.wado/inspect_variant_payload<core:prelude/list.wado/List<i32>>"(v_60 = self.value; if @unlikely(ref.is_null(v_60) != 0) {
             unreachable;
         }; ref.as_non_null(v_60), f);
     }
     if ref.is_null(self.value) {
-        s_64 = global:core:prelude/traits.wado::$const_obj_18;
         self_65 = f.buf;
         new_used_77 = self_65.used + 4;
         if @unlikely(new_used_77 > builtin::array_len(self_65.repr)) {
@@ -1955,7 +1952,7 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         }
         start_78 = self_65.used;
         self_65.used = new_used_77;
-        builtin::array_copy<u8>(self_65.repr, start_78, s_64.repr, 0, 4);
+        builtin::array_copy<u8>(self_65.repr, start_78, global:core:prelude/traits.wado::$const_obj_18, 0, 4);
         self_80 = f.buf;
         new_used_92 = self_80.used + 2;
         if @unlikely(new_used_92 > builtin::array_len(self_80.repr)) {
@@ -1966,7 +1963,6 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         self_80.used = new_used_92;
         builtin::array_copy<u8>(self_80.repr, start_93, global:core:prelude/traits.wado::$const_obj_17, 0, 2);
         self_98 = f.buf;
-        other_99 = global:core:prelude/traits.wado::$const_obj_21;
         new_used_110 = self_98.used + 5;
         if @unlikely(new_used_110 > builtin::array_len(self_98.repr)) {
             cold_path;
@@ -1974,7 +1970,7 @@ fn "core:prelude/traits.wado/value_copy_new_owner_needs_a_proof.wado/Held^core:p
         }
         start_111 = self_98.used;
         self_98.used = new_used_110;
-        builtin::array_copy<u8>(self_98.repr, start_111, other_99.repr, 0, 5);
+        builtin::array_copy<u8>(self_98.repr, start_111, global:core:prelude/traits.wado::$const_obj_21, 0, 5);
     }
 }
 

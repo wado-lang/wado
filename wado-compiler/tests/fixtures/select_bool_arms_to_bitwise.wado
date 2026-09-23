@@ -1,0 +1,31 @@
+// A value-producing `&&` / `||` over pure, trap-free operands lowers to a
+// bitwise `&` / `|` rather than a `select`: on two `bool`s they agree, and the
+// bitwise form costs Cranelift no conditional move.
+
+use { println, Stdout } from "core:cli";
+
+#[inline(never)]
+fn plain(b: u8) -> bool {
+    return b >= 0x20 && b != 0x22 && b != 0x5C;
+}
+
+#[inline(never)]
+fn stop(b: u8) -> bool {
+    return b == 0x22 || b == 0x5C;
+}
+
+export fn run() with Stdout {
+    let mut out: String = "";
+    for let b of [0x1F as u8, 0x20, 0x22, 0x41, 0x5C, 0xE3] as List<u8> {
+        out.push(if plain(b) { 'p' } else { '-' });
+        out.push(if stop(b) { 's' } else { '-' });
+    }
+    println(out);
+}
+
+__DATA__
+{
+    "stdout": "--p--sp--sp-\n",
+    "wir_expect:O2": ["(b >=u 32) & (b != 34)", "(b == 34) | (b == 92)"],
+    "wir_not_expect:O2": ["select i32(b"]
+}

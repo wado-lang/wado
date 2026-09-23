@@ -80,6 +80,7 @@ fn "retain_anchored_local_destination.wado/fill"(p) {
 }
 
 fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retention_leaves_the_write_back_standing"() {
+    let $load_0: ref null "core:prelude/string.wado//String";
     let $cond: bool;
     let $write_back_1: ref "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>";
     let $write_back_before_2: ref null "core:prelude/string.wado//String";
@@ -88,8 +89,8 @@ fn "retain_anchored_local_destination.wado/$cm_export__$test_0_a_bounded_retenti
     $write_back_1 = struct.new "core:prelude/types.wado//Box<retain_anchored_local_destination.wado/Payload>" { value: $sroa_b_item };
     $write_back_before_2 = $sroa_b_item;
     "retain_anchored_local_destination.wado/fill"($write_back_1);
-    if ref.eq($write_back_1.value, $write_back_before_2) == 0 {
-        $sroa_b_item = $write_back_1.value;
+    if ref.eq(local.tee $load_0($write_back_1.value), $write_back_before_2) == 0 {
+        $sroa_b_item = $load_0;
     }
     let $match_scrut_0: ref null "core:prelude/string.wado//String";
     $match_scrut_0 = $sroa_b_item;
@@ -194,7 +195,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l5;

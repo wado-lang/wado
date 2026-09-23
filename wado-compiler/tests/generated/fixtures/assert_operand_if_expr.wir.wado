@@ -100,6 +100,10 @@ fn "assert_operand_if_expr.wado/$cm_export__run"() {
 }
 
 fn "assert_operand_if_expr.wado/run$cold0"() with Stdout {
+    let $load_0: ref Array<u8>;
+    let $load_5: ref Array<u8>;
+    let $load_10: ref Array<u8>;
+    let $load_17: ref Array<u8>;
     let $local_5: ref "core:prelude/string.wado//String";
     let $local_6: ref "core:prelude/format.wado//Formatter";
     let self_17: ref Array<u8>;
@@ -134,18 +138,18 @@ fn "assert_operand_if_expr.wado/run$cold0"() with Stdout {
     let start_116: i32;
     $local_5 = struct.new "core:prelude/string.wado//String" { repr: builtin::array_new<u8>(222), used: 0 };
     $local_5.used = 55;
-    self_17 = $local_5.repr;
+    self_17 = local.tee $load_0($local_5.repr);
     builtin::array_copy<u8>(self_17, 0, global:assert_operand_if_expr.wado::$const_obj_15, 0, 20);
-    self_21 = $local_5.repr;
+    self_21 = $load_0;
     offset_22 = 0 + 20;
     builtin::array_copy<u8>(self_21, offset_22, global:assert_operand_if_expr.wado::$const_obj_14, 0, 3);
-    self_25 = $local_5.repr;
+    self_25 = $load_0;
     offset_26 = 0 + 23;
     builtin::array_copy<u8>(self_25, offset_26, global:assert_operand_if_expr.wado::$const_obj_13, 0, 4);
-    self_29 = $local_5.repr;
+    self_29 = $load_0;
     offset_30 = 0 + 27;
     builtin::array_copy<u8>(self_29, offset_30, global:assert_operand_if_expr.wado::$const_obj_12, 0, 27);
-    self_33 = $local_5.repr;
+    self_33 = $load_0;
     offset_34 = 0 + 54;
     builtin::array_copy<u8>(self_33, offset_34, global:assert_operand_if_expr.wado::$const_obj_11, 0, 1);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -157,15 +161,15 @@ fn "assert_operand_if_expr.wado/run$cold0"() with Stdout {
     }
     start_45 = $local_5.used;
     $local_5.used = new_used_44;
-    self_47 = $local_5.repr;
+    self_47 = local.tee $load_5($local_5.repr);
     builtin::array_copy<u8>(self_47, start_45, global:assert_operand_if_expr.wado::$const_obj_10, 0, 2);
-    self_51 = $local_5.repr;
+    self_51 = $load_5;
     offset_52 = start_45 + 2;
     builtin::array_copy<u8>(self_51, offset_52, global:assert_operand_if_expr.wado::$const_obj_9, 0, 12);
-    self_55 = $local_5.repr;
+    self_55 = $load_5;
     offset_56 = start_45 + 14;
     builtin::array_copy<u8>(self_55, offset_56, global:assert_operand_if_expr.wado::$const_obj_8, 0, 43);
-    self_59 = $local_5.repr;
+    self_59 = $load_5;
     offset_60 = start_45 + 57;
     builtin::array_copy<u8>(self_59, offset_60, global:assert_operand_if_expr.wado::$const_obj_7, 0, 3);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -177,9 +181,9 @@ fn "assert_operand_if_expr.wado/run$cold0"() with Stdout {
     }
     start_71 = $local_5.used;
     $local_5.used = new_used_70;
-    self_73 = $local_5.repr;
+    self_73 = local.tee $load_10($local_5.repr);
     builtin::array_copy<u8>(self_73, start_71, global:assert_operand_if_expr.wado::$const_obj_1, 0, 1);
-    self_77 = $local_5.repr;
+    self_77 = $load_10;
     offset_78 = start_71 + 1;
     builtin::array_copy<u8>(self_77, offset_78, global:assert_operand_if_expr.wado::$const_obj_5, 0, 7);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -195,9 +199,9 @@ fn "assert_operand_if_expr.wado/run$cold0"() with Stdout {
     }
     start_90 = $local_5.used;
     $local_5.used = new_used_89;
-    self_92 = $local_5.repr;
+    self_92 = local.tee $load_17($local_5.repr);
     builtin::array_copy<u8>(self_92, start_90, global:assert_operand_if_expr.wado::$const_obj_1, 0, 1);
-    self_96 = $local_5.repr;
+    self_96 = $load_17;
     offset_97 = start_90 + 1;
     builtin::array_copy<u8>(self_96, offset_97, global:assert_operand_if_expr.wado::$const_obj_2, 0, 27);
     $local_6 = struct.new "core:prelude/format.wado//Formatter" { fill: 32, align: 2, sign_plus: 0, alternate: 0, zero_pad: 0, width: -1, precision: -2, indent: 0, buf: $local_5 };
@@ -297,19 +301,20 @@ fn "core:rt/panic"($mv$message$repr, $mv$message$used) {
 }
 
 fn "core:prelude/string.wado/core:prelude/string.wado/String::grow"(self, min_capacity) {
+    let $load_0: ref Array<u8>;
     let capacity: i32;
     let new_capacity: i32;
     let new_repr: ref Array<u8>;
     let a_7: i32;
     let a_9: i32;
-    capacity = builtin::array_len(self.repr);
+    capacity = builtin::array_len(local.tee $load_0(self.repr));
     if min_capacity <= capacity {
         return;
     }
     a_9 = capacity * 2;
     a_7 = select i32(a_9 > min_capacity, a_9, min_capacity);
     new_repr = builtin::array_new<u8>(local.tee new_capacity(select i32(a_7 > 8, a_7, 8)));
-    builtin::array_copy<u8>(new_repr, 0, self.repr, 0, self.used);
+    builtin::array_copy<u8>(new_repr, 0, $load_0, 0, self.used);
     self.repr = new_repr;
 }
 
@@ -372,7 +377,7 @@ fn "core:prelude/types.wado/core:prelude/types.wado/StreamWritable<u8>::write_ra
             };
             drop("mem/realloc"(ptr_14, raw_len, 1, 0));
             offset = offset + $sroa_written_count;
-            if select i32(select i32($sroa_written_result != 0, 1, $sroa_written_count <= 0), 1, offset >= end_3) {
+            if (($sroa_written_result != 0) | ($sroa_written_count <= 0)) | (offset >= end_3) {
                 return;
             }
             continue l26;
