@@ -176,6 +176,9 @@ impl Interpreter<'_> {
     /// `Const` only when every element is itself constant, and only up to
     /// [`MAX_SEQ_ELEMENTS`].
     fn seq_lattice(&self, body: &Body, type_id: TypeId, elements: &[Operand]) -> Lattice {
+        if elements.len() > MAX_SEQ_ELEMENTS {
+            return Lattice::NonConst;
+        }
         let mut values = Vec::with_capacity(elements.len());
         for op in elements {
             match self.operand_to_lattice(body, *op) {
@@ -292,13 +295,10 @@ impl Interpreter<'_> {
                 self.array_literal_lattice(body, node.type_id, elements)
             }
             ExprKind::PackedArray(bytes) => {
-                let elements = bytes
-                    .iter()
-                    .map(|b| Value::Int {
-                        value: u64::from(*b),
-                        prim: PrimitiveType::U8,
-                    })
-                    .collect();
+                let elements = bytes.iter().map(|b| Value::Int {
+                    value: u64::from(*b),
+                    prim: PrimitiveType::U8,
+                });
                 Value::seq(node.type_id, elements).map_or(Lattice::NonConst, Lattice::Const)
             }
             // A plain enum case is its discriminant, which is the whole value:

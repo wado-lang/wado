@@ -183,12 +183,17 @@ impl Value {
         }
     }
 
-    /// `None` when longer than [`MAX_SEQ_ELEMENTS`].
+    /// `None` when longer than [`MAX_SEQ_ELEMENTS`], which is decided before
+    /// any element is produced.
     #[must_use]
-    pub fn seq(type_id: TypeId, elements: Vec<Value>) -> Option<Self> {
+    pub fn seq<I>(type_id: TypeId, elements: I) -> Option<Self>
+    where
+        I: IntoIterator<Item = Value, IntoIter: ExactSizeIterator>,
+    {
+        let elements = elements.into_iter();
         (elements.len() <= MAX_SEQ_ELEMENTS).then(|| Self::Seq {
             type_id,
-            elements: elements.into(),
+            elements: elements.collect(),
         })
     }
 
