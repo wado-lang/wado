@@ -381,28 +381,14 @@ fn lex_error_at(tokens: &TokenStream, i: i32) -> Diagnostic {
 }
 
 pub fn merge_lex_errors(tokens: &TokenStream, diagnostics: &mut List<Diagnostic>, max_errors: i32) {
-    let mut lex: List<Diagnostic> = [];
+    let mut merged: List<Diagnostic> = [];
     for let mut i = 0; i < tokens.len(); i += 1 {
         if tokens.is_lex_error(i) {
-            lex.push(lex_error_at(tokens, i));
+            merged.push(lex_error_at(tokens, i));
         }
     }
-    if lex.is_empty() {
-        return;
-    }
-    let mut merged: List<Diagnostic> = [];
-    let mut next = 0;
-    for let d of lex {
-        while next < diagnostics.len() && diagnostics[next].span.start < d.span.start {
-            merged.push(diagnostics[next]);
-            next += 1;
-        }
-        merged.push(d);
-    }
-    while next < diagnostics.len() {
-        merged.push(diagnostics[next]);
-        next += 1;
-    }
+    merged.extend(diagnostics);
+    merged.sort_by(|a: &Diagnostic, b: &Diagnostic| a.span.start.cmp(&b.span.start));
     merged.truncate(max_errors);
     *diagnostics = merged;
 }
