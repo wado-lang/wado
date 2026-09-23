@@ -10,7 +10,7 @@
 //! poison bytes catch any wrong-offset / wrong-source read.
 //!
 //! Exercises write-ok, read-ok, and a real Err (writing to a read-only
-//! descriptor → `NotPermitted`).
+//! descriptor → `BadDescriptor`).
 
 use { Preopens, Filesize, PathFlags, OpenFlags, DescriptorFlags, ErrorCode } from "wasi:filesystem";
 use { println, Stdout } from "core:cli";
@@ -78,8 +78,8 @@ export fn run() with (Preopens, Stdout) {
         Some(Ok(_)) => {
             println("ewrite-ok");
         },
-        Some(Err(ErrorCode::NotPermitted)) => {
-            println("ewrite-err-NotPermitted");
+        Some(Err(ErrorCode::BadDescriptor)) => {
+            println("ewrite-err-BadDescriptor");
         },
         Some(Err(_)) => {
             println("ewrite-err-other");
@@ -95,5 +95,5 @@ __DATA__
 {
     "preopened_dirs": [["", "/work"]],
     "allocator": "debug",
-    "stdout": "write-ok\nread-ok n=3\newrite-err-NotPermitted\n"
+    "stdout": "write-ok\nread-ok n=3\newrite-err-BadDescriptor\n"
 }

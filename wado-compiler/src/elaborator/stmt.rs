@@ -852,19 +852,49 @@ impl<H: CompilerHost> Elaborator<'_, H> {
             Pattern::Typed { pattern, .. } => {
                 return self.check_irrefutable_pattern(pattern, span, site);
             }
-            Pattern::Literal(_) => "literal patterns may not match".to_string(),
-            Pattern::Variant { variant_name, .. } => format!("`{variant_name}` may not match"),
-            Pattern::Or(_) => "or-patterns may not match".to_string(),
-            Pattern::Range { .. } => "range patterns may not match".to_string(),
+            Pattern::Literal(_)
+            | Pattern::Variant { .. }
+            | Pattern::Or(_)
+            | Pattern::Range { .. } => {
+                refutable_shape(pattern).expect("a testing pattern is refutable by its shape")
+            }
         };
         self.reject_refutable(site, &reason, span);
         false
     }
 
+    /// Why `pattern` itself, apart from its parts, can fail against `scrutinee`.
+    /// A case of a one-case type cannot.
+    fn refutation(&mut self, pattern: &Pattern, scrutinee: TypeId) -> Option<String> {
+        match pattern {
+            Pattern::Variant { .. } if self.case_count(scrutinee) == 1 => None,
+            Pattern::Ident { name, .. } if self.is_immutable_global(name) => {
+                Some(format!("`{name}` may not match"))
+            }
+            _ => refutable_shape(pattern),
+        }
+    }
+
+    fn case_count(&self, scrutinee: TypeId) -> usize {
+        let head = self
+            .tysys
+            .type_table
+            .borrow()
+            .scrutinee_structure_head(scrutinee);
+        match (self.variant_of_type(head), self.enum_of_type(head)) {
+            (Some(variant), _) => variant.cases.len(),
+            (None, Some(enumeration)) => enumeration.cases.len(),
+            (None, None) => 0,
+        }
+    }
+
     fn reject_refutable(&mut self, site: BindingSite, reason: &str, span: Span) {
         let (position, remedy) = match site {
             BindingSite::Let => ("`let` binding", "use `let ... else` or `if let` instead"),
-            BindingSite::ForOf => ("`for` binding", "match on the element in the loop body instead"),
+            BindingSite::ForOf => (
+                "`for` binding",
+                "match on the element in the loop body instead",
+            ),
         };
         let _ = self.emit(TypeError::InvalidPattern {
             message: format!("refutable pattern in {position}: {reason}; {remedy}"),
@@ -1232,7 +1262,15 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                         .iter()
                         .chain(std::iter::repeat(&TypeTable::UNKNOWN)),
                 ) {
-                    self.resolve_let_pattern_inner(p, elem_type, is_mut, span, site, ctx, ref_binding);
+                    self.resolve_let_pattern_inner(
+                        p,
+                        elem_type,
+                        is_mut,
+                        span,
+                        site,
+                        ctx,
+                        ref_binding,
+                    );
                 }
             }
             ast::Pattern::Struct {
@@ -1594,6 +1632,11 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         span: Span,
         ref_binding: RefBinding,
     ) -> PatBindings {
+        if let Some(site) = ctx.irrefutable_site
+            && let Some(reason) = self.refutation(pattern, scrutinee_type)
+        {
+            self.reject_refutable(site, &reason, span);
+        }
         match pattern {
             Pattern::Wildcard => Vec::new(),
             Pattern::Ident {
@@ -1612,9 +1655,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // The parser does not use case to disambiguate; instead, we check
                 // whether the name is a known case of the scrutinee type.
                 if !is_mut && self.is_known_case_of_type(scrutinee_type, name, None) {
-                    if let Some(site) = ctx.irrefutable_site {
-                        self.reject_refutable(site, &format!("`{name}` may not match"), *name_span);
-                    }
                     // Delegate to the Variant branch with empty bindings.
                     // Preserve the identifier's AstId/span as name_id/name_span so
                     // LSP jump-to-def on `None`/`Red` still resolves to the case decl.
@@ -1637,9 +1677,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
                 // introduces no binding but reads the global — record the
                 // use→def edge so it is not flagged dead (mirrors the expr path).
                 if !is_mut && self.is_immutable_global(name) {
-                    if let Some(site) = ctx.irrefutable_site {
-                        self.reject_refutable(site, &format!("`{name}` may not match"), *name_span);
-                    }
                     self.record_item_reference_by_name(*id, name);
                     return Vec::new();
                 }
@@ -2996,7 +3033,6 @@ impl<H: CompilerHost> Elaborator<'_, H> {
         } else {
             for_of.binding.clone()
         };
-        self.check_irrefutable_pattern(&binding, span, BindingSite::ForOf);
         ctx.irrefutable_site = Some(BindingSite::ForOf);
         self.resolve_if_pattern_inner(&binding, item_type, ctx, span, RefBinding::None);
         ctx.irrefutable_site = None;
@@ -3288,6 +3324,23 @@ fn format_pattern_qualifier_type(ty: &Type) -> String {
         Type::TypePackSpread(name, _) => format!("..{name}"),
         Type::Infer(_) => "_".to_string(),
         Type::Error(_) => "<error>".to_string(),
+    }
+}
+
+/// Why a pattern that tests its value can fail, read off its shape alone.
+fn refutable_shape(pattern: &Pattern) -> Option<String> {
+    match pattern {
+        Pattern::Literal(_) => Some("literal patterns may not match".to_string()),
+        Pattern::Variant { variant_name, .. } => Some(format!("`{variant_name}` may not match")),
+        Pattern::Or(_) => Some("or-patterns may not match".to_string()),
+        Pattern::Range { .. } => Some("range patterns may not match".to_string()),
+        Pattern::Ident { .. }
+        | Pattern::MutIdent { .. }
+        | Pattern::Wildcard
+        | Pattern::Tuple(..)
+        | Pattern::Struct { .. }
+        | Pattern::Typed { .. }
+        | Pattern::Error(_) => None,
     }
 }
 
